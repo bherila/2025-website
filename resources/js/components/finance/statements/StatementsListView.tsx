@@ -26,6 +26,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 
+import AccountTaxDocumentsSection from '../AccountTaxDocumentsSection'
 import AccountStatementsChart from './AccountStatementsChart'
 import StatementPdfButton from './StatementPdfButton'
 
@@ -454,6 +455,8 @@ export default function StatementsListView({
             title="Statement Files"
             actions={<FileUploadButton onUpload={fileManager.uploadFile} />}
           />
+
+          <AccountTaxDocumentsSection accountId={accountId} />
 
           <DeleteFileModal
             file={fileManager.deleteFile}

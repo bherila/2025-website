@@ -12,6 +12,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\LotMatcher;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
@@ -587,12 +588,7 @@ class ParseImportJob implements ShouldQueue
 
             // Create a matching sell line item in fin_account_line_items.
             // Only create if no matching sell transaction already exists (by date/symbol/qty/amount).
-            $existingSell = FinAccountLineItems::where('t_account', $accountId)
-                ->where('t_date', $saleDate)
-                ->where('t_symbol', $symbol ?? $description)
-                ->where('t_qty', -abs($quantity))
-                ->where('t_amt', -abs($proceeds))
-                ->exists();
+            $existingSell = app(LotMatcher::class)->matchingSellTransactionExists($lot);
 
             if (! $existingSell) {
                 $sellItem = FinAccountLineItems::create([

@@ -3,11 +3,14 @@
 namespace App\Models\FinanceTool;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FinAccountLot extends Model
 {
+    use SerializesDatesAsLocal;
+
     protected $table = 'fin_account_lots';
 
     protected $primaryKey = 'lot_id';
@@ -29,6 +32,9 @@ class FinAccountLot extends Model
         'open_t_id',
         'close_t_id',
         'tax_document_id',
+        'superseded_by_lot_id',
+        'reconciliation_status',
+        'reconciliation_notes',
     ];
 
     protected $casts = [

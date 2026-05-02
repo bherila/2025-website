@@ -81,6 +81,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'app',
     component: MockComponent,
   },
+  'tax-lot-reconciliation': {
+    id: 'tax-lot-reconciliation',
+    label: '1099-B Reconciliation',
+    shortLabel: '1099-B',
+    keywords: [],
+    category: 'App',
+    presentation: 'app',
+    component: MockComponent,
+  },
   'form-1040': {
     id: 'form-1040',
     label: 'Form 1040',
