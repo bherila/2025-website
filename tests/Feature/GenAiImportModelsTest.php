@@ -248,4 +248,23 @@ class GenAiImportModelsTest extends TestCase
             'ai_configuration_id' => $config->id,
         ]);
     }
+
+    public function test_ai_provider_and_model_are_persisted_on_job(): void
+    {
+        $job = $this->createTestJob();
+        $job->update([
+            'ai_provider' => 'bedrock',
+            'ai_model' => 'us.anthropic.claude-sonnet-4-6',
+        ]);
+
+        $this->assertDatabaseHas('genai_import_jobs', [
+            'id' => $job->id,
+            'ai_provider' => 'bedrock',
+            'ai_model' => 'us.anthropic.claude-sonnet-4-6',
+        ]);
+
+        $fresh = $job->fresh();
+        $this->assertSame('bedrock', $fresh->ai_provider);
+        $this->assertSame('us.anthropic.claude-sonnet-4-6', $fresh->ai_model);
+    }
 }

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Models\UserAiConfiguration;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -168,6 +169,9 @@ class AdminGenAiJobsControllerTest extends TestCase
     {
         $admin = $this->createAdminUser();
         $user = $this->createUser();
+        $config = UserAiConfiguration::factory()->for($user)->bedrock()->create([
+            'model' => 'us.anthropic.claude-sonnet-4-6',
+        ]);
 
         $job = GenAiImportJob::create([
             'user_id' => $user->id,
@@ -178,6 +182,11 @@ class AdminGenAiJobsControllerTest extends TestCase
             'file_size_bytes' => 10240,
             'status' => 'parsed',
             'context_json' => '{"accounts":[{"name":"Checking","last4":"1234"}]}',
+            'ai_configuration_id' => $config->id,
+            'ai_provider' => 'bedrock',
+            'ai_model' => 'us.anthropic.claude-sonnet-4-6',
+            'input_tokens' => 1000,
+            'output_tokens' => 200,
         ]);
 
         $response = $this->actingAs($admin)->getJson("/api/admin/genai-jobs/{$job->id}");
@@ -185,6 +194,11 @@ class AdminGenAiJobsControllerTest extends TestCase
         $response->assertJsonPath('id', $job->id);
         $response->assertJsonPath('original_filename', 'statements.pdf');
         $response->assertJsonPath('context_json', '{"accounts":[{"name":"Checking","last4":"1234"}]}');
+        $response->assertJsonPath('ai_configuration_id', $config->id);
+        $response->assertJsonPath('ai_provider', 'bedrock');
+        $response->assertJsonPath('ai_model', 'us.anthropic.claude-sonnet-4-6');
+        $response->assertJsonPath('input_tokens', 1000);
+        $response->assertJsonPath('output_tokens', 200);
     }
 
     public function test_show_returns_404_for_nonexistent_job(): void
@@ -214,5 +228,41 @@ class AdminGenAiJobsControllerTest extends TestCase
         $response = $this->actingAs($admin)->getJson("/api/admin/genai-jobs/{$job->id}");
         $response->assertOk();
         $response->assertJsonPath('error_message', 'Gemini error: bad request');
+    }
+
+    public function test_requeue_clears_previous_ai_metadata(): void
+    {
+        $admin = $this->createAdminUser();
+        $config = UserAiConfiguration::factory()->for($admin)->bedrock()->create([
+            'model' => 'us.anthropic.claude-sonnet-4-6',
+        ]);
+
+        $job = GenAiImportJob::create([
+            'user_id' => $admin->id,
+            'job_type' => 'utility_bill',
+            'file_hash' => 'billhash',
+            'original_filename' => 'utility.pdf',
+            's3_path' => "genai-import/{$admin->id}/utility.pdf",
+            'file_size_bytes' => 500,
+            'status' => 'failed',
+            'error_message' => 'Provider error',
+            'retry_count' => 1,
+            'ai_configuration_id' => $config->id,
+            'ai_provider' => 'bedrock',
+            'ai_model' => 'us.anthropic.claude-sonnet-4-6',
+            'input_tokens' => 100,
+            'output_tokens' => 20,
+        ]);
+
+        $response = $this->actingAs($admin)->postJson("/api/admin/genai-jobs/{$job->id}/requeue");
+
+        $response->assertOk();
+        $job->refresh();
+        $this->assertSame('pending', $job->status);
+        $this->assertNull($job->ai_configuration_id);
+        $this->assertNull($job->ai_provider);
+        $this->assertNull($job->ai_model);
+        $this->assertNull($job->input_tokens);
+        $this->assertNull($job->output_tokens);
     }
 }

@@ -122,7 +122,12 @@ class ParseImportJob implements ShouldQueue
                 return;
             }
 
-            $job->markProcessing();
+            $job->update([
+                'status' => 'processing',
+                'ai_configuration_id' => $activeConfig?->id,
+                'ai_provider' => $client->provider(),
+                'ai_model' => $client->model(),
+            ]);
 
             ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError] = $this->callGenerateContent(
                 $client,
@@ -136,9 +141,6 @@ class ParseImportJob implements ShouldQueue
             $jobUpdates = [];
             if ($rawResponse !== null) {
                 $jobUpdates['raw_response'] = $rawResponse;
-            }
-            if ($activeConfig) {
-                $jobUpdates['ai_configuration_id'] = $activeConfig->id;
             }
             if ($inputTokens !== null) {
                 $jobUpdates['input_tokens'] = $inputTokens;

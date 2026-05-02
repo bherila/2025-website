@@ -9,6 +9,9 @@ import GenAiJobsList from './GenAiJobsList'
 const job: GenAiImportJobData = {
   id: 42,
   user_id: 1,
+  ai_configuration_id: null,
+  ai_provider: null,
+  ai_model: null,
   acct_id: 1,
   job_type: 'finance_transactions',
   file_hash: 'hash',
@@ -23,6 +26,8 @@ const job: GenAiImportJobData = {
   retry_count: 0,
   scheduled_for: null,
   parsed_at: '2026-03-28T12:00:00Z',
+  input_tokens: null,
+  output_tokens: null,
   created_at: '2026-03-28T12:00:00Z',
   updated_at: '2026-03-28T12:01:00Z',
 }

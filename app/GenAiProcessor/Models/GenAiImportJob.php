@@ -36,6 +36,8 @@ class GenAiImportJob extends Model
     protected $fillable = [
         'user_id',
         'ai_configuration_id',
+        'ai_provider',
+        'ai_model',
         'acct_id',
         'job_type',
         'file_hash',
