@@ -1,5 +1,6 @@
 import { Key, Plus, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -86,8 +87,10 @@ export const PasskeySection: React.FC<PasskeySectionProps> = ({ onSuccess, onErr
 
   const registerPasskey = async () => {
     // Close the name dialog immediately so the browser's native passkey UI is
-    // not blocked by a React focus-trap (Radix Dialog traps focus while open).
-    setShowNameDialog(false);
+    // not blocked by a React focus-trap.
+    flushSync(() => {
+      setShowNameDialog(false);
+    });
     setRegistering(true);
     try {
       // Step 1: Get registration options

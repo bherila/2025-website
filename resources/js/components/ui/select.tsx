@@ -4,6 +4,31 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+interface SelectContextValue {
+  portalContainer: HTMLElement | null
+  setTriggerElement: (element: HTMLElement | null) => void
+}
+
+const SelectContext = React.createContext<SelectContextValue | null>(null)
+
+function useSelectContext(): SelectContextValue | null {
+  return React.useContext(SelectContext)
+}
+
+function composeRefs<T>(
+  ...refs: (React.Ref<T> | undefined)[]
+): React.RefCallback<T> {
+  return (node) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") {
+        ref(node)
+      } else if (ref) {
+        ref.current = node
+      }
+    }
+  }
+}
+
 type SelectProps = Omit<
   React.ComponentProps<typeof SelectPrimitive.Root>,
   "defaultValue" | "onValueChange" | "value"
@@ -15,20 +40,37 @@ type SelectProps = Omit<
 
 function Select({
   defaultValue,
+  modal,
   onValueChange,
   value,
   ...props
 }: SelectProps) {
+  const [triggerElement, setTriggerElement] = React.useState<HTMLElement | null>(null)
+  const portalContainer = React.useMemo(
+    () =>
+      triggerElement?.closest<HTMLElement>("[data-slot='dialog-content']") ??
+      triggerElement?.closest<HTMLElement>("[data-slot='dialog-portal']") ??
+      null,
+    [triggerElement]
+  )
+  const contextValue = React.useMemo<SelectContextValue>(
+    () => ({ portalContainer, setTriggerElement }),
+    [portalContainer]
+  )
+
   return (
-    <SelectPrimitive.Root
-      data-slot="select"
-      defaultValue={defaultValue ?? undefined}
-      onValueChange={(nextValue) =>
-        onValueChange?.(nextValue == null ? "" : String(nextValue))
-      }
-      value={value ?? undefined}
-      {...props}
-    />
+    <SelectContext.Provider value={contextValue}>
+      <SelectPrimitive.Root
+        data-slot="select"
+        defaultValue={defaultValue ?? undefined}
+        modal={modal ?? false}
+        onValueChange={(nextValue) =>
+          onValueChange?.(nextValue == null ? "" : String(nextValue))
+        }
+        value={value ?? undefined}
+        {...props}
+      />
+    </SelectContext.Provider>
   )
 }
 
@@ -48,14 +90,18 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  ref,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default"
 }) {
+  const selectContext = useSelectContext()
+
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
+      ref={composeRefs(ref, selectContext?.setTriggerElement)}
       className={cn(
         "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 data-[invalid]:ring-destructive/20 dark:data-[invalid]:ring-destructive/40 data-[invalid]:border-destructive bg-background flex w-fit items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
@@ -90,8 +136,10 @@ function SelectContent({
   sideOffset,
   ...props
 }: SelectContentProps) {
+  const selectContext = useSelectContext()
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={selectContext?.portalContainer ?? undefined}>
       <SelectPrimitive.Positioner
         align={align}
         alignItemWithTrigger={alignItemWithTrigger ?? position !== "popper"}

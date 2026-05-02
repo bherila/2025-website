@@ -34,6 +34,12 @@ interface AiConfigDialogProps {
 }
 
 const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().slice(0, 10);
+const providerOptions: { value: Provider; label: string }[] = [
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'bedrock', label: 'Bedrock' },
+];
+const selectClassName = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring';
 
 export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
   open,
@@ -77,15 +83,17 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
           <Label htmlFor="config-provider">Provider</Label>
           <Select
             value={form.provider}
-            onValueChange={v => setForm(f => ({ ...f, provider: v as Provider, model: '' }))}
+            onValueChange={value => setForm(f => ({ ...f, provider: value as Provider, model: '' }))}
           >
-            <SelectTrigger id="config-provider">
-              <SelectValue />
+            <SelectTrigger id="config-provider" className="w-full">
+              <SelectValue>
+                {(value: Provider | null) => providerOptions.find(provider => provider.value === value)?.label ?? ''}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="gemini">Gemini</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="bedrock">Bedrock</SelectItem>
+              {providerOptions.map(provider => (
+                <SelectItem key={provider.value} value={provider.value}>{provider.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -146,7 +154,7 @@ export const AiConfigDialog: React.FC<AiConfigDialogProps> = ({
               <select
                 id="config-model"
                 required
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                className={selectClassName}
                 value={form.model}
                 onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
               >
