@@ -4,6 +4,7 @@ namespace App\Models\ClientManagement;
 
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientInvoiceLine extends Model
@@ -52,8 +53,10 @@ class ClientInvoiceLine extends Model
 
     /**
      * Get the invoice this line belongs to.
+     *
+     * @return BelongsTo<ClientInvoice, $this>
      */
-    public function invoice()
+    public function invoice(): BelongsTo
     {
         return $this->belongsTo(ClientInvoice::class, 'client_invoice_id', 'client_invoice_id');
     }

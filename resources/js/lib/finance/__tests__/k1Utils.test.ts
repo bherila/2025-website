@@ -17,6 +17,15 @@ import {
   sumAbsK1CodeItems,
 } from '../k1Utils'
 
+declare const require: (path: string) => unknown
+
+interface K1CharacterFixture {
+  notes: string
+  expected: 'short' | 'long' | null
+}
+
+const characterFixtures = require('./fixtures/k1-11s-character-fixtures.json') as K1CharacterFixture[]
+
 function makeData(overrides: Partial<FK1StructuredData> = {}): FK1StructuredData {
   return {
     schemaVersion: '2026.1',
@@ -56,11 +65,13 @@ describe('classify11SCharacter', () => {
   it('classifies short-term notes', () => {
     expect(classify11SCharacter('Net short-term capital loss. Report on Schedule D / Form 8949 Part I.')).toBe('short')
     expect(classify11SCharacter('short term gain')).toBe('short')
+    expect(classify11SCharacter('ST capital gain')).toBe('short')
   })
 
   it('classifies long-term notes', () => {
     expect(classify11SCharacter('Net long-term capital gain, assets held more than 3 years.')).toBe('long')
     expect(classify11SCharacter('long-term capital gain')).toBe('long')
+    expect(classify11SCharacter('LT capital loss')).toBe('long')
   })
 
   it('returns undefined when notes do not mention character', () => {
@@ -69,6 +80,10 @@ describe('classify11SCharacter', () => {
 
   it('returns undefined when notes mention both short-term and long-term', () => {
     expect(classify11SCharacter('Statement includes short-term and long-term capital gain subtotals')).toBeUndefined()
+  })
+
+  it.each(characterFixtures)('matches the shared fixture for $notes', ({ notes, expected }) => {
+    expect(classify11SCharacter(notes) ?? null).toBe(expected)
   })
 })
 
@@ -135,6 +150,18 @@ describe('sumAbsK1CodeItems', () => {
 
     expect(sumAbsK1CodeItems(data, '13', 'ZZ')).toBe(9151)
   })
+
+  it('documents that signed recoveries are treated as deduction magnitudes', () => {
+    const data = makeData({
+      codes: {
+        '13': [
+          { code: 'ZZ', value: '-250' },
+        ],
+      },
+    })
+
+    expect(sumAbsK1CodeItems(data, '13', 'ZZ')).toBe(250)
+  })
 })
 
 describe('trader fund helpers', () => {
@@ -148,6 +175,32 @@ describe('trader fund helpers', () => {
     expect(isTraderFundK1(data)).toBe(true)
   })
 
+  it('does not detect trader fund status from negated statement notes when the structured field is absent', () => {
+    const data = makeData({
+      raw_text: 'The partnership is not a trader in securities.',
+    })
+
+    expect(isTraderFundK1(data)).toBe(false)
+  })
+
+  it('uses the structured trader-in-securities field before statement notes', () => {
+    const explicitFalse = makeData({
+      fields: {
+        partnershipPosition_traderInSecurities: { value: 'false' },
+      },
+      raw_text: 'The partnership is not a trader in securities.',
+    })
+    const explicitTrue = makeData({
+      fields: {
+        partnershipPosition_traderInSecurities: { value: 'true' },
+      },
+      raw_text: 'No trader deductions are described in the statement.',
+    })
+
+    expect(isTraderFundK1(explicitFalse)).toBe(false)
+    expect(isTraderFundK1(explicitTrue)).toBe(true)
+  })
+
   it('extracts Box 20AJ Form 461 support disclosure', () => {
     const data = makeData({
       codes: {
@@ -155,6 +208,26 @@ describe('trader fund helpers', () => {
           code: 'AJ',
           value: '-79535',
           notes: 'Capital gains from trade or business: $124,206; Capital losses from trade or business: ($155,469); Other income from trade or business: $65,845; Other deductions from trade or business: ($114,117).',
+        }],
+      },
+    })
+
+    expect(extractK1Form461Disclosure(data)).toEqual({
+      capitalGains: 124206,
+      capitalLosses: -155469,
+      otherIncome: 65845,
+      otherDeductions: -114117,
+      net: -79535,
+    })
+  })
+
+  it('extracts Box 20AJ Form 461 support disclosure with leading minus signs', () => {
+    const data = makeData({
+      codes: {
+        '20': [{
+          code: 'AJ',
+          value: '-79535',
+          notes: 'Capital gains from trade or business: $124,206; Capital losses from trade or business: -$155,469; Other income from trade or business: $65,845; Other deductions from trade or business: -$114,117.',
         }],
       },
     })

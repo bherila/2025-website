@@ -58,6 +58,11 @@ describe('Client-portal hydration', () => {
           hours: 2,
           date_worked: '2024-01-10',
           name: 'Deferred Feature Work',
+          billed_invoice: {
+            id: 2,
+            invoice_number: 'TEST-002',
+            issue_date: '2024-02-01',
+          },
         },
       ],
     }
@@ -78,6 +83,7 @@ describe('Client-portal hydration', () => {
     expect(screen.getByRole('heading', { name: /Invoice TEST-001/ })).toBeInTheDocument()
     expect(screen.getByText(/1 entry deferred to a future invoice/)).toBeInTheDocument()
     expect(screen.getByText('Deferred Feature Work')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'TEST-002' })).toHaveAttribute('href', '/client/portal/acme/invoice/2')
     // ensure no invoice-specific network request was made
     expect((window as any).fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/client/portal/acme/invoices/1'))
   })

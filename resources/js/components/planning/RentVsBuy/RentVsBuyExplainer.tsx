@@ -19,6 +19,7 @@ export default function RentVsBuyExplainer(): ReactElement {
           <li>CA Prop 13 limits the assessed value used for property taxes to 2% annual growth until it catches up with the modeled home value.</li>
           <li>Closing costs are treated as upfront economic cost. Selling costs and estimated capital gains tax are applied when estimating sellable equity at each year-end.</li>
           <li>Home-sale capital gains tax applies the selected tax rate after the homeowner exclusion: $250,000 for single filers and $500,000 for married filing jointly.</li>
+          <li>Capital improvements are not modeled as basis increases, so adjust the scenario manually if improvements would materially change the gain.</li>
           <li>Homeowners insurance, renter&apos;s insurance, and HOA fees grow annually using their own growth-rate inputs. Property tax and maintenance scale with the modeled assessed or market value.</li>
           <li>Rent grows by the rent-increase input each year. Home value and the renter&apos;s portfolio compound annually using the appreciation and investment-return inputs.</li>
           <li>Inflation discounts future costs and wealth into today&apos;s dollars, but it does not automatically inflate fixed nominal expenses like HOA or insurance.</li>

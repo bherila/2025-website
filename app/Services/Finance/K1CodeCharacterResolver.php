@@ -7,6 +7,10 @@ class K1CodeCharacterResolver
     /**
      * Resolve Schedule D character metadata for a K-1 coded statement row.
      *
+     * This inspector mirrors the client-side read-time classifier in
+     * resources/js/lib/finance/k1Utils.ts. Keep both implementations pinned to the
+     * fixture set under resources/js/lib/finance/__tests__/fixtures.
+     *
      * @param  array<string, mixed>  $item
      * @return array{character: 'short'|'long', source: 'stored'|'notes'}|null
      */
@@ -64,8 +68,8 @@ class K1CodeCharacterResolver
             return null;
         }
 
-        $hasShort = preg_match('/\b(short[\s-]?term|st)\b/i', $notes) === 1;
-        $hasLong = preg_match('/\b(long[\s-]?term|lt)\b/i', $notes) === 1;
+        $hasShort = preg_match('/\b(?:short[\s-]+term|st(?=\s+capital\b))\b/i', $notes) === 1;
+        $hasLong = preg_match('/\b(?:long[\s-]+term|lt(?=\s+capital\b))\b/i', $notes) === 1;
 
         if ($hasShort === $hasLong) {
             return null;

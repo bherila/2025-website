@@ -45,6 +45,7 @@ export function sumK1CodeItems(data: FK1StructuredData, box: string, code: strin
 }
 
 export function sumAbsK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  // Box 13 deduction helpers intentionally treat reported values as positive magnitudes.
   return getK1CodeItems(data, box, code)
     .reduce((acc, item) => acc.add(Math.abs(parseMoneyOrZero(item.value))), currency(0)).value
 }
@@ -62,8 +63,8 @@ export function sumAbsK1CodeItems(data: FK1StructuredData, box: string, code: st
  */
 export function classify11SCharacter(notes?: string | null): 'short' | 'long' | undefined {
   if (!notes) return undefined
-  const hasShort = /short[- ]term/i.test(notes)
-  const hasLong = /long[- ]term/i.test(notes)
+  const hasShort = /\b(?:short[-\s]+term|st(?=\s+capital\b))\b/i.test(notes)
+  const hasLong = /\b(?:long[-\s]+term|lt(?=\s+capital\b))\b/i.test(notes)
   if (hasShort && !hasLong) return 'short'
   if (hasLong && !hasShort) return 'long'
   return undefined
@@ -79,12 +80,25 @@ export function resolve11SCharacter(item: { character?: 'short' | 'long'; notes?
 }
 
 export function isTraderFundK1(data: FK1StructuredData): boolean {
-  if (data.fields['partnershipPosition_traderInSecurities']?.value === 'true') return true
+  const structuredTraderStatus = data.fields['partnershipPosition_traderInSecurities']?.value
+  if (structuredTraderStatus === 'true') return true
+  if (structuredTraderStatus === 'false') return false
+
   const haystack = [
     data.raw_text,
     ...(data.warnings ?? []),
     ...Object.values(data.codes).flatMap((items) => items.map((item) => item.notes ?? '')),
   ].join(' ').toLowerCase()
+
+  const hasNegatedTraderInSecurities = /\b(?:not|isn't|is not|was not|no)\s+(?:a\s+)?trader in securities\b/i.test(haystack)
+  if (hasNegatedTraderInSecurities) {
+    return [
+      'trader deductions',
+      'trading activities',
+      'trading in financial instruments',
+      'trading in financial instruments/commodities',
+    ].some((needle) => haystack.includes(needle))
+  }
 
   return [
     'trader in securities',
@@ -110,7 +124,7 @@ export interface K1Form461Disclosure {
 
 function noteAmount(notes: string, label: string): number | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = notes.match(new RegExp(`${escaped}:\\s*(\\(?\\$?[\\d,]+(?:\\.\\d+)?\\)?)`, 'i'))
+  const match = notes.match(new RegExp(`${escaped}:\\s*(\\(?-?\\$?[\\d,]+(?:\\.\\d+)?\\)?)`, 'i'))
   if (!match?.[1]) return null
   return parseMoney(match[1])
 }

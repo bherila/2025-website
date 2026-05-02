@@ -353,7 +353,10 @@ class ClientInvoice extends Model
      * deferred work from their own work period that was not billed on this
      * invoice, even if it has since been linked to a future invoice.
      *
-     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     * Void and canceled invoices intentionally return no deferred-work rows:
+     * there is no actionable invoice-period billing state to explain.
+     *
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}>
      */
     protected function buildDeferredPendingList(): array
     {
@@ -386,7 +389,7 @@ class ClientInvoice extends Model
     }
 
     /**
-     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}>
      */
     protected function buildOriginalPeriodDeferredList(): array
     {
@@ -401,6 +404,7 @@ class ClientInvoice extends Model
             ->where('is_billable', true)
             ->where('is_deferred_billing', true)
             ->whereBetween('date_worked', [$this->period_start, $this->period_end])
+            ->with('invoiceLine.invoice')
             ->when($invoiceLineIds !== [], function ($query) use ($invoiceLineIds) {
                 $query->where(function ($subQuery) use ($invoiceLineIds) {
                     $subQuery
@@ -417,15 +421,26 @@ class ClientInvoice extends Model
     }
 
     /**
-     * @return array{id: int, hours: float, date_worked: string, name: string|null}
+     * @return array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}
      */
     protected function summariseDeferredEntry(ClientTimeEntry $entry): array
     {
-        return [
+        $summary = [
             'id' => (int) $entry->id,
             'hours' => round(((int) $entry->minutes_worked) / 60, 4),
             'date_worked' => $entry->date_worked->format('Y-m-d'),
             'name' => $entry->name,
         ];
+
+        $futureInvoice = $entry->invoiceLine?->invoice;
+        if ($futureInvoice && $futureInvoice->client_invoice_id !== $this->client_invoice_id) {
+            $summary['billed_invoice'] = [
+                'id' => (int) $futureInvoice->client_invoice_id,
+                'invoice_number' => $futureInvoice->invoice_number,
+                'issue_date' => $futureInvoice->issue_date?->toDateString(),
+            ];
+        }
+
+        return $summary;
     }
 }

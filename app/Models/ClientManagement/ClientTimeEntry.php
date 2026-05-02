@@ -7,6 +7,7 @@ use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientTimeEntry extends Model
@@ -117,8 +118,10 @@ class ClientTimeEntry extends Model
 
     /**
      * Get the invoice line this time entry is linked to.
+     *
+     * @return BelongsTo<ClientInvoiceLine, $this>
      */
-    public function invoiceLine()
+    public function invoiceLine(): BelongsTo
     {
         return $this->belongsTo(ClientInvoiceLine::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
