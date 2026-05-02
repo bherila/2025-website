@@ -33,7 +33,7 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 
 ## Authentication (Production / HTTP Transport)
 
-The HTTP route (`POST /mcp/finance`) requires an `Authorization: Bearer <token>` header. The token is matched against the `mcp_api_key` column on the `users` table via the `AuthenticateMcpRequest` middleware.
+The HTTP route (`POST /mcp/finance`) requires an `Authorization: Bearer <token>` header. The token is matched against the `mcp_api_key` column on the `users` table via the `AuthenticateMcpRequest` middleware. A matching token is not enough by itself: the associated user must also pass `User::canLogin()`, so disabled users or users with all login roles removed receive the same generic `401 Unauthorized` response as invalid tokens.
 
 **Generating a key:** Users navigate to **My Account** → **MCP API Key** section and click **Generate MCP API Key**. The key is shown once. A subsequent click **regenerates** the key, immediately invalidating the old one.
 

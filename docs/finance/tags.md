@@ -273,8 +273,8 @@ The Schedule C view aggregates all tagged transactions by their `tax_characteris
 ### Schedule C Navigation
 
 The Schedule C view is accessible from:
-- **Main navbar** → Finance dropdown → *Schedule C View*
-- **Finance Sub-Nav** → between *All Transactions* and *RSU*
+- **Finance Sub-Nav** → **Tax Preview**, which includes Schedule C in the Tax Preview dock/legacy tabs
+- **API** → `GET /api/finance/schedule-c`
 
 ---
 

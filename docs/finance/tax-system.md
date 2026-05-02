@@ -780,6 +780,10 @@ The worksheet is intentionally a thin adapter:
 
 The underlying Pub 560 calculation lives in `resources/js/lib/planning/solo401k.ts` and is shared with the public `/financial-planning/solo-401k` calculator. See [../financial-planning.md](../financial-planning.md) for the standalone route, URL state, and shared component notes.
 
+### 1099-B Lot Reconciliation App
+
+The Tax Preview dock includes a `1099-B Lot Reconciliation` app for comparing broker-reported 1099-B lots with account-derived lots and persisting accepted/superseded decisions. See [tax-lot-reconciliation.md](tax-lot-reconciliation.md) for endpoint details, matching rules, persistence fields, and tests.
+
 ### Frontend Components
 
 - **`TaxDocumentsSection`** (`TaxDocumentsSection.tsx`) — W-2/W-2c documents grouped by employment entity. Combined Review column. Delete moved to Review modal.

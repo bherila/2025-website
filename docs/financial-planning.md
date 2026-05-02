@@ -8,8 +8,9 @@ The `/financial-planning` section hosts public, standalone planning calculators.
 |-------|---------|------|
 | `/financial-planning` | Landing page listing shipped calculators | Public |
 | `/financial-planning/solo-401k` | Solo 401(k) contribution calculator | Public |
+| `/financial-planning/rent-vs-buy` | Rent vs Buy home-cost comparison calculator | Public |
 
-Routes are defined in `routes/web.php` outside the `auth` middleware group. Navbar wiring for this section is tracked separately so calculators can ship before the global nav changes.
+Routes are defined in `routes/web.php` outside the `auth` middleware group. The site-wide navbar is data-driven from `resources/views/layouts/app.blade.php`; its public **Financial Planning** dropdown links to the overview, Solo 401(k), and Rent vs Buy pages for both logged-out and logged-in visitors.
 
 ## Solo 401(k) Calculator
 
@@ -36,6 +37,22 @@ The standalone page persists scenarios entirely in the URL query string, for exa
 ```text
 /financial-planning/solo-401k?year=2025&ne=120000&se=8500&w2=15000&catchup=1
 ```
+
+## Rent vs Buy Calculator
+
+The Rent vs Buy calculator compares the cumulative cost of renting against buying a home across a configurable time horizon.
+
+Key files:
+
+- `resources/js/financial-planning/rent-vs-buy.tsx` — standalone public page mount.
+- `resources/js/components/planning/RentVsBuy/RentVsBuyPage.tsx` — URL-state orchestration and default inputs.
+- `resources/js/components/planning/RentVsBuy/RentVsBuyForm.tsx` — editable assumptions.
+- `resources/js/components/planning/RentVsBuy/RentVsBuyResults.tsx` — cumulative-cost and equity result display.
+- `resources/js/lib/planning/rentVsBuy.ts` — shared calculation library.
+
+Inputs include home price, down payment, mortgage rate and term, closing costs, property tax, HOA, insurance, maintenance, appreciation, selling costs, rent, renter's insurance, rent growth, investment return, marginal tax rate, filing status, inflation, and time horizon.
+
+The standalone page serializes scenarios into the URL query string using compact keys such as `price`, `down`, `rate`, `rent`, `invest`, and `horizon`.
 
 ## Shared Tax Preview Integration
 
