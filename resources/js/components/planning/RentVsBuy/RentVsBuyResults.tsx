@@ -15,12 +15,32 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { RentVsBuyResults, RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
+import type { RentVsBuyDetailSection, RentVsBuyResults, RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
 
-import RentVsBuyDetailsModal, { type RentVsBuyDetailSection } from './RentVsBuyDetailsModal'
+import RentVsBuyDetailsModal from './RentVsBuyDetailsModal'
 
 interface RentVsBuyResultsProps {
   results: RentVsBuyResults
+}
+
+interface DetailButtonProps {
+  children: ReactElement | string
+  row: RentVsBuyYearRow
+  section: RentVsBuyDetailSection
+  onOpenDetails: (row: RentVsBuyYearRow, section: RentVsBuyDetailSection) => void
+}
+
+function DetailButton({ children, row, section, onOpenDetails }: DetailButtonProps): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="link"
+      className="h-auto min-h-0 p-0 text-right font-normal"
+      onClick={() => onOpenDetails(row, section)}
+    >
+      {children}
+    </Button>
+  )
 }
 
 export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): ReactElement {
@@ -54,32 +74,11 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
     setDetailState(null)
   }
 
-  function DetailButton({
-    children,
-    row,
-    section,
-  }: {
-    children: ReactElement | string
-    row: RentVsBuyYearRow
-    section: RentVsBuyDetailSection
-  }): ReactElement {
-    return (
-      <Button
-        type="button"
-        variant="link"
-        className="h-auto min-h-0 p-0 text-right font-normal"
-        onClick={() => openDetails(row, section)}
-      >
-        {children}
-      </Button>
-    )
-  }
-
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SummaryTile title="Break-even horizon" kind={results.breakEvenYear === null ? 'yellow' : 'green'}>
-          {results.breakEvenYear === null ? 'Renting stays cheaper' : `Year ${results.breakEvenYear}`}
+          {results.breakEvenYear === null ? 'Renter wealth stays ahead' : `Year ${results.breakEvenYear}`}
         </SummaryTile>
         <SummaryTile title="Own vs. rent wealth delta" kind={results.finalWealthDelta >= 0 ? 'green' : 'red'}>
           {results.finalWealthDelta >= 0 ? '+' : '-'}
@@ -92,7 +91,7 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
           {formatMoney(finalRow?.renterPortfolio.total)}
         </SummaryTile>
         <SummaryTile title="Nonrecoverable costs">
-          {formatMoney(finalRow?.buyNonrecoverableCosts.total)} / {formatMoney(finalRow?.rentNonrecoverableCosts.total)}
+          Buy {formatMoney(finalRow?.buyNonrecoverableCosts.total)} / Rent {formatMoney(finalRow?.rentNonrecoverableCosts.total)}
         </SummaryTile>
       </div>
 
@@ -158,19 +157,19 @@ export default function RentVsBuyResults({ results }: RentVsBuyResultsProps): Re
                     <TableRow key={row.year} className={results.breakEvenYear === row.year ? 'bg-success/10' : undefined}>
                       <TableCell>{row.year}</TableCell>
                       <TableCell className="text-right">
-                        <DetailButton row={row} section="buy-costs">{formatMoney(row.buyNonrecoverableCosts.total)}</DetailButton>
+                        <DetailButton row={row} section="buy-costs" onOpenDetails={openDetails}>{formatMoney(row.buyNonrecoverableCosts.total)}</DetailButton>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DetailButton row={row} section="rent-costs">{formatMoney(row.rentNonrecoverableCosts.total)}</DetailButton>
+                        <DetailButton row={row} section="rent-costs" onOpenDetails={openDetails}>{formatMoney(row.rentNonrecoverableCosts.total)}</DetailButton>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DetailButton row={row} section="buyer-portfolio">{formatMoney(row.buyerPortfolio.total)}</DetailButton>
+                        <DetailButton row={row} section="buyer-portfolio" onOpenDetails={openDetails}>{formatMoney(row.buyerPortfolio.total)}</DetailButton>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DetailButton row={row} section="renter-portfolio">{formatMoney(row.renterPortfolio.total)}</DetailButton>
+                        <DetailButton row={row} section="renter-portfolio" onOpenDetails={openDetails}>{formatMoney(row.renterPortfolio.total)}</DetailButton>
                       </TableCell>
                       <TableCell className="text-right">
-                        <DetailButton row={row} section="buyer-wealth">{formatMoney(row.buyerTotalWealth)}</DetailButton>
+                        <DetailButton row={row} section="buyer-wealth" onOpenDetails={openDetails}>{formatMoney(row.buyerTotalWealth)}</DetailButton>
                       </TableCell>
                       <TableCell className="text-right">{formatMoney(row.renterTotalWealth)}</TableCell>
                       <TableCell className="text-right">

@@ -10,9 +10,7 @@ import {
   TableCell,
   TableRow,
 } from '@/components/ui/table'
-import type { RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
-
-export type RentVsBuyDetailSection = 'buy-costs' | 'rent-costs' | 'buyer-portfolio' | 'buyer-wealth' | 'renter-portfolio'
+import type { RentVsBuyDetailSection, RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
 
 interface RentVsBuyDetailsModalProps {
   row: RentVsBuyYearRow | null
@@ -91,7 +89,9 @@ function getDetailGroups(row: RentVsBuyYearRow, section: RentVsBuyDetailSection)
     return [{
       title: 'Portfolio components',
       lines: [
-        { label: 'Starting balance', value: row.buyerPortfolio.startingBalance },
+        ...(row.buyerPortfolio.startingBalance > 0
+          ? [{ label: 'Starting balance', value: row.buyerPortfolio.startingBalance }]
+          : []),
         { label: 'Cash-flow savings invested', value: row.buyerPortfolio.cashFlowContributions },
         { label: 'Investment growth', value: row.buyerPortfolio.investmentGrowth },
         { label: 'Portfolio value', value: row.buyerPortfolio.total, kind: 'subtotal' },

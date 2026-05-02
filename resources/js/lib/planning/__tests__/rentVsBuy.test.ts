@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 
-import { computeRentVsBuy, type RentVsBuyInputs, type RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
+import { computeRentVsBuy, type RentVsBuyInputs, type RentVsBuyPortfolioBreakdown, type RentVsBuyYearRow } from '@/lib/planning/rentVsBuy'
 
 function makeInputs(overrides: Partial<RentVsBuyInputs> = {}): RentVsBuyInputs {
   return {
@@ -41,6 +41,17 @@ function annualCostIncrease(rows: RentVsBuyYearRow[], index: number): number {
     .value
 }
 
+function portfolioComponentTotal(portfolio: RentVsBuyPortfolioBreakdown | undefined): number {
+  if (!portfolio) {
+    return 0
+  }
+
+  return currency(portfolio.startingBalance)
+    .add(portfolio.cashFlowContributions)
+    .add(portfolio.investmentGrowth)
+    .value
+}
+
 describe('computeRentVsBuy', () => {
   it('finds a break-even year within the chosen horizon for balanced assumptions', () => {
     const result = computeRentVsBuy(makeInputs({
@@ -55,7 +66,7 @@ describe('computeRentVsBuy', () => {
     expect(result.breakEvenYear).toBeLessThanOrEqual(12)
   })
 
-  it('returns null when renting stays cheaper for the full horizon', () => {
+  it('returns null when renter wealth stays ahead for the full horizon', () => {
     const result = computeRentVsBuy(makeInputs({
       homePrice: 1_250_000,
       monthlyRent: 2_100,
@@ -232,6 +243,20 @@ describe('computeRentVsBuy', () => {
     expect(result.rows[1]?.renterPortfolio.total).toBeCloseTo(121_000, 2)
     expect(result.rows[2]?.renterPortfolio.total).toBeCloseTo(133_100, 2)
     expect(result.rows[2]?.wealthDelta).toBeCloseTo(-33_100, 2)
+  })
+
+  it('keeps portfolio breakdowns on the same basis as portfolio totals with inflation', () => {
+    const result = computeRentVsBuy(makeInputs({
+      homePrice: 625_000,
+      monthlyRent: 3_400,
+      investmentReturnPercent: 7,
+      inflationRatePercent: 3,
+      timeHorizonYears: 4,
+    }))
+    const finalRow = result.rows.at(-1)
+
+    expect(portfolioComponentTotal(finalRow?.buyerPortfolio)).toBeCloseTo(finalRow?.buyerPortfolio.total ?? 0, 2)
+    expect(portfolioComponentTotal(finalRow?.renterPortfolio)).toBeCloseTo(finalRow?.renterPortfolio.total ?? 0, 2)
   })
 
   it('treats a zero-rate or zero-term mortgage as a full-cash purchase', () => {
