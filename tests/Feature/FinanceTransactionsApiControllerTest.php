@@ -182,6 +182,39 @@ class FinanceTransactionsApiControllerTest extends TestCase
         $response->assertUnauthorized();
     }
 
+    public function test_import_line_items_skips_duplicates(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+
+        $payload = [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-03',
+                    't_amt' => 42.00,
+                    't_type' => 'deposit',
+                    't_description' => 'API deposit',
+                ],
+            ],
+        ];
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", $payload)
+            ->assertOk()
+            ->assertJsonPath('imported', 1)
+            ->assertJsonPath('skipped_duplicate', 0);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", $payload)
+            ->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('skipped_duplicate', 1);
+
+        $this->assertSame(1, FinAccountLineItems::query()
+            ->where('t_account', $account->acct_id)
+            ->where('t_date', '2026-05-03')
+            ->where('t_amt', 42.00)
+            ->count());
+    }
+
     // -------------------------------------------------------------------------
     // GET /api/finance/{account_id}/transaction-years  (single account)
     // -------------------------------------------------------------------------
