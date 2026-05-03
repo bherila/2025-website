@@ -50,6 +50,10 @@ class ParseImportJob1099BTest extends TestCase
         });
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return Collection<int, FinAccounts>
+     */
     private function makeAccountCollection(array $rows): Collection
     {
         return FinAccounts::hydrate($rows);
@@ -245,6 +249,35 @@ class ParseImportJob1099BTest extends TestCase
             't_date' => '2024-06-15',
             't_source' => '1099b',
         ]);
+    }
+
+    public function test_upsert_lots_normalizes_empty_symbol_to_description_fallback(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity');
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+
+        $transactions = [[
+            'symbol' => '',
+            'description' => 'APPLE INC',
+            'cusip' => '037833100',
+            'quantity' => 10,
+            'purchase_date' => '2023-01-10',
+            'sale_date' => '2024-06-15',
+            'proceeds' => 1800.00,
+            'cost_basis' => 1500.00,
+            'wash_sale_disallowed' => 0,
+            'realized_gain_loss' => 300.00,
+            'form_8949_box' => 'D',
+            'is_covered' => true,
+            'additional_info' => null,
+        ]];
+
+        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+
+        $lot = FinAccountLot::where('acct_id', $account->acct_id)->firstOrFail();
+        $this->assertSame('APPLE INC', $lot->symbol);
+        $this->assertSame('037833100', $lot->cusip);
     }
 
     public function test_upsert_lots_determines_short_term_from_form_8949_box(): void

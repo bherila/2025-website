@@ -560,7 +560,7 @@ class ParseImportJob implements ShouldQueue
                 continue;
             }
 
-            $symbol = is_string($tx['symbol'] ?? null) ? trim($tx['symbol']) : null;
+            $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
             $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
             $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
             $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);

@@ -8,6 +8,24 @@ use Carbon\CarbonInterface;
 
 class LotMatcher
 {
+    private const OPEN_TRANSACTION_TYPES = [
+        'buy',
+        'reinvest',
+        'sell short',
+        'sell to open',
+        'short sale',
+    ];
+
+    private const CLOSE_TRANSACTION_TYPES = [
+        'sell',
+        'cover',
+        'buy to cover',
+        'buy to close',
+        'sell to close',
+        'merger',
+        'cash in lieu',
+    ];
+
     public const MONEY_TOLERANCE = 0.01;
 
     public const QUANTITY_TOLERANCE = 0.000001;
@@ -63,7 +81,7 @@ class LotMatcher
         return $this->matchingTransaction(
             $lot,
             $purchaseDate,
-            ['Buy', 'Reinvest', 'Sell Short'],
+            self::OPEN_TRANSACTION_TYPES,
             $this->numericValue($lot->quantity),
             $this->numericValue($lot->cost_basis),
             $excludedTransactionIds,
@@ -83,7 +101,7 @@ class LotMatcher
         return $this->matchingTransaction(
             $lot,
             $saleDate,
-            ['Sell', 'Cover', 'Merger', 'Cash In Lieu'],
+            self::CLOSE_TRANSACTION_TYPES,
             $this->numericValue($lot->quantity),
             $this->numericValue($lot->proceeds),
             $excludedTransactionIds,
@@ -165,11 +183,15 @@ class LotMatcher
         }
 
         [$dateStart, $dateEnd] = $this->dateWindow($date);
+        [$dateDistanceOrderSql, $dateDistanceOrderBindings] = $this->dateDistanceOrder($date);
+        [$quantityMin, $quantityMax] = $this->toleranceBounds($quantity, self::QUANTITY_TOLERANCE);
+        [$amountMin, $amountMax] = $this->toleranceBounds($amount, self::MONEY_TOLERANCE);
+        $typePlaceholders = implode(', ', array_fill(0, count($types), '?'));
 
-        return FinAccountLineItems::query()
+        $query = FinAccountLineItems::query()
             ->where('t_account', (int) $lot->acct_id)
             ->whereBetween('t_date', [$dateStart, $dateEnd])
-            ->whereIn('t_type', $types)
+            ->whereRaw("LOWER(t_type) IN ({$typePlaceholders})", $types)
             ->when($excludedTransactionIds !== [], fn ($query) => $query->whereNotIn('t_id', $excludedTransactionIds))
             ->where(function ($query) use ($symbol, $cusip): void {
                 if ($symbol !== '') {
@@ -180,26 +202,12 @@ class LotMatcher
                     $query->orWhere('t_cusip', $cusip);
                 }
             })
-            ->orderBy('t_id')
-            ->get()
-            ->filter(fn (FinAccountLineItems $transaction): bool => $this->numericClose(
-                abs($this->numericValue($transaction->t_qty)),
-                abs($quantity),
-                self::QUANTITY_TOLERANCE,
-            ) && $this->numericClose(
-                abs($this->numericValue($transaction->t_amt)),
-                abs($amount),
-                self::MONEY_TOLERANCE,
-            ))
-            ->sort(function (FinAccountLineItems $left, FinAccountLineItems $right) use ($date): int {
-                $dateComparison = $this->dateDistanceDays($left->t_date, $date) <=> $this->dateDistanceDays($right->t_date, $date);
-                if ($dateComparison !== 0) {
-                    return $dateComparison;
-                }
+            ->whereRaw('ABS(CAST(COALESCE(t_qty, 0) AS REAL)) BETWEEN CAST(? AS REAL) AND CAST(? AS REAL)', [$quantityMin, $quantityMax])
+            ->whereRaw('ABS(CAST(COALESCE(t_amt, 0) AS REAL)) BETWEEN CAST(? AS REAL) AND CAST(? AS REAL)', [$amountMin, $amountMax])
+            ->orderByRaw($dateDistanceOrderSql, $dateDistanceOrderBindings)
+            ->orderBy('t_id');
 
-                return (int) $left->t_id <=> (int) $right->t_id;
-            })
-            ->first();
+        return $query->first();
     }
 
     /**
@@ -226,14 +234,32 @@ class LotMatcher
         ];
     }
 
-    private function dateDistanceDays(mixed $left, string $right): int
+    /**
+     * @return array{0: string, 1: string[]}
+     */
+    private function dateDistanceOrder(string $date): array
     {
-        $leftDate = $this->dateValue($left);
-        if ($leftDate === null) {
-            return PHP_INT_MAX;
+        $center = new \DateTimeImmutable($date);
+        $clauses = ['WHEN t_date = ? THEN 0'];
+        $bindings = [$center->format('Y-m-d')];
+
+        for ($distance = 1; $distance <= self::DATE_TOLERANCE_DAYS; $distance++) {
+            $clauses[] = "WHEN t_date IN (?, ?) THEN {$distance}";
+            $bindings[] = $center->modify("-{$distance} days")->format('Y-m-d');
+            $bindings[] = $center->modify("+{$distance} days")->format('Y-m-d');
         }
 
-        return abs((int) (new \DateTimeImmutable($leftDate))->diff(new \DateTimeImmutable($right))->format('%r%a'));
+        return ['CASE '.implode(' ', $clauses).' ELSE '.(self::DATE_TOLERANCE_DAYS + 1).' END', $bindings];
+    }
+
+    /**
+     * @return array{0: float, 1: float}
+     */
+    private function toleranceBounds(float $value, float $tolerance): array
+    {
+        $absoluteValue = abs($value);
+
+        return [max(0.0, $absoluteValue - $tolerance), $absoluteValue + $tolerance];
     }
 
     private function numericClose(float $left, float $right, float $tolerance): bool

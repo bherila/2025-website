@@ -173,6 +173,78 @@ class TaxLotReconciliationServiceTest extends TestCase
         $this->assertNull(app(LotMatcher::class)->matchingBuyTransaction($lot));
     }
 
+    public function test_lot_matcher_matches_short_position_type_variants_case_insensitively(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $shortLot = $this->makeLot($account, [
+            'lot_source' => '1099b',
+            'quantity' => 5,
+            'purchase_date' => '2025-01-15',
+            'cost_basis' => 500,
+            'sale_date' => '2025-04-01',
+            'proceeds' => 400,
+            'is_short_term' => true,
+        ]);
+
+        $openShort = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2025-01-15',
+            't_type' => 'Sell to open',
+            't_symbol' => 'AAPL',
+            't_qty' => -5,
+            't_amt' => 500,
+            't_source' => 'import',
+        ]);
+        $closeShort = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2025-04-01',
+            't_type' => 'Buy to cover',
+            't_symbol' => 'AAPL',
+            't_qty' => 5,
+            't_amt' => -400,
+            't_source' => 'import',
+        ]);
+
+        $matcher = app(LotMatcher::class);
+
+        $this->assertSame($openShort->t_id, $matcher->matchingBuyTransaction($shortLot)?->t_id);
+        $this->assertSame($closeShort->t_id, $matcher->matchingSellTransaction($shortLot)?->t_id);
+    }
+
+    public function test_lot_matcher_prefers_closest_date_candidate_after_sql_filtering(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $lot = $this->makeLot($account, [
+            'lot_source' => '1099b',
+            'quantity' => 5,
+            'sale_date' => '2025-04-03',
+            'proceeds' => 500,
+        ]);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2025-04-01',
+            't_type' => 'Sell',
+            't_symbol' => 'AAPL',
+            't_qty' => -5,
+            't_amt' => 500,
+            't_source' => 'import',
+        ]);
+        $closestSell = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2025-04-02',
+            't_type' => 'Sell',
+            't_symbol' => 'AAPL',
+            't_qty' => -5,
+            't_amt' => 500,
+            't_source' => 'import',
+        ]);
+
+        $this->assertSame($closestSell->t_id, app(LotMatcher::class)->matchingSellTransaction($lot)?->t_id);
+    }
+
     public function test_reconcile_classifies_matched_variance_missing_duplicate_and_unresolved_rows(): void
     {
         $user = $this->createUser();
@@ -252,7 +324,7 @@ class TaxLotReconciliationServiceTest extends TestCase
             'missing_close_transactions' => 4,
         ], $result['summary']);
 
-        $statuses = collect($result['accounts'][0]['rows'])->pluck('status')->all();
+        $statuses = array_column($result['accounts'][0]['rows'], 'status');
         $this->assertContains('matched', $statuses);
         $this->assertContains('variance', $statuses);
         $this->assertContains('missing_account', $statuses);
@@ -315,6 +387,36 @@ class TaxLotReconciliationServiceTest extends TestCase
         $this->assertSame($buy->t_id, $row['transaction_match']['opening']['transaction']['t_id']);
         $this->assertSame('matched', $row['transaction_match']['closing']['status']);
         $this->assertSame($sell->t_id, $row['transaction_match']['closing']['transaction']['t_id']);
+    }
+
+    public function test_reconcile_preserves_null_transaction_amounts_and_quantities(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $taxDocument = $this->makeTaxDocument($user->id);
+        $transaction = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-01-02',
+            't_type' => 'Buy',
+            't_symbol' => 'AAPL',
+            't_qty' => null,
+            't_amt' => null,
+            't_price' => null,
+            't_source' => 'import',
+        ]);
+
+        $this->makeLot($account, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $taxDocument->id,
+            'open_t_id' => $transaction->t_id,
+        ]);
+
+        $result = app(TaxLotReconciliationService::class)->reconcile($user->id, 2025);
+        $payload = $result['accounts'][0]['rows'][0]['transaction_match']['opening']['transaction'];
+
+        $this->assertNull($payload['t_amt']);
+        $this->assertNull($payload['t_qty']);
+        $this->assertNull($payload['t_price']);
     }
 
     public function test_reconcile_matches_lots_inside_disposition_tolerances(): void

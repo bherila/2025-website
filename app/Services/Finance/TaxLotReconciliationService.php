@@ -325,14 +325,23 @@ class TaxLotReconciliationService
             't_id' => (int) $transaction->t_id,
             't_date' => $this->lotMatcher->dateValue($transaction->t_date),
             't_type' => $transaction->t_type,
-            't_amt' => $this->lotMatcher->numericValue($transaction->t_amt),
+            't_amt' => $this->nullableNumericValue($transaction->t_amt),
             't_symbol' => $transaction->t_symbol,
             't_cusip' => $transaction->t_cusip,
-            't_qty' => $this->lotMatcher->numericValue($transaction->t_qty),
-            't_price' => $transaction->t_price !== null ? $this->lotMatcher->numericValue($transaction->t_price) : null,
+            't_qty' => $this->nullableNumericValue($transaction->t_qty),
+            't_price' => $this->nullableNumericValue($transaction->t_price),
             't_description' => $transaction->t_description,
             't_source' => $transaction->t_source,
         ];
+    }
+
+    private function nullableNumericValue(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (float) $value;
     }
 
     /**
