@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
+use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,14 +24,18 @@ class TaxDocumentController extends Controller
 
     protected TaxDocumentCreationService $creationService;
 
+    protected TaxDocumentParsedDataNormalizer $parsedDataNormalizer;
+
     public function __construct(
         FileStorageService $fileService,
         GenAiJobDispatcherService $dispatcherService,
         TaxDocumentCreationService $creationService,
+        TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
     ) {
         $this->fileService = $fileService;
         $this->dispatcherService = $dispatcherService;
         $this->creationService = $creationService;
+        $this->parsedDataNormalizer = $parsedDataNormalizer;
     }
 
     public function index(Request $request): JsonResponse
@@ -77,7 +82,12 @@ class TaxDocumentController extends Controller
             $query->where('is_reviewed', $request->boolean('is_reviewed'));
         }
 
-        return response()->json($query->get());
+        return response()->json(
+            $this->parsedDataNormalizer->documentsForResponse(
+                $query->get(),
+                $request->boolean('include_original_parsed_data'),
+            )
+        );
     }
 
     public function requestUpload(Request $request): JsonResponse
@@ -173,10 +183,10 @@ class TaxDocumentController extends Controller
 
         $doc = $this->creationService->createSingleAccountDocument($docAttributes, $linkAttributes);
 
-        return response()->json(
-            $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']),
-            201
-        );
+        $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
 
     /**
@@ -226,10 +236,10 @@ class TaxDocumentController extends Controller
             $request->input('context_accounts', []),
         );
 
-        return response()->json(
-            $doc->load(['uploader:id,name', 'accountLinks.account:acct_id,acct_name']),
-            201
-        );
+        $doc->load(['uploader:id,name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
 
     /**
@@ -285,9 +295,13 @@ class TaxDocumentController extends Controller
             }
         });
 
-        return response()->json(
-            $doc->fresh(['uploader:id,name', 'employmentEntity:id,display_name', 'accountLinks.account:acct_id,acct_name'])
-        );
+        $freshDoc = $doc->fresh(['uploader:id,name', 'employmentEntity:id,display_name', 'accountLinks.account:acct_id,acct_name']);
+        if (! $freshDoc instanceof FileForTaxDocument) {
+            abort(404);
+        }
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($freshDoc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($freshDoc));
     }
 
     /**
@@ -465,20 +479,25 @@ class TaxDocumentController extends Controller
             return $taxDoc;
         });
 
-        return response()->json(
-            $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']),
-            201
-        );
+        $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $doc = FileForTaxDocument::where('id', $id)
             ->where('user_id', Auth::id())
             ->with(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name'])
             ->firstOrFail();
 
-        return response()->json($doc);
+        return response()->json(
+            $this->parsedDataNormalizer->documentForResponse(
+                $doc,
+                $request->boolean('include_original_parsed_data'),
+            )
+        );
     }
 
     public function download(int $id): JsonResponse
@@ -556,7 +575,10 @@ class TaxDocumentController extends Controller
         }
         $doc->syncToAccountLinks($linkUpdates);
 
-        return response()->json($doc);
+        $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
     }
 
     /**
@@ -586,7 +608,12 @@ class TaxDocumentController extends Controller
             $query->whereIn('form_type', $types);
         }
 
-        return response()->json($query->get());
+        return response()->json(
+            $this->parsedDataNormalizer->documentsForResponse(
+                $query->get(),
+                $request->boolean('include_original_parsed_data'),
+            )
+        );
     }
 
     /**
@@ -628,7 +655,10 @@ class TaxDocumentController extends Controller
         }
         $doc->syncToAccountLinks($linkUpdates);
 
-        return response()->json($doc);
+        $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
     }
 
     /**

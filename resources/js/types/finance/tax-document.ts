@@ -355,9 +355,18 @@ export interface TaxDocumentAccountLink {
   is_reviewed: boolean
   notes: string | null
   misc_routing?: MiscRouting | null
+  parsed_data_needs_review?: boolean
+  parsed_data_warnings?: ParsedDataWarning[]
+  has_original_parsed_data?: boolean
   account: { acct_id: number; acct_name: string } | null
   created_at: string
   updated_at: string
+}
+
+export interface ParsedDataWarning {
+  path: string
+  code: string
+  message: string
 }
 
 export interface TaxDocument {
@@ -381,7 +390,11 @@ export interface TaxDocument {
   genai_job_id: number | null
   genai_status: 'pending' | 'processing' | 'parsed' | 'failed' | null
   misc_routing?: MiscRouting | null
-  parsed_data: TaxDocumentParsedData | null
+  parsed_data: TaxDocumentParsedData | MultiAccountParsedEntry[] | null
+  parsed_data_needs_review?: boolean
+  parsed_data_warnings?: ParsedDataWarning[]
+  has_original_parsed_data?: boolean
+  original_parsed_data?: TaxDocumentParsedData | MultiAccountParsedEntry[] | null
   uploader: { id: number; name: string } | null
   employment_entity: { id: number; display_name: string } | null
   /** @deprecated Legacy eager-load. Use accountLinks instead. */

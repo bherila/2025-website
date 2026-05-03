@@ -67,12 +67,16 @@ class FileForTaxDocument extends Model
         'genai_job_id',
         'genai_status',
         'parsed_data',
+        'parsed_data_needs_review',
+        'parsed_data_warnings',
         'download_history',
     ];
 
     protected $casts = [
         'file_size_bytes' => 'integer',
         'is_reviewed' => 'boolean',
+        'parsed_data_needs_review' => 'boolean',
+        'parsed_data_warnings' => 'array',
         'tax_year' => 'integer',
         'download_history' => 'array',
     ];
@@ -84,7 +88,7 @@ class FileForTaxDocument extends Model
      * Writes pass through unchanged so the backfill command can store the
      * already-transformed value without re-encoding it.
      *
-     * @return Attribute<array<string,mixed>|null, array<string,mixed>|null>
+     * @return Attribute<array<mixed>|null, array<mixed>|null>
      */
     protected function parsedData(): Attribute
     {

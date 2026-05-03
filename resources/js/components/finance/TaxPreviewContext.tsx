@@ -726,9 +726,9 @@ export function TaxPreviewProvider({
       } else if (doc.form_type === 'broker_1099' && !Array.isArray(doc.parsed_data)) {
         // Flat-dict broker_1099 (single-account consolidated 1099): read aggregate fields directly.
         const p = doc.parsed_data as Record<string, unknown>
-        interestIncome = interestIncome.add((p.int_1_interest_income as number | undefined) ?? 0)
-        dividendIncome = dividendIncome.add((p.div_1a_total_ordinary as number | undefined) ?? 0)
-        qualifiedDividends = qualifiedDividends.add((p.div_1b_qualified as number | undefined) ?? 0)
+        interestIncome = interestIncome.add((p.box1_interest as number | undefined) ?? 0)
+        dividendIncome = dividendIncome.add((p.box1a_ordinary as number | undefined) ?? 0)
+        qualifiedDividends = qualifiedDividends.add((p.box1b_qualified as number | undefined) ?? 0)
       }
     }
 
@@ -924,14 +924,14 @@ export function TaxPreviewProvider({
       const p = doc.parsed_data as Record<string, unknown>
       const isBroker = doc.form_type === 'broker_1099'
       const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
-      const interest = isBroker ? (p?.int_1_interest_income as number | undefined) : (p?.box1_interest as number | undefined)
-      const ordDiv = isBroker ? (p?.div_1a_total_ordinary as number | undefined) : (p?.box1a_ordinary as number | undefined)
+      const interest = p?.box1_interest as number | undefined
+      const ordDiv = p?.box1a_ordinary as number | undefined
       const grossDistribution = doc.form_type === '1099_r' ? (p?.box1_gross_distribution as number | undefined) : undefined
       const taxableDistribution = doc.form_type === '1099_r'
         ? ((p?.box2a_taxable_amount as number | undefined) ?? (p?.box1_gross_distribution as number | undefined))
         : undefined
-      const foreignTax = isBroker ? (p?.div_7_foreign_tax_paid as number | undefined) : ((p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined)
-      const capGainLoss = isBroker ? (p?.b_total_gain_loss as number | undefined) : undefined
+      const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
+      const capGainLoss = isBroker ? (p?.total_realized_gain_loss as number | undefined) : undefined
       const fedTaxWithheld = doc.form_type === '1099_r' ? (p?.box4_fed_tax as number | undefined) : undefined
       const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
       const noteParts = [

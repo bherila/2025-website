@@ -23,6 +23,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
+import { buildManualInputPrompt, extractBrokerEntriesFromManualInput, formatManualTaxInput, getFormatLabel, type ManualTaxInputFormat, parseManualTaxInput } from '@/lib/finance/taxDocumentManualInput'
 import type { TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -173,6 +174,7 @@ export default function MultiAccountImportModal({
   const [skipGenAiProcessing, setSkipGenAiProcessing] = useState(false)
   const [showManualJson, setShowManualJson] = useState(false)
   const [manualJsonInput, setManualJsonInput] = useState('')
+  const [manualInputFormat, setManualInputFormat] = useState<ManualTaxInputFormat>('json')
   const [promptInfo, setPromptInfo] = useState<PromptInfo | null>(null)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
@@ -190,6 +192,7 @@ export default function MultiAccountImportModal({
     setSkipGenAiProcessing(false)
     setShowManualJson(false)
     setManualJsonInput('')
+    setManualInputFormat('json')
     setPromptInfo(null)
     setPromptCopied(false)
     if (pollTimerRef.current) {
@@ -324,7 +327,7 @@ export default function MultiAccountImportModal({
       }))
       let parsedData: unknown = null
       if (manualJsonInput.trim()) {
-        parsedData = JSON.parse(manualJsonInput)
+        parsedData = parseManualTaxInput(manualJsonInput, manualInputFormat)
       }
 
       const doc = (await fetchWrapper.post('/api/finance/tax-documents/multi-account', {
@@ -368,30 +371,40 @@ export default function MultiAccountImportModal({
     if (file) handleFileSelect(file)
   }
 
+  const switchManualInputFormat = (nextFormat: ManualTaxInputFormat) => {
+    if (nextFormat === manualInputFormat) return
+
+    if (!manualJsonInput.trim()) {
+      setManualInputFormat(nextFormat)
+      return
+    }
+
+    try {
+      const parsed = parseManualTaxInput(manualJsonInput, manualInputFormat)
+      setManualJsonInput(formatManualTaxInput(parsed, nextFormat))
+      setManualInputFormat(nextFormat)
+    } catch {
+      setManualInputFormat(nextFormat)
+    }
+  }
+
   const handleCopyPrompt = async () => {
     if (!promptInfo?.prompt) return
-    await navigator.clipboard.writeText(promptInfo.prompt)
+    await navigator.clipboard.writeText(buildManualInputPrompt(promptInfo, manualInputFormat))
     setPromptCopied(true)
     setTimeout(() => setPromptCopied(false), 2500)
   }
 
   const handleAttachManualJson = () => {
     try {
-      const parsed = JSON.parse(manualJsonInput)
-      const entries = Array.isArray(parsed)
-        ? parsed
-        : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { accounts?: unknown }).accounts)
-            ? (parsed as { accounts: unknown[] }).accounts
-            : null)
-      if (!entries || entries.length === 0) {
-        throw new Error('JSON must be an array of account/form entries, or an object with an accounts array.')
-      }
-      setManualJsonInput(JSON.stringify(entries, null, 2))
+      const parsed = parseManualTaxInput(manualJsonInput, manualInputFormat)
+      const entries = extractBrokerEntriesFromManualInput(parsed)
+      setManualJsonInput(formatManualTaxInput(entries, manualInputFormat))
       setShowManualJson(false)
       setSkipGenAiProcessing(false)
-      toast.success('Broker import JSON attached. Upload the PDF to finish.')
+      toast.success(`Broker import ${getFormatLabel(manualInputFormat)} attached. Upload the PDF to finish.`)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Invalid JSON')
+      toast.error(err instanceof Error ? err.message : `Invalid ${getFormatLabel(manualInputFormat)}`)
     }
   }
 
@@ -505,7 +518,7 @@ export default function MultiAccountImportModal({
                 onClick={() => setShowManualJson(true)}
               >
                 <FileCode2 className="h-4 w-4" />
-                {manualJsonInput.trim() ? 'Edit attached broker JSON' : 'Attach broker JSON from LLM'}
+                {manualJsonInput.trim() ? `Edit attached broker ${getFormatLabel(manualInputFormat)}` : 'Attach broker data from LLM'}
               </Button>
             </div>
             {error && (
@@ -521,11 +534,31 @@ export default function MultiAccountImportModal({
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
-                Copy this prompt into ChatGPT with the broker PDF, then paste the returned JSON array here.
+                Copy this prompt into ChatGPT with the broker PDF, then paste the returned {getFormatLabel(manualInputFormat)} here.
               </p>
               <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={handleCopyPrompt} disabled={!promptInfo?.prompt}>
                 <ClipboardCopy className="h-3.5 w-3.5" />
                 {promptCopied ? 'Copied' : 'Copy prompt'}
+              </Button>
+            </div>
+            <div className="inline-flex rounded-md border bg-background p-0.5">
+              <Button
+                type="button"
+                variant={manualInputFormat === 'json' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 rounded-sm px-3 text-xs"
+                onClick={() => switchManualInputFormat('json')}
+              >
+                JSON
+              </Button>
+              <Button
+                type="button"
+                variant={manualInputFormat === 'toon' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 rounded-sm px-3 text-xs"
+                onClick={() => switchManualInputFormat('toon')}
+              >
+                TOON
               </Button>
             </div>
             {promptLoading && (
@@ -536,21 +569,23 @@ export default function MultiAccountImportModal({
             )}
             {promptInfo && (
               <pre className="max-h-44 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap">
-                {promptInfo.prompt}
+                {buildManualInputPrompt(promptInfo, manualInputFormat)}
               </pre>
             )}
             <Textarea
               value={manualJsonInput}
               onChange={e => setManualJsonInput(e.target.value)}
               className="h-48 font-mono text-xs"
-              placeholder={'[\n  {\n    "account_identifier": "1234-5678",\n    "account_name": "Brokerage Account",\n    "form_type": "1099_b",\n    "tax_year": 2025,\n    "parsed_data": { "transactions": [] }\n  }\n]'}
+              placeholder={manualInputFormat === 'toon'
+                ? 'accounts[1]:\n  - account_identifier: 1234-5678\n    account_name: Brokerage Account\n    form_type: 1099_b\n    tax_year: 2025\n    parsed_data:\n      transactions[0]:'
+                : '[\n  {\n    "account_identifier": "1234-5678",\n    "account_name": "Brokerage Account",\n    "form_type": "1099_b",\n    "tax_year": 2025,\n    "parsed_data": { "transactions": [] }\n  }\n]'}
             />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setShowManualJson(false)}>
                 Back
               </Button>
               <Button type="button" onClick={handleAttachManualJson}>
-                Attach JSON
+                Attach {getFormatLabel(manualInputFormat)}
               </Button>
             </div>
           </div>

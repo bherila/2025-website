@@ -870,7 +870,7 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
     if (doc.formType === 'broker_1099' || doc.formType === '1099_div' || doc.formType === '1099_div_c') {
       addSource('13', {
         description: `${doc.payerName} — 1099-DIV capital gain distributions`,
-        amount: numericValue(parsed.div_2a_cap_gain ?? parsed.box2a_cap_gain),
+        amount: numericValue(parsed.box2a_cap_gain),
       })
     }
   }

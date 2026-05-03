@@ -255,13 +255,11 @@ const WEALTHFRONT_1099_DIV = {
     parsed_data: {
       payer_tin: '27-1967207',
       recipient_tin: 'XXX-XX-9913',
-      boxes: {
-        '1a_total_ordinary_dividends': 1816.11,
-        '1b_qualified_dividends': 1732.51,
-        '2a_total_capital_gain_distributions': 8.15,
-        '7_foreign_tax_paid': 10.45,
-        '8_foreign_country_or_us_possession': 'See detail',
-      },
+      box1a_ordinary: 1816.11,
+      box1b_qualified: 1732.51,
+      box2a_cap_gain: 8.15,
+      box7_foreign_tax: 10.45,
+      box8_foreign_country: 'See detail',
       detail_totals: {
         total_dividends_and_distributions: 1834.58,
       },
@@ -376,8 +374,8 @@ describe('TaxDocumentReviewModal — 1099-B exports', () => {
   })
 })
 
-describe('TaxDocumentReviewModal — nested broker 1099 review data', () => {
-  it('renders nested 1099-DIV boxes and supporting totals in the review panel', async () => {
+describe('TaxDocumentReviewModal — broker 1099 review data', () => {
+  it('renders canonical 1099-DIV boxes and supporting totals in the review panel', async () => {
     render(<TaxDocumentReviewModal {...(baseProps({
       document: WEALTHFRONT_1099_DIV,
       accountLink: WEALTHFRONT_1099_DIV_LINK,

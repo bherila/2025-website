@@ -65,12 +65,12 @@ export function collectForeignTaxSummaries(documents: TaxDocument[]): ForeignTax
         const sourceLabel = getSourceLabel(doc, parsedData)
         const accountId = doc.account_links?.find((link) => link.account_id != null)?.account_id ?? doc.account_id
 
-        const dividendSummary = extractForeignTaxFrom1099Div({ box7_foreign_tax: parsedData.div_7_foreign_tax_paid }, accountId)
+        const dividendSummary = extractForeignTaxFrom1099Div({ box7_foreign_tax: parsedData.box7_foreign_tax }, accountId)
         if (dividendSummary) {
           summaries.push(attachSourceDocumentMetadata(dividendSummary, doc, sourceLabel))
         }
 
-        const interestSummary = extractForeignTaxFrom1099Int({ box6_foreign_tax: parsedData.int_6_foreign_tax_paid }, accountId)
+        const interestSummary = extractForeignTaxFrom1099Int({ box6_foreign_tax: parsedData.box6_foreign_tax }, accountId)
         if (interestSummary) {
           summaries.push(attachSourceDocumentMetadata(interestSummary, doc, sourceLabel))
         }
