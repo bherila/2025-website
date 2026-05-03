@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { AlertTriangle, CheckCircle2, FileWarning, Link2, Loader2, RefreshCw, Scale } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, FileWarning, Link2, Loader2, RefreshCw, Scale } from 'lucide-react'
 import type { ReactElement } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import {
   type TaxLotReconciliationAccount,
@@ -53,6 +54,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [applyingAccountId, setApplyingAccountId] = useState<number | null>(null)
+  const [exporting, setExporting] = useState<'txf' | 'olt' | null>(null)
 
   const loadReconciliation = useCallback(async () => {
     setLoading(true)
@@ -117,6 +119,25 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
     await apply(account.account_id, { accept: [row.account_lot.lot_id] }, 'Accepted account-only lot')
   }
 
+  async function exportAll(format: 'txf' | 'olt'): Promise<void> {
+    setExporting(format)
+    try {
+      await downloadFinanceExport(
+        format === 'txf' ? '/api/finance/lots/export-txf' : '/api/finance/lots/export-olt-xlsx',
+        {
+          source: 'database',
+          scope: 'all',
+          tax_year: selectedYear,
+        },
+        format === 'txf' ? `1099b-lots-all-${selectedYear}.txf` : `1099b-lots-all-${selectedYear}.xlsx`,
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to export 1099-B lots')
+    } finally {
+      setExporting(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -144,11 +165,23 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
 
   return (
     <div className="space-y-5">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold">1099-B Lot Reconciliation</h2>
-        <p className="text-xs text-muted-foreground">
-          Compares broker-reported 1099-B lots against account statement lots for {selectedYear}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold">1099-B Lot Reconciliation</h2>
+          <p className="text-xs text-muted-foreground">
+            Compares broker-reported 1099-B lots against account statement lots for {selectedYear}.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasRows} onClick={() => void exportAll('txf')}>
+            {exporting === 'txf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Export TXF
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasRows} onClick={() => void exportAll('olt')}>
+            {exporting === 'olt' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            Export OLT XLSX
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">

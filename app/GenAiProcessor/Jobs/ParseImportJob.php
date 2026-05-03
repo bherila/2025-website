@@ -567,7 +567,14 @@ class ParseImportJob implements ShouldQueue
             $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
             $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
             $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
+            $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
+            $isCovered = isset($tx['is_covered']) ? (bool) $tx['is_covered'] : null;
             $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
+            $form8949Box = null;
+            if (is_string($tx['form_8949_box'] ?? null)) {
+                $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
+                $form8949Box = in_array($candidateBox, ['A', 'B', 'C', 'D', 'E', 'F'], true) ? $candidateBox : null;
+            }
 
             $purchaseDateRaw = $tx['purchase_date'] ?? null;
             $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
@@ -577,7 +584,7 @@ class ParseImportJob implements ShouldQueue
             if (isset($tx['is_short_term'])) {
                 $isShortTerm = (bool) $tx['is_short_term'];
             } elseif (isset($tx['form_8949_box'])) {
-                $box = strtoupper(trim((string) $tx['form_8949_box']));
+                $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
                 if (in_array($box, ['A', 'B', 'C'], true)) {
                     $isShortTerm = true;
                 } elseif (in_array($box, ['D', 'E', 'F'], true)) {
@@ -605,6 +612,10 @@ class ParseImportJob implements ShouldQueue
                 'is_short_term' => $isShortTerm,
                 'lot_source' => '1099b',
                 'tax_document_id' => $taxDocumentId,
+                'form_8949_box' => $form8949Box,
+                'is_covered' => $isCovered,
+                'accrued_market_discount' => $accruedMarketDiscount,
+                'wash_sale_disallowed' => $washSaleDisallowed,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);

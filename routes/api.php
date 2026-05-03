@@ -28,6 +28,7 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionLinkingApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
+use App\Http\Controllers\FinanceTool\Form8949LotExportController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
@@ -161,6 +162,8 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-pdf-state
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);
+Route::middleware(['web', 'auth'])->post('/finance/lots/export-txf', [Form8949LotExportController::class, 'txf']);
+Route::middleware(['web', 'auth'])->post('/finance/lots/export-olt-xlsx', [Form8949LotExportController::class, 'oltXlsx']);
 Route::middleware(['web', 'auth'])->get('/finance/lots/reconciliation', [FinanceLotsController::class, 'reconciliation']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/reconciliation', [FinanceLotsController::class, 'accountReconciliation']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/reconciliation/apply', [FinanceLotsController::class, 'applyReconciliation']);
