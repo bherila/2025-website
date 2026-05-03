@@ -1,88 +1,85 @@
-import { AlertCircle, FileSpreadsheet, Search } from 'lucide-react'
+import { ClipboardList, FileSpreadsheet, Search } from 'lucide-react'
 
-import { YearSelectorWithNav } from '@/components/finance/YearSelectorWithNav'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { YearSelection } from '@/lib/financeRouteBuilder'
 
+import { YearSelectorWithNav } from '../YearSelectorWithNav'
 import { useDockActions } from './DockActions'
 
 interface DockHeaderBarProps {
-  year: number
+  selectedYear: number
   availableYears: number[]
-  isLoading: boolean
-  onYearChange: (year: YearSelection) => void
+  isLoadingYears: boolean
   pendingReviewCount: number
+  onYearChange: (year: number | 'all') => void
 }
 
 /**
- * Top header bar for the Tax Preview dock shell. Holds the year selector,
- * command palette trigger, dock actions, and the review queue shortcut.
+ * Top header bar for the Tax Preview dock. Holds the title, command palette,
+ * document review queue, workbook export, and year navigation.
  *
  * Must be rendered inside `<DockActionsProvider>` so `useDockActions` resolves.
  */
 export function DockHeaderBar({
-  year,
+  selectedYear,
   availableYears,
-  isLoading,
-  onYearChange,
+  isLoadingYears,
   pendingReviewCount,
+  onYearChange,
 }: DockHeaderBarProps): React.ReactElement {
   const { exportXlsx, isExportingXlsx, openReviewQueue, setPaletteOpen } = useDockActions()
   const meta = navigatorMeta()
-  const showReviewQueue = pendingReviewCount > 0
-  const reviewLabel = `Review Queue (${pendingReviewCount})`
 
   return (
-    <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
-      <h1 className="finance-nav-title">Tax Preview</h1>
-      <Badge variant="outline" className="border-primary/30 bg-primary/10 text-xs text-primary">
-        Dock
-      </Badge>
-      <YearSelectorWithNav
-        selectedYear={year}
-        availableYears={availableYears}
-        isLoading={isLoading}
-        onYearChange={onYearChange}
-        includeAll={false}
-      />
-      <Button
+    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2">
+      <h1 className="text-base font-semibold tracking-tight">Tax Preview</h1>
+      <button
         type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 gap-1.5 border-info/30 bg-info/10 px-2.5 text-xs text-info hover:bg-info/15"
         onClick={() => setPaletteOpen(true)}
+        className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Open command palette"
       >
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Jump</span>
+        <span>Jump to form…</span>
         <kbd className="ml-1 hidden rounded border border-border bg-muted px-1 font-mono text-[10px] sm:inline">
           {meta}K
         </kbd>
-      </Button>
-      {showReviewQueue && (
+      </button>
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {pendingReviewCount > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-2.5 text-xs"
+            onClick={openReviewQueue}
+          >
+            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+            Review Documents
+            <Badge variant="destructive" className="h-4 px-1.5 py-0 text-xs">
+              {pendingReviewCount}
+            </Badge>
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 gap-1.5 border-warning/35 bg-warning/10 px-2.5 text-xs text-warning hover:bg-warning/15"
-          onClick={openReviewQueue}
+          className="h-7 gap-1.5 px-2.5 text-xs"
+          onClick={exportXlsx}
+          disabled={isExportingXlsx}
         >
-          <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-          {reviewLabel}
+          <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+          {isExportingXlsx ? 'Generating...' : 'Export XLSX'}
         </Button>
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="ml-auto h-7 gap-1.5 border-primary/30 bg-accent px-2.5 text-xs text-accent-foreground hover:bg-accent/80"
-        onClick={exportXlsx}
-        disabled={isExportingXlsx}
-      >
-        <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
-        {isExportingXlsx ? 'Generating…' : 'Export XLSX'}
-      </Button>
+        <YearSelectorWithNav
+          selectedYear={selectedYear}
+          availableYears={availableYears}
+          isLoading={isLoadingYears}
+          onYearChange={onYearChange}
+          includeAll={false}
+        />
+      </div>
     </div>
   )
 }

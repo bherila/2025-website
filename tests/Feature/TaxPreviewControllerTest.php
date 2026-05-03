@@ -45,6 +45,16 @@ class TaxPreviewControllerTest extends TestCase
         $response->assertSee('tax-preview-data');
     }
 
+    public function test_tax_preview_ignores_stale_dock_query_parameter(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->get('/finance/tax-preview?year=2024&dock=0');
+
+        $response->assertStatus(200);
+        $response->assertSee('tax-preview-data');
+    }
+
     public function test_tax_preview_page_preload_contains_expected_keys(): void
     {
         $user = $this->createUser();

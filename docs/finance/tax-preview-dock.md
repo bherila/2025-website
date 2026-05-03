@@ -1,17 +1,15 @@
-# Tax Preview — Miller-Column "Dock" Shell
+# Tax Preview — Miller-Column Shell
 
-The Tax Preview page now uses the horizontal Miller-columns shell as its only supported UI. It renders the shared `TaxPreviewPage` shell and shares data through `TaxPreviewProvider`; no secondary legacy tab layout is retained.
-
-The current behavior is `/finance/tax-preview` (with optional `?year=...`) and any `dock` query parameter is ignored.
+The Tax Preview page uses the horizontal Miller-columns drill-down shell as its only supported UI. The canonical URL is `/finance/tax-preview`; stale `dock` query parameters are ignored.
 
 ---
 
 ## Architecture
 
 ```
-TaxPreviewPage (dock-only shell)
+TaxPreviewPage
 ├── DockActionsProvider                        // ⌘K palette + worksheet dialog dispatch
-│   ├── DockHeaderBar                          // title + year + jump + review queue + export actions
+│   ├── DockHeaderBar                          // title + year selector + review/export actions + "Jump to form…" button
 │   ├── TaxEstimateHeader                      // persistent 3-tier (slim / expanded / full modal)
 │   └── MillerShell
 │       ├── CommandPalette                     // ⌘K palette
@@ -24,11 +22,11 @@ TaxPreviewPage (dock-only shell)
 
 | File | Role |
 |------|------|
-| `resources/js/components/finance/TaxPreviewPage.tsx` | Always renders `MillerShell` + header controls, and strips stale `dock` params on year navigation |
+| `resources/js/components/finance/TaxPreviewPage.tsx` | Dock-only page shell; wires year navigation, XLSX export, `TaxEstimateHeader`, and `MillerShell` |
 | `resources/js/components/finance/tax-preview/MillerShell.tsx` | Renders the route as a horizontal stack of columns. Handles Escape-to-truncate, overflow-x-auto container, narrow-screen fallback (show only the last column). |
 | `resources/js/components/finance/tax-preview/useTaxRoute.ts` | Parses URL hash (`#/form-1040/sch-1/form-1116:general`) → `{ columns: [{form, instance?}] }`; mutations push to `window.history`. |
 | `resources/js/components/finance/tax-preview/DockHomeView.tsx` | Landing view (zero-column route). Cards: Recent, Pinned, App, Forms, Worksheets. |
-| `resources/js/components/finance/tax-preview/DockHeaderBar.tsx` | Persistent top bar (title, year selector, ⌘K button, review queue, export). |
+| `resources/js/components/finance/tax-preview/DockHeaderBar.tsx` | Persistent top bar (title, ⌘K button, year selector, review queue, XLSX export). |
 | `resources/js/components/finance/tax-preview/TaxEstimateHeader.tsx` | 3-tier estimate (slim one-liner / expanded KPI cards / full modal with brackets + safe-harbor). Exports `summarizeTaxEstimate` + `TaxEstimateFullDetail`. |
 | `resources/js/components/finance/tax-preview/formRegistry.ts` | Registry *type* — `FormRegistry`, `FormId` union, `FormCategory`, `Presentation`, `FormRenderProps`, `DrillTarget`. |
 | `resources/js/components/finance/tax-preview/registry.tsx` | Registry *instance* — every form's adapter + entry (category, presentation, instances, xlsx contributor). |
@@ -63,7 +61,7 @@ The 1099-B lot reconciliation workflow is surfaced through the following dock en
 
 ## Drill adapter pattern
 
-Preview components were written for the Tabs UI's `onTabChange(tab: TaxTabId) => void`. In dock mode those callbacks are rerouted to `onDrill({ form: FormId })` via a small shim:
+Some preview components still expose `onTabChange(tab: TaxTabId) => void` because their source-navigation callbacks predate the dock shell. Dock adapters reroute those callbacks to `onDrill({ form: FormId })` via a small shim:
 
 ```ts
 // resources/js/components/finance/tax-tab-ids.ts
@@ -124,7 +122,7 @@ Tax-preview source navigation is intentionally form-level today:
 - Schedule 2 data-source dialogs route to the contributing form via `goToTab`.
 - K-1 trader-fund routing rows surface source labels and inline tooltips. Exact K-1 code-row deep links remain a future improvement; use `finance:k1-codes` for a CLI audit trail when reviewing trader-fund rows.
 
-When adding source navigation, keep the Tabs and Dock paths aligned: legacy components should continue accepting `onTabChange(tab)`, and dock adapters should translate that tab through `tabToDrill(onDrill)`.
+When adding source navigation, keep older `onTabChange(tab)` component callbacks translated through `tabToDrill(onDrill)` in the dock adapter.
 
 ---
 
@@ -178,5 +176,5 @@ Both light and dark variants are defined. Avoid hardcoded palette classes (`bg-g
 
 ## Related docs
 
-- [tax-system.md](tax-system.md) — legacy Tabs UI and data model
+- [tax-system.md](tax-system.md) — Tax Preview data model and computations
 - [README.md](README.md) — finance module index
