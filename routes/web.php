@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminGenAiJobsWebController;
+use App\Http\Controllers\AdminTaxNormalizationWebController;
 use App\Http\Controllers\BingoController;
 use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
@@ -89,6 +90,9 @@ Route::middleware('auth')->group(function () {
 
     // Admin GenAI Jobs (Admin only)
     Route::get('/admin/genai-jobs', [AdminGenAiJobsWebController::class, 'index'])->name('admin.genai-jobs');
+
+    // Admin Tax Normalization Review (Admin only)
+    Route::get('/admin/tax-normalization-review', [AdminTaxNormalizationWebController::class, 'index'])->name('admin.tax-normalization-review');
 
     // Client Management Routes
     Route::get('/client/mgmt', [ClientCompanyController::class, 'index'])->name('client-management.index');

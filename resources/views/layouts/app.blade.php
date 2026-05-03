@@ -39,6 +39,8 @@
         ['type' => 'link', 'label' => 'Capital Loss Carryover Worksheet', 'href' => '/tools/irs-f461'],
         $__isAdmin ? ['type' => 'group', 'label' => 'Admin'] : null,
         $__isAdmin ? ['type' => 'link', 'label' => 'User Management', 'href' => '/admin/users'] : null,
+        $__isAdmin ? ['type' => 'link', 'label' => 'GenAI Jobs', 'href' => '/admin/genai-jobs'] : null,
+        $__isAdmin ? ['type' => 'link', 'label' => 'Tax Normalization Review', 'href' => '/admin/tax-normalization-review'] : null,
         $__isAdmin ? ['type' => 'link', 'label' => 'Client Management', 'href' => '/client/mgmt'] : null,
       ]));
 
