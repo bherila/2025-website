@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect,useState } from 'react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import type { AccountLineItem, AccountLineItemTag } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -26,6 +28,8 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
   const [isSaving, setIsSaving] = useState(false)
   const { tags: availableTags } = useFinanceTags({ enabled: isOpen })
   const [currentTags, setCurrentTags] = useState<AccountLineItemTag[]>(transaction.tags ?? [])
+  const [pendingTagAdds, setPendingTagAdds] = useState<Set<number>>(() => new Set())
+  const [pendingTagRemovals, setPendingTagRemovals] = useState<Set<number>>(() => new Set())
 
   // Helper to format numeric value for form input (as text)
   const formatNumericValue = (value: number | string | null | undefined): string => {
@@ -68,30 +72,63 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
     setFee(formatNumericValue(transaction.t_fee))
     setSymbol(transaction.t_symbol || '')
     setCurrentTags(transaction.tags ?? [])
+    setPendingTagAdds(new Set())
+    setPendingTagRemovals(new Set())
   }, [transaction])
 
   const handleAddTag = async (tagId: number, tagLabel: string, tagColor: string) => {
-    if (currentTags.some((t) => t.tag_id === tagId)) return
+    if (
+      currentTags.some((t) => t.tag_id === tagId)
+      || pendingTagAdds.has(tagId)
+      || pendingTagRemovals.has(tagId)
+    ) return
+
+    const optimisticTag: AccountLineItemTag = { tag_id: tagId, tag_label: tagLabel, tag_color: tagColor, tag_userid: '' }
+    setPendingTagAdds((prev) => new Set(prev).add(tagId))
+    setCurrentTags((prev) => [...prev, optimisticTag])
+
     try {
       await fetchWrapper.post('/api/finance/tags/apply', {
         tag_id: tagId,
         transaction_ids: String(transaction.t_id),
       })
-      setCurrentTags((prev) => [...prev, { tag_id: tagId, tag_label: tagLabel, tag_color: tagColor, tag_userid: '' }])
     } catch (error) {
+      setCurrentTags((prev) => prev.filter((t) => t.tag_id !== tagId))
+      toast.error('Failed to add tag')
       console.error('Failed to add tag', error)
+    } finally {
+      setPendingTagAdds((prev) => {
+        const next = new Set(prev)
+        next.delete(tagId)
+        return next
+      })
     }
   }
 
   const handleRemoveTag = async (tagId: number) => {
+    if (pendingTagAdds.has(tagId) || pendingTagRemovals.has(tagId)) return
+
+    const removedTag = currentTags.find((tag) => tag.tag_id === tagId)
+    setPendingTagRemovals((prev) => new Set(prev).add(tagId))
+    setCurrentTags((prev) => prev.filter((t) => t.tag_id !== tagId))
+
     try {
       await fetchWrapper.post('/api/finance/tags/remove', {
         transaction_ids: String(transaction.t_id),
         tag_id: tagId,
       })
-      setCurrentTags((prev) => prev.filter((t) => t.tag_id !== tagId))
     } catch (error) {
+      if (removedTag) {
+        setCurrentTags((prev) => prev.some((tag) => tag.tag_id === tagId) ? prev : [...prev, removedTag])
+      }
+      toast.error('Failed to remove tag')
       console.error('Failed to remove tag', error)
+    } finally {
+      setPendingTagRemovals((prev) => {
+        const next = new Set(prev)
+        next.delete(tagId)
+        return next
+      })
     }
   }
 
@@ -276,11 +313,18 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
                         backgroundColor: getTagColorLight(tag.tag_color ?? ''),
                         color: getTagColorDark(tag.tag_color ?? ''),
                       }}
-                      className="cursor-pointer hover:opacity-70"
+                      className="inline-flex cursor-pointer items-center gap-1 hover:opacity-70 aria-disabled:cursor-wait aria-disabled:opacity-70"
+                      aria-busy={tag.tag_id !== undefined && pendingTagAdds.has(tag.tag_id)}
+                      aria-disabled={tag.tag_id !== undefined && (pendingTagAdds.has(tag.tag_id) || pendingTagRemovals.has(tag.tag_id))}
                       onClick={() => tag.tag_id !== undefined && handleRemoveTag(tag.tag_id)}
-                      title="Click to remove tag"
+                      title={tag.tag_id !== undefined && pendingTagAdds.has(tag.tag_id) ? 'Adding tag...' : 'Click to remove tag'}
                     >
-                      {tag.tag_label} ×
+                      {tag.tag_label}
+                      {tag.tag_id !== undefined && pendingTagAdds.has(tag.tag_id) ? (
+                        <Spinner size="small" className="h-3 w-3" />
+                      ) : (
+                        <span aria-hidden="true">×</span>
+                      )}
                     </Badge>
                   ))}
                 </div>

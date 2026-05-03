@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 import type { FinanceTag } from '../../useFinanceTags'
@@ -118,6 +118,44 @@ describe('TransactionsTaggingToolbar', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } })
     fireEvent.click(screen.getByRole('button', { name: /^Add$/i }))
     expect(onApplyTag).toHaveBeenCalledWith(1)
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Add$/i })).not.toBeDisabled())
+  })
+
+  it('shows a pending state while applying a tag', async () => {
+    let resolveApply: () => void = () => {}
+    const onApplyTag = jest.fn().mockImplementation(() => new Promise<void>((resolve) => {
+      resolveApply = resolve
+    }))
+
+    render(<TransactionsTaggingToolbar {...defaultProps} onApplyTag={onApplyTag} />)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Add$/i }))
+
+    expect(screen.getByRole('button', { name: /Adding/i })).toBeDisabled()
+    expect(screen.getByTestId('spinner')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveApply()
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Add$/i })).not.toBeDisabled())
+  })
+
+  it('shows a pending state while removing a selected tag', async () => {
+    let resolveRemove: () => void = () => {}
+    const onRemoveTag = jest.fn().mockImplementation(() => new Promise<void>((resolve) => {
+      resolveRemove = resolve
+    }))
+
+    render(<TransactionsTaggingToolbar {...defaultProps} onRemoveTag={onRemoveTag} />)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Remove$/i }))
+
+    expect(screen.getByRole('button', { name: /Removing/i })).toBeDisabled()
+
+    await act(async () => {
+      resolveRemove()
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Remove$/i })).not.toBeDisabled())
   })
 
   it('Add button is disabled when no tag is selected', () => {
@@ -164,11 +202,12 @@ describe('TransactionsTaggingToolbar', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
-  it('calls onRemoveAllTags when confirmed', () => {
+  it('calls onRemoveAllTags when confirmed', async () => {
     const onRemoveAllTags = jest.fn().mockResolvedValue(undefined)
     render(<TransactionsTaggingToolbar {...defaultProps} onRemoveAllTags={onRemoveAllTags} />)
     fireEvent.click(screen.getByRole('button', { name: /Clear All/i }))
     fireEvent.click(screen.getByText(/Confirm Removal/i))
     expect(onRemoveAllTags).toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Clear All/i })).not.toBeDisabled())
   })
 })
