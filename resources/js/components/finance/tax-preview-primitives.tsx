@@ -81,8 +81,8 @@ export function InfoTooltip({ children }: { children: React.ReactNode }) {
 
 export function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border rounded-lg overflow-hidden text-sm">
-      <div className="bg-muted/40 px-3 py-2 text-xs font-semibold tracking-wide border-b">{title}</div>
+    <div className="border border-border/60 rounded-lg overflow-hidden text-sm">
+      <div className="bg-muted/40 px-3 py-2 text-xs font-semibold tracking-wide border-b border-border/60">{title}</div>
       <div className="divide-y divide-dashed divide-border/50">{children}</div>
     </div>
   )
