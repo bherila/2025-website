@@ -1853,9 +1853,3 @@ parameters:
 			identifier: arrayValues.list
 			count: 1
 			path: app/Services/Finance/TaxPreviewDataService.php
-
-		-
-			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Services/Finance/TaxPreviewDataService.php

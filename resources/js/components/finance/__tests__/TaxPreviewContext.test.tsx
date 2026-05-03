@@ -207,10 +207,10 @@ describe('TaxPreviewContext', () => {
       tax_year: 2025,
       account_id: 33,
       parsed_data: {
-        int_1_interest_income: 100,
-        div_1a_total_ordinary: 500,
-        div_1b_qualified: 400,
-        div_7_foreign_tax_paid: 0,
+        box1_interest: 100,
+        box1a_ordinary: 500,
+        box1b_qualified: 400,
+        box7_foreign_tax: 0,
       },
     };
     (fetchWrapper.get as jest.Mock)
@@ -235,8 +235,8 @@ describe('TaxPreviewContext', () => {
       account_id: 33,
       parsed_data: {
         payer_name: 'Shared Broker',
-        div_7_foreign_tax_paid: 25,
-        int_6_foreign_tax_paid: 10,
+        box7_foreign_tax: 25,
+        box6_foreign_tax: 10,
       },
     }
 

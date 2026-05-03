@@ -12,6 +12,7 @@ class TaxPreviewDataService
 {
     public function __construct(
         private ScheduleCSummaryService $scheduleCSummaryService,
+        private TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
     ) {}
 
     /**
@@ -125,18 +126,19 @@ class TaxPreviewDataService
      */
     private function documentsForYear(int $userId, int $year, array $formTypes): array
     {
-        return FileForTaxDocument::where('user_id', $userId)
+        $documents = FileForTaxDocument::where('user_id', $userId)
             ->where('tax_year', $year)
             ->whereIn('form_type', $formTypes)
             ->with([
                 'uploader:id,name',
                 'employmentEntity:id,display_name',
                 'account:acct_id,acct_name',
-                'accountLinks',
+                'accountLinks.account:acct_id,acct_name',
             ])
             ->orderBy('created_at', 'desc')
-            ->get()
-            ->toArray();
+            ->get();
+
+        return $this->parsedDataNormalizer->documentsForResponse($documents);
     }
 
     /**

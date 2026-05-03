@@ -153,130 +153,11 @@ export interface DocAmounts {
   foreignTax: number | null
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function valueFromNestedObject(
-  data: Record<string, unknown>,
-  objectKey: string,
-  ...keys: readonly string[]
-): unknown {
-  const nested = data[objectKey]
-  if (!isRecord(nested)) {
-    return undefined
-  }
-
-  for (const key of keys) {
-    if (nested[key] !== undefined) {
-      return nested[key]
-    }
-  }
-
-  return undefined
-}
-
-function firstDefinedValue(data: Record<string, unknown>, ...keys: readonly string[]): unknown {
-  for (const key of keys) {
-    if (data[key] !== undefined) {
-      return data[key]
-    }
-  }
-
-  return undefined
-}
-
-function copyIfPresent(
-  normalized: Record<string, unknown>,
-  targetKey: string,
-  data: Record<string, unknown>,
-  ...sourceKeys: readonly string[]
-): void {
-  const direct = firstDefinedValue(data, ...sourceKeys)
-  if (direct !== undefined) {
-    normalized[targetKey] = direct
-    return
-  }
-
-  const boxed = valueFromNestedObject(data, 'boxes', ...sourceKeys)
-  if (boxed !== undefined) {
-    normalized[targetKey] = boxed
-  }
-}
-
-/**
- * Normalize the known 1099 extraction variants into the flat keys used by Tax Preview.
- * Some AI/import paths store IRS boxes inside parsed_data.boxes using long IRS labels,
- * while older manual/broker paths store box1a_ordinary, div_1a_total_ordinary, etc.
- */
-export function normalize1099ParsedData(
-  formType: string | undefined,
-  data: Record<string, unknown>,
-): Record<string, unknown> {
-  const normalized: Record<string, unknown> = { ...data }
-
-  copyIfPresent(normalized, 'payer_name', data, 'payer_name')
-  copyIfPresent(normalized, 'payer_tin', data, 'payer_tin')
-  copyIfPresent(normalized, 'recipient_name', data, 'recipient_name')
-  copyIfPresent(normalized, 'recipient_tin', data, 'recipient_tin', 'recipient_tin_last4')
-  copyIfPresent(normalized, 'account_number', data, 'account_number')
-
-  if (formType === '1099_int' || formType === '1099_int_c') {
-    copyIfPresent(normalized, 'box1_interest', data, 'box1_interest', 'int_1_interest_income', '1_interest_income')
-    copyIfPresent(normalized, 'box2_early_withdrawal', data, 'box2_early_withdrawal', 'int_2_early_withdrawal_penalty', '2_early_withdrawal_penalty')
-    copyIfPresent(normalized, 'box3_savings_bond', data, 'box3_savings_bond', 'int_3_us_savings_bonds_treasury', '3_interest_on_us_savings_bonds_and_treasury_obligations')
-    copyIfPresent(normalized, 'box4_fed_tax', data, 'box4_fed_tax', 'int_4_federal_tax_withheld', '4_federal_income_tax_withheld')
-    copyIfPresent(normalized, 'box5_investment_expense', data, 'box5_investment_expense', 'int_5_investment_expenses', '5_investment_expenses')
-    copyIfPresent(normalized, 'box6_foreign_tax', data, 'box6_foreign_tax', 'int_6_foreign_tax_paid', '6_foreign_tax_paid')
-    copyIfPresent(normalized, 'box7_foreign_country', data, 'box7_foreign_country', 'int_7_foreign_country', '7_foreign_country_or_us_possession', '7_foreign_country_or_us_territory')
-    copyIfPresent(normalized, 'box8_tax_exempt', data, 'box8_tax_exempt', 'int_8_tax_exempt_interest', '8_tax_exempt_interest')
-    copyIfPresent(normalized, 'box9_private_activity', data, 'box9_private_activity', 'int_9_specified_private_activity_bond_interest', '9_specified_private_activity_bond_interest', '9_specified_private_activity_bond_interest_amt')
-    copyIfPresent(normalized, 'box10_market_discount', data, 'box10_market_discount', 'int_10_market_discount', '10_market_discount', '10_market_discount_covered_lots')
-    copyIfPresent(normalized, 'box11_bond_premium', data, 'box11_bond_premium', 'int_11_bond_premium', '11_bond_premium', '11_bond_premium_covered_lots')
-    copyIfPresent(normalized, 'box12_treasury_premium', data, 'box12_treasury_premium', 'int_12_treasury_premium', '12_bond_premium_on_treasury_obligations', '12_bond_premium_on_treasury_obligations_covered_lots')
-    copyIfPresent(normalized, 'box13_tax_exempt_premium', data, 'box13_tax_exempt_premium', 'int_13_tax_exempt_bond_premium', '13_bond_premium_on_tax_exempt_bond', '13_bond_premium_on_tax_exempt_bonds')
-  }
-
-  if (formType === '1099_div' || formType === '1099_div_c') {
-    copyIfPresent(normalized, 'box1a_ordinary', data, 'box1a_ordinary', 'box1_ordinary', 'div_1a_total_ordinary', '1a_total_ordinary_dividends')
-    copyIfPresent(normalized, 'box1b_qualified', data, 'box1b_qualified', 'box1b', 'div_1b_qualified', '1b_qualified_dividends')
-    copyIfPresent(normalized, 'box2a_cap_gain', data, 'box2a_cap_gain', 'div_2a_cap_gain', '2a_total_capital_gain_distributions')
-    copyIfPresent(normalized, 'box2b_unrecap_1250', data, 'box2b_unrecap_1250', '2b_unrecaptured_section_1250_gain')
-    copyIfPresent(normalized, 'box2c_section_1202', data, 'box2c_section_1202', '2c_section_1202_gain')
-    copyIfPresent(normalized, 'box2d_collectibles', data, 'box2d_collectibles', '2d_collectibles_28_percent_gain')
-    copyIfPresent(normalized, 'box2e_section_897_ordinary', data, 'box2e_section_897_ordinary', '2e_section_897_ordinary_dividends')
-    copyIfPresent(normalized, 'box2f_section_897_cap_gain', data, 'box2f_section_897_cap_gain', '2f_section_897_capital_gain')
-    copyIfPresent(normalized, 'box3_nondividend', data, 'box3_nondividend', '3_nondividend_distributions')
-    copyIfPresent(normalized, 'box4_fed_tax', data, 'box4_fed_tax', 'div_4_federal_tax_withheld', '4_federal_income_tax_withheld')
-    copyIfPresent(normalized, 'box5_section_199a', data, 'box5_section_199a', '5_section_199a_dividends')
-    copyIfPresent(normalized, 'box6_investment_expense', data, 'box6_investment_expense', '6_investment_expenses')
-    copyIfPresent(normalized, 'box7_foreign_tax', data, 'box7_foreign_tax', 'div_7_foreign_tax_paid', '7_foreign_tax_paid')
-    copyIfPresent(normalized, 'box8_foreign_country', data, 'box8_foreign_country', '8_foreign_country_or_us_possession')
-    copyIfPresent(normalized, 'box9_cash_liquidation', data, 'box9_cash_liquidation', '9_cash_liquidation_distributions')
-    copyIfPresent(normalized, 'box10_noncash_liquidation', data, 'box10_noncash_liquidation', '10_noncash_liquidation_distributions')
-    copyIfPresent(normalized, 'box11_exempt_interest', data, 'box11_exempt_interest', 'box12_exempt_interest_dividends', '12_exempt_interest_dividends')
-    copyIfPresent(normalized, 'box12_private_activity', data, 'box12_private_activity', 'box13_specified_private_activity_bond_interest_dividends_amt', '13_specified_private_activity_bond_interest_dividends_amt')
-    copyIfPresent(normalized, 'box14_state_tax', data, 'box14_state_tax', 'state_tax_withheld')
-  }
-
-  if (formType === '1099_misc') {
-    copyIfPresent(normalized, 'box1_rents', data, 'box1_rents', 'misc_1_rents', '1_rents')
-    copyIfPresent(normalized, 'box2_royalties', data, 'box2_royalties', 'misc_2_royalties', '2_royalties')
-    copyIfPresent(normalized, 'box3_other_income', data, 'box3_other_income', 'box3_other', 'misc_3_other_income', '3_other_income')
-    copyIfPresent(normalized, 'box4_fed_tax', data, 'box4_fed_tax', 'misc_4_federal_tax_withheld', '4_federal_income_tax_withheld')
-    copyIfPresent(normalized, 'box8_substitute_payments', data, 'box8_substitute_payments', 'misc_8_substitute_payments', '8_substitute_payments_in_lieu_of_dividends_or_interest')
-  }
-
-  return normalized
-}
-
 const MISC_PRIMARY_BOX_KEYS = [
   'box1_rents',
   'box2_royalties',
   'box3_other_income',
-  'box3_other',
-  'box7_nonemployee',
-  'total_amount',
+  'box8_substitute_payments',
 ] as const
 
 function getNumericValue(
@@ -323,15 +204,11 @@ function sumNumericValues(
 }
 
 function inferMiscRouting(parsedData: Record<string, unknown>): MiscRouting | null {
-  if (getNumericValue(parsedData, 'box7_nonemployee') !== null) {
-    return 'sch_c'
-  }
-
   if (getNumericValue(parsedData, 'box1_rents', 'box2_royalties') !== null) {
     return 'sch_e'
   }
 
-  if (getNumericValue(parsedData, 'box3_other_income', 'box3_other', 'total_amount') !== null) {
+  if (getNumericValue(parsedData, 'box3_other_income', 'box8_substitute_payments') !== null) {
     return 'sch_1_line_8'
   }
 
@@ -353,8 +230,8 @@ function applyMiscRouting(
     return
   }
 
-  result.schC = sumNumericValues(parsedData, ['box7_nonemployee'])
-  result.other = sumNumericValues(parsedData, ['box1_rents', 'box2_royalties', 'box3_other_income', 'box3_other'])
+  result.schC = null
+  result.other = sumNumericValues(parsedData, ['box1_rents', 'box2_royalties', 'box3_other_income', 'box8_substitute_payments'])
 
   if (result.other === null) {
     const inferredRouting = inferMiscRouting(parsedData)
@@ -440,26 +317,26 @@ export function getDocAmounts(
     if (!raw) {
       return result
     }
-    const p = normalize1099ParsedData(effectiveFormType, raw)
+    const p = raw
     if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
-      const interest = getNumericValue(p, 'int_1_interest_income', 'box1_interest')
+      const interest = getNumericValue(p, 'box1_interest')
       if (interest != null && interest !== 0) {
         result.interest = interest
       }
-      const ft = getNumericValue(p, 'int_6_foreign_tax_paid', 'box6_foreign_tax')
+      const ft = getNumericValue(p, 'box6_foreign_tax')
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
       }
     } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-      const ordDiv = getNumericValue(p, 'div_1a_total_ordinary', 'box1a_ordinary', 'box1_ordinary')
+      const ordDiv = getNumericValue(p, 'box1a_ordinary')
       if (ordDiv != null && ordDiv !== 0) {
         result.dividend = ordDiv
       }
-      const capGain = getNumericValue(p, 'div_2a_cap_gain', 'box2a_cap_gain')
+      const capGain = getNumericValue(p, 'box2a_cap_gain')
       if (capGain != null && capGain !== 0) {
         result.capGain = capGain
       }
-      const ft = getNumericValue(p, 'div_7_foreign_tax_paid', 'box7_foreign_tax')
+      const ft = getNumericValue(p, 'box7_foreign_tax')
       if (ft != null && ft !== 0) {
         result.foreignTax = ft
       }
@@ -480,7 +357,7 @@ export function getDocAmounts(
     return result
   }
 
-  const p = normalize1099ParsedData(effectiveFormType, doc.parsed_data as Record<string, unknown>)
+  const p = doc.parsed_data as Record<string, unknown>
 
   if (effectiveFormType === '1099_int' || effectiveFormType === '1099_int_c') {
     const amt = getNumericValue(p, 'box1_interest')
@@ -492,7 +369,7 @@ export function getDocAmounts(
       result.foreignTax = ft
     }
   } else if (effectiveFormType === '1099_div' || effectiveFormType === '1099_div_c') {
-    const amt = getNumericValue(p, 'box1a_ordinary', 'box1_ordinary')
+    const amt = getNumericValue(p, 'box1a_ordinary')
     if (amt != null && amt !== 0) {
       result.dividend = amt
     }

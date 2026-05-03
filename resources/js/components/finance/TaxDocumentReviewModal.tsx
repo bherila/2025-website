@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { type ReactNode,useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -11,6 +11,7 @@ import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,8 +39,8 @@ import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
-import { extractLinkParsedData, normalize1099ParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
-import type { MiscRouting, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
+import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import type { MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxDocumentReviewModalProps {
@@ -412,7 +413,7 @@ function Standard1099ReviewPanel({
   data: Record<string, unknown>
   payerFallback: string
 }) {
-  const normalized = normalize1099ParsedData(formType, data)
+  const normalized = data
   const payer = payerDisplayName(normalized, payerFallback)
 
   if (formType === '1099_b' || formType === '1099_b_c') {
@@ -682,7 +683,7 @@ export default function TaxDocumentReviewModal({
   
   // Local editor state for the active document
   const [notes, setNotes] = useState('')
-  const [editData, setEditData] = useState<TaxDocumentParsedData | Record<string, unknown>>({})
+  const [editData, setEditData] = useState<TaxDocumentParsedData | MultiAccountParsedEntry[] | Record<string, unknown>>({})
   const [miscRouting, setMiscRouting] = useState<MiscRoutingSelectValue>('auto')
 
   const activeDoc = documents[currentIndex]
@@ -692,6 +693,9 @@ export default function TaxDocumentReviewModal({
   const isLinkReview = propAccountLink != null && propDocument?.form_type === 'broker_1099'
   const effectiveFormType = isLinkReview ? propAccountLink!.form_type : activeDoc?.form_type
   const effectiveReviewed = isLinkReview ? propAccountLink!.is_reviewed : activeDoc?.is_reviewed ?? false
+  const parsedDataWarnings = isLinkReview
+    ? propAccountLink?.parsed_data_warnings ?? []
+    : activeDoc?.parsed_data_warnings ?? []
 
   // When a K-1 is already confirmed, every section is rendered read-only EXCEPT the K-3 SBP
   // election checkbox (it's a user tax-planning preference, not extracted data). Detect when
@@ -848,26 +852,46 @@ export default function TaxDocumentReviewModal({
           return
         }
         const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
-        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: updatedArray })
-        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
-        setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, parsed_data: updatedArray as typeof d.parsed_data } : d))
+        const updatedDoc = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: updatedArray })) as TaxDocument
+        const updatedLinkData = extractLinkParsedData(updatedDoc, propAccountLink)
+        setEditData((updatedLinkData ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
       } else {
-        await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })
-        setEditData(parsedData as TaxDocumentParsedData | Record<string, unknown>)
-        setDocuments(prev => prev.map(d => d.id === doc.id ? {
-          ...d,
-          parsed_data: JSON.parse(JSON.stringify(parsedData)),
-        } : d))
+        const updatedDoc = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })) as TaxDocument
+        setEditData((updatedDoc.parsed_data ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
+        setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
       }
-      toast.success('JSON updated')
+      toast.success('Extracted data updated')
       onDocumentReviewed?.()
     } catch {
-      toast.error('Failed to update JSON')
+      toast.error('Failed to update extracted data')
     } finally {
       setSaving(false)
       setJsonEditOpen(false)
     }
   }, [onDocumentReviewed, isLinkReview, propAccountLink])
+
+  const loadOriginalParsedDataForEdit = useCallback(async (): Promise<unknown> => {
+    if (!activeDoc) {
+      throw new Error('No active document selected.')
+    }
+
+    const doc = (await fetchWrapper.get(`/api/finance/tax-documents/${activeDoc.id}?include_original_parsed_data=1`)) as TaxDocument
+    if (isLinkReview && propAccountLink) {
+      const sourceDoc = {
+        ...doc,
+        parsed_data: doc.original_parsed_data ?? doc.parsed_data,
+      } as TaxDocument
+      const linkData = extractLinkParsedData(sourceDoc, propAccountLink)
+      if (!linkData) {
+        throw new Error('Original extraction is not available for this account entry.')
+      }
+
+      return linkData
+    }
+
+    return doc.original_parsed_data ?? doc.parsed_data ?? {}
+  }, [activeDoc, isLinkReview, propAccountLink])
 
   const handleDelete = async (doc: TaxDocument) => {
     if (!confirm(`Delete "${doc.original_filename}"? This action cannot be undone.`)) return
@@ -1094,6 +1118,24 @@ export default function TaxDocumentReviewModal({
                   </div>
                 </div>
 
+                {parsedDataWarnings.length > 0 && (
+                  <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="space-y-2 text-xs">
+                      <p>
+                        Some extracted fields were stored but are not used by Tax Preview yet. Review the canonical values below before saving.
+                      </p>
+                      <ul className="list-disc space-y-1 pl-4">
+                        {parsedDataWarnings.slice(0, 3).map((warning, index) => (
+                          <li key={`${warning.path}-${warning.code}-${index}`}>
+                            {warning.path}: {warning.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4">
                   {/* Extracted Data - full width with 2-column internal layout */}
                   <div className="space-y-2">
@@ -1130,9 +1172,7 @@ export default function TaxDocumentReviewModal({
                             />
                           )}
                           <ParsedDataEditor
-                            data={isReviewable1099(effectiveFormType)
-                              ? normalize1099ParsedData(effectiveFormType, editData as Record<string, unknown>)
-                              : editData as Record<string, unknown>}
+                            data={editData as Record<string, unknown>}
                             onChange={(d) => setEditData(d)}
                             readOnly={effectiveReviewed}
                             formType={effectiveFormType}
@@ -1265,11 +1305,13 @@ export default function TaxDocumentReviewModal({
     {activeDoc && (
       <ManualJsonAttachModal
         open={jsonEditOpen}
-        formType={activeDoc.form_type}
+        formType={effectiveFormType ?? activeDoc.form_type}
         taxYear={taxYear}
-        accountId={activeDoc.account_id ?? undefined}
+        accountId={(isLinkReview ? propAccountLink?.account_id : activeDoc.account_id) ?? undefined}
         employmentEntityId={activeDoc.employment_entity_id ?? undefined}
         initialJson={editData}
+        hasOriginalParsedData={isLinkReview ? Boolean(propAccountLink?.has_original_parsed_data) : Boolean(activeDoc.has_original_parsed_data)}
+        onLoadOriginalParsedData={loadOriginalParsedDataForEdit}
         onJsonReady={async (data) => {
           await handleJsonEdit(activeDoc, data)
         }}

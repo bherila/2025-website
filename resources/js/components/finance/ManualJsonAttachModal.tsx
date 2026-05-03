@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertCircle, Check, CheckCircle, ChevronLeft, ClipboardCopy, Loader2 } from 'lucide-react'
+import { AlertCircle, Check, CheckCircle, ChevronLeft, ClipboardCopy, Loader2, RefreshCcw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
+import { buildManualInputPrompt, formatManualTaxInput, getFormatLabel, type ManualTaxInputFormat, parseManualTaxInput } from '@/lib/finance/taxDocumentManualInput'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -25,7 +26,7 @@ import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 function validateParsedData(data: unknown, formType: string): string[] {
   const errors: string[] = []
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    errors.push('JSON must be a plain object (not an array or primitive).')
+    errors.push('Data must be a plain object (not an array or primitive).')
     return errors
   }
   const obj = data as Record<string, unknown>
@@ -135,6 +136,8 @@ interface ManualJsonAttachModalProps {
   employmentEntityId?: number | undefined
   /** Existing document JSON (for edit mode — pre-fills the textarea). */
   initialJson?: unknown
+  hasOriginalParsedData?: boolean
+  onLoadOriginalParsedData?: () => Promise<unknown>
   /**
    * When provided, clicking the action button calls onJsonReady(parsedData) instead
    * of posting to the API. Used when attaching JSON before uploading the PDF file.
@@ -153,6 +156,8 @@ export default function ManualJsonAttachModal({
   accountId,
   employmentEntityId,
   initialJson,
+  hasOriginalParsedData = false,
+  onLoadOriginalParsedData,
   onJsonReady,
   onSuccess,
   onBack,
@@ -161,11 +166,13 @@ export default function ManualJsonAttachModal({
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
   const [schemaCopied, setSchemaCopied] = useState(false)
+  const [inputFormat, setInputFormat] = useState<ManualTaxInputFormat>('json')
 
   const [jsonInput, setJsonInput] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [isValid, setIsValid] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [loadingOriginal, setLoadingOriginal] = useState(false)
 
   const formLabel = FORM_TYPE_LABELS[formType] ?? formType
 
@@ -179,6 +186,7 @@ export default function ManualJsonAttachModal({
     setIsValid(initStr !== '')
     setPromptCopied(false)
     setSchemaCopied(false)
+    setInputFormat('json')
 
     setPromptLoading(true)
     fetchWrapper
@@ -196,22 +204,39 @@ export default function ManualJsonAttachModal({
       return
     }
     try {
-      const parsed = JSON.parse(jsonInput)
+      const parsed = parseManualTaxInput(jsonInput, inputFormat)
       const errors = validateParsedData(parsed, formType)
       setValidationErrors(errors)
       setIsValid(errors.length === 0)
     } catch {
-      setValidationErrors(['Invalid JSON — please check your input for syntax errors.'])
+      setValidationErrors([`Invalid ${getFormatLabel(inputFormat)} — please check your input for syntax errors.`])
       setIsValid(false)
     }
-  }, [jsonInput, formType])
+  }, [jsonInput, formType, inputFormat])
+
+  const switchInputFormat = useCallback((nextFormat: ManualTaxInputFormat) => {
+    if (nextFormat === inputFormat) return
+
+    if (!jsonInput.trim()) {
+      setInputFormat(nextFormat)
+      return
+    }
+
+    try {
+      const parsed = parseManualTaxInput(jsonInput, inputFormat)
+      setJsonInput(formatManualTaxInput(parsed, nextFormat))
+      setInputFormat(nextFormat)
+    } catch {
+      setInputFormat(nextFormat)
+    }
+  }, [inputFormat, jsonInput])
 
   const handleCopyPrompt = useCallback(async () => {
     if (!promptInfo?.prompt) return
-    await navigator.clipboard.writeText(promptInfo.prompt)
+    await navigator.clipboard.writeText(buildManualInputPrompt(promptInfo, inputFormat))
     setPromptCopied(true)
     setTimeout(() => setPromptCopied(false), 2500)
-  }, [promptInfo])
+  }, [inputFormat, promptInfo])
 
   const handleCopySchema = useCallback(async () => {
     if (!promptInfo?.json_schema) return
@@ -220,11 +245,25 @@ export default function ManualJsonAttachModal({
     setTimeout(() => setSchemaCopied(false), 2500)
   }, [promptInfo])
 
+  const handleLoadOriginal = useCallback(async () => {
+    if (!onLoadOriginalParsedData) return
+    setLoadingOriginal(true)
+    try {
+      const original = await onLoadOriginalParsedData()
+      setJsonInput(formatManualTaxInput(original, inputFormat))
+      toast.success(`Original extraction loaded as ${getFormatLabel(inputFormat)}.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load original extraction.')
+    } finally {
+      setLoadingOriginal(false)
+    }
+  }, [inputFormat, onLoadOriginalParsedData])
+
   const handleSubmit = useCallback(async () => {
     if (!isValid) return
     let parsedData: unknown
     try {
-      parsedData = JSON.parse(jsonInput)
+      parsedData = parseManualTaxInput(jsonInput, inputFormat)
     } catch {
       return
     }
@@ -245,29 +284,85 @@ export default function ManualJsonAttachModal({
         ...(employmentEntityId != null ? { employment_entity_id: employmentEntityId } : {}),
       })) as TaxDocument
 
-      toast.success(`${formLabel} JSON attached successfully.`)
+      toast.success(`${formLabel} data attached successfully.`)
       onSuccess(doc)
     } catch (err) {
       toast.error('Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'))
     } finally {
       setSubmitting(false)
     }
-  }, [isValid, jsonInput, onJsonReady, formType, taxYear, accountId, employmentEntityId, formLabel, onSuccess])
+  }, [isValid, jsonInput, inputFormat, onJsonReady, formType, taxYear, accountId, employmentEntityId, formLabel, onSuccess])
 
   const isEditMode = initialJson != null
+  const inputLabel = getFormatLabel(inputFormat)
+  const promptText = promptInfo ? buildManualInputPrompt(promptInfo, inputFormat) : ''
+  const placeholder = inputFormat === 'toon'
+    ? (() => {
+        try {
+          return formatManualTaxInput(JSON.parse(getJsonPlaceholder(formType)), 'toon')
+        } catch {
+          return 'payer_name: Example Payer\nbox1_interest: 123.45'
+        }
+      })()
+    : getJsonPlaceholder(formType)
 
   return (
     <Dialog open={open} onOpenChange={isOpen => !isOpen && !submitting && onBack()}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Edit JSON' : 'Attach JSON'} — {formLabel}</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit extracted data' : 'Attach extracted data'} — {formLabel}</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-md border bg-background p-0.5">
+              <Button
+                type="button"
+                variant={inputFormat === 'json' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 rounded-sm px-3 text-xs"
+                onClick={() => switchInputFormat('json')}
+              >
+                JSON
+              </Button>
+              <Button
+                type="button"
+                variant={inputFormat === 'toon' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 rounded-sm px-3 text-xs"
+                onClick={() => switchInputFormat('toon')}
+              >
+                TOON
+              </Button>
+            </div>
+            {isEditMode && hasOriginalParsedData && onLoadOriginalParsedData && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={handleLoadOriginal}
+                disabled={loadingOriginal || submitting}
+              >
+                {loadingOriginal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+                Load original extraction
+              </Button>
+            )}
+          </div>
+
+          {isEditMode && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                This editor opens the canonical data used by Tax Preview. Saving replaces the stored extraction with the current {inputLabel} content converted to JSON.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Instructions */}
           <p className="text-sm text-muted-foreground">
             Copy the prompt below and paste it along with your document into any LLM (ChatGPT, Claude, Gemini,
-            etc.). The LLM will return a JSON object — paste that JSON in the field at the bottom.
+            etc.). The LLM will return {inputLabel} — paste that output in the field at the bottom.
           </p>
 
           {promptLoading && (
@@ -296,14 +391,14 @@ export default function ManualJsonAttachModal({
                   </Button>
                 </div>
                 <pre className="text-xs bg-muted rounded-md p-3 overflow-auto max-h-48 whitespace-pre-wrap break-all border">
-                  {promptInfo.prompt}
+                  {promptText}
                 </pre>
               </section>
 
-              {/* ── JSON schema reference ─────────────────────────────── */}
+              {/* ── Data shape reference ─────────────────────────────── */}
               <section>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-sm font-semibold">Step 2 — Expected JSON format (for reference)</h3>
+                  <h3 className="text-sm font-semibold">Step 2 — Expected data shape (for reference)</h3>
                   <Button variant="ghost" size="sm" onClick={handleCopySchema} className="gap-1.5">
                     {schemaCopied ? (
                       <>
@@ -329,14 +424,14 @@ export default function ManualJsonAttachModal({
               <h3 className="text-sm font-semibold">Step 3 — Paste the LLM output here</h3>
               {isValid && (
                 <Badge variant="outline" className="text-green-700 border-green-400 gap-1">
-                  <CheckCircle className="h-3 w-3" /> Valid JSON
+                  <CheckCircle className="h-3 w-3" /> Valid {inputLabel}
                 </Badge>
               )}
             </div>
             <Textarea
               value={jsonInput}
               onChange={e => setJsonInput(e.target.value)}
-              placeholder={getJsonPlaceholder(formType)}
+              placeholder={placeholder}
               className="font-mono text-xs h-40 resize-none"
               disabled={submitting}
             />
@@ -367,7 +462,7 @@ export default function ManualJsonAttachModal({
             className="gap-1.5"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {submitting ? 'Saving…' : onJsonReady ? 'Attach JSON' : 'Attach JSON'}
+            {submitting ? 'Saving…' : onJsonReady ? `Attach ${inputLabel}` : `Attach ${inputLabel}`}
           </Button>
         </DialogFooter>
       </DialogContent>

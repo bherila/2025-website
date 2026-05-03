@@ -6,7 +6,7 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { parseK1Field } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
-import { extractLinkParsedData, getDocAmounts, normalize1099ParsedData } from '@/lib/finance/taxDocumentUtils'
+import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
 
@@ -66,7 +66,7 @@ export function computeScheduleB(
           continue
         }
 
-        const p = normalize1099ParsedData(link.form_type, extractLinkParsedData(doc, link) ?? {})
+        const p = extractLinkParsedData(doc, link) ?? {}
         const payer = (p.payer_name as string | undefined)
           ?? link.account?.acct_name
           ?? link.ai_account_name
@@ -95,7 +95,7 @@ export function computeScheduleB(
       continue
     }
 
-    const p = normalize1099ParsedData(doc.form_type, doc.parsed_data as Record<string, unknown>)
+    const p = doc.parsed_data as Record<string, unknown>
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099 Payer'
     const amounts = getDocAmounts(doc)
 

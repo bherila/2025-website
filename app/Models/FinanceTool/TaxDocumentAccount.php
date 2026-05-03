@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $is_reviewed
  * @property string|null $notes
  * @property string|null $misc_routing
+ * @property bool $parsed_data_needs_review
+ * @property array<int, array<string, string>>|null $parsed_data_warnings
  */
 class TaxDocumentAccount extends Model
 {
@@ -38,6 +40,8 @@ class TaxDocumentAccount extends Model
         'is_reviewed',
         'notes',
         'misc_routing',
+        'parsed_data_needs_review',
+        'parsed_data_warnings',
     ];
 
     protected function casts(): array
@@ -45,6 +49,8 @@ class TaxDocumentAccount extends Model
         return [
             'tax_year' => 'integer',
             'is_reviewed' => 'boolean',
+            'parsed_data_needs_review' => 'boolean',
+            'parsed_data_warnings' => 'array',
         ];
     }
 

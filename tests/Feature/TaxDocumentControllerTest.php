@@ -817,6 +817,102 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertEquals($doc->id, $response->json('0.id'));
     }
 
+    public function test_show_canonicalizes_noncanonical_1099_div_parsed_data_and_flags_review(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'account_id' => $account->acct_id,
+            'parsed_data' => [
+                'payer_tin' => '27-1967207',
+                'recipient_tin' => 'XXX-XX-9913',
+                'fatca_filing_requirement' => false,
+                'boxes' => [
+                    '1a_total_ordinary_dividends' => 1816.11,
+                    '1b_qualified_dividends' => 1732.51,
+                    '2a_total_capital_gain_distributions' => 8.15,
+                    '7_foreign_tax_paid' => 10.45,
+                    '8_foreign_country_or_us_possession' => 'See detail',
+                ],
+                'state_tax_withheld' => 0,
+                'detail_totals' => [
+                    'total_dividends_and_distributions' => 1834.58,
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.box1a_ordinary', 1816.11)
+            ->assertJsonPath('parsed_data.box1b_qualified', 1732.51)
+            ->assertJsonPath('parsed_data.box2a_cap_gain', 8.15)
+            ->assertJsonPath('parsed_data.box7_foreign_tax', 10.45)
+            ->assertJsonPath('parsed_data.box8_foreign_country', 'See detail')
+            ->assertJsonPath('parsed_data.box14_state_tax', 0)
+            ->assertJsonPath('parsed_data.detail_totals.total_dividends_and_distributions', 1834.58)
+            ->assertJsonPath('has_original_parsed_data', true)
+            ->assertJsonPath('parsed_data_needs_review', true)
+            ->assertJsonPath('parsed_data_warnings.0.code', 'canonicalized_alias')
+            ->assertJsonMissingPath('original_parsed_data');
+
+        $this->assertTrue((bool) $doc->fresh()->parsed_data_needs_review);
+
+        $originalResponse = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}?include_original_parsed_data=1");
+        $originalResponse->assertOk()
+            ->assertJsonPath('original_parsed_data.boxes.1a_total_ordinary_dividends', 1816.11);
+    }
+
+    public function test_broker_1099_canonicalizes_entries_and_flags_matching_link_for_review(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Wealthfront S&P500 FLFF');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'parsed_data' => [
+                [
+                    'account_identifier' => 'x2070',
+                    'account_name' => 'Wealthfront S&P500 FLFF',
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                    'parsed_data' => [
+                        'payer_name' => 'Apex Clearing',
+                        'boxes' => [
+                            '1a_total_ordinary_dividends' => 250.12,
+                            '1b_qualified_dividends' => 225.10,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+        $link = TaxDocumentAccount::createLink(
+            $doc->id,
+            $account->acct_id,
+            '1099_div',
+            2024,
+            aiIdentifier: 'x2070',
+            aiAccountName: 'Wealthfront S&P500 FLFF',
+        );
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.0.parsed_data.box1a_ordinary', 250.12)
+            ->assertJsonPath('parsed_data.0.parsed_data.box1b_qualified', 225.10)
+            ->assertJsonPath('parsed_data_needs_review', false)
+            ->assertJsonPath('account_links.0.parsed_data_needs_review', true)
+            ->assertJsonPath('account_links.0.has_original_parsed_data', true)
+            ->assertJsonPath('account_links.0.parsed_data_warnings.0.code', 'canonicalized_alias');
+
+        $this->assertFalse((bool) $doc->fresh()->parsed_data_needs_review);
+        $this->assertTrue((bool) $link->fresh()->parsed_data_needs_review);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public function test_can_store_1099_nec_document(): void

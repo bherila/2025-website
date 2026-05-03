@@ -55,7 +55,7 @@ function makeBrokerDivDoc(): TaxDocument {
     download_count: 0,
     genai_job_id: null,
     genai_status: 'parsed',
-    parsed_data: { payer_name: 'Broker Div', div_2a_cap_gain: 400 },
+    parsed_data: { payer_name: 'Broker Div', box2a_cap_gain: 400 },
     uploader: null,
     employment_entity: null,
     account: { acct_id: 10, acct_name: 'Brokerage' },
