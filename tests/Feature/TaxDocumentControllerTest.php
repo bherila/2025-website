@@ -859,11 +859,66 @@ class TaxDocumentControllerTest extends TestCase
             ->assertJsonPath('parsed_data_warnings.0.code', 'canonicalized_alias')
             ->assertJsonMissingPath('original_parsed_data');
 
-        $this->assertTrue((bool) $doc->fresh()->parsed_data_needs_review);
+        $this->assertFalse((bool) $doc->fresh()->parsed_data_needs_review);
 
         $originalResponse = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}?include_original_parsed_data=1");
         $originalResponse->assertOk()
             ->assertJsonPath('original_parsed_data.boxes.1a_total_ordinary_dividends', 1816.11);
+    }
+
+    public function test_update_persists_canonicalization_review_flags(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'account_id' => $account->acct_id,
+            'parsed_data' => ['payer_name' => 'Fidelity'],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'parsed_data' => [
+                'box1a_ordinary' => 100.00,
+                'boxes' => [
+                    '1a_total_ordinary_dividends' => 999.99,
+                    '1b_qualified_dividends' => 80.00,
+                ],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.box1a_ordinary', 100)
+            ->assertJsonPath('parsed_data.box1b_qualified', 80)
+            ->assertJsonPath('parsed_data_needs_review', true);
+
+        $doc->refresh();
+        $this->assertTrue((bool) $doc->parsed_data_needs_review);
+        $this->assertSame('canonicalized_alias', $doc->parsed_data_warnings[0]['code'] ?? null);
+    }
+
+    public function test_show_preserves_accessor_transformed_k1_parsed_data(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Partnership');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'account_id' => $account->acct_id,
+            'parsed_data' => [
+                'entity_name' => 'Sample Partnership',
+                'box1_ordinary_income' => 500,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, 'k1', 2024);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.schemaVersion', '1.0')
+            ->assertJsonPath('parsed_data.fields.B.value', 'Sample Partnership')
+            ->assertJsonPath('parsed_data.fields.1.value', '500');
     }
 
     public function test_broker_1099_canonicalizes_entries_and_flags_matching_link_for_review(): void
@@ -910,7 +965,66 @@ class TaxDocumentControllerTest extends TestCase
             ->assertJsonPath('account_links.0.parsed_data_warnings.0.code', 'canonicalized_alias');
 
         $this->assertFalse((bool) $doc->fresh()->parsed_data_needs_review);
-        $this->assertTrue((bool) $link->fresh()->parsed_data_needs_review);
+        $this->assertFalse((bool) $link->fresh()->parsed_data_needs_review);
+    }
+
+    public function test_broker_1099_matches_link_by_account_name_and_merges_repeated_warnings(): void
+    {
+        $user = $this->createUser();
+        $targetAccount = $this->createFinAccount($user->id, 'Wealthfront S&P500 FLFF');
+        $otherAccount = $this->createFinAccount($user->id, 'Wealthfront Cash');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'parsed_data' => [
+                [
+                    'account_name' => 'Wealthfront S&P500 FLFF',
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                    'parsed_data' => [
+                        'boxes' => [
+                            '1a_total_ordinary_dividends' => 250.12,
+                        ],
+                    ],
+                ],
+                [
+                    'account_name' => 'Wealthfront S&P500 FLFF',
+                    'form_type' => '1099_div',
+                    'tax_year' => 2024,
+                    'parsed_data' => [
+                        'box1b_qualified' => 225.10,
+                    ],
+                ],
+            ],
+        ]);
+        $targetLink = TaxDocumentAccount::createLink(
+            $doc->id,
+            $targetAccount->acct_id,
+            '1099_div',
+            2024,
+            aiAccountName: 'Wealthfront S&P500 FLFF',
+        );
+        TaxDocumentAccount::createLink(
+            $doc->id,
+            $otherAccount->acct_id,
+            '1099_div',
+            2024,
+            aiAccountName: 'Wealthfront Cash',
+        );
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+            'notes' => 'Persist normalization flags',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data_needs_review', false)
+            ->assertJsonPath('account_links.0.parsed_data_needs_review', true)
+            ->assertJsonPath('account_links.0.parsed_data_warnings.0.code', 'canonicalized_alias')
+            ->assertJsonCount(1, 'account_links.0.parsed_data_warnings')
+            ->assertJsonPath('account_links.1.parsed_data_needs_review', false);
+
+        $this->assertTrue((bool) $targetLink->fresh()->parsed_data_needs_review);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

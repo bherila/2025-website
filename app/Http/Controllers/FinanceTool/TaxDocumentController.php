@@ -184,6 +184,7 @@ class TaxDocumentController extends Controller
         $doc = $this->creationService->createSingleAccountDocument($docAttributes, $linkAttributes);
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
@@ -236,6 +237,7 @@ class TaxDocumentController extends Controller
         );
 
         $doc->load(['uploader:id,name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
@@ -297,6 +299,7 @@ class TaxDocumentController extends Controller
         if (! $freshDoc instanceof FileForTaxDocument) {
             abort(404);
         }
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($freshDoc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($freshDoc));
     }
@@ -477,6 +480,7 @@ class TaxDocumentController extends Controller
         });
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($doc), 201);
     }
@@ -572,6 +576,7 @@ class TaxDocumentController extends Controller
         $doc->syncToAccountLinks($linkUpdates);
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
     }
@@ -651,6 +656,7 @@ class TaxDocumentController extends Controller
         $doc->syncToAccountLinks($linkUpdates);
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name', 'accountLinks.account:acct_id,acct_name']);
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
         return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
     }

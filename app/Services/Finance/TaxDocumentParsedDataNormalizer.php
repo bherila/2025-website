@@ -156,39 +156,13 @@ class TaxDocumentParsedDataNormalizer
      */
     public function documentForResponse(FileForTaxDocument $doc, bool $includeOriginal = false): array
     {
-        $doc->loadMissing('accountLinks.account');
-
-        $rawParsedData = $this->rawParsedData($doc);
-        $parsedData = $rawParsedData ?? $doc->parsed_data;
-        /** @var array<int, array<int, array<string, string>>> $warningsByLink */
-        $warningsByLink = [];
-        $parentWarnings = [];
-
-        [$canonical, $warnings, $warningsByEntry] = $this->normalizeContainer($doc->form_type, $parsedData);
-        $parentWarnings = $warnings;
-
-        if ($this->documentHasFormType($doc, 'broker_1099') && is_array($parsedData) && array_is_list($parsedData)) {
-            foreach ($parsedData as $index => $entry) {
-                if (! is_array($entry)) {
-                    continue;
-                }
-
-                $link = $this->findMatchingLink($entry, $doc->accountLinks);
-                if ($link instanceof TaxDocumentAccount) {
-                    $warningsByLink[(int) $link->id] = $warningsByEntry[$index] ?? [];
-                } else {
-                    $parentWarnings = array_merge($parentWarnings, $warningsByEntry[$index] ?? []);
-                }
-            }
-        }
-
-        $this->persistReviewFlags($doc, $parentWarnings, $warningsByLink);
+        $normalized = $this->normalizeDocument($doc);
 
         $payload = $doc->toArray();
-        $payload['parsed_data'] = $canonical;
-        $payload['parsed_data_warnings'] = $parentWarnings;
-        $payload['parsed_data_needs_review'] = $parentWarnings !== [];
-        $payload['has_original_parsed_data'] = $rawParsedData !== null && $rawParsedData !== $canonical;
+        $payload['parsed_data'] = $normalized['parsed_data'];
+        $payload['parsed_data_warnings'] = $normalized['parent_warnings'];
+        $payload['parsed_data_needs_review'] = $normalized['parent_warnings'] !== [];
+        $payload['has_original_parsed_data'] = $normalized['raw_parsed_data'] !== null && $normalized['raw_parsed_data'] !== $normalized['parsed_data'];
 
         if (isset($payload['account_links']) && is_array($payload['account_links'])) {
             foreach ($payload['account_links'] as &$linkPayload) {
@@ -196,7 +170,7 @@ class TaxDocumentParsedDataNormalizer
                     continue;
                 }
 
-                $linkWarnings = $warningsByLink[(int) $linkPayload['id']] ?? ($linkPayload['parsed_data_warnings'] ?? []);
+                $linkWarnings = $normalized['warnings_by_link'][(int) $linkPayload['id']] ?? ($linkPayload['parsed_data_warnings'] ?? []);
                 $linkPayload['parsed_data_warnings'] = $linkWarnings;
                 $linkPayload['parsed_data_needs_review'] = $linkWarnings !== [];
                 $linkPayload['has_original_parsed_data'] = $linkWarnings !== [];
@@ -205,7 +179,7 @@ class TaxDocumentParsedDataNormalizer
         }
 
         if ($includeOriginal && $payload['has_original_parsed_data']) {
-            $payload['original_parsed_data'] = $rawParsedData;
+            $payload['original_parsed_data'] = $normalized['raw_parsed_data'];
         }
 
         return $payload;
@@ -226,9 +200,64 @@ class TaxDocumentParsedDataNormalizer
         return $rows;
     }
 
-    private function documentHasFormType(FileForTaxDocument $doc, string $formType): bool
+    public function persistReviewFlagsForDocument(FileForTaxDocument $doc): void
     {
-        return $doc->form_type === $formType;
+        $normalized = $this->normalizeDocument($doc);
+
+        $this->persistReviewFlags($doc, $normalized['parent_warnings'], $normalized['warnings_by_link']);
+    }
+
+    /**
+     * @return array{
+     *     parsed_data: mixed,
+     *     raw_parsed_data: array<mixed>|null,
+     *     parent_warnings: array<int, array<string, string>>,
+     *     warnings_by_link: array<int, array<int, array<string, string>>>
+     * }
+     */
+    private function normalizeDocument(FileForTaxDocument $doc): array
+    {
+        $doc->loadMissing('accountLinks.account');
+
+        $rawParsedData = $this->rawParsedData($doc);
+        $parsedData = $this->shouldPreferRawParsedData($doc->form_type)
+            ? ($rawParsedData ?? $doc->parsed_data)
+            : $doc->parsed_data;
+        /** @var array<int, array<int, array<string, string>>> $warningsByLink */
+        $warningsByLink = [];
+
+        [$canonical, $parentWarnings, $warningsByEntry] = $this->normalizeContainer($doc->form_type, $parsedData);
+
+        if ($warningsByEntry !== [] && is_array($parsedData) && array_is_list($parsedData)) {
+            foreach ($parsedData as $index => $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+
+                $entryWarnings = $warningsByEntry[$index] ?? [];
+                $link = $this->findMatchingLink($entry, $doc->accountLinks);
+                if ($link instanceof TaxDocumentAccount) {
+                    $linkId = (int) $link->id;
+                    $warningsByLink[$linkId] = $this->dedupeWarnings(array_merge($warningsByLink[$linkId] ?? [], $entryWarnings));
+                } else {
+                    $parentWarnings = array_merge($parentWarnings, $entryWarnings);
+                }
+            }
+        }
+
+        return [
+            'parsed_data' => $canonical,
+            'raw_parsed_data' => $rawParsedData,
+            'parent_warnings' => $this->dedupeWarnings($parentWarnings),
+            'warnings_by_link' => $warningsByLink,
+        ];
+    }
+
+    private function shouldPreferRawParsedData(string $formType): bool
+    {
+        return $this->baseFormType($formType) !== $formType
+            || $formType === 'broker_1099'
+            || isset(self::CANONICAL_KEYS_BY_FORM[$formType]);
     }
 
     /**
@@ -290,11 +319,19 @@ class TaxDocumentParsedDataNormalizer
         }
 
         foreach ($aliases as $sourceKey => $targetKey) {
-            if (array_key_exists($sourceKey, $parsedData) && ! array_key_exists($targetKey, $canonical)) {
-                $canonical[$targetKey] = $parsedData[$sourceKey];
-                $warnings[] = $this->warning("{$pathPrefix}.{$sourceKey}", 'canonicalized_alias', "Canonicalized to {$targetKey}.");
-                $consumed[$sourceKey] = true;
+            if (! array_key_exists($sourceKey, $parsedData)) {
+                continue;
             }
+
+            if (! array_key_exists($targetKey, $canonical)) {
+                $canonical[$targetKey] = $parsedData[$sourceKey];
+                $message = "Canonicalized to {$targetKey}.";
+            } else {
+                $message = "Alias maps to {$targetKey}; existing canonical value was preserved.";
+            }
+
+            $warnings[] = $this->warning("{$pathPrefix}.{$sourceKey}", 'canonicalized_alias', $message);
+            $consumed[$sourceKey] = true;
         }
 
         if (isset($parsedData['boxes']) && is_array($parsedData['boxes'])) {
@@ -304,16 +341,20 @@ class TaxDocumentParsedDataNormalizer
                 }
 
                 $targetKey = $aliases[$sourceKey] ?? null;
-                if ($targetKey !== null && ! array_key_exists($targetKey, $canonical)) {
-                    $canonical[$targetKey] = $value;
-                    $warnings[] = $this->warning("{$pathPrefix}.boxes.{$sourceKey}", 'canonicalized_alias', "Canonicalized to {$targetKey}.");
+                if ($targetKey !== null) {
+                    if (! array_key_exists($targetKey, $canonical)) {
+                        $canonical[$targetKey] = $value;
+                        $message = "Canonicalized to {$targetKey}.";
+                    } else {
+                        $message = "Alias maps to {$targetKey}; existing canonical value was preserved.";
+                    }
+
+                    $warnings[] = $this->warning("{$pathPrefix}.boxes.{$sourceKey}", 'canonicalized_alias', $message);
 
                     continue;
                 }
 
-                if ($targetKey === null) {
-                    $warnings[] = $this->warning("{$pathPrefix}.boxes.{$sourceKey}", 'unsupported_field', 'Stored but not used by Tax Preview.');
-                }
+                $warnings[] = $this->warning("{$pathPrefix}.boxes.{$sourceKey}", 'unsupported_field', 'Stored but not used by Tax Preview.');
             }
             $consumed['boxes'] = true;
         }
@@ -412,17 +453,37 @@ class TaxDocumentParsedDataNormalizer
             return $candidates[0];
         }
 
-        $identifier = $entry['account_identifier'] ?? null;
-        if (! is_string($identifier) || $identifier === '') {
-            return null;
-        }
-
-        $identified = array_values(array_filter(
+        $identifier = $this->nonEmptyString($entry['account_identifier'] ?? null);
+        $identified = $identifier === null ? [] : $this->matchingLinks(
             $candidates,
             static fn (TaxDocumentAccount $link): bool => $link->ai_identifier === $identifier,
-        ));
+        );
+        if (count($identified) === 1) {
+            return $identified[0];
+        }
 
-        return count($identified) === 1 ? $identified[0] : null;
+        $accountName = $this->nonEmptyString($entry['account_name'] ?? null);
+        $named = $accountName === null ? [] : $this->matchingLinks(
+            $candidates,
+            static fn (TaxDocumentAccount $link): bool => $link->ai_account_name === $accountName,
+        );
+
+        return count($named) === 1 ? $named[0] : null;
+    }
+
+    /**
+     * @param  array<int, TaxDocumentAccount>  $links
+     * @param  callable(TaxDocumentAccount): bool  $callback
+     * @return array<int, TaxDocumentAccount>
+     */
+    private function matchingLinks(array $links, callable $callback): array
+    {
+        return array_values(array_filter($links, $callback));
+    }
+
+    private function nonEmptyString(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**
