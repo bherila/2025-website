@@ -436,10 +436,10 @@ function Standard1099ReviewPanel({
           )}
         </FormBlock>
         {hasLots ? (
-          <>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Form8949MiniSection title="Form 8949 Part I — Short-Term" lots={lots} />
             <Form8949MiniSection title="Form 8949 Part II — Long-Term" lots={lots} />
-          </>
+          </div>
         ) : (
           <FormBlock title="Form 8949 Detail">
             <FormLine label="No transactions extracted" raw="—" />
@@ -457,6 +457,10 @@ function Standard1099ReviewPanel({
     : formType === '1099_div' || formType === '1099_div_c'
       ? `${payer} — Schedule B Dividends`
       : `${payer} — 1099-MISC Routing`
+  const supplementalBlocks = [
+    { key: 'detail-totals', node: objectReviewBlock('Detail Totals', normalized.detail_totals) },
+    { key: 'foreign-income-and-taxes', node: objectReviewBlock('Foreign Income and Taxes', normalized.foreign_income_and_taxes_summary) },
+  ].filter((block): block is { key: string; node: ReactNode } => block.node !== null)
 
   return (
     <div className="space-y-4">
@@ -465,8 +469,15 @@ function Standard1099ReviewPanel({
           ? visibleFields.map((field) => renderReviewLine(normalized, field))
           : <FormLine label="No recognized IRS boxes extracted" raw="—" />}
       </FormBlock>
-      {objectReviewBlock('Detail Totals', normalized.detail_totals)}
-      {objectReviewBlock('Foreign Income and Taxes', normalized.foreign_income_and_taxes_summary)}
+      {supplementalBlocks.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {supplementalBlocks.map((block) => (
+            <div key={block.key} className="min-w-0">
+              {block.node}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -654,7 +665,7 @@ function ParsedDataEditor({
               />
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
             {taxEntries.map(renderField)}
           </div>
         </div>
@@ -1042,7 +1053,7 @@ export default function TaxDocumentReviewModal({
               <p className="text-sm max-w-xs">No documents are currently waiting for your review.</p>
             </div>
           ) : (
-            <div className="space-y-6 py-2">
+            <div className="mx-auto w-full max-w-7xl space-y-6 py-2">
               <div className="space-y-4">
                 {/* Header info */}
                 <div className="flex items-start justify-between gap-4">
@@ -1252,7 +1263,7 @@ export default function TaxDocumentReviewModal({
         </div>
 
         <DialogFooter className="border-t pt-4 px-1">
-          <div className="flex w-full items-center justify-between">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
             <div className="flex items-center gap-2">
               <Button variant="ghost" onClick={onClose}>Close</Button>
               {activeDoc && (
