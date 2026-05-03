@@ -16,9 +16,8 @@ interface DockHeaderBarProps {
 }
 
 /**
- * Top header bar shown when dock mode is active. Holds the title, the
- * title, year selector, command palette trigger, dock actions, and the
- * review queue shortcut.
+ * Top header bar for the Tax Preview dock shell. Holds the year selector,
+ * command palette trigger, dock actions, and the review queue shortcut.
  *
  * Must be rendered inside `<DockActionsProvider>` so `useDockActions` resolves.
  */

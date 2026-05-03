@@ -766,7 +766,7 @@ Per-account upload uses the `ghost` variant **Add** dropdown with per-form-type 
 
 The Tax Preview page (`TaxPreviewPage.tsx`) is a dock-style drill-down shell (see Tab Structure above for referenced internal sections). The home card view opens `Form`, `Schedule`, `App`, and `Worksheet` destinations, and selections open as columns in the shell. The `Tax Estimate`, `Account Documents`, and `Action Items` sections remain available as top-level dock app targets.
 
-`Form1040Preview` is purely presentational — it receives pre-computed `Form1040LineItem[]` from `taxReturn.form1040` (computed once in `TaxPreviewContext` and shared with the XLSX workbook export). Each 1040 line has an optional `navTab` that navigates to the relevant schedule tab on click, and an optional `sources` array for the drill-down data source modal.
+`Form1040Preview` is purely presentational — it receives pre-computed `Form1040LineItem[]` from `taxReturn.form1040` (computed once in `TaxPreviewContext` and shared with the XLSX workbook export). Each 1040 line has an optional `navTab` that opens the corresponding schedule or form column in the dock shell on click, and an optional `sources` array for the drill-down data source modal.
 
 All schedule computations (Schedule 1, B, C, D, E, SE, Forms 1116/4952/6251/8582/8959/8960/8995) run once in `TaxPreviewContext` and their results are stored on `TaxReturn1040`. Preview components receive pre-computed data — they do not recompute.
 

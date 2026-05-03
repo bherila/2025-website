@@ -72,8 +72,8 @@ const mockRegistry: FormRegistry = {
   },
   'tax-lot-reconciliation': {
     id: 'tax-lot-reconciliation',
-    label: '1099-B Reconciliation',
-    shortLabel: '1099-B',
+    label: '1099-B Lot Reconciliation',
+    shortLabel: '1099-B Reconcile',
     category: 'App',
     presentation: 'app',
     ...sharedDefaults,
@@ -303,7 +303,7 @@ describe('CommandPalette', () => {
         <CommandPalette open onOpenChange={onOpenChange} registry={mockRegistry} />
       </Wrapper>,
     )
-    fireEvent.click(screen.getByText('1099-B Reconciliation'))
+    fireEvent.click(screen.getByText('1099-B Lot Reconciliation'))
     expect(window.location.hash).toBe('#/tax-lot-reconciliation')
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })

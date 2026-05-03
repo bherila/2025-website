@@ -40,8 +40,8 @@ TaxPreviewPage (dock-only shell)
 
 The 1099-B lot reconciliation workflow is surfaced through the following dock entry points:
 
-- **Home App card**: opens as `1099-B Reconciliation` under the **App** section.
-- **Command palette** (`/⌘K`): searchable as "1099-B" / "lot reconciliation".
+- **Home App card**: opens as `1099-B Lot Reconciliation` under the **App** section.
+- **Command palette** (`/⌘K`): searchable as "1099-B" / "lot reconciliation" (short label: `1099-B Reconcile`).
 - **Direct hash route**: `#/tax-lot-reconciliation` (now allowed in `taxRoute.ts`).
 
 ---

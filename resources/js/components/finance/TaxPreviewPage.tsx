@@ -1,5 +1,6 @@
 'use client'
 
+import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
@@ -22,8 +23,10 @@ function TaxPreviewPageContent(): React.ReactElement {
     year: selectedYear,
     availableYears,
     isLoading,
+    error,
     pendingReviewCount,
     taxReturn,
+    refreshAll,
   } = useTaxPreview()
 
   const [isExporting, setIsExporting] = useState(false)
@@ -82,6 +85,19 @@ function TaxPreviewPageContent(): React.ReactElement {
           onYearChange={handleYearChange}
           pendingReviewCount={pendingReviewCount}
         />
+        {error && (
+          <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{error}</span>
+            <button
+              onClick={() => void refreshAll()}
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs hover:bg-destructive/20"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </button>
+          </div>
+        )}
         <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
         <div className="relative min-h-0 flex-1">
           <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
