@@ -50,7 +50,7 @@ export function EditAccountFlags({ accountId, isDebt, isRetirement, acctNumber }
   }
 
   return (
-    <Card className="shadow-sm mt-8">
+    <Card className="shadow-sm">
       <CardHeader>
         <CardTitle>Account Settings</CardTitle>
       </CardHeader>

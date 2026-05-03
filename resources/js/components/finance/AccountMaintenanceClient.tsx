@@ -54,8 +54,8 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
   }
 
   return (
-    <>
-      <Card className="shadow-sm mb-6 w-100">
+    <div className="space-y-6">
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Rename Account</CardTitle>
         </CardHeader>
@@ -70,7 +70,7 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm mb-6 w-100">
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Account Closed Status</CardTitle>
         </CardHeader>
@@ -117,6 +117,6 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
           )}
         </CardContent>
       </Card>
-    </>
+    </div>
   )
 }
