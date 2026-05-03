@@ -73,6 +73,8 @@ class FinAccountTag extends Model
         'ordinary_dividend' => ['label' => 'Ordinary Dividend', 'category' => 'other', 'entity_types' => []],
         'qualified_dividend' => ['label' => 'Qualified Dividend', 'category' => 'other', 'entity_types' => []],
         'other_ordinary_income' => ['label' => 'Other Ordinary Income', 'category' => 'other', 'entity_types' => []],
+        'fee_irc67g' => ['label' => 'Investment Management Fee (Personal)', 'category' => 'other', 'entity_types' => []],
+        'fee_schE' => ['label' => 'Investment Management Fee (Sch E)', 'category' => 'other', 'entity_types' => []],
         // W-2 income items
         'w2_wages' => ['label' => 'W-2 Wages / Salary', 'category' => 'w2_income', 'entity_types' => ['w2']],
         'w2_other_comp' => ['label' => 'W-2 Other Compensation', 'category' => 'w2_income', 'entity_types' => ['w2']],

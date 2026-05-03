@@ -424,4 +424,28 @@ class FinanceScheduleCControllerTest extends TestCase
             'tax_characteristic' => 'invalid_value_not_in_enum',
         ]);
     }
+
+    public function test_investment_management_fee_tax_characteristics_are_allowed(): void
+    {
+        $user = $this->createUser();
+
+        foreach (['fee_irc67g', 'fee_schE'] as $taxCharacteristic) {
+            FinAccountTag::create([
+                'tag_userid' => $user->id,
+                'tag_label' => 'Tag '.$taxCharacteristic,
+                'tag_color' => 'gray',
+                'tax_characteristic' => $taxCharacteristic,
+            ]);
+
+            $this->assertDatabaseHas('fin_account_tag', [
+                'tag_userid' => $user->id,
+                'tax_characteristic' => $taxCharacteristic,
+            ]);
+        }
+
+        $this->assertContains('fee_irc67g', FinAccountTag::validValues());
+        $this->assertContains('fee_schE', FinAccountTag::validValues());
+        $this->assertSame('Investment Management Fee (Personal)', FinAccountTag::labelFor('fee_irc67g'));
+        $this->assertSame('Investment Management Fee (Sch E)', FinAccountTag::labelFor('fee_schE'));
+    }
 }
