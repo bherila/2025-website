@@ -193,29 +193,29 @@ export async function applyTransactionSync(cacheKey: string, payload: Transactio
     const db = await getDb()
     const tx = db.transaction([TRANSACTIONS_STORE, METADATA_STORE], 'readwrite')
     const rowsStore = tx.objectStore(TRANSACTIONS_STORE)
+    const pendingWrites: Promise<unknown>[] = []
 
-    await Promise.all(
-      payload.deleted.map((deletion) => rowsStore.delete(rowKey(cacheKey, deletion.t_id))),
-    )
-    await Promise.all(
-      payload.transactions.map((transaction) => {
-        const id = transactionId(transaction)
-        if (id === null) {
-          return Promise.resolve()
-        }
+    for (const deletion of payload.deleted) {
+      pendingWrites.push(rowsStore.delete(rowKey(cacheKey, deletion.t_id)))
+    }
 
-        return rowsStore.put({
+    for (const transaction of payload.transactions) {
+      const id = transactionId(transaction)
+      if (id !== null) {
+        pendingWrites.push(rowsStore.put({
           rowKey: rowKey(cacheKey, id),
           scope: cacheKey,
           transaction,
-        })
-      }),
-    )
-    await tx.objectStore(METADATA_STORE).put({
+        }))
+      }
+    }
+
+    pendingWrites.push(tx.objectStore(METADATA_STORE).put({
       scope: cacheKey,
       lastFetched: Date.now(),
       lastSyncedAt: payload.server_time,
-    })
+    }))
+    await Promise.all(pendingWrites)
     await tx.done
 
     return getCachedTransactions(cacheKey)

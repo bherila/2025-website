@@ -432,6 +432,10 @@ class FinanceTransactionsDedupeApiController extends Controller
                     FinAccountLot::where('close_t_id', $delId)->update(['close_t_id' => $keepId]);
                 }
 
+                FinAccountLineItems::whereIn('t_id', array_values(array_unique($parentReassignments)))
+                    ->where('t_account', $account->acct_id)
+                    ->update(['updated_at' => now()]);
+
                 // Delete tag mappings first
                 DB::table('fin_account_line_item_tag_map')
                     ->whereIn('t_id', $actualDeleteIds)
