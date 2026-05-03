@@ -133,7 +133,7 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 Tab IDs are defined in `resources/js/components/finance/tax-tab-ids.ts`.
 
 ```
-Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule E | Schedule SE | Capital Gains | Form 1116 | Form 6251 | Form 8582 | Form 8995 | Schedule C | Tax Estimate | Action Items
+Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule 2 | Schedule 3 | Schedule E | Schedule SE | Capital Gains | Form 1116 | Form 6251 | Form 8582 | Form 8995 | Schedule C | Tax Estimate | Action Items
 ```
 
 | Tab | Component(s) | Description |
@@ -143,6 +143,8 @@ Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule E | Schedule SE 
 | Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
 | Schedule A | `ScheduleAPreview` + `UserDeductionsSection` | Itemized deductions — investment interest (K-1, 1099, short dividends) + user-entered SALT/mortgage/charitable via `fin_user_deductions` |
 | Schedule 1 | `Schedule1Preview` | Part I (additional income: Schedule C line 3, Schedule E line 5, 1099-MISC line 8z → line 10 total) + Part II (adjustments: deductible SE tax line 15, placeholders for HSA/health insurance/IRA/student loan → line 26 total). Feeds Form 1040 lines 8 and 10. |
+| Schedule 2 | `AdditionalTaxesPreview` (per-section) | Additional taxes (AMT line 1, Form 8959 Additional Medicare, Form 8960 NIIT) — surfaced both here and on the Tax Estimate tab. |
+| Schedule 3 | `Schedule3Preview` | Additional credits and payments. |
 | Schedule E | `ScheduleEPreview` | Partnership/S-corp income from K-1 — Box 1 ordinary, Box 2/3 rental, Box 4 guaranteed payments, trader-fund Box 11ZZ ordinary items, and Box 13ZZ other deductions |
 | Schedule SE | `ScheduleSEPreview` | Self-employment tax computation from K-1 Box 14A/14C + Schedule C |
 | Capital Gains | `ScheduleDPreview` | Form 6781 + Schedule D, including K-1 Box 11S non-portfolio capital gain/loss when ST/LT character is known |

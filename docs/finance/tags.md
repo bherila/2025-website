@@ -36,7 +36,14 @@ Tags support 10 predefined colors: `gray`, `red`, `orange`, `yellow`, `green`, `
 
 ## Tax Characteristics
 
-A tag's `tax_characteristic` classifies it as a particular IRS Schedule C line item. Valid values are grouped into two categories:
+A tag's `tax_characteristic` classifies it as a particular IRS line item. Valid values are grouped into the categories below; see `FinAccountTag::TAX_CHARACTERISTICS` for the canonical registry (label + entity-type metadata).
+
+### Schedule C: Income
+
+| Value | IRS Label |
+|-------|-----------|
+| `business_income` | Gross receipts or sales |
+| `business_returns` | Returns and allowances |
 
 ### Schedule C: Expense (`sce_*`)
 
@@ -82,7 +89,16 @@ A tag's `tax_characteristic` classifies it as a particular IRS Schedule C line i
 | `scho_hoa` | HOA fees |
 | `scho_casualty_losses` | Casualty losses (business-use portion) |
 
-### Non-Schedule C Income
+### W-2 Income
+
+These characteristics require a `w2`-typed employment entity link.
+
+| Value | Description |
+|-------|-------------|
+| `w2_wages` | W-2 wages / salary |
+| `w2_other_comp` | W-2 other compensation |
+
+### Non-Schedule C / Non-W-2 Income
 
 These characteristics do **not** require an employment entity link.
 
@@ -103,9 +119,11 @@ Tags with Schedule C tax characteristics (`business_income`, `business_returns`,
 |--------|------|-------------|
 | `employment_entity_id` | BIGINT NULL | FK to `fin_employment_entity` (required for Schedule C characteristics) |
 
-**Helper**: `FinAccountTag::isScheduleCCharacteristic($value)` returns `true` if the value requires an entity link.
+**Helper**: `FinAccountTag::isScheduleCCharacteristic($value)` returns `true` if the value requires a Schedule C entity link.
 
-**Canonical list**: `FinAccountTag::TAX_CHARACTERISTIC_VALUES` (all values) and `FinAccountTag::SCHEDULE_C_CHARACTERISTICS` (Schedule C only).
+**Canonical registry**: `FinAccountTag::TAX_CHARACTERISTICS` (the constant — keys + label/category/entity-type metadata). Static helpers on the model: `validValues()` (flat list of all keys) and `scheduleCValues()` (only Schedule C-required values).
+
+> The TypeScript counterpart in `resources/js/lib/finance/taxCharacteristics.ts` must be kept in sync with this constant; adding a new entry also requires a schema migration to update the `tax_characteristic` ENUM (MySQL) and CHECK constraint (SQLite).
 
 See [tax-system.md](tax-system.md) for full employment entity documentation.
 
@@ -212,28 +230,15 @@ The All Transactions page (`/finance/account/all/transactions`) supports filteri
 
 ---
 
-## Schedule C View
+## Schedule C Aggregation API
 
-**Route**: `GET /finance/schedule-c`  
-**Component**: `resources/js/components/finance/ScheduleCPage.tsx`  
-**API Endpoint**: `GET /api/finance/schedule-c[?year=YYYY]`  
+The Schedule C view itself is no longer a standalone page — `/finance/schedule-c` now 301-redirects to `/finance/tax-preview` and the rendering lives in `ScheduleCTab` inside Tax Preview (see [tax-system.md](tax-system.md#schedule-c-tab)). The aggregation endpoint is still useful directly:
+
+**API Endpoint**: `GET /api/finance/schedule-c[?year=YYYY]`
 **Controller**: `app/Http/Controllers/FinanceTool/FinanceScheduleCController.php`
+**Service**: `app/Services/Finance/ScheduleCSummaryService.php`
 
-The Schedule C view aggregates all tagged transactions by their `tax_characteristic` code and groups the results by tax year. It provides a ready-made summary for completing IRS Schedule C (Profit or Loss from Business) and the Home Office Deduction worksheet.
-
-### Page Layout
-
-- **Year selector** (top-right) with −/+ navigation buttons; defaults to the current year.
-- **"List transactions in-line" toggle** (Switch) — shows individual transactions indented beneath each line item.
-- For each tax year (shown in descending order):
-  - **Full-width year header** (`<h2>`) displaying the year
-  - **Income table** (shown only when `business_*` tagged transactions exist)
-  - **Two side-by-side tables** (50%/50%):
-    - **Schedule C Expenses** — sums all `sce_*` tagged transactions for the year
-    - **Home Office Deductions** — sums all `scho_*` tagged transactions for the year
-  - Each table shows a **Total row** at the bottom
-  - **Click any row** to open a Transaction List Modal showing each transaction that contributes to that line, with a link to the transaction in the account's transaction list
-  - Amounts are displayed as **positive numbers** (expenses are stored as negative in the database but negated for display)
+The endpoint aggregates tagged transactions by their `tax_characteristic` code, grouped by tax year. It powers the per-entity Schedule C income/expense breakdowns rendered by `ScheduleCTab`.
 
 ### API Response Shape
 
@@ -269,12 +274,6 @@ The Schedule C view aggregates all tagged transactions by their `tax_characteris
 - Only years with at least one tagged transaction (matching the optional year filter) appear in `years`.
 - Tags with `tax_characteristic = null` are excluded.
 - Multiple transactions across multiple tags pointing to the same `tax_characteristic` value are aggregated into a single total; individual transactions are included in the `transactions` array.
-
-### Schedule C Navigation
-
-The Schedule C view is accessible from:
-- **Finance Sub-Nav** → **Tax Preview**, which includes Schedule C in the Tax Preview dock/legacy tabs
-- **API** → `GET /api/finance/schedule-c`
 
 ---
 

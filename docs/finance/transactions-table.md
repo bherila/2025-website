@@ -51,26 +51,28 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 
 ## Component Location
 
+Most of the table internals live in `resources/js/components/finance/transactionTable/`; the page-level wrappers (`TransactionsPage`, `TransactionsPageToolbar`, `AccountNavigation`) sit in the `finance/` directory above it.
+
 ### Core
-- **Frontend Component**: `resources/js/components/finance/TransactionsTable.tsx`
-- **CSS Styles**: `resources/js/components/finance/TransactionsTable.css`
+- **Frontend Component**: `resources/js/components/finance/transactionTable/TransactionsTable.tsx`
+- **CSS Styles**: `resources/js/components/finance/transactionTable/TransactionsTable.css`
 - **Primary Usage**: `resources/js/components/finance/TransactionsPage.tsx`
 - **Type Definitions**: `resources/js/data/finance/AccountLineItem.ts`
 
 ### Extracted Components
-- **PaginationControls**: `resources/js/components/finance/PaginationControls.tsx` — Pagination UI with page size dropdown
-- **TransactionsSummaryCards**: `resources/js/components/finance/TransactionsSummaryCards.tsx` — 4-card summary grid (Net/Credits/Debits/Rows)
-- **TransactionsTaggingToolbar**: `resources/js/components/finance/TransactionsTaggingToolbar.tsx` — Selection-aware tagging toolbar with confirm dialog
-- **DeleteTransactionDialog**: `resources/js/components/finance/DeleteTransactionDialog.tsx` — Delete confirmation AlertDialog
+- **PaginationControls**: `resources/js/components/finance/transactionTable/PaginationControls.tsx` — Pagination UI with page size dropdown
+- **TransactionsSummaryCards**: `resources/js/components/finance/transactionTable/TransactionsSummaryCards.tsx` — 4-card summary grid (Net/Credits/Debits/Rows)
+- **TransactionsTaggingToolbar**: `resources/js/components/finance/transactionTable/TransactionsTaggingToolbar.tsx` — Selection-aware tagging toolbar with confirm dialog
+- **DeleteTransactionDialog**: `resources/js/components/finance/transactionTable/DeleteTransactionDialog.tsx` — Delete confirmation AlertDialog
 - **TransactionsPageToolbar**: `resources/js/components/finance/TransactionsPageToolbar.tsx` — Toolbar with year/tag/filter selectors and action buttons
 
 ### Extracted Hooks
-- **useRowSelection**: `resources/js/components/finance/useRowSelection.ts` — Row selection with click, shift, ctrl/cmd logic
-- **useTransactionFilters**: `resources/js/components/finance/useTransactionFilters.ts` — 14 column filter states + memoized `filteredData`
-- **useColumnVisibility**: `resources/js/components/finance/useColumnVisibility.ts` — 16 column-empty checks as one memoized hook
+- **useRowSelection**: `resources/js/components/finance/transactionTable/useRowSelection.ts` — Row selection with click, shift, ctrl/cmd logic
+- **useTransactionFilters**: `resources/js/components/finance/transactionTable/useTransactionFilters.ts` — 14 column filter states + memoized `filteredData`
+- **useColumnVisibility**: `resources/js/components/finance/transactionTable/useColumnVisibility.ts` — 16 column-empty checks as one memoized hook
 
 ### Extracted Utilities
-- **transactionExport**: `resources/js/components/finance/transactionExport.ts` — Pure CSV/JSON export functions
+- **transactionExport**: `resources/js/components/finance/transactionTable/transactionExport.ts` — Pure CSV/JSON export functions
 
 ---
 

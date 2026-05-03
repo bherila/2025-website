@@ -24,7 +24,7 @@ TaxPreviewPage (dock branch)
 
 | File | Role |
 |------|------|
-| `resources/js/components/finance/TaxPreviewPage.tsx` | `dockMode` gate at `~line 473`; branches between Tabs UI and `MillerShell` |
+| `resources/js/components/finance/TaxPreviewPage.tsx` | `dockMode` gate (search for `const dockMode =`); branches between Tabs UI and `MillerShell` |
 | `resources/js/components/finance/tax-preview/MillerShell.tsx` | Renders the route as a horizontal stack of columns. Handles Escape-to-truncate, overflow-x-auto container, narrow-screen fallback (show only the last column). |
 | `resources/js/components/finance/tax-preview/useTaxRoute.ts` | Parses URL hash (`#/form-1040/sch-1/form-1116:general`) → `{ columns: [{form, instance?}] }`; mutations push to `window.history`. |
 | `resources/js/components/finance/tax-preview/DockHomeView.tsx` | Landing view (zero-column route). Cards: Recent, Pinned, App, Forms, Worksheets. |
