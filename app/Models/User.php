@@ -118,7 +118,12 @@ class User extends Authenticatable
                     timeout: (int) config('genai.providers.gemini.timeout', 240),
                     responseMimeType: null,
                 ),
-                'anthropic' => new AnthropicClient($config->api_key, $config->model),
+                'anthropic' => new AnthropicClient(
+                    apiKey: $config->api_key,
+                    model: $config->model,
+                    maxTokens: (int) config('genai.providers.anthropic.max_tokens', 64000),
+                    timeout: (int) config('genai.providers.anthropic.timeout', 240),
+                ),
                 'bedrock' => new BedrockClient($config->api_key, $config->model, $config->region ?? 'us-east-1', $config->session_token ?? ''),
             };
         }
