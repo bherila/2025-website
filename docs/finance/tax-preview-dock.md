@@ -1,17 +1,17 @@
 # Tax Preview — Miller-Column "Dock" Shell
 
-The Tax Preview page has two UIs: the legacy vertical Tabs view and a horizontal Miller-columns drill-down shell ("dock mode"). Both render the same `TaxPreviewPage` component and the same `TaxPreviewProvider` data; only the outer chrome differs.
+The Tax Preview page now uses the horizontal Miller-columns shell as its only supported UI. It renders the shared `TaxPreviewPage` shell and shares data through `TaxPreviewProvider`; no secondary legacy tab layout is retained.
 
-**Opt-in**: append `?dock=1` to the URL (e.g. `/finance/tax-preview?year=2025&dock=1`). The gate lives at `TaxPreviewPage.tsx:dockMode` — a query-string check. There is no per-user opt-in or admin flag yet.
+The current behavior is `/finance/tax-preview` (with optional `?year=...`) and any `dock` query parameter is ignored.
 
 ---
 
 ## Architecture
 
 ```
-TaxPreviewPage (dock branch)
+TaxPreviewPage (dock-only shell)
 ├── DockActionsProvider                        // ⌘K palette + worksheet dialog dispatch
-│   ├── DockHeaderBar                          // title + "Jump to form…" button + ?dock=0 hint
+│   ├── DockHeaderBar                          // title + year + jump + review queue + export actions
 │   ├── TaxEstimateHeader                      // persistent 3-tier (slim / expanded / full modal)
 │   └── MillerShell
 │       ├── CommandPalette                     // ⌘K palette
@@ -24,17 +24,25 @@ TaxPreviewPage (dock branch)
 
 | File | Role |
 |------|------|
-| `resources/js/components/finance/TaxPreviewPage.tsx` | `dockMode` gate (search for `const dockMode =`); branches between Tabs UI and `MillerShell` |
+| `resources/js/components/finance/TaxPreviewPage.tsx` | Always renders `MillerShell` + header controls, and strips stale `dock` params on year navigation |
 | `resources/js/components/finance/tax-preview/MillerShell.tsx` | Renders the route as a horizontal stack of columns. Handles Escape-to-truncate, overflow-x-auto container, narrow-screen fallback (show only the last column). |
 | `resources/js/components/finance/tax-preview/useTaxRoute.ts` | Parses URL hash (`#/form-1040/sch-1/form-1116:general`) → `{ columns: [{form, instance?}] }`; mutations push to `window.history`. |
 | `resources/js/components/finance/tax-preview/DockHomeView.tsx` | Landing view (zero-column route). Cards: Recent, Pinned, App, Forms, Worksheets. |
-| `resources/js/components/finance/tax-preview/DockHeaderBar.tsx` | Persistent top bar (title, ⌘K button, disable hint). |
+| `resources/js/components/finance/tax-preview/DockHeaderBar.tsx` | Persistent top bar (title, year selector, ⌘K button, review queue, export). |
 | `resources/js/components/finance/tax-preview/TaxEstimateHeader.tsx` | 3-tier estimate (slim one-liner / expanded KPI cards / full modal with brackets + safe-harbor). Exports `summarizeTaxEstimate` + `TaxEstimateFullDetail`. |
 | `resources/js/components/finance/tax-preview/formRegistry.ts` | Registry *type* — `FormRegistry`, `FormId` union, `FormCategory`, `Presentation`, `FormRenderProps`, `DrillTarget`. |
 | `resources/js/components/finance/tax-preview/registry.tsx` | Registry *instance* — every form's adapter + entry (category, presentation, instances, xlsx contributor). |
 | `resources/js/components/finance/tax-preview/DockActions.tsx` | Context for the ⌘K palette open state + worksheet dialog dispatch. |
 | `resources/js/components/finance/tax-preview/CommandPalette.tsx` | ⌘K palette; searches registry by keywords/label. |
 | `resources/js/components/finance/tax-preview/InstanceTabs.tsx` | Per-column instance tabs (Form 1116 passive/general, etc.). |
+
+### Discoverability for 1099-B lot reconciliation
+
+The 1099-B lot reconciliation workflow is surfaced through the following dock entry points:
+
+- **Home App card**: opens as `1099-B Reconciliation` under the **App** section.
+- **Command palette** (`/⌘K`): searchable as "1099-B" / "lot reconciliation".
+- **Direct hash route**: `#/tax-lot-reconciliation` (now allowed in `taxRoute.ts`).
 
 ---
 

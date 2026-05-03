@@ -764,7 +764,7 @@ Per-account upload uses the `ghost` variant **Add** dropdown with per-form-type 
 
 ## Tax Preview Page Layout
 
-The Tax Preview page (`TaxPreviewPage.tsx`) is a tabbed interface (see Tab Structure above). The **Overview** tab contains the W-2 Income Summary, income overview cards, and Account Documents section. The **Tax Estimate** tab contains `AdditionalTaxesPreview` (Schedule 2), `Form1040Preview`, federal/state tax tables, and estimated tax payments.
+The Tax Preview page (`TaxPreviewPage.tsx`) is a dock-style drill-down shell (see Tab Structure above for referenced internal sections). The home card view opens `Form`, `Schedule`, `App`, and `Worksheet` destinations, and selections open as columns in the shell. The `Tax Estimate`, `Account Documents`, and `Action Items` sections remain available as top-level dock app targets.
 
 `Form1040Preview` is purely presentational — it receives pre-computed `Form1040LineItem[]` from `taxReturn.form1040` (computed once in `TaxPreviewContext` and shared with the XLSX workbook export). Each 1040 line has an optional `navTab` that navigates to the relevant schedule tab on click, and an optional `sources` array for the drill-down data source modal.
 

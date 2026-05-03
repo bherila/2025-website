@@ -287,6 +287,18 @@ describe('CommandPalette', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('selects the 1099-B reconciliation app from command palette', () => {
+    const onOpenChange = jest.fn()
+    render(
+      <Wrapper>
+        <CommandPalette open onOpenChange={onOpenChange} registry={mockRegistry} />
+      </Wrapper>,
+    )
+    fireEvent.click(screen.getByText('1099-B Reconciliation'))
+    expect(window.location.hash).toBe('#/tax-lot-reconciliation')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('selecting an instance pushes the instance hash route', () => {
     const onOpenChange = jest.fn()
     render(

@@ -5,6 +5,7 @@ const FORM_IDS: ReadonlySet<string> = new Set<FormId>([
   'estimate',
   'action-items',
   'documents',
+  'tax-lot-reconciliation',
   'form-1040',
   'sch-1',
   'sch-2',

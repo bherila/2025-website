@@ -22,6 +22,12 @@ describe('taxRoute', () => {
       })
     })
 
+    it('parses 1099-B lot reconciliation routes', () => {
+      expect(parseHash('#/tax-lot-reconciliation')).toEqual({
+        columns: [{ form: 'tax-lot-reconciliation' }],
+      })
+    })
+
     it('parses a multi-column drill-down', () => {
       expect(parseHash('#/form-1040/sch-1/form-1116')).toEqual({
         columns: [{ form: 'form-1040' }, { form: 'sch-1' }, { form: 'form-1116' }],

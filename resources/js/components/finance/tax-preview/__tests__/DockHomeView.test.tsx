@@ -82,6 +82,16 @@ describe('DockHomeView', () => {
     expect(within(recentCard).queryByText('1040')).not.toBeInTheDocument()
   })
 
+  it('includes 1099-B lot reconciliation in App cards for discoverability', () => {
+    render(
+      <Wrapper>
+        <DockHomeView />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText('1099-B Reconcile')).toBeInTheDocument()
+  })
+
   it('Clear button empties the Recent list for the active year', () => {
     window.localStorage.setItem(
       STORAGE_KEY,
