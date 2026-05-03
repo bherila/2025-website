@@ -52,6 +52,43 @@ export function TransactionsTaggingToolbar({
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
   const [removeTagsConfirmOpen, setRemoveTagsConfirmOpen] = useState(false)
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false)
+  const [pendingTagAction, setPendingTagAction] = useState<'add' | 'remove' | 'clear' | null>(null)
+
+  const isTagActionPending = pendingTagAction !== null
+
+  const handleApplySelectedTag = async () => {
+    if (!selectedTagId || isTagActionPending) return
+
+    setPendingTagAction('add')
+    try {
+      await onApplyTag(Number(selectedTagId))
+    } finally {
+      setPendingTagAction(null)
+    }
+  }
+
+  const handleRemoveSelectedTag = async () => {
+    if (!selectedTagId || isTagActionPending) return
+
+    setPendingTagAction('remove')
+    try {
+      await onRemoveTag(Number(selectedTagId))
+    } finally {
+      setPendingTagAction(null)
+    }
+  }
+
+  const handleRemoveAllTags = async () => {
+    if (isTagActionPending) return
+
+    setRemoveTagsConfirmOpen(false)
+    setPendingTagAction('clear')
+    try {
+      await onRemoveAllTags()
+    } finally {
+      setPendingTagAction(null)
+    }
+  }
 
   if (effectiveCount > 1000) {
     return (
@@ -86,16 +123,19 @@ export function TransactionsTaggingToolbar({
           ) : (
             <>
               <TagSelect value={selectedTagId} onChange={setSelectedTagId} tags={availableTags} placeholder="Select a tag…" className="w-48 text-xs font-mono" />
-              <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onApplyTag(Number(selectedTagId))}>
-                Add
+              <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId || isTagActionPending} onClick={handleApplySelectedTag}>
+                {pendingTagAction === 'add' && <Spinner size="small" className="mr-2 h-3 w-3" />}
+                {pendingTagAction === 'add' ? 'Adding' : 'Add'}
               </Button>
-              <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId} onClick={() => selectedTagId && onRemoveTag(Number(selectedTagId))}>
-                Remove
+              <Button variant="outline" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider" disabled={effectiveCount === 0 || !selectedTagId || isTagActionPending} onClick={handleRemoveSelectedTag}>
+                {pendingTagAction === 'remove' && <Spinner size="small" className="mr-2 h-3 w-3" />}
+                {pendingTagAction === 'remove' ? 'Removing' : 'Remove'}
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0} onClick={() => setRemoveTagsConfirmOpen(true)}>
-                    Clear All
+                  <Button variant="destructive" size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider ml-2" disabled={effectiveCount === 0 || isTagActionPending} onClick={() => setRemoveTagsConfirmOpen(true)}>
+                    {pendingTagAction === 'clear' && <Spinner size="small" className="mr-2 h-3 w-3" />}
+                    {pendingTagAction === 'clear' ? 'Clearing' : 'Clear All'}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Remove all tags from {isSelection ? 'selected' : 'transactions in the current view'}</TooltipContent>
@@ -148,7 +188,7 @@ export function TransactionsTaggingToolbar({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="border-border hover:bg-muted/50">Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => { setRemoveTagsConfirmOpen(false); await onRemoveAllTags() }}>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={isTagActionPending} onClick={handleRemoveAllTags}>
               Confirm Removal
             </AlertDialogAction>
           </AlertDialogFooter>
