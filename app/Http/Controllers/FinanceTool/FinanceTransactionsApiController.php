@@ -11,6 +11,7 @@ use App\Models\FinanceTool\FinStatement;
 use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\Finance\TransactionImportService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -67,30 +68,13 @@ class FinanceTransactionsApiController extends Controller
             }
         }
 
-        // Return a streamed response to save memory on large datasets
-        return response()->stream(function () use ($query) {
-            echo '[';
-            $first = true;
-            // lazy() chunks the results and eager loads relations for each chunk
-            $query->lazy()->each(function ($item) use (&$first) {
-                if (! $first) {
-                    echo ',';
-                }
-                echo json_encode($this->transformLineItem($item));
-                $first = false;
-            });
-            echo ']';
-        }, 200, [
-            'Content-Type' => 'application/json',
-            'Cache-Control' => 'no-cache',
-            'X-Accel-Buffering' => 'no',
-        ]);
+        return $this->streamLineItems($query);
     }
 
     /**
      * Get incremental transaction changes for one or all accounts.
      */
-    public function syncLineItems(Request $request, int|string|null $account_id = null): JsonResponse
+    public function syncLineItems(Request $request, int|string|null $account_id = null): StreamedResponse
     {
         $since = $this->syncSince($request);
         $serverTime = now();
@@ -109,7 +93,7 @@ class FinanceTransactionsApiController extends Controller
             ->orderBy('t_date', 'desc');
 
         if ($since !== null) {
-            $transactionsQuery->where('updated_at', '>', $since);
+            $transactionsQuery->where('updated_at', '>=', $since);
         }
 
         $deletionsQuery = FinAccountLineItemDeletion::query()->orderBy('deleted_at', 'asc');
@@ -120,20 +104,23 @@ class FinanceTransactionsApiController extends Controller
         }
 
         if ($since !== null) {
-            $deletionsQuery->where('deleted_at', '>', $since);
+            $deletionsQuery->where('deleted_at', '>=', $since);
         }
 
-        return response()->json([
-            'server_time' => $serverTime->toJSON(),
-            'transactions' => $transactionsQuery->get()->map(fn (FinAccountLineItems $item): array => $this->transformLineItem($item))->values(),
-            'deleted' => $deletionsQuery->get(['t_id', 't_account', 'deleted_at'])
-                ->map(fn (FinAccountLineItemDeletion $deletion): array => [
+        return response()->stream(function () use ($serverTime, $transactionsQuery, $deletionsQuery): void {
+            echo '{"server_time":'.json_encode($serverTime->toJSON()).',"transactions":';
+            $this->writeJsonArray($transactionsQuery->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+            echo ',"deleted":';
+            $this->writeJsonArray(
+                $deletionsQuery->select(['t_id', 't_account', 'deleted_at'])->lazy(),
+                fn (FinAccountLineItemDeletion $deletion): array => [
                     't_id' => (int) $deletion->t_id,
                     't_account' => (int) $deletion->t_account,
                     'deleted_at' => $deletion->deleted_at->toJSON(),
-                ])
-                ->values(),
-        ]);
+                ],
+            );
+            echo '}';
+        }, 200, $this->streamJsonHeaders());
     }
 
     private function syncSince(Request $request): ?CarbonImmutable
@@ -147,6 +134,51 @@ class FinanceTransactionsApiController extends Controller
         ]);
 
         return CarbonImmutable::parse((string) $request->query('since'));
+    }
+
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
+    private function streamLineItems(Builder $query): StreamedResponse
+    {
+        return response()->stream(function () use ($query): void {
+            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+        }, 200, $this->streamJsonHeaders());
+    }
+
+    /**
+     * @template TItem
+     *
+     * @param  iterable<TItem>  $items
+     * @param  callable(TItem): array<string, mixed>  $transform
+     */
+    private function writeJsonArray(iterable $items, callable $transform): void
+    {
+        echo '[';
+        $first = true;
+
+        foreach ($items as $item) {
+            if (! $first) {
+                echo ',';
+            }
+
+            echo json_encode($transform($item));
+            $first = false;
+        }
+
+        echo ']';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function streamJsonHeaders(): array
+    {
+        return [
+            'Content-Type' => 'application/json',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ];
     }
 
     /**

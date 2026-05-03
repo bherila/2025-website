@@ -14,10 +14,10 @@ return new class extends Migration
     {
         Schema::table('fin_account_line_items', function (Blueprint $table) {
             if (! Schema::hasColumn('fin_account_line_items', 'created_at')) {
-                $table->timestamp('created_at')->nullable()->after('when_added');
+                $table->timestamp('created_at', 6)->nullable()->after('when_added');
             }
             if (! Schema::hasColumn('fin_account_line_items', 'updated_at')) {
-                $table->timestamp('updated_at')->nullable()->after('created_at');
+                $table->timestamp('updated_at', 6)->nullable()->after('created_at');
             }
         });
 
@@ -39,8 +39,8 @@ return new class extends Migration
             $table->unsignedBigInteger('t_id');
             $table->unsignedBigInteger('t_account');
             $table->unsignedBigInteger('user_id');
-            $table->timestamp('deleted_at');
-            $table->timestamps();
+            $table->timestamp('deleted_at', 6);
+            $table->timestamps(6);
 
             $table->unique('t_id', 'failid_t_id_unique');
             $table->index(['t_account', 'deleted_at'], 'failid_account_deleted_at_idx');

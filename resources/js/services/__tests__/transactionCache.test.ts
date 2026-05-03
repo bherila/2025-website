@@ -9,6 +9,21 @@ function storeFor(name: keyof typeof stores) {
   return {
     get: jest.fn((key: string) => Promise.resolve(stores[name].get(key))),
     getAll: jest.fn(() => Promise.resolve(Array.from(stores[name].values()))),
+    indexNames: {
+      contains: jest.fn(() => true),
+    },
+    index: jest.fn(() => ({
+      getAllKeys: jest.fn((scope: string) => Promise.resolve(
+        Array.from(stores[name].values()).flatMap((value) => {
+          if (typeof value === 'object' && value !== null && 'scope' in value && value.scope === scope && 'rowKey' in value && typeof value.rowKey === 'string') {
+            return [value.rowKey]
+          }
+
+          return []
+        }),
+      )),
+    })),
+    createIndex: jest.fn(),
     put: jest.fn((value: { rowKey?: string, scope?: string }) => {
       const key = value.rowKey ?? value.scope
       if (key) stores[name].set(key, value)
@@ -28,6 +43,11 @@ function storeFor(name: keyof typeof stores) {
 const mockDb = {
   get: jest.fn((storeName: keyof typeof stores, key: string) => storeFor(storeName).get(key)),
   getAll: jest.fn((storeName: keyof typeof stores) => storeFor(storeName).getAll()),
+  getAllFromIndex: jest.fn((storeName: keyof typeof stores, _indexName: string, scope: string) => Promise.resolve(
+    Array.from(stores[storeName].values()).filter((value) => {
+      return typeof value === 'object' && value !== null && 'scope' in value && value.scope === scope
+    }),
+  )),
   transaction: jest.fn((storeNames: Array<keyof typeof stores> | keyof typeof stores) => ({
     objectStore: jest.fn((storeName: keyof typeof stores) => storeFor(storeName)),
     done: Promise.resolve(),
@@ -36,13 +56,15 @@ const mockDb = {
   objectStoreNames: {
     contains: jest.fn(() => false),
   },
-  createObjectStore: jest.fn(),
+  createObjectStore: jest.fn((storeName: keyof typeof stores) => storeFor(storeName)),
   deleteObjectStore: jest.fn(),
 }
 
 jest.mock('idb', () => ({
   openDB: jest.fn((_name, _version, options) => {
-    options?.upgrade?.(mockDb)
+    options?.upgrade?.(mockDb, 0, 4, {
+      objectStore: (storeName: keyof typeof stores) => storeFor(storeName),
+    })
     return Promise.resolve(mockDb)
   }),
 }))
@@ -100,6 +122,7 @@ describe('transaction cache storage', () => {
     const cached = await getCachedTransactions('account:33')
     expect(cached?.transactions).toHaveLength(5)
     expect(cached?.lastSyncedAt).toBe('2026-05-03T10:00:00.000Z')
+    expect(mockDb.getAllFromIndex).toHaveBeenCalledWith('transactionRows', 'scope', 'account:33')
   })
 
   it('keeps single-account and all-account scopes separate', async () => {

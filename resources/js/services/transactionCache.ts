@@ -8,9 +8,10 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 
 const DB_NAME = 'transaction-cache'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const TRANSACTIONS_STORE = 'transactionRows'
 const METADATA_STORE = 'syncMetadata'
+const SCOPE_INDEX = 'scope'
 
 export interface TransactionDeletion {
   t_id: number
@@ -43,10 +44,22 @@ interface SyncMetadataEntry {
   lastSyncedAt: string | null
 }
 
+interface ScopedRowsIndex {
+  getAllKeys(query: string): Promise<IDBValidKey[]>
+}
+
+interface ScopedRowsStore {
+  delete(key: string): Promise<void>
+  index(name: string): ScopedRowsIndex
+}
+
 interface TransactionCacheDB extends DBSchema {
   transactionRows: {
     key: string
     value: TransactionRowEntry
+    indexes: {
+      scope: string
+    }
   }
   syncMetadata: {
     key: string
@@ -59,7 +72,7 @@ let dbPromise: Promise<IDBPDatabase<TransactionCacheDB>> | null = null
 function getDb(): Promise<IDBPDatabase<TransactionCacheDB>> {
   if (!dbPromise) {
     dbPromise = openDB<TransactionCacheDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, _oldVersion, _newVersion, transaction) {
         const legacyDb = db as unknown as {
           objectStoreNames: DOMStringList
           deleteObjectStore: (name: string) => void
@@ -67,14 +80,18 @@ function getDb(): Promise<IDBPDatabase<TransactionCacheDB>> {
         if (legacyDb.objectStoreNames.contains('transactions')) {
           legacyDb.deleteObjectStore('transactions')
         }
-        if (db.objectStoreNames.contains(TRANSACTIONS_STORE)) {
-          db.deleteObjectStore(TRANSACTIONS_STORE)
+
+        const transactionRowsStore = db.objectStoreNames.contains(TRANSACTIONS_STORE)
+          ? transaction.objectStore(TRANSACTIONS_STORE)
+          : db.createObjectStore(TRANSACTIONS_STORE, { keyPath: 'rowKey' })
+
+        if (!transactionRowsStore.indexNames.contains(SCOPE_INDEX)) {
+          transactionRowsStore.createIndex(SCOPE_INDEX, SCOPE_INDEX)
         }
-        if (db.objectStoreNames.contains(METADATA_STORE)) {
-          db.deleteObjectStore(METADATA_STORE)
+
+        if (!db.objectStoreNames.contains(METADATA_STORE)) {
+          db.createObjectStore(METADATA_STORE, { keyPath: 'scope' })
         }
-        db.createObjectStore(TRANSACTIONS_STORE, { keyPath: 'rowKey' })
-        db.createObjectStore(METADATA_STORE, { keyPath: 'scope' })
       },
     })
   }
@@ -87,6 +104,18 @@ function rowKey(scope: string, transactionId: number): string {
 
 function transactionId(transaction: AccountLineItem): number | null {
   return typeof transaction.t_id === 'number' ? transaction.t_id : null
+}
+
+async function getRowsForScope(db: IDBPDatabase<TransactionCacheDB>, scope: string): Promise<TransactionRowEntry[]> {
+  return db.getAllFromIndex(TRANSACTIONS_STORE, SCOPE_INDEX, scope)
+}
+
+async function deleteRowsForScope(
+  rowsStore: ScopedRowsStore,
+  scope: string,
+): Promise<void> {
+  const rowKeys = await rowsStore.index(SCOPE_INDEX).getAllKeys(scope)
+  await Promise.all(rowKeys.map((key) => rowsStore.delete(String(key))))
 }
 
 export function buildCacheKey(
@@ -106,9 +135,8 @@ export async function getCachedTransactions(cacheKey: string): Promise<Transacti
       return null
     }
 
-    const rows = await db.getAll(TRANSACTIONS_STORE)
+    const rows = await getRowsForScope(db, cacheKey)
     const transactions = rows
-      .filter((row) => row.scope === cacheKey)
       .map((row) => row.transaction)
       .sort((a, b) => String(b.t_date).localeCompare(String(a.t_date)))
 
@@ -132,13 +160,7 @@ export async function setCachedTransactions(
     const db = await getDb()
     const tx = db.transaction([TRANSACTIONS_STORE, METADATA_STORE], 'readwrite')
     const rowsStore = tx.objectStore(TRANSACTIONS_STORE)
-    const existingRows = await rowsStore.getAll()
-
-    await Promise.all(
-      existingRows
-        .filter((row) => row.scope === cacheKey)
-        .map((row) => rowsStore.delete(row.rowKey)),
-    )
+    await deleteRowsForScope(rowsStore, cacheKey)
 
     await Promise.all(
       transactions.map((transaction) => {
@@ -219,12 +241,7 @@ export async function deleteCachedTransactions(cacheKey: string): Promise<void> 
     const db = await getDb()
     const tx = db.transaction([TRANSACTIONS_STORE, METADATA_STORE], 'readwrite')
     const rowsStore = tx.objectStore(TRANSACTIONS_STORE)
-    const existingRows = await rowsStore.getAll()
-    await Promise.all(
-      existingRows
-        .filter((row) => row.scope === cacheKey)
-        .map((row) => rowsStore.delete(row.rowKey)),
-    )
+    await deleteRowsForScope(rowsStore, cacheKey)
     await tx.objectStore(METADATA_STORE).delete(cacheKey)
     await tx.done
   } catch {

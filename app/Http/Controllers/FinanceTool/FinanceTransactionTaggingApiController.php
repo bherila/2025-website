@@ -249,8 +249,6 @@ class FinanceTransactionTaggingApiController extends Controller
             ->whereHas('account', function ($query) use ($userId) {
                 $query->where('acct_owner', $userId);
             })
-            ->get()
-            ->each
-            ->touch();
+            ->update(['updated_at' => now()]);
     }
 }

@@ -225,6 +225,28 @@ class FinanceTransactionsApiControllerTest extends TestCase
         $this->assertSame($transactions[1]->t_id, $response->json('transactions.0.t_id'));
     }
 
+    public function test_sync_line_items_includes_boundary_timestamp_changes(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transactions = FinAccountLineItems::where('t_account', $account->acct_id)->orderBy('t_id')->get();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[0]->t_id)
+            ->update(['updated_at' => $since->subMinute()]);
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[1]->t_id)
+            ->update(['updated_at' => $since]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('transactions'));
+        $this->assertSame($transactions[1]->t_id, $response->json('transactions.0.t_id'));
+    }
+
     public function test_delete_line_item_writes_tombstone_and_excludes_deleted_row(): void
     {
         $user = $this->createUser();
@@ -263,6 +285,34 @@ class FinanceTransactionsApiControllerTest extends TestCase
             't_account' => $account->acct_id,
             'user_id' => $user->id,
             'deleted_at' => $since->addMinute(),
+        ]);
+        $transaction->delete();
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertSame([], $response->json('transactions'));
+        $this->assertCount(1, $response->json('deleted'));
+        $this->assertSame($transaction->t_id, $response->json('deleted.0.t_id'));
+    }
+
+    public function test_sync_line_items_includes_boundary_timestamp_tombstones(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transaction = FinAccountLineItems::where('t_account', $account->acct_id)->firstOrFail();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_account', $account->acct_id)
+            ->update(['updated_at' => $since->subMinute()]);
+
+        FinAccountLineItemDeletion::create([
+            't_id' => $transaction->t_id,
+            't_account' => $account->acct_id,
+            'user_id' => $user->id,
+            'deleted_at' => $since,
         ]);
         $transaction->delete();
 
