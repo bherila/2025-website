@@ -232,6 +232,7 @@ class ClientExpenseApiController extends Controller
         }
 
         $expense->update(['fin_line_item_id' => $validated['fin_line_item_id']]);
+        $finLineItem->touch();
 
         return response()->json(['message' => 'Expense linked to finance line item']);
     }
@@ -247,7 +248,12 @@ class ClientExpenseApiController extends Controller
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
         }
 
+        $finLineItem = $expense->fin_line_item_id !== null
+            ? FinAccountLineItems::find($expense->fin_line_item_id)
+            : null;
+
         $expense->update(['fin_line_item_id' => null]);
+        $finLineItem?->touch();
 
         return response()->json(['message' => 'Expense unlinked from finance line item']);
     }

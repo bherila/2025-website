@@ -43,12 +43,6 @@ parameters:
 			path: app/Console/Commands/Finance/FinanceTaxRenderCommand.php
 
 		-
-			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Console/Commands/Finance/FinanceTransactionsCommand.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between float and null will always evaluate to true\.$#'
 			identifier: notIdentical.alwaysTrue
 			count: 1
@@ -190,12 +184,6 @@ parameters:
 			message: '#^Access to an undefined property App\\Models\\ClientManagement\\ClientExpense\:\:\$fin_line_item\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
-			identifier: property.notFound
-			count: 4
 			path: app/Http/Controllers/ClientManagement/ClientExpenseApiController.php
 
 		-
@@ -397,42 +385,6 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
-			identifier: property.notFound
-			count: 3
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$childTransactions\.$#'
-			identifier: property.notFound
-			count: 4
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$parentTransactions\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
-			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 11
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
-			message: '#^Relation ''childTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 4
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
-			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 4
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionLinkingApiController.php
-
-		-
 			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountTag\:\:\$totals\.$#'
 			identifier: property.notFound
 			count: 1
@@ -445,64 +397,10 @@ parameters:
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionTaggingApiController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$childTransactions\.$#'
-			identifier: property.notFound
-			count: 3
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$clientExpense\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$parentTransactions\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
 			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
 			identifier: isset.offset
 			count: 1
 			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
-			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
-			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$parentTransactions\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$tags\.$#'
-			identifier: property.notFound
-			count: 3
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
-
-		-
-			message: '#^Relation ''parentTransactions'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
-
-		-
-			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 2
-			path: app/Http/Controllers/FinanceTool/FinanceTransactionsDedupeApiController.php
 
 		-
 			message: '#^Strict comparison using \!\=\= between float\|non\-empty\-string and 0 will always evaluate to true\.$#'
@@ -703,12 +601,6 @@ parameters:
 			path: app/Http/Controllers/UtilityBillTracker/UtilityBillImportController.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$account\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
-
-		-
 			message: '#^Cannot call method copy\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -736,12 +628,6 @@ parameters:
 			message: '#^Method App\\Http\\Controllers\\UtilityBillTracker\\UtilityBillLinkingController\:\:unlinkTransaction\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
-			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
-
-		-
-			message: '#^Relation ''account'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 3
 			path: app/Http/Controllers/UtilityBillTracker/UtilityBillLinkingController.php
 
 		-
@@ -862,12 +748,6 @@ parameters:
 			message: '#^Method App\\Mcp\\Tools\\ListTransactions\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\IntegerType\|Illuminate\\JsonSchema\\Types\\StringType\>\.$#'
 			identifier: return.type
 			count: 1
-			path: app/Mcp/Tools/ListTransactions.php
-
-		-
-			message: '#^Relation ''tags'' is not found in App\\Models\\FinanceTool\\FinAccountLineItems model\.$#'
-			identifier: larastan.relationExistence
-			count: 2
 			path: app/Mcp/Tools/ListTransactions.php
 
 		-
@@ -1319,54 +1199,6 @@ parameters:
 			identifier: property.defaultValue
 			count: 1
 			path: app/Models/FinanceTool/FinAccountLineItemTagMap.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:account\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:childLinks\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:childTransactions\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:clientExpense\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:parentLinks\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:parentTransactions\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:statement\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinAccountLineItems\:\:tags\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinAccountLineItems.php
 
 		-
 			message: '#^Method App\\Models\\FinanceTool\\FinAccountLot\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'

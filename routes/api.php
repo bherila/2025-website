@@ -54,8 +54,10 @@ Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::c
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts
 Route::middleware(['web', 'auth'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth'])->get('/finance/all/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/transaction', [FinanceTransactionsApiController::class, 'createTransaction']);

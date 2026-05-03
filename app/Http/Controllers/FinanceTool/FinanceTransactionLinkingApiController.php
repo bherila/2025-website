@@ -179,6 +179,8 @@ class FinanceTransactionLinkingApiController extends Controller
             'parent_t_id' => $parentTransaction->t_id,
             'child_t_id' => $childTransaction->t_id,
         ]);
+        $parentTransaction->touch();
+        $childTransaction->touch();
 
         return response()->json([
             'success' => true,
@@ -207,7 +209,7 @@ class FinanceTransactionLinkingApiController extends Controller
             })
             ->firstOrFail();
 
-        FinAccountLineItems::where('t_id', $request->linked_t_id)
+        $linkedTransaction = FinAccountLineItems::where('t_id', $request->linked_t_id)
             ->whereHas('account', function ($query) use ($uid) {
                 $query->where('acct_owner', $uid);
             })
@@ -224,6 +226,8 @@ class FinanceTransactionLinkingApiController extends Controller
         }
 
         $link->delete();
+        $transaction->touch();
+        $linkedTransaction->touch();
 
         return response()->json(['success' => true]);
     }

@@ -251,6 +251,8 @@ class TransactionImportService
 
             $rowToInsert = array_intersect_key($normalized, $allowedFields);
             $rowToInsert['when_added'] = now();
+            $rowToInsert['created_at'] = now();
+            $rowToInsert['updated_at'] = now();
             $validRows[] = $rowToInsert;
         }
 

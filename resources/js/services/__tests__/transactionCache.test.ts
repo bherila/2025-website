@@ -1,197 +1,206 @@
-/**
- * Tests for transactionCache.ts
- *
- * We mock the `idb` library so tests run deterministically in jsdom (no real IndexedDB).
- *
- * Cache key format changed in DB_VERSION=2: keys are now just `{accountId}` (account IDs
- * are unique across users, so no userId or year scoping is needed). `clearCacheForUser`
- * is now a no-op alias for `clearAllCache`.
- */
-
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 
-// ---------------------------------------------------------------------------
-// Mock idb
-// ---------------------------------------------------------------------------
-const mockStore: Map<string, unknown> = new Map()
-
-const mockObjectStore = {
-  get: jest.fn((key: string) => Promise.resolve(mockStore.get(key))),
-  put: jest.fn((value: { cacheKey: string }) => {
-    mockStore.set(value.cacheKey, value)
-    return Promise.resolve()
-  }),
-  delete: jest.fn((key: string) => {
-    mockStore.delete(key)
-    return Promise.resolve()
-  }),
-  getAllKeys: jest.fn(() => Promise.resolve(Array.from(mockStore.keys()))),
-  clear: jest.fn(() => {
-    mockStore.clear()
-    return Promise.resolve()
-  }),
+const stores = {
+  transactionRows: new Map<string, unknown>(),
+  syncMetadata: new Map<string, unknown>(),
 }
 
-const mockTx = {
-  objectStore: jest.fn(() => mockObjectStore),
-  done: Promise.resolve(),
+function storeFor(name: keyof typeof stores) {
+  return {
+    get: jest.fn((key: string) => Promise.resolve(stores[name].get(key))),
+    getAll: jest.fn(() => Promise.resolve(Array.from(stores[name].values()))),
+    put: jest.fn((value: { rowKey?: string, scope?: string }) => {
+      const key = value.rowKey ?? value.scope
+      if (key) stores[name].set(key, value)
+      return Promise.resolve()
+    }),
+    delete: jest.fn((key: string) => {
+      stores[name].delete(key)
+      return Promise.resolve()
+    }),
+    clear: jest.fn(() => {
+      stores[name].clear()
+      return Promise.resolve()
+    }),
+  }
 }
 
 const mockDb = {
-  get: jest.fn((storeName: string, key: string) => mockObjectStore.get(key)),
-  put: jest.fn((storeName: string, value: { cacheKey: string }) => mockObjectStore.put(value)),
-  delete: jest.fn((storeName: string, key: string) => mockObjectStore.delete(key)),
-  clear: jest.fn((storeName: string) => mockObjectStore.clear()),
-  transaction: jest.fn(() => mockTx),
+  get: jest.fn((storeName: keyof typeof stores, key: string) => storeFor(storeName).get(key)),
+  getAll: jest.fn((storeName: keyof typeof stores) => storeFor(storeName).getAll()),
+  transaction: jest.fn((storeNames: Array<keyof typeof stores> | keyof typeof stores) => ({
+    objectStore: jest.fn((storeName: keyof typeof stores) => storeFor(storeName)),
+    done: Promise.resolve(),
+    store: storeFor(Array.isArray(storeNames) ? storeNames[0] ?? 'transactionRows' : storeNames),
+  })),
+  objectStoreNames: {
+    contains: jest.fn(() => false),
+  },
+  createObjectStore: jest.fn(),
+  deleteObjectStore: jest.fn(),
 }
 
 jest.mock('idb', () => ({
-  openDB: jest.fn(() => Promise.resolve(mockDb)),
+  openDB: jest.fn((_name, _version, options) => {
+    options?.upgrade?.(mockDb)
+    return Promise.resolve(mockDb)
+  }),
 }))
 
-// ---------------------------------------------------------------------------
-// Import after mocking
-// ---------------------------------------------------------------------------
-import { makeRows } from '@/__tests__/utils/testDataFactory'
+const mockGet = jest.fn()
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: (url: string) => mockGet(url),
+  },
+}))
+
+import { makeRow, makeRows } from '@/__tests__/utils/testDataFactory'
 import {
+  applyTransactionSync,
   buildCacheKey,
   clearAllCache,
   clearCacheForUser,
   deleteCachedTransactions,
   getCachedTransactions,
   setCachedTransactions,
+  syncCachedTransactions,
 } from '@/services/transactionCache'
 
+function resetStores() {
+  stores.transactionRows.clear()
+  stores.syncMetadata.clear()
+  jest.clearAllMocks()
+  mockGet.mockReset()
+}
+
 describe('buildCacheKey', () => {
-  it('returns the accountId as the key when called with just accountId', () => {
-    expect(buildCacheKey(7)).toBe('7')
+  it('returns a single-account scope when called with just accountId', () => {
+    expect(buildCacheKey(7)).toBe('account:7')
   })
 
-  it('returns the accountId when called with legacy (userId, accountId, year) signature', () => {
-    // Old callers pass (userId, accountId, year) — accountId is param 2
-    expect(buildCacheKey(42, 7, '2024')).toBe('7')
+  it('returns the account scope when called with legacy (userId, accountId, year) signature', () => {
+    expect(buildCacheKey(42, 7, '2024')).toBe('account:7')
   })
 
-  it('works with string accountId', () => {
-    expect(buildCacheKey('33')).toBe('33')
-  })
-})
-
-describe('getCachedTransactions', () => {
-  beforeEach(() => {
-    mockStore.clear()
-    jest.clearAllMocks()
-    // Re-wire mock after clearAllMocks
-    mockDb.get.mockImplementation((_, key: string) => mockObjectStore.get(key))
-    mockObjectStore.get.mockImplementation((key: string) => Promise.resolve(mockStore.get(key)))
-  })
-
-  it('returns null when cache is empty', async () => {
-    const result = await getCachedTransactions('7')
-    expect(result).toBeNull()
-  })
-
-  it('returns the cached entry when it exists', async () => {
-    const rows = makeRows(3)
-    const entry = { cacheKey: '7', transactions: rows, lastFetched: Date.now() }
-    mockStore.set('7', entry)
-
-    const result = await getCachedTransactions('7')
-    expect(result).toEqual(entry)
-    expect(result?.transactions).toHaveLength(3)
+  it('returns the all-accounts scope', () => {
+    expect(buildCacheKey('all')).toBe('all')
   })
 })
 
-describe('setCachedTransactions', () => {
-  beforeEach(() => {
-    mockStore.clear()
-    jest.clearAllMocks()
-    mockDb.put.mockImplementation((_, value: { cacheKey: string }) => mockObjectStore.put(value))
-    mockObjectStore.put.mockImplementation((value: { cacheKey: string }) => {
-      mockStore.set(value.cacheKey, value)
-      return Promise.resolve()
+describe('transaction cache storage', () => {
+  beforeEach(resetStores)
+
+  it('returns null when cache metadata is empty', async () => {
+    await expect(getCachedTransactions('account:7')).resolves.toBeNull()
+  })
+
+  it('stores transactions under the given scope', async () => {
+    await setCachedTransactions('account:33', makeRows(5), '2026-05-03T10:00:00.000Z')
+
+    const cached = await getCachedTransactions('account:33')
+    expect(cached?.transactions).toHaveLength(5)
+    expect(cached?.lastSyncedAt).toBe('2026-05-03T10:00:00.000Z')
+  })
+
+  it('keeps single-account and all-account scopes separate', async () => {
+    await setCachedTransactions('account:7', [makeRow({ t_id: 1, t_description: 'single' })])
+    await setCachedTransactions('all', [makeRow({ t_id: 1, t_description: 'all' })])
+
+    const single = await getCachedTransactions('account:7')
+    const all = await getCachedTransactions('all')
+
+    expect(single?.transactions[0]?.t_description).toBe('single')
+    expect(all?.transactions[0]?.t_description).toBe('all')
+  })
+
+  it('deletes only the specified scope', async () => {
+    await setCachedTransactions('account:7', makeRows(1))
+    await setCachedTransactions('all', makeRows(1))
+
+    await deleteCachedTransactions('account:7')
+
+    await expect(getCachedTransactions('account:7')).resolves.toBeNull()
+    expect((await getCachedTransactions('all'))?.transactions).toHaveLength(1)
+  })
+})
+
+describe('applyTransactionSync', () => {
+  beforeEach(resetStores)
+
+  it('upserts changed rows and stores sync metadata', async () => {
+    await setCachedTransactions('account:7', [makeRow({ t_id: 1, t_description: 'old' })])
+
+    const result = await applyTransactionSync('account:7', {
+      server_time: '2026-05-03T11:00:00.000Z',
+      transactions: [makeRow({ t_id: 1, t_description: 'new' }), makeRow({ t_id: 2 })],
+      deleted: [],
     })
+
+    expect(result?.transactions).toHaveLength(2)
+    expect(result?.transactions.find((row: AccountLineItem) => row.t_id === 1)?.t_description).toBe('new')
+    expect(result?.lastSyncedAt).toBe('2026-05-03T11:00:00.000Z')
   })
 
-  it('stores transactions under the given cache key', async () => {
-    const rows = makeRows(5)
-    await setCachedTransactions('33', rows)
-    expect(mockStore.has('33')).toBe(true)
-    const stored = mockStore.get('33') as { transactions: AccountLineItem[] }
-    expect(stored.transactions).toHaveLength(5)
-  })
+  it('removes rows listed in tombstones', async () => {
+    await setCachedTransactions('account:7', makeRows(2))
 
-  it('updates lastFetched timestamp', async () => {
-    const before = Date.now()
-    await setCachedTransactions('33', makeRows(1))
-    const after = Date.now()
-    const stored = mockStore.get('33') as { lastFetched: number }
-    expect(stored.lastFetched).toBeGreaterThanOrEqual(before)
-    expect(stored.lastFetched).toBeLessThanOrEqual(after)
+    const result = await applyTransactionSync('account:7', {
+      server_time: '2026-05-03T11:00:00.000Z',
+      transactions: [],
+      deleted: [{ t_id: 1, t_account: 7, deleted_at: '2026-05-03T10:59:00.000Z' }],
+    })
+
+    expect(result?.transactions.map((row) => row.t_id)).toEqual([2])
   })
 })
 
-describe('deleteCachedTransactions', () => {
-  beforeEach(() => {
-    mockStore.clear()
-    jest.clearAllMocks()
-    mockDb.delete.mockImplementation((_, key: string) => mockObjectStore.delete(key))
-    mockObjectStore.delete.mockImplementation((key: string) => {
-      mockStore.delete(key)
-      return Promise.resolve()
+describe('syncCachedTransactions', () => {
+  beforeEach(resetStores)
+
+  it('fetches bootstrap sync without since when no metadata exists', async () => {
+    mockGet.mockResolvedValue({
+      server_time: '2026-05-03T10:00:00.000Z',
+      transactions: makeRows(1),
+      deleted: [],
     })
+
+    await syncCachedTransactions('account:7', '/api/finance/7/line_items/sync')
+
+    expect(mockGet).toHaveBeenCalledWith('/api/finance/7/line_items/sync')
   })
 
-  it('removes the specified cache entry', async () => {
-    mockStore.set('33', { cacheKey: '33', transactions: [], lastFetched: 0 })
-    await deleteCachedTransactions('33')
-    expect(mockStore.has('33')).toBe(false)
-  })
+  it('passes last sync timestamp on incremental sync', async () => {
+    await setCachedTransactions('account:7', makeRows(1), '2026-05-03T10:00:00.000Z')
+    mockGet.mockResolvedValue({
+      server_time: '2026-05-03T11:00:00.000Z',
+      transactions: [],
+      deleted: [],
+    })
 
-  it('is a no-op when the key does not exist', async () => {
-    await expect(deleteCachedTransactions('nonexistent')).resolves.toBeUndefined()
+    await syncCachedTransactions('account:7', '/api/finance/7/line_items/sync')
+
+    expect(mockGet).toHaveBeenCalledWith('/api/finance/7/line_items/sync?since=2026-05-03T10%3A00%3A00.000Z')
   })
 })
 
-describe('clearCacheForUser', () => {
-  beforeEach(() => {
-    mockStore.clear()
-    jest.clearAllMocks()
-    mockDb.clear.mockImplementation(() => mockObjectStore.clear())
-    mockObjectStore.clear.mockImplementation(() => {
-      mockStore.clear()
-      return Promise.resolve()
-    })
-  })
+describe('clear cache helpers', () => {
+  beforeEach(resetStores)
 
-  it('clears all cache entries (no longer user-scoped)', async () => {
-    mockStore.set('1', { cacheKey: '1' })
-    mockStore.set('2', { cacheKey: '2' })
-    await clearCacheForUser(42)
-    expect(mockStore.size).toBe(0)
-  })
+  it('clears every store', async () => {
+    await setCachedTransactions('account:7', makeRows(1))
+    await setCachedTransactions('all', makeRows(1))
 
-  it('is a no-op when the cache is already empty', async () => {
-    await expect(clearCacheForUser(42)).resolves.toBeUndefined()
-    expect(mockStore.size).toBe(0)
-  })
-})
-
-describe('clearAllCache', () => {
-  beforeEach(() => {
-    mockStore.clear()
-    jest.clearAllMocks()
-    mockDb.clear.mockImplementation(() => mockObjectStore.clear())
-    mockObjectStore.clear.mockImplementation(() => {
-      mockStore.clear()
-      return Promise.resolve()
-    })
-  })
-
-  it('empties the entire cache store', async () => {
-    mockStore.set('1', {})
-    mockStore.set('2', {})
     await clearAllCache()
-    expect(mockStore.size).toBe(0)
+
+    await expect(getCachedTransactions('account:7')).resolves.toBeNull()
+    await expect(getCachedTransactions('all')).resolves.toBeNull()
+  })
+
+  it('clearCacheForUser remains an all-cache compatibility alias', async () => {
+    await setCachedTransactions('account:7', makeRows(1))
+
+    await clearCacheForUser(42)
+
+    await expect(getCachedTransactions('account:7')).resolves.toBeNull()
   })
 })

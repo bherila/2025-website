@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Files\FileForFinAccount;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -459,7 +460,7 @@ class FinanceApiController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function deleteAccount(Request $request, int $account_id): JsonResponse
+    public function deleteAccount(Request $request, int $account_id, TransactionDeletionTombstoneService $tombstones): JsonResponse
     {
         $uid = Auth::id();
 
@@ -467,7 +468,10 @@ class FinanceApiController extends Controller
             ->where('acct_owner', $uid)
             ->firstOrFail();
 
-        DB::transaction(function () use ($account) {
+        DB::transaction(function () use ($account, $tombstones, $uid): void {
+            $transactions = FinAccountLineItems::where('t_account', $account->acct_id)->get(['t_id', 't_account']);
+            $tombstones->record($transactions, (int) $uid);
+
             FinAccountLineItems::where('t_account', $account->acct_id)->delete();
 
             // Delete file records individually so each model's booted() deleting

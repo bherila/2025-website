@@ -102,6 +102,8 @@ export const AccountLineItemSchema = z.object({
   child_transactions: z.array(LinkedTransactionSchema).optional(),
   tags: z.array(AccountLineItemTagSchema).optional(),
   client_expense: ClientExpenseLinkSchema.nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  updated_at: z.string().nullable().optional(),
 })
 
 export type AccountLineItemTag = z.infer<typeof AccountLineItemTagSchema>
