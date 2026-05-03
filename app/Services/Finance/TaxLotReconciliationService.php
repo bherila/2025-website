@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
@@ -21,7 +22,7 @@ class TaxLotReconciliationService
     /**
      * @return array{
      *     tax_year: int,
-     *     summary: array{matched: int, variance: int, missing_account: int, missing_1099b: int, duplicates: int, unresolved_account_links: int},
+     *     summary: array{matched: int, variance: int, missing_account: int, missing_1099b: int, duplicates: int, unresolved_account_links: int, matched_open_transactions: int, matched_close_transactions: int, missing_open_transactions: int, missing_close_transactions: int},
      *     accounts: array<int, array<string, mixed>>,
      *     unresolved_account_links: array<int, array<string, mixed>>
      * }
@@ -84,12 +85,15 @@ class TaxLotReconciliationService
         $accountLotsByDisposition = $this->accountLotsByDisposition($accountLots);
 
         foreach ($reportedLots as $reportedLot) {
+            $transactionMatch = $this->resolveTransactionMatch($reportedLot);
+            $this->mergeTransactionSummary($summary, $transactionMatch);
+
             $candidates = $this->candidateAccountLots($reportedLot, $accountLotsByDisposition)
                 ->filter(fn (FinAccountLot $accountLot): bool => $this->lotMatcher->sameDisposition($reportedLot, $accountLot))
                 ->values();
 
             if ($candidates->isEmpty()) {
-                $rows[] = $this->rowPayload('missing_account', $reportedLot, null, collect());
+                $rows[] = $this->rowPayload('missing_account', $reportedLot, null, collect(), $transactionMatch);
                 $summary['missing_account']++;
 
                 continue;
@@ -100,7 +104,7 @@ class TaxLotReconciliationService
             }
 
             if ($candidates->count() > 1) {
-                $rows[] = $this->rowPayload('duplicate', $reportedLot, $candidates->first(), $candidates);
+                $rows[] = $this->rowPayload('duplicate', $reportedLot, $candidates->first(), $candidates, $transactionMatch);
                 $summary['duplicates']++;
 
                 continue;
@@ -110,7 +114,7 @@ class TaxLotReconciliationService
             $candidate = $candidates->first();
             $status = $this->lotMatcher->taxValuesMatch($reportedLot, $candidate) ? 'matched' : 'variance';
 
-            $rows[] = $this->rowPayload($status, $reportedLot, $candidate, $candidates);
+            $rows[] = $this->rowPayload($status, $reportedLot, $candidate, $candidates, $transactionMatch);
             $summary[$status]++;
         }
 
@@ -214,15 +218,22 @@ class TaxLotReconciliationService
 
     /**
      * @param  Collection<int, FinAccountLot>  $candidates
+     * @param  array{open: FinAccountLineItems|null, close: FinAccountLineItems|null}|null  $transactionMatch
      * @return array<string, mixed>
      */
-    private function rowPayload(string $status, ?FinAccountLot $reportedLot, ?FinAccountLot $accountLot, Collection $candidates): array
-    {
+    private function rowPayload(
+        string $status,
+        ?FinAccountLot $reportedLot,
+        ?FinAccountLot $accountLot,
+        Collection $candidates,
+        ?array $transactionMatch = null,
+    ): array {
         return [
             'status' => $status,
             'reported_lot' => $reportedLot ? $this->lotPayload($reportedLot) : null,
             'account_lot' => $accountLot ? $this->lotPayload($accountLot) : null,
             'candidate_lots' => $candidates->map(fn (FinAccountLot $lot): array => $this->lotPayload($lot))->values()->all(),
+            'transaction_match' => $transactionMatch !== null ? $this->transactionMatchPayload($transactionMatch) : null,
             'deltas' => $reportedLot && $accountLot ? $this->lotMatcher->deltas($reportedLot, $accountLot) : [
                 'quantity' => null,
                 'proceeds' => null,
@@ -243,6 +254,7 @@ class TaxLotReconciliationService
             'acct_id' => (int) $lot->acct_id,
             'symbol' => $lot->symbol,
             'description' => $lot->description,
+            'cusip' => $lot->cusip,
             'quantity' => $this->lotMatcher->numericValue($lot->quantity),
             'purchase_date' => $this->lotMatcher->dateValue($lot->purchase_date),
             'sale_date' => $this->lotMatcher->dateValue($lot->sale_date),
@@ -262,6 +274,64 @@ class TaxLotReconciliationService
             'reconciliation_status' => $lot->reconciliation_status,
             'reconciliation_notes' => $lot->reconciliation_notes,
             'tax_document_filename' => $this->taxDocumentFilename($lot),
+        ];
+    }
+
+    /**
+     * @return array{open: FinAccountLineItems|null, close: FinAccountLineItems|null}
+     */
+    private function resolveTransactionMatch(FinAccountLot $reportedLot): array
+    {
+        return [
+            'open' => $reportedLot->openTransaction instanceof FinAccountLineItems
+                ? $reportedLot->openTransaction
+                : $this->lotMatcher->matchingBuyTransaction($reportedLot),
+            'close' => $reportedLot->closeTransaction instanceof FinAccountLineItems
+                ? $reportedLot->closeTransaction
+                : $this->lotMatcher->matchingSellTransaction($reportedLot),
+        ];
+    }
+
+    /**
+     * @param  array{open: FinAccountLineItems|null, close: FinAccountLineItems|null}  $match
+     * @return array{
+     *     opening: array{status: string, transaction: array<string, mixed>|null},
+     *     closing: array{status: string, transaction: array<string, mixed>|null}
+     * }
+     */
+    private function transactionMatchPayload(array $match): array
+    {
+        $openTransaction = $match['open'];
+        $closeTransaction = $match['close'];
+
+        return [
+            'opening' => [
+                'status' => $openTransaction instanceof FinAccountLineItems ? 'matched' : 'missing',
+                'transaction' => $openTransaction instanceof FinAccountLineItems ? $this->transactionPayload($openTransaction) : null,
+            ],
+            'closing' => [
+                'status' => $closeTransaction instanceof FinAccountLineItems ? 'matched' : 'missing',
+                'transaction' => $closeTransaction instanceof FinAccountLineItems ? $this->transactionPayload($closeTransaction) : null,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function transactionPayload(FinAccountLineItems $transaction): array
+    {
+        return [
+            't_id' => (int) $transaction->t_id,
+            't_date' => $this->lotMatcher->dateValue($transaction->t_date),
+            't_type' => $transaction->t_type,
+            't_amt' => $this->lotMatcher->numericValue($transaction->t_amt),
+            't_symbol' => $transaction->t_symbol,
+            't_cusip' => $transaction->t_cusip,
+            't_qty' => $this->lotMatcher->numericValue($transaction->t_qty),
+            't_price' => $transaction->t_price !== null ? $this->lotMatcher->numericValue($transaction->t_price) : null,
+            't_description' => $transaction->t_description,
+            't_source' => $transaction->t_source,
         ];
     }
 
@@ -289,7 +359,11 @@ class TaxLotReconciliationService
                 $query->where('lot_source', FinAccountLot::SOURCE_1099B)
                     ->orWhereNotNull('tax_document_id');
             })
-            ->with(['taxDocument:id,original_filename,form_type,tax_year'])
+            ->with([
+                'closeTransaction:t_id,t_date,t_type,t_amt,t_symbol,t_cusip,t_qty,t_price,t_description,t_source',
+                'openTransaction:t_id,t_date,t_type,t_amt,t_symbol,t_cusip,t_qty,t_price,t_description,t_source',
+                'taxDocument:id,original_filename,form_type,tax_year',
+            ])
             ->orderBy('acct_id')
             ->orderBy('symbol')
             ->orderBy('sale_date')
@@ -352,7 +426,7 @@ class TaxLotReconciliationService
     }
 
     /**
-     * @return array{matched: int, variance: int, missing_account: int, missing_1099b: int, duplicates: int, unresolved_account_links: int}
+     * @return array{matched: int, variance: int, missing_account: int, missing_1099b: int, duplicates: int, unresolved_account_links: int, matched_open_transactions: int, matched_close_transactions: int, missing_open_transactions: int, missing_close_transactions: int}
      */
     private function emptySummary(): array
     {
@@ -363,6 +437,10 @@ class TaxLotReconciliationService
             'missing_1099b' => 0,
             'duplicates' => 0,
             'unresolved_account_links' => 0,
+            'matched_open_transactions' => 0,
+            'matched_close_transactions' => 0,
+            'missing_open_transactions' => 0,
+            'missing_close_transactions' => 0,
         ];
     }
 
@@ -395,5 +473,18 @@ class TaxLotReconciliationService
         foreach (array_keys($summary) as $key) {
             $summary[$key] += $accountSummary[$key] ?? 0;
         }
+    }
+
+    /**
+     * @param  array{open: FinAccountLineItems|null, close: FinAccountLineItems|null}  $transactionMatch
+     * @param  array<string, int>  $summary
+     */
+    private function mergeTransactionSummary(array &$summary, array $transactionMatch): void
+    {
+        $openTransaction = $transactionMatch['open'];
+        $closeTransaction = $transactionMatch['close'];
+
+        $summary[$openTransaction instanceof FinAccountLineItems ? 'matched_open_transactions' : 'missing_open_transactions']++;
+        $summary[$closeTransaction instanceof FinAccountLineItems ? 'matched_close_transactions' : 'missing_close_transactions']++;
     }
 }

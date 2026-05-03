@@ -12,6 +12,8 @@ class LotMatcher
 
     public const QUANTITY_TOLERANCE = 0.000001;
 
+    public const DATE_TOLERANCE_DAYS = 2;
+
     public function sameDisposition(
         FinAccountLot $reportedLot,
         FinAccountLot $accountLot,
@@ -45,18 +47,47 @@ class LotMatcher
 
     public function matchingSellTransactionExists(FinAccountLot $lot): bool
     {
-        $saleDate = $this->dateValue($lot->sale_date);
-        if ($saleDate === null || $lot->proceeds === null) {
-            return false;
+        return $this->matchingSellTransaction($lot) instanceof FinAccountLineItems;
+    }
+
+    /**
+     * @param  int[]  $excludedTransactionIds
+     */
+    public function matchingBuyTransaction(FinAccountLot $lot, array $excludedTransactionIds = []): ?FinAccountLineItems
+    {
+        $purchaseDate = $this->dateValue($lot->purchase_date);
+        if ($purchaseDate === null || $this->shouldSkipOpeningMatch($lot, $purchaseDate)) {
+            return null;
         }
 
-        return FinAccountLineItems::query()
-            ->where('t_account', (int) $lot->acct_id)
-            ->where('t_date', $saleDate)
-            ->where('t_symbol', (string) $lot->symbol)
-            ->where('t_qty', -abs($this->numericValue($lot->quantity)))
-            ->where('t_amt', -abs($this->numericValue($lot->proceeds)))
-            ->exists();
+        return $this->matchingTransaction(
+            $lot,
+            $purchaseDate,
+            ['Buy', 'Reinvest', 'Sell Short'],
+            $this->numericValue($lot->quantity),
+            $this->numericValue($lot->cost_basis),
+            $excludedTransactionIds,
+        );
+    }
+
+    /**
+     * @param  int[]  $excludedTransactionIds
+     */
+    public function matchingSellTransaction(FinAccountLot $lot, array $excludedTransactionIds = []): ?FinAccountLineItems
+    {
+        $saleDate = $this->dateValue($lot->sale_date);
+        if ($saleDate === null || $lot->proceeds === null) {
+            return null;
+        }
+
+        return $this->matchingTransaction(
+            $lot,
+            $saleDate,
+            ['Sell', 'Cover', 'Merger', 'Cash In Lieu'],
+            $this->numericValue($lot->quantity),
+            $this->numericValue($lot->proceeds),
+            $excludedTransactionIds,
+        );
     }
 
     /**
@@ -112,6 +143,97 @@ class LotMatcher
     private function normalizeSymbol(mixed $symbol): string
     {
         return strtoupper(trim((string) $symbol));
+    }
+
+    /**
+     * @param  string[]  $types
+     * @param  int[]  $excludedTransactionIds
+     */
+    private function matchingTransaction(
+        FinAccountLot $lot,
+        string $date,
+        array $types,
+        float $quantity,
+        float $amount,
+        array $excludedTransactionIds = [],
+    ): ?FinAccountLineItems {
+        $symbol = $this->normalizeSymbol($lot->symbol);
+        $cusip = $this->normalizeSymbol($lot->cusip ?? null);
+
+        if ($symbol === '' && $cusip === '') {
+            return null;
+        }
+
+        [$dateStart, $dateEnd] = $this->dateWindow($date);
+
+        return FinAccountLineItems::query()
+            ->where('t_account', (int) $lot->acct_id)
+            ->whereBetween('t_date', [$dateStart, $dateEnd])
+            ->whereIn('t_type', $types)
+            ->when($excludedTransactionIds !== [], fn ($query) => $query->whereNotIn('t_id', $excludedTransactionIds))
+            ->where(function ($query) use ($symbol, $cusip): void {
+                if ($symbol !== '') {
+                    $query->orWhere('t_symbol', $symbol);
+                }
+
+                if ($cusip !== '') {
+                    $query->orWhere('t_cusip', $cusip);
+                }
+            })
+            ->orderBy('t_id')
+            ->get()
+            ->filter(fn (FinAccountLineItems $transaction): bool => $this->numericClose(
+                abs($this->numericValue($transaction->t_qty)),
+                abs($quantity),
+                self::QUANTITY_TOLERANCE,
+            ) && $this->numericClose(
+                abs($this->numericValue($transaction->t_amt)),
+                abs($amount),
+                self::MONEY_TOLERANCE,
+            ))
+            ->sort(function (FinAccountLineItems $left, FinAccountLineItems $right) use ($date): int {
+                $dateComparison = $this->dateDistanceDays($left->t_date, $date) <=> $this->dateDistanceDays($right->t_date, $date);
+                if ($dateComparison !== 0) {
+                    return $dateComparison;
+                }
+
+                return (int) $left->t_id <=> (int) $right->t_id;
+            })
+            ->first();
+    }
+
+    /**
+     * Long-term "various" 1099-B rows are stored with purchase_date = sale_date
+     * only because the database requires a purchase_date; do not report noisy
+     * missing buy matches for those placeholder dates.
+     */
+    private function shouldSkipOpeningMatch(FinAccountLot $lot, string $purchaseDate): bool
+    {
+        return $lot->is_short_term === false
+            && $this->dateValue($lot->sale_date) === $purchaseDate;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function dateWindow(string $date): array
+    {
+        $center = new \DateTimeImmutable($date);
+
+        return [
+            $center->modify('-'.self::DATE_TOLERANCE_DAYS.' days')->format('Y-m-d'),
+            $center->modify('+'.self::DATE_TOLERANCE_DAYS.' days')->format('Y-m-d'),
+        ];
+    }
+
+    private function dateDistanceDays(mixed $left, string $right): int
+    {
+        $leftDate = $this->dateValue($left);
+        if ($leftDate === null) {
+            return PHP_INT_MAX;
+        }
+
+        return abs((int) (new \DateTimeImmutable($leftDate))->diff(new \DateTimeImmutable($right))->format('%r%a'));
     }
 
     private function numericClose(float $left, float $right, float $tolerance): bool

@@ -39,7 +39,7 @@ class FinanceLotsController extends Controller
         // Closed-lot mode returns full columns needed by Form 8949 (per-transaction detail).
         // Open-lot / as_of mode remains narrow (acct_id + basis + dates) for Form 1116 worksheet.
         $selectColumns = $status === 'closed'
-            ? ['lot_id', 'acct_id', 'symbol', 'description', 'quantity', 'purchase_date', 'cost_basis', 'sale_date', 'proceeds', 'realized_gain_loss', 'is_short_term', 'lot_source', 'tax_document_id', 'form_8949_box', 'is_covered', 'accrued_market_discount', 'wash_sale_disallowed']
+            ? ['lot_id', 'acct_id', 'symbol', 'description', 'cusip', 'quantity', 'purchase_date', 'cost_basis', 'sale_date', 'proceeds', 'realized_gain_loss', 'is_short_term', 'lot_source', 'tax_document_id', 'form_8949_box', 'is_covered', 'accrued_market_discount', 'wash_sale_disallowed']
             : ['acct_id', 'cost_basis', 'purchase_date', 'sale_date'];
 
         $query = FinAccountLot::whereIn('acct_id', $accountIds)->select($selectColumns);

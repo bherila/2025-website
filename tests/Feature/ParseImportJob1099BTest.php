@@ -197,7 +197,7 @@ class ParseImportJob1099BTest extends TestCase
     // upsertLotsFromBroker
     // ---------------------------------------------------------------------------
 
-    public function test_upsert_lots_creates_lot_and_sell_line_item(): void
+    public function test_upsert_lots_creates_lot_without_synthetic_line_item(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -231,13 +231,14 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertSame(1500.0, (float) $lot->cost_basis);
         $this->assertSame(300.0, (float) $lot->realized_gain_loss);
         $this->assertSame('1099b', $lot->lot_source);
+        $this->assertSame('037833100', $lot->cusip);
         $this->assertSame($taxDocId, $lot->tax_document_id);
         $this->assertSame('D', $lot->form_8949_box);
         $this->assertTrue($lot->is_covered);
         $this->assertSame(12.34, (float) $lot->accrued_market_discount);
         $this->assertSame(0.0, (float) $lot->wash_sale_disallowed);
 
-        $this->assertDatabaseHas('fin_account_line_items', [
+        $this->assertDatabaseMissing('fin_account_line_items', [
             't_account' => $account->acct_id,
             't_type' => 'Sell',
             't_symbol' => 'AAPL',
@@ -289,14 +290,14 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertFalse($lot->is_short_term);
     }
 
-    public function test_upsert_lots_deduplicates_sell_line_items(): void
+    public function test_upsert_lots_links_existing_sell_line_items(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
         $taxDoc = $this->makeTaxDoc($user->id, 0);
 
         // Pre-existing sell transaction with the same date/symbol/qty/amount
-        FinAccountLineItems::create([
+        $existingSell = FinAccountLineItems::create([
             't_account' => $account->acct_id,
             't_date' => '2024-06-15',
             't_type' => 'Sell',
@@ -316,12 +317,57 @@ class ParseImportJob1099BTest extends TestCase
 
         $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
 
-        // Lot is created but no duplicate sell line item
-        $this->assertDatabaseHas('fin_account_lots', ['symbol' => 'MSFT']);
+        // Lot is created and linked to the native sell without creating a duplicate transaction.
+        $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'MSFT')->firstOrFail();
+        $this->assertSame($existingSell->t_id, $lot->close_t_id);
         $this->assertSame(1, FinAccountLineItems::where('t_account', $account->acct_id)
             ->where('t_symbol', 'MSFT')
             ->where('t_type', 'Sell')
             ->count());
+    }
+
+    public function test_upsert_lots_does_not_reuse_same_sell_line_item_for_duplicate_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity');
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+
+        $firstSell = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-06-15',
+            't_type' => 'Sell',
+            't_symbol' => 'MSFT',
+            't_qty' => -5,
+            't_amt' => 1000.00,
+            't_source' => 'import',
+        ]);
+        $secondSell = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-06-15',
+            't_type' => 'Sell',
+            't_symbol' => 'MSFT',
+            't_qty' => -5,
+            't_amt' => 1000.00,
+            't_source' => 'import',
+        ]);
+
+        $lotRow = [
+            'symbol' => 'MSFT', 'description' => 'Microsoft', 'cusip' => null,
+            'quantity' => 5, 'purchase_date' => '2023-06-01', 'sale_date' => '2024-06-15',
+            'proceeds' => 1000.00, 'cost_basis' => 800.00, 'wash_sale_disallowed' => 0,
+            'realized_gain_loss' => 200.00, 'form_8949_box' => 'D', 'is_covered' => true,
+            'additional_info' => null,
+        ];
+
+        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, [$lotRow, $lotRow], $taxDoc->id);
+
+        $closeIds = FinAccountLot::where('acct_id', $account->acct_id)
+            ->where('symbol', 'MSFT')
+            ->orderBy('lot_id')
+            ->pluck('close_t_id')
+            ->all();
+
+        $this->assertSame([$firstSell->t_id, $secondSell->t_id], $closeIds);
     }
 
     public function test_upsert_lots_skips_rows_missing_required_fields(): void
