@@ -203,12 +203,48 @@ cat transactions.json | php artisan finance:import-transactions
 
 ---
 
-### `finance:statements` *(planned)*
+### `finance:tax-docs`
 
-List statements (balance snapshots) for an account.
+List tax documents (W-2, 1099, K-1, etc.) for a given year for the configured user.
 
 ```
-php artisan finance:statements [--account=ACCT_ID] [--year=YEAR] [--format=table|json]
+php artisan finance:tax-docs --year=YEAR [--account=ACCT_ID] [--format=table|json]
+```
+
+`--year` is required. Pass `--account` to filter to documents linked to one account.
+
+---
+
+### `finance:tax-import`
+
+Import tax document metadata from a JSON payload on stdin into `fin_tax_documents`.
+
+```bash
+cat tax-doc.json | php artisan finance:tax-import --year=YEAR [--dry-run] [--schema] [--format=table|json]
+```
+
+`--year` is required. Use `--schema` to print the expected JSON input format. Useful for AI-generated tax document metadata.
+
+---
+
+### `finance:tax-render`
+
+Render a summary of computed tax forms (1040, schedules, etc.) for a given year. Read-only — does not write to the database.
+
+```
+php artisan finance:tax-render --year=YEAR [--form=FORM] [--format=table|json]
+```
+
+`--year` is required. Pass `--form` (e.g. `w2`, `1099_int`, `k1`, `broker_1099`) to filter to one form type.
+
+---
+
+### `finance:k1-migrate`
+
+Migrate legacy flat-format K-1 `parsed_data` records into the canonical structured shape. Migrated rows are stamped with `schemaVersion: "1.0"` — a marker distinct from `"2026.1"` (which `GenAiJobDispatcherService::coerceK1Args` writes for fresh AI extractions), so you can tell migrated-from-legacy data apart from AI-extracted data after the fact. One-time migration; safe to run repeatedly (only legacy rows without a `schemaVersion` key are touched).
+
+```
+php artisan finance:k1-migrate [--dry-run]
 ```
 
 ---
@@ -294,7 +330,7 @@ Import commands (`finance:transactions --import`, `finance:import-transactions`,
 php artisan finance:import-transactions --schema
 ```
 
-The schema is defined as a constant on the command class (not duplicated in docs). `BaseFinanceCommand` provides `emitSchema(array $schema): void` to handle output; the caller immediately returns `0`.
+Schemas live next to the import logic — `TransactionImportService::inputSchema()` for transaction imports, and similar static methods on import services or constants on the command class for others. `BaseFinanceCommand` provides `emitSchema(array $schema): void` to handle output; the caller immediately returns `0`.
 
 ### Base class
 
