@@ -16,7 +16,10 @@ class TransactionImportService
         return [
             'description' => 'Transaction import payload. Pass as JSON or TOON on stdin.',
             'type' => 'object',
-            'required' => ['transactions'],
+            'oneOf' => [
+                ['required' => ['transactions']],
+                ['required' => ['accounts']],
+            ],
             'properties' => [
                 'account_id' => [
                     'type' => 'integer',
@@ -48,18 +51,55 @@ class TransactionImportService
                         ],
                     ],
                 ],
+                'accounts' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'required' => ['transactions'],
+                        'properties' => [
+                            'acct_id' => ['type' => 'integer', 'description' => 'Account ID applied to child transactions when t_account is omitted.'],
+                            'account_id' => ['type' => 'integer', 'description' => 'Alias for acct_id.'],
+                            'transactions' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'required' => ['t_date', 't_type', 't_amt'],
+                                    'properties' => [
+                                        't_account' => ['type' => 'integer', 'description' => 'Account ID. Overrides the parent account ID.'],
+                                        't_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Transaction date (YYYY-MM-DD).'],
+                                        't_type' => ['type' => 'string', 'description' => 'Transaction type (e.g. Buy, Sell, Dividend, deposit, withdrawal).'],
+                                        't_amt' => ['type' => 'number', 'description' => 'Amount (negative = debit/cost, positive = credit/proceeds).'],
+                                        't_symbol' => ['type' => ['string', 'null'], 'description' => 'Ticker symbol (optional, nullable). Normalized to uppercase on import.'],
+                                        't_qty' => ['type' => 'number', 'description' => 'Quantity (shares/contracts; negative for sales).'],
+                                        't_price' => ['type' => 'number', 'description' => 'Price per share/contract.'],
+                                        't_commission' => ['type' => 'number'],
+                                        't_fee' => ['type' => 'number'],
+                                        't_method' => ['type' => 'string', 'description' => 'Broker method string (e.g. BUY, SELL, BUY TO OPEN).'],
+                                        't_description' => ['type' => 'string'],
+                                        't_comment' => ['type' => 'string'],
+                                        't_source' => ['type' => 'string', 'description' => 'Import source identifier.'],
+                                        't_origin' => ['type' => 'string', 'enum' => ['manual', 'import', 'api']],
+                                        'opt_expiration' => ['type' => 'string', 'format' => 'date', 'description' => 'Options expiration date.'],
+                                        'opt_type' => ['type' => 'string', 'enum' => ['call', 'put']],
+                                        'opt_strike' => ['type' => 'number'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
             ],
         ];
     }
 
     /**
      * @param  array<mixed>  $payload
-     * @return list<array<string, mixed>>
+     * @return list<mixed>
      */
     public static function transactionsFromPayload(array $payload): array
     {
         if (isset($payload['transactions']) && is_array($payload['transactions'])) {
-            return array_values(array_filter($payload['transactions'], is_array(...)));
+            return array_values($payload['transactions']);
         }
 
         if (isset($payload['accounts']) && is_array($payload['accounts'])) {
@@ -72,6 +112,8 @@ class TransactionImportService
 
                 foreach ($account['transactions'] as $transaction) {
                     if (! is_array($transaction)) {
+                        $transactions[] = $transaction;
+
                         continue;
                     }
 
@@ -88,7 +130,7 @@ class TransactionImportService
         }
 
         if (array_is_list($payload)) {
-            return array_values(array_filter($payload, is_array(...)));
+            return $payload;
         }
 
         return [];
@@ -99,13 +141,13 @@ class TransactionImportService
      */
     public static function defaultAccountIdFromPayload(array $payload, ?int $fallbackAccountId): ?int
     {
-        return isset($payload['account_id'])
+        return isset($payload['account_id']) && is_numeric($payload['account_id'])
             ? (int) $payload['account_id']
             : $fallbackAccountId;
     }
 
     /**
-     * @param  list<array<string, mixed>>  $transactions
+     * @param  list<mixed>  $transactions
      * @param  array{
      *     dry_run?: bool,
      *     default_account_id?: int|null,
@@ -139,6 +181,12 @@ class TransactionImportService
         $errors = [];
 
         foreach ($transactions as $index => $row) {
+            if (! is_array($row)) {
+                $errors[] = "Row {$index}: not an object.";
+
+                continue;
+            }
+
             $normalized = $this->normalizeRow($row);
 
             $accountId = isset($normalized['t_account'])
@@ -347,6 +395,17 @@ class TransactionImportService
      */
     private function duplicateKey(array $row): string
     {
-        return ($row['t_date'] ?? '').'|'.($row['t_type'] ?? '').'|'.($row['t_amt'] ?? '').'|'.($row['t_symbol'] ?? '');
+        return ($row['t_date'] ?? '').'|'.($row['t_type'] ?? '').'|'.$this->duplicateAmountKey($row['t_amt'] ?? null).'|'.($row['t_symbol'] ?? '');
+    }
+
+    private function duplicateAmountKey(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return is_numeric($value)
+            ? number_format((float) $value, 4, '.', '')
+            : trim((string) $value);
     }
 }

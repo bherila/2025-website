@@ -6,6 +6,7 @@ use App\Console\Commands\Finance\FinanceTransactionsCommand;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
+use App\Services\Finance\TransactionImportService;
 use Database\Seeders\Finance\FinanceAccountsSeeder;
 use Database\Seeders\Finance\FinanceTransactionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -198,5 +199,27 @@ class FinanceTransactionsCommandTest extends TestCase
             't_type' => 'Dividend',
             't_symbol' => 'MSFT',
         ]);
+    }
+
+    public function test_import_schema_documents_accounts_payload_shape(): void
+    {
+        $schema = TransactionImportService::inputSchema();
+
+        $this->assertSame([['required' => ['transactions']], ['required' => ['accounts']]], $schema['oneOf']);
+        $this->assertArrayHasKey('accounts', $schema['properties']);
+        $this->assertArrayHasKey('transactions', $schema['properties']['accounts']['items']['properties']);
+    }
+
+    public function test_import_option_reports_non_object_rows(): void
+    {
+        $this->withPayload([
+            'transactions' => [
+                'not-an-object',
+            ],
+        ]);
+
+        $this->artisan('finance:transactions', ['--import' => true, '--account' => (string) $this->checkingId()])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('Row 0: not an object.');
     }
 }
