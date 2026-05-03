@@ -286,7 +286,7 @@ class TaxLotReconciliationService
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->where(function ($query): void {
-                $query->where('lot_source', '1099b')
+                $query->where('lot_source', FinAccountLot::SOURCE_1099B)
                     ->orWhereNotNull('tax_document_id');
             })
             ->with(['taxDocument:id,original_filename,form_type,tax_year'])
@@ -310,7 +310,7 @@ class TaxLotReconciliationService
                 $query->whereNull('tax_document_id')
                     ->where(function ($sourceQuery): void {
                         $sourceQuery->whereNull('lot_source')
-                            ->orWhereNotIn('lot_source', ['1099b', '1099_b']);
+                            ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
                     });
             })
             ->orderBy('acct_id')

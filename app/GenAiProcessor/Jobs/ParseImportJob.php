@@ -610,7 +610,7 @@ class ParseImportJob implements ShouldQueue
                 'proceeds' => $proceeds,
                 'realized_gain_loss' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
                 'is_short_term' => $isShortTerm,
-                'lot_source' => '1099b',
+                'lot_source' => FinAccountLot::SOURCE_1099B,
                 'tax_document_id' => $taxDocumentId,
                 'form_8949_box' => $form8949Box,
                 'is_covered' => $isCovered,
@@ -637,7 +637,7 @@ class ParseImportJob implements ShouldQueue
                     't_amt' => -abs($proceeds),
                     't_basis' => $costBasis,
                     't_realized_pl' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
-                    't_source' => '1099b',
+                    't_source' => FinAccountLot::SOURCE_1099B,
                 ]);
 
                 // Link the lot to the sell transaction.

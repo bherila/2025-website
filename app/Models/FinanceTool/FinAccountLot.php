@@ -11,6 +11,10 @@ class FinAccountLot extends Model
 {
     use SerializesDatesAsLocal;
 
+    public const SOURCE_1099B = '1099b';
+
+    public const SOURCE_1099B_UNDERSCORE = '1099_b';
+
     protected $table = 'fin_account_lots';
 
     protected $primaryKey = 'lot_id';

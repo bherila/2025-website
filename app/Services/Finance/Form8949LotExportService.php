@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class Form8949LotExportService
@@ -95,7 +96,7 @@ class Form8949LotExportService
             ->whereNotNull('proceeds')
             ->whereNull('superseded_by_lot_id')
             ->where(function (Builder $query): void {
-                $query->whereIn('lot_source', ['1099b', '1099_b'])
+                $query->whereIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE])
                     ->orWhereNotNull('tax_document_id');
             })
             ->with([
@@ -115,10 +116,8 @@ class Form8949LotExportService
         $form8949Box = $this->normalizeBox($lot->form_8949_box, $isShortTerm, $lot->is_covered);
         $proceeds = $this->floatValue($lot->proceeds);
         $costBasis = $this->floatValue($lot->cost_basis);
-        $gain = $this->floatValue($lot->realized_gain_loss);
-        $computedAdjustment = round($gain - ($proceeds - $costBasis), 2);
-        $washSaleDisallowed = $this->nonZeroFloatOrNull($lot->wash_sale_disallowed);
-        $adjustment = $washSaleDisallowed ?? $computedAdjustment;
+        $washSaleDisallowed = $this->positiveNonZeroFloatOrNull($lot->wash_sale_disallowed);
+        $adjustment = $washSaleDisallowed ?? 0.0;
         $payerData = $this->payerData($lot);
         $account = $lot->account;
         $accountName = $account instanceof FinAccounts ? (string) $account->acct_name : null;
@@ -156,19 +155,30 @@ class Form8949LotExportService
                 continue;
             }
 
-            $isShortTerm = $this->boolValue($row['isShortTerm'] ?? $row['is_short_term'] ?? null) ?? true;
+            $dateAcquired = $this->stringValue($row['dateAcquired'] ?? $row['purchase_date'] ?? null);
+            $dateSold = $this->stringValue($row['dateSold'] ?? $row['sale_date'] ?? null) ?? '';
+            $isShortTerm = $this->boolValue($row['isShortTerm'] ?? $row['is_short_term'] ?? null)
+                ?? $this->inferShortTerm($dateAcquired, $dateSold);
+            if ($isShortTerm === null) {
+                throw ValidationException::withMessages([
+                    'lots' => 'Each analyzer lot must include isShortTerm/is_short_term or valid acquired and sold dates.',
+                ]);
+            }
+
             $proceeds = $this->floatValue($row['proceeds'] ?? 0);
             $costBasis = $this->floatValue($row['costBasis'] ?? $row['cost_basis'] ?? 0);
             $gain = $this->floatValue($row['gainOrLoss'] ?? $row['realized_gain_loss'] ?? ($proceeds - $costBasis));
             $providedAdjustmentCode = $this->stringValue($row['adjustmentCode'] ?? null);
-            $washSaleDisallowed = $this->nonZeroFloatOrNull(
+            $washSaleDisallowed = $this->positiveNonZeroFloatOrNull(
                 $row['washSaleDisallowed']
                     ?? $row['wash_sale_disallowed']
                     ?? $row['disallowedLoss']
                     ?? ($providedAdjustmentCode === 'W' ? ($row['adjustmentAmount'] ?? null) : null)
             );
-            $adjustment = $this->floatValue($row['adjustmentAmount'] ?? ($washSaleDisallowed ?? ($gain - ($proceeds - $costBasis))));
             $adjustmentCode = $providedAdjustmentCode ?? ($washSaleDisallowed !== null ? 'W' : null);
+            $adjustment = $adjustmentCode !== null
+                ? $this->floatValue($row['adjustmentAmount'] ?? ($washSaleDisallowed ?? ($gain - ($proceeds - $costBasis))))
+                : 0.0;
 
             $lots[] = new Form8949ExportLot(
                 description: $this->description(
@@ -176,8 +186,8 @@ class Form8949LotExportService
                     isset($row['symbol']) ? (string) $row['symbol'] : null,
                     $row['quantity'] ?? null,
                 ),
-                dateAcquired: $this->stringValue($row['dateAcquired'] ?? $row['purchase_date'] ?? null),
-                dateSold: $this->stringValue($row['dateSold'] ?? $row['sale_date'] ?? null) ?? '',
+                dateAcquired: $dateAcquired,
+                dateSold: $dateSold,
                 proceeds: $proceeds,
                 costBasis: $costBasis,
                 adjustmentAmount: $adjustment,
@@ -269,7 +279,7 @@ class Form8949LotExportService
             }
         }
 
-        if ($entries !== []) {
+        if (count($entries) === 1) {
             return $this->payerDataFromEntry($entries[0]);
         }
 
@@ -348,7 +358,7 @@ class Form8949LotExportService
         return null;
     }
 
-    private function nonZeroFloatOrNull(mixed $value): ?float
+    private function positiveNonZeroFloatOrNull(mixed $value): ?float
     {
         if (! is_numeric($value)) {
             return null;
@@ -373,5 +383,21 @@ class Form8949LotExportService
     private function normalizedString(string $value): string
     {
         return strtolower(trim($value));
+    }
+
+    private function inferShortTerm(?string $dateAcquired, string $dateSold): ?bool
+    {
+        if ($dateAcquired === null || trim($dateAcquired) === '' || trim($dateSold) === '') {
+            return null;
+        }
+
+        try {
+            $acquired = new \DateTimeImmutable($dateAcquired);
+            $sold = new \DateTimeImmutable($dateSold);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $acquired->diff($sold)->days <= 365;
     }
 }

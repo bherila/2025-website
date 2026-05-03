@@ -100,6 +100,80 @@ class Form8949LotExportTest extends TestCase
         $this->assertSame('22-2222222', $sheet->getCell('U2')->getValue());
     }
 
+    public function test_account_document_export_does_not_guess_payer_when_multiple_entries_do_not_match_link(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'E-TRADE Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $document->update([
+            'parsed_data' => [
+                [
+                    'account_identifier' => 'FID-1111',
+                    'account_name' => 'Fidelity Taxable',
+                    'form_type' => '1099_b',
+                    'parsed_data' => ['payer_name' => 'Fidelity Brokerage Services', 'payer_tin' => '11-1111111'],
+                ],
+                [
+                    'account_identifier' => 'SCH-3333',
+                    'account_name' => 'Schwab Taxable',
+                    'form_type' => '1099_b',
+                    'parsed_data' => ['payer_name' => 'Charles Schwab', 'payer_tin' => '33-3333333'],
+                ],
+            ],
+        ]);
+        $link = TaxDocumentAccount::createLink($document->id, $account->acct_id, '1099_b', 2025, aiIdentifier: 'ETR-2222', aiAccountName: 'E-TRADE Taxable');
+        $this->makeLot($account, $document);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-olt-xlsx', [
+            'source' => 'database',
+            'scope' => 'account_document',
+            'account_id' => $account->acct_id,
+            'tax_document_id' => $document->id,
+            'account_link_id' => $link->id,
+        ]);
+
+        $response->assertOk();
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'olt-payer-fallback-test');
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        @unlink($tempPath);
+
+        $sheet = $spreadsheet->getSheet(0);
+        $this->assertSame('E-TRADE Taxable', $sheet->getCell('T2')->getValue());
+        $this->assertNull($sheet->getCell('U2')->getValue());
+    }
+
+    public function test_olt_export_suppresses_unknown_adjustment_without_code(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $this->makeLot($account, $document, [
+            'proceeds' => 1000,
+            'cost_basis' => 800,
+            'realized_gain_loss' => 250,
+            'wash_sale_disallowed' => 0,
+        ]);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-olt-xlsx', [
+            'source' => 'database',
+            'scope' => 'all',
+            'tax_year' => 2025,
+        ]);
+
+        $response->assertOk();
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'olt-adjustment-test');
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        @unlink($tempPath);
+
+        $sheet = $spreadsheet->getSheet(0);
+        $this->assertNull($sheet->getCell('F2')->getValue());
+        $this->assertSame(0.0, $sheet->getCell('G2')->getValue());
+    }
+
     public function test_all_account_olt_export_returns_combined_template_rows(): void
     {
         $user = $this->createUser();
@@ -154,6 +228,48 @@ class Form8949LotExportTest extends TestCase
         $response->assertOk();
         $response->assertSeeText('N712', false);
         $response->assertSeeText('PTesla', false);
+    }
+
+    public function test_analyzer_export_infers_term_from_dates_when_flag_is_missing(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-txf', [
+            'source' => 'analyzer',
+            'lots' => [[
+                'symbol' => 'TSLA',
+                'description' => 'Tesla',
+                'quantity' => 5,
+                'dateAcquired' => '2023-01-01',
+                'dateSold' => '2025-03-01',
+                'proceeds' => 1000,
+                'costBasis' => 800,
+                'gainOrLoss' => 200,
+            ]],
+        ]);
+
+        $response->assertOk();
+        $response->assertSeeText('N714', false);
+    }
+
+    public function test_analyzer_export_rejects_lot_without_term_or_dates(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/lots/export-txf', [
+            'source' => 'analyzer',
+            'lots' => [[
+                'symbol' => 'TSLA',
+                'description' => 'Tesla',
+                'dateSold' => '2025-03-01',
+                'proceeds' => 1000,
+                'costBasis' => 800,
+                'gainOrLoss' => 200,
+            ]],
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors('lots');
     }
 
     public function test_export_rejects_other_users_account(): void
