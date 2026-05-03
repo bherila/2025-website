@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertCircle, CheckCircle, Clock, Loader2, Upload } from 'lucide-react'
+import { AlertCircle, CheckCircle, Clock, Loader2, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -65,6 +65,67 @@ interface ParsedLink {
   account: { acct_id: number; acct_name: string } | null
 }
 
+interface ExistingTaxDocumentResponse {
+  id: number
+  genai_status: string | null
+  form_type?: string | null
+  parsed_data?: Record<string, unknown> | Array<Record<string, unknown>> | null
+  account_links: TaxDocumentAccountLink[]
+}
+
+const LEGACY_BROKER_FORM_DETECTORS: Array<{
+  formType: string
+  keys: string[]
+  prefixes: string[]
+}> = [
+  {
+    formType: '1099_div',
+    keys: ['box1a_ordinary', 'box1b_qualified', 'box2a_cap_gain'],
+    prefixes: ['div_'],
+  },
+  {
+    formType: '1099_int',
+    keys: ['box1_interest', 'box3_savings_bond'],
+    prefixes: ['int_'],
+  },
+  {
+    formType: '1099_misc',
+    keys: ['box1_rents', 'box2_royalties', 'box3_other_income', 'box8_substitute_payments'],
+    prefixes: ['misc_'],
+  },
+  {
+    formType: '1099_b',
+    keys: ['total_proceeds', 'total_cost_basis', 'total_realized_gain_loss', 'b_total_proceeds'],
+    prefixes: ['b_'],
+  },
+]
+
+function hasDetectedForm(data: Record<string, unknown>, keys: string[], prefixes: string[]): boolean {
+  return Object.keys(data).some(key => keys.includes(key) || prefixes.some(prefix => key.startsWith(prefix)))
+}
+
+function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLink[] {
+  if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.parsed_data) {
+    return []
+  }
+
+  const data = doc.parsed_data
+  const aiIdentifier = typeof data.account_number === 'string' ? data.account_number : null
+  const aiAccountName = typeof data.payer_name === 'string' ? data.payer_name : null
+
+  return LEGACY_BROKER_FORM_DETECTORS
+    .filter(detector => hasDetectedForm(data, detector.keys, detector.prefixes))
+    .map((detector, index) => ({
+      id: -(index + 1),
+      account_id: null,
+      form_type: detector.formType,
+      tax_year: typeof data.tax_year === 'number' ? data.tax_year : 0,
+      ai_identifier: aiIdentifier,
+      ai_account_name: aiAccountName,
+      account: null,
+    }))
+}
+
 export default function MultiAccountImportModal({
   open,
   taxYear,
@@ -80,6 +141,7 @@ export default function MultiAccountImportModal({
   const [taxDocId, setTaxDocId] = useState<number | null>(null)
   const [links, setLinks] = useState<ParsedLink[]>([])
   const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -90,6 +152,7 @@ export default function MultiAccountImportModal({
     setTaxDocId(null)
     setLinks([])
     setConfirming(false)
+    setDeleting(false)
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current)
     }
@@ -100,19 +163,20 @@ export default function MultiAccountImportModal({
   const pollJob = useCallback(
     async (docId: number, attempt = 0) => {
       try {
-        const doc = (await fetchWrapper.get(`/api/finance/tax-documents/${docId}`)) as {
-          id: number
-          genai_status: string | null
-          account_links: TaxDocumentAccountLink[]
-        }
+        const doc = (await fetchWrapper.get(`/api/finance/tax-documents/${docId}`)) as ExistingTaxDocumentResponse
 
         if (doc.genai_status === 'parsed') {
           // Build editable link list from the join table rows.
           // ai_identifier and ai_account_name are now stored directly on each link row.
-          const enriched: ParsedLink[] = doc.account_links.map(link => ({
+          const sourceLinks = doc.account_links.length > 0
+            ? doc.account_links
+            : synthesizeLegacyBrokerLinks(doc)
+          const enriched: ParsedLink[] = sourceLinks.map(link => ({
             ...link,
+            tax_year: link.tax_year || taxYear,
             // In single-account mode, apply the preselected account to any unresolved rows.
             account_id: link.account_id ?? (preselectedAccountId ?? null),
+            account: link.account ?? null,
           }))
           setLinks(enriched)
           setPhase('assign')
@@ -141,7 +205,7 @@ export default function MultiAccountImportModal({
         }
       }
     },
-    [preselectedAccountId],
+    [preselectedAccountId, taxYear],
   )
 
   useLayoutEffect(() => {
@@ -267,6 +331,25 @@ export default function MultiAccountImportModal({
     }
   }
 
+  const handleDeleteDocument = async () => {
+    if (!taxDocId) return
+    const shouldDelete = window.confirm('Delete this tax document import? This removes the uploaded file record and any account assignment rows so you can re-upload it cleanly.')
+    if (!shouldDelete) return
+
+    setDeleting(true)
+    setError(null)
+    try {
+      await fetchWrapper.delete(`/api/finance/tax-documents/${taxDocId}`, {})
+      toast.success('Tax document import deleted')
+      reset()
+      onSuccess()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete tax document')
+      setDeleting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={open => !open && handleClose()}>
       <DialogContent className="max-w-2xl">
@@ -351,6 +434,13 @@ export default function MultiAccountImportModal({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {links.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-sm text-muted-foreground text-center py-6">
+                        No assignable account/form rows were detected for this document.
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {links.map(link => (
                     <TableRow key={link.id}>
                       <TableCell className="text-sm">
@@ -410,15 +500,32 @@ export default function MultiAccountImportModal({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={confirming}>
-            Cancel
-          </Button>
-          {phase === 'assign' && (
-            <Button onClick={handleConfirm} disabled={confirming}>
-              {confirming && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Confirm Import
-            </Button>
-          )}
+          <div className="flex w-full items-center justify-between gap-2">
+            {taxDocId ? (
+              <Button
+                variant="destructive"
+                onClick={handleDeleteDocument}
+                disabled={confirming || deleting}
+                className="gap-1"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete file
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleClose} disabled={confirming || deleting}>
+                Cancel
+              </Button>
+              {phase === 'assign' && (
+                <Button onClick={handleConfirm} disabled={confirming || deleting || links.length === 0}>
+                  {confirming && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Confirm Import
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
