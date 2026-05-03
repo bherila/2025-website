@@ -11,6 +11,12 @@ All agent-operational rules, coding standards, workflow commands, and architectu
 
 **IMPORTANT**: All testing requirements in [TESTING.md](TESTING.md) must pass before committing — this includes TypeScript (`pnpm run type-check`), ESLint (`pnpm run lint`), Jest, Laravel Pint, and PHPUnit tests.
 
+## Migrations and schema dumps are CI-only
+
+**Never run `php artisan migrate` or `php artisan schema:dump` yourself.** CI is responsible for applying migrations and regenerating `database/schema/{mysql,sqlite}-schema.sql`. Your job ends at writing the migration file in `database/migrations/`.
+
+This overrides the boilerplate in the auto-generated `<laravel-boost-guidelines>` block below — that block tells you to "update the schema dump after migrations." Ignore it. Do not run either command, do not flag a missing schema-dump update in code reviews, and do not suggest the user run them as part of a normal change. If the user explicitly asks, pass `--database=sqlite --no-interaction` (the `.env` may point to a remote MySQL host).
+
 ## Money math — always use currency.js
 
 All arithmetic involving money (adds, subtracts, multiplies, divides) must go through [currency.js](https://currency.js.org/). Never use raw `+ - * /` on dollar amounts; JavaScript floats produce rounding errors that compound across tax workflows.
@@ -195,7 +201,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 - Avoid `DB::`; prefer `Model::query()`. Generate code that leverages Laravel's ORM capabilities rather than bypassing them.
 - Generate code that prevents N+1 query problems by using eager loading.
 - Use Laravel's query builder for very complex database operations.
-- Update the schema dump via `php artisan schema:dump` after migrations and do **NOT** use the `--prune` flag.
+- **Do not run `php artisan schema:dump` or `php artisan migrate`** — CI handles both. See the "Migrations and schema dumps are CI-only" section above. (This bullet overrides the upstream boost guideline.)
 
 ### Model Creation
 
