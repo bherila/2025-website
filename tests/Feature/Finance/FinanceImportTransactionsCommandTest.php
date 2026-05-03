@@ -275,6 +275,20 @@ class FinanceImportTransactionsCommandTest extends TestCase
         ]);
     }
 
+    public function test_toon_mode_outputs_summary(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-11-02', 't_type' => 'deposit', 't_amt' => 301.00],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions', ['--dry-run' => true, '--format' => 'toon'])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('skipped_duplicate');
+    }
+
     public function test_statement_id_is_stripped_from_imported_rows(): void
     {
         $this->withPayload([

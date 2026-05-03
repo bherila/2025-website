@@ -3,6 +3,9 @@
 namespace App\Console\Commands\Finance;
 
 use App\Models\User;
+use HelgeSverre\Toon\DecodeOptions;
+use HelgeSverre\Toon\Exceptions\DecodeException;
+use HelgeSverre\Toon\Toon;
 use Illuminate\Console\Command;
 
 /**
@@ -16,7 +19,7 @@ use Illuminate\Console\Command;
  * defaulting to 1 if not set. All queries are scoped to this user.
  *
  * ## Output formats
- * Commands expose a `--format` option (table|json). Use `outputData()` to
+ * Commands expose a `--format` option (table|json|toon). Use `outputData()` to
  * emit rows in the caller-chosen format. Use `outputJson()` or `renderTable()`
  * directly when you need explicit control.
  */
@@ -55,10 +58,10 @@ abstract class BaseFinanceCommand extends Command
     }
 
     /**
-     * Output an array of rows in the format selected by --format (table|json).
+     * Output an array of rows in the format selected by --format (table|json|toon).
      *
      * @param  array<string>  $headers  Column headers (for table mode)
-     * @param  array<array<string>>  $rows  Rows of scalar values (for table mode)
+     * @param  array<array<array-key, mixed>>  $rows  Rows of scalar values (for table mode)
      * @param  array<mixed>  $data  Raw data (for json mode)
      */
     protected function outputData(array $headers, array $rows, array $data): void
@@ -67,6 +70,8 @@ abstract class BaseFinanceCommand extends Command
 
         if ($format === 'json') {
             $this->outputJson($data);
+        } elseif ($format === 'toon') {
+            $this->outputToon($data);
         } else {
             $this->renderTable($headers, $rows);
         }
@@ -83,13 +88,23 @@ abstract class BaseFinanceCommand extends Command
     }
 
     /**
+     * Emit $data as TOON on stdout.
+     *
+     * @param  array<mixed>  $data
+     */
+    protected function outputToon(array $data): void
+    {
+        $this->line(Toon::encode($data));
+    }
+
+    /**
      * Render a monospaced table to the terminal.
      *
      * Calculates the maximum width of each column across both headers and rows,
      * then pads every cell with spaces so columns are aligned.
      *
      * @param  array<string>  $headers
-     * @param  array<array<string>>  $rows
+     * @param  array<array<array-key, mixed>>  $rows
      */
     protected function renderTable(array $headers, array $rows): void
     {
@@ -173,6 +188,66 @@ abstract class BaseFinanceCommand extends Command
     }
 
     /**
+     * Read and decode a JSON or TOON payload from stdin.
+     *
+     * @return array<mixed>|null
+     */
+    protected function readStructuredFromStdin(string $format = 'auto'): ?array
+    {
+        $raw = '';
+
+        while (! feof(STDIN)) {
+            $chunk = fread(STDIN, 8192);
+            if ($chunk === false) {
+                break;
+            }
+            $raw .= $chunk;
+        }
+
+        $raw = trim($raw);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if ($format === 'json' || $format === 'auto') {
+            $decoded = json_decode($raw, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+
+            if ($format === 'json') {
+                $this->error('Invalid JSON from stdin: '.json_last_error_msg());
+
+                return null;
+            }
+        }
+
+        if ($format === 'toon' || $format === 'auto') {
+            try {
+                $decoded = Toon::decode($raw, DecodeOptions::lenient());
+            } catch (DecodeException $e) {
+                $this->error('Invalid TOON from stdin: '.$e->getMessage());
+
+                return null;
+            }
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+
+            $this->error('Invalid TOON from stdin: decoded payload must be an object or array.');
+
+            return null;
+        }
+
+        $this->error("Invalid --input-format value '{$format}'. Use 'auto', 'json', or 'toon'.");
+
+        return null;
+    }
+
+    /**
      * Emit a JSON schema to stdout.
      *
      * Called when the command is invoked with --schema. Intended for LLM context
@@ -191,13 +266,15 @@ abstract class BaseFinanceCommand extends Command
     /**
      * Common --format option definition. Add to $signature as {--format=table}.
      * Validated here so individual commands don't need to repeat the check.
+     *
+     * @param  list<string>  $allowedFormats
      */
-    protected function validateFormat(): bool
+    protected function validateFormat(array $allowedFormats = ['table', 'json']): bool
     {
         $format = $this->option('format') ?? 'table';
 
-        if (! in_array($format, ['table', 'json'], true)) {
-            $this->error("Invalid --format value '{$format}'. Use 'table' or 'json'.");
+        if (! in_array($format, $allowedFormats, true)) {
+            $this->error("Invalid --format value '{$format}'. Use ".implode(', ', array_map(fn (string $value): string => "'{$value}'", $allowedFormats)).'.');
 
             return false;
         }

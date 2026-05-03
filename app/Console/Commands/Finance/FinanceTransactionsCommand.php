@@ -4,6 +4,7 @@ namespace App\Console\Commands\Finance;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\TransactionImportService;
 
 class FinanceTransactionsCommand extends BaseFinanceCommand
 {
@@ -14,18 +15,54 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
         {--type= : Filter by t_type (e.g. Buy, Sell, Dividend)}
         {--symbol= : Filter by ticker symbol}
         {--limit=100 : Max rows to return (0 = unlimited)}
-        {--format=table : Output format: table or json}';
+        {--import : Import transactions from stdin instead of listing}
+        {--dry-run : Validate import and display what would be inserted without committing}
+        {--schema : Print the expected import input schema to stdout and exit}
+        {--input-format=auto : Import stdin format: auto, json, or toon}
+        {--format=table : Output format: table, json, or toon}';
 
-    protected $description = 'List transactions from one or all accounts for the configured user (FINANCE_CLI_USER_ID)';
+    protected $description = 'List or import transactions for the configured user (FINANCE_CLI_USER_ID)';
 
-    public function handle(): int
+    /**
+     * Test hook: set this before calling artisan() in a feature test to inject
+     * an import payload without faking STDIN. Reset to null after the test.
+     *
+     * @internal
+     *
+     * @var array<mixed>|null
+     */
+    public static ?array $testStdinOverride = null;
+
+    /**
+     * @return array<mixed>|null
+     */
+    protected function getStdinData(): ?array
     {
-        if (! $this->validateFormat()) {
+        if (static::$testStdinOverride !== null) {
+            return static::$testStdinOverride;
+        }
+
+        return $this->readStructuredFromStdin((string) ($this->option('input-format') ?? 'auto'));
+    }
+
+    public function handle(TransactionImportService $transactionImportService): int
+    {
+        if ($this->option('schema')) {
+            $this->emitSchema(TransactionImportService::inputSchema());
+
+            return 0;
+        }
+
+        if (! $this->validateFormat(['table', 'json', 'toon'])) {
             return 1;
         }
 
         if ($this->resolveUser() === null) {
             return 1;
+        }
+
+        if ($this->option('import')) {
+            return $this->handleImport($transactionImportService);
         }
 
         // Validate --month requires --year
@@ -118,6 +155,70 @@ class FinanceTransactionsCommand extends BaseFinanceCommand
         $data = $transactions->map(fn (FinAccountLineItems $t) => $t->getAttributes())->values()->toArray();
 
         $this->outputData($headers, $rows, $data);
+
+        return 0;
+    }
+
+    private function handleImport(TransactionImportService $transactionImportService): int
+    {
+        $payload = $this->getStdinData();
+
+        if ($payload === null) {
+            $this->error('No JSON or TOON payload received on stdin. Pipe a payload or use --schema to see the expected format.');
+
+            return 1;
+        }
+
+        $defaultAccountId = TransactionImportService::defaultAccountIdFromPayload(
+            $payload,
+            $this->option('account') !== null ? (int) $this->option('account') : null,
+        );
+
+        $transactions = TransactionImportService::transactionsFromPayload($payload);
+
+        if ($transactions === []) {
+            $this->error('Payload must contain a non-empty "transactions" array.');
+
+            return 1;
+        }
+
+        $result = $transactionImportService->importForUser($this->userId(), $transactions, [
+            'dry_run' => (bool) $this->option('dry-run'),
+            'default_account_id' => $defaultAccountId,
+            'require_type' => true,
+        ]);
+
+        foreach ($result->errors as $error) {
+            $this->error($error);
+        }
+
+        if ($result->hasErrors()) {
+            return 1;
+        }
+
+        $structuredOutput = in_array($this->option('format') ?? 'table', ['json', 'toon'], true);
+
+        if ($result->dryRun && $result->rows !== [] && ! $structuredOutput) {
+            $this->info('[dry-run] The following rows would be inserted:');
+            $previewHeaders = ['t_account', 't_date', 't_type', 't_amt', 't_symbol', 't_description'];
+            $previewRows = array_map(fn (array $row): array => [
+                $row['t_account'] ?? '',
+                $row['t_date'] ?? '',
+                $row['t_type'] ?? '',
+                $row['t_amt'] ?? '',
+                $row['t_symbol'] ?? '',
+                mb_strimwidth((string) ($row['t_description'] ?? ''), 0, 50, '…'),
+            ], $result->rows);
+            $this->renderTable($previewHeaders, $previewRows);
+        }
+
+        $summaryHeaders = ['status', 'count'];
+        $summaryRows = [
+            [$result->dryRun ? 'would_insert' : 'inserted', $result->inserted],
+            ['skipped_duplicate', $result->skippedDuplicate],
+        ];
+
+        $this->outputData($summaryHeaders, $summaryRows, $result->toArray());
 
         return 0;
     }

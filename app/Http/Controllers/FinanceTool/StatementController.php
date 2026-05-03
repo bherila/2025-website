@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
-use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinStatementDetail;
+use App\Services\Finance\TransactionImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -301,7 +301,7 @@ class StatementController extends Controller
      * Import statement details from PDF parsing (MTD/YTD line items).
      * Creates a statement record and adds statement details to it.
      */
-    public function importPdfStatement(Request $request, int $account_id): JsonResponse
+    public function importPdfStatement(Request $request, int $account_id, TransactionImportService $transactionImportService): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -370,26 +370,25 @@ class StatementController extends Controller
 
         // Insert transactions
         $transactionsCount = 0;
+        $skippedDuplicateTransactionsCount = 0;
         if (! empty($transactions)) {
-            $transactionRows = array_map(function ($tx) use ($account, $statementId) {
-                return [
-                    't_account' => $account->acct_id,
-                    'statement_id' => $statementId,
-                    't_date' => substr($tx['t_date'], 0, 10),
-                    't_amt' => $tx['t_amt'],
-                    't_description' => $tx['t_description'] ?? null,
-                    't_type' => $tx['t_type'] ?? null,
-                    't_symbol' => $tx['t_symbol'] ?? null,
-                    't_qty' => $tx['t_qty'] ?? 0,
-                    't_price' => $tx['t_price'] ?? 0,
-                    't_commission' => $tx['t_commission'] ?? 0,
-                    't_fee' => $tx['t_fee'] ?? 0,
-                    't_source' => 'import',
-                    'when_added' => now(),
-                ];
-            }, $transactions);
-            FinAccountLineItems::insert($transactionRows);
-            $transactionsCount = count($transactionRows);
+            $result = $transactionImportService->importForUser((int) $uid, TransactionImportService::transactionsFromPayload(['transactions' => $transactions]), [
+                'default_account_id' => (int) $account->acct_id,
+                'default_statement_id' => (int) $statementId,
+                'require_type' => false,
+                'source' => 'import',
+                'include_defaults' => true,
+            ]);
+
+            if ($result->hasErrors()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $result->errors,
+                ], 422);
+            }
+
+            $transactionsCount = $result->inserted;
+            $skippedDuplicateTransactionsCount = $result->skippedDuplicate;
         }
 
         // Insert lot rows
@@ -445,6 +444,7 @@ class StatementController extends Controller
             'closing_balance' => $closingBalance,
             'details_count' => count($statementDetails),
             'transactions_count' => $transactionsCount,
+            'skipped_duplicate_transactions_count' => $skippedDuplicateTransactionsCount,
             'lots_count' => $lotsCount,
         ]);
     }
@@ -455,7 +455,7 @@ class StatementController extends Controller
      * transactions, statementDetails, and lots. The file_hash (if provided) is
      * stored once in files_for_fin_accounts and referenced by all created statements.
      */
-    public function importMultiAccountPdf(Request $request): JsonResponse
+    public function importMultiAccountPdf(Request $request, TransactionImportService $transactionImportService): JsonResponse
     {
         $uid = Auth::id();
 
@@ -493,7 +493,7 @@ class StatementController extends Controller
         $results = [];
         $fileHash = $request->input('file_hash');
 
-        DB::transaction(function () use ($request, $uid, $fileHash, &$results) {
+        DB::transaction(function () use ($request, $uid, $fileHash, &$results, $transactionImportService): void {
             foreach ($request->input('accounts') as $accountData) {
                 $account = FinAccounts::where('acct_id', $accountData['acct_id'])
                     ->where('acct_owner', $uid)
@@ -573,26 +573,22 @@ class StatementController extends Controller
                 }
 
                 $transactionsCount = 0;
+                $skippedDuplicateTransactionsCount = 0;
                 if (! empty($transactions)) {
-                    $txRows = array_map(function ($tx) use ($account, $statementId) {
-                        return [
-                            't_account' => $account->acct_id,
-                            'statement_id' => $statementId,
-                            't_date' => substr($tx['t_date'], 0, 10),
-                            't_amt' => $tx['t_amt'],
-                            't_description' => $tx['t_description'] ?? null,
-                            't_type' => $tx['t_type'] ?? null,
-                            't_symbol' => $tx['t_symbol'] ?? null,
-                            't_qty' => $tx['t_qty'] ?? 0,
-                            't_price' => $tx['t_price'] ?? 0,
-                            't_commission' => $tx['t_commission'] ?? 0,
-                            't_fee' => $tx['t_fee'] ?? 0,
-                            't_source' => 'import',
-                            'when_added' => now(),
-                        ];
-                    }, $transactions);
-                    FinAccountLineItems::insert($txRows);
-                    $transactionsCount = count($txRows);
+                    $result = $transactionImportService->importForUser((int) $uid, TransactionImportService::transactionsFromPayload(['transactions' => $transactions]), [
+                        'default_account_id' => (int) $account->acct_id,
+                        'default_statement_id' => (int) $statementId,
+                        'require_type' => false,
+                        'source' => 'import',
+                        'include_defaults' => true,
+                    ]);
+
+                    if ($result->hasErrors()) {
+                        throw new \InvalidArgumentException(implode(' ', $result->errors));
+                    }
+
+                    $transactionsCount = $result->inserted;
+                    $skippedDuplicateTransactionsCount = $result->skippedDuplicate;
                 }
 
                 $lotsCount = 0;
@@ -641,6 +637,7 @@ class StatementController extends Controller
                     'acct_id' => $account->acct_id,
                     'statement_id' => $statementId,
                     'transactions_count' => $transactionsCount,
+                    'skipped_duplicate_transactions_count' => $skippedDuplicateTransactionsCount,
                     'lots_count' => $lotsCount,
                     'details_count' => count($statementDetails),
                 ];

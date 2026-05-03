@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinStatement;
 use App\Models\User;
 use Tests\TestCase;
 
@@ -180,6 +181,131 @@ class FinanceTransactionsApiControllerTest extends TestCase
     {
         $response = $this->getJson('/api/finance/all/line_items');
         $response->assertUnauthorized();
+    }
+
+    public function test_import_line_items_skips_duplicates(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+
+        $payload = [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-03',
+                    't_amt' => 42.00,
+                    't_type' => 'deposit',
+                    't_description' => 'API deposit',
+                ],
+            ],
+        ];
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", $payload)
+            ->assertOk()
+            ->assertJsonPath('imported', 1)
+            ->assertJsonPath('skipped_duplicate', 0);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", $payload)
+            ->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('skipped_duplicate', 1);
+
+        $this->assertSame(1, FinAccountLineItems::query()
+            ->where('t_account', $account->acct_id)
+            ->where('t_date', '2026-05-03')
+            ->where('t_amt', 42.00)
+            ->count());
+    }
+
+    public function test_import_line_items_normalizes_decimal_amounts_for_duplicate_detection(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2026-05-03',
+            't_amt' => '42.0000',
+            't_type' => 'deposit',
+            't_symbol' => null,
+            't_description' => 'Existing API deposit',
+        ]);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-03',
+                    't_amt' => 42,
+                    't_type' => 'deposit',
+                    't_description' => 'API deposit',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('skipped_duplicate', 1);
+    }
+
+    public function test_import_line_items_rejects_statement_id_from_another_account(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $otherAccount = $this->createAccountWithTransactions($user->id, 'Savings');
+        $otherStatement = FinStatement::create([
+            'acct_id' => $otherAccount->acct_id,
+            'balance' => 100,
+            'statement_opening_date' => '2026-05-01',
+            'statement_closing_date' => '2026-05-31',
+        ]);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-03',
+                    't_amt' => 42,
+                    't_type' => 'deposit',
+                    'statement_id' => $otherStatement->statement_id,
+                ],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseMissing('fin_account_line_items', [
+            't_account' => $account->acct_id,
+            't_date' => '2026-05-03',
+            't_amt' => 42,
+        ]);
+    }
+
+    public function test_import_line_items_forces_rows_to_url_account(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $otherAccount = $this->createAccountWithTransactions($user->id, 'Savings');
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", [
+            'transactions' => [
+                [
+                    't_account' => $otherAccount->acct_id,
+                    't_date' => '2026-05-03',
+                    't_amt' => 42,
+                    't_type' => 'deposit',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('imported', 1);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $account->acct_id,
+            't_date' => '2026-05-03',
+            't_amt' => 42,
+        ]);
+        $this->assertDatabaseMissing('fin_account_line_items', [
+            't_account' => $otherAccount->acct_id,
+            't_date' => '2026-05-03',
+            't_amt' => 42,
+        ]);
     }
 
     // -------------------------------------------------------------------------

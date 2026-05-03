@@ -37,18 +37,6 @@ parameters:
 			path: app/Console/Commands/Finance/FinanceAccountsCommand.php
 
 		-
-			message: '#^Parameter \#2 \$rows of method App\\Console\\Commands\\Finance\\BaseFinanceCommand\:\:outputData\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Console/Commands/Finance/FinanceImportTransactionsCommand.php
-
-		-
-			message: '#^Parameter \#2 \$rows of method App\\Console\\Commands\\Finance\\BaseFinanceCommand\:\:outputData\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Console/Commands/Finance/FinanceTaxImportCommand.php
-
-		-
 			message: '#^Match arm comparison between ''1099_div''\|''1099_div_c'' and ''k1'' is always false\.$#'
 			identifier: match.alwaysFalse
 			count: 1

@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinStatement;
+use App\Services\Finance\TransactionImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceTransactionsApiController extends Controller
@@ -105,7 +108,7 @@ class FinanceTransactionsApiController extends Controller
     /**
      * Import line items (transactions) for an account
      */
-    public function importLineItems(Request $request, int $account_id): JsonResponse
+    public function importLineItems(Request $request, int $account_id, TransactionImportService $transactionImportService): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -113,49 +116,120 @@ class FinanceTransactionsApiController extends Controller
         // Check if we have a top-level statement_id or if it's per item
         $statementId = $request->input('statement_id');
         $lineItems = isset($data['transactions']) ? $data['transactions'] : (isset($data[0]) ? $data : []);
+        $statementErrors = $this->validateImportStatementIds($lineItems, $statementId, (int) $account->acct_id);
 
-        $dataToInsert = [];
-
-        foreach ($lineItems as $item) {
-            $dataToInsert[] = [
-                't_account' => $account->acct_id,
-                'statement_id' => $item['statement_id'] ?? $statementId,
-                't_date' => $item['t_date'],
-                't_date_posted' => $item['t_date_posted'] ?? null,
-                't_type' => $item['t_type'] ?? null,
-                't_schc_category' => $item['t_schc_category'] ?? null,
-                't_amt' => $item['t_amt'] ?? null,
-                't_symbol' => $item['t_symbol'] ?? null,
-                't_cusip' => $item['t_cusip'] ?? null,
-                't_qty' => $item['t_qty'] ?? 0,
-                't_price' => $item['t_price'] ?? '0',
-                't_commission' => $item['t_commission'] ?? '0',
-                't_fee' => $item['t_fee'] ?? '0',
-                't_method' => $item['t_method'] ?? null,
-                't_source' => $item['t_source'] ?? 'import',
-                't_origin' => $item['t_origin'] ?? null,
-                'opt_expiration' => $item['opt_expiration'] ?? null,
-                'opt_type' => $item['opt_type'] ?? null,
-                'opt_strike' => $item['opt_strike'] ?? '0',
-                't_description' => $item['t_description'] ?? null,
-                't_comment' => $item['t_comment'] ?? null,
-                't_from' => $item['t_from'] ?? null,
-                't_to' => $item['t_to'] ?? null,
-                't_interest_rate' => $item['t_interest_rate'] ?? null,
-                't_harvested_amount' => $item['t_harvested_amount'] ?? null,
-                't_account_balance' => $item['t_account_balance'] ?? null,
-                'when_added' => now(),
-            ];
+        if ($statementErrors !== []) {
+            return response()->json([
+                'success' => false,
+                'errors' => $statementErrors,
+            ], 422);
         }
 
-        if (! empty($dataToInsert)) {
-            FinAccountLineItems::insert($dataToInsert);
+        $result = $transactionImportService->importForUser((int) Auth::id(), TransactionImportService::transactionsFromPayload([
+            'transactions' => $this->lineItemsForAccount($lineItems, (int) $account->acct_id),
+        ]), [
+            'default_account_id' => (int) $account->acct_id,
+            'default_statement_id' => $statementId !== null ? (int) $statementId : null,
+            'require_type' => false,
+            'allow_row_statement_id' => true,
+            'source' => 'import',
+            'include_defaults' => true,
+        ]);
+
+        if ($result->hasErrors()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $result->errors,
+            ], 422);
         }
 
         return response()->json([
             'success' => true,
-            'imported' => count($dataToInsert),
+            'imported' => $result->inserted,
+            'skipped_duplicate' => $result->skippedDuplicate,
         ]);
+    }
+
+    /**
+     * @param  array<mixed>  $lineItems
+     * @return list<mixed>
+     */
+    private function lineItemsForAccount(array $lineItems, int $accountId): array
+    {
+        return array_map(function (mixed $lineItem) use ($accountId): mixed {
+            if (! is_array($lineItem)) {
+                return $lineItem;
+            }
+
+            $lineItem['t_account'] = $accountId;
+
+            return $lineItem;
+        }, array_values($lineItems));
+    }
+
+    /**
+     * @param  array<mixed>  $lineItems
+     * @return list<string>
+     */
+    private function validateImportStatementIds(array $lineItems, mixed $statementId, int $accountId): array
+    {
+        $statementIds = [];
+
+        if ($statementId !== null) {
+            $statementIds[] = $statementId;
+        }
+
+        foreach ($lineItems as $lineItem) {
+            if (is_array($lineItem) && array_key_exists('statement_id', $lineItem) && $lineItem['statement_id'] !== null) {
+                $statementIds[] = $lineItem['statement_id'];
+            }
+        }
+
+        if ($statementIds === []) {
+            return [];
+        }
+
+        $errors = [];
+        $normalizedStatementIds = [];
+
+        foreach ($statementIds as $candidate) {
+            if (! is_numeric($candidate)) {
+                $errors[] = 'statement_id '.$this->stringValue($candidate).' must be numeric.';
+
+                continue;
+            }
+
+            $normalizedStatementIds[] = (int) $candidate;
+        }
+
+        if ($normalizedStatementIds === []) {
+            return $errors;
+        }
+
+        $ownedStatementIds = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereIn('statement_id', array_values(array_unique($normalizedStatementIds)))
+            ->pluck('statement_id')
+            ->map(fn ($id): int => (int) $id)
+            ->flip()
+            ->all();
+
+        foreach (array_unique($normalizedStatementIds) as $candidate) {
+            if (! isset($ownedStatementIds[$candidate])) {
+                $errors[] = "statement_id {$candidate} was not found for this account.";
+            }
+        }
+
+        return $errors;
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_scalar($value) || $value === null) {
+            return "'{$value}'";
+        }
+
+        return "'".get_debug_type($value)."'";
     }
 
     /**

@@ -36,14 +36,17 @@ All commands are scoped to the resolved user. No command can read or write anoth
 
 ## Output Formats
 
-Every command accepts `--format=table` (default) or `--format=json`.
+Most commands accept `--format=table` (default) or `--format=json`. `finance:transactions` and `finance:import-transactions` also support `--format=toon`.
 
 **Table** renders a monospaced, pipe-delimited grid suitable for terminal inspection.
 
 **JSON** emits a pretty-printed JSON array on stdout — useful for piping to `jq`, saving to a file, or feeding back into another command.
 
+**TOON** emits Token-Oriented Object Notation for compact LLM context and can be imported back with `--input-format=toon`.
+
 ```bash
 php artisan finance:transactions --format=json | jq '.[].t_amt'
+php artisan finance:transactions --format=toon > /tmp/txns.toon
 ```
 
 ---
@@ -93,7 +96,11 @@ php artisan finance:transactions
   [--type=TYPE]
   [--symbol=SYMBOL]
   [--limit=100]
-  [--format=table|json]
+  [--import]
+  [--dry-run]
+  [--schema]
+  [--input-format=auto|json|toon]
+  [--format=table|json|toon]
 ```
 
 **Options**
@@ -103,11 +110,15 @@ php artisan finance:transactions
 - `--type` — filter by `t_type` (e.g. `Buy`, `Sell`, `Dividend`)
 - `--symbol` — filter by ticker symbol
 - `--limit` — max rows to return (default: 100; `0` = unlimited)
-- `--format` — output format (default: `table`)
+- `--import` — import transactions from stdin instead of listing
+- `--dry-run` — with `--import`, validate and show what would be inserted without committing
+- `--schema` — print the import input schema
+- `--input-format` — with `--import`, decode stdin as `auto`, `json`, or `toon`
+- `--format` — output format (default: `table`; `toon` is supported)
 
 **Table columns:** `t_id`, `account`, `date`, `type`, `symbol`, `qty`, `amount`, `description`
 
-**JSON shape:** array of `fin_account_line_items` rows (all fillable fields).
+**JSON/TOON shape:** array of `fin_account_line_items` rows (all fillable fields). Import mode also accepts the `accounts[].transactions[]` shape produced by the GenAI finance statement parser and maps `date`/`amount`/`description` aliases onto `t_date`/`t_amt`/`t_description`.
 
 ---
 
@@ -144,20 +155,22 @@ The command reports stored character metadata, notes-derived ST/LT character for
 
 ### `finance:import-transactions`
 
-Insert transactions from a JSON payload read from stdin.
+Insert transactions from a JSON or TOON payload read from stdin. This uses the same transaction import service as `finance:transactions --import` and the server-side finance statement import endpoints.
 
 ```bash
 cat transactions.json | php artisan finance:import-transactions
   [--account=ACCT_ID]
   [--dry-run]
   [--schema]
-  [--format=table|json]
+  [--input-format=auto|json|toon]
+  [--format=table|json|toon]
 ```
 
 **Options**
 - `--account` — default account ID if not specified per-row in the payload
 - `--dry-run` — validate and display what would be inserted; do not commit
 - `--schema` — print the expected JSON input schema to stdout and exit (useful for LLM context)
+- `--input-format` — decode stdin as `auto`, `json`, or `toon`
 - `--format` — output format for the result summary (default: `table`)
 
 **Input JSON format (stdin):**
@@ -268,13 +281,13 @@ This replaces the older `withoutGlobalScopes()->where('acct_owner', ...)` patter
 
 ### Deduplication on import
 
-`finance:import-transactions` should check for existing transactions with matching `(t_account, t_date, t_type, t_amt, t_symbol)` before inserting to avoid double-importing the same data. The `t_is_not_duplicate` flag should be set appropriately.
+`finance:import-transactions`, `finance:transactions --import`, and the server-side finance statement import endpoints check for existing transactions with matching `(t_account, t_date, t_type, t_amt, t_symbol)` before inserting to avoid double-importing the same data.
 
 ### `--help` and `--schema`
 
 All Artisan commands expose `--help` / `-h` for free via Symfony Console — it prints the command description, arguments, and options. No custom work is needed.
 
-Import commands (`finance:import-transactions`, `finance:tax-import`) additionally expose `--schema`, which prints the expected JSON input format to stdout and exits immediately. This is intended for LLM context injection:
+Import commands (`finance:transactions --import`, `finance:import-transactions`, `finance:tax-import`) additionally expose `--schema`, which prints the expected JSON input format to stdout and exits immediately. This is intended for LLM context injection:
 
 ```bash
 # Teach Claude the expected format before generating import data
@@ -291,10 +304,11 @@ All commands extend `App\Console\Commands\Finance\BaseFinanceCommand`, which pro
 |---|---|
 | `userId()` | Read `FINANCE_CLI_USER_ID` env var, default 1 |
 | `resolveUser()` | Load `User` model; returns `null` and prints an error if not found — caller must `return 1` |
-| `outputData($headers, $rows, $data)` | Route to `renderTable` or `outputJson` based on `--format` |
+| `outputData($headers, $rows, $data)` | Route to table, JSON, or TOON output based on `--format` |
 | `renderTable($headers, $rows)` | Monospaced pipe-delimited terminal table |
 | `outputJson($data)` | Pretty-printed JSON to stdout |
-| `readJsonFromStdin()` | Read + decode JSON payload from stdin |
+| `outputToon($data)` | TOON output to stdout |
+| `readStructuredFromStdin()` | Read + decode JSON or TOON payload from stdin |
 | `validateFormat()` | Validate `--format` option value |
 | `emitSchema($schema)` | Print JSON schema to stdout and exit (for `--schema` flag) |
 
@@ -305,16 +319,16 @@ All commands extend `App\Console\Commands\Finance\BaseFinanceCommand`, which pro
 The primary motivation for this tool is enabling AI-assisted workflows via Claude CLI. Example session:
 
 ```bash
-# 1. Export current transactions for an account as JSON context for Claude
-php artisan finance:transactions --account=5 --year=2024 --format=json > /tmp/txns.json
+# 1. Export current transactions for an account as compact TOON context for Claude
+php artisan finance:transactions --account=5 --year=2024 --format=toon > /tmp/txns.toon
 
 # 2. Ask Claude to reconcile against a PDF statement
-claude "Compare the transactions in /tmp/txns.json against the statement in statement.pdf.
-Generate a JSON array of any missing transactions in the finance:import-transactions format."
+claude "Compare the transactions in /tmp/txns.toon against the statement in statement.pdf.
+Generate TOON for any missing transactions in the finance:import-transactions format."
 
 # 3. Review and import the result
-cat /tmp/missing.json | php artisan finance:import-transactions --account=5 --dry-run
-cat /tmp/missing.json | php artisan finance:import-transactions --account=5
+cat /tmp/missing.toon | php artisan finance:transactions --import --account=5 --input-format=toon --dry-run
+cat /tmp/missing.toon | php artisan finance:transactions --import --account=5 --input-format=toon
 ```
 
 This complements the GenAI-based PDF import tools in the UI, giving power users a scriptable, auditable path that doesn't require a browser session.

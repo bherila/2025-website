@@ -2,7 +2,11 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Console\Commands\Finance\FinanceTransactionsCommand;
+use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
+use App\Services\Finance\TransactionImportService;
 use Database\Seeders\Finance\FinanceAccountsSeeder;
 use Database\Seeders\Finance\FinanceTransactionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,8 +29,22 @@ class FinanceTransactionsCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        FinanceTransactionsCommand::$testStdinOverride = null;
         putenv('FINANCE_CLI_USER_ID=');
         parent::tearDown();
+    }
+
+    private function checkingId(): int
+    {
+        return (int) FinAccounts::withoutGlobalScopes()
+            ->where('acct_name', 'Demo Checking')
+            ->value('acct_id');
+    }
+
+    /** @param array<mixed> $payload */
+    private function withPayload(array $payload): void
+    {
+        FinanceTransactionsCommand::$testStdinOverride = $payload;
     }
 
     public function test_lists_transactions_in_table_format(): void
@@ -44,6 +62,13 @@ class FinanceTransactionsCommandTest extends TestCase
         $this->artisan('finance:transactions', ['--format' => 'json'])
             ->assertExitCode(0)
             ->expectsOutputToContain('"t_date"');
+    }
+
+    public function test_toon_output_has_transaction_fields(): void
+    {
+        $this->artisan('finance:transactions', ['--format' => 'toon'])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('t_date');
     }
 
     public function test_filter_by_symbol(): void
@@ -113,5 +138,88 @@ class FinanceTransactionsCommandTest extends TestCase
     {
         $this->artisan('finance:transactions', ['--format' => 'xml'])
             ->assertExitCode(1);
+    }
+
+    public function test_import_option_inserts_and_skips_duplicates(): void
+    {
+        $payload = [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-01',
+                    't_type' => 'deposit',
+                    't_amt' => 125.50,
+                    't_description' => 'CLI deposit',
+                    't_symbol' => null,
+                ],
+            ],
+        ];
+
+        $this->withPayload($payload);
+        $this->artisan('finance:transactions', ['--import' => true, '--account' => (string) $this->checkingId()])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('inserted');
+
+        $this->withPayload($payload);
+        $this->artisan('finance:transactions', ['--import' => true, '--account' => (string) $this->checkingId()])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('skipped_duplicate');
+
+        $this->assertSame(1, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId())
+            ->where('t_date', '2026-05-01')
+            ->where('t_amt', 125.50)
+            ->count());
+    }
+
+    public function test_import_option_accepts_genai_account_transaction_shape(): void
+    {
+        $this->withPayload([
+            'accounts' => [
+                [
+                    'acct_id' => $this->checkingId(),
+                    'transactions' => [
+                        [
+                            'date' => '2026-05-02',
+                            'type' => 'Dividend',
+                            'amount' => 12.34,
+                            'description' => 'Generated dividend',
+                            'symbol' => 'msft',
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->artisan('finance:transactions', ['--import' => true])
+            ->assertExitCode(0);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId(),
+            't_date' => '2026-05-02',
+            't_type' => 'Dividend',
+            't_symbol' => 'MSFT',
+        ]);
+    }
+
+    public function test_import_schema_documents_accounts_payload_shape(): void
+    {
+        $schema = TransactionImportService::inputSchema();
+
+        $this->assertSame([['required' => ['transactions']], ['required' => ['accounts']]], $schema['oneOf']);
+        $this->assertArrayHasKey('accounts', $schema['properties']);
+        $this->assertArrayHasKey('transactions', $schema['properties']['accounts']['items']['properties']);
+    }
+
+    public function test_import_option_reports_non_object_rows(): void
+    {
+        $this->withPayload([
+            'transactions' => [
+                'not-an-object',
+            ],
+        ]);
+
+        $this->artisan('finance:transactions', ['--import' => true, '--account' => (string) $this->checkingId()])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('Row 0: not an object.');
     }
 }
