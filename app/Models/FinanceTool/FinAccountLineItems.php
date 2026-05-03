@@ -3,15 +3,20 @@
 namespace App\Models\FinanceTool;
 
 use App\Models\ClientManagement\ClientExpense;
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FinAccountLineItems extends Model
 {
+    use SerializesDatesAsLocal;
+
     protected $table = 'fin_account_line_items';
 
     protected $primaryKey = 't_id';
-
-    public $timestamps = false;
 
     protected $fillable = [
         't_account',
@@ -42,17 +47,31 @@ class FinAccountLineItems extends Model
         't_account_balance',
     ];
 
-    public function account()
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    /**
+     * @return BelongsTo<FinAccounts, $this>
+     */
+    public function account(): BelongsTo
     {
         return $this->belongsTo(FinAccounts::class, 't_account', 'acct_id');
     }
 
-    public function statement()
+    /**
+     * @return BelongsTo<FinStatement, $this>
+     */
+    public function statement(): BelongsTo
     {
         return $this->belongsTo(FinStatement::class, 'statement_id', 'statement_id');
     }
 
-    public function tags()
+    /**
+     * @return BelongsToMany<FinAccountTag, $this>
+     */
+    public function tags(): BelongsToMany
     {
         return $this->belongsToMany(FinAccountTag::class, 'fin_account_line_item_tag_map', 't_id', 'tag_id');
     }
@@ -60,7 +79,10 @@ class FinAccountLineItems extends Model
     /**
      * Get links where this transaction is the parent
      */
-    public function childLinks()
+    /**
+     * @return HasMany<FinAccountLineItemLink, $this>
+     */
+    public function childLinks(): HasMany
     {
         return $this->hasMany(FinAccountLineItemLink::class, 'parent_t_id', 't_id');
     }
@@ -68,7 +90,10 @@ class FinAccountLineItems extends Model
     /**
      * Get links where this transaction is the child
      */
-    public function parentLinks()
+    /**
+     * @return HasMany<FinAccountLineItemLink, $this>
+     */
+    public function parentLinks(): HasMany
     {
         return $this->hasMany(FinAccountLineItemLink::class, 'child_t_id', 't_id');
     }
@@ -76,7 +101,10 @@ class FinAccountLineItems extends Model
     /**
      * Get all child transactions (transactions linked to this one as parent)
      */
-    public function childTransactions()
+    /**
+     * @return BelongsToMany<FinAccountLineItems, $this>
+     */
+    public function childTransactions(): BelongsToMany
     {
         return $this->belongsToMany(
             FinAccountLineItems::class,
@@ -91,7 +119,10 @@ class FinAccountLineItems extends Model
     /**
      * Get all parent transactions (transactions this one is linked to as child)
      */
-    public function parentTransactions()
+    /**
+     * @return BelongsToMany<FinAccountLineItems, $this>
+     */
+    public function parentTransactions(): BelongsToMany
     {
         return $this->belongsToMany(
             FinAccountLineItems::class,
@@ -106,7 +137,10 @@ class FinAccountLineItems extends Model
     /**
      * Get the client expense linked to this line item.
      */
-    public function clientExpense()
+    /**
+     * @return HasOne<ClientExpense, $this>
+     */
+    public function clientExpense(): HasOne
     {
         return $this->hasOne(ClientExpense::class, 'fin_line_item_id', 't_id');
     }

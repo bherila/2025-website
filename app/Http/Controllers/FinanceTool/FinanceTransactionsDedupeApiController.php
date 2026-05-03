@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -236,7 +237,7 @@ class FinanceTransactionsDedupeApiController extends Controller
      * - Deletes the specified transactions
      * - Records confirmed non-duplicate pairs in fin_transaction_non_duplicate_pairs
      */
-    public function mergeDuplicates(Request $request, int $account_id): JsonResponse
+    public function mergeDuplicates(Request $request, int $account_id, TransactionDeletionTombstoneService $tombstones): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -420,11 +421,20 @@ class FinanceTransactionsDedupeApiController extends Controller
             }
 
             if (! empty($actualDeleteIds)) {
+                $deletedTransactions = FinAccountLineItems::whereIn('t_id', $actualDeleteIds)
+                    ->where('t_account', $account->acct_id)
+                    ->get(['t_id', 't_account']);
+                $tombstones->record($deletedTransactions, (int) $uid);
+
                 // Reassign lots from deleted transactions to kept transactions
                 foreach ($parentReassignments as $delId => $keepId) {
                     FinAccountLot::where('open_t_id', $delId)->update(['open_t_id' => $keepId]);
                     FinAccountLot::where('close_t_id', $delId)->update(['close_t_id' => $keepId]);
                 }
+
+                FinAccountLineItems::whereIn('t_id', array_values(array_unique($parentReassignments)))
+                    ->where('t_account', $account->acct_id)
+                    ->update(['updated_at' => now()]);
 
                 // Delete tag mappings first
                 DB::table('fin_account_line_item_tag_map')

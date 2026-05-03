@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinStatement;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceTransactionsApiControllerTest extends TestCase
@@ -181,6 +184,158 @@ class FinanceTransactionsApiControllerTest extends TestCase
     {
         $response = $this->getJson('/api/finance/all/line_items');
         $response->assertUnauthorized();
+    }
+
+    public function test_sync_line_items_bootstraps_active_transactions(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$account->acct_id}/line_items/sync");
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'server_time',
+                'transactions',
+                'deleted',
+            ]);
+        $this->assertCount(2, $response->json('transactions'));
+        $this->assertSame([], $response->json('deleted'));
+    }
+
+    public function test_sync_line_items_returns_only_changes_after_since(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transactions = FinAccountLineItems::where('t_account', $account->acct_id)->orderBy('t_id')->get();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[0]->t_id)
+            ->update(['updated_at' => $since->subMinute()]);
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[1]->t_id)
+            ->update(['updated_at' => $since->addMinute()]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('transactions'));
+        $this->assertSame($transactions[1]->t_id, $response->json('transactions.0.t_id'));
+    }
+
+    public function test_sync_line_items_includes_boundary_timestamp_changes(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transactions = FinAccountLineItems::where('t_account', $account->acct_id)->orderBy('t_id')->get();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[0]->t_id)
+            ->update(['updated_at' => $since->subMinute()]);
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transactions[1]->t_id)
+            ->update(['updated_at' => $since]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('transactions'));
+        $this->assertSame($transactions[1]->t_id, $response->json('transactions.0.t_id'));
+    }
+
+    public function test_delete_line_item_writes_tombstone_and_excludes_deleted_row(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transaction = FinAccountLineItems::where('t_account', $account->acct_id)->firstOrFail();
+
+        $this->actingAs($user)
+            ->deleteJson("/api/finance/{$account->acct_id}/line_items", ['t_id' => $transaction->t_id])
+            ->assertOk();
+
+        $this->assertDatabaseMissing('fin_account_line_items', ['t_id' => $transaction->t_id]);
+        $this->assertDatabaseHas('fin_account_line_item_deletions', [
+            't_id' => $transaction->t_id,
+            't_account' => $account->acct_id,
+            'user_id' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$account->acct_id}/line_items");
+        $response->assertOk();
+        $this->assertCount(1, $response->json());
+    }
+
+    public function test_sync_line_items_returns_tombstones_after_since(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transaction = FinAccountLineItems::where('t_account', $account->acct_id)->firstOrFail();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_account', $account->acct_id)
+            ->update(['updated_at' => $since->subMinute()]);
+
+        FinAccountLineItemDeletion::create([
+            't_id' => $transaction->t_id,
+            't_account' => $account->acct_id,
+            'user_id' => $user->id,
+            'deleted_at' => $since->addMinute(),
+        ]);
+        $transaction->delete();
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertSame([], $response->json('transactions'));
+        $this->assertCount(1, $response->json('deleted'));
+        $this->assertSame($transaction->t_id, $response->json('deleted.0.t_id'));
+    }
+
+    public function test_sync_line_items_includes_boundary_timestamp_tombstones(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $transaction = FinAccountLineItems::where('t_account', $account->acct_id)->firstOrFail();
+        $since = CarbonImmutable::parse('2026-05-03 10:00:00');
+
+        DB::table('fin_account_line_items')
+            ->where('t_account', $account->acct_id)
+            ->update(['updated_at' => $since->subMinute()]);
+
+        FinAccountLineItemDeletion::create([
+            't_id' => $transaction->t_id,
+            't_account' => $account->acct_id,
+            'user_id' => $user->id,
+            'deleted_at' => $since,
+        ]);
+        $transaction->delete();
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items/sync?since=".$since->toISOString());
+
+        $response->assertOk();
+        $this->assertSame([], $response->json('transactions'));
+        $this->assertCount(1, $response->json('deleted'));
+        $this->assertSame($transaction->t_id, $response->json('deleted.0.t_id'));
+    }
+
+    public function test_all_account_sync_is_scoped_to_authenticated_user(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+        $this->createAccountWithTransactions($user->id, 'Mine');
+        $this->createAccountWithTransactions($otherUser->id, 'Theirs');
+
+        $response = $this->actingAs($user)->getJson('/api/finance/all/line_items/sync');
+
+        $response->assertOk();
+        $this->assertCount(2, $response->json('transactions'));
     }
 
     public function test_import_line_items_skips_duplicates(): void

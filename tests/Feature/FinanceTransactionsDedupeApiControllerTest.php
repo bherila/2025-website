@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -16,6 +17,9 @@ class FinanceTransactionsDedupeApiControllerTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
     private function createTransaction(int $acctId, array $attrs = []): int
     {
         return DB::table('fin_account_line_items')->insertGetId(array_merge([
@@ -105,6 +109,36 @@ class FinanceTransactionsDedupeApiControllerTest extends TestCase
             ->whereColumn('parent_t_id', 'child_t_id')
             ->count();
         $this->assertEquals(0, $selfLinks);
+    }
+
+    public function test_merge_duplicates_touches_kept_transaction_for_incremental_sync(): void
+    {
+        $user = $this->createUser();
+        $acctId = $this->createAccount($user->id);
+        $oldTimestamp = CarbonImmutable::now()->subDay();
+
+        $keepId = $this->createTransaction($acctId, [
+            't_description' => 'Keeper',
+            'updated_at' => $oldTimestamp,
+        ]);
+        $deleteId = $this->createTransaction($acctId, [
+            't_description' => 'Duplicate',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/merge-duplicates", [
+            'merges' => [
+                ['keepId' => $keepId, 'deleteIds' => [$deleteId]],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $updatedAt = DB::table('fin_account_line_items')
+            ->where('t_id', $keepId)
+            ->value('updated_at');
+
+        $this->assertNotNull($updatedAt);
+        $this->assertTrue(CarbonImmutable::parse((string) $updatedAt)->greaterThan($oldTimestamp));
     }
 
     /**

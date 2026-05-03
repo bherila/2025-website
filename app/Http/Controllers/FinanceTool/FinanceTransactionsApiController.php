@@ -4,13 +4,18 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
+use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinStatement;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\Finance\TransactionImportService;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceTransactionsApiController extends Controller
@@ -63,30 +68,123 @@ class FinanceTransactionsApiController extends Controller
             }
         }
 
-        // Return a streamed response to save memory on large datasets
-        return response()->stream(function () use ($query) {
-            echo '[';
-            $first = true;
-            // lazy() chunks the results and eager loads relations for each chunk
-            $query->lazy()->each(function ($item) use (&$first) {
-                if (! $first) {
-                    echo ',';
-                }
-                echo json_encode($this->transformLineItem($item));
-                $first = false;
-            });
-            echo ']';
-        }, 200, [
+        return $this->streamLineItems($query);
+    }
+
+    /**
+     * Get incremental transaction changes for one or all accounts.
+     */
+    public function syncLineItems(Request $request, int|string|null $account_id = null): StreamedResponse
+    {
+        $since = $this->syncSince($request);
+        $serverTime = now();
+
+        $isAllAccounts = ! $account_id || $account_id === 'all';
+
+        if (! $isAllAccounts) {
+            $account = $this->resolveOwnedAccount($account_id);
+            $accountIds = [$account->acct_id];
+        } else {
+            $accountIds = $this->getUserAccountIds()->all();
+        }
+
+        $transactionsQuery = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+            ->orderBy('t_date', 'desc');
+
+        if ($since !== null) {
+            $transactionsQuery->where('updated_at', '>=', $since);
+        }
+
+        $deletionsQuery = FinAccountLineItemDeletion::query()->orderBy('deleted_at', 'asc');
+        if ($isAllAccounts) {
+            $deletionsQuery->where('user_id', Auth::id());
+        } else {
+            $deletionsQuery->whereIn('t_account', $accountIds);
+        }
+
+        if ($since !== null) {
+            $deletionsQuery->where('deleted_at', '>=', $since);
+        }
+
+        return response()->stream(function () use ($serverTime, $transactionsQuery, $deletionsQuery): void {
+            echo '{"server_time":'.json_encode($serverTime->toJSON()).',"transactions":';
+            $this->writeJsonArray($transactionsQuery->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+            echo ',"deleted":';
+            $this->writeJsonArray(
+                $deletionsQuery->select(['t_id', 't_account', 'deleted_at'])->lazy(),
+                fn (FinAccountLineItemDeletion $deletion): array => [
+                    't_id' => (int) $deletion->t_id,
+                    't_account' => (int) $deletion->t_account,
+                    'deleted_at' => $deletion->deleted_at->toJSON(),
+                ],
+            );
+            echo '}';
+        }, 200, $this->streamJsonHeaders());
+    }
+
+    private function syncSince(Request $request): ?CarbonImmutable
+    {
+        if (! $request->filled('since')) {
+            return null;
+        }
+
+        $request->validate([
+            'since' => 'date',
+        ]);
+
+        return CarbonImmutable::parse((string) $request->query('since'));
+    }
+
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
+    private function streamLineItems(Builder $query): StreamedResponse
+    {
+        return response()->stream(function () use ($query): void {
+            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+        }, 200, $this->streamJsonHeaders());
+    }
+
+    /**
+     * @template TItem
+     *
+     * @param  iterable<TItem>  $items
+     * @param  callable(TItem): array<string, mixed>  $transform
+     */
+    private function writeJsonArray(iterable $items, callable $transform): void
+    {
+        echo '[';
+        $first = true;
+
+        foreach ($items as $item) {
+            if (! $first) {
+                echo ',';
+            }
+
+            echo json_encode($transform($item));
+            $first = false;
+        }
+
+        echo ']';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function streamJsonHeaders(): array
+    {
+        return [
             'Content-Type' => 'application/json',
             'Cache-Control' => 'no-cache',
             'X-Accel-Buffering' => 'no',
-        ]);
+        ];
     }
 
     /**
      * Delete a line item (transaction)
      */
-    public function deleteLineItem(Request $request, int $account_id): JsonResponse
+    public function deleteLineItem(Request $request, int $account_id, TransactionDeletionTombstoneService $tombstones): JsonResponse
     {
         $account = $this->resolveOwnedAccount($account_id);
 
@@ -94,13 +192,23 @@ class FinanceTransactionsApiController extends Controller
             't_id' => 'required|integer',
         ]);
 
-        // Unlink any lots referencing this transaction before deleting
-        FinAccountLot::where('open_t_id', $request->t_id)->update(['open_t_id' => null]);
-        FinAccountLot::where('close_t_id', $request->t_id)->update(['close_t_id' => null]);
+        DB::transaction(function () use ($account, $request, $tombstones): void {
+            $transaction = FinAccountLineItems::where('t_id', $request->t_id)
+                ->where('t_account', $account->acct_id)
+                ->first();
 
-        FinAccountLineItems::where('t_id', $request->t_id)
-            ->where('t_account', $account->acct_id)
-            ->delete();
+            if (! $transaction) {
+                return;
+            }
+
+            $tombstones->record([$transaction], (int) Auth::id());
+
+            // Unlink any lots referencing this transaction before deleting
+            FinAccountLot::where('open_t_id', $request->t_id)->update(['open_t_id' => null]);
+            FinAccountLot::where('close_t_id', $request->t_id)->update(['close_t_id' => null]);
+
+            $transaction->delete();
+        });
 
         return response()->json(['success' => true]);
     }
@@ -381,7 +489,7 @@ class FinanceTransactionsApiController extends Controller
      * Only transactions belonging to the authenticated user are deleted.
      * Returns the count of deleted rows.
      */
-    public function batchDelete(Request $request): JsonResponse
+    public function batchDelete(Request $request, TransactionDeletionTombstoneService $tombstones): JsonResponse
     {
         $request->validate([
             't_ids' => 'required|array|min:1|max:1000',
@@ -391,21 +499,26 @@ class FinanceTransactionsApiController extends Controller
         $userAccountIds = $this->getUserAccountIds();
 
         $tIds = $request->input('t_ids');
-        $ownedTransactionIds = FinAccountLineItems::whereIn('t_id', $tIds)
+        $ownedTransactions = FinAccountLineItems::whereIn('t_id', $tIds)
             ->whereIn('t_account', $userAccountIds)
-            ->pluck('t_id');
+            ->get(['t_id', 't_account']);
+        $ownedTransactionIds = $ownedTransactions->pluck('t_id');
 
-        // Unlink lots referencing only this user's transactions
-        FinAccountLot::whereIn('acct_id', $userAccountIds)
-            ->whereIn('open_t_id', $ownedTransactionIds)
-            ->update(['open_t_id' => null]);
-        FinAccountLot::whereIn('acct_id', $userAccountIds)
-            ->whereIn('close_t_id', $ownedTransactionIds)
-            ->update(['close_t_id' => null]);
+        $deleted = DB::transaction(function () use ($ownedTransactions, $ownedTransactionIds, $tombstones, $userAccountIds): int {
+            $tombstones->record($ownedTransactions, (int) Auth::id());
 
-        $deleted = FinAccountLineItems::whereIn('t_id', $ownedTransactionIds)
-            ->whereIn('t_account', $userAccountIds)
-            ->delete();
+            // Unlink lots referencing only this user's transactions
+            FinAccountLot::whereIn('acct_id', $userAccountIds)
+                ->whereIn('open_t_id', $ownedTransactionIds)
+                ->update(['open_t_id' => null]);
+            FinAccountLot::whereIn('acct_id', $userAccountIds)
+                ->whereIn('close_t_id', $ownedTransactionIds)
+                ->update(['close_t_id' => null]);
+
+            return FinAccountLineItems::whereIn('t_id', $ownedTransactionIds)
+                ->whereIn('t_account', $userAccountIds)
+                ->delete();
+        });
 
         return response()->json(['success' => true, 'deleted' => $deleted]);
     }

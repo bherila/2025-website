@@ -36,7 +36,7 @@ import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/
 import { extractLinkParsedData, getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
-import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
+import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
@@ -646,19 +646,15 @@ export function TaxPreviewProvider({
       try {
         const perAccountResults = await Promise.all(
           activeAccountIds.map(async (acctId) => {
-            // Check IndexedDB cache first — avoids redundant API calls when
-            // transactions were already fetched by the Transactions page.
             const cacheKey = buildCacheKey(acctId)
             const cached = await getCachedTransactions(cacheKey)
-            if (cached) {
-              return analyzeShortDividends(cached.transactions)
+            const synced = await syncCachedTransactions(cacheKey, `/api/finance/${acctId}/line_items/sync`)
+            const transactions = synced?.transactions ?? cached?.transactions
+            if (!transactions) {
+              return null
             }
-            // Fall back to API fetch (stores all years, no year param)
-            const raw = await fetchWrapper.get(`/api/finance/${acctId}/line_items`)
-            const parsed = AccountLineItemSchema.array().safeParse(raw)
+            const parsed = AccountLineItemSchema.array().safeParse(transactions)
             if (!parsed.success) return null
-            // Populate cache so the Transactions page and future Tax Preview loads benefit
-            void setCachedTransactions(cacheKey, parsed.data)
             return analyzeShortDividends(parsed.data)
           }),
         )

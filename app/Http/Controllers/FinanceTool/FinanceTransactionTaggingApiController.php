@@ -178,6 +178,7 @@ class FinanceTransactionTaggingApiController extends Controller
         }
 
         $query->delete();
+        $this->touchUserTransactions($transaction_ids, (int) $uid);
 
         return response()->json(['success' => true]);
     }
@@ -230,7 +231,24 @@ class FinanceTransactionTaggingApiController extends Controller
                 'tag_id' => $tag->tag_id,
             ]);
         }
+        $this->touchUserTransactions($transaction_ids, (int) $uid);
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * @param  list<int>  $transactionIds
+     */
+    private function touchUserTransactions(array $transactionIds, int $userId): void
+    {
+        if ($transactionIds === []) {
+            return;
+        }
+
+        FinAccountLineItems::whereIn('t_id', $transactionIds)
+            ->whereHas('account', function ($query) use ($userId) {
+                $query->where('acct_owner', $userId);
+            })
+            ->update(['updated_at' => now()]);
     }
 }

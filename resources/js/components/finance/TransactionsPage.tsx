@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { importUrl } from '@/lib/financeRouteBuilder'
-import { buildCacheKey, getCachedTransactions, setCachedTransactions } from '@/services/transactionCache'
+import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 
 import NewTransactionModal from './NewTransactionModal'
 import { type FilterType,TransactionsPageToolbar } from './TransactionsPageToolbar'
@@ -39,6 +39,30 @@ function setUrlParams(updates: Record<string, string>) {
     }
   }
   window.history.replaceState(null, '', `?${params.toString()}`)
+}
+
+function filterTransactions(
+  transactions: AccountLineItem[],
+  selectedYear: string,
+  filter: FilterType,
+  selectedTag: string,
+): AccountLineItem[] {
+  return transactions.filter((transaction) => {
+    if (selectedYear !== 'all' && !transaction.t_date?.startsWith(selectedYear)) {
+      return false
+    }
+    if (filter === 'stock' && !transaction.t_symbol) {
+      return false
+    }
+    if (filter === 'cash' && transaction.t_symbol) {
+      return false
+    }
+    if (selectedTag !== 'all' && !transaction.tags?.some((tag) => tag.tag_label === selectedTag)) {
+      return false
+    }
+
+    return true
+  })
 }
 
 export default function TransactionsPage({ accountId, initialAvailableYears = [], userId }: TransactionsPageProps) {
@@ -110,43 +134,23 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
       try {
         setIsLoading(true)
 
-        // Cache single-account, unfiltered fetches by accountId (no year scoping).
-        const canUseCache = !isAllAccounts && filter === 'all' && selectedTag === 'all'
-        const cacheKey = canUseCache ? buildCacheKey(accountId) : null
+        const cacheKey = buildCacheKey(accountId)
 
-        // 1. Show cached data immediately if available (filter by year in JS if needed)
-        if (cacheKey) {
-          const cached = await getCachedTransactions(cacheKey)
-          if (cached) {
-            const fromCache = selectedYear !== 'all'
-              ? cached.transactions.filter((t) => t.t_date?.startsWith(selectedYear))
-              : cached.transactions
-            setData(fromCache)
-            setIsLoading(false)
-          }
+        const cached = await getCachedTransactions(cacheKey)
+        if (cached) {
+          setData(filterTransactions(cached.transactions, selectedYear, filter, selectedTag))
+          setIsLoading(false)
         }
 
-        // 2. Always fetch fresh data from the API.
-        // Cache stores the full all-year dataset; year filter is applied in JS above.
-        const params = new URLSearchParams()
-        if (filter !== 'all') params.append('filter', filter)
-        if (selectedTag !== 'all') params.append('tag', selectedTag)
-        const queryString = params.toString() ? `?${params.toString()}` : ''
         const endpoint = isAllAccounts
-          ? `/api/finance/all/line_items${queryString}`
-          : `/api/finance/${accountId}/line_items${queryString}`
-        const fetchedData = await fetchWrapper.get(endpoint)
-        const allParsed = z.array(AccountLineItemSchema).parse(fetchedData).filter(Boolean)
-
-        // Apply year filter in JS for display
-        const yearFiltered = selectedYear !== 'all'
-          ? allParsed.filter((t) => t.t_date?.startsWith(selectedYear))
-          : allParsed
-        setData(yearFiltered)
-
-        // 3. Persist the FULL (all-year) dataset to cache for reuse
-        if (cacheKey) {
-          await setCachedTransactions(cacheKey, allParsed)
+          ? '/api/finance/all/line_items/sync'
+          : `/api/finance/${accountId}/line_items/sync`
+        const synced = await syncCachedTransactions(cacheKey, endpoint)
+        if (synced) {
+          const parsed = z.array(AccountLineItemSchema).parse(synced.transactions).filter(Boolean)
+          setData(filterTransactions(parsed, selectedYear, filter, selectedTag))
+        } else if (!cached) {
+          setData([])
         }
       } catch (error) {
         console.error('Error fetching transactions:', error)

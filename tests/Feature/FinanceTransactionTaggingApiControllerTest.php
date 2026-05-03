@@ -6,6 +6,8 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLineItemTagMap;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceTransactionTaggingApiControllerTest extends TestCase
@@ -234,6 +236,44 @@ class FinanceTransactionTaggingApiControllerTest extends TestCase
 
         $this->assertDatabaseHas('fin_account_line_item_tag_map', ['t_id' => $t1->t_id, 'tag_id' => $tag->tag_id]);
         $this->assertDatabaseHas('fin_account_line_item_tag_map', ['t_id' => $t2->t_id, 'tag_id' => $tag->tag_id]);
+    }
+
+    public function test_apply_tag_touches_transactions_for_incremental_sync(): void
+    {
+        $user = $this->createUser();
+        $this->actingAs($user);
+
+        $tag = FinAccountTag::create([
+            'tag_userid' => $user->id,
+            'tag_label' => 'Sync',
+            'tag_color' => 'purple',
+        ]);
+
+        $acct = FinAccounts::create([
+            'acct_userid' => $user->id,
+            'acct_name' => 'Sync Account',
+            'acct_currency' => 'USD',
+            'acct_type' => 'Asset',
+        ]);
+        $oldTimestamp = CarbonImmutable::now()->subDay();
+        $transaction = FinAccountLineItems::create([
+            't_account' => $acct->acct_id,
+            't_date' => '2023-01-01',
+            't_amt' => 100,
+            't_description' => 'Sync me',
+        ]);
+        DB::table('fin_account_line_items')
+            ->where('t_id', $transaction->t_id)
+            ->update(['updated_at' => $oldTimestamp]);
+        $transaction->refresh();
+
+        $this->postJson('/api/finance/tags/apply', [
+            'tag_id' => $tag->tag_id,
+            'transaction_ids' => (string) $transaction->t_id,
+        ])->assertOk();
+
+        $transaction->refresh();
+        $this->assertTrue($transaction->updated_at->greaterThan($oldTimestamp));
     }
 
     public function test_apply_tag_returns_404_for_tag_belonging_to_another_user(): void
