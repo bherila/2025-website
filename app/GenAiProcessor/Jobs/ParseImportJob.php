@@ -543,7 +543,7 @@ class ParseImportJob implements ShouldQueue
     }
 
     /**
-     * Upsert 1099-B transaction lots into fin_account_lots and fin_account_line_items.
+     * Upsert 1099-B transaction lots into fin_account_lots and link them to existing transactions.
      *
      * Lots are keyed by tax_document_id, so re-processing is idempotent:
      * existing lots for this document were deleted before this method is called.
@@ -553,13 +553,14 @@ class ParseImportJob implements ShouldQueue
     private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId): void
     {
         $now = now()->toDateTimeString();
+        $usedTransactionIds = [];
 
         foreach ($transactions as $tx) {
             if (! is_array($tx)) {
                 continue;
             }
 
-            $symbol = is_string($tx['symbol'] ?? null) ? trim($tx['symbol']) : null;
+            $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
             $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
             $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
             $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);
@@ -602,6 +603,7 @@ class ParseImportJob implements ShouldQueue
                 'acct_id' => $accountId,
                 'symbol' => $symbol ?? $description,
                 'description' => $description,
+                'cusip' => $cusip,
                 'quantity' => $quantity,
                 'purchase_date' => $purchaseDateNormalized ?? $saleDate, // fallback to sale date if "various"
                 'cost_basis' => $costBasis,
@@ -620,28 +622,22 @@ class ParseImportJob implements ShouldQueue
                 'updated_at' => $now,
             ]);
 
-            // Create a matching sell line item in fin_account_line_items.
-            // Only create if no matching sell transaction already exists (by date/symbol/qty/amount).
-            $existingSell = app(LotMatcher::class)->matchingSellTransactionExists($lot);
+            $matcher = app(LotMatcher::class);
+            $buyItem = $purchaseDateNormalized !== null ? $matcher->matchingBuyTransaction($lot, $usedTransactionIds) : null;
+            if ($buyItem instanceof FinAccountLineItems) {
+                $usedTransactionIds[] = (int) $buyItem->t_id;
+            }
 
-            if (! $existingSell) {
-                $sellItem = FinAccountLineItems::create([
-                    't_account' => $accountId,
-                    't_date' => $saleDate,
-                    't_type' => 'Sell',
-                    't_description' => $description,
-                    't_symbol' => $symbol ?? $description,
-                    't_cusip' => $cusip,
-                    't_qty' => -abs($quantity),
-                    't_price' => $quantity > 0 ? round($proceeds / $quantity, 6) : null,
-                    't_amt' => -abs($proceeds),
-                    't_basis' => $costBasis,
-                    't_realized_pl' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
-                    't_source' => FinAccountLot::SOURCE_1099B,
+            $sellItem = $matcher->matchingSellTransaction($lot, $usedTransactionIds);
+            if ($sellItem instanceof FinAccountLineItems) {
+                $usedTransactionIds[] = (int) $sellItem->t_id;
+            }
+
+            if ($buyItem instanceof FinAccountLineItems || $sellItem instanceof FinAccountLineItems) {
+                $lot->update([
+                    'open_t_id' => $buyItem?->t_id,
+                    'close_t_id' => $sellItem?->t_id,
                 ]);
-
-                // Link the lot to the sell transaction.
-                $lot->update(['close_t_id' => $sellItem->t_id]);
             }
         }
     }

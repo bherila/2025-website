@@ -30,6 +30,7 @@ function lot(id: number, overrides: Record<string, unknown> = {}) {
     acct_id: 10,
     symbol: 'AAPL',
     description: 'Apple Inc.',
+    cusip: '037833100',
     quantity: 10,
     purchase_date: '2024-01-02',
     sale_date: '2025-02-03',
@@ -62,6 +63,10 @@ const response = {
     missing_1099b: 0,
     duplicates: 0,
     unresolved_account_links: 1,
+    matched_open_transactions: 1,
+    matched_close_transactions: 1,
+    missing_open_transactions: 0,
+    missing_close_transactions: 0,
   },
   accounts: [
     {
@@ -74,6 +79,10 @@ const response = {
         missing_1099b: 0,
         duplicates: 0,
         unresolved_account_links: 0,
+        matched_open_transactions: 1,
+        matched_close_transactions: 1,
+        missing_open_transactions: 0,
+        missing_close_transactions: 0,
       },
       rows: [
         {
@@ -81,6 +90,38 @@ const response = {
           reported_lot: lot(101),
           account_lot: lot(202, { lot_source: 'analyzer', tax_document_id: null }),
           candidate_lots: [lot(202, { lot_source: 'analyzer', tax_document_id: null })],
+          transaction_match: {
+            opening: {
+              status: 'matched',
+              transaction: {
+                t_id: 301,
+                t_date: '2024-01-02',
+                t_type: 'Buy',
+                t_amt: -1000,
+                t_symbol: 'AAPL',
+                t_cusip: '037833100',
+                t_qty: 10,
+                t_price: 100,
+                t_description: 'BUY AAPL',
+                t_source: 'import',
+              },
+            },
+            closing: {
+              status: 'matched',
+              transaction: {
+                t_id: 302,
+                t_date: '2025-02-03',
+                t_type: 'Sell',
+                t_amt: 1250,
+                t_symbol: 'AAPL',
+                t_cusip: '037833100',
+                t_qty: -10,
+                t_price: 125,
+                t_description: 'SELL AAPL',
+                t_source: 'import',
+              },
+            },
+          },
           deltas: {
             quantity: 0,
             proceeds: 0,
@@ -211,6 +252,7 @@ describe('TaxLotReconciliationPanel', () => {
             lot_source: 'analyzer',
             reconciliation_status: 'accepted',
           })],
+          transaction_match: null,
           deltas: {
             quantity: null,
             proceeds: null,

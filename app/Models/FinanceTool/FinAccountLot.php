@@ -23,6 +23,7 @@ class FinAccountLot extends Model
         'acct_id',
         'symbol',
         'description',
+        'cusip',
         'quantity',
         'purchase_date',
         'cost_basis',

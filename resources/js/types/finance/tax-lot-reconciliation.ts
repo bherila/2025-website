@@ -13,6 +13,7 @@ export const taxLotReconciliationLotSchema = z.object({
   acct_id: z.number(),
   symbol: z.string().nullable(),
   description: z.string().nullable(),
+  cusip: z.string().nullable(),
   quantity: z.number(),
   purchase_date: z.string().nullable(),
   sale_date: z.string().nullable(),
@@ -34,6 +35,29 @@ export const taxLotReconciliationLotSchema = z.object({
   tax_document_filename: z.string().nullable(),
 })
 
+export const taxLotReconciliationTransactionSchema = z.object({
+  t_id: z.number(),
+  t_date: z.string().nullable(),
+  t_type: z.string().nullable(),
+  t_amt: z.number().nullable(),
+  t_symbol: z.string().nullable(),
+  t_cusip: z.string().nullable(),
+  t_qty: z.number().nullable(),
+  t_price: z.number().nullable(),
+  t_description: z.string().nullable(),
+  t_source: z.string().nullable(),
+})
+
+export const taxLotReconciliationTransactionMatchLegSchema = z.object({
+  status: z.enum(['matched', 'missing']),
+  transaction: taxLotReconciliationTransactionSchema.nullable(),
+})
+
+export const taxLotReconciliationTransactionMatchSchema = z.object({
+  opening: taxLotReconciliationTransactionMatchLegSchema,
+  closing: taxLotReconciliationTransactionMatchLegSchema,
+})
+
 export const taxLotReconciliationDeltasSchema = z.object({
   quantity: z.number().nullable(),
   proceeds: z.number().nullable(),
@@ -47,6 +71,7 @@ export const taxLotReconciliationRowSchema = z.object({
   reported_lot: taxLotReconciliationLotSchema.nullable(),
   account_lot: taxLotReconciliationLotSchema.nullable(),
   candidate_lots: z.array(taxLotReconciliationLotSchema),
+  transaction_match: taxLotReconciliationTransactionMatchSchema.nullable(),
   deltas: taxLotReconciliationDeltasSchema,
 })
 
@@ -57,6 +82,10 @@ export const taxLotReconciliationSummarySchema = z.object({
   missing_1099b: z.number(),
   duplicates: z.number(),
   unresolved_account_links: z.number(),
+  matched_open_transactions: z.number(),
+  matched_close_transactions: z.number(),
+  missing_open_transactions: z.number(),
+  missing_close_transactions: z.number(),
 })
 
 export const taxLotReconciliationAccountSchema = z.object({
@@ -85,6 +114,8 @@ export const taxLotReconciliationResponseSchema = z.object({
 
 export type TaxLotReconciliationStatus = z.infer<typeof taxLotReconciliationStatusSchema>
 export type TaxLotReconciliationLot = z.infer<typeof taxLotReconciliationLotSchema>
+export type TaxLotReconciliationTransaction = z.infer<typeof taxLotReconciliationTransactionSchema>
+export type TaxLotReconciliationTransactionMatch = z.infer<typeof taxLotReconciliationTransactionMatchSchema>
 export type TaxLotReconciliationRow = z.infer<typeof taxLotReconciliationRowSchema>
 export type TaxLotReconciliationAccount = z.infer<typeof taxLotReconciliationAccountSchema>
 export type TaxLotReconciliationResponse = z.infer<typeof taxLotReconciliationResponseSchema>

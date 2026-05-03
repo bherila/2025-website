@@ -47,6 +47,10 @@ const SUMMARY_ITEMS: Array<{ key: keyof TaxLotReconciliationResponse['summary'];
   { key: 'missing_1099b', label: 'Missing 1099-B' },
   { key: 'duplicates', label: 'Duplicates' },
   { key: 'unresolved_account_links', label: 'Unresolved Links' },
+  { key: 'matched_open_transactions', label: 'Matched Buys' },
+  { key: 'matched_close_transactions', label: 'Matched Sells' },
+  { key: 'missing_open_transactions', label: 'Missing Buys' },
+  { key: 'missing_close_transactions', label: 'Missing Sells' },
 ]
 
 export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconciliationPanelProps) {
@@ -169,7 +173,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
         <div className="space-y-1">
           <h2 className="text-base font-semibold">1099-B Lot Reconciliation</h2>
           <p className="text-xs text-muted-foreground">
-            Compares broker-reported 1099-B lots against account statement lots for {selectedYear}.
+            Compares broker-reported 1099-B lots against account lots and native account transactions for {selectedYear}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -184,7 +188,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         {SUMMARY_ITEMS.map(item => (
           <div key={item.key} className="rounded-md border border-border bg-card px-3 py-2">
             <div className="text-[11px] font-medium uppercase text-muted-foreground">{item.label}</div>
@@ -261,6 +265,7 @@ function AccountReconciliationTable({
             <TableRow>
               <TableHead>Status</TableHead>
               <TableHead>1099-B Lot</TableHead>
+              <TableHead>Transactions</TableHead>
               <TableHead>Account Lot</TableHead>
               <TableHead className="text-right">Proceeds Δ</TableHead>
               <TableHead className="text-right">Basis Δ</TableHead>
@@ -276,6 +281,9 @@ function AccountReconciliationTable({
                 </TableCell>
                 <TableCell>
                   <LotSummary lot={row.reported_lot} source="reported" />
+                </TableCell>
+                <TableCell>
+                  <TransactionMatchSummary row={row} />
                 </TableCell>
                 <TableCell>
                   <LotSummary lot={row.account_lot} source="account" duplicateCount={row.status === 'duplicate' ? row.candidate_lots.length : 0} />
@@ -332,10 +340,55 @@ function LotSummary({ lot, source, duplicateCount = 0 }: { lot: TaxLotReconcilia
       <div className="text-muted-foreground">
         {lot.quantity.toLocaleString()} shares · sold {lot.sale_date ?? 'unknown'}
       </div>
+      {lot.cusip && <div className="text-muted-foreground">CUSIP {lot.cusip}</div>}
       <div className="text-muted-foreground">
         Proceeds {money(lot.proceeds)} · Basis {money(lot.cost_basis)}
       </div>
       {lot.tax_document_filename && <div className="truncate text-muted-foreground">{lot.tax_document_filename}</div>}
+    </div>
+  )
+}
+
+function TransactionMatchSummary({ row }: { row: TaxLotReconciliationRow }) {
+  if (!row.transaction_match) {
+    return <span className="text-xs text-muted-foreground">No 1099-B lot</span>
+  }
+
+  return (
+    <div className="space-y-1 text-xs">
+      <TransactionLegSummary label="Buy" leg={row.transaction_match.opening} />
+      <TransactionLegSummary label="Sell" leg={row.transaction_match.closing} />
+    </div>
+  )
+}
+
+function TransactionLegSummary({
+  label,
+  leg,
+}: {
+  label: string
+  leg: NonNullable<TaxLotReconciliationRow['transaction_match']>['opening']
+}) {
+  const transaction = leg.status === 'matched' ? leg.transaction : null
+  const matched = transaction !== null
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge
+        variant="outline"
+        className={matched
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
+          : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'}
+      >
+        {label}
+      </Badge>
+      {matched ? (
+        <span className="text-muted-foreground">
+          #{transaction.t_id} · {transaction.t_date ?? 'unknown'} · {money(transaction.t_amt)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">missing</span>
+      )}
     </div>
   )
 }
