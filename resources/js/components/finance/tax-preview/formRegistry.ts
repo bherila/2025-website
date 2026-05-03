@@ -12,6 +12,7 @@ export type FormId =
   | 'estimate'
   | 'action-items'
   | 'documents'
+  | 'w2-summary'
   | 'tax-lot-reconciliation'
   | 'form-1040'
   | 'sch-1'

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 
+import type { YearSelection } from '@/lib/financeRouteBuilder'
+
 import { DockHeaderBar } from '../DockHeaderBar'
 
 const mockSetPaletteOpen = jest.fn()
@@ -17,15 +19,15 @@ jest.mock('../DockActions', () => ({
 }))
 
 jest.mock('@/components/finance/YearSelectorWithNav', () => ({
-  YearSelectorWithNav: ({ onYearChange }: { onYearChange: (year: number) => void }) => (
-    <button
-      type="button"
-      onClick={() => {
-        onYearChange(2024)
-      }}
-    >
-      Change year
-    </button>
+  YearSelectorWithNav: ({ onYearChange }: { onYearChange: (year: YearSelection) => void }) => (
+    <div>
+      <button type="button" onClick={() => onYearChange(2024)}>
+        Change year
+      </button>
+      <button type="button" onClick={() => onYearChange('all')}>
+        Select all
+      </button>
+    </div>
   ),
 }))
 
@@ -70,10 +72,24 @@ describe('DockHeaderBar', () => {
   })
 
   it('opens the review queue modal from header action', () => {
-    render(<DockHeaderBar {...baseProps} />)
+    render(
+      <DockHeaderBar
+        year={2025}
+        availableYears={[2025, 2024]}
+        isLoading={false}
+        onYearChange={jest.fn()}
+        pendingReviewCount={3}
+      />,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /review queue/i }))
     expect(mockOpenReviewQueue).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides the review queue button when there are no pending items', () => {
+    render(<DockHeaderBar {...baseProps} />)
+
+    expect(screen.queryByRole('button', { name: /review queue/i })).not.toBeInTheDocument()
   })
 
   it('calls back when year selection changes', () => {
@@ -91,5 +107,22 @@ describe('DockHeaderBar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /change year/i }))
     expect(onYearChange).toHaveBeenCalledWith(2024)
+  })
+
+  it('handles YearSelection "all" from the year selector', () => {
+    const onYearChange = jest.fn()
+
+    render(
+      <DockHeaderBar
+        year={2025}
+        availableYears={[2025, 2024]}
+        isLoading={false}
+        onYearChange={onYearChange}
+        pendingReviewCount={0}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /select all/i }))
+    expect(onYearChange).toHaveBeenCalledWith('all')
   })
 })

@@ -191,6 +191,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'column',
     component: MockComponent,
   },
+  'w2-summary': {
+    id: 'w2-summary',
+    label: 'W-2 Income Summary',
+    shortLabel: 'W-2 Summary',
+    keywords: ['w2', 'summary'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: MockComponent,
+  },
 }
 
 function stubColumn(id: string, label: string, shortLabel: string): FormRegistry[keyof FormRegistry] {

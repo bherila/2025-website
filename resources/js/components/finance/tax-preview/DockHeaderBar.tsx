@@ -31,7 +31,8 @@ export function DockHeaderBar({
 }: DockHeaderBarProps): React.ReactElement {
   const { exportXlsx, isExportingXlsx, openReviewQueue, setPaletteOpen } = useDockActions()
   const meta = navigatorMeta()
-  const reviewLabel = pendingReviewCount > 0 ? `Review Queue (${pendingReviewCount})` : 'Review Queue'
+  const showReviewQueue = pendingReviewCount > 0
+  const reviewLabel = `Review Queue (${pendingReviewCount})`
 
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
@@ -45,13 +46,12 @@ export function DockHeaderBar({
         isLoading={isLoading}
         onYearChange={onYearChange}
         includeAll={false}
-        className="ml-2"
       />
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="ml-2 h-7 gap-1.5 px-2.5 text-xs"
+        className="h-7 gap-1.5 px-2.5 text-xs"
         onClick={() => setPaletteOpen(true)}
         aria-label="Open command palette"
       >
@@ -61,16 +61,18 @@ export function DockHeaderBar({
           {meta}K
         </kbd>
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 gap-1.5 px-2.5 text-xs"
-        onClick={openReviewQueue}
-      >
-        <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-        {reviewLabel}
-      </Button>
+      {showReviewQueue && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 px-2.5 text-xs"
+          onClick={openReviewQueue}
+        >
+          <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+          {reviewLabel}
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"
