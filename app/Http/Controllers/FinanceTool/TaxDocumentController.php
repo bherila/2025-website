@@ -677,6 +677,7 @@ class TaxDocumentController extends Controller
     }
 
     /**
+     * @param  array<mixed>  $parsedData
      * @return array<int,array<string,mixed>>
      */
     private function normalizeBrokerParsedData(array $parsedData): array
