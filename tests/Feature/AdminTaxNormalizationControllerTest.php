@@ -118,7 +118,8 @@ class AdminTaxNormalizationControllerTest extends TestCase
             ->assertJsonPath('0.document_id', $doc->id)
             ->assertJsonPath('0.form_type', '1099_div')
             ->assertJsonPath('0.tax_year', 2024)
-            ->assertJsonPath('0.warnings.0.code', 'unsupported_field');
+            ->assertJsonPath('0.warnings.0.code', 'unsupported_field')
+            ->assertJsonPath('0.review_url', "/finance/tax-preview?year=2024&review_document_id={$doc->id}");
     }
 
     public function test_returns_flagged_account_links(): void
@@ -139,7 +140,8 @@ class AdminTaxNormalizationControllerTest extends TestCase
             ->assertJsonPath('0.item_type', 'link')
             ->assertJsonPath('0.link_id', $link->id)
             ->assertJsonPath('0.document_id', $doc->id)
-            ->assertJsonPath('0.warnings.0.code', 'canonicalized_alias');
+            ->assertJsonPath('0.warnings.0.code', 'canonicalized_alias')
+            ->assertJsonPath('0.review_url', "/finance/tax-preview?year=2024&review_document_id={$doc->id}");
     }
 
     public function test_does_not_return_non_flagged_items(): void
@@ -205,6 +207,70 @@ class AdminTaxNormalizationControllerTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.tax_year', 2023);
+    }
+
+    public function test_filter_by_warning_code_matches_any_warning_position(): void
+    {
+        $admin = $this->createAdminUser();
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $matchingDoc = $this->createTaxDocument($user->id, [
+            'parsed_data_needs_review' => true,
+            'parsed_data_warnings' => [
+                ['code' => 'ignored_field', 'path' => 'notes'],
+                ['code' => 'unsupported_field', 'path' => 'unsupported'],
+            ],
+        ]);
+
+        $nonMatchingDoc = $this->createTaxDocument($user->id, [
+            'original_filename' => 'alias-only.pdf',
+            'stored_filename' => '2024.01.01 alias-only.pdf',
+            's3_path' => "tax_docs/{$user->id}/2024.01.01 alias-only.pdf",
+            'file_hash' => str_repeat('d', 64),
+            'parsed_data_needs_review' => true,
+            'parsed_data_warnings' => [
+                ['code' => 'canonicalized_alias', 'path' => 'old_key', 'canonical_key' => 'new_key'],
+            ],
+        ]);
+
+        $matchingLink = $this->createAccountLink($nonMatchingDoc, $account->acct_id, [
+            'parsed_data_needs_review' => true,
+            'parsed_data_warnings' => [
+                ['code' => 'canonicalized_alias', 'path' => 'old_key'],
+                ['code' => 'unsupported_field', 'path' => 'account_number'],
+            ],
+        ]);
+
+        $response = $this->actingAs($admin)->getJson('/api/admin/tax-normalization-review?warning_code=unsupported_field');
+
+        $response->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.item_type', 'link')
+            ->assertJsonPath('0.link_id', $matchingLink->id)
+            ->assertJsonPath('1.item_type', 'document')
+            ->assertJsonPath('1.document_id', $matchingDoc->id);
+
+        $this->assertFalse(collect($response->json())->contains(
+            fn (array $item): bool => $item['item_type'] === 'document' && $item['document_id'] === $nonMatchingDoc->id,
+        ));
+    }
+
+    public function test_filter_by_warning_code_returns_empty_for_miss(): void
+    {
+        $admin = $this->createAdminUser();
+        $user = $this->createUser();
+
+        $this->createTaxDocument($user->id, [
+            'parsed_data_needs_review' => true,
+            'parsed_data_warnings' => [
+                ['code' => 'canonicalized_alias', 'path' => 'old_key', 'canonical_key' => 'new_key'],
+            ],
+        ]);
+
+        $response = $this->actingAs($admin)->getJson('/api/admin/tax-normalization-review?warning_code=unsupported_field');
+
+        $response->assertOk()->assertJson([]);
     }
 
     public function test_filter_by_type_document_only(): void

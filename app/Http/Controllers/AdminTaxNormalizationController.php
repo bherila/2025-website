@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AcknowledgeTaxNormalizationRequest;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Gate;
 
 class AdminTaxNormalizationController extends Controller
 {
+    private const MAX_REVIEW_ITEMS = 500;
+
     /**
      * List all tax documents and account links flagged for parsed-data normalization review.
      *
@@ -41,13 +44,15 @@ class AdminTaxNormalizationController extends Controller
         $links = [];
 
         if ($type === 'all' || $type === 'document') {
+            $documentWarningCode = $warningCode;
             $docQuery = FileForTaxDocument::where('parsed_data_needs_review', true)
                 ->with([
                     'employmentEntity:id,display_name',
                     'account:acct_id,acct_name',
                 ])
                 ->orderBy('tax_year', 'desc')
-                ->orderBy('id', 'desc');
+                ->orderBy('id', 'desc')
+                ->limit(self::MAX_REVIEW_ITEMS);
 
             if ($formTypes !== null) {
                 $docQuery->whereIn('form_type', $formTypes);
@@ -57,48 +62,34 @@ class AdminTaxNormalizationController extends Controller
                 $docQuery->where('tax_year', $year);
             }
 
+            if ($documentWarningCode !== null && $this->supportsJsonWarningCodePredicate($docQuery->getModel()->getConnection()->getDriverName())) {
+                $docQuery->whereRaw("JSON_SEARCH(parsed_data_warnings, 'one', ?, null, '$[*].code') IS NOT NULL", [$documentWarningCode]);
+                $documentWarningCode = null;
+            }
+
             foreach ($docQuery->get() as $doc) {
                 $warnings = $doc->parsed_data_warnings ?? [];
 
                 // Apply warning_code filter in PHP to correctly match any warning object
                 // with the given code, regardless of its position or additional fields.
-                if ($warningCode !== null && ! $this->hasWarningCode($warnings, $warningCode)) {
+                if ($documentWarningCode !== null && ! $this->hasWarningCode($warnings, $documentWarningCode)) {
                     continue;
                 }
 
-                /** @var FinAccounts|null $account */
-                $account = $doc->account;
-                /** @var FinEmploymentEntity|null $entity */
-                $entity = $doc->employmentEntity;
-
-                $documents[] = [
-                    'item_type' => 'document',
-                    'document_id' => $doc->id,
-                    'link_id' => null,
-                    'form_type' => $doc->form_type,
-                    'tax_year' => $doc->tax_year,
-                    'original_filename' => $doc->original_filename,
-                    'account_id' => $doc->account_id,
-                    'account_name' => $account?->acct_name,
-                    'employment_entity_name' => $entity?->display_name,
-                    'warnings' => $warnings,
-                    'is_reviewed' => (bool) $doc->is_reviewed,
-                    'parsed_data_needs_review' => true,
-                    'review_url' => "/finance/tax-documents/{$doc->id}/review",
-                    'created_at' => $doc->created_at,
-                    'updated_at' => $doc->updated_at,
-                ];
+                $documents[] = $this->documentPayload($doc, $warnings);
             }
         }
 
         if ($type === 'all' || $type === 'link') {
+            $linkWarningCode = $warningCode;
             $linkQuery = TaxDocumentAccount::where('parsed_data_needs_review', true)
                 ->with([
                     'document:id,original_filename,tax_year,form_type,user_id',
                     'account:acct_id,acct_name',
                 ])
                 ->orderBy('tax_year', 'desc')
-                ->orderBy('id', 'desc');
+                ->orderBy('id', 'desc')
+                ->limit(self::MAX_REVIEW_ITEMS);
 
             if ($formTypes !== null) {
                 $linkQuery->whereIn('form_type', $formTypes);
@@ -108,39 +99,21 @@ class AdminTaxNormalizationController extends Controller
                 $linkQuery->where('tax_year', $year);
             }
 
+            if ($linkWarningCode !== null && $this->supportsJsonWarningCodePredicate($linkQuery->getModel()->getConnection()->getDriverName())) {
+                $linkQuery->whereRaw("JSON_SEARCH(parsed_data_warnings, 'one', ?, null, '$[*].code') IS NOT NULL", [$linkWarningCode]);
+                $linkWarningCode = null;
+            }
+
             foreach ($linkQuery->get() as $link) {
                 $warnings = $link->parsed_data_warnings ?? [];
 
                 // Apply warning_code filter in PHP to correctly match any warning object
                 // with the given code, regardless of its position or additional fields.
-                if ($warningCode !== null && ! $this->hasWarningCode($warnings, $warningCode)) {
+                if ($linkWarningCode !== null && ! $this->hasWarningCode($warnings, $linkWarningCode)) {
                     continue;
                 }
 
-                /** @var FileForTaxDocument|null $parentDoc */
-                $parentDoc = $link->document;
-                /** @var FinAccounts|null $account */
-                $account = $link->account;
-
-                $links[] = [
-                    'item_type' => 'link',
-                    'document_id' => $link->tax_document_id,
-                    'link_id' => $link->id,
-                    'form_type' => $link->form_type,
-                    'tax_year' => $link->tax_year,
-                    'original_filename' => $parentDoc?->original_filename,
-                    'account_id' => $link->account_id,
-                    'account_name' => $account?->acct_name,
-                    'ai_identifier' => $link->ai_identifier,
-                    'ai_account_name' => $link->ai_account_name,
-                    'employment_entity_name' => null,
-                    'warnings' => $warnings,
-                    'is_reviewed' => (bool) $link->is_reviewed,
-                    'parsed_data_needs_review' => true,
-                    'review_url' => "/finance/tax-documents/{$link->tax_document_id}/review",
-                    'created_at' => $link->created_at,
-                    'updated_at' => $link->updated_at,
-                ];
+                $links[] = $this->linkPayload($link, $warnings);
             }
         }
 
@@ -158,7 +131,7 @@ class AdminTaxNormalizationController extends Controller
             return (int) ($b['document_id'] ?? 0) <=> (int) ($a['document_id'] ?? 0);
         });
 
-        return response()->json($items);
+        return response()->json(array_slice($items, 0, self::MAX_REVIEW_ITEMS));
     }
 
     /**
@@ -171,35 +144,111 @@ class AdminTaxNormalizationController extends Controller
      *   link_id: int (required when type = "link")
      *   type: "document" | "link"
      */
-    public function acknowledge(Request $request): JsonResponse
+    public function acknowledge(AcknowledgeTaxNormalizationRequest $request): JsonResponse
     {
-        Gate::authorize('admin');
-
-        $request->validate([
-            'type' => 'required|in:document,link',
-            'document_id' => 'required_if:type,document|nullable|integer',
-            'link_id' => 'required_if:type,link|nullable|integer',
-        ]);
-
         $itemType = $request->input('type');
 
         if ($itemType === 'document') {
             $doc = FileForTaxDocument::findOrFail((int) $request->input('document_id'));
-            $doc->forceFill([
-                'parsed_data_needs_review' => false,
-                'parsed_data_warnings' => null,
-            ])->saveQuietly();
+            $this->clearNormalizationReviewFlag($doc);
 
             return response()->json(['success' => true, 'item_type' => 'document', 'id' => $doc->id]);
         }
 
         $link = TaxDocumentAccount::findOrFail((int) $request->input('link_id'));
-        $link->forceFill([
+        $this->clearNormalizationReviewFlag($link);
+
+        return response()->json(['success' => true, 'item_type' => 'link', 'id' => $link->id]);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $warnings
+     * @return array<string, mixed>
+     */
+    private function documentPayload(FileForTaxDocument $doc, array $warnings): array
+    {
+        /** @var FinAccounts|null $account */
+        $account = $doc->account;
+        /** @var FinEmploymentEntity|null $entity */
+        $entity = $doc->employmentEntity;
+
+        return [
+            'item_type' => 'document',
+            'document_id' => $doc->id,
+            'link_id' => null,
+            'form_type' => $doc->form_type,
+            'tax_year' => $doc->tax_year,
+            'original_filename' => $doc->original_filename,
+            'account_id' => $doc->account_id,
+            'account_name' => $account?->acct_name,
+            'ai_identifier' => null,
+            'ai_account_name' => null,
+            'employment_entity_name' => $entity?->display_name,
+            'warnings' => $warnings,
+            'is_reviewed' => (bool) $doc->is_reviewed,
+            'parsed_data_needs_review' => true,
+            'review_url' => $this->reviewUrl($doc->tax_year, $doc->id),
+            'created_at' => $doc->created_at,
+            'updated_at' => $doc->updated_at,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $warnings
+     * @return array<string, mixed>
+     */
+    private function linkPayload(TaxDocumentAccount $link, array $warnings): array
+    {
+        /** @var FileForTaxDocument|null $parentDoc */
+        $parentDoc = $link->document;
+        /** @var FinAccounts|null $account */
+        $account = $link->account;
+
+        return [
+            'item_type' => 'link',
+            'document_id' => $link->tax_document_id,
+            'link_id' => $link->id,
+            'form_type' => $link->form_type,
+            'tax_year' => $link->tax_year,
+            'original_filename' => $parentDoc?->original_filename,
+            'account_id' => $link->account_id,
+            'account_name' => $account?->acct_name,
+            'ai_identifier' => $link->ai_identifier,
+            'ai_account_name' => $link->ai_account_name,
+            'employment_entity_name' => null,
+            'warnings' => $warnings,
+            'is_reviewed' => (bool) $link->is_reviewed,
+            'parsed_data_needs_review' => true,
+            'review_url' => $this->reviewUrl($link->tax_year, $link->tax_document_id),
+            'created_at' => $link->created_at,
+            'updated_at' => $link->updated_at,
+        ];
+    }
+
+    private function reviewUrl(?int $taxYear, int $documentId): string
+    {
+        return '/finance/tax-preview?'.http_build_query([
+            'year' => $taxYear,
+            'review_document_id' => $documentId,
+        ]);
+    }
+
+    private function supportsJsonWarningCodePredicate(string $driver): bool
+    {
+        return in_array($driver, ['mysql', 'mariadb'], true);
+    }
+
+    /**
+     * Use forceFill because these admin-only review fields are operational flags
+     * rather than normal mass-assignable form input; save quietly avoids retriggering
+     * document parsing or review side effects while only clearing the flag.
+     */
+    private function clearNormalizationReviewFlag(FileForTaxDocument|TaxDocumentAccount $item): void
+    {
+        $item->forceFill([
             'parsed_data_needs_review' => false,
             'parsed_data_warnings' => null,
         ])->saveQuietly();
-
-        return response()->json(['success' => true, 'item_type' => 'link', 'id' => $link->id]);
     }
 
     /**

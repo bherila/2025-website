@@ -1,8 +1,19 @@
 import { AlertTriangle, CheckCircle, ExternalLink, Filter } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 import Container from '@/components/container'
 import MainTitle from '@/components/MainTitle'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -95,7 +106,6 @@ function AcknowledgeButton({ item, onAcknowledged }: AcknowledgeButtonProps) {
 
   const handleAcknowledge = async () => {
     if (loading) return
-    if (!confirm('Clear the review flag for this item? This removes the warning list.')) return
 
     setLoading(true)
     try {
@@ -105,8 +115,9 @@ function AcknowledgeButton({ item, onAcknowledged }: AcknowledgeButtonProps) {
         link_id: item.item_type === 'link' ? item.link_id : undefined,
       })
       onAcknowledged(item)
+      toast.success('Review flag cleared')
     } catch (err) {
-      alert('Failed to acknowledge item')
+      toast.error('Failed to acknowledge item')
       console.error(err)
     } finally {
       setLoading(false)
@@ -114,10 +125,26 @@ function AcknowledgeButton({ item, onAcknowledged }: AcknowledgeButtonProps) {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={handleAcknowledge} disabled={loading}>
-      <CheckCircle className="h-3.5 w-3.5 mr-1" />
-      {loading ? 'Clearing…' : 'Acknowledge'}
-    </Button>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={loading}>
+          <CheckCircle className="h-3.5 w-3.5 mr-1" />
+          {loading ? 'Clearing…' : 'Acknowledge'}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogTitle>Clear Review Flag</AlertDialogTitle>
+        <AlertDialogDescription>
+          This removes the parsed-data warning list from this flagged item.
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => void handleAcknowledge()} disabled={loading}>
+            Clear Flag
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
