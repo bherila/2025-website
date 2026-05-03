@@ -36,8 +36,8 @@ class TxfWriter
             $lines[] = '$'.$this->formatAmount($lot->proceeds);
             $lines[] = '$'.$this->formatAmount($lot->costBasis);
 
-            if ($lot->adjustmentAmount !== 0.0) {
-                $lines[] = '$'.$this->formatAmount($lot->adjustmentAmount);
+            if ($lot->washSaleDisallowed !== null && $lot->washSaleDisallowed !== 0.0) {
+                $lines[] = '$'.$this->formatAmount($lot->washSaleDisallowed);
             }
 
             $lines[] = '^';

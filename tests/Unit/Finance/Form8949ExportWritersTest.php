@@ -35,10 +35,19 @@ class Form8949ExportWritersTest extends TestCase
     public function test_txf_writer_includes_wash_sale_adjustment_when_present(): void
     {
         $txf = (new TxfWriter)->write([
-            $this->lot('A', true, adjustmentAmount: 500.0, adjustmentCode: 'W'),
+            $this->lot('A', true, adjustmentAmount: 500.0, adjustmentCode: 'W', washSaleDisallowed: 500.0),
         ]);
 
         $this->assertStringContainsString('$500.00', $txf);
+    }
+
+    public function test_txf_writer_does_not_emit_non_wash_adjustment_amount(): void
+    {
+        $txf = (new TxfWriter)->write([
+            $this->lot('A', true, adjustmentAmount: 500.0),
+        ]);
+
+        $this->assertStringNotContainsString('$500.00', $txf);
     }
 
     public function test_olt_xlsx_writer_creates_template_sheet_with_lot_rows(): void
@@ -71,6 +80,7 @@ class Form8949ExportWritersTest extends TestCase
         ?string $adjustmentCode = null,
         ?bool $isCovered = true,
         ?float $accruedMarketDiscount = null,
+        ?float $washSaleDisallowed = null,
     ): Form8949ExportLot {
         return new Form8949ExportLot(
             description: "Example Lot {$box}",
@@ -89,7 +99,7 @@ class Form8949ExportWritersTest extends TestCase
             payerTin: '12-3456789',
             isCovered: $isCovered,
             accruedMarketDiscount: $accruedMarketDiscount,
-            washSaleDisallowed: $adjustmentAmount !== 0.0 ? $adjustmentAmount : null,
+            washSaleDisallowed: $washSaleDisallowed,
         );
     }
 }

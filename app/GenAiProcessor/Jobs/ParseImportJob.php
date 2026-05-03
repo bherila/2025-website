@@ -568,7 +568,7 @@ class ParseImportJob implements ShouldQueue
             $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
             $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
             $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
-            $isCovered = isset($tx['is_covered']) ? (bool) $tx['is_covered'] : null;
+            $isCovered = array_key_exists('is_covered', $tx) ? $this->normalizeBooleanOrNull($tx['is_covered']) : null;
             $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
             $form8949Box = null;
             if (is_string($tx['form_8949_box'] ?? null)) {
@@ -581,8 +581,8 @@ class ParseImportJob implements ShouldQueue
 
             // Determine is_short_term from the form_8949_box or explicit field.
             $isShortTerm = null;
-            if (isset($tx['is_short_term'])) {
-                $isShortTerm = (bool) $tx['is_short_term'];
+            if (array_key_exists('is_short_term', $tx)) {
+                $isShortTerm = $this->normalizeBooleanOrNull($tx['is_short_term']);
             } elseif (isset($tx['form_8949_box'])) {
                 $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
                 if (in_array($box, ['A', 'B', 'C'], true)) {
@@ -674,6 +674,33 @@ class ParseImportJob implements ShouldQueue
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function normalizeBooleanOrNull(mixed $value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return match ($value) {
+                1 => true,
+                0 => false,
+                default => null,
+            };
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            return match ($normalized) {
+                '1', 'true', 'yes', 'y' => true,
+                '0', 'false', 'no', 'n' => false,
+                default => null,
+            };
+        }
+
+        return null;
     }
 
     /**

@@ -8,7 +8,6 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
-use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class Form8949LotExportService
@@ -99,7 +98,11 @@ class Form8949LotExportService
                 $query->whereIn('lot_source', ['1099b', '1099_b'])
                     ->orWhereNotNull('tax_document_id');
             })
-            ->with(['account', 'taxDocument:id,original_filename,form_type,tax_year,parsed_data'])
+            ->with([
+                'account',
+                'taxDocument:id,original_filename,form_type,tax_year,parsed_data',
+                'taxDocument.accountLinks:id,tax_document_id,account_id,form_type,ai_identifier,ai_account_name',
+            ])
             ->orderBy('acct_id')
             ->orderBy('sale_date')
             ->orderBy('symbol')
@@ -113,8 +116,9 @@ class Form8949LotExportService
         $proceeds = $this->floatValue($lot->proceeds);
         $costBasis = $this->floatValue($lot->cost_basis);
         $gain = $this->floatValue($lot->realized_gain_loss);
-        $adjustment = round($proceeds - $costBasis - $gain, 2);
-        $washSaleDisallowed = $lot->wash_sale_disallowed !== null ? $this->floatValue($lot->wash_sale_disallowed) : ($adjustment !== 0.0 ? $adjustment : null);
+        $computedAdjustment = round($gain - ($proceeds - $costBasis), 2);
+        $washSaleDisallowed = $this->nonZeroFloatOrNull($lot->wash_sale_disallowed);
+        $adjustment = $washSaleDisallowed ?? $computedAdjustment;
         $payerData = $this->payerData($lot);
         $account = $lot->account;
         $accountName = $account instanceof FinAccounts ? (string) $account->acct_name : null;
@@ -126,7 +130,7 @@ class Form8949LotExportService
             proceeds: $proceeds,
             costBasis: $costBasis,
             adjustmentAmount: $adjustment,
-            adjustmentCode: $adjustment !== 0.0 ? 'W' : null,
+            adjustmentCode: $washSaleDisallowed !== null ? 'W' : null,
             isShortTerm: $isShortTerm,
             form8949Box: $form8949Box,
             quantity: $this->floatValue($lot->quantity),
@@ -156,7 +160,15 @@ class Form8949LotExportService
             $proceeds = $this->floatValue($row['proceeds'] ?? 0);
             $costBasis = $this->floatValue($row['costBasis'] ?? $row['cost_basis'] ?? 0);
             $gain = $this->floatValue($row['gainOrLoss'] ?? $row['realized_gain_loss'] ?? ($proceeds - $costBasis));
-            $adjustment = $this->floatValue($row['adjustmentAmount'] ?? ($proceeds - $costBasis - $gain));
+            $providedAdjustmentCode = $this->stringValue($row['adjustmentCode'] ?? null);
+            $washSaleDisallowed = $this->nonZeroFloatOrNull(
+                $row['washSaleDisallowed']
+                    ?? $row['wash_sale_disallowed']
+                    ?? $row['disallowedLoss']
+                    ?? ($providedAdjustmentCode === 'W' ? ($row['adjustmentAmount'] ?? null) : null)
+            );
+            $adjustment = $this->floatValue($row['adjustmentAmount'] ?? ($washSaleDisallowed ?? ($gain - ($proceeds - $costBasis))));
+            $adjustmentCode = $providedAdjustmentCode ?? ($washSaleDisallowed !== null ? 'W' : null);
 
             $lots[] = new Form8949ExportLot(
                 description: $this->description(
@@ -169,11 +181,12 @@ class Form8949LotExportService
                 proceeds: $proceeds,
                 costBasis: $costBasis,
                 adjustmentAmount: $adjustment,
-                adjustmentCode: $this->stringValue($row['adjustmentCode'] ?? null) ?? ($adjustment !== 0.0 ? 'W' : null),
+                adjustmentCode: $adjustmentCode,
                 isShortTerm: $isShortTerm,
                 form8949Box: $isShortTerm ? 'C' : 'F',
                 quantity: isset($row['quantity']) ? $this->floatValue($row['quantity']) : null,
                 symbol: $this->stringValue($row['symbol'] ?? null),
+                washSaleDisallowed: $washSaleDisallowed,
             );
         }
 
@@ -233,6 +246,7 @@ class Form8949LotExportService
             ];
         }
 
+        $entries = [];
         foreach ($document->parsed_data as $entry) {
             if (! is_array($entry) || ($entry['form_type'] ?? null) !== '1099_b') {
                 continue;
@@ -243,13 +257,75 @@ class Form8949LotExportService
                 continue;
             }
 
-            return [
-                'payer_name' => $this->stringValue($parsedData['payer_name'] ?? null),
-                'payer_tin' => $this->stringValue($parsedData['payer_tin'] ?? null),
-            ];
+            $entries[] = $entry;
+        }
+
+        $link = $this->accountLinkForLot($lot);
+        if ($link instanceof TaxDocumentAccount) {
+            foreach ($entries as $entry) {
+                if ($this->entryMatchesAccountLink($entry, $link)) {
+                    return $this->payerDataFromEntry($entry);
+                }
+            }
+        }
+
+        if ($entries !== []) {
+            return $this->payerDataFromEntry($entries[0]);
         }
 
         return [];
+    }
+
+    private function accountLinkForLot(FinAccountLot $lot): ?TaxDocumentAccount
+    {
+        $document = $lot->taxDocument;
+        if ($document instanceof FileForTaxDocument && $document->relationLoaded('accountLinks')) {
+            $link = $document->accountLinks
+                ->first(fn ($candidate): bool => $candidate instanceof TaxDocumentAccount && $candidate->account_id === $lot->acct_id && $candidate->form_type === '1099_b');
+
+            return $link instanceof TaxDocumentAccount ? $link : null;
+        }
+
+        return TaxDocumentAccount::query()
+            ->where('tax_document_id', $lot->tax_document_id)
+            ->where('account_id', $lot->acct_id)
+            ->where('form_type', '1099_b')
+            ->first();
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     */
+    private function entryMatchesAccountLink(array $entry, TaxDocumentAccount $link): bool
+    {
+        $entryIdentifier = $this->stringValue($entry['account_identifier'] ?? null);
+        if ($entryIdentifier !== null && $link->ai_identifier !== null && $this->normalizedString($entryIdentifier) === $this->normalizedString($link->ai_identifier)) {
+            return true;
+        }
+
+        $entryAccountName = $this->stringValue($entry['account_name'] ?? null);
+        if ($entryAccountName !== null && $link->ai_account_name !== null && $this->normalizedString($entryAccountName) === $this->normalizedString($link->ai_account_name)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     * @return array{payer_name?: string|null, payer_tin?: string|null}
+     */
+    private function payerDataFromEntry(array $entry): array
+    {
+        $parsedData = $entry['parsed_data'] ?? [];
+        if (! is_array($parsedData)) {
+            return [];
+        }
+
+        return [
+            'payer_name' => $this->stringValue($parsedData['payer_name'] ?? null),
+            'payer_tin' => $this->stringValue($parsedData['payer_tin'] ?? null),
+        ];
     }
 
     private function floatValue(mixed $value): float
@@ -272,6 +348,17 @@ class Form8949LotExportService
         return null;
     }
 
+    private function nonZeroFloatOrNull(mixed $value): ?float
+    {
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        $float = round(abs((float) $value), 2);
+
+        return $float !== 0.0 ? $float : null;
+    }
+
     private function stringValue(mixed $value): ?string
     {
         if (! is_string($value)) {
@@ -281,5 +368,10 @@ class Form8949LotExportService
         $trimmed = trim($value);
 
         return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function normalizedString(string $value): string
+    {
+        return strtolower(trim($value));
     }
 }

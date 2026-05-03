@@ -44,6 +44,9 @@ class Form8949LotExportRequest extends FormRequest
             'lots.*.realized_gain_loss' => ['nullable', 'numeric'],
             'lots.*.adjustmentAmount' => ['nullable', 'numeric'],
             'lots.*.adjustmentCode' => ['nullable', 'string', 'max:8'],
+            'lots.*.washSaleDisallowed' => ['nullable', 'numeric'],
+            'lots.*.wash_sale_disallowed' => ['nullable', 'numeric'],
+            'lots.*.disallowedLoss' => ['nullable', 'numeric'],
             'lots.*.isShortTerm' => ['nullable', 'boolean'],
             'lots.*.is_short_term' => ['nullable', 'boolean'],
         ];

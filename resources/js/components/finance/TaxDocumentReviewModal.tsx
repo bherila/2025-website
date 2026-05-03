@@ -555,6 +555,7 @@ export default function TaxDocumentReviewModal({
           scope: 'account_document',
           account_id: accountId,
           tax_document_id: activeDoc.id,
+          tax_year: taxYear,
           ...(propAccountLink ? { account_link_id: propAccountLink.id } : {}),
         },
         format === 'txf' ? `1099b-lots-${taxYear}.txf` : `1099b-lots-${taxYear}.xlsx`,

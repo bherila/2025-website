@@ -40,9 +40,64 @@ class Form8949LotExportTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('content-type', 'text/plain; charset=utf-8');
+        $response->assertHeader('content-disposition', 'attachment; filename="1099b-lots-2025.txf"');
         $response->assertSeeText('N711', false);
         $response->assertSeeText('PApple Inc.', false);
         $response->assertSeeText('$1250.00', false);
+    }
+
+    public function test_account_document_export_uses_matching_payer_data_for_account_link(): void
+    {
+        $user = $this->createUser();
+        $fidelity = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $etrade = $this->makeAccount($user->id, 'E-TRADE Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $document->update([
+            'parsed_data' => [
+                [
+                    'account_identifier' => 'FID-1111',
+                    'account_name' => 'Fidelity Taxable',
+                    'form_type' => '1099_b',
+                    'tax_year' => 2025,
+                    'parsed_data' => [
+                        'payer_name' => 'Fidelity Brokerage Services',
+                        'payer_tin' => '11-1111111',
+                    ],
+                ],
+                [
+                    'account_identifier' => 'ETR-2222',
+                    'account_name' => 'E-TRADE Taxable',
+                    'form_type' => '1099_b',
+                    'tax_year' => 2025,
+                    'parsed_data' => [
+                        'payer_name' => 'E-TRADE Securities',
+                        'payer_tin' => '22-2222222',
+                    ],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($document->id, $fidelity->acct_id, '1099_b', 2025, aiIdentifier: 'FID-1111', aiAccountName: 'Fidelity Taxable');
+        $link = TaxDocumentAccount::createLink($document->id, $etrade->acct_id, '1099_b', 2025, aiIdentifier: 'ETR-2222', aiAccountName: 'E-TRADE Taxable');
+        $this->makeLot($etrade, $document, ['description' => 'Microsoft']);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-olt-xlsx', [
+            'source' => 'database',
+            'scope' => 'account_document',
+            'account_id' => $etrade->acct_id,
+            'tax_document_id' => $document->id,
+            'account_link_id' => $link->id,
+        ]);
+
+        $response->assertOk();
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'olt-payer-test');
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        @unlink($tempPath);
+
+        $sheet = $spreadsheet->getSheet(0);
+        $this->assertSame('E-TRADE Securities', $sheet->getCell('T2')->getValue());
+        $this->assertSame('22-2222222', $sheet->getCell('U2')->getValue());
     }
 
     public function test_all_account_olt_export_returns_combined_template_rows(): void
