@@ -183,15 +183,12 @@ class LotMatcher
         }
 
         [$dateStart, $dateEnd] = $this->dateWindow($date);
-        [$dateDistanceOrderSql, $dateDistanceOrderBindings] = $this->dateDistanceOrder($date);
         [$quantityMin, $quantityMax] = $this->toleranceBounds($quantity, self::QUANTITY_TOLERANCE);
         [$amountMin, $amountMax] = $this->toleranceBounds($amount, self::MONEY_TOLERANCE);
-        $typePlaceholders = implode(', ', array_fill(0, count($types), '?'));
 
-        $query = FinAccountLineItems::query()
+        $candidates = FinAccountLineItems::query()
             ->where('t_account', (int) $lot->acct_id)
             ->whereBetween('t_date', [$dateStart, $dateEnd])
-            ->whereRaw("LOWER(t_type) IN ({$typePlaceholders})", $types)
             ->when($excludedTransactionIds !== [], fn ($query) => $query->whereNotIn('t_id', $excludedTransactionIds))
             ->where(function ($query) use ($symbol, $cusip): void {
                 if ($symbol !== '') {
@@ -202,12 +199,17 @@ class LotMatcher
                     $query->orWhere('t_cusip', $cusip);
                 }
             })
-            ->whereRaw('ABS(CAST(COALESCE(t_qty, 0) AS REAL)) BETWEEN CAST(? AS REAL) AND CAST(? AS REAL)', [$quantityMin, $quantityMax])
-            ->whereRaw('ABS(CAST(COALESCE(t_amt, 0) AS REAL)) BETWEEN CAST(? AS REAL) AND CAST(? AS REAL)', [$amountMin, $amountMax])
-            ->orderByRaw($dateDistanceOrderSql, $dateDistanceOrderBindings)
-            ->orderBy('t_id');
+            ->get();
 
-        return $query->first();
+        return $candidates
+            ->filter(fn (FinAccountLineItems $candidate): bool => in_array(strtolower((string) $candidate->t_type), $types, true)
+                && $this->numericBetween(abs($this->numericValue($candidate->t_qty)), $quantityMin, $quantityMax)
+                && $this->numericBetween(abs($this->numericValue($candidate->t_amt)), $amountMin, $amountMax))
+            ->sortBy(fn (FinAccountLineItems $candidate): array => [
+                abs((int) (new \DateTimeImmutable($date))->diff(new \DateTimeImmutable((string) $candidate->t_date))->format('%r%a')),
+                (int) $candidate->t_id,
+            ])
+            ->first();
     }
 
     /**
@@ -235,24 +237,6 @@ class LotMatcher
     }
 
     /**
-     * @return array{0: string, 1: string[]}
-     */
-    private function dateDistanceOrder(string $date): array
-    {
-        $center = new \DateTimeImmutable($date);
-        $clauses = ['WHEN t_date = ? THEN 0'];
-        $bindings = [$center->format('Y-m-d')];
-
-        for ($distance = 1; $distance <= self::DATE_TOLERANCE_DAYS; $distance++) {
-            $clauses[] = "WHEN t_date IN (?, ?) THEN {$distance}";
-            $bindings[] = $center->modify("-{$distance} days")->format('Y-m-d');
-            $bindings[] = $center->modify("+{$distance} days")->format('Y-m-d');
-        }
-
-        return ['CASE '.implode(' ', $clauses).' ELSE '.(self::DATE_TOLERANCE_DAYS + 1).' END', $bindings];
-    }
-
-    /**
      * @return array{0: float, 1: float}
      */
     private function toleranceBounds(float $value, float $tolerance): array
@@ -265,6 +249,11 @@ class LotMatcher
     private function numericClose(float $left, float $right, float $tolerance): bool
     {
         return abs($left - $right) <= $tolerance;
+    }
+
+    private function numericBetween(float $value, float $minimum, float $maximum): bool
+    {
+        return $value >= $minimum && $value <= $maximum;
     }
 
     private function nullableNumericClose(mixed $left, mixed $right, float $tolerance): bool

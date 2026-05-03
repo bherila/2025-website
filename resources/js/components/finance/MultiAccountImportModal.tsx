@@ -1,10 +1,11 @@
 'use client'
 
-import { AlertCircle, CheckCircle, Clock, Loader2, Trash2, Upload } from 'lucide-react'
+import { AlertCircle, CheckCircle, ClipboardCopy, Clock, FileCode2, Loader2, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
@@ -73,6 +75,12 @@ interface ExistingTaxDocumentResponse {
   account_links: TaxDocumentAccountLink[]
 }
 
+interface PromptInfo {
+  prompt: string
+  json_schema: Record<string, unknown>
+  form_label: string
+}
+
 const LEGACY_BROKER_FORM_DETECTORS: Array<{
   formType: string
   keys: string[]
@@ -104,7 +112,27 @@ function hasDetectedForm(data: Record<string, unknown>, keys: string[], prefixes
   return Object.keys(data).some(key => keys.includes(key) || prefixes.some(prefix => key.startsWith(prefix)))
 }
 
+function coerceTaxYear(value: unknown): number {
+  const year = typeof value === 'number' ? value : Number(value)
+
+  return Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : 0
+}
+
 function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLink[] {
+  if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
+    return doc.parsed_data
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+      .map((entry, index) => ({
+        id: -(index + 1),
+        account_id: null,
+        form_type: typeof entry.form_type === 'string' ? entry.form_type : '1099_b',
+        tax_year: coerceTaxYear(entry.tax_year),
+        ai_identifier: typeof entry.account_identifier === 'string' ? entry.account_identifier : null,
+        ai_account_name: typeof entry.account_name === 'string' ? entry.account_name : null,
+        account: null,
+      }))
+  }
+
   if (doc.form_type !== 'broker_1099' || Array.isArray(doc.parsed_data) || !doc.parsed_data) {
     return []
   }
@@ -119,7 +147,7 @@ function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLi
       id: -(index + 1),
       account_id: null,
       form_type: detector.formType,
-      tax_year: typeof data.tax_year === 'number' ? data.tax_year : 0,
+      tax_year: coerceTaxYear(data.tax_year),
       ai_identifier: aiIdentifier,
       ai_account_name: aiAccountName,
       account: null,
@@ -142,6 +170,12 @@ export default function MultiAccountImportModal({
   const [links, setLinks] = useState<ParsedLink[]>([])
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [skipGenAiProcessing, setSkipGenAiProcessing] = useState(false)
+  const [showManualJson, setShowManualJson] = useState(false)
+  const [manualJsonInput, setManualJsonInput] = useState('')
+  const [promptInfo, setPromptInfo] = useState<PromptInfo | null>(null)
+  const [promptLoading, setPromptLoading] = useState(false)
+  const [promptCopied, setPromptCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -153,6 +187,11 @@ export default function MultiAccountImportModal({
     setLinks([])
     setConfirming(false)
     setDeleting(false)
+    setSkipGenAiProcessing(false)
+    setShowManualJson(false)
+    setManualJsonInput('')
+    setPromptInfo(null)
+    setPromptCopied(false)
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current)
     }
@@ -219,6 +258,17 @@ export default function MultiAccountImportModal({
     pollJob(existingTaxDocId)
   }, [open, existingTaxDocId, pollJob])
 
+  useEffect(() => {
+    if (!open || !showManualJson) return
+
+    setPromptLoading(true)
+    fetchWrapper
+      .get(`/api/finance/tax-documents/prompt?form_type=broker_1099&tax_year=${encodeURIComponent(String(taxYear))}`)
+      .then((data: unknown) => setPromptInfo(data as PromptInfo))
+      .catch(() => toast.error('Could not load broker 1099 prompt info.'))
+      .finally(() => setPromptLoading(false))
+  }, [open, showManualJson, taxYear])
+
   const handleClose = () => {
     // If a doc was created or loaded (taxDocId is set) but the user closed without confirming,
     // still trigger a reload so the parent shows the auto-created links from ParseImportJob.
@@ -272,6 +322,10 @@ export default function MultiAccountImportModal({
         name: a.acct_name,
         last4: a.acct_number ? a.acct_number.slice(-4) : undefined,
       }))
+      let parsedData: unknown = null
+      if (manualJsonInput.trim()) {
+        parsedData = JSON.parse(manualJsonInput)
+      }
 
       const doc = (await fetchWrapper.post('/api/finance/tax-documents/multi-account', {
         s3_key: uploadResp.s3_key,
@@ -281,11 +335,21 @@ export default function MultiAccountImportModal({
         file_hash: hashHex,
         mime_type: file.type || 'application/pdf',
         context_accounts: accountHints,
+        ...(parsedData != null ? { parsed_data: parsedData } : {}),
+        ...(skipGenAiProcessing && parsedData == null ? { skip_gen_ai_processing: true } : {}),
       })) as { id: number }
 
       setTaxDocId(doc.id)
-      setPhase('polling')
-      pollJob(doc.id)
+      if (parsedData != null) {
+        pollJob(doc.id)
+      } else if (skipGenAiProcessing) {
+        toast.success('Document uploaded without GenAI processing')
+        reset()
+        onSuccess()
+      } else {
+        setPhase('polling')
+        pollJob(doc.id)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -302,6 +366,33 @@ export default function MultiAccountImportModal({
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) handleFileSelect(file)
+  }
+
+  const handleCopyPrompt = async () => {
+    if (!promptInfo?.prompt) return
+    await navigator.clipboard.writeText(promptInfo.prompt)
+    setPromptCopied(true)
+    setTimeout(() => setPromptCopied(false), 2500)
+  }
+
+  const handleAttachManualJson = () => {
+    try {
+      const parsed = JSON.parse(manualJsonInput)
+      const entries = Array.isArray(parsed)
+        ? parsed
+        : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { accounts?: unknown }).accounts)
+            ? (parsed as { accounts: unknown[] }).accounts
+            : null)
+      if (!entries || entries.length === 0) {
+        throw new Error('JSON must be an array of account/form entries, or an object with an accounts array.')
+      }
+      setManualJsonInput(JSON.stringify(entries, null, 2))
+      setShowManualJson(false)
+      setSkipGenAiProcessing(false)
+      toast.success('Broker import JSON attached. Upload the PDF to finish.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Invalid JSON')
+    }
   }
 
   const updateLinkAccount = (linkId: number, accountId: number | null) => {
@@ -391,12 +482,77 @@ export default function MultiAccountImportModal({
                 onChange={handleFileInput}
               />
             </div>
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  checked={skipGenAiProcessing}
+                  disabled={manualJsonInput.trim() !== ''}
+                  onCheckedChange={checked => setSkipGenAiProcessing(checked === true)}
+                  aria-label="Skip GenAI processing"
+                />
+                <span className="grid gap-1">
+                  <span className="font-medium">Upload only, skip GenAI processing</span>
+                  <span className="text-xs text-muted-foreground">
+                    Saves the PDF without queueing AI extraction. Useful for oversized or slow statements.
+                  </span>
+                </span>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={uploading || skipGenAiProcessing}
+                onClick={() => setShowManualJson(true)}
+              >
+                <FileCode2 className="h-4 w-4" />
+                {manualJsonInput.trim() ? 'Edit attached broker JSON' : 'Attach broker JSON from LLM'}
+              </Button>
+            </div>
             {error && (
               <div className="flex items-center gap-2 text-destructive text-sm">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 {error}
               </div>
             )}
+          </div>
+        )}
+
+        {phase === 'upload' && showManualJson && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Copy this prompt into ChatGPT with the broker PDF, then paste the returned JSON array here.
+              </p>
+              <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={handleCopyPrompt} disabled={!promptInfo?.prompt}>
+                <ClipboardCopy className="h-3.5 w-3.5" />
+                {promptCopied ? 'Copied' : 'Copy prompt'}
+              </Button>
+            </div>
+            {promptLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading prompt...
+              </div>
+            )}
+            {promptInfo && (
+              <pre className="max-h-44 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap">
+                {promptInfo.prompt}
+              </pre>
+            )}
+            <Textarea
+              value={manualJsonInput}
+              onChange={e => setManualJsonInput(e.target.value)}
+              className="h-48 font-mono text-xs"
+              placeholder={'[\n  {\n    "account_identifier": "1234-5678",\n    "account_name": "Brokerage Account",\n    "form_type": "1099_b",\n    "tax_year": 2025,\n    "parsed_data": { "transactions": [] }\n  }\n]'}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowManualJson(false)}>
+                Back
+              </Button>
+              <Button type="button" onClick={handleAttachManualJson}>
+                Attach JSON
+              </Button>
+            </div>
           </div>
         )}
 
