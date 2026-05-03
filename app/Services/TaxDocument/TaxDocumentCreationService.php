@@ -25,8 +25,8 @@ class TaxDocumentCreationService
 {
     /**
      * Create a single-account tax document, its account link (if applicable), and dispatch
-     * an AI parsing job. When $docAttributes already contains 'parsed_data' the AI job is
-     * skipped entirely and genai_status is set to 'parsed'.
+     * an AI parsing job. When $docAttributes already contains 'parsed_data', or
+     * skip_gen_ai_processing is true, the AI job is skipped entirely.
      *
      * @param  array<string,mixed>  $docAttributes  FileForTaxDocument fillable field values.
      *                                              Required: user_id, tax_year, form_type,
@@ -34,7 +34,8 @@ class TaxDocumentCreationService
      *                                              mime_type, file_size_bytes, file_hash,
      *                                              uploaded_by_user_id.
      *                                              Optional: employment_entity_id, account_id,
-     *                                              notes, parsed_data (skips AI when present).
+     *                                              notes, parsed_data (skips AI when present),
+     *                                              skip_gen_ai_processing.
      * @param  array<string,mixed>|null  $linkAttributes  When provided, a TaxDocumentAccount row
      *                                                    is created. Required key: account_id.
      *                                                    Optional keys: form_type, tax_year, notes.
@@ -44,13 +45,20 @@ class TaxDocumentCreationService
         array $docAttributes,
         ?array $linkAttributes = null,
     ): FileForTaxDocument {
+        $skipGenAiProcessing = (bool) ($docAttributes['skip_gen_ai_processing'] ?? false);
+        unset($docAttributes['skip_gen_ai_processing']);
+
         $hasParsedData = isset($docAttributes['parsed_data']);
 
-        if (! $hasParsedData) {
+        if ($hasParsedData) {
+            $docAttributes['genai_status'] = 'parsed';
+        } elseif (! $skipGenAiProcessing) {
             $docAttributes['genai_status'] = 'pending';
+        } else {
+            $docAttributes['genai_status'] = null;
         }
 
-        $doc = DB::transaction(function () use ($docAttributes, $linkAttributes, $hasParsedData): FileForTaxDocument {
+        $doc = DB::transaction(function () use ($docAttributes, $linkAttributes, $hasParsedData, $skipGenAiProcessing): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create($docAttributes);
 
             // Create the account link if link attributes are provided.
@@ -64,7 +72,7 @@ class TaxDocumentCreationService
                 );
             }
 
-            if (! $hasParsedData) {
+            if (! $hasParsedData && ! $skipGenAiProcessing) {
                 $genaiJob = GenAiImportJob::create([
                     'user_id' => $docAttributes['user_id'],
                     'job_type' => 'tax_document',
@@ -87,7 +95,7 @@ class TaxDocumentCreationService
             return $taxDoc;
         });
 
-        if (! $hasParsedData) {
+        if (! $hasParsedData && ! $skipGenAiProcessing) {
             ParseImportJob::dispatch($doc->genai_job_id);
         }
 
@@ -97,6 +105,7 @@ class TaxDocumentCreationService
     /**
      * Create a multi-account consolidated tax document (e.g. Fidelity Tax Reporting Statement)
      * and dispatch an AI parsing job. Account links are created later, after AI parsing.
+     * When parsed_data is supplied, or skip_gen_ai_processing is true, the AI job is skipped.
      *
      * @param  array<string,mixed>  $docAttributes  FileForTaxDocument fillable field values.
      *                                              Required: user_id, tax_year, form_type,
@@ -111,10 +120,18 @@ class TaxDocumentCreationService
         array $docAttributes,
         array $contextAccounts = [],
     ): FileForTaxDocument {
-        $docAttributes['genai_status'] = 'pending';
+        $skipGenAiProcessing = (bool) ($docAttributes['skip_gen_ai_processing'] ?? false);
+        unset($docAttributes['skip_gen_ai_processing']);
 
-        $doc = DB::transaction(function () use ($docAttributes, $contextAccounts): FileForTaxDocument {
+        $hasParsedData = isset($docAttributes['parsed_data']);
+        $docAttributes['genai_status'] = $hasParsedData ? 'parsed' : ($skipGenAiProcessing ? null : 'pending');
+
+        $doc = DB::transaction(function () use ($docAttributes, $contextAccounts, $hasParsedData, $skipGenAiProcessing): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create($docAttributes);
+
+            if ($hasParsedData || $skipGenAiProcessing) {
+                return $taxDoc;
+            }
 
             $genaiJob = GenAiImportJob::create([
                 'user_id' => $docAttributes['user_id'],
@@ -137,7 +154,9 @@ class TaxDocumentCreationService
             return $taxDoc;
         });
 
-        ParseImportJob::dispatch($doc->genai_job_id);
+        if (! $hasParsedData && ! $skipGenAiProcessing) {
+            ParseImportJob::dispatch($doc->genai_job_id);
+        }
 
         return $doc;
     }

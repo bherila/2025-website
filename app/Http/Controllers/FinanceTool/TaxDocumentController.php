@@ -115,6 +115,7 @@ class TaxDocumentController extends Controller
             'account_id' => 'nullable|integer',
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
+            'skip_gen_ai_processing' => 'nullable|boolean',
             'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
         ]);
 
@@ -138,8 +139,8 @@ class TaxDocumentController extends Controller
         $s3Key = $validated['s3_key'];
         $storedFilename = $validated['stored_filename'];
 
-        // When caller supplies pre-parsed JSON, skip AI processing entirely.
         $hasParsedData = $request->filled('parsed_data');
+        $skipGenAiProcessing = $request->boolean('skip_gen_ai_processing');
 
         $docAttributes = [
             'user_id' => $userId,
@@ -156,7 +157,8 @@ class TaxDocumentController extends Controller
             'notes' => $request->notes,
             'parsed_data' => $hasParsedData ? $request->parsed_data : null,
             'misc_routing' => $request->input('misc_routing'),
-            'genai_status' => $hasParsedData ? 'parsed' : 'pending',
+            'skip_gen_ai_processing' => $skipGenAiProcessing,
+            'genai_status' => $hasParsedData ? 'parsed' : ($skipGenAiProcessing ? null : 'pending'),
         ];
 
         $linkAttributes = null;
@@ -193,6 +195,8 @@ class TaxDocumentController extends Controller
             'context_accounts' => 'nullable|array',
             'context_accounts.*.name' => 'nullable|string|max:255',
             'context_accounts.*.last4' => 'nullable|string|max:4',
+            'parsed_data' => 'nullable|array',
+            'skip_gen_ai_processing' => 'nullable|boolean',
         ]);
 
         $userId = Auth::id();
@@ -216,6 +220,8 @@ class TaxDocumentController extends Controller
                 'file_size_bytes' => $request->file_size_bytes,
                 'file_hash' => $request->file_hash,
                 'uploaded_by_user_id' => $userId,
+                'parsed_data' => $request->filled('parsed_data') ? $this->normalizeBrokerParsedData($request->parsed_data) : null,
+                'skip_gen_ai_processing' => $request->boolean('skip_gen_ai_processing'),
             ],
             $request->input('context_accounts', []),
         );
@@ -375,6 +381,10 @@ class TaxDocumentController extends Controller
 
         if (! in_array($formType, FileForTaxDocument::FORM_TYPES, true)) {
             return response()->json(['message' => 'Invalid form type.'], 422);
+        }
+
+        if ($formType === 'broker_1099') {
+            return response()->json($this->getBroker1099PromptInfo($taxYear));
         }
 
         $effectiveType = match ($formType) {
@@ -664,5 +674,54 @@ class TaxDocumentController extends Controller
             ->where('id', $entityId)
             ->where('user_id', $userId)
             ->firstOrFail();
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function normalizeBrokerParsedData(array $parsedData): array
+    {
+        if (isset($parsedData['accounts']) && is_array($parsedData['accounts'])) {
+            return array_values(array_filter($parsedData['accounts'], 'is_array'));
+        }
+
+        return array_values(array_filter($parsedData, 'is_array'));
+    }
+
+    /**
+     * @return array{prompt: string, json_schema: array<string,mixed>, form_label: string}
+     */
+    private function getBroker1099PromptInfo(int $taxYear): array
+    {
+        $schema = [
+            'type' => 'ARRAY',
+            'description' => 'Array of detected account/form entries from a consolidated broker 1099.',
+            'items' => [
+                'type' => 'OBJECT',
+                'required' => ['account_identifier', 'account_name', 'form_type', 'tax_year', 'parsed_data'],
+                'properties' => [
+                    'account_identifier' => ['type' => 'STRING'],
+                    'account_name' => ['type' => 'STRING'],
+                    'form_type' => ['type' => 'STRING', 'enum' => ['1099_div', '1099_int', '1099_misc', '1099_nec', '1099_b']],
+                    'tax_year' => ['type' => 'NUMBER'],
+                    'parsed_data' => ['type' => 'OBJECT'],
+                ],
+            ],
+        ];
+
+        $schemaJson = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return [
+            'prompt' => <<<PROMPT
+Analyze the attached consolidated brokerage tax statement for tax year {$taxYear}. Extract each distinct account/form combination.
+
+Return ONLY a valid JSON array. Do not use markdown or code fences. Each array item must contain account_identifier, account_name, form_type, tax_year, and parsed_data. For 1099-B entries, include parsed_data.transactions as an array of sale lots with symbol, description, cusip, quantity, purchase_date, sale_date, proceeds, cost_basis, wash_sale_disallowed, realized_gain_loss, is_short_term, form_8949_box, is_covered, and additional_info.
+
+Expected schema:
+{$schemaJson}
+PROMPT,
+            'json_schema' => $schema,
+            'form_label' => 'Consolidated Broker 1099',
+        ];
     }
 }

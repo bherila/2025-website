@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -91,6 +92,7 @@ export default function TaxDocumentUploadModal({
   const [isDragging, setIsDragging] = useState(false)
   const [showManualJson, setShowManualJson] = useState(false)
   const [attachedJson, setAttachedJson] = useState<unknown | null>(null)
+  const [skipGenAiProcessing, setSkipGenAiProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -103,6 +105,7 @@ export default function TaxDocumentUploadModal({
       setIsDragging(false)
       setShowManualJson(false)
       setAttachedJson(null)
+      setSkipGenAiProcessing(false)
       setError(null)
     }
   }, [open])
@@ -160,6 +163,7 @@ export default function TaxDocumentUploadModal({
           ...(employmentEntityId != null ? { employment_entity_id: employmentEntityId } : {}),
           // When JSON was pre-attached, include it so the backend skips AI processing
           ...(jsonToAttach != null ? { parsed_data: jsonToAttach } : {}),
+          ...(skipGenAiProcessing && jsonToAttach == null ? { skip_gen_ai_processing: true } : {}),
         })
 
         setPhase('done')
@@ -172,7 +176,7 @@ export default function TaxDocumentUploadModal({
         toast.error('Upload failed: ' + message)
       }
     },
-    [formType, taxYear, accountId, employmentEntityId, onSuccess, attachedJson],
+    [formType, taxYear, accountId, employmentEntityId, onSuccess, attachedJson, skipGenAiProcessing],
   )
 
   const handleFileSelected = useCallback(
@@ -325,6 +329,22 @@ export default function TaxDocumentUploadModal({
               className="hidden"
               onChange={handleFileSelected}
             />
+
+            {attachedJson == null && !isUploading && (
+              <label className="flex items-start gap-3 rounded-md border bg-muted/20 p-3 text-sm">
+                <Checkbox
+                  checked={skipGenAiProcessing}
+                  onCheckedChange={checked => setSkipGenAiProcessing(checked === true)}
+                  aria-label="Skip GenAI processing"
+                />
+                <span className="grid gap-1">
+                  <span className="font-medium">Upload only, skip GenAI processing</span>
+                  <span className="text-xs text-muted-foreground">
+                    Saves the document without queueing AI extraction. You can attach JSON or fill it in later.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {/* Attached JSON indicator */}
             {attachedJson != null && !isUploading && (
