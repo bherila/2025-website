@@ -512,6 +512,77 @@ class UserAiConfigurationTest extends TestCase
         });
     }
 
+    public function test_resolved_anthropic_client_uses_configured_max_tokens(): void
+    {
+        config(['genai.providers.anthropic.max_tokens' => 32768]);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), '/v1/messages')) {
+                return Http::response([
+                    'content' => [['type' => 'text', 'text' => 'ok']],
+                    'stop_reason' => 'end_turn',
+                    'usage' => ['input_tokens' => 1, 'output_tokens' => 1],
+                ], 200);
+            }
+
+            return Http::response([], 404);
+        });
+
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->anthropic()->for($user)->create();
+
+        $client = $user->resolvedAiClient();
+
+        $this->assertNotNull($client);
+        $this->assertSame('anthropic', $client->provider());
+
+        $client->converse('', [[
+            'role' => 'user',
+            'content' => [ContentBlock::text('Return ONLY TOON')],
+        ]]);
+
+        Http::assertSent(function (Request $request) {
+            $data = $request->data();
+
+            return str_contains($request->url(), '/v1/messages')
+                && ($data['max_tokens'] ?? null) === 32768;
+        });
+    }
+
+    public function test_resolved_anthropic_client_defaults_to_64k_max_tokens(): void
+    {
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), '/v1/messages')) {
+                return Http::response([
+                    'content' => [['type' => 'text', 'text' => 'ok']],
+                    'stop_reason' => 'end_turn',
+                    'usage' => ['input_tokens' => 1, 'output_tokens' => 1],
+                ], 200);
+            }
+
+            return Http::response([], 404);
+        });
+
+        $user = User::factory()->create(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->anthropic()->for($user)->create();
+
+        $client = $user->resolvedAiClient();
+
+        $this->assertNotNull($client);
+
+        $client->converse('', [[
+            'role' => 'user',
+            'content' => [ContentBlock::text('Return ONLY TOON')],
+        ]]);
+
+        Http::assertSent(function (Request $request) {
+            $data = $request->data();
+
+            return str_contains($request->url(), '/v1/messages')
+                && ($data['max_tokens'] ?? null) === 64000;
+        });
+    }
+
     public function test_resolved_ai_client_returns_null_for_expired_active_config(): void
     {
         $user = User::factory()->create(['gemini_api_key' => null]);
