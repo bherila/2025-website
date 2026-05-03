@@ -18,7 +18,7 @@ class AdminTaxNormalizationController extends Controller
      * Supports filtering by:
      *   - form_type (comma-separated)
      *   - year
-     *   - warning_code (matches any warning in the warnings array)
+     *   - warning_code (matches any warning in the warnings array by code field)
      *   - type: "document" | "link" | "all" (default: all)
      *
      * GET /api/admin/tax-normalization-review
@@ -57,11 +57,15 @@ class AdminTaxNormalizationController extends Controller
                 $docQuery->where('tax_year', $year);
             }
 
-            if ($warningCode !== null) {
-                $docQuery->whereJsonContains('parsed_data_warnings', [['code' => $warningCode]]);
-            }
-
             foreach ($docQuery->get() as $doc) {
+                $warnings = $doc->parsed_data_warnings ?? [];
+
+                // Apply warning_code filter in PHP to correctly match any warning object
+                // with the given code, regardless of its position or additional fields.
+                if ($warningCode !== null && ! $this->hasWarningCode($warnings, $warningCode)) {
+                    continue;
+                }
+
                 /** @var FinAccounts|null $account */
                 $account = $doc->account;
                 /** @var FinEmploymentEntity|null $entity */
@@ -77,7 +81,7 @@ class AdminTaxNormalizationController extends Controller
                     'account_id' => $doc->account_id,
                     'account_name' => $account?->acct_name,
                     'employment_entity_name' => $entity?->display_name,
-                    'warnings' => $doc->parsed_data_warnings ?? [],
+                    'warnings' => $warnings,
                     'is_reviewed' => (bool) $doc->is_reviewed,
                     'parsed_data_needs_review' => true,
                     'review_url' => "/finance/tax-documents/{$doc->id}/review",
@@ -104,11 +108,15 @@ class AdminTaxNormalizationController extends Controller
                 $linkQuery->where('tax_year', $year);
             }
 
-            if ($warningCode !== null) {
-                $linkQuery->whereJsonContains('parsed_data_warnings', [['code' => $warningCode]]);
-            }
-
             foreach ($linkQuery->get() as $link) {
+                $warnings = $link->parsed_data_warnings ?? [];
+
+                // Apply warning_code filter in PHP to correctly match any warning object
+                // with the given code, regardless of its position or additional fields.
+                if ($warningCode !== null && ! $this->hasWarningCode($warnings, $warningCode)) {
+                    continue;
+                }
+
                 /** @var FileForTaxDocument|null $parentDoc */
                 $parentDoc = $link->document;
                 /** @var FinAccounts|null $account */
@@ -126,7 +134,7 @@ class AdminTaxNormalizationController extends Controller
                     'ai_identifier' => $link->ai_identifier,
                     'ai_account_name' => $link->ai_account_name,
                     'employment_entity_name' => null,
-                    'warnings' => $link->parsed_data_warnings ?? [],
+                    'warnings' => $warnings,
                     'is_reviewed' => (bool) $link->is_reviewed,
                     'parsed_data_needs_review' => true,
                     'review_url' => "/finance/tax-documents/{$link->tax_document_id}/review",
@@ -192,5 +200,21 @@ class AdminTaxNormalizationController extends Controller
         ])->saveQuietly();
 
         return response()->json(['success' => true, 'item_type' => 'link', 'id' => $link->id]);
+    }
+
+    /**
+     * Check whether any warning in the array has the given code.
+     *
+     * @param  array<int, array<string, mixed>>  $warnings
+     */
+    private function hasWarningCode(array $warnings, string $code): bool
+    {
+        foreach ($warnings as $warning) {
+            if (($warning['code'] ?? null) === $code) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
