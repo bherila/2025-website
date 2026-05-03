@@ -1,6 +1,5 @@
 'use client'
 import AccountMaintenanceClient from '@/components/finance/AccountMaintenanceClient'
-import AccountTaxDocumentsSection from '@/components/finance/AccountTaxDocumentsSection'
 import { DeleteAccountSection } from '@/components/finance/DeleteAccountSection'
 import { EditAccountFlags } from '@/components/finance/EditAccountFlags'
 import MainTitle from '@/components/MainTitle'
@@ -22,17 +21,17 @@ export default function FinanceAccountMaintenancePage({
   acctNumber: string | null
 }) {
   return (
-    <div className="container mx-auto px-4 py-8 w-500">
+    <div className="container mx-auto max-w-6xl px-4 py-8">
       <MainTitle>Account Maintenance</MainTitle>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-        <div className="lg:col-span-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] lg:items-start">
+        <div>
           <AccountMaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} />
         </div>
         <div>
           <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} acctNumber={acctNumber} />
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         <div>
           <Card className="shadow-sm">
             <CardHeader>
@@ -43,13 +42,9 @@ export default function FinanceAccountMaintenancePage({
             </CardContent>
           </Card>
         </div>
-        <div className="border-t lg:border-t-0 lg:border-l lg:pl-8 pt-8 lg:pt-0">
-          <h2 className="text-2xl font-bold mb-4">Danger Zone</h2>
+        <div>
           <DeleteAccountSection accountId={accountId} />
         </div>
-      </div>
-      <div className="mt-8">
-        <AccountTaxDocumentsSection accountId={accountId} />
       </div>
     </div>
   )
