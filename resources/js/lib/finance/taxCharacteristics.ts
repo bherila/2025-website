@@ -63,6 +63,8 @@ export const TAX_CHARACTERISTICS: Record<string, TaxCharacteristicMeta> = {
   ordinary_dividend: { label: 'Ordinary Dividend', category: 'other', entityTypes: [] },
   qualified_dividend: { label: 'Qualified Dividend', category: 'other', entityTypes: [] },
   other_ordinary_income: { label: 'Other Ordinary Income', category: 'other', entityTypes: [] },
+  fee_irc67g: { label: 'Investment Management Fee (Personal)', category: 'other', entityTypes: [] },
+  fee_schE: { label: 'Investment Management Fee (Sch E)', category: 'other', entityTypes: [] },
   // W-2 income items
   w2_wages: { label: 'W-2 Wages / Salary', category: 'w2_income', entityTypes: ['w2'] },
   w2_other_comp: { label: 'W-2 Other Compensation', category: 'w2_income', entityTypes: ['w2'] },
