@@ -5,6 +5,8 @@ import currency from 'currency.js'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { parseK1Field } from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
+import { extractLinkParsedData, getDocAmounts, normalize1099ParsedData } from '@/lib/finance/taxDocumentUtils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { ScheduleBLines, ScheduleBSourceLine } from '@/types/finance/tax-return'
 
@@ -57,24 +59,59 @@ export function computeScheduleB(
   }
 
   for (const doc of reviewed1099Docs) {
-    const p = doc.parsed_data as Record<string, unknown>
+    const links = doc.account_links ?? []
+    if (doc.form_type === 'broker_1099' && links.length > 0) {
+      for (const link of links) {
+        if (!link.is_reviewed || (link.form_type !== '1099_int' && link.form_type !== '1099_int_c' && link.form_type !== '1099_div' && link.form_type !== '1099_div_c')) {
+          continue
+        }
+
+        const p = normalize1099ParsedData(link.form_type, extractLinkParsedData(doc, link) ?? {})
+        const payer = (p.payer_name as string | undefined)
+          ?? link.account?.acct_name
+          ?? link.ai_account_name
+          ?? '1099 Payer'
+        const amounts = getDocAmounts(doc, link)
+
+        if (link.form_type === '1099_int' || link.form_type === '1099_int_c') {
+          if (amounts.interest != null && amounts.interest !== 0) {
+            interestLines.push({ label: `${payer} — 1099-INT Box 1`, amount: amounts.interest, docId: doc.id })
+          }
+        } else {
+          if (amounts.dividend != null && amounts.dividend !== 0) {
+            dividendLines.push({ label: `${payer} — 1099-DIV Box 1a`, amount: amounts.dividend, docId: doc.id })
+          }
+          const qualified = parseMoney(p.box1b_qualified)
+          if (qualified !== null && qualified !== 0) {
+            qualDividendLines.push({ label: `${payer} — 1099-DIV Box 1b`, amount: qualified, docId: doc.id })
+          }
+        }
+      }
+
+      continue
+    }
+
+    if (!doc.is_reviewed) {
+      continue
+    }
+
+    const p = normalize1099ParsedData(doc.form_type, doc.parsed_data as Record<string, unknown>)
     const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? '1099 Payer'
+    const amounts = getDocAmounts(doc)
 
     if (doc.form_type === '1099_int' || doc.form_type === '1099_int_c') {
-      const box1 = p?.box1_interest as number | undefined
-      if (box1 != null && box1 !== 0) {
-        interestLines.push({ label: `${payer} — 1099-INT Box 1`, amount: box1, docId: doc.id })
+      if (amounts.interest != null && amounts.interest !== 0) {
+        interestLines.push({ label: `${payer} — 1099-INT Box 1`, amount: amounts.interest, docId: doc.id })
       }
     }
 
     if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
-      const box1a = (p?.box1a_ordinary ?? p?.box1_ordinary) as number | undefined
-      if (box1a != null && box1a !== 0) {
-        dividendLines.push({ label: `${payer} — 1099-DIV Box 1a`, amount: box1a, docId: doc.id })
+      if (amounts.dividend != null && amounts.dividend !== 0) {
+        dividendLines.push({ label: `${payer} — 1099-DIV Box 1a`, amount: amounts.dividend, docId: doc.id })
       }
-      const box1b = (p?.box1b_qualified ?? p?.box1b) as number | undefined
-      if (box1b != null && box1b !== 0) {
-        qualDividendLines.push({ label: `${payer} — 1099-DIV Box 1b`, amount: box1b, docId: doc.id })
+      const qualified = parseMoney(p.box1b_qualified)
+      if (qualified !== null && qualified !== 0) {
+        qualDividendLines.push({ label: `${payer} — 1099-DIV Box 1b`, amount: qualified, docId: doc.id })
       }
     }
   }

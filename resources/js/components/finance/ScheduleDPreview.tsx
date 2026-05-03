@@ -6,7 +6,7 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
-import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
+import { getDocAmounts, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -77,21 +77,31 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     }
   }
 
-  const brokerSources = reviewed1099Docs
-    .filter((d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c')
-    .map((doc) => {
-      const p = (doc.parsed_data ?? {}) as Record<string, unknown>
-      const gains = readScheduleDBrokerGains(p)
-      if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
-        return {
-          stGain: gains.shortTermGain,
-          ltGain: gains.longTermGain,
-          lineAmounts: gains.lineAmounts,
+  const brokerSources = reviewed1099Docs.flatMap((doc) => {
+    const records: Record<string, unknown>[] = []
+    if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
+      for (const [entry] of iterateReviewedBrokerEntries(doc)) {
+        if (entry.form_type === '1099_b' || entry.form_type === '1099_b_c') {
+          records.push(entry.parsed_data ?? {})
         }
       }
-      return null
+    } else if (doc.form_type === 'broker_1099' || doc.form_type === '1099_b' || doc.form_type === '1099_b_c') {
+      records.push((doc.parsed_data ?? {}) as Record<string, unknown>)
+    }
+
+    return records.flatMap((p) => {
+      const gains = readScheduleDBrokerGains(p)
+      if (gains.shortTermGain === 0 && gains.longTermGain === 0 && gains.totalGain === 0) {
+        return []
+      }
+
+      return [{
+        stGain: gains.shortTermGain,
+        ltGain: gains.longTermGain,
+        lineAmounts: gains.lineAmounts,
+      }]
     })
-    .filter((source): source is NonNullable<typeof source> => source !== null)
+  })
 
   const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
     brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
@@ -211,19 +221,42 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   )
 
   for (const doc of brokerDocs) {
-    const p = (doc.parsed_data ?? {}) as Record<string, unknown>
-    const payer = (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage'
+    const records: { data: Record<string, unknown>; label: string }[] = []
 
-    // Our manually-imported broker_1099 format (fields set by finance:tax-import / tinker)
-    const gains = readScheduleDBrokerGains(p)
+    if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
+      for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
+        if (entry.form_type !== '1099_b' && entry.form_type !== '1099_b_c') {
+          continue
+        }
 
-    if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
-      brokerSources.push({
-        label: payer,
-        stGain: gains.shortTermGain,
-        ltGain: gains.longTermGain,
-        lineAmounts: gains.lineAmounts,
+        records.push({
+          data: entry.parsed_data ?? {},
+          label: link.account?.acct_name
+            ?? entry.account_name
+            ?? (entry.parsed_data?.payer_name as string | undefined)
+            ?? doc.original_filename
+            ?? 'Brokerage',
+        })
+      }
+    } else {
+      const p = (doc.parsed_data ?? {}) as Record<string, unknown>
+      records.push({
+        data: p,
+        label: (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage',
       })
+    }
+
+    for (const record of records) {
+      const gains = readScheduleDBrokerGains(record.data)
+
+      if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
+        brokerSources.push({
+          label: record.label,
+          stGain: gains.shortTermGain,
+          ltGain: gains.longTermGain,
+          lineAmounts: gains.lineAmounts,
+        })
+      }
     }
   }
 

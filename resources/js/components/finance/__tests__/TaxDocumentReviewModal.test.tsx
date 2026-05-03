@@ -228,6 +228,72 @@ const BROKER_1099_LINK = {
   updated_at: '2026-01-01T00:00:00Z',
 } as const
 
+const WEALTHFRONT_1099_DIV = {
+  id: 4,
+  user_id: 1,
+  tax_year: 2024,
+  form_type: 'broker_1099',
+  employment_entity_id: null,
+  account_id: null,
+  original_filename: 'wealthfront.pdf',
+  stored_filename: null,
+  s3_path: null,
+  mime_type: 'application/pdf',
+  file_size_bytes: 1000,
+  file_hash: 'wealthfront',
+  is_reviewed: false,
+  notes: null,
+  human_file_size: '1 KB',
+  download_count: 0,
+  genai_job_id: null,
+  genai_status: 'parsed',
+  parsed_data: [{
+    account_identifier: '8W14FLFF',
+    account_name: 'Wealthfront Brokerage LLC',
+    form_type: '1099_div',
+    tax_year: 2024,
+    parsed_data: {
+      payer_tin: '27-1967207',
+      recipient_tin: 'XXX-XX-9913',
+      boxes: {
+        '1a_total_ordinary_dividends': 1816.11,
+        '1b_qualified_dividends': 1732.51,
+        '2a_total_capital_gain_distributions': 8.15,
+        '7_foreign_tax_paid': 10.45,
+        '8_foreign_country_or_us_possession': 'See detail',
+      },
+      detail_totals: {
+        total_dividends_and_distributions: 1834.58,
+      },
+      foreign_income_and_taxes_summary: {
+        total_foreign_source_income: 42.56,
+      },
+    },
+  }],
+  uploader: null,
+  employment_entity: null,
+  account: null,
+  account_links: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
+const WEALTHFRONT_1099_DIV_LINK = {
+  id: 44,
+  tax_document_id: 4,
+  account_id: 10,
+  form_type: '1099_div',
+  tax_year: 2024,
+  ai_identifier: '8W14FLFF',
+  ai_account_name: 'Wealthfront Brokerage LLC',
+  is_reviewed: false,
+  notes: null,
+  misc_routing: null,
+  account: { acct_id: 10, acct_name: 'Wealthfront S&P500 FLFF' },
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     open: true,
@@ -307,5 +373,21 @@ describe('TaxDocumentReviewModal — 1099-B exports', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /txf/i })).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /olt xlsx/i })).toBeInTheDocument()
+  })
+})
+
+describe('TaxDocumentReviewModal — nested broker 1099 review data', () => {
+  it('renders nested 1099-DIV boxes and supporting totals in the review panel', async () => {
+    render(<TaxDocumentReviewModal {...(baseProps({
+      document: WEALTHFRONT_1099_DIV,
+      accountLink: WEALTHFRONT_1099_DIV_LINK,
+    }) as any)} />)
+
+    expect(await screen.findByText('Total ordinary dividends')).toBeInTheDocument()
+    expect(screen.getByText('$1,816')).toBeInTheDocument()
+    expect(screen.getByText('Qualified dividends')).toBeInTheDocument()
+    expect(screen.getByText('See detail')).toBeInTheDocument()
+    expect(screen.getByText('Detail Totals')).toBeInTheDocument()
+    expect(screen.getByText('Foreign Income and Taxes')).toBeInTheDocument()
   })
 })

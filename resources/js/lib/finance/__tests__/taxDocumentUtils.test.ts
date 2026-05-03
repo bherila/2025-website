@@ -1,6 +1,6 @@
 import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 
-import { getDocAmounts, getPayerName } from '../taxDocumentUtils'
+import { getDocAmounts, getPayerName, normalize1099ParsedData } from '../taxDocumentUtils'
 
 function makeDoc(overrides: Partial<TaxDocument> = {}): TaxDocument {
   return {
@@ -104,6 +104,21 @@ describe('getDocAmounts', () => {
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: 800, capGain: null, schC: null, other: null, foreignTax: 12 })
   })
 
+  it('extracts nested 1099-DIV boxes from Wealthfront-style parsed data', () => {
+    const doc = makeDoc({
+      form_type: '1099_div',
+      parsed_data: {
+        boxes: {
+          '1a_total_ordinary_dividends': 1816.11,
+          '2a_total_capital_gain_distributions': 8.15,
+          '7_foreign_tax_paid': 10.45,
+        },
+      } as never,
+    })
+
+    expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: 1816.11, capGain: 8.15, schC: null, other: null, foreignTax: 10.45 })
+  })
+
   it('uses shared foreign-tax summaries when provided', () => {
     const doc = makeDoc({ form_type: '1099_div', parsed_data: { box1a_ordinary: 800, box7_foreign_tax: 12 } as never })
     expect(getDocAmounts(doc, undefined, [{
@@ -117,6 +132,20 @@ describe('getDocAmounts', () => {
   it('extracts 1099-MISC income into the "other" column', () => {
     const doc = makeDoc({ form_type: '1099_misc', parsed_data: { box3_other_income: 400 } as never })
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 400, foreignTax: null })
+  })
+
+  it('normalizes nested 1099-INT boxes into Tax Preview field names', () => {
+    expect(normalize1099ParsedData('1099_int', {
+      boxes: {
+        '1_interest_income': 42,
+        '9_specified_private_activity_bond_interest_amt': 7,
+        '13_bond_premium_on_tax_exempt_bonds': 3,
+      },
+    })).toEqual(expect.objectContaining({
+      box1_interest: 42,
+      box9_private_activity: 7,
+      box13_tax_exempt_premium: 3,
+    }))
   })
 
   it('ignores zero values (treated as "no data")', () => {

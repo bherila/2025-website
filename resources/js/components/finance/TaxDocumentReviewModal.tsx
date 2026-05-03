@@ -2,12 +2,14 @@
 
 import currency from 'currency.js'
 import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode,useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { computeForm8949, type Form8949Box, type Form8949Lot } from '@/components/finance/Form8949Preview'
 import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
 import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
+import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,7 +37,8 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { getSbpElection } from '@/lib/finance/k1Utils'
-import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import { parseMoney } from '@/lib/finance/money'
+import { extractLinkParsedData, normalize1099ParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
 import type { MiscRouting, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -168,6 +171,13 @@ interface FormFieldDef {
   frequency: 'common' | 'sometimes' | 'rarely'
 }
 
+interface ReviewLineDef {
+  key: string
+  label: string
+  box?: string
+  kind?: 'money' | 'raw'
+}
+
 const F1099_INT_FIELDS: FormFieldDef[] = [
   { key: 'box1_interest', label: 'Interest income', box: '1', frequency: 'common' },
   { key: 'box2_early_withdrawal', label: 'Early withdrawal penalty', box: '2', frequency: 'sometimes' },
@@ -203,6 +213,262 @@ const F1099_DIV_FIELDS: FormFieldDef[] = [
   { key: 'box12_private_activity', label: 'Specified private activity bond interest dividends', box: '12', frequency: 'rarely' },
   { key: 'box14_state_tax', label: 'Exempt-interest dividends from regulated investment company', box: '14', frequency: 'sometimes' },
 ]
+
+const F1099_MISC_FIELDS: ReviewLineDef[] = [
+  { key: 'box1_rents', label: 'Rents', box: '1' },
+  { key: 'box2_royalties', label: 'Royalties', box: '2' },
+  { key: 'box3_other_income', label: 'Other income', box: '3' },
+  { key: 'box4_fed_tax', label: 'Federal income tax withheld', box: '4' },
+  { key: 'box5_fishing_boat', label: 'Fishing boat proceeds', box: '5' },
+  { key: 'box6_medical', label: 'Medical and health care payments', box: '6' },
+  { key: 'box7_direct_sales_indicator', label: 'Direct sales indicator', box: '7', kind: 'raw' },
+  { key: 'box8_substitute_payments', label: 'Substitute payments in lieu of dividends or interest', box: '8' },
+  { key: 'box9_crop_insurance', label: 'Crop insurance proceeds', box: '9' },
+  { key: 'box10_gross_proceeds_attorney', label: 'Gross proceeds paid to an attorney', box: '10' },
+  { key: 'box14_excess_golden_parachute', label: 'Excess golden parachute payments', box: '14' },
+  { key: 'box15_nonqualified_deferred', label: 'Nonqualified deferred compensation', box: '15' },
+  { key: 'box16_state_tax', label: 'State tax withheld', box: '16' },
+]
+
+function reviewDefsForForm(formType: string | undefined): ReviewLineDef[] {
+  if (formType === '1099_int' || formType === '1099_int_c') {
+    return F1099_INT_FIELDS.map((field) => ({ key: field.key, label: field.label, box: field.box }))
+  }
+
+  if (formType === '1099_div' || formType === '1099_div_c') {
+    return F1099_DIV_FIELDS.map((field) => ({ key: field.key, label: field.label, box: field.box }))
+  }
+
+  if (formType === '1099_misc') {
+    return F1099_MISC_FIELDS
+  }
+
+  return []
+}
+
+function isReviewable1099(formType: string | undefined): boolean {
+  return formType === '1099_int'
+    || formType === '1099_int_c'
+    || formType === '1099_div'
+    || formType === '1099_div_c'
+    || formType === '1099_misc'
+    || formType === '1099_b'
+    || formType === '1099_b_c'
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasDisplayValue(data: Record<string, unknown>, key: string): boolean {
+  const value = data[key]
+  return value !== undefined && value !== null && value !== ''
+}
+
+function moneyValue(value: unknown): number | null {
+  return parseMoney(value)
+}
+
+function payerDisplayName(data: Record<string, unknown>, fallback: string): string {
+  const payerName = data.payer_name
+  return typeof payerName === 'string' && payerName.trim() !== '' ? payerName : fallback
+}
+
+function form8949Box(value: unknown): Form8949Box | null {
+  if (value === 'A' || value === 'B' || value === 'C' || value === 'D' || value === 'E' || value === 'F') {
+    return value
+  }
+
+  return null
+}
+
+function renderReviewLine(data: Record<string, unknown>, field: ReviewLineDef): ReactNode {
+  const value = data[field.key]
+  const boxRef = field.box
+  if (field.kind === 'raw' || typeof value === 'string' || typeof value === 'boolean') {
+    return (
+      <FormLine
+        key={field.key}
+        {...(boxRef ? { boxRef } : {})}
+        label={field.label}
+        raw={value === null || value === undefined || value === '' ? '—' : String(value)}
+      />
+    )
+  }
+
+  return <FormLine key={field.key} {...(boxRef ? { boxRef } : {})} label={field.label} value={(value ?? null) as string | number | null} />
+}
+
+function objectReviewBlock(title: string, value: unknown): ReactNode {
+  if (!isPlainRecord(value)) {
+    return null
+  }
+
+  const rows = Object.entries(value).filter(([, rowValue]) => rowValue !== null && rowValue !== undefined && rowValue !== '')
+  if (rows.length === 0) {
+    return null
+  }
+
+  return (
+    <FormBlock title={title}>
+      {rows.map(([key, rowValue]) => {
+        const label = key.replace(/_/g, ' ')
+        if (typeof rowValue === 'number') {
+          return <FormLine key={key} label={label} value={rowValue} />
+        }
+
+        return <FormLine key={key} label={label} raw={String(rowValue)} />
+      })}
+    </FormBlock>
+  )
+}
+
+function transactionsToLots(transactions: unknown): Form8949Lot[] {
+  if (!Array.isArray(transactions)) {
+    return []
+  }
+
+  return transactions.flatMap((transaction) => {
+    if (!isPlainRecord(transaction)) {
+      return []
+    }
+
+    const isShortTerm = typeof transaction.is_short_term === 'boolean'
+      ? transaction.is_short_term
+      : transaction.is_short_term === 1 || transaction.is_short_term === '1' || transaction.is_short_term === 'true'
+
+    return [{
+      symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
+      description: typeof transaction.description === 'string' ? transaction.description : null,
+      quantity: transaction.quantity as number | string | null,
+      purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
+      sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
+      proceeds: transaction.proceeds as number | string | null,
+      cost_basis: transaction.cost_basis as number | string | null,
+      realized_gain_loss: transaction.realized_gain_loss as number | string | null,
+      is_short_term: isShortTerm,
+      form_8949_box: form8949Box(transaction.form_8949_box),
+      is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
+      accrued_market_discount: transaction.accrued_market_discount as number | string | null,
+      wash_sale_disallowed: transaction.wash_sale_disallowed as number | string | null,
+    }]
+  })
+}
+
+function Form8949MiniSection({
+  title,
+  lots,
+}: {
+  title: string
+  lots: Form8949Lot[]
+}) {
+  const data = computeForm8949(lots)
+  const sections = title.includes('Short') ? data.shortTerm : data.longTerm
+  const totals = title.includes('Short') ? data.partITotals : data.partIITotals
+
+  if (sections.length === 0) {
+    return null
+  }
+
+  return (
+    <FormBlock title={title}>
+      {sections.map((section) => (
+        <div key={section.box} className="divide-y divide-dashed divide-border/40">
+          <div className="bg-muted/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {section.label} · {section.rows.length} transaction{section.rows.length === 1 ? '' : 's'}
+          </div>
+          {section.rows.slice(0, 8).map((row, index) => (
+            <div key={`${section.box}-${index}`}>
+              <FormLine
+                label={`${row.description} · acquired ${row.dateAcquired} · sold ${row.dateSold}`}
+                value={row.gain}
+              />
+              <FormSubLine text={`Proceeds ${fmtAmt(row.proceeds)} · Basis ${fmtAmt(row.basis)}${row.code ? ` · Code ${row.code}` : ''}`} />
+            </div>
+          ))}
+          {section.rows.length > 8 && (
+            <FormLine label={`${section.rows.length - 8} more transactions`} raw="Shown in full on Form 8949" />
+          )}
+          <FormTotalLine
+            label={`Totals (${section.box}) — Proceeds ${fmtAmt(section.totals.proceeds)} · Basis ${fmtAmt(section.totals.basis)} · Net`}
+            value={section.totals.gain}
+          />
+        </div>
+      ))}
+      <FormTotalLine
+        label={`Part total — Proceeds ${fmtAmt(totals.proceeds)} · Basis ${fmtAmt(totals.basis)} · Net`}
+        value={totals.gain}
+      />
+    </FormBlock>
+  )
+}
+
+function Standard1099ReviewPanel({
+  formType,
+  data,
+  payerFallback,
+}: {
+  formType: string | undefined
+  data: Record<string, unknown>
+  payerFallback: string
+}) {
+  const normalized = normalize1099ParsedData(formType, data)
+  const payer = payerDisplayName(normalized, payerFallback)
+
+  if (formType === '1099_b' || formType === '1099_b_c') {
+    const lots = transactionsToLots(normalized.transactions)
+    const gains = computeForm8949(lots)
+    const hasLots = lots.length > 0
+
+    return (
+      <div className="space-y-4">
+        <FormBlock title={`${payer} — 1099-B Summary`}>
+          <FormLine label="Total proceeds" value={(normalized.total_proceeds ?? null) as string | number | null} />
+          <FormLine label="Total cost or other basis" value={(normalized.total_cost_basis ?? null) as string | number | null} />
+          <FormLine label="Wash sale loss disallowed" value={(normalized.total_wash_sale_disallowed ?? null) as string | number | null} />
+          <FormTotalLine label="Total realized gain / (loss)" value={moneyValue(normalized.total_realized_gain_loss)} />
+          {hasLots && (
+            <>
+              <FormLine label="Form 8949 short-term net" value={gains.partITotals.gain} />
+              <FormLine label="Form 8949 long-term net" value={gains.partIITotals.gain} />
+            </>
+          )}
+        </FormBlock>
+        {hasLots ? (
+          <>
+            <Form8949MiniSection title="Form 8949 Part I — Short-Term" lots={lots} />
+            <Form8949MiniSection title="Form 8949 Part II — Long-Term" lots={lots} />
+          </>
+        ) : (
+          <FormBlock title="Form 8949 Detail">
+            <FormLine label="No transactions extracted" raw="—" />
+          </FormBlock>
+        )}
+        {objectReviewBlock('Extraction Notes', normalized.extraction_notes)}
+      </div>
+    )
+  }
+
+  const fields = reviewDefsForForm(formType)
+  const visibleFields = fields.filter((field) => hasDisplayValue(normalized, field.key))
+  const title = formType === '1099_int' || formType === '1099_int_c'
+    ? `${payer} — Schedule B Interest`
+    : formType === '1099_div' || formType === '1099_div_c'
+      ? `${payer} — Schedule B Dividends`
+      : `${payer} — 1099-MISC Routing`
+
+  return (
+    <div className="space-y-4">
+      <FormBlock title={title}>
+        {visibleFields.length > 0
+          ? visibleFields.map((field) => renderReviewLine(normalized, field))
+          : <FormLine label="No recognized IRS boxes extracted" raw="—" />}
+      </FormBlock>
+      {objectReviewBlock('Detail Totals', normalized.detail_totals)}
+      {objectReviewBlock('Foreign Income and Taxes', normalized.foreign_income_and_taxes_summary)}
+    </div>
+  )
+}
 
 /** Returns the list of addable fields for the given form type, excluding fields already in data. */
 function getAddableFields(formType: string | undefined, data: Record<string, unknown>): FormFieldDef[] {
@@ -839,7 +1105,7 @@ export default function TaxDocumentReviewModal({
                         <div className="text-[10px] text-muted-foreground/60 italic">Mistakes? Correct them below</div>
                       )}
                     </div>
-                    <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10">
+                    <div className="bg-muted/40 rounded-lg p-3 border border-muted-foreground/10 space-y-4">
                       {effectiveFormType === 'k1' && isFK1StructuredData(editData) ? (
                         <K1ReviewPanel
                           data={editData}
@@ -853,12 +1119,25 @@ export default function TaxDocumentReviewModal({
                           readOnly={effectiveReviewed}
                         />
                       ) : (
-                        <ParsedDataEditor
-                          data={editData as Record<string, unknown>}
-                          onChange={(d) => setEditData(d)}
-                          readOnly={effectiveReviewed}
-                          formType={effectiveFormType}
-                        />
+                        <>
+                          {isReviewable1099(effectiveFormType) && (
+                            <Standard1099ReviewPanel
+                              formType={effectiveFormType}
+                              data={editData as Record<string, unknown>}
+                              payerFallback={isLinkReview && propAccountLink
+                                ? propAccountLink.account?.acct_name ?? propAccountLink.ai_account_name ?? '1099 Payer'
+                                : activeDoc.account?.acct_name ?? activeDoc.employment_entity?.display_name ?? '1099 Payer'}
+                            />
+                          )}
+                          <ParsedDataEditor
+                            data={isReviewable1099(effectiveFormType)
+                              ? normalize1099ParsedData(effectiveFormType, editData as Record<string, unknown>)
+                              : editData as Record<string, unknown>}
+                            onChange={(d) => setEditData(d)}
+                            readOnly={effectiveReviewed}
+                            formType={effectiveFormType}
+                          />
+                        </>
                       )}
                     </div>
                   </div>
