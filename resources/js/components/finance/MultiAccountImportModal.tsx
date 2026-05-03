@@ -112,6 +112,12 @@ function hasDetectedForm(data: Record<string, unknown>, keys: string[], prefixes
   return Object.keys(data).some(key => keys.includes(key) || prefixes.some(prefix => key.startsWith(prefix)))
 }
 
+function coerceTaxYear(value: unknown): number {
+  const year = typeof value === 'number' ? value : Number(value)
+
+  return Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : 0
+}
+
 function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLink[] {
   if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
     return doc.parsed_data
@@ -120,7 +126,7 @@ function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLi
         id: -(index + 1),
         account_id: null,
         form_type: typeof entry.form_type === 'string' ? entry.form_type : '1099_b',
-        tax_year: typeof entry.tax_year === 'number' ? entry.tax_year : 0,
+        tax_year: coerceTaxYear(entry.tax_year),
         ai_identifier: typeof entry.account_identifier === 'string' ? entry.account_identifier : null,
         ai_account_name: typeof entry.account_name === 'string' ? entry.account_name : null,
         account: null,
@@ -141,7 +147,7 @@ function synthesizeLegacyBrokerLinks(doc: ExistingTaxDocumentResponse): ParsedLi
       id: -(index + 1),
       account_id: null,
       form_type: detector.formType,
-      tax_year: typeof data.tax_year === 'number' ? data.tax_year : 0,
+      tax_year: coerceTaxYear(data.tax_year),
       ai_identifier: aiIdentifier,
       ai_account_name: aiAccountName,
       account: null,

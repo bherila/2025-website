@@ -124,7 +124,7 @@ class TaxDocumentCreationService
         unset($docAttributes['skip_gen_ai_processing']);
 
         $hasParsedData = isset($docAttributes['parsed_data']);
-        $docAttributes['genai_status'] = $hasParsedData ? 'parsed' : ($skipGenAiProcessing ? null : 'pending');
+        $docAttributes['genai_status'] = $hasParsedData ? 'parsed' : 'pending';
 
         $doc = DB::transaction(function () use ($docAttributes, $contextAccounts, $hasParsedData, $skipGenAiProcessing): FileForTaxDocument {
             $taxDoc = FileForTaxDocument::create($docAttributes);
