@@ -1,5 +1,6 @@
 
 import currency from 'currency.js'
+import { useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
@@ -12,6 +13,7 @@ import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
+import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import Schedule3Preview, { computeSchedule3 } from '@/components/finance/Schedule3Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
@@ -28,6 +30,8 @@ import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliation
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
+import type { fin_payslip } from '@/components/payslip/payslipDbCols'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import {
   buildEstimatedTaxSheet,
@@ -533,6 +537,156 @@ function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
   return <TaxEstimateFullDetail summary={summary} />
 }
 
+function W2IncomeSummaryAdapter({ state }: FormRenderProps): React.ReactElement {
+  return <W2IncomeSummary payslips={state.payslips} />
+}
+
+/**
+ * W-2 income summary table derived from payslip rows.
+ *
+ * Rows are clickable when they correspond to a computed value and open a data-source modal
+ * that shows the per-payslip contributions.
+ */
+function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }): React.ReactElement {
+  const [dataSourceRow, setDataSourceRow] = useState<{
+    label: string
+    getter: (p: fin_payslip) => currency
+  } | null>(null)
+
+  if (payslips.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-muted p-3 text-sm text-muted-foreground">
+        No W-2 payslip data for this year yet.
+      </div>
+    )
+  }
+
+  const sum = (fn: (row: fin_payslip) => currency) => payslips.reduce((acc, row) => acc.add(fn(row)), currency(0))
+  const wagesGetter = (r: fin_payslip) => currency(r.ps_salary ?? 0)
+  const bonusGetter = (r: fin_payslip) => currency(r.earnings_bonus ?? 0)
+  const rsuGetter = (r: fin_payslip) => currency(r.earnings_rsu ?? 0)
+  const vacationGetter = (r: fin_payslip) => currency(r.ps_vacation_payout ?? 0)
+  const imputedGetter = (r: fin_payslip) =>
+    currency(r.imp_ltd ?? 0)
+      .add(r.imp_legal ?? 0)
+      .add(r.imp_fitness ?? 0)
+      .add(r.imp_other ?? 0)
+  const pretaxDeductionsGetter = (r: fin_payslip) =>
+    currency(r.ps_401k_pretax ?? 0)
+      .add(r.ps_pretax_medical ?? 0)
+      .add(r.ps_pretax_dental ?? 0)
+      .add(r.ps_pretax_vision ?? 0)
+      .add(r.ps_pretax_fsa ?? 0)
+  const fedWHGetter = (r: fin_payslip) =>
+    currency(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0)
+  const stateWHGetter = (r: fin_payslip) =>
+    currency((r.state_data?.[0]?.state_tax as number) ?? 0).add((r.state_data?.[0]?.state_tax_addl as number) ?? 0)
+  const oasdiGetter = (r: fin_payslip) => currency(r.ps_oasdi ?? 0)
+  const medicareGetter = (r: fin_payslip) => currency(r.ps_medicare ?? 0)
+  const sdiGetter = (r: fin_payslip) => currency((r.state_data?.[0]?.state_disability as number) ?? 0)
+
+  const wages = sum(wagesGetter)
+  const bonus = sum(bonusGetter)
+  const rsu = sum(rsuGetter)
+  const vacationPayout = sum(vacationGetter)
+  const imputed = sum(imputedGetter)
+  const pretaxDeductions = sum(pretaxDeductionsGetter)
+  const gross = wages
+    .add(bonus)
+    .add(rsu)
+    .add(vacationPayout)
+    .add(imputed)
+    .subtract(pretaxDeductions)
+  const fedWH = sum(fedWHGetter)
+  const stateWH = sum(stateWHGetter)
+  const oasdi = sum(oasdiGetter)
+  const medicare = sum(medicareGetter)
+  const sdi = sum(sdiGetter)
+
+  const grossGetter = (r: fin_payslip) =>
+    wagesGetter(r).add(bonusGetter(r)).add(rsuGetter(r)).add(vacationGetter(r)).add(imputedGetter(r)).subtract(pretaxDeductionsGetter(r))
+
+  const rows = [
+    { label: 'Wages / Salary', value: wages, getter: wagesGetter },
+    bonus.value > 0 ? { label: 'Bonus', value: bonus, getter: bonusGetter } : null,
+    rsu.value > 0 ? { label: 'RSU Vesting', value: rsu, getter: rsuGetter } : null,
+    vacationPayout.value > 0 ? { label: 'Vacation Payout', value: vacationPayout, getter: vacationGetter } : null,
+    imputed.value > 0 ? { label: 'Imputed Income (benefits)', value: imputed, getter: imputedGetter } : null,
+    pretaxDeductions.value > 0
+      ? { label: 'Pre-tax Deductions (401k, benefits)', value: pretaxDeductions.multiply(-1), getter: (r: fin_payslip) => pretaxDeductionsGetter(r).multiply(-1) }
+      : null,
+    { label: 'Total Gross W-2 Income (Box 1)', value: gross, bold: true, getter: grossGetter },
+    { label: '', value: null, getter: null },
+    { label: 'Federal Income Tax Withheld', value: fedWH, getter: fedWHGetter },
+    { label: 'State Income Tax Withheld', value: stateWH, getter: stateWHGetter },
+    { label: 'OASDI / Social Security Tax', value: oasdi, getter: oasdiGetter },
+    { label: 'Medicare Tax', value: medicare, getter: medicareGetter },
+    sdi.value > 0 ? { label: 'State Disability Insurance (SDI)', value: sdi, getter: sdiGetter } : null,
+  ].filter(Boolean) as {
+    label: string
+    value: currency | null
+    bold?: boolean
+    getter: ((p: fin_payslip) => currency) | null
+  }[]
+
+  return (
+    <>
+      <div>
+        <h2 className="text-lg font-semibold mb-2">W-2 Income Summary</h2>
+        <div className="border rounded-md overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Line Item</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, i) =>
+                row.label === '' ? (
+                  <TableRow key={i} className="border-t-2">
+                    <TableCell colSpan={2} className="py-0 h-px bg-muted/30" />
+                  </TableRow>
+                ) : (
+                  <TableRow key={i} className={row.bold ? 'font-semibold bg-muted/30' : ''}>
+                    <TableCell className="text-sm">{row.label}</TableCell>
+                    <TableCell className="text-right text-sm font-mono">
+                      {row.value !== null && row.getter ? (
+                        <button
+                          type="button"
+                          className="underline decoration-dotted cursor-pointer hover:text-primary"
+                          onClick={() => setDataSourceRow({ label: row.label, getter: row.getter! })}
+                          title="View data sources"
+                        >
+                          {row.value.format()}
+                        </button>
+                      ) : row.value !== null ? (
+                        row.value.format()
+                      ) : (
+                        ''
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {dataSourceRow && (
+        <PayslipDataSourceModal
+          open
+          label={dataSourceRow.label}
+          payslips={payslips}
+          valueGetter={dataSourceRow.getter}
+          onClose={() => setDataSourceRow(null)}
+        />
+      )}
+    </>
+  )
+}
+
 function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <div className="space-y-6">
@@ -963,6 +1117,16 @@ export const formRegistry: FormRegistry = {
       order: 200,
       build: buildEstimatedTaxSheet,
     },
+  },
+  'w2-summary': {
+    id: 'w2-summary',
+    label: 'W-2 Income Summary',
+    shortLabel: 'W-2 Summary',
+    keywords: ['W-2', 'payroll', 'gross income', 'withholding', 'wages', 'taxes withheld'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: W2IncomeSummaryAdapter,
+    hasData: (state) => state.payslips.length > 0,
   },
   documents: {
     id: 'documents',

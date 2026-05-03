@@ -142,7 +142,7 @@
   --popover: 0 0% 9%;
   --popover-foreground: 0 0% 91%;
 
-  --table-border: 0 0% 20%;      /* #333333 */
+  --table-border: 0 0% 16%;      /* #2a2a2a - match border for muted card/table chrome */
 }
 
 /* ----------------------------- */

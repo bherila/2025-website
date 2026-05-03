@@ -72,8 +72,8 @@ const mockRegistry: FormRegistry = {
   },
   'tax-lot-reconciliation': {
     id: 'tax-lot-reconciliation',
-    label: '1099-B Reconciliation',
-    shortLabel: '1099-B',
+    label: '1099-B Lot Reconciliation',
+    shortLabel: '1099-B Reconcile',
     category: 'App',
     presentation: 'app',
     ...sharedDefaults,
@@ -191,6 +191,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'column',
     component: MockComponent,
   },
+  'w2-summary': {
+    id: 'w2-summary',
+    label: 'W-2 Income Summary',
+    shortLabel: 'W-2 Summary',
+    keywords: ['w2', 'summary'],
+    category: 'Worksheet',
+    presentation: 'modal',
+    component: MockComponent,
+  },
 }
 
 function stubColumn(id: string, label: string, shortLabel: string): FormRegistry[keyof FormRegistry] {
@@ -284,6 +293,18 @@ describe('CommandPalette', () => {
     )
     fireEvent.click(screen.getByText('Form 1040 — U.S. Individual Income Tax Return'))
     expect(window.location.hash).toBe('#/form-1040')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('selects the 1099-B reconciliation app from command palette', () => {
+    const onOpenChange = jest.fn()
+    render(
+      <Wrapper>
+        <CommandPalette open onOpenChange={onOpenChange} registry={mockRegistry} />
+      </Wrapper>,
+    )
+    fireEvent.click(screen.getByText('1099-B Lot Reconciliation'))
+    expect(window.location.hash).toBe('#/tax-lot-reconciliation')
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
