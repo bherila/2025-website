@@ -11,6 +11,10 @@ class FinAccountLot extends Model
 {
     use SerializesDatesAsLocal;
 
+    public const SOURCE_1099B = '1099b';
+
+    public const SOURCE_1099B_UNDERSCORE = '1099_b';
+
     protected $table = 'fin_account_lots';
 
     protected $primaryKey = 'lot_id';
@@ -32,6 +36,10 @@ class FinAccountLot extends Model
         'open_t_id',
         'close_t_id',
         'tax_document_id',
+        'form_8949_box',
+        'is_covered',
+        'accrued_market_discount',
+        'wash_sale_disallowed',
         'superseded_by_lot_id',
         'reconciliation_status',
         'reconciliation_notes',
@@ -44,6 +52,9 @@ class FinAccountLot extends Model
         'proceeds' => 'decimal:4',
         'realized_gain_loss' => 'decimal:4',
         'is_short_term' => 'boolean',
+        'is_covered' => 'boolean',
+        'accrued_market_discount' => 'decimal:4',
+        'wash_sale_disallowed' => 'decimal:4',
         'purchase_date' => 'date',
         'sale_date' => 'date',
     ];

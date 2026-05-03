@@ -213,6 +213,7 @@ class ParseImportJob1099BTest extends TestCase
             'sale_date' => '2024-06-15',
             'proceeds' => 1800.00,
             'cost_basis' => 1500.00,
+            'accrued_market_discount' => 12.34,
             'wash_sale_disallowed' => 0,
             'realized_gain_loss' => 300.00,
             'is_short_term' => false,
@@ -231,6 +232,10 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertSame(300.0, (float) $lot->realized_gain_loss);
         $this->assertSame('1099b', $lot->lot_source);
         $this->assertSame($taxDocId, $lot->tax_document_id);
+        $this->assertSame('D', $lot->form_8949_box);
+        $this->assertTrue($lot->is_covered);
+        $this->assertSame(12.34, (float) $lot->accrued_market_discount);
+        $this->assertSame(0.0, (float) $lot->wash_sale_disallowed);
 
         $this->assertDatabaseHas('fin_account_line_items', [
             't_account' => $account->acct_id,
@@ -261,6 +266,27 @@ class ParseImportJob1099BTest extends TestCase
             'symbol' => 'TSLA',
             'is_short_term' => true,
         ]);
+    }
+
+    public function test_upsert_lots_normalizes_string_booleans_from_ai_payload(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity');
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+
+        $transactions = [[
+            'symbol' => 'NVDA', 'description' => 'NVIDIA', 'cusip' => null,
+            'quantity' => 2, 'purchase_date' => '2024-01-01', 'sale_date' => '2024-03-01',
+            'proceeds' => 500, 'cost_basis' => 400, 'wash_sale_disallowed' => 0,
+            'realized_gain_loss' => 100, 'form_8949_box' => 'A', 'is_covered' => 'false',
+            'is_short_term' => 'false', 'additional_info' => null,
+        ]];
+
+        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+
+        $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'NVDA')->firstOrFail();
+        $this->assertFalse($lot->is_covered);
+        $this->assertFalse($lot->is_short_term);
     }
 
     public function test_upsert_lots_deduplicates_sell_line_items(): void

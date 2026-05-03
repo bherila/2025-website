@@ -567,17 +567,24 @@ class ParseImportJob implements ShouldQueue
             $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
             $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
             $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
+            $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
+            $isCovered = array_key_exists('is_covered', $tx) ? $this->normalizeBooleanOrNull($tx['is_covered']) : null;
             $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
+            $form8949Box = null;
+            if (is_string($tx['form_8949_box'] ?? null)) {
+                $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
+                $form8949Box = in_array($candidateBox, ['A', 'B', 'C', 'D', 'E', 'F'], true) ? $candidateBox : null;
+            }
 
             $purchaseDateRaw = $tx['purchase_date'] ?? null;
             $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
 
             // Determine is_short_term from the form_8949_box or explicit field.
             $isShortTerm = null;
-            if (isset($tx['is_short_term'])) {
-                $isShortTerm = (bool) $tx['is_short_term'];
+            if (array_key_exists('is_short_term', $tx)) {
+                $isShortTerm = $this->normalizeBooleanOrNull($tx['is_short_term']);
             } elseif (isset($tx['form_8949_box'])) {
-                $box = strtoupper(trim((string) $tx['form_8949_box']));
+                $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
                 if (in_array($box, ['A', 'B', 'C'], true)) {
                     $isShortTerm = true;
                 } elseif (in_array($box, ['D', 'E', 'F'], true)) {
@@ -603,8 +610,12 @@ class ParseImportJob implements ShouldQueue
                 'proceeds' => $proceeds,
                 'realized_gain_loss' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
                 'is_short_term' => $isShortTerm,
-                'lot_source' => '1099b',
+                'lot_source' => FinAccountLot::SOURCE_1099B,
                 'tax_document_id' => $taxDocumentId,
+                'form_8949_box' => $form8949Box,
+                'is_covered' => $isCovered,
+                'accrued_market_discount' => $accruedMarketDiscount,
+                'wash_sale_disallowed' => $washSaleDisallowed,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -626,7 +637,7 @@ class ParseImportJob implements ShouldQueue
                     't_amt' => -abs($proceeds),
                     't_basis' => $costBasis,
                     't_realized_pl' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
-                    't_source' => '1099b',
+                    't_source' => FinAccountLot::SOURCE_1099B,
                 ]);
 
                 // Link the lot to the sell transaction.
@@ -663,6 +674,33 @@ class ParseImportJob implements ShouldQueue
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function normalizeBooleanOrNull(mixed $value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return match ($value) {
+                1 => true,
+                0 => false,
+                default => null,
+            };
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            return match ($normalized) {
+                '1', 'true', 'yes', 'y' => true,
+                '0', 'false', 'no', 'n' => false,
+                default => null,
+            };
+        }
+
+        return null;
     }
 
     /**

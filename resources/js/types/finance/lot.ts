@@ -12,6 +12,10 @@ export interface Lot {
     realized_gain_loss: string | null
     is_short_term: boolean | null
     lot_source: string | null
+    form_8949_box?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | null
+    is_covered?: boolean | null
+    accrued_market_discount?: string | null
+    wash_sale_disallowed?: string | null
     open_t_id: number | null
     close_t_id: number | null
     statement?: {

@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -33,6 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
+import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
 import type { MiscRouting, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
@@ -409,6 +410,7 @@ export default function TaxDocumentReviewModal({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [exporting1099B, setExporting1099B] = useState<'txf' | 'olt' | null>(null)
   const [jsonEditOpen, setJsonEditOpen] = useState(false)
   const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
   
@@ -533,6 +535,35 @@ export default function TaxDocumentReviewModal({
       window.open(result.download_url, '_blank', 'noopener,noreferrer')
     } catch {
       toast.error('Failed to get download link')
+    }
+  }
+
+  const handle1099BExport = async (format: 'txf' | 'olt'): Promise<void> => {
+    if (!activeDoc) return
+    const accountId = propAccountLink?.account_id ?? activeDoc.account_id
+    if (!accountId) {
+      toast.error('This 1099-B is not linked to an account')
+      return
+    }
+
+    setExporting1099B(format)
+    try {
+      await downloadFinanceExport(
+        format === 'txf' ? '/api/finance/lots/export-txf' : '/api/finance/lots/export-olt-xlsx',
+        {
+          source: 'database',
+          scope: 'account_document',
+          account_id: accountId,
+          tax_document_id: activeDoc.id,
+          tax_year: taxYear,
+          ...(propAccountLink ? { account_link_id: propAccountLink.id } : {}),
+        },
+        format === 'txf' ? `1099b-lots-${taxYear}.txf` : `1099b-lots-${taxYear}.xlsx`,
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to export 1099-B lots')
+    } finally {
+      setExporting1099B(null)
     }
   }
 
@@ -758,7 +789,31 @@ export default function TaxDocumentReviewModal({
                       <span className="truncate max-w-[200px]">{activeDoc.original_filename}</span>
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex flex-wrap justify-end gap-1 shrink-0">
+                    {effectiveFormType === '1099_b' && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1"
+                          onClick={() => void handle1099BExport('txf')}
+                          disabled={exporting1099B !== null}
+                        >
+                          {exporting1099B === 'txf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                          TXF
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1"
+                          onClick={() => void handle1099BExport('olt')}
+                          disabled={exporting1099B !== null}
+                        >
+                          {exporting1099B === 'olt' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                          OLT XLSX
+                        </Button>
+                      </>
+                    )}
                     {activeDoc.s3_path && (
                       <>
                         <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleView(activeDoc)}>

@@ -251,6 +251,10 @@ class TaxLotReconciliationService
             'realized_gain_loss' => $lot->realized_gain_loss !== null ? $this->lotMatcher->numericValue($lot->realized_gain_loss) : null,
             'is_short_term' => $lot->is_short_term,
             'lot_source' => $lot->lot_source,
+            'form_8949_box' => $lot->form_8949_box,
+            'is_covered' => $lot->is_covered,
+            'accrued_market_discount' => $lot->accrued_market_discount !== null ? $this->lotMatcher->numericValue($lot->accrued_market_discount) : null,
+            'wash_sale_disallowed' => $lot->wash_sale_disallowed !== null ? $this->lotMatcher->numericValue($lot->wash_sale_disallowed) : null,
             'statement_id' => $lot->statement_id !== null ? (int) $lot->statement_id : null,
             'close_t_id' => $lot->close_t_id !== null ? (int) $lot->close_t_id : null,
             'tax_document_id' => $lot->tax_document_id !== null ? (int) $lot->tax_document_id : null,
@@ -282,7 +286,7 @@ class TaxLotReconciliationService
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->where(function ($query): void {
-                $query->where('lot_source', '1099b')
+                $query->where('lot_source', FinAccountLot::SOURCE_1099B)
                     ->orWhereNotNull('tax_document_id');
             })
             ->with(['taxDocument:id,original_filename,form_type,tax_year'])
@@ -306,7 +310,7 @@ class TaxLotReconciliationService
                 $query->whereNull('tax_document_id')
                     ->where(function ($sourceQuery): void {
                         $sourceQuery->whereNull('lot_source')
-                            ->orWhereNotIn('lot_source', ['1099b', '1099_b']);
+                            ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
                     });
             })
             ->orderBy('acct_id')

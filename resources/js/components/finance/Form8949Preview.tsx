@@ -23,6 +23,10 @@ export interface Form8949Lot {
   /** 'broker_statement', '1099b', 'manual', etc. Drives the A/B/C vs. D/E/F box split. */
   lot_source?: string | null
   tax_document_id?: number | null
+  form_8949_box?: Form8949Box | null
+  is_covered?: boolean | null
+  accrued_market_discount?: number | string | null
+  wash_sale_disallowed?: number | string | null
 }
 
 export type Form8949Box = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
@@ -75,6 +79,9 @@ function toBool(v: unknown): boolean {
  */
 export function classifyBox(lot: Form8949Lot): Form8949Box {
   const shortTerm = toBool(lot.is_short_term)
+  if (lot.form_8949_box && ['A', 'B', 'C', 'D', 'E', 'F'].includes(lot.form_8949_box)) {
+    return lot.form_8949_box
+  }
   const src = (lot.lot_source ?? '').toLowerCase()
   if (src === '1099b' || src === '1099_b') {
     return shortTerm ? 'A' : 'D'

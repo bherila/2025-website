@@ -36,6 +36,11 @@ describe('classifyBox', () => {
   it('routes manual-entry long-term lots to box F', () => {
     expect(classifyBox(mkLot({ is_short_term: 0, lot_source: 'manual' }))).toBe('F')
   })
+
+  it('prefers an imported Form 8949 box when present', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b', form_8949_box: 'B' }))).toBe('B')
+    expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b', form_8949_box: 'E' }))).toBe('E')
+  })
 })
 
 describe('computeForm8949', () => {

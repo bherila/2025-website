@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 jest.mock('@/fetchWrapper', () => ({
-  fetchWrapper: { get: jest.fn(), put: jest.fn(), patch: jest.fn() },
+  fetchWrapper: { get: jest.fn(), put: jest.fn(), patch: jest.fn(), postRaw: jest.fn() },
 }))
 
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }))
@@ -175,6 +175,59 @@ const UNREVIEWED_MISC = {
   updated_at: '2026-01-01T00:00:00Z',
 } as const
 
+const BROKER_1099 = {
+  id: 3,
+  user_id: 1,
+  tax_year: 2024,
+  form_type: 'broker_1099',
+  employment_entity_id: null,
+  account_id: null,
+  original_filename: 'broker.pdf',
+  stored_filename: null,
+  s3_path: null,
+  mime_type: 'application/pdf',
+  file_size_bytes: 1000,
+  file_hash: 'broker',
+  is_reviewed: false,
+  notes: null,
+  human_file_size: '1 KB',
+  download_count: 0,
+  genai_job_id: null,
+  genai_status: 'parsed',
+  parsed_data: [{
+    account_identifier: '1234',
+    account_name: 'Fidelity',
+    form_type: '1099_b',
+    tax_year: 2024,
+    parsed_data: {
+      payer_name: 'Fidelity',
+      transactions: [],
+    },
+  }],
+  uploader: null,
+  employment_entity: null,
+  account: null,
+  account_links: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
+const BROKER_1099_LINK = {
+  id: 33,
+  tax_document_id: 3,
+  account_id: 10,
+  form_type: '1099_b',
+  tax_year: 2024,
+  ai_identifier: '1234',
+  ai_account_name: 'Fidelity',
+  is_reviewed: false,
+  notes: null,
+  misc_routing: null,
+  account: { acct_id: 10, acct_name: 'Fidelity Taxable' },
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     open: true,
@@ -242,5 +295,17 @@ describe('TaxDocumentReviewModal — 1099-MISC routing', () => {
     const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
     expect(url).toBe('/api/finance/tax-documents/2')
     expect(payload.misc_routing).toBe('sch_c')
+  })
+})
+
+describe('TaxDocumentReviewModal — 1099-B exports', () => {
+  it('shows TXF and OLT export actions for 1099-B account-link review', async () => {
+    render(<TaxDocumentReviewModal {...(baseProps({
+      document: BROKER_1099,
+      accountLink: BROKER_1099_LINK,
+    }) as any)} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /txf/i })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /olt xlsx/i })).toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
-import { downloadTxf } from '@/lib/finance/txfExport'
+import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import {
     analyzeLots,
     computeSummary,
@@ -64,6 +65,7 @@ export default function LotAnalyzer({ transactions, accountMap, accountId, onLoa
     const [showShortTermOnly, setShowShortTermOnly] = useState(false)
     const [showAccountNames, setShowAccountNames] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [isExportingTxf, setIsExportingTxf] = useState(false)
     const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null)
     const [selectedYear, setSelectedYear] = useState<string>('all')
 
@@ -97,6 +99,20 @@ export default function LotAnalyzer({ transactions, accountMap, accountId, onLoa
 
     const shortTermLots = useMemo(() => yearFilteredLots.filter(l => l.isShortTerm), [yearFilteredLots])
     const longTermLots = useMemo(() => yearFilteredLots.filter(l => !l.isShortTerm), [yearFilteredLots])
+
+    const handleExportTxf = useCallback(async () => {
+        setIsExportingTxf(true)
+        try {
+            await downloadFinanceExport('/api/finance/lots/export-txf', {
+                source: 'analyzer',
+                lots: yearFilteredLots,
+            }, selectedYear === 'all' ? 'all.txf' : `${selectedYear}.txf`)
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to export TXF')
+        } finally {
+            setIsExportingTxf(false)
+        }
+    }, [selectedYear, yearFilteredLots])
 
     const handleSave = useCallback(async () => {
         if (!accountId) return
@@ -353,10 +369,10 @@ export default function LotAnalyzer({ transactions, accountMap, accountId, onLoa
                 )}
                 <Button
                     variant="outline"
-                    onClick={() => downloadTxf(yearFilteredLots, selectedYear)}
-                    disabled={yearFilteredLots.length === 0}
+                    onClick={() => void handleExportTxf()}
+                    disabled={isExportingTxf || yearFilteredLots.length === 0}
                 >
-                    Save as TXF File
+                    {isExportingTxf ? 'Exporting…' : 'Save as TXF File'}
                 </Button>
                 {saveResult && (
                     <span className={`text-sm ${saveResult.success ? 'text-green-600' : 'text-red-600'}`}>

@@ -8,6 +8,7 @@ jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
     get: jest.fn(),
     post: jest.fn(),
+    postRaw: jest.fn(),
   },
 }))
 
@@ -21,6 +22,7 @@ jest.mock('sonner', () => ({
 
 const mockGet = fetchWrapper.get as jest.Mock
 const mockPost = fetchWrapper.post as jest.Mock
+const mockPostRaw = fetchWrapper.postRaw as jest.Mock
 
 function lot(id: number, overrides: Record<string, unknown> = {}) {
   return {
@@ -36,6 +38,10 @@ function lot(id: number, overrides: Record<string, unknown> = {}) {
     realized_gain_loss: 250,
     is_short_term: false,
     lot_source: '1099b',
+    form_8949_box: 'D',
+    is_covered: true,
+    accrued_market_discount: 0,
+    wash_sale_disallowed: 0,
     statement_id: null,
     close_t_id: null,
     tax_document_id: null,
@@ -114,6 +120,35 @@ describe('TaxLotReconciliationPanel', () => {
     expect(screen.getByText(/Unmatched Brokerage/)).toBeInTheDocument()
     expect(screen.getAllByText('AAPL').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Matched').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('button', { name: /export txf/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /export olt xlsx/i })).toBeInTheDocument()
+  })
+
+  it('exports all 1099-B lots from the dock reconciliation view', async () => {
+    mockGet.mockResolvedValue(response)
+    mockPostRaw.mockResolvedValue({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['txf'])),
+      headers: { get: jest.fn().mockReturnValue('attachment; filename="lots.txf"') },
+    })
+    Object.defineProperty(URL, 'createObjectURL', { writable: true, value: jest.fn(() => 'blob:txf') })
+    Object.defineProperty(URL, 'revokeObjectURL', { writable: true, value: jest.fn() })
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /export txf/i }))
+
+    await waitFor(() => {
+      expect(mockPostRaw).toHaveBeenCalledWith('/api/finance/lots/export-txf', {
+        source: 'database',
+        scope: 'all',
+        tax_year: 2025,
+      })
+    })
+
+    expect(URL.createObjectURL).toHaveBeenCalled()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:txf')
   })
 
   it('posts supersede payload when accepting exact matches', async () => {
