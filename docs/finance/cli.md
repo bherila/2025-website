@@ -241,7 +241,7 @@ php artisan finance:tax-render --year=YEAR [--form=FORM] [--format=table|json]
 
 ### `finance:k1-migrate`
 
-Migrate legacy flat-format K-1 `parsed_data` records to the canonical `schemaVersion: "2026.1"` (`FK1StructuredData`) shape. One-time data migration used after the K-1 schema unification; safe to run repeatedly (idempotent).
+Migrate legacy flat-format K-1 `parsed_data` records into the canonical structured shape. Migrated rows are stamped with `schemaVersion: "1.0"` — a marker distinct from `"2026.1"` (which `GenAiJobDispatcherService::coerceK1Args` writes for fresh AI extractions), so you can tell migrated-from-legacy data apart from AI-extracted data after the fact. One-time migration; safe to run repeatedly (only legacy rows without a `schemaVersion` key are touched).
 
 ```
 php artisan finance:k1-migrate [--dry-run]
