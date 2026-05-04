@@ -10,7 +10,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Get the full tax preview dataset for a given year, including W-2s, 1099s, Schedule C, capital gains, Form 1116 foreign tax data, and action items. For payslip data use the list_payslips tool.')]
+#[Description('Get the full tax preview dataset for a given year, including W-2s, 1099s, Schedule C, capital gains, Form 1116 foreign tax data, action items, and backend tax fact source lines. For payslip data use the list_payslips tool.')]
 class GetTaxPreview extends Tool
 {
     public function __construct(

@@ -230,11 +230,11 @@ describe('TaxDocuments1099Section', () => {
     fireEvent.change(select, { target: { value: 'form_8949_summary' } })
 
     await waitFor(() => {
-      expect(mockedFetchWrapper.patch).toHaveBeenCalledWith('/api/finance/tax-documents/22/accounts/77', {
+      expect(mockedFetchWrapper.patch).toHaveBeenCalledWith('/api/finance/tax-documents/22/accounts/77?include_tax_facts=1', {
         reporting_mode: 'form_8949_summary',
       })
     })
-    expect(onDocumentsReload).toHaveBeenCalled()
+    expect(onDocumentsReload).not.toHaveBeenCalled()
   })
 
   it('shows the effective reporting mode when the persisted mode is no longer eligible', () => {

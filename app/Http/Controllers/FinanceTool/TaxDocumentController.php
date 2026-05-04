@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
+use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,16 +27,20 @@ class TaxDocumentController extends Controller
 
     protected TaxDocumentParsedDataNormalizer $parsedDataNormalizer;
 
+    protected TaxPreviewFactsService $taxPreviewFactsService;
+
     public function __construct(
         FileStorageService $fileService,
         GenAiJobDispatcherService $dispatcherService,
         TaxDocumentCreationService $creationService,
         TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
+        TaxPreviewFactsService $taxPreviewFactsService,
     ) {
         $this->fileService = $fileService;
         $this->dispatcherService = $dispatcherService;
         $this->creationService = $creationService;
         $this->parsedDataNormalizer = $parsedDataNormalizer;
+        $this->taxPreviewFactsService = $taxPreviewFactsService;
     }
 
     public function index(Request $request): JsonResponse
@@ -351,7 +356,9 @@ class TaxDocumentController extends Controller
 
         $link->save();
 
-        return response()->json($link->load('account:acct_id,acct_name,acct_number'));
+        $responseLink = $link->load('account:acct_id,acct_name,acct_number');
+
+        return $this->jsonWithOptionalTaxFacts($request, 'link', $responseLink, (int) $doc->tax_year);
     }
 
     /**
@@ -583,7 +590,12 @@ class TaxDocumentController extends Controller
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
-        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
+        return $this->jsonWithOptionalTaxFacts(
+            $request,
+            'document',
+            $this->parsedDataNormalizer->documentForResponse($doc),
+            (int) $doc->tax_year,
+        );
     }
 
     /**
@@ -663,7 +675,24 @@ class TaxDocumentController extends Controller
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
-        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
+        return $this->jsonWithOptionalTaxFacts(
+            $request,
+            'document',
+            $this->parsedDataNormalizer->documentForResponse($doc),
+            (int) $doc->tax_year,
+        );
+    }
+
+    private function jsonWithOptionalTaxFacts(Request $request, string $payloadKey, mixed $payload, int $year): JsonResponse
+    {
+        if (! $request->boolean('include_tax_facts')) {
+            return response()->json($payload);
+        }
+
+        return response()->json([
+            $payloadKey => $payload,
+            'taxFacts' => $this->taxPreviewFactsService->arrayForYear((int) Auth::id(), $year),
+        ]);
     }
 
     /**

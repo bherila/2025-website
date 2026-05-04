@@ -13,6 +13,7 @@ class TaxPreviewDataService
     public function __construct(
         private ScheduleCSummaryService $scheduleCSummaryService,
         private TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
+        private TaxPreviewFactsService $taxPreviewFactsService,
     ) {}
 
     /**
@@ -51,6 +52,7 @@ class TaxPreviewDataService
             'employmentEntities' => $this->employmentEntities($userId),
             'accounts' => $accounts,
             'activeAccountIds' => $this->activeAccountIdsForYear($accounts, $year),
+            'taxFacts' => $this->taxPreviewFactsService->arrayForYear($userId, $year),
         ];
     }
 

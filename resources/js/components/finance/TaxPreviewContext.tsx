@@ -42,6 +42,7 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
 import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
@@ -72,6 +73,7 @@ export interface TaxPreviewDataset {
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
+  taxFacts: TaxPreviewFacts | null
 }
 
 interface TaxPreviewContextValue {
@@ -94,6 +96,8 @@ interface TaxPreviewContextValue {
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
+  taxFacts: TaxPreviewFacts | null
+  setTaxFacts: Dispatch<SetStateAction<TaxPreviewFacts | null>>
   income1099: {
     interestIncome: currency
     dividendIncome: currency
@@ -254,6 +258,7 @@ export function TaxPreviewProvider({
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
+  const [taxFacts, setTaxFacts] = useState<TaxPreviewFacts | null>(null)
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
@@ -610,6 +615,7 @@ export function TaxPreviewProvider({
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
       setActiveAccountIds(Array.isArray(response.activeAccountIds) ? response.activeAccountIds : [])
+      setTaxFacts(response.taxFacts ?? null)
       setError(null)
       priorYearCarryoverCache.current.clear()
       await refreshPriorYearCarryover(response.availableYears, year - 1)
@@ -1428,6 +1434,7 @@ export function TaxPreviewProvider({
     employmentEntities,
     accounts,
     activeAccountIds,
+    taxFacts,
     income1099,
     schedule1OtherIncome,
     schedule1Line8Breakdown,
@@ -1476,6 +1483,7 @@ export function TaxPreviewProvider({
     setEmploymentEntities,
     setAccounts,
     setActiveAccountIds,
+    setTaxFacts,
     refreshAll,
   }), [
     year,
@@ -1497,6 +1505,7 @@ export function TaxPreviewProvider({
     employmentEntities,
     accounts,
     activeAccountIds,
+    taxFacts,
     income1099,
     schedule1OtherIncome,
     schedule1Line8Breakdown,

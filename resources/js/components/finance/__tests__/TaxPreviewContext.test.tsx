@@ -35,6 +35,7 @@ function makeDoc(id: number, genai_status: string, form_type = '1099_int') {
 
 function makeResponse(docs: object[] = []) {
   return {
+    year: 2025,
     availableYears: [2025],
     payslips: [],
     pendingReviewCount: 0,
@@ -44,6 +45,44 @@ function makeResponse(docs: object[] = []) {
     employmentEntities: [],
     accounts: [],
     activeAccountIds: [],
+    taxFacts: null,
+  }
+}
+
+function makeTaxFacts() {
+  return {
+    year: 2025,
+    schedule1: {
+      line5Sources: [],
+      line5Total: 0,
+      line8zSources: [{
+        id: 'doc-1-schedule1-8z',
+        label: 'Fidelity — 1099-MISC other income',
+        amount: 42,
+        sourceType: '1099_misc_other_income',
+        taxDocumentId: 1,
+        taxDocumentAccountId: null,
+        accountId: null,
+        formType: '1099_misc',
+        box: null,
+        code: null,
+        routing: 'default_schedule_1_8z',
+        routingReason: 'Default route',
+        notes: null,
+      }],
+      line8zTotal: 42,
+      line9TotalOtherIncome: 42,
+    },
+    form4952: {
+      investmentInterestSources: [],
+      totalInvestmentInterestExpense: 0,
+      investmentExpenseSources: [],
+      totalInvestmentExpenses: 0,
+      netInvestmentIncomeBeforeQualifiedDividendElection: 0,
+      totalQualifiedDividends: 0,
+      deductibleInvestmentInterestExpense: 0,
+      disallowedCarryforward: 0,
+    },
   }
 }
 
@@ -56,6 +95,19 @@ beforeEach(() => jest.clearAllMocks())
 // --- tests -----------------------------------------------------------------
 
 describe('TaxPreviewContext', () => {
+  it('stores backend tax facts from the dataset and allows patch replacement', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([]))
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setTaxFacts(makeTaxFacts()))
+
+    expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
+    expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
+  })
+
   it('does not show loading spinner on background polls', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))

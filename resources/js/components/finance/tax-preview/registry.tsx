@@ -748,6 +748,8 @@ function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
         foreignTaxSummaries={state.foreignTaxSummaries}
         isLoading={state.isLoading}
         onDocumentsReload={state.refreshAll}
+        onDocumentsListChange={state.setAccountDocuments}
+        onTaxFactsChange={state.setTaxFacts}
       />
     </div>
   )
