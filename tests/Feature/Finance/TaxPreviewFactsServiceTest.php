@@ -110,7 +110,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('sch_1_line_8', $facts['schedule1']['line8zSources'][0]['routing']);
     }
 
-    public function test_schedule1_stale_unknown_line8_routing_falls_back_to_line8z(): void
+    public function test_schedule1_stale_unknown_line8_routing_is_excluded_without_crashing(): void
     {
         $user = $this->createUser();
         $this->createTaxDocument($user->id, [
@@ -122,9 +122,8 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
 
-        $this->assertSame(12.34, $facts['schedule1']['line8zTotal']);
-        $this->assertSame('default_schedule_1_8z', $facts['schedule1']['line8zSources'][0]['routing']);
-        $this->assertStringContainsString('stale_legacy_value', $facts['schedule1']['line8zSources'][0]['routingReason']);
+        $this->assertSame(0.0, $facts['schedule1']['line8zTotal']);
+        $this->assertSame([], $facts['schedule1']['line8zSources']);
     }
 
     public function test_1099_misc_explicit_schedule_c_or_e_routing_excludes_line8z(): void

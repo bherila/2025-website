@@ -4,6 +4,8 @@ namespace App\Services\Finance;
 
 class MoneyMath
 {
+    private const int FLOAT_INPUT_DECIMAL_PLACES = 4;
+
     public static function round(float|int|string $value): float
     {
         return self::fromCents(self::toCents($value));
@@ -52,7 +54,7 @@ class MoneyMath
     public static function toCents(float|int|string $value): int
     {
         if (is_float($value)) {
-            return self::toCents(number_format($value, 4, '.', ''));
+            return self::toCents(number_format($value, self::FLOAT_INPUT_DECIMAL_PLACES, '.', ''));
         }
 
         $raw = trim((string) $value);

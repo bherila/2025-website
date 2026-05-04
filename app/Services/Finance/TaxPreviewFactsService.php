@@ -351,6 +351,8 @@ class TaxPreviewFactsService
     }
 
     /**
+     * Same-day sequencing relies on the persisted transaction id order after the date sort.
+     *
      * @param  FinAccountLineItems[]  $transactions
      */
     private function hasLaterSameDayShortSaleOpen(array $transactions, FinAccountLineItems $dividend, string $symbol, string $dividendDate): bool

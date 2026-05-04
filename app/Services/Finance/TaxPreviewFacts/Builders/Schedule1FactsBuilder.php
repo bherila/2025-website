@@ -170,9 +170,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         ?string $routing,
     ): TaxFactSource {
         $payer = $this->payerName($doc, $link, $parsedData);
-        $factRouting = $routing !== null
-            ? TaxFactRouting::tryFrom($routing) ?? TaxFactRouting::DefaultSchedule18z
-            : TaxFactRouting::DefaultSchedule18z;
+        $factRouting = $this->line8FactRouting($routing);
 
         return new TaxFactSource(
             id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule1-8z" : "doc-{$doc->id}-schedule1-8z",
@@ -229,9 +227,16 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
 
     private function routesToLine8(?string $routing): bool
     {
-        return $routing === null
-            || in_array($routing, self::LINE_8_ROUTINGS, true)
-            || ! in_array($routing, ['sch_c', 'sch_e'], true);
+        return $routing === null || in_array($routing, self::LINE_8_ROUTINGS, true);
+    }
+
+    private function line8FactRouting(?string $routing): TaxFactRouting
+    {
+        if ($routing === null) {
+            return TaxFactRouting::DefaultSchedule18z;
+        }
+
+        return TaxFactRouting::tryFrom($routing) ?? TaxFactRouting::DefaultSchedule18z;
     }
 
     private function miscRoutingReason(?string $routing, TaxFactRouting $factRouting): string
