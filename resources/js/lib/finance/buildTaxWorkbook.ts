@@ -3,7 +3,11 @@ import currency from 'currency.js'
 import { computeForm8949, formatForm8949Date } from '@/components/finance/Form8949Preview'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
-import { buildCapitalGainsReportFrom1099ExportDocs } from '@/lib/finance/capitalGainsReporting'
+import type { CapitalGainsReport } from '@/lib/finance/capitalGainsReporting'
+import {
+  buildCapitalGainsReportFrom1099ExportDocs,
+  REPORTING_MODE_LABELS,
+} from '@/lib/finance/capitalGainsReporting'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
@@ -771,8 +775,8 @@ export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | 
   }
 }
 
-export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
-  const lots = buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []).form8949Lots
+function buildForm8949SheetFromCapitalGainsReport(capitalGainsReport: CapitalGainsReport): XlsxSheet | null {
+  const lots = capitalGainsReport.form8949Lots
   if (lots.length === 0) {
     return null
   }
@@ -832,7 +836,14 @@ export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   return { name: 'Form 8949', rows }
 }
 
-export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  return buildForm8949SheetFromCapitalGainsReport(buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []))
+}
+
+function buildScheduleDSheetFromCapitalGainsReport(
+  taxReturn: TaxReturn1040,
+  capitalGainsReport: CapitalGainsReport,
+): XlsxSheet | null {
   if (!taxReturn.scheduleD) {
     return null
   }
@@ -853,8 +864,6 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
 
   const sourceBuckets: ScheduleDSourceBuckets = {}
   const reconciliationNote = 'Detail rows do not reconcile to the canonical Schedule D amount; verify source documents and tax preview calculations.'
-  const shortTerm1099BNote = '1099-B summary data lacks Form 8949 box detail; routed to line 1a instead of 1b/2/3.'
-  const longTerm1099BNote = '1099-B summary data lacks Form 8949 box detail; routed to line 8a instead of 8b/9/10.'
   const addSource = (line: ScheduleDLine, source: ScheduleDSource): void => {
     if (!isNonZero(source.amount)) {
       return
@@ -911,12 +920,12 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
     }
   }
 
-  for (const source of buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []).sources) {
+  for (const source of capitalGainsReport.sources) {
     addSource(source.line, {
       description: source.label,
       amount: source.amount,
       note: source.note ?? (source.reportingMode === 'schedule_d_summary'
-        ? (source.line === '1a' ? shortTerm1099BNote : longTerm1099BNote)
+        ? `Reporting mode: ${REPORTING_MODE_LABELS[source.reportingMode]}`
         : `Form 8949${source.form8949Box ? ` Box ${source.form8949Box}` : ''}`),
     })
   }
@@ -1062,6 +1071,13 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   }
 
   return { name: 'Schedule D', rows }
+}
+
+export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  return buildScheduleDSheetFromCapitalGainsReport(
+    taxReturn,
+    buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []),
+  )
 }
 
 export function buildOverviewSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
@@ -1547,11 +1563,12 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   // adds the `rowIndex` map needed for cross-sheet formula refs (Schedule A
   // line 9 → Form 4952, Form 1040 lines → many). Schedule A and Form 1040
   // take an explicit refs param so their formulas resolve declaratively.
+  const capitalGainsReport = buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? [])
   const overviewSheet = wrapSheet(buildOverviewSheet(taxReturn))
   const scheduleBSheet = wrapSheet(buildScheduleBSheet(taxReturn))
   const scheduleCSheet = wrapSheet(buildScheduleCSheet(taxReturn))
-  const scheduleDSheet = wrapSheet(buildScheduleDSheet(taxReturn))
-  const form8949Sheet = wrapSheet(buildForm8949Sheet(taxReturn))
+  const scheduleDSheet = wrapSheet(buildScheduleDSheetFromCapitalGainsReport(taxReturn, capitalGainsReport))
+  const form8949Sheet = wrapSheet(buildForm8949SheetFromCapitalGainsReport(capitalGainsReport))
   const scheduleESheet = wrapSheet(buildScheduleESheet(taxReturn))
   const scheduleSESheet = wrapSheet(buildScheduleSESheet(taxReturn))
   const form4952Sheet = wrapSheet(buildForm4952Sheet(taxReturn))
