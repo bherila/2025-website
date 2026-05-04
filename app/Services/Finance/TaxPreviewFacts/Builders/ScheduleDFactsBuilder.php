@@ -5,9 +5,12 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDRollupFact;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
 {
@@ -24,10 +27,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                 continue;
             }
 
-            $lineBuckets[$rollup->scheduleDLine]['proceeds'] += $rollup->totalProceeds;
-            $lineBuckets[$rollup->scheduleDLine]['cost'] += $rollup->totalCostBasis;
-            $lineBuckets[$rollup->scheduleDLine]['adjustments'] += $rollup->totalAdjustment;
-            $lineBuckets[$rollup->scheduleDLine]['gainLoss'] += $rollup->netGainOrLoss;
+            $lineBuckets[$rollup->scheduleDLine]['proceeds'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['proceeds'], $rollup->totalProceeds]);
+            $lineBuckets[$rollup->scheduleDLine]['cost'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['cost'], $rollup->totalCostBasis]);
+            $lineBuckets[$rollup->scheduleDLine]['adjustments'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['adjustments'], $rollup->totalAdjustment]);
+            $lineBuckets[$rollup->scheduleDLine]['gainLoss'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['gainLoss'], $rollup->netGainOrLoss]);
         }
 
         $section1256Sources = $this->scheduleDSection1256Sources($k1Docs);
@@ -41,27 +44,27 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line1a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1a'));
         $line1b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1b'));
         $line2 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '2'));
-        $line3 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3') + $this->sumSources($line3Sources));
+        $line3 = $this->sumMoney([$this->scheduleDLineGainLoss($lineBuckets, '3'), $this->sumSources($line3Sources)]);
         $line4 = 0.0;
         $line5 = $this->sumSources($line5Sources);
         $line6 = 0.0;
-        $line7 = $this->roundMoney($line1a + $line1b + $line2 + $line3 + $line4 + $line5 + $line6);
+        $line7 = $this->sumMoney([$line1a, $line1b, $line2, $line3, $line4, $line5, $line6]);
 
         $line8a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8a'));
         $line8b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8b'));
         $line9 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '9'));
-        $line10 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '10') + $this->sumSources($line10Sources));
+        $line10 = $this->sumMoney([$this->scheduleDLineGainLoss($lineBuckets, '10'), $this->sumSources($line10Sources)]);
         $line11 = 0.0;
         $line12 = $this->sumSources($line12Sources);
         $line13 = $this->sumSources($line13Sources);
         $line14 = 0.0;
-        $line15 = $this->roundMoney($line8a + $line8b + $line9 + $line10 + $line11 + $line12 + $line13 + $line14);
-        $line16 = $this->roundMoney($line7 + $line15);
+        $line15 = $this->sumMoney([$line8a, $line8b, $line9, $line10, $line11, $line12, $line13, $line14]);
+        $line16 = $this->sumMoney([$line7, $line15]);
         $line21 = $line16 < 0.0 ? max($line16, -3000.0) : $line16;
         $appliedToReturn = $line21 < 0.0 ? $line21 : 0.0;
-        $carryforward = $line16 < 0.0 ? $this->roundMoney($line16 - $appliedToReturn) : 0.0;
-        $businessCapGains = $this->roundMoney($line5 + $line12);
-        $personalCapGains = $this->roundMoney($line16 - $businessCapGains);
+        $carryforward = $line16 < 0.0 ? $this->subtractMoney($line16, $appliedToReturn) : 0.0;
+        $businessCapGains = $this->sumMoney([$line5, $line12]);
+        $personalCapGains = $this->subtractMoney($line16, $businessCapGains);
         $limited = $this->limitedCapitalGains($line16, $line21, $businessCapGains, $personalCapGains);
 
         return new ScheduleDFacts(
@@ -123,18 +126,19 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     continue;
                 }
 
-                $shortTermAmount = $this->roundMoney($amount * 0.4);
-                $longTermAmount = $this->roundMoney($amount * 0.6);
+                $allocation = MoneyMath::allocateRatio($amount, 40, 100);
+                $shortTermAmount = $allocation['allocated'];
+                $longTermAmount = $allocation['remainder'];
                 $shortTerm[] = new TaxFactSource(
                     id: "k1-{$doc->id}-11C-{$index}-schedule-d-line3",
                     label: "{$partnerName} — K-1 Box 11C Form 6781 40% S/T allocation",
                     amount: $shortTermAmount,
-                    sourceType: 'k1_section_1256_short_term',
+                    sourceType: TaxFactSourceType::K1Section1256ShortTerm,
                     taxDocumentId: $doc->id,
                     formType: 'k1',
                     box: '11',
                     code: 'C',
-                    routing: 'schedule_d_line_3',
+                    routing: TaxFactRouting::ScheduleDLine3,
                     routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
@@ -145,12 +149,12 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     id: "k1-{$doc->id}-11C-{$index}-schedule-d-line10",
                     label: "{$partnerName} — K-1 Box 11C Form 6781 60% L/T allocation",
                     amount: $longTermAmount,
-                    sourceType: 'k1_section_1256_long_term',
+                    sourceType: TaxFactSourceType::K1Section1256LongTerm,
                     taxDocumentId: $doc->id,
                     formType: 'k1',
                     box: '11',
                     code: 'C',
-                    routing: 'schedule_d_line_10',
+                    routing: TaxFactRouting::ScheduleDLine10,
                     routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
@@ -180,7 +184,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             $partnerName = $this->k1PartnerName($doc, $data);
             $box8 = $this->k1Field($data, '8');
             if ($box8 !== 0.0) {
-                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $box8, 'k1_short_term_capital_gain', '8', null, 'schedule_d_line_5', 'K-1 Box 8 short-term capital gain/loss flows to Schedule D line 5.');
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $box8, TaxFactSourceType::K1ShortTermCapitalGain, '8', null, TaxFactRouting::ScheduleDLine5, 'K-1 Box 8 short-term capital gain/loss flows to Schedule D line 5.');
             }
 
             foreach ($this->k1CodeItems($data, '11', 'S') as $index => $item) {
@@ -193,7 +197,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     continue;
                 }
 
-                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_nonportfolio_short_term_capital_gain', '11', 'S', 'schedule_d_line_5', 'K-1 Box 11S short-term non-portfolio capital gain/loss flows to Schedule D line 5.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, TaxFactSourceType::K1NonportfolioShortTermCapitalGain, '11', 'S', TaxFactRouting::ScheduleDLine5, 'K-1 Box 11S short-term non-portfolio capital gain/loss flows to Schedule D line 5.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
             }
         }
 
@@ -216,14 +220,14 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
 
             $partnerName = $this->k1PartnerName($doc, $data);
             foreach ([
-                '9a' => ['k1_long_term_capital_gain', 'K-1 Box 9a long-term capital gain/loss flows to Schedule D line 12.'],
-                '9b' => ['k1_collectibles_gain', 'K-1 Box 9b collectibles gain/loss supports Schedule D line 12.'],
-                '9c' => ['k1_unrecaptured_1250_gain', 'K-1 Box 9c unrecaptured Section 1250 gain supports Schedule D line 12.'],
-                '10' => ['k1_section_1231_gain', 'K-1 Box 10 net Section 1231 gain/loss flows to Schedule D line 12.'],
+                '9a' => [TaxFactSourceType::K1LongTermCapitalGain, 'K-1 Box 9a long-term capital gain/loss flows to Schedule D line 12.'],
+                '9b' => [TaxFactSourceType::K1CollectiblesGain, 'K-1 Box 9b collectibles gain/loss supports Schedule D line 12.'],
+                '9c' => [TaxFactSourceType::K1Unrecaptured1250Gain, 'K-1 Box 9c unrecaptured Section 1250 gain supports Schedule D line 12.'],
+                '10' => [TaxFactSourceType::K1Section1231Gain, 'K-1 Box 10 net Section 1231 gain/loss flows to Schedule D line 12.'],
             ] as $box => [$sourceType, $reason]) {
                 $amount = $this->k1Field($data, $box);
                 if ($amount !== 0.0) {
-                    $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, $sourceType, $box, null, 'schedule_d_line_12', $reason);
+                    $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, $sourceType, $box, null, TaxFactRouting::ScheduleDLine12, $reason);
                 }
             }
 
@@ -237,7 +241,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     continue;
                 }
 
-                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_nonportfolio_long_term_capital_gain', '11', 'S', 'schedule_d_line_12', 'K-1 Box 11S long-term non-portfolio capital gain/loss flows to Schedule D line 12.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, TaxFactSourceType::K1NonportfolioLongTermCapitalGain, '11', 'S', TaxFactRouting::ScheduleDLine12, 'K-1 Box 11S long-term non-portfolio capital gain/loss flows to Schedule D line 12.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
             }
         }
 
@@ -267,13 +271,13 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     id: $entry['link'] instanceof TaxDocumentAccount ? "link-{$entry['link']->id}-schedule-d-line13" : "doc-{$doc->id}-schedule-d-line13",
                     label: "{$this->payerName($doc, $entry['link'], $entry['parsedData'])} — capital gain distributions",
                     amount: $this->roundMoney($amount),
-                    sourceType: '1099_div_capital_gain_distributions',
+                    sourceType: TaxFactSourceType::Form1099DivCapitalGainDistributions,
                     taxDocumentId: $doc->id,
                     taxDocumentAccountId: $entry['link']?->id,
                     accountId: $entry['link']?->account_id,
                     formType: '1099_div',
                     box: '2a',
-                    routing: 'schedule_d_line_13',
+                    routing: TaxFactRouting::ScheduleDLine13,
                     routingReason: '1099-DIV Box 2a total capital gain distributions flow to Schedule D line 13.',
                     isReviewed: $this->sourceIsReviewed($doc, $entry['link']),
                     reviewStatus: $this->reviewStatus($doc, $entry['link']),
@@ -306,7 +310,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     continue;
                 }
 
-                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_ambiguous_nonportfolio_capital_gain', '11', 'S', 'needs_review_schedule_d_line_5_or_12', 'K-1 Box 11S needs short-term or long-term character before Schedule D routing.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, TaxFactSourceType::K1AmbiguousNonportfolioCapitalGain, '11', 'S', TaxFactRouting::NeedsReviewScheduleDLine5Or12, 'K-1 Box 11S needs short-term or long-term character before Schedule D routing.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
             }
         }
 
@@ -317,10 +321,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         FileForTaxDocument $doc,
         string $partnerName,
         float $amount,
-        string $sourceType,
+        TaxFactSourceType $sourceType,
         string $box,
         ?string $code,
-        string $routing,
+        TaxFactRouting $routing,
         string $routingReason,
         ?int $index = null,
         ?string $notes = null,
@@ -328,7 +332,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $suffix = $index !== null ? "-{$index}" : '';
 
         return new TaxFactSource(
-            id: "k1-{$doc->id}-{$box}{$code}{$suffix}-{$routing}",
+            id: "k1-{$doc->id}-{$box}{$code}{$suffix}-{$routing->value}",
             label: $code !== null ? "{$partnerName} — K-1 Box {$box}{$code}" : "{$partnerName} — K-1 Box {$box}",
             amount: $this->roundMoney($amount),
             sourceType: $sourceType,
@@ -379,6 +383,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             return ['business' => $businessCapGains, 'personal' => $personalCapGains];
         }
 
+        if ($this->hasMixedSigns($businessCapGains, $personalCapGains)) {
+            return $this->limitedMixedSignCapitalGains($line21, $businessCapGains, $personalCapGains);
+        }
+
         $businessRatio = $line16 === 0.0 ? 0.0 : $businessCapGains / $line16;
         $personalRatio = $line16 === 0.0 ? 0.0 : $personalCapGains / $line16;
 
@@ -386,5 +394,35 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             'business' => $this->roundMoney($line21 * $businessRatio),
             'personal' => $this->roundMoney($line21 * $personalRatio),
         ];
+    }
+
+    private function hasMixedSigns(float $businessCapGains, float $personalCapGains): bool
+    {
+        return ($businessCapGains < 0.0 && $personalCapGains > 0.0)
+            || ($businessCapGains > 0.0 && $personalCapGains < 0.0);
+    }
+
+    /**
+     * @return array{business:float,personal:float}
+     */
+    private function limitedMixedSignCapitalGains(float $line21, float $businessCapGains, float $personalCapGains): array
+    {
+        if ($line21 >= 0.0) {
+            return ['business' => $businessCapGains, 'personal' => $personalCapGains];
+        }
+
+        $business = min(0.0, $businessCapGains);
+        $personal = min(0.0, $personalCapGains);
+        $negativeTotal = $this->sumMoney([$business, $personal]);
+
+        if ($negativeTotal >= $line21) {
+            return ['business' => $business, 'personal' => $personal];
+        }
+
+        if ($business < 0.0) {
+            return ['business' => $line21, 'personal' => 0.0];
+        }
+
+        return ['business' => 0.0, 'personal' => $line21];
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Data;
 
 use App\Services\Finance\CapitalGains\Form8949ReportRow;
+use App\Services\Finance\MoneyMath;
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 #[TypeScript]
@@ -33,11 +34,11 @@ readonly class Form8949RowFact
             description: $row->description,
             dateAcquired: $row->dateAcquired,
             dateSold: $row->dateSold,
-            proceeds: round($row->proceeds, 2),
-            costBasis: round($row->costBasis, 2),
+            proceeds: MoneyMath::round($row->proceeds),
+            costBasis: MoneyMath::round($row->costBasis),
             adjustmentCode: $row->adjustmentCode,
-            adjustmentAmount: round($row->adjustmentAmount, 2),
-            gainOrLoss: round($row->gainOrLoss, 2),
+            adjustmentAmount: MoneyMath::round($row->adjustmentAmount),
+            gainOrLoss: MoneyMath::round($row->gainOrLoss),
             isShortTerm: $row->isShortTerm,
             isCovered: $row->isCovered,
             isSummaryRow: $row->isSummaryRow,

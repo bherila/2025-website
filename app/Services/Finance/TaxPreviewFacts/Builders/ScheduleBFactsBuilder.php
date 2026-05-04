@@ -5,7 +5,9 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
 {
@@ -53,11 +55,11 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
                     id: "k1-{$doc->id}-schedule-b-interest",
                     label: $partnerName,
                     amount: $this->roundMoney($interest),
-                    sourceType: 'k1_interest_income',
+                    sourceType: TaxFactSourceType::K1InterestIncome,
                     taxDocumentId: $doc->id,
                     formType: 'k1',
                     box: '5',
-                    routing: 'schedule_b_line_1',
+                    routing: TaxFactRouting::ScheduleBLine1,
                     routingReason: 'K-1 Box 5 interest income is listed on Schedule B Part I.',
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
@@ -71,11 +73,11 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
                     id: "k1-{$doc->id}-schedule-b-ordinary-dividends",
                     label: $partnerName,
                     amount: $this->roundMoney($ordinaryDividends),
-                    sourceType: 'k1_ordinary_dividends',
+                    sourceType: TaxFactSourceType::K1OrdinaryDividends,
                     taxDocumentId: $doc->id,
                     formType: 'k1',
                     box: '6a',
-                    routing: 'schedule_b_line_5',
+                    routing: TaxFactRouting::ScheduleBLine5,
                     routingReason: 'K-1 Box 6a ordinary dividends are listed on Schedule B Part II.',
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
@@ -89,11 +91,11 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
                     id: "k1-{$doc->id}-qualified-dividends",
                     label: $partnerName,
                     amount: $this->roundMoney($qualifiedDividends),
-                    sourceType: 'k1_qualified_dividends',
+                    sourceType: TaxFactSourceType::K1QualifiedDividends,
                     taxDocumentId: $doc->id,
                     formType: 'k1',
                     box: '6b',
-                    routing: 'form_1040_line_3a',
+                    routing: TaxFactRouting::Form1040Line3a,
                     routingReason: 'K-1 Box 6b qualified dividends are a subset of Box 6a and support Form 1040 line 3a / Form 4952 line 4b.',
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
@@ -102,12 +104,12 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
             }
         }
 
-        $directInterestTotal = $this->sumSourcesByTypes($interestSources, ['1099_int_interest', '1099_int_treasury_interest']);
+        $directInterestTotal = $this->sumSourcesByTypes($interestSources, [TaxFactSourceType::Form1099IntInterest, TaxFactSourceType::Form1099IntTreasuryInterest]);
         $interestTotal = $this->sumSources($interestSources);
-        $k1InterestTotal = $this->roundMoney($interestTotal - $directInterestTotal);
-        $directOrdinaryDividendTotal = $this->sumSourcesByTypes($ordinaryDividendSources, ['1099_div_ordinary_dividends']);
+        $k1InterestTotal = $this->subtractMoney($interestTotal, $directInterestTotal);
+        $directOrdinaryDividendTotal = $this->sumSourcesByTypes($ordinaryDividendSources, [TaxFactSourceType::Form1099DivOrdinaryDividends]);
         $ordinaryDividendTotal = $this->sumSources($ordinaryDividendSources);
-        $k1OrdinaryDividendTotal = $this->roundMoney($ordinaryDividendTotal - $directOrdinaryDividendTotal);
+        $k1OrdinaryDividendTotal = $this->subtractMoney($ordinaryDividendTotal, $directOrdinaryDividendTotal);
         $qualifiedDividendTotal = $this->sumSources($qualifiedDividendSources);
 
         return new ScheduleBFacts(
@@ -121,7 +123,7 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
             ordinaryDividendTotal: $ordinaryDividendTotal,
             qualifiedDividendSources: $qualifiedDividendSources,
             qualifiedDividendTotal: $qualifiedDividendTotal,
-            form4952Line5aTotal: $this->roundMoney($directInterestTotal + $directOrdinaryDividendTotal),
+            form4952Line5aTotal: $this->sumMoney([$directInterestTotal, $directOrdinaryDividendTotal]),
         );
     }
 
@@ -144,13 +146,13 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
                 id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-interest-box1" : "doc-{$doc->id}-schedule-b-interest-box1",
                 label: $payer,
                 amount: $this->roundMoney($box1),
-                sourceType: '1099_int_interest',
+                sourceType: TaxFactSourceType::Form1099IntInterest,
                 taxDocumentId: $doc->id,
                 taxDocumentAccountId: $link?->id,
                 accountId: $link?->account_id,
                 formType: '1099_int',
                 box: '1',
-                routing: 'schedule_b_line_1',
+                routing: TaxFactRouting::ScheduleBLine1,
                 routingReason: '1099-INT Box 1 interest income is listed on Schedule B Part I.',
                 isReviewed: $this->sourceIsReviewed($doc, $link),
                 reviewStatus: $this->reviewStatus($doc, $link),
@@ -168,13 +170,13 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
                 id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-interest-box3" : "doc-{$doc->id}-schedule-b-interest-box3",
                 label: $payer,
                 amount: $this->roundMoney($box3),
-                sourceType: '1099_int_treasury_interest',
+                sourceType: TaxFactSourceType::Form1099IntTreasuryInterest,
                 taxDocumentId: $doc->id,
                 taxDocumentAccountId: $link?->id,
                 accountId: $link?->account_id,
                 formType: '1099_int',
                 box: '3',
-                routing: 'schedule_b_line_1',
+                routing: TaxFactRouting::ScheduleBLine1,
                 routingReason: '1099-INT Box 3 U.S. savings bond and Treasury obligation interest is listed on Schedule B Part I unless excluded on Form 8815.',
                 isReviewed: $this->sourceIsReviewed($doc, $link),
                 reviewStatus: $this->reviewStatus($doc, $link),
@@ -203,13 +205,13 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
             id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-ordinary-dividends" : "doc-{$doc->id}-schedule-b-ordinary-dividends",
             label: $this->payerName($doc, $link, $parsedData),
             amount: $this->roundMoney($amount),
-            sourceType: '1099_div_ordinary_dividends',
+            sourceType: TaxFactSourceType::Form1099DivOrdinaryDividends,
             taxDocumentId: $doc->id,
             taxDocumentAccountId: $link?->id,
             accountId: $link?->account_id,
             formType: '1099_div',
             box: '1a',
-            routing: 'schedule_b_line_5',
+            routing: TaxFactRouting::ScheduleBLine5,
             routingReason: '1099-DIV Box 1a ordinary dividends are listed on Schedule B Part II.',
             isReviewed: $this->sourceIsReviewed($doc, $link),
             reviewStatus: $this->reviewStatus($doc, $link),
@@ -235,13 +237,13 @@ class ScheduleBFactsBuilder extends TaxPreviewFactBuilder
             id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-qualified-dividends" : "doc-{$doc->id}-qualified-dividends",
             label: $this->payerName($doc, $link, $parsedData),
             amount: $this->roundMoney($amount),
-            sourceType: '1099_div_qualified_dividends',
+            sourceType: TaxFactSourceType::Form1099DivQualifiedDividends,
             taxDocumentId: $doc->id,
             taxDocumentAccountId: $link?->id,
             accountId: $link?->account_id,
             formType: '1099_div',
             box: '1b',
-            routing: 'form_1040_line_3a',
+            routing: TaxFactRouting::Form1040Line3a,
             routingReason: '1099-DIV Box 1b qualified dividends are a subset of Box 1a and support Form 1040 line 3a / Form 4952 line 4b.',
             isReviewed: $this->sourceIsReviewed($doc, $link),
             reviewStatus: $this->reviewStatus($doc, $link),

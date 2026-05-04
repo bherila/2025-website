@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Data;
 
 use App\Services\Finance\CapitalGains\WashSaleAdjustment;
+use App\Services\Finance\MoneyMath;
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 #[TypeScript]
@@ -36,7 +37,7 @@ readonly class WashSaleAdjustmentFact
             symbol: $adjustment->symbol,
             saleDate: $adjustment->saleDateStr,
             replacementDate: $adjustment->replacementDateStr,
-            disallowedLoss: round($adjustment->disallowedLoss, 2),
+            disallowedLoss: MoneyMath::round($adjustment->disallowedLoss),
             saleAccountId: $adjustment->saleAccountId,
             saleAccountName: $adjustment->saleAccountName,
             replacementAccountId: $adjustment->replacementAccountId,

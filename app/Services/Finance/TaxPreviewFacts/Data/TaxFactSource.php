@@ -7,24 +7,31 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 #[TypeScript]
 readonly class TaxFactSource
 {
+    public string $sourceType;
+
+    public ?string $routing;
+
     public function __construct(
         public string $id,
         public string $label,
         public float $amount,
-        public string $sourceType,
+        TaxFactSourceType|string $sourceType,
         public ?int $taxDocumentId = null,
         public ?int $taxDocumentAccountId = null,
         public ?int $accountId = null,
         public ?string $formType = null,
         public ?string $box = null,
         public ?string $code = null,
-        public ?string $routing = null,
+        TaxFactRouting|string|null $routing = null,
         public ?string $routingReason = null,
         public ?string $notes = null,
         public bool $isReviewed = true,
         public string $reviewStatus = 'reviewed',
         public ?string $reviewAction = null,
-    ) {}
+    ) {
+        $this->sourceType = $sourceType instanceof TaxFactSourceType ? $sourceType->value : $sourceType;
+        $this->routing = $routing instanceof TaxFactRouting ? $routing->value : $routing;
+    }
 
     /**
      * @return array{id:string,label:string,amount:float,sourceType:string,taxDocumentId:?int,taxDocumentAccountId:?int,accountId:?int,formType:?string,box:?string,code:?string,routing:?string,routingReason:?string,notes:?string,isReviewed:bool,reviewStatus:string,reviewAction:?string}

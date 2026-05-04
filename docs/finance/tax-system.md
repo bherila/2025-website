@@ -160,6 +160,8 @@ Totals intentionally include `needs_review` sources so the preview can estimate 
 
 Maintainability rule: the fact layer is audit-first and slice-first. Keep DTOs in `app/Services/Finance/TaxPreviewFacts/Data/`; keep form collection/calculation logic in `app/Services/Finance/TaxPreviewFacts/Builders/{Slice}FactsBuilder.php`; keep shared parsed-data/source helpers in `TaxPreviewFactBuilder`; and keep `TaxPreviewFactsService` as orchestration/compatibility glue. New forms should add or extend a builder instead of adding private calculation methods to `TaxPreviewFactsService`.
 
+Money math in backend tax facts should route through `App\Services\Finance\MoneyMath` or the builder helpers that wrap it. The fact layer stores/output dollars as floats for API compatibility, but sums, differences, and 60/40 allocations should be rounded through integer cents so source totals reconcile predictably to filed-return line amounts. `TaxFactSource` routing/source-type values should be produced from the PHP backed enums and serialized as strings; the frontend contract remains string-based.
+
 Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
 
 ```bash

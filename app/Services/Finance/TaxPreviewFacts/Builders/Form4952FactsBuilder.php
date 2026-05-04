@@ -6,7 +6,9 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class Form4952FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -26,8 +28,8 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                 id: 'short-dividends-form4952-line1',
                 label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
                 amount: $this->roundMoney(-abs($shortDividendDeduction)),
-                sourceType: 'short_dividend_investment_interest',
-                routing: 'form_4952_line_1',
+                sourceType: TaxFactSourceType::ShortDividendInvestmentInterest,
+                routing: TaxFactRouting::Form4952Line1,
                 routingReason: 'Short-dividend substitute payments on short positions held more than 45 days are treated as investment interest expense.',
                 isReviewed: true,
             );
@@ -54,15 +56,15 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     $investmentInterestSources[] = new TaxFactSource(
                         id: "k1-{$doc->id}-13{$code}-{$index}",
                         label: "{$partnerName} — Box 13{$code}",
-                        amount: $this->roundMoney(-abs($rawAmount)),
-                        sourceType: 'k1_investment_interest',
+                        amount: $this->roundMoney($rawAmount),
+                        sourceType: TaxFactSourceType::K1InvestmentInterest,
                         taxDocumentId: $doc->id,
                         formType: $this->formType($doc),
                         box: '13',
                         code: $code,
-                        routing: 'form_4952_line_1',
+                        routing: TaxFactRouting::Form4952Line1,
                         routingReason: 'K-1 Box 13 investment-interest codes feed Form 4952 Part I.',
-                        notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
+                        notes: $this->box13InvestmentInterestNotes($item, $rawAmount),
                         isReviewed: $this->sourceIsReviewed($doc),
                         reviewStatus: $this->reviewStatus($doc),
                         reviewAction: $this->reviewAction($doc),
@@ -80,12 +82,12 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     id: "k1-{$doc->id}-20B-{$index}",
                     label: "{$partnerName} — Box 20B (investment expenses)",
                     amount: $this->roundMoney(-abs($rawAmount)),
-                    sourceType: 'k1_excluded_investment_expense',
+                    sourceType: TaxFactSourceType::K1ExcludedInvestmentExpense,
                     taxDocumentId: $doc->id,
                     formType: $this->formType($doc),
                     box: '20',
                     code: 'B',
-                    routing: 'excluded_form_4952_line_5',
+                    routing: TaxFactRouting::ExcludedForm4952Line5,
                     routingReason: 'K-1 Box 20B investment expenses are tracked for debugging but are excluded from the current Form 4952 line 5 return treatment.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
@@ -109,13 +111,13 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                         : "doc-{$doc->id}-1099-int-box5",
                     label: "{$payer} — 1099-INT Box 5 (investment expense)",
                     amount: $this->roundMoney(-abs($amount)),
-                    sourceType: '1099_int_investment_expense',
+                    sourceType: TaxFactSourceType::Form1099IntInvestmentExpense,
                     taxDocumentId: $doc->id,
                     taxDocumentAccountId: $entry['link']?->id,
                     accountId: $entry['link']?->account_id,
                     formType: '1099_int',
                     box: '5',
-                    routing: 'form_4952_line_1',
+                    routing: TaxFactRouting::Form4952Line1,
                     routingReason: 'The current client preview treats 1099-INT Box 5 as an investment-interest source for Form 4952.',
                     isReviewed: $this->sourceIsReviewed($doc, $entry['link']),
                     reviewStatus: $this->reviewStatus($doc, $entry['link']),
@@ -124,17 +126,17 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             }
         }
 
-        $totalInvestmentInterestExpense = abs($this->sumSources($investmentInterestSources));
-        $totalInvestmentExpenses = abs($this->sumSources($investmentExpenseSources));
-        $totalExcludedInvestmentExpenses = abs($this->sumSources($excludedInvestmentExpenseSources));
+        $totalInvestmentInterestExpense = $this->sumAbsoluteSources($investmentInterestSources);
+        $totalInvestmentExpenses = $this->sumAbsoluteSources($investmentExpenseSources);
+        $totalExcludedInvestmentExpenses = $this->sumAbsoluteSources($excludedInvestmentExpenseSources);
         $grossInvestmentIncomeFromScheduleB = $scheduleB->form4952Line5aTotal;
         $grossInvestmentIncomeFromK1 = $this->k1Form4952GrossInvestmentIncome($k1Docs);
-        $grossInvestmentIncomeTotal = $this->roundMoney($grossInvestmentIncomeFromScheduleB + $grossInvestmentIncomeFromK1);
+        $grossInvestmentIncomeTotal = $this->sumMoney([$grossInvestmentIncomeFromScheduleB, $grossInvestmentIncomeFromK1]);
         $totalQualifiedDividends = $this->form4952QualifiedDividendsIncludedInGross($k1Docs, $scheduleB);
-        $line4c = $this->roundMoney($grossInvestmentIncomeTotal - $totalQualifiedDividends);
-        $niiBefore = max(0.0, $this->roundMoney($line4c - $totalInvestmentExpenses));
+        $line4c = $this->subtractMoney($grossInvestmentIncomeTotal, $totalQualifiedDividends);
+        $niiBefore = max(0.0, $this->subtractMoney($line4c, $totalInvestmentExpenses));
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
-        $carryforward = max(0.0, $this->roundMoney($totalInvestmentInterestExpense - $deductible));
+        $carryforward = max(0.0, $this->subtractMoney($totalInvestmentInterestExpense, $deductible));
 
         return new Form4952Facts(
             investmentInterestSources: $investmentInterestSources,
@@ -168,14 +170,15 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             }
 
             $box20A = $this->sumK1CodeItems($data, '20', 'A');
-            $total += $box20A !== 0.0
+            $amount = $box20A !== 0.0
                 ? $box20A
-                : $this->roundMoney(
-                    $this->k1Field($data, '5')
-                    + $this->k1Field($data, '6a')
-                    - $this->k1Field($data, '6b')
-                    + $this->sumK1CodeItems($data, '11', 'C')
-                );
+                : $this->sumMoney([
+                    $this->k1Field($data, '5'),
+                    $this->k1Field($data, '6a'),
+                    -$this->k1Field($data, '6b'),
+                    $this->sumK1CodeItems($data, '11', 'C'),
+                ]);
+            $total = $this->sumMoney([$total, $amount]);
         }
 
         return $this->roundMoney($total);
@@ -186,7 +189,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
      */
     private function form4952QualifiedDividendsIncludedInGross(array $k1Docs, ScheduleBFacts $scheduleB): float
     {
-        $directQualifiedDividends = $this->sumSourcesByTypes($scheduleB->qualifiedDividendSources, ['1099_div_qualified_dividends']);
+        $directQualifiedDividends = $this->sumSourcesByTypes($scheduleB->qualifiedDividendSources, [TaxFactSourceType::Form1099DivQualifiedDividends]);
         $k1QualifiedDividendsIncludedInBox20A = 0.0;
 
         foreach ($k1Docs as $doc) {
@@ -195,9 +198,24 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                 continue;
             }
 
-            $k1QualifiedDividendsIncludedInBox20A += $this->k1Field($data, '6b');
+            $k1QualifiedDividendsIncludedInBox20A = $this->sumMoney([$k1QualifiedDividendsIncludedInBox20A, $this->k1Field($data, '6b')]);
         }
 
-        return $this->roundMoney($directQualifiedDividends + $k1QualifiedDividendsIncludedInBox20A);
+        return $this->sumMoney([$directQualifiedDividends, $k1QualifiedDividendsIncludedInBox20A]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function box13InvestmentInterestNotes(array $item, float $rawAmount): ?string
+    {
+        $notes = is_string($item['notes'] ?? null) ? $item['notes'] : null;
+        if ($rawAmount <= 0.0) {
+            return $notes;
+        }
+
+        $warning = 'Reported as a positive K-1 Box 13 amount; total expense uses the absolute value.';
+
+        return $notes !== null && $notes !== '' ? "{$notes} {$warning}" : $warning;
     }
 }

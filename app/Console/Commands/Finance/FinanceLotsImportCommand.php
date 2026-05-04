@@ -3,6 +3,7 @@
 namespace App\Console\Commands\Finance;
 
 use App\Models\FinanceTool\FinAccountLot;
+use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
 use App\Services\Finance\Wealthfront1099BLotParser;
 use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Carbon;
@@ -63,21 +64,15 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
     protected $description = 'Import 1099-B lots (JSON / CSV / TOON / broker PDF/text) into fin_account_lots';
 
-    // ── CSV column constants ──────────────────────────────────────────────────
-
     private const CSV_REQUIRED_COLS = ['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'realized_gain_loss'];
 
     private const CSV_OPTIONAL_COLS = ['description', 'cusip', 'wash_sale_disallowed', 'is_short_term', 'form_8949_box', 'is_covered'];
-
-    // ── pdftotext parser state ────────────────────────────────────────────────
 
     private string $currentSymbol = '';
 
     private string $currentDescription = '';
 
     private bool $isLongTerm = false;
-
-    // ── main ──────────────────────────────────────────────────────────────────
 
     public function handle(): int
     {
@@ -178,8 +173,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return 0;
     }
 
-    // ── input ─────────────────────────────────────────────────────────────────
-
     private function readInput(): ?string
     {
         $filePath = $this->option('file');
@@ -192,7 +185,13 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             }
 
             if (strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'pdf') {
-                $raw = app(Wealthfront1099BLotParser::class)->textFromPdf($filePath);
+                try {
+                    $raw = app(Wealthfront1099BLotParser::class)->textFromPdf($filePath);
+                } catch (WealthfrontPdfParseException $exception) {
+                    $this->error($exception->getMessage());
+
+                    return null;
+                }
             } else {
                 $raw = file_get_contents($filePath);
             }
@@ -271,8 +270,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return 'text';
     }
 
-    // ── JSON parser ───────────────────────────────────────────────────────────
-
     /**
      * Parse broker_1099 JSON (the format used by the AI-extracted 1099b.json).
      *
@@ -343,8 +340,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return $lots;
     }
 
-    // ── TOON parser ───────────────────────────────────────────────────────────
-
     /**
      * Parse TOON-encoded lot data (helgesverre/toon).
      *
@@ -373,8 +368,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         return $this->parseJson($asJson);
     }
-
-    // ── CSV parser ────────────────────────────────────────────────────────────
 
     /**
      * Parse a flat CSV file.  The first row must be a header row.
@@ -450,8 +443,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         return $lots;
     }
-
-    // ── pdftotext parser ──────────────────────────────────────────────────────
 
     /**
      * Parse broker 1099-B text output.
@@ -551,8 +542,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         return $lots;
     }
-
-    // ── persistence ───────────────────────────────────────────────────────────
 
     /**
      * Insert parsed lots, skipping exact duplicates already in the table.
@@ -864,19 +853,34 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private function bulkUpdateLotTransactionIds(array $updates): void
     {
         foreach (array_chunk($updates, 500) as $chunk) {
-            foreach ($chunk as $update) {
-                FinAccountLot::query()
-                    ->whereKey($update['lot_id'])
-                    ->update([
-                        'open_t_id' => $update['open_t_id'],
-                        'close_t_id' => $update['close_t_id'],
-                        'updated_at' => now(),
-                    ]);
-            }
+            $lotIds = array_map(static fn (array $update): int => $update['lot_id'], $chunk);
+            FinAccountLot::query()
+                ->whereIn('lot_id', $lotIds)
+                ->update([
+                    'open_t_id' => DB::raw($this->caseLotUpdateSql($chunk, 'open_t_id')),
+                    'close_t_id' => DB::raw($this->caseLotUpdateSql($chunk, 'close_t_id')),
+                    'updated_at' => now(),
+                ]);
         }
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    /**
+     * @param  array<int, array{lot_id: int, open_t_id: int|null, close_t_id: int|null}>  $updates
+     */
+    private function caseLotUpdateSql(array $updates, string $field): string
+    {
+        $cases = ['CASE lot_id'];
+
+        foreach ($updates as $update) {
+            $value = $update[$field] === null ? 'NULL' : (string) (int) $update[$field];
+            $cases[] = sprintf('WHEN %d THEN %s', $update['lot_id'], $value);
+        }
+
+        $cases[] = "ELSE {$field}";
+        $cases[] = 'END';
+
+        return implode(' ', $cases);
+    }
 
     private function taxDocumentId(): int|false|null
     {
@@ -980,8 +984,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return (float) str_replace(',', '', trim($raw));
     }
 
-    // ── schema ────────────────────────────────────────────────────────────────
-
     private function printSchema(): void
     {
         $this->line('');
@@ -1058,8 +1060,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->line('The file must contain "FORM 1099-B" and "Short-term transactions" or');
         $this->line('"Long-term transactions" section headers, or the standard Wealthfront covered-lot layout.');
     }
-
-    // ── output ────────────────────────────────────────────────────────────────
 
     /** @param  array<int, array<string, mixed>>  $lots */
     private function renderLotsTable(array $lots): void

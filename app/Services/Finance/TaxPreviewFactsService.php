@@ -14,9 +14,12 @@ use App\Services\Finance\TaxPreviewFacts\Builders\Form8949FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Schedule1FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleBFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleDFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
 use Carbon\CarbonImmutable;
+use InvalidArgumentException;
 
 class TaxPreviewFactsService
 {
@@ -82,6 +85,10 @@ class TaxPreviewFactsService
         }
 
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
+        if ($userId === null && $this->containsCapitalGainsDocuments($docs1099)) {
+            throw new InvalidArgumentException('A user id is required to compute capital-gains tax preview facts from 1099-B or broker 1099 documents.');
+        }
+
         $capitalGainsReport = $userId !== null
             ? $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)
             : $this->emptyCapitalGainsReport($year);
@@ -157,6 +164,20 @@ class TaxPreviewFactsService
         return (string) $doc->getAttribute('form_type');
     }
 
+    /**
+     * @param  FileForTaxDocument[]  $docs1099
+     */
+    private function containsCapitalGainsDocuments(array $docs1099): bool
+    {
+        foreach ($docs1099 as $doc) {
+            if (in_array($this->formType($doc), ['1099_b', 'broker_1099'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function shortDividendItemizedDeduction(int $userId, int $year): float
     {
         $accountIds = FinAccounts::withoutGlobalScopes()
@@ -192,7 +213,7 @@ class TaxPreviewFactsService
                 $dividendDate = CarbonImmutable::parse((string) $transaction->t_date);
                 $daysHeld = $shortOpenDate->diffInDays($dividendDate, false);
                 if ($daysHeld > 45) {
-                    $total += abs((float) $transaction->t_amt);
+                    $total = MoneyMath::sum([$total, abs((float) $transaction->t_amt)]);
                 }
             }
         }
@@ -226,7 +247,7 @@ class TaxPreviewFactsService
 
         $sources = [];
         foreach ($rows as $accountId => $transactions) {
-            $amount = $this->roundMoney($transactions->sum(static fn (FinAccountLineItems $transaction): float => (float) $transaction->t_amt));
+            $amount = MoneyMath::sum($transactions->map(static fn (FinAccountLineItems $transaction): float => (float) $transaction->t_amt)->all());
             if ($amount === 0.0) {
                 continue;
             }
@@ -237,9 +258,9 @@ class TaxPreviewFactsService
                 id: "account-{$accountId}-margin-interest",
                 label: "{$accountName} — Margin interest paid",
                 amount: $amount,
-                sourceType: 'brokerage_margin_interest',
+                sourceType: TaxFactSourceType::BrokerageMarginInterest,
                 accountId: (int) $accountId,
-                routing: 'form_4952_line_1',
+                routing: TaxFactRouting::Form4952Line1,
                 routingReason: 'Brokerage margin-interest transactions are investment interest expense for Form 4952 Part I.',
                 isReviewed: true,
             );
@@ -273,17 +294,28 @@ class TaxPreviewFactsService
 
         $dividendDate = (string) $dividend->t_date;
         $openDate = null;
+        $latestCoverDate = null;
 
         foreach ($transactions as $transaction) {
-            if ((string) $transaction->t_symbol !== $symbol
-                || $transaction->t_type !== 'Sell Short'
-                || (string) $transaction->t_date > $dividendDate) {
+            if ((string) $transaction->t_symbol !== $symbol || (string) $transaction->t_date > $dividendDate) {
                 continue;
             }
 
-            if ($openDate === null || (string) $transaction->t_date > $openDate) {
+            if ($transaction->t_type === 'Sell Short') {
                 $openDate = (string) $transaction->t_date;
             }
+
+            if ($transaction->t_type === 'Cover') {
+                $latestCoverDate = (string) $transaction->t_date;
+            }
+
+            if ($transaction === $dividend) {
+                break;
+            }
+        }
+
+        if ($openDate !== null && $latestCoverDate !== null && $latestCoverDate >= $openDate) {
+            return null;
         }
 
         return $openDate !== null ? CarbonImmutable::parse($openDate) : null;
@@ -291,6 +323,6 @@ class TaxPreviewFactsService
 
     private function roundMoney(float $value): float
     {
-        return round($value, 2);
+        return MoneyMath::round($value);
     }
 }

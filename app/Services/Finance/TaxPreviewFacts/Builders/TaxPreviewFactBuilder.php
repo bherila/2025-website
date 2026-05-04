@@ -7,7 +7,9 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\K1CodeCharacterResolver;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 abstract class TaxPreviewFactBuilder
 {
@@ -228,10 +230,9 @@ abstract class TaxPreviewFactBuilder
      */
     protected function sumK1CodeItems(array $data, string $box, string $code): float
     {
-        return $this->roundMoney(array_reduce(
+        return $this->sumMoney(array_map(
+            fn (array $item): float => $this->parseMoney($item['value'] ?? null) ?? 0.0,
             $this->k1CodeItems($data, $box, $code),
-            fn (float $total, array $item): float => $total + ($this->parseMoney($item['value'] ?? null) ?? 0.0),
-            0.0,
         ));
     }
 
@@ -240,10 +241,9 @@ abstract class TaxPreviewFactBuilder
      */
     protected function sumAbsK1CodeItems(array $data, string $box, string $code): float
     {
-        return $this->roundMoney(array_reduce(
+        return $this->sumMoney(array_map(
+            fn (array $item): float => abs($this->parseMoney($item['value'] ?? null) ?? 0.0),
             $this->k1CodeItems($data, $box, $code),
-            fn (float $total, array $item): float => $total + abs($this->parseMoney($item['value'] ?? null) ?? 0.0),
-            0.0,
         ));
     }
 
@@ -308,7 +308,7 @@ abstract class TaxPreviewFactBuilder
                 continue;
             }
 
-            $total += $value;
+            $total = $this->sumMoney([$total, $value]);
             $hasValue = true;
         }
 
@@ -338,7 +338,7 @@ abstract class TaxPreviewFactBuilder
                 continue;
             }
 
-            $total += $value;
+            $total = $this->sumMoney([$total, $value]);
             $hasValue = true;
         }
 
@@ -354,23 +354,37 @@ abstract class TaxPreviewFactBuilder
      */
     protected function sumSources(array $sources): float
     {
-        return $this->roundMoney(array_reduce(
+        return $this->sumMoney(array_map(
+            static fn (TaxFactSource $source): float => $source->amount,
             $sources,
-            static fn (float $total, TaxFactSource $source): float => $total + $source->amount,
-            0.0,
         ));
     }
 
     /**
      * @param  TaxFactSource[]  $sources
-     * @param  string[]  $sourceTypes
+     */
+    protected function sumAbsoluteSources(array $sources): float
+    {
+        return $this->sumMoney(array_map(
+            static fn (TaxFactSource $source): float => abs($source->amount),
+            $sources,
+        ));
+    }
+
+    /**
+     * @param  TaxFactSource[]  $sources
+     * @param  TaxFactSourceType[]  $sourceTypes
      */
     protected function sumSourcesByTypes(array $sources, array $sourceTypes): float
     {
-        return $this->roundMoney(array_reduce(
+        $sourceTypeValues = array_map(
+            static fn (TaxFactSourceType $sourceType): string => $sourceType->value,
+            $sourceTypes,
+        );
+
+        return $this->sumMoney(array_map(
+            static fn (TaxFactSource $source): float => in_array($source->sourceType, $sourceTypeValues, true) ? $source->amount : 0.0,
             $sources,
-            static fn (float $total, TaxFactSource $source): float => $total + (in_array($source->sourceType, $sourceTypes, true) ? $source->amount : 0.0),
-            0.0,
         ));
     }
 
@@ -450,12 +464,25 @@ abstract class TaxPreviewFactBuilder
 
         $number = (float) $normalized;
 
-        return $this->roundMoney($isParentheticalNegative ? -abs($number) : $number);
+        return MoneyMath::round($isParentheticalNegative ? -abs($number) : $number);
     }
 
     protected function roundMoney(float $value): float
     {
-        return round($value, 2);
+        return MoneyMath::round($value);
+    }
+
+    /**
+     * @param  array<int, float|int|string>  $values
+     */
+    protected function sumMoney(array $values): float
+    {
+        return MoneyMath::sum($values);
+    }
+
+    protected function subtractMoney(float|int|string $left, float|int|string $right): float
+    {
+        return MoneyMath::subtract($left, $right);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Data;
 
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
+use App\Services\Finance\MoneyMath;
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 #[TypeScript]
@@ -25,10 +26,10 @@ readonly class ScheduleDRollupFact
             form8949Box: $rollup->form8949Box,
             isShortTerm: $rollup->isShortTerm,
             scheduleDLine: $rollup->scheduleDLine,
-            totalProceeds: round($rollup->totalProceeds, 2),
-            totalCostBasis: round($rollup->totalCostBasis, 2),
-            totalAdjustment: round($rollup->totalAdjustment, 2),
-            netGainOrLoss: round($rollup->netGainOrLoss, 2),
+            totalProceeds: MoneyMath::round($rollup->totalProceeds),
+            totalCostBasis: MoneyMath::round($rollup->totalCostBasis),
+            totalAdjustment: MoneyMath::round($rollup->totalAdjustment),
+            netGainOrLoss: MoneyMath::round($rollup->netGainOrLoss),
             rowCount: $rollup->rowCount,
         );
     }

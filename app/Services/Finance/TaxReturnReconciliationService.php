@@ -20,10 +20,10 @@ class TaxReturnReconciliationService
             $actual = $this->actualValue($facts, (string) ($line['path'] ?? ''));
 
             $status = 'matched';
-            $roundedExpected = $expected !== null ? round($expected, $precision) : null;
-            $roundedActual = $actual !== null ? round($actual, $precision) : null;
+            $roundedExpected = $expected !== null ? $this->roundMoney($expected, $precision) : null;
+            $roundedActual = $actual !== null ? $this->roundMoney($actual, $precision) : null;
             $delta = $roundedExpected !== null && $roundedActual !== null
-                ? round($roundedActual - $roundedExpected, max(2, $precision))
+                ? $this->roundMoney($roundedActual - $roundedExpected, max(2, $precision))
                 : null;
 
             if ($actual === null) {
@@ -167,10 +167,10 @@ class TaxReturnReconciliationService
                 return null;
             }
 
-            $total += $value;
+            $total = MoneyMath::sum([$total, $value]);
         }
 
-        return round($total, 2);
+        return $this->roundMoney($total);
     }
 
     /**
@@ -185,7 +185,7 @@ class TaxReturnReconciliationService
             return null;
         }
 
-        return round($left - $right, 2);
+        return $this->roundMoney($left - $right);
     }
 
     /**
@@ -221,5 +221,14 @@ class TaxReturnReconciliationService
         }
 
         return null;
+    }
+
+    private function roundMoney(float $value, int $precision = 2): float
+    {
+        if ($precision === 2) {
+            return MoneyMath::round($value);
+        }
+
+        return round($value, $precision);
     }
 }

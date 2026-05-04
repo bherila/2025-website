@@ -2,13 +2,35 @@
 
 namespace App\Services\Finance;
 
+use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
 use Smalot\PdfParser\Parser;
+use Throwable;
 
 class Wealthfront1099BLotParser
 {
+    private const MAX_PDF_BYTES = 25_000_000;
+
     public function textFromPdf(string $path): string
     {
-        return (new Parser)->parseFile($path)->getText();
+        $realPath = realpath($path);
+        if ($realPath === false || ! is_file($realPath) || ! is_readable($realPath)) {
+            throw WealthfrontPdfParseException::invalidPath($path);
+        }
+
+        $fileSize = filesize($realPath);
+        if ($fileSize === false) {
+            throw WealthfrontPdfParseException::invalidPath($path);
+        }
+
+        if ($fileSize > self::MAX_PDF_BYTES) {
+            throw WealthfrontPdfParseException::tooLarge($realPath, $fileSize, self::MAX_PDF_BYTES);
+        }
+
+        try {
+            return (new Parser)->parseFile($realPath)->getText();
+        } catch (Throwable $exception) {
+            throw WealthfrontPdfParseException::parseFailed($realPath, $exception->getMessage());
+        }
     }
 
     /**

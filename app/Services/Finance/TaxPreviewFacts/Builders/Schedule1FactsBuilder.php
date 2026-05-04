@@ -5,7 +5,9 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class Schedule1FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -30,7 +32,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             $box4 = $this->k1Field($data, '4');
             $box11ZZ = $this->sumK1CodeItems($data, '11', 'ZZ');
             $box13ZZ = $this->sumAbsK1CodeItems($data, '13', 'ZZ');
-            $amount = $this->roundMoney($box1 + $box2 + $box3 + $box4 + $box11ZZ - $box13ZZ);
+            $amount = $this->sumMoney([$box1, $box2, $box3, $box4, $box11ZZ, -$box13ZZ]);
 
             if ($amount === 0.0) {
                 continue;
@@ -40,10 +42,10 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
                 id: "k1-{$doc->id}-schedule1-line5",
                 label: "{$partnerName} — Schedule E net income/loss",
                 amount: $amount,
-                sourceType: 'k1_schedule_e_net',
+                sourceType: TaxFactSourceType::K1ScheduleENet,
                 taxDocumentId: $doc->id,
                 formType: $this->formType($doc),
-                routing: 'schedule_1_line_5',
+                routing: TaxFactRouting::Schedule1Line5,
                 routingReason: 'K-1 ordinary, rental, and Schedule E partnership-statement sources flow through Schedule E to Schedule 1 line 5.',
                 notes: "Box 1 {$box1}; Box 2 {$box2}; Box 3 {$box3}; Box 4 {$box4}; Box 11ZZ {$box11ZZ}; Box 13ZZ -{$box13ZZ}",
                 isReviewed: $this->sourceIsReviewed($doc),
@@ -74,7 +76,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             line8iTotal: $line8iTotal,
             line8zSources: $line8zSources,
             line8zTotal: $line8zTotal,
-            line9TotalOtherIncome: $this->roundMoney($line8bTotal + $line8hTotal + $line8iTotal + $line8zTotal),
+            line9TotalOtherIncome: $this->sumMoney([$line8bTotal, $line8hTotal, $line8iTotal, $line8zTotal]),
         );
     }
 
@@ -168,17 +170,20 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         ?string $routing,
     ): TaxFactSource {
         $payer = $this->payerName($doc, $link, $parsedData);
+        $factRouting = $routing !== null
+            ? TaxFactRouting::from($routing)
+            : TaxFactRouting::DefaultSchedule18z;
 
         return new TaxFactSource(
             id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule1-8z" : "doc-{$doc->id}-schedule1-8z",
             label: "{$payer} — 1099-MISC other income",
             amount: $amount,
-            sourceType: '1099_misc_other_income',
+            sourceType: TaxFactSourceType::Form1099MiscOtherIncome,
             taxDocumentId: $doc->id,
             taxDocumentAccountId: $link?->id,
             accountId: $link?->account_id,
             formType: '1099_misc',
-            routing: $routing ?? 'default_schedule_1_8z',
+            routing: $factRouting,
             routingReason: $routing === null
                 ? 'Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E.'
                 : '1099-MISC routing explicitly targets the Schedule 1 line 8 family.',

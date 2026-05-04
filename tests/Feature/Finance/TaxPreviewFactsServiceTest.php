@@ -9,6 +9,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 class TaxPreviewFactsServiceTest extends TestCase
@@ -90,6 +91,23 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(60.0, $facts['schedule1']['line9TotalOtherIncome']);
         $this->assertCount(3, $facts['schedule1']['line8Sources']);
         $this->assertCount(1, $facts['schedule1']['line8zSources']);
+    }
+
+    public function test_schedule1_legacy_line8_routing_defaults_to_line8z(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'sch_1_line_8',
+            'parsed_data' => ['box3_other_income' => 12.34],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertSame(12.34, $facts['schedule1']['line8zTotal']);
+        $this->assertSame(0.0, $facts['schedule1']['line8bTotal']);
+        $this->assertSame('sch_1_line_8', $facts['schedule1']['line8zSources'][0]['routing']);
     }
 
     public function test_1099_misc_explicit_schedule_c_or_e_routing_excludes_line8z(): void
@@ -262,6 +280,60 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('brokerage_margin_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
     }
 
+    public function test_short_dividend_holding_period_resets_after_cover_and_reopen(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $now = now();
+        DB::table('fin_account_line_items')->insert([
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-01-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-02-01',
+                't_type' => 'Cover',
+                't_symbol' => 'XYZ',
+                't_qty' => 10,
+                't_amt' => -900,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-03-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-03-20',
+                't_type' => 'Dividend',
+                't_symbol' => 'XYZ',
+                't_amt' => -50,
+                't_description' => 'SHORT DIVIDEND CHARGED',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(0.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertSame([], $facts['form4952']['investmentInterestSources']);
+    }
+
     public function test_form4952_reconstructs_k1_gross_investment_income_when_box_20a_is_absent(): void
     {
         $user = $this->createUser();
@@ -301,6 +373,35 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(26320.0, $facts['form4952']['totalInvestmentInterestExpense']);
         $this->assertCount(1, $facts['form4952']['investmentInterestSources']);
         $this->assertSame('k1_investment_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
+    }
+
+    public function test_form4952_preserves_k1_box13_signs_while_totaling_absolute_expense(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund Positive'],
+                codes: ['13' => [['code' => 'H', 'value' => '100']]],
+            ),
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund Negative'],
+                codes: ['13' => [['code' => 'H', 'value' => '-25']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+        $sourcesByLabel = collect($facts['form4952']['investmentInterestSources'])->keyBy('label');
+
+        $this->assertSame(125.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertSame(100.0, $sourcesByLabel['Fund Positive — Box 13H']['amount']);
+        $this->assertStringContainsString('positive K-1 Box 13', $sourcesByLabel['Fund Positive — Box 13H']['notes']);
+        $this->assertSame(-25.0, $sourcesByLabel['Fund Negative — Box 13H']['amount']);
     }
 
     public function test_schedule_d_and_form8949_facts_use_canonical_php_capital_gains_report(): void
@@ -376,6 +477,48 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(1855.0, $facts['scheduleD']['line16Combined']);
         $this->assertSame(75.0, $facts['scheduleD']['ambiguous11SAmount']);
         $this->assertSame('needs_review_schedule_d_line_5_or_12', $facts['scheduleD']['ambiguous11SSources'][0]['routing']);
+    }
+
+    public function test_schedule_d_limited_capital_gains_handles_mixed_sign_business_and_personal(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $this->createLot($account, [
+            'symbol' => 'MSFT',
+            'description' => 'Microsoft Corp.',
+            'purchase_date' => '2023-01-01',
+            'sale_date' => '2025-11-01',
+            'cost_basis' => 1000,
+            'proceeds' => 2000,
+            'is_short_term' => false,
+            'form_8949_box' => 'D',
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'Business Loss Fund', '8' => '-5000']),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(-5000.0, $facts['scheduleD']['totalBusinessCapGains']);
+        $this->assertSame(1000.0, $facts['scheduleD']['totalPersonalCapGains']);
+        $this->assertSame(-3000.0, $facts['scheduleD']['line21LimitedLossOrGain']);
+        $this->assertSame(-3000.0, $facts['scheduleD']['limitedBusinessCapGains']);
+        $this->assertSame(0.0, $facts['scheduleD']['limitedPersonalCapGains']);
+    }
+
+    public function test_facts_from_documents_requires_user_id_for_capital_gains_documents(): void
+    {
+        $user = $this->createUser();
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'parsed_data' => [],
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        app(TaxPreviewFactsService::class)->factsFromDocuments(2025, [$document]);
     }
 
     private function createAccount(int $userId): FinAccounts
