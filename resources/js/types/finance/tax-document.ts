@@ -355,6 +355,7 @@ export interface TaxDocumentAccountLink {
   is_reviewed: boolean
   notes: string | null
   misc_routing?: MiscRouting | null
+  reporting_mode?: Broker1099BReportingMode | null
   parsed_data_needs_review?: boolean
   parsed_data_warnings?: ParsedDataWarning[]
   has_original_parsed_data?: boolean
@@ -362,6 +363,8 @@ export interface TaxDocumentAccountLink {
   created_at: string
   updated_at: string
 }
+
+export type Broker1099BReportingMode = 'schedule_d_summary' | 'form_8949_summary' | 'form_8949_transactions'
 
 export interface ParsedDataWarning {
   path: string

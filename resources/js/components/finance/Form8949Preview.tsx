@@ -6,10 +6,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
-import { form8949LotsFromTaxDocuments, mergeForm8949Lots } from '@/lib/finance/form8949Extraction'
+import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
+import { mergeForm8949Lots } from '@/lib/finance/form8949Extraction'
 import type { TaxDocument } from '@/types/finance/tax-document'
-
-export { form8949LotsFromTaxDocuments }
 
 /** One closed lot row, shaped to match the `fin_account_lots` closed-status API response. */
 export interface Form8949Lot {
@@ -34,6 +33,7 @@ export interface Form8949Lot {
   account_name?: string | null
   account_last4?: string | null
   account_link_id?: number | null
+  adjustment_code?: string | null
 }
 
 export type Form8949Box = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
@@ -63,6 +63,10 @@ export interface Form8949Data {
   longTerm: Form8949Section[]
   partITotals: { proceeds: number; basis: number; adjustment: number; gain: number }
   partIITotals: { proceeds: number; basis: number; adjustment: number; gain: number }
+}
+
+export function form8949LotsFromTaxDocuments(docs: TaxDocument[], accountId?: number): Form8949Lot[] {
+  return buildCapitalGainsReportFromTaxDocuments(docs, accountId).form8949Lots
 }
 
 function toNum(v: unknown): number {
@@ -156,7 +160,8 @@ export function computeForm8949(lots: Form8949Lot[]): Form8949Data {
       : toNum(lot.realized_gain_loss)
     const inferredAdjustment = currency(gain).subtract(unadjustedGain).value
     const adjustment = washSale ?? inferredAdjustment
-    const code = washSale !== null || Math.abs(inferredAdjustment) > 0.005 ? 'W' : ''
+    const computedCode = washSale !== null || Math.abs(inferredAdjustment) > 0.005 ? 'W' : ''
+    const code = lot.adjustment_code?.trim() || computedCode
 
     const row: Form8949Row = {
       description: rowDescription(lot),
@@ -246,7 +251,7 @@ export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], a
   }, [selectedYear, accountId])
 
   const importedLots = useMemo(
-    () => form8949LotsFromTaxDocuments(reviewed1099Docs, accountId),
+    () => buildCapitalGainsReportFromTaxDocuments(reviewed1099Docs, accountId).form8949Lots,
     [reviewed1099Docs, accountId],
   )
   const mergedLots = useMemo(() => mergeForm8949Lots(lots ?? [], importedLots), [lots, importedLots])

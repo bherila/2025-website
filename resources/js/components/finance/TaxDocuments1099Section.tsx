@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Sigma, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown, Clock, Eye, FileText, Loader2, Plus, Sigma, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -24,14 +24,21 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
+import {
+  defaultReportingMode,
+  isBroker1099BLink,
+  REPORTING_MODE_LABELS,
+  scheduleDSummaryEligibility,
+} from '@/lib/finance/capitalGainsReporting'
 import type { DocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { getDocAmounts, getPayerName, hasReviewedContent } from '@/lib/finance/taxDocumentUtils'
-import type { F1099DivParsedData, F1099IntParsedData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { extractLinkParsedData, getDocAmounts, getPayerName, hasReviewedContent } from '@/lib/finance/taxDocumentUtils'
+import type { Broker1099BReportingMode, F1099DivParsedData, F1099IntParsedData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 import { TAX_TABS } from './tax-tab-ids'
@@ -150,6 +157,7 @@ interface UploadModalState {
 }
 
 const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
+const REPORTING_MODE_OPTIONS = ['schedule_d_summary', 'form_8949_summary', 'form_8949_transactions'] as const
 // Form types shown as individual upload options in the per-account Add dropdown.
 // 'broker_1099' is intentionally omitted here — it is handled by the "Consolidated 1099" entry
 // which routes through the MultiAccountImportModal with a preselected account.
@@ -187,7 +195,7 @@ export default function TaxDocuments1099Section({
 
   const fetchDocuments = useCallback(async () => {
     try {
-        const params = new URLSearchParams({
+      const params = new URLSearchParams({
         form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_nec,1099_b,broker_1099,k1',
         year: String(selectedYear),
       })
@@ -200,6 +208,15 @@ export default function TaxDocuments1099Section({
       setError('Failed to load account documents')
     }
   }, [selectedYear])
+
+  const reloadDocuments = useCallback(async () => {
+    if (onDocumentsReload) {
+      await onDocumentsReload()
+      return
+    }
+
+    await fetchDocuments()
+  }, [fetchDocuments, onDocumentsReload])
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -399,6 +416,82 @@ export default function TaxDocuments1099Section({
     )
   }
 
+  const parsedDataForReportingMode = (doc: TaxDocument, link: TaxDocumentAccountLink): Record<string, unknown> | null => {
+    if (doc.form_type === 'broker_1099') {
+      return extractLinkParsedData(doc, link)
+    }
+
+    return doc.parsed_data && typeof doc.parsed_data === 'object' && !Array.isArray(doc.parsed_data)
+      ? doc.parsed_data as Record<string, unknown>
+      : null
+  }
+
+  const handleReportingModeChange = async (
+    doc: TaxDocument,
+    link: TaxDocumentAccountLink,
+    nextMode: Broker1099BReportingMode,
+  ) => {
+    const parsedData = parsedDataForReportingMode(doc, link)
+    const eligibility = parsedData ? scheduleDSummaryEligibility(parsedData) : { eligible: true, warnings: [] }
+    if (nextMode === 'schedule_d_summary' && !eligibility.eligible) {
+      toast.error(eligibility.warnings[0] ?? 'Schedule D Summary is not available for this 1099-B account.')
+      return
+    }
+
+    try {
+      await fetchWrapper.patch(`/api/finance/tax-documents/${doc.id}/accounts/${link.id}`, {
+        reporting_mode: nextMode,
+      })
+      toast.success('Reporting mode updated')
+      await reloadDocuments()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update reporting mode')
+    }
+  }
+
+  const renderReportingModeSelector = (doc: TaxDocument, link?: TaxDocumentAccountLink) => {
+    if (!link || !isBroker1099BLink(link)) {
+      return null
+    }
+
+    const parsedData = parsedDataForReportingMode(doc, link)
+    const eligibility = parsedData ? scheduleDSummaryEligibility(parsedData) : { eligible: true, warnings: [] }
+    const value = link.reporting_mode ?? (parsedData ? defaultReportingMode(parsedData) : 'form_8949_transactions')
+
+    return (
+      <div className="flex min-w-[13rem] flex-col gap-1">
+        <Select
+          value={value}
+          onValueChange={(next) => void handleReportingModeChange(doc, link, next as Broker1099BReportingMode)}
+        >
+          <SelectTrigger size="sm" className="h-7 w-full min-w-[13rem] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REPORTING_MODE_OPTIONS.map(mode => (
+              <SelectItem key={mode} value={mode} disabled={mode === 'schedule_d_summary' && !eligibility.eligible}>
+                {REPORTING_MODE_LABELS[mode]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!eligibility.eligible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-3 w-3" />
+                Schedule D summary unavailable
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-72">
+              {eligibility.warnings.join(' ')}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    )
+  }
+
   type DocRow = {
     key: string
     doc: TaxDocument
@@ -541,7 +634,9 @@ export default function TaxDocuments1099Section({
         }
 
         const visibleColumns = MONEY_COLUMNS.filter(c => hasDataByKey[c.key])
-        const totalCols = 3 + visibleColumns.length
+        const hasReportingColumn = allGroups.some((group) => group.rows.some((row) => isBroker1099BLink(row.link)))
+        const baseColumnCount = hasReportingColumn ? 4 : 3
+        const totalCols = baseColumnCount + visibleColumns.length
 
         const renderAmountCells = (a: DocAmounts) => (
           <>
@@ -573,6 +668,9 @@ export default function TaxDocuments1099Section({
             <TableRow key={`${g.account.acct_id}-${r.key}`} className={g.isSecondary ? 'opacity-50' : ''}>
               {idx === 0 ? accountCell : null}
               <TableCell className="align-middle">{renderTaxDocumentButton(r.doc, r.link)}</TableCell>
+              {hasReportingColumn && (
+                <TableCell className="align-middle">{renderReportingModeSelector(r.doc, r.link)}</TableCell>
+              )}
               <TableCell className="text-xs text-muted-foreground align-middle">{r.payerName}</TableCell>
               {renderAmountCells(r.amounts)}
             </TableRow>
@@ -586,6 +684,7 @@ export default function TaxDocuments1099Section({
                 <TableRow>
                   <TableHead>Account</TableHead>
                   <TableHead>Document</TableHead>
+                  {hasReportingColumn && <TableHead>Reporting</TableHead>}
                   <TableHead>Name</TableHead>
                   {visibleColumns.map(col => (
                     <TableHead key={col.key} className="text-right">
@@ -597,7 +696,7 @@ export default function TaxDocuments1099Section({
               <TableBody>
                 {visibleColumns.length > 0 && (
                   <TableRow className="border-b border-muted bg-muted/20 hover:bg-muted/30">
-                    <TableCell colSpan={3} className="font-semibold text-sm">Total</TableCell>
+                    <TableCell colSpan={baseColumnCount} className="font-semibold text-sm">Total</TableCell>
                     {visibleColumns.map(col => (
                       <MoneyCell key={col.key} value={totalsByKey[col.key].value} isTotal />
                     ))}

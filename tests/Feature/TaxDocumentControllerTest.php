@@ -698,6 +698,60 @@ class TaxDocumentControllerTest extends TestCase
         ]);
     }
 
+    public function test_can_update_account_link_reporting_mode(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'is_reviewed' => true,
+        ]);
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+            'is_reviewed' => true,
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
+            'reporting_mode' => 'form_8949_summary',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('reporting_mode', 'form_8949_summary');
+
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
+            'id' => $link->id,
+            'reporting_mode' => 'form_8949_summary',
+        ]);
+    }
+
+    public function test_update_account_link_rejects_invalid_reporting_mode(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+        ]);
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
+            'reporting_mode' => 'not_valid',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
     public function test_destroy_account_link_deletes_parent_when_last_link_removed(): void
     {
         $user = $this->createUser();

@@ -1363,6 +1363,7 @@ export function TaxPreviewProvider({
             id: link.id,
             account_id: link.account_id,
             form_type: link.form_type,
+            reporting_mode: link.reporting_mode ?? null,
             ai_identifier: link.ai_identifier,
             ai_account_name: link.ai_account_name,
             account: link.account,
