@@ -6,11 +6,10 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
 import { isTraderFundK1, sumAbsK1CodeItems, sumK1CodeItems } from '@/lib/finance/k1Utils'
 import { parseMoneyOrZero } from '@/lib/finance/money'
-import { getDocAmounts, getPayerName, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
+import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
-import type { Form4952Lines } from '@/types/finance/tax-return'
 
 // ── K-1 field helpers ─────────────────────────────────────────────────────────
 
@@ -33,8 +32,6 @@ interface PartnerRow {
   box11ZZOtherIncome: number
   /** Box 13ZZ — partnership-statement "other deductions" (positive magnitude). For trader funds: trader/management fees, admin expenses. Subtracted from Schedule E Part II nonpassive. */
   box13ZZOtherDeductions: number
-  /** Allowed Box 13H investment interest after Form 4952 limitation when the K-1 footnote directs Schedule E nonpassive treatment. */
-  box13HInvestmentInterestDeduction: number
   /** Trader-fund ordinary items that are also NII for Form 8960. */
   traderNii: number
   netPassive: number
@@ -59,26 +56,15 @@ export interface ScheduleELines {
   totalBox5: number
   totalBox11ZZ: number
   totalBox13ZZ: number
-  totalBox13HInvestmentInterestDeduction: number
   totalTraderNii: number
   totalPassive: number
   totalNonpassive: number
   grandTotal: number
 }
 
-function hasRentalRoyaltyFields(doc: TaxDocument): boolean {
-  if (!doc.parsed_data || Array.isArray(doc.parsed_data)) {
-    return false
-  }
-
-  const parsedData = doc.parsed_data as Record<string, unknown>
-  return hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties')
-}
-
 export function computeScheduleELines(
   reviewedK1Docs: TaxDocument[],
   reviewed1099Docs: TaxDocument[] = [],
-  form4952?: Form4952Lines,
 ): ScheduleELines {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -95,8 +81,7 @@ export function computeScheduleELines(
 
         const amount = getDocAmounts(doc, link).other
         const effectiveRouting = link.misc_routing ?? doc.misc_routing
-        const shouldInclude = amount !== null
-          && (effectiveRouting === 'sch_e' || (effectiveRouting == null && hasRentalRoyaltyFields(doc)))
+        const shouldInclude = amount !== null && effectiveRouting === 'sch_e'
 
         if (!shouldInclude) {
           return []
@@ -117,8 +102,7 @@ export function computeScheduleELines(
     }
 
     const amount = getDocAmounts(doc).other
-    const shouldInclude = amount !== null
-      && (doc.misc_routing === 'sch_e' || (doc.misc_routing == null && hasRentalRoyaltyFields(doc)))
+    const shouldInclude = amount !== null && doc.misc_routing === 'sch_e'
 
     if (!shouldInclude) {
       return []
@@ -147,18 +131,13 @@ export function computeScheduleELines(
     const box11ZZOtherIncome = sumK1CodeItems(data, '11', 'ZZ')
     // Box 13ZZ items are reported as positive magnitudes representing deductions.
     const box13ZZOtherDeductions = sumAbsK1CodeItems(data, '13', 'ZZ')
-    const box13HInvestmentInterestDeduction = (form4952?.invIntSources ?? [])
-      .filter((source) => source.docId === doc.id && source.box === '13' && source.scheduleEDeductionEligible)
-      .reduce((acc, source) => acc.add(source.allowedAmount ?? 0), currency(0)).value
-
     const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
     const netNonpassive = currency(box1OrdinaryIncome)
       .add(box4GuaranteedPayments)
       .add(box11ZZOtherIncome)
-      .subtract(box13ZZOtherDeductions)
-      .subtract(box13HInvestmentInterestDeduction).value
+      .subtract(box13ZZOtherDeductions).value
     const traderNii = isTraderFundK1(data)
-      ? currency(box11ZZOtherIncome).subtract(box13ZZOtherDeductions).subtract(box13HInvestmentInterestDeduction).value
+      ? currency(box11ZZOtherIncome).subtract(box13ZZOtherDeductions).value
       : 0
 
     return {
@@ -172,7 +151,6 @@ export function computeScheduleELines(
       box5Interest,
       box11ZZOtherIncome,
       box13ZZOtherDeductions,
-      box13HInvestmentInterestDeduction,
       traderNii,
       netPassive,
       netNonpassive,
@@ -186,7 +164,6 @@ export function computeScheduleELines(
   const totalBox5 = partnerRows.reduce((acc, r) => acc.add(r.box5Interest), currency(0)).value
   const totalBox11ZZ = partnerRows.reduce((acc, r) => acc.add(r.box11ZZOtherIncome), currency(0)).value
   const totalBox13ZZ = partnerRows.reduce((acc, r) => acc.add(r.box13ZZOtherDeductions), currency(0)).value
-  const totalBox13HInvestmentInterestDeduction = partnerRows.reduce((acc, r) => acc.add(r.box13HInvestmentInterestDeduction), currency(0)).value
   const totalTraderNii = partnerRows.reduce((acc, r) => acc.add(r.traderNii), currency(0)).value
   const miscIncomeTotal = miscIncomeRows.reduce((acc, row) => acc.add(row.amount), currency(0)).value
   const totalPassive = partnerRows.reduce((acc, r) => acc.add(r.netPassive), currency(0)).value
@@ -204,7 +181,6 @@ export function computeScheduleELines(
     totalBox5,
     totalBox11ZZ,
     totalBox13ZZ,
-    totalBox13HInvestmentInterestDeduction,
     totalTraderNii,
     totalPassive,
     totalNonpassive,
@@ -216,12 +192,11 @@ interface ScheduleEPreviewProps {
   reviewedK1Docs: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   selectedYear: number
-  form4952?: Form4952Lines | undefined
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = [], selectedYear, form4952 }: ScheduleEPreviewProps) {
+export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = [], selectedYear }: ScheduleEPreviewProps) {
   const {
     miscIncomeRows,
     miscIncomeTotal,
@@ -233,11 +208,10 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
     totalBox5,
     totalBox11ZZ,
     totalBox13ZZ,
-    totalBox13HInvestmentInterestDeduction,
     totalPassive,
     totalNonpassive,
     grandTotal,
-  } = computeScheduleELines(reviewedK1Docs, reviewed1099Docs, form4952)
+  } = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
 
   if (partnerRows.length === 0 && miscIncomeRows.length === 0) {
     return (
@@ -341,20 +315,6 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
                 value={currency(0).subtract(r.box13ZZOtherDeductions).value}
               />
             )}
-            {r.box13HInvestmentInterestDeduction !== 0 && (
-              <FormLine
-                label={(
-                  <span className="inline-flex items-center gap-1">
-                    {r.partnerName} — allowed Box 13H investment interest
-                    <InfoTooltip>
-                      This is the Form 4952-allowed portion of K-1 Box 13H whose footnote directs deduction on
-                      Schedule E Part II as nonpassive. Any disallowed amount remains a Form 4952 carryforward.
-                    </InfoTooltip>
-                  </span>
-                )}
-                value={currency(0).subtract(r.box13HInvestmentInterestDeduction).value}
-              />
-            )}
           </div>
         ))}
         <FormTotalLine label="Total nonpassive income / (loss) — Part II" value={totalNonpassive} />
@@ -386,10 +346,7 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
           {totalBox13ZZ !== 0 && (
             <FormLine label="Other deductions (Box 13ZZ)" value={currency(0).subtract(totalBox13ZZ).value} />
           )}
-          {totalBox13HInvestmentInterestDeduction !== 0 && (
-            <FormLine label="Allowed investment interest (Box 13H after Form 4952)" value={currency(0).subtract(totalBox13HInvestmentInterestDeduction).value} />
-          )}
-          {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && totalBox11ZZ === 0 && totalBox13ZZ === 0 && totalBox13HInvestmentInterestDeduction === 0 && (
+          {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && totalBox11ZZ === 0 && totalBox13ZZ === 0 && (
             <FormLine label="No nonpassive K-1 activity" raw="—" />
           )}
           <FormTotalLine label="Total nonpassive income / (loss)" value={totalNonpassive} />

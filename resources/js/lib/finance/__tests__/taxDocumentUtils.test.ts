@@ -245,6 +245,17 @@ describe('getDocAmounts', () => {
     expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: 99, schC: null, other: null, foreignTax: null })
   })
 
+  it('uses parent review state for flat broker 1099 child-form amounts', () => {
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      is_reviewed: true,
+      parsed_data: { box3_other_income: 3838.89, box8_substitute_payments: 0.44 } as never,
+    })
+    const link = makeLink({ form_type: '1099_misc', is_reviewed: false })
+
+    expect(getDocAmounts(doc, link)).toEqual({ interest: null, dividend: null, capGain: null, schC: null, other: 3839.33, foreignTax: null })
+  })
+
   it('extracts 1099-NEC amounts into the Schedule C column', () => {
     const doc = makeDoc({ form_type: '1099_nec', parsed_data: { box1_nonemployeeComp: 2400 } as never })
     expect(getDocAmounts(doc)).toEqual({ interest: null, dividend: null, capGain: null, schC: 2400, other: null, foreignTax: null })

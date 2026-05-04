@@ -295,12 +295,12 @@ describe('computeForm4952Lines — Box 20B (Issue 7)', () => {
     expect(result.niiBefore).toBe(80000)
   })
 
-  it('allocates allowed Box 13H to Schedule E when the K-1 footnote directs nonpassive treatment', () => {
+  it('keeps deductible Box 13H on Form 4952 instead of carving out a Schedule E amount', () => {
     const data = makeK1Data({
       fields: {},
       codes: {
         '13': [
-          { code: 'H', value: '10000', notes: 'Subject to §163(d) via Form 4952. Deductible portion flows to Schedule E Part II as nonpassive.' },
+          { code: 'H', value: '10000', notes: 'Subject to §163(d) via Form 4952.' },
         ],
         '20': [
           { code: 'A', value: '4000' },
@@ -314,14 +314,14 @@ describe('computeForm4952Lines — Box 20B (Issue 7)', () => {
     })
 
     expect(result.deductibleInvestmentInterestExpense).toBe(4000)
-    expect(result.scheduleEDeductibleInvestmentInterestExpense).toBe(4000)
+    expect(result.scheduleEDeductibleInvestmentInterestExpense).toBe(0)
     expect(result.invIntSources[0]?.allowedAmount).toBe(4000)
   })
 
   it('per-source allowedAmount values sum exactly to deductibleInvestmentInterestExpense across rounding-prone splits', () => {
     // Three sources whose pro-rata shares of finalDeductible would each end in
     // a recurring decimal — without remainder-absorption the sum drifts from
-    // deductibleInvestmentInterestExpense and miswstates the Sch E vs. Sch A split.
+    // deductibleInvestmentInterestExpense and misstates the source-level allowed split.
     const data = makeK1Data({
       fields: {},
       codes: {

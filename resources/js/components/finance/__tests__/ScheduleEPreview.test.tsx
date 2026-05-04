@@ -39,7 +39,7 @@ function makeMiscDoc(overrides: Partial<TaxDocument> = {}): TaxDocument {
 
 describe('ScheduleEPreview', () => {
   it('renders 1099-MISC rental income before any K-1 rows', () => {
-    render(<ScheduleEPreview reviewedK1Docs={[]} reviewed1099Docs={[makeMiscDoc()]} selectedYear={2025} />)
+    render(<ScheduleEPreview reviewedK1Docs={[]} reviewed1099Docs={[makeMiscDoc({ misc_routing: 'sch_e' })]} selectedYear={2025} />)
 
     expect(screen.getByText('Part I — 1099-MISC Rental & Royalty Income')).toBeInTheDocument()
     expect(screen.getByText('Tenant Co — 1099-MISC')).toBeInTheDocument()
@@ -48,10 +48,17 @@ describe('ScheduleEPreview', () => {
   })
 
   it('adds 1099-MISC rental income into the Schedule E grand total', () => {
-    const lines = computeScheduleELines([], [makeMiscDoc({ parsed_data: { payer_name: 'Tenant Co', box2_royalties: 900 } })])
+    const lines = computeScheduleELines([], [makeMiscDoc({ misc_routing: 'sch_e', parsed_data: { payer_name: 'Tenant Co', box2_royalties: 900 } })])
 
     expect(lines.miscIncomeTotal).toBe(900)
     expect(lines.grandTotal).toBe(900)
+  })
+
+  it('does not route unassigned 1099-MISC rental or royalty boxes to Schedule E by default', () => {
+    const lines = computeScheduleELines([], [makeMiscDoc({ parsed_data: { payer_name: 'Tenant Co', box2_royalties: 900 } })])
+
+    expect(lines.miscIncomeTotal).toBe(0)
+    expect(lines.grandTotal).toBe(0)
   })
 
   it('routes Box 11ZZ ordinary income/loss and Box 13ZZ deductions to Part II nonpassive', () => {
@@ -108,7 +115,7 @@ describe('ScheduleEPreview', () => {
     expect(lines.totalTraderNii).toBeCloseTo(-83357)
   })
 
-  it('subtracts only the Form 4952-allowed Box 13H amount when routed to Schedule E', () => {
+  it('does not subtract Form 4952-allowed Box 13H from Schedule E line 5 totals', () => {
     const k1Doc: TaxDocument = {
       id: 101,
       user_id: 1,
@@ -147,28 +154,10 @@ describe('ScheduleEPreview', () => {
       updated_at: '2026-01-01T00:00:00Z',
     }
 
-    const lines = computeScheduleELines([k1Doc], [], {
-      invIntSources: [{
-        label: 'AQR — Box 13H',
-        amount: -10000,
-        docId: 101,
-        box: '13',
-        code: 'H',
-        scheduleEDeductionEligible: true,
-        allowedAmount: 2500,
-      }],
-      totalInvIntExpense: 10000,
-      scheduleEDeductibleInvestmentInterestExpense: 2500,
-      invExpSources: [],
-      totalInvExp: 0,
-      niiBefore: 2500,
-      totalQualDiv: 0,
-      deductibleInvestmentInterestExpense: 2500,
-      disallowedCarryforward: 7500,
-    })
+    const lines = computeScheduleELines([k1Doc], [])
 
-    expect(lines.totalBox13HInvestmentInterestDeduction).toBe(2500)
-    expect(lines.totalNonpassive).toBe(-2500)
-    expect(lines.totalTraderNii).toBe(-2500)
+    expect(lines.totalNonpassive).toBe(0)
+    expect(lines.grandTotal).toBe(0)
+    expect(lines.totalTraderNii).toBe(0)
   })
 })

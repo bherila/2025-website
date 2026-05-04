@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import React from 'react'
 
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -109,5 +109,45 @@ describe('ScheduleDPreview detail navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Form 1040 line 7' }))
 
     expect(onGoToForm1040).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens Schedule D line 5 supporting details with per-source navigation', () => {
+    const onOpenDoc = jest.fn()
+    const k1Doc = makeTaxDocument({
+      id: 20,
+      form_type: 'k1',
+      original_filename: 'k1.pdf',
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: '1065',
+        fields: {
+          B: { value: 'TAX AWARE HEDGE FUND FUND, LLC' },
+          '8': { value: '1200' },
+        },
+        codes: {
+          '11': [{ code: 'S', value: '-500', notes: 'Net short-term capital loss' }],
+        },
+      },
+    })
+
+    render(
+      <ScheduleDPreview
+        reviewedK1Docs={[k1Doc]}
+        reviewed1099Docs={[]}
+        selectedYear={2025}
+        onOpenDoc={onOpenDoc}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Line 5 total — short-term gain or \(loss\) from partnerships/ }))
+
+    expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
+    const modal = screen.getByRole('dialog', { name: 'Schedule D Line 5 Supporting Details' })
+    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8')).toBeInTheDocument()
+    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S (S/T non-portfolio)')).toBeInTheDocument()
+
+    fireEvent.click(within(modal).getAllByRole('button', { name: 'Go to K-1' })[0]!)
+
+    expect(onOpenDoc).toHaveBeenCalledWith(20)
   })
 })
