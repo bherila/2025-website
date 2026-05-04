@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
 use Database\Seeders\Finance\FinanceAccountsSeeder;
@@ -144,6 +145,56 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_json_import_bulk_matches_existing_open_and_close_transactions(): void
+    {
+        $now = now();
+        $openId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $this->acctId,
+            't_date' => '2025-01-15',
+            't_type' => 'Buy',
+            't_symbol' => 'AAPL',
+            't_qty' => 10,
+            't_amt' => -2000,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $closeId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $this->acctId,
+            't_date' => '2025-11-20',
+            't_type' => 'Sell',
+            't_symbol' => 'AAPL',
+            't_qty' => -10,
+            't_amt' => 2350,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode([
+            'transactions' => [
+                $this->sampleJsonPayload()['transactions'][0],
+            ],
+        ]));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--clear' => true,
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Imported: 1 inserted');
+
+        $lot = DB::table('fin_account_lots')
+            ->where('acct_id', $this->acctId)
+            ->where('symbol', 'AAPL')
+            ->first();
+
+        $this->assertNotNull($lot);
+        $this->assertEquals($openId, $lot->open_t_id);
+        $this->assertEquals($closeId, $lot->close_t_id);
+
+        unlink($tmpFile);
+    }
+
     // ── CSV format ────────────────────────────────────────────────────────────
 
     public function test_csv_import_inserts_lots(): void
@@ -189,6 +240,77 @@ class FinanceLotsImportCommandTest extends TestCase
         ])->assertFailed();
 
         $this->assertDatabaseCount('fin_account_lots', 0);
+
+        unlink($tmpFile);
+    }
+
+    // ── Wealthfront text format ───────────────────────────────────────────────
+
+    public function test_wealthfront_text_import_inserts_covered_lots_and_tax_document_reference(): void
+    {
+        $taxDocument = FileForTaxDocument::create([
+            'user_id' => User::where('email', 'test@example.com')->value('id'),
+            'tax_year' => 2025,
+            'form_type' => 'broker_1099',
+            'original_filename' => '2025 1099 Wealthfront.pdf',
+            'stored_filename' => '2025 1099 Wealthfront.pdf',
+            's3_path' => 'tax_docs/1/2025 1099 Wealthfront.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1234,
+            'file_hash' => str_repeat('c', 64),
+            'uploaded_by_user_id' => User::where('email', 'test@example.com')->value('id'),
+            'genai_status' => 'parsed',
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'wealthfront_lots_').'.txt';
+        file_put_contents($tmpFile, implode("\n", [
+            'Wealthfront Brokerage LLC',
+            'SHORT TERM TRANSACTIONS FOR COVERED TAX LOTS (Box 12 is checked)',
+            'ABBOTT LABS COM / CUSIP: 002824100 / Symbol:',
+            '04/14/25    2.000    255.14',
+            'V a r i o u s',
+            '262.93    ...    -7.79    Total of 2 transactions',
+            'SCHWAB CHARLES CORP COM / CUSIP: 808513105 / Symbol:',
+            '04/04/25    5.000    349.54    Various    361.44    11.90 W    0.00    Total of 2 transactions',
+            'LONG TERM TRANSACTIONS FOR COVERED TAX LOTS (Box 12 is checked)',
+            'AMAZON COM INC COM / CUSIP: 023135106 / Symbol:',
+            '03/27/25    1.000    190.00    02/10/24    150.00    ...    40.00    Sale',
+        ]));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--input-format' => 'text',
+            '--tax-document' => $taxDocument->id,
+            '--clear' => true,
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Parsed 3 lot record(s)')
+            ->expectsOutputToContain('Imported: 3 inserted');
+
+        $this->assertDatabaseCount('fin_account_lots', 3);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => '002824100',
+            'cusip' => '002824100',
+            'purchase_date' => '2025-04-14',
+            'form_8949_box' => 'A',
+            'is_covered' => 1,
+            'tax_document_id' => $taxDocument->id,
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => '808513105',
+            'wash_sale_disallowed' => 11.90,
+            'realized_gain_loss' => 0.00,
+            'tax_document_id' => $taxDocument->id,
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => '023135106',
+            'is_short_term' => 0,
+            'form_8949_box' => 'D',
+            'tax_document_id' => $taxDocument->id,
+        ]);
 
         unlink($tmpFile);
     }

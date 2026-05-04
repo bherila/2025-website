@@ -280,7 +280,7 @@ php artisan finance:k1-migrate [--dry-run]
 
 ### `finance:lots-import`
 
-Import 1099-B closed-lot records into `fin_account_lots`. Accepts **JSON**, **CSV**, **TOON**, or **Fidelity pdftotext** input.
+Import 1099-B closed-lot records into `fin_account_lots`. Accepts **JSON**, **CSV**, **TOON**, **Fidelity pdftotext**, or supported broker PDFs. Wealthfront consolidated 1099 PDFs are parsed directly through the bundled PHP PDF parser, so they do not require `pdftotext` on the server.
 
 ```bash
 # JSON (broker_1099 format — see --schema)
@@ -295,12 +295,16 @@ php artisan finance:lots-import --account=33 --file=lots.toon
 # Fidelity 1099-B PDF via pdftotext
 pdftotext -layout "2025 1099 Fidelity.pdf" - | php artisan finance:lots-import --account=33
 
+# Wealthfront consolidated 1099 PDF, stamped back to a tax document
+php artisan finance:lots-import --account=33 --tax-document=19 --file="2025 1099 Wealthfront.pdf" --clear
+
 # Print expected schema for all formats
 php artisan finance:lots-import --schema
 ```
 
 **Options**
 - `--account` — target `fin_accounts.acct_id` (required)
+- `--tax-document` — optional `fin_tax_documents.id`; stamps imported lots with their source tax document
 - `--file` — path to input file; omit to read from stdin
 - `--input-format` — force format: `json` | `csv` | `toon` | `text` (auto-detected by default)
 - `--dry-run` — parse and preview without writing
@@ -310,7 +314,7 @@ php artisan finance:lots-import --schema
 
 **Duplicate detection:** skips rows where the same `(acct_id, symbol, quantity, purchase_date, sale_date, proceeds, cost_basis)` already exists (within $0.01 rounding).
 
-**Transaction linking:** for each imported lot, attempts to find a matching `fin_account_line_items` opening (buy) and closing (sell) transaction and sets `open_t_id` / `close_t_id`.
+**Transaction linking:** for each imported lot, attempts to find a matching `fin_account_line_items` opening (buy) and closing (sell) transaction and sets `open_t_id` / `close_t_id`. Wealthfront PDF lots skip this step because the statement lot rows are CUSIP-based and do not reliably expose ticker symbols for account-line matching.
 
 **Taxable disposition types parsed from pdftotext:** `Sale`, `Merger` (cash mergers), `Cash In Lieu` (fractional share payouts).
 
