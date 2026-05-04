@@ -125,7 +125,7 @@ Year changes are **full page navigations** (`window.location.href = ...`). Blade
 - Schedule C data
 - Employment entities
 - Accounts + active-account IDs
-- Backend `taxFacts` source lines for Schedule 1 and Form 4952 debug paths
+- Backend `taxFacts` source lines for Schedule 1, Schedule B, Form 4952, Schedule D, and Form 8949 debug paths
 
 The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, stores backend `taxFacts`, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions. Tax totals are still rendered from the client-side calculation system; `taxFacts` is an audit/debug contract first.
 
@@ -145,6 +145,8 @@ The current pilot covers the highest-value debug paths:
 | `schedule1` | Schedule 1 line 8z / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
 | `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
 | `form4952` | Form 4952 line 1 / line 4a / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
+| `scheduleD` | Schedule D lines 1a-16 / line 21 | Schedule D facts combine Form 8949 rollups with K-1 Box 8/9/10, Box 11C Form 6781 60/40 allocations, Box 11S character routing, and 1099-DIV Box 2a capital-gain distributions. Ambiguous Box 11S rows are exposed as `needs_review` sources instead of being silently routed. |
 
 Each `TaxFactSource` carries review metadata:
 
@@ -164,7 +166,7 @@ php artisan typescript:transform
 
 Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset. When a source moves from `needs_review` to `reviewed`, replacing `taxFacts` is enough for supporting details and future line coloring to update without a full dataset refresh.
 
-The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. This pilot does not switch workbook or preview totals to backend facts yet.
+The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. Capital gains are now shared through the PHP `CapitalGainsTaxReportService`; avoid adding new Schedule D/Form 8949 wash-sale or lot-routing logic to the React-only analyzer unless it is purely UI exploration.
 
 ### Filed Return Reconciliation
 
@@ -174,7 +176,7 @@ Use `finance:tax-reconcile` to compare backend `taxFacts` against a CPA-prepared
 php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/Finance/tax-return-reconciliations/2025-cpa-anonymized.json --format=json
 ```
 
-Committed fixtures must be anonymized: line numbers, labels, expected amounts, fact paths, precision, and notes are OK; raw documents, taxpayer names, payer names, SSNs, account names, and account numbers are not. Keep private source artifacts in ignored `training_data/tax_reconciliation/` when they help local debugging. The default 2025 fixture currently verifies Schedule 1, Schedule B, and Form 4952 line values against the backend fact layer.
+Committed fixtures must be anonymized: line numbers, labels, expected amounts, fact paths, precision, and notes are OK; raw documents, taxpayer names, payer names, SSNs, account names, and account numbers are not. Keep private source artifacts in ignored `training_data/tax_reconciliation/` when they help local debugging. The default 2025 fixture currently verifies Schedule 1, Schedule B, and Form 4952 line values against the backend fact layer; add Schedule D/Form 8949 lines as filed-return fixtures become available.
 
 ### Tab Structure
 

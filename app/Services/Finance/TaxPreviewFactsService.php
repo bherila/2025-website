@@ -7,11 +7,20 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\CapitalGains\Form8949ReportRow;
+use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
+use App\Services\Finance\CapitalGains\WashSaleAdjustment;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8949Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8949RowFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDRollupFact;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\WashSaleAdjustmentFact;
 use Carbon\CarbonImmutable;
 
 class TaxPreviewFactsService
@@ -35,12 +44,17 @@ class TaxPreviewFactsService
         'misc_8_substitute_payments',
     ];
 
+    public function __construct(
+        private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
+        private readonly K1CodeCharacterResolver $k1CodeCharacterResolver,
+    ) {}
+
     /**
      * @return array<string>
      */
     public static function supportedSlices(): array
     {
-        return ['all', 'schedule1', 'scheduleB', 'form4952'];
+        return ['all', 'schedule1', 'scheduleB', 'form4952', 'scheduleD', 'form8949'];
     }
 
     public function factsForYear(int $userId, int $year): TaxPreviewFacts
@@ -61,6 +75,7 @@ class TaxPreviewFactsService
             $documents,
             $this->shortDividendItemizedDeduction($userId, $year),
             $this->marginInterestSources($userId, $year),
+            $userId,
         );
     }
 
@@ -68,8 +83,13 @@ class TaxPreviewFactsService
      * @param  iterable<FileForTaxDocument>  $documents
      * @param  TaxFactSource[]  $marginInterestSources
      */
-    public function factsFromDocuments(int $year, iterable $documents, float $shortDividendDeduction = 0.0, array $marginInterestSources = []): TaxPreviewFacts
-    {
+    public function factsFromDocuments(
+        int $year,
+        iterable $documents,
+        float $shortDividendDeduction = 0.0,
+        array $marginInterestSources = [],
+        ?int $userId = null,
+    ): TaxPreviewFacts {
         $k1Docs = [];
         $docs1099 = [];
 
@@ -82,12 +102,17 @@ class TaxPreviewFactsService
         }
 
         $scheduleB = $this->scheduleBFacts($k1Docs, $docs1099);
+        $capitalGainsReport = $userId !== null
+            ? $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)
+            : $this->emptyCapitalGainsReport($year);
 
         return new TaxPreviewFacts(
             year: $year,
             schedule1: $this->schedule1Facts($k1Docs, $docs1099),
             scheduleB: $scheduleB,
             form4952: $this->form4952Facts($k1Docs, $docs1099, $scheduleB, $shortDividendDeduction, $marginInterestSources),
+            scheduleD: $this->scheduleDFacts($k1Docs, $docs1099, $capitalGainsReport['scheduleDRollup']),
+            form8949: $this->form8949Facts($capitalGainsReport),
         );
     }
 
@@ -119,6 +144,14 @@ class TaxPreviewFactsService
             'form4952' => [
                 'year' => $facts['year'],
                 'form4952' => $facts['form4952'],
+            ],
+            'scheduleD' => [
+                'year' => $facts['year'],
+                'scheduleD' => $facts['scheduleD'],
+            ],
+            'form8949' => [
+                'year' => $facts['year'],
+                'form8949' => $facts['form8949'],
             ],
             default => $facts,
         };
@@ -491,6 +524,433 @@ class TaxPreviewFactsService
             deductibleInvestmentInterestExpense: $deductible,
             disallowedCarryforward: $carryforward,
         );
+    }
+
+    /**
+     * @param  array{taxYear:int,reportingMode:string,transactions:array<int,mixed>,adjustments:array<int,WashSaleAdjustment>,rows:array<int,Form8949ReportRow>,scheduleDRollup:array<int,ScheduleDRollupInput>}  $capitalGainsReport
+     */
+    private function form8949Facts(array $capitalGainsReport): Form8949Facts
+    {
+        $rows = array_map(
+            static fn (Form8949ReportRow $row): Form8949RowFact => Form8949RowFact::fromReportRow($row),
+            $capitalGainsReport['rows'],
+        );
+        $rollups = array_map(
+            static fn (ScheduleDRollupInput $rollup): ScheduleDRollupFact => ScheduleDRollupFact::fromRollup($rollup),
+            $capitalGainsReport['scheduleDRollup'],
+        );
+        $adjustments = array_map(
+            static fn (WashSaleAdjustment $adjustment): WashSaleAdjustmentFact => WashSaleAdjustmentFact::fromAdjustment($adjustment),
+            $capitalGainsReport['adjustments'],
+        );
+
+        $washSaleTotal = $this->roundMoney(array_reduce(
+            $capitalGainsReport['adjustments'],
+            static fn (float $total, WashSaleAdjustment $adjustment): float => $total + $adjustment->disallowedLoss,
+            0.0,
+        ));
+
+        return new Form8949Facts(
+            reportingMode: $capitalGainsReport['reportingMode'],
+            rows: $rows,
+            scheduleDRollups: $rollups,
+            washSaleAdjustments: $adjustments,
+            rowCount: count($rows),
+            washSaleAdjustmentCount: count($adjustments),
+            washSaleAdjustmentTotal: $washSaleTotal,
+        );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  ScheduleDRollupInput[]  $rollups
+     */
+    private function scheduleDFacts(array $k1Docs, array $docs1099, array $rollups): ScheduleDFacts
+    {
+        $lineBuckets = $this->emptyScheduleDLineBuckets();
+        foreach ($rollups as $rollup) {
+            if (! isset($lineBuckets[$rollup->scheduleDLine])) {
+                continue;
+            }
+
+            $lineBuckets[$rollup->scheduleDLine]['proceeds'] += $rollup->totalProceeds;
+            $lineBuckets[$rollup->scheduleDLine]['cost'] += $rollup->totalCostBasis;
+            $lineBuckets[$rollup->scheduleDLine]['adjustments'] += $rollup->totalAdjustment;
+            $lineBuckets[$rollup->scheduleDLine]['gainLoss'] += $rollup->netGainOrLoss;
+        }
+
+        $section1256Sources = $this->scheduleDSection1256Sources($k1Docs);
+        $line3Sources = $section1256Sources['shortTerm'];
+        $line10Sources = $section1256Sources['longTerm'];
+        $line5Sources = $this->scheduleDLine5Sources($k1Docs);
+        $line12Sources = $this->scheduleDLine12Sources($k1Docs);
+        $line13Sources = $this->scheduleDLine13Sources($docs1099);
+        $ambiguous11SSources = $this->scheduleDAmbiguous11SSources($k1Docs);
+
+        $line1a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1a'));
+        $line1b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1b'));
+        $line2 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '2'));
+        $line3 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3') + $this->sumSources($line3Sources));
+        $line4 = 0.0;
+        $line5 = $this->sumSources($line5Sources);
+        $line6 = 0.0;
+        $line7 = $this->roundMoney($line1a + $line1b + $line2 + $line3 + $line4 + $line5 + $line6);
+
+        $line8a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8a'));
+        $line8b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8b'));
+        $line9 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '9'));
+        $line10 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '10') + $this->sumSources($line10Sources));
+        $line11 = 0.0;
+        $line12 = $this->sumSources($line12Sources);
+        $line13 = $this->sumSources($line13Sources);
+        $line14 = 0.0;
+        $line15 = $this->roundMoney($line8a + $line8b + $line9 + $line10 + $line11 + $line12 + $line13 + $line14);
+        $line16 = $this->roundMoney($line7 + $line15);
+        $line21 = $line16 < 0.0 ? max($line16, -3000.0) : $line16;
+        $appliedToReturn = $line21 < 0.0 ? $line21 : 0.0;
+        $carryforward = $line16 < 0.0 ? $this->roundMoney($line16 - $appliedToReturn) : 0.0;
+        $businessCapGains = $this->roundMoney($line5 + $line12);
+        $personalCapGains = $this->roundMoney($line16 - $businessCapGains);
+        $limited = $this->limitedCapitalGains($line16, $line21, $businessCapGains, $personalCapGains);
+
+        return new ScheduleDFacts(
+            form8949Rollups: array_map(static fn (ScheduleDRollupInput $rollup): ScheduleDRollupFact => ScheduleDRollupFact::fromRollup($rollup), $rollups),
+            line1aGainLoss: $line1a,
+            line1bGainLoss: $line1b,
+            line2GainLoss: $line2,
+            line3Sources: $line3Sources,
+            line3GainLoss: $line3,
+            line4GainLoss: $line4,
+            line5Sources: $line5Sources,
+            line5GainLoss: $line5,
+            line6Carryover: $line6,
+            line7NetShortTerm: $line7,
+            line8aGainLoss: $line8a,
+            line8bGainLoss: $line8b,
+            line9GainLoss: $line9,
+            line10Sources: $line10Sources,
+            line10GainLoss: $line10,
+            line11GainLoss: $line11,
+            line12Sources: $line12Sources,
+            line12GainLoss: $line12,
+            line13Sources: $line13Sources,
+            line13CapitalGainDistributions: $line13,
+            line14Carryover: $line14,
+            line15NetLongTerm: $line15,
+            line16Combined: $line16,
+            line21LimitedLossOrGain: $line21,
+            appliedToReturn: $appliedToReturn,
+            carryforward: $carryforward,
+            totalBusinessCapGains: $businessCapGains,
+            totalPersonalCapGains: $personalCapGains,
+            limitedBusinessCapGains: $limited['business'],
+            limitedPersonalCapGains: $limited['personal'],
+            ambiguous11SSources: $ambiguous11SSources,
+            ambiguous11SAmount: $this->sumSources($ambiguous11SSources),
+        );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return array{shortTerm:TaxFactSource[],longTerm:TaxFactSource[]}
+     */
+    private function scheduleDSection1256Sources(array $k1Docs): array
+    {
+        $shortTerm = [];
+        $longTerm = [];
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            foreach ($this->k1CodeItems($data, '11', 'C') as $index => $item) {
+                $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
+                if ($amount === 0.0) {
+                    continue;
+                }
+
+                $shortTermAmount = $this->roundMoney($amount * 0.4);
+                $longTermAmount = $this->roundMoney($amount * 0.6);
+                $shortTerm[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line3",
+                    label: "{$partnerName} — K-1 Box 11C Form 6781 40% S/T allocation",
+                    amount: $shortTermAmount,
+                    sourceType: 'k1_section_1256_short_term',
+                    taxDocumentId: $doc->id,
+                    formType: 'k1',
+                    box: '11',
+                    code: 'C',
+                    routing: 'schedule_d_line_3',
+                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
+                    notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
+                $longTerm[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line10",
+                    label: "{$partnerName} — K-1 Box 11C Form 6781 60% L/T allocation",
+                    amount: $longTermAmount,
+                    sourceType: 'k1_section_1256_long_term',
+                    taxDocumentId: $doc->id,
+                    formType: 'k1',
+                    box: '11',
+                    code: 'C',
+                    routing: 'schedule_d_line_10',
+                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
+                    notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
+            }
+        }
+
+        return ['shortTerm' => $shortTerm, 'longTerm' => $longTerm];
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return TaxFactSource[]
+     */
+    private function scheduleDLine5Sources(array $k1Docs): array
+    {
+        $sources = [];
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            $box8 = $this->k1Field($data, '8');
+            if ($box8 !== 0.0) {
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $box8, 'k1_short_term_capital_gain', '8', null, 'schedule_d_line_5', 'K-1 Box 8 short-term capital gain/loss flows to Schedule D line 5.');
+            }
+
+            foreach ($this->k1CodeItems($data, '11', 'S') as $index => $item) {
+                if (($this->k1CodeCharacterResolver->resolve('11', $item)['character'] ?? null) !== 'short') {
+                    continue;
+                }
+
+                $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
+                if ($amount === 0.0) {
+                    continue;
+                }
+
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_nonportfolio_short_term_capital_gain', '11', 'S', 'schedule_d_line_5', 'K-1 Box 11S short-term non-portfolio capital gain/loss flows to Schedule D line 5.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+            }
+        }
+
+        return $sources;
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return TaxFactSource[]
+     */
+    private function scheduleDLine12Sources(array $k1Docs): array
+    {
+        $sources = [];
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            foreach ([
+                '9a' => ['k1_long_term_capital_gain', 'K-1 Box 9a long-term capital gain/loss flows to Schedule D line 12.'],
+                '9b' => ['k1_collectibles_gain', 'K-1 Box 9b collectibles gain/loss supports Schedule D line 12.'],
+                '9c' => ['k1_unrecaptured_1250_gain', 'K-1 Box 9c unrecaptured Section 1250 gain supports Schedule D line 12.'],
+                '10' => ['k1_section_1231_gain', 'K-1 Box 10 net Section 1231 gain/loss flows to Schedule D line 12.'],
+            ] as $box => [$sourceType, $reason]) {
+                $amount = $this->k1Field($data, $box);
+                if ($amount !== 0.0) {
+                    $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, $sourceType, $box, null, 'schedule_d_line_12', $reason);
+                }
+            }
+
+            foreach ($this->k1CodeItems($data, '11', 'S') as $index => $item) {
+                if (($this->k1CodeCharacterResolver->resolve('11', $item)['character'] ?? null) !== 'long') {
+                    continue;
+                }
+
+                $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
+                if ($amount === 0.0) {
+                    continue;
+                }
+
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_nonportfolio_long_term_capital_gain', '11', 'S', 'schedule_d_line_12', 'K-1 Box 11S long-term non-portfolio capital gain/loss flows to Schedule D line 12.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+            }
+        }
+
+        return $sources;
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $docs1099
+     * @return TaxFactSource[]
+     */
+    private function scheduleDLine13Sources(array $docs1099): array
+    {
+        $sources = [];
+
+        foreach ($docs1099 as $doc) {
+            foreach ($this->document1099DivEntries($doc) as $entry) {
+                $amount = $this->firstNumericOrNestedValue(
+                    $entry['parsedData'],
+                    ['box2a_cap_gain', 'div_2a_cap_gain'],
+                    ['2a_total_capital_gain_distributions'],
+                );
+                if ($amount === null || $amount === 0.0) {
+                    continue;
+                }
+
+                $sources[] = new TaxFactSource(
+                    id: $entry['link'] instanceof TaxDocumentAccount ? "link-{$entry['link']->id}-schedule-d-line13" : "doc-{$doc->id}-schedule-d-line13",
+                    label: "{$this->payerName($doc, $entry['link'], $entry['parsedData'])} — capital gain distributions",
+                    amount: $this->roundMoney($amount),
+                    sourceType: '1099_div_capital_gain_distributions',
+                    taxDocumentId: $doc->id,
+                    taxDocumentAccountId: $entry['link']?->id,
+                    accountId: $entry['link']?->account_id,
+                    formType: '1099_div',
+                    box: '2a',
+                    routing: 'schedule_d_line_13',
+                    routingReason: '1099-DIV Box 2a total capital gain distributions flow to Schedule D line 13.',
+                    isReviewed: $this->sourceIsReviewed($doc, $entry['link']),
+                    reviewStatus: $this->reviewStatus($doc, $entry['link']),
+                    reviewAction: $this->reviewAction($doc, $entry['link']),
+                );
+            }
+        }
+
+        return $sources;
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return TaxFactSource[]
+     */
+    private function scheduleDAmbiguous11SSources(array $k1Docs): array
+    {
+        $sources = [];
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            foreach ($this->k1CodeItems($data, '11', 'S') as $index => $item) {
+                $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
+                if ($amount === 0.0 || $this->k1CodeCharacterResolver->resolve('11', $item) !== null) {
+                    continue;
+                }
+
+                $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, 'k1_ambiguous_nonportfolio_capital_gain', '11', 'S', 'needs_review_schedule_d_line_5_or_12', 'K-1 Box 11S needs short-term or long-term character before Schedule D routing.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+            }
+        }
+
+        return $sources;
+    }
+
+    private function k1ScheduleDSource(
+        FileForTaxDocument $doc,
+        string $partnerName,
+        float $amount,
+        string $sourceType,
+        string $box,
+        ?string $code,
+        string $routing,
+        string $routingReason,
+        ?int $index = null,
+        ?string $notes = null,
+    ): TaxFactSource {
+        $suffix = $index !== null ? "-{$index}" : '';
+
+        return new TaxFactSource(
+            id: "k1-{$doc->id}-{$box}{$code}{$suffix}-{$routing}",
+            label: $code !== null ? "{$partnerName} — K-1 Box {$box}{$code}" : "{$partnerName} — K-1 Box {$box}",
+            amount: $this->roundMoney($amount),
+            sourceType: $sourceType,
+            taxDocumentId: $doc->id,
+            formType: 'k1',
+            box: $box,
+            code: $code,
+            routing: $routing,
+            routingReason: $routingReason,
+            notes: $notes,
+            isReviewed: $this->sourceIsReviewed($doc),
+            reviewStatus: $this->reviewStatus($doc),
+            reviewAction: $this->reviewAction($doc),
+        );
+    }
+
+    /**
+     * @return array<string, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>
+     */
+    private function emptyScheduleDLineBuckets(): array
+    {
+        $buckets = [];
+        foreach (['1a', '1b', '2', '3', '8a', '8b', '9', '10'] as $line) {
+            $buckets[$line] = ['proceeds' => 0.0, 'cost' => 0.0, 'adjustments' => 0.0, 'gainLoss' => 0.0];
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * @param  array<string, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>  $lineBuckets
+     */
+    private function scheduleDLineGainLoss(array $lineBuckets, string $line): float
+    {
+        return $lineBuckets[$line]['gainLoss'] ?? 0.0;
+    }
+
+    /**
+     * @return array{business:float,personal:float}
+     */
+    private function limitedCapitalGains(float $line16, float $line21, float $businessCapGains, float $personalCapGains): array
+    {
+        if ($line21 === $line16) {
+            return ['business' => $businessCapGains, 'personal' => $personalCapGains];
+        }
+
+        if ($line16 >= 0.0) {
+            return ['business' => $businessCapGains, 'personal' => $personalCapGains];
+        }
+
+        $businessRatio = $line16 === 0.0 ? 0.0 : $businessCapGains / $line16;
+        $personalRatio = $line16 === 0.0 ? 0.0 : $personalCapGains / $line16;
+
+        return [
+            'business' => $this->roundMoney($line21 * $businessRatio),
+            'personal' => $this->roundMoney($line21 * $personalRatio),
+        ];
+    }
+
+    /**
+     * @return array{taxYear:int,reportingMode:string,transactions:array<int,mixed>,adjustments:array<int,WashSaleAdjustment>,rows:array<int,Form8949ReportRow>,scheduleDRollup:array<int,ScheduleDRollupInput>}
+     */
+    private function emptyCapitalGainsReport(int $year): array
+    {
+        return [
+            'taxYear' => $year,
+            'reportingMode' => 'form_8949_transactions',
+            'transactions' => [],
+            'adjustments' => [],
+            'rows' => [],
+            'scheduleDRollup' => [],
+        ];
     }
 
     /**

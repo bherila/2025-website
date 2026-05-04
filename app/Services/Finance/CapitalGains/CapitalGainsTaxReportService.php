@@ -1,0 +1,158 @@
+<?php
+
+namespace App\Services\Finance\CapitalGains;
+
+use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinAccounts;
+
+class CapitalGainsTaxReportService
+{
+    public function __construct(
+        private readonly WashSaleAnalysisEngine $washSaleEngine,
+        private readonly Form8949ReportBuilder $reportBuilder,
+        private readonly CapitalGainsImportNormalizer $normalizer,
+    ) {}
+
+    /**
+     * @return array{taxYear:int,reportingMode:string,transactions:array<int,CanonicalCapitalGainTransaction>,adjustments:array<int,WashSaleAdjustment>,rows:array<int,Form8949ReportRow>,scheduleDRollup:array<int,ScheduleDRollupInput>}
+     */
+    public function reportForUserYear(
+        int $userId,
+        int $taxYear,
+        string $reportingMode = 'form_8949_transactions',
+    ): array {
+        $accountIds = $this->accountIdsForUser($userId);
+        $adjustments = $this->washSaleEngine->analyze($accountIds, $taxYear);
+        $transactions = $this->loadCanonicalTransactions($accountIds, $taxYear);
+
+        return [
+            'taxYear' => $taxYear,
+            'reportingMode' => $reportingMode,
+            'transactions' => $transactions,
+            'adjustments' => $adjustments,
+            'rows' => $this->reportBuilder->buildRows($transactions, $adjustments, $reportingMode),
+            'scheduleDRollup' => $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode),
+        ];
+    }
+
+    /**
+     * Load closed account lots for the given accounts/year as canonical transactions.
+     *
+     * This uses account lots as the reconciliation source of truth and excludes
+     * imported 1099-B copies so matched reported/account rows are not counted
+     * twice in Form 8949 or Schedule D totals.
+     *
+     * @param  int[]  $accountIds
+     * @return CanonicalCapitalGainTransaction[]
+     */
+    public function loadCanonicalTransactions(array $accountIds, int $taxYear): array
+    {
+        if ($accountIds === []) {
+            return [];
+        }
+
+        $lots = FinAccountLot::query()
+            ->whereIn('acct_id', $accountIds)
+            ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
+            ->whereNull('superseded_by_lot_id')
+            ->whereNull('tax_document_id')
+            ->where(function ($query): void {
+                $query->whereNull('lot_source')
+                    ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
+            })
+            ->with(['account:acct_id,acct_name'])
+            ->orderBy('acct_id')
+            ->orderBy('symbol')
+            ->orderBy('sale_date')
+            ->orderBy('lot_id')
+            ->get();
+
+        $transactions = [];
+        foreach ($lots as $lot) {
+            $transactions[] = $this->normalizer->fromAccountLot($lot);
+        }
+
+        return $transactions;
+    }
+
+    /**
+     * @param  Form8949ReportRow[]  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public function rowsPayload(array $rows): array
+    {
+        return array_map(static fn (Form8949ReportRow $row): array => [
+            'form_8949_box' => $row->form8949Box,
+            'description' => $row->description,
+            'date_acquired' => $row->dateAcquired,
+            'date_sold' => $row->dateSold,
+            'proceeds' => $row->proceeds,
+            'cost_basis' => $row->costBasis,
+            'adjustment_code' => $row->adjustmentCode,
+            'adjustment_amount' => $row->adjustmentAmount,
+            'gain_or_loss' => $row->gainOrLoss,
+            'is_short_term' => $row->isShortTerm,
+            'is_covered' => $row->isCovered,
+            'is_summary_row' => $row->isSummaryRow,
+            'account_name' => $row->accountName,
+            'tax_document_id' => $row->taxDocumentId,
+            'source_transaction_id' => $row->sourceTransactionId,
+        ], $rows);
+    }
+
+    /**
+     * @param  ScheduleDRollupInput[]  $rollups
+     * @return array<int, array<string, mixed>>
+     */
+    public function rollupPayload(array $rollups): array
+    {
+        return array_map(static fn (ScheduleDRollupInput $rollup): array => [
+            'form_8949_box' => $rollup->form8949Box,
+            'is_short_term' => $rollup->isShortTerm,
+            'schedule_d_line' => $rollup->scheduleDLine,
+            'total_proceeds' => $rollup->totalProceeds,
+            'total_cost_basis' => $rollup->totalCostBasis,
+            'total_adjustment' => $rollup->totalAdjustment,
+            'net_gain_or_loss' => $rollup->netGainOrLoss,
+            'row_count' => $rollup->rowCount,
+        ], $rollups);
+    }
+
+    /**
+     * @param  WashSaleAdjustment[]  $adjustments
+     * @return array<int, array<string, mixed>>
+     */
+    public function adjustmentsPayload(array $adjustments): array
+    {
+        return array_map(static fn (WashSaleAdjustment $adjustment): array => [
+            'id' => $adjustment->id,
+            'loss_sale_id' => $adjustment->lossSaleId,
+            'replacement_purchase_id' => $adjustment->replacementPurchaseId,
+            'symbol' => $adjustment->symbol,
+            'sale_date' => $adjustment->saleDateStr,
+            'replacement_date' => $adjustment->replacementDateStr,
+            'disallowed_loss' => $adjustment->disallowedLoss,
+            'sale_account_id' => $adjustment->saleAccountId,
+            'sale_account_name' => $adjustment->saleAccountName,
+            'replacement_account_id' => $adjustment->replacementAccountId,
+            'replacement_account_name' => $adjustment->replacementAccountName,
+            'is_cross_account' => $adjustment->isCrossAccount,
+            'reason' => $adjustment->reason,
+            'sale_lot_id' => $adjustment->saleLotId,
+            'replacement_lot_id' => $adjustment->replacementLotId,
+            'detection_note' => $adjustment->detectionNote,
+        ], $adjustments);
+    }
+
+    /**
+     * @return int[]
+     */
+    private function accountIdsForUser(int $userId): array
+    {
+        return FinAccounts::forOwner($userId)
+            ->pluck('acct_id')
+            ->map(static fn (int|string $id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+}

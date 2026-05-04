@@ -255,6 +255,8 @@ Supported slices:
 | `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8z 1099-MISC sources |
 | `scheduleB` | Schedule B interest, ordinary dividend, and qualified dividend sources, including direct 1099 sources and K-1 sources |
 | `form4952` | Investment-interest, Schedule B gross-investment-income, K-1 gross-investment-income, and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
+| `scheduleD` | Schedule D line totals and supporting K-1/Form 6781/1099-DIV source lines, with Form 8949 rollups from the PHP capital-gains engine |
+| `form8949` | Canonical Form 8949 rows, Schedule D rollups, and PHP wash-sale adjustments |
 
 Useful examples:
 
@@ -262,6 +264,7 @@ Useful examples:
 php artisan finance:tax-preview-facts --year=2025 --slice=schedule1 --format=toon
 php artisan finance:tax-preview-facts --year=2025 --slice=scheduleB --format=toon
 php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json | jq '.form4952'
+php artisan finance:tax-preview-facts --year=2025 --slice=form8949 --format=json | jq '.form8949.washSaleAdjustments'
 ```
 
 The command is read-only and uses the same `TaxPreviewFactsService` that feeds `/api/finance/tax-preview-data` and the MCP `get_tax_preview` tool.

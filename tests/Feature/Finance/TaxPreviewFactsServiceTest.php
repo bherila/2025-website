@@ -3,6 +3,7 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFactsService;
@@ -248,12 +249,115 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('k1_investment_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
     }
 
+    public function test_schedule_d_and_form8949_facts_use_canonical_php_capital_gains_report(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+
+        $lossLot = $this->createLot($account, [
+            'symbol' => 'TSLA',
+            'description' => 'Tesla Inc.',
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-12-01',
+            'cost_basis' => 1000,
+            'proceeds' => 800,
+            'form_8949_box' => 'A',
+        ]);
+        $this->createLot($account, [
+            'symbol' => 'TSLA',
+            'description' => 'Tesla Inc.',
+            'purchase_date' => '2025-12-01',
+            'sale_date' => null,
+            'cost_basis' => 1000,
+            'proceeds' => null,
+            'form_8949_box' => null,
+        ]);
+        $this->createLot($account, [
+            'symbol' => 'MSFT',
+            'description' => 'Microsoft Corp.',
+            'purchase_date' => '2023-01-01',
+            'sale_date' => '2025-11-01',
+            'cost_basis' => 1500,
+            'proceeds' => 2000,
+            'is_short_term' => false,
+            'form_8949_box' => 'D',
+        ]);
+
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund', '8' => '100', '9a' => '200'],
+                codes: [
+                    '11' => [
+                        ['code' => 'C', 'value' => '1000', 'notes' => 'Section 1256 contracts'],
+                        ['code' => 'S', 'value' => '-25', 'notes' => 'Net short-term capital loss'],
+                        ['code' => 'S', 'value' => '50', 'notes' => 'Net long-term capital gain'],
+                        ['code' => 'S', 'value' => '75', 'notes' => 'Capital gain character pending'],
+                    ],
+                ],
+            ),
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker', 'box2a_cap_gain' => 30],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(2, $facts['form8949']['rowCount']);
+        $this->assertSame(1, $facts['form8949']['washSaleAdjustmentCount']);
+        $this->assertSame(200.0, $facts['form8949']['washSaleAdjustmentTotal']);
+        $this->assertSame("account_lot:{$lossLot->lot_id}", $facts['form8949']['washSaleAdjustments'][0]['lossSaleId']);
+        $this->assertSame(0.0, $facts['scheduleD']['line1bGainLoss']);
+        $this->assertSame(500.0, $facts['scheduleD']['line8bGainLoss']);
+        $this->assertSame(400.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(75.0, $facts['scheduleD']['line5GainLoss']);
+        $this->assertSame(600.0, $facts['scheduleD']['line10GainLoss']);
+        $this->assertSame(250.0, $facts['scheduleD']['line12GainLoss']);
+        $this->assertSame(30.0, $facts['scheduleD']['line13CapitalGainDistributions']);
+        $this->assertSame(475.0, $facts['scheduleD']['line7NetShortTerm']);
+        $this->assertSame(1380.0, $facts['scheduleD']['line15NetLongTerm']);
+        $this->assertSame(1855.0, $facts['scheduleD']['line16Combined']);
+        $this->assertSame(75.0, $facts['scheduleD']['ambiguous11SAmount']);
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $facts['scheduleD']['ambiguous11SSources'][0]['routing']);
+    }
+
     private function createAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
             'acct_owner' => $userId,
             'acct_name' => 'Brokerage',
         ]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createLot(FinAccounts $account, array $overrides = []): FinAccountLot
+    {
+        $costBasis = (float) ($overrides['cost_basis'] ?? 1000);
+        $proceeds = isset($overrides['proceeds']) ? (float) $overrides['proceeds'] : null;
+        $gain = $proceeds !== null ? $proceeds - $costBasis : null;
+
+        return FinAccountLot::create([
+            'acct_id' => $account->acct_id,
+            'symbol' => $overrides['symbol'] ?? 'AAPL',
+            'description' => $overrides['description'] ?? 'Test Stock',
+            'quantity' => $overrides['quantity'] ?? 10,
+            'purchase_date' => $overrides['purchase_date'] ?? '2025-01-01',
+            'sale_date' => $overrides['sale_date'] ?? null,
+            'cost_basis' => $costBasis,
+            'proceeds' => $proceeds,
+            'realized_gain_loss' => $gain,
+            'is_short_term' => $overrides['is_short_term'] ?? true,
+            'lot_source' => $overrides['lot_source'] ?? 'analyzer',
+            'tax_document_id' => $overrides['tax_document_id'] ?? null,
+            'form_8949_box' => $overrides['form_8949_box'] ?? 'A',
+            'is_covered' => $overrides['is_covered'] ?? true,
+            'wash_sale_disallowed' => $overrides['wash_sale_disallowed'] ?? null,
+        ]);
     }
 
     /**
