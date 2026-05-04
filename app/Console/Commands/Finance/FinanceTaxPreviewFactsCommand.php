@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands\Finance;
 
+use App\Models\User;
 use App\Services\Finance\TaxPreviewFactsService;
 
 class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
@@ -22,9 +23,19 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
 
     public function handle(): int
     {
+        if (! $this->validateFormat(['table', 'json', 'toon'])) {
+            return self::FAILURE;
+        }
+
         $userId = (int) ($this->option('user') ?: $this->userId());
         $year = (int) ($this->option('year') ?: date('Y'));
         $slice = (string) ($this->option('slice') ?: 'all');
+
+        if (! User::query()->whereKey($userId)->exists()) {
+            $this->error("User ID {$userId} not found. Pass --user for a valid user or set FINANCE_CLI_USER_ID.");
+
+            return self::FAILURE;
+        }
 
         if (! in_array($slice, TaxPreviewFactsService::supportedSlices(), true)) {
             $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, form4952, scheduleD, or form8949.");
@@ -101,6 +112,16 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             if (is_array($source)) {
                 $rows[] = ['form4952', 'line5', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
             }
+        }
+
+        foreach (($facts['form4952']['excludedInvestmentExpenseSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['form4952', 'excludedLine5', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        if (isset($facts['form4952']['totalExcludedInvestmentExpenses'])) {
+            $rows[] = ['form4952', 'excludedLine5Total', 'totalExcludedInvestmentExpenses', $facts['form4952']['totalExcludedInvestmentExpenses'], ''];
         }
 
         foreach ([

@@ -504,7 +504,7 @@ class TaxPreviewFactsService
         $grossInvestmentIncomeFromScheduleB = $scheduleB->form4952Line5aTotal;
         $grossInvestmentIncomeFromK1 = $this->k1Form4952GrossInvestmentIncome($k1Docs);
         $grossInvestmentIncomeTotal = $this->roundMoney($grossInvestmentIncomeFromScheduleB + $grossInvestmentIncomeFromK1);
-        $totalQualifiedDividends = $scheduleB->qualifiedDividendTotal;
+        $totalQualifiedDividends = $this->form4952QualifiedDividendsIncludedInGross($k1Docs, $scheduleB);
         $niiBefore = max(0.0, $this->roundMoney($grossInvestmentIncomeTotal - $totalQualifiedDividends - $totalInvestmentExpenses));
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
         $carryforward = max(0.0, $this->roundMoney($totalInvestmentInterestExpense - $deductible));
@@ -1153,10 +1153,35 @@ class TaxPreviewFactsService
             $box20A = $this->sumK1CodeItems($data, '20', 'A');
             $total += $box20A !== 0.0
                 ? $box20A
-                : $this->roundMoney($this->k1Field($data, '5') + $this->k1Field($data, '6a'));
+                : $this->roundMoney(
+                    $this->k1Field($data, '5')
+                    + $this->k1Field($data, '6a')
+                    - $this->k1Field($data, '6b')
+                    + $this->sumK1CodeItems($data, '11', 'C')
+                );
         }
 
         return $this->roundMoney($total);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     */
+    private function form4952QualifiedDividendsIncludedInGross(array $k1Docs, ScheduleBFacts $scheduleB): float
+    {
+        $directQualifiedDividends = $this->sumSourcesByTypes($scheduleB->qualifiedDividendSources, ['1099_div_qualified_dividends']);
+        $k1QualifiedDividendsIncludedInBox20A = 0.0;
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null || $this->sumK1CodeItems($data, '20', 'A') === 0.0) {
+                continue;
+            }
+
+            $k1QualifiedDividendsIncludedInBox20A += $this->k1Field($data, '6b');
+        }
+
+        return $this->roundMoney($directQualifiedDividends + $k1QualifiedDividendsIncludedInBox20A);
     }
 
     /**

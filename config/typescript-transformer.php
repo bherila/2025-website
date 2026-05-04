@@ -2,9 +2,6 @@
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
-use Spatie\LaravelTypeScriptTransformer\Transformers\DtoTransformer;
-use Spatie\TypeScriptTransformer\Collectors\DefaultCollector;
-use Spatie\TypeScriptTransformer\Writers\ModuleWriter;
 
 return [
     'auto_discover_types' => [
@@ -12,11 +9,11 @@ return [
     ],
 
     'collectors' => [
-        DefaultCollector::class,
+        'Spatie\\TypeScriptTransformer\\Collectors\\DefaultCollector',
     ],
 
     'transformers' => [
-        DtoTransformer::class,
+        'Spatie\\LaravelTypeScriptTransformer\\Transformers\\DtoTransformer',
     ],
 
     'default_type_replacements' => [
@@ -29,7 +26,7 @@ return [
 
     'output_file' => resource_path('js/types/generated/tax-preview-facts.ts'),
 
-    'writer' => ModuleWriter::class,
+    'writer' => 'Spatie\\TypeScriptTransformer\\Writers\\ModuleWriter',
 
     'formatter' => null,
 

@@ -229,6 +229,27 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('brokerage_margin_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
     }
 
+    public function test_form4952_reconstructs_k1_gross_investment_income_when_box_20a_is_absent(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund', '5' => '100', '6a' => '50', '6b' => '20'],
+                codes: [
+                    '11' => [['code' => 'C', 'value' => '30']],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(160.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
+        $this->assertSame(0.0, $facts['form4952']['totalQualifiedDividends']);
+        $this->assertSame(160.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
+    }
+
     public function test_form4952_does_not_classify_full_return_diagnostic_as_k1_interest(): void
     {
         $user = $this->createUser();

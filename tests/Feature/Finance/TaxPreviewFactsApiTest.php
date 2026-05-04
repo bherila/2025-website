@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
 class TaxPreviewFactsApiTest extends TestCase
@@ -108,6 +109,53 @@ class TaxPreviewFactsApiTest extends TestCase
             ->expectsOutputToContain('"line8zTotal": 42');
     }
 
+    public function test_tax_preview_facts_cli_rejects_invalid_format(): void
+    {
+        $user = $this->createUser();
+
+        $this->artisan('finance:tax-preview-facts', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--format' => 'yaml',
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('Invalid --format value');
+    }
+
+    public function test_tax_preview_facts_cli_rejects_missing_user(): void
+    {
+        $this->artisan('finance:tax-preview-facts', [
+            '--user' => 999999,
+            '--year' => 2025,
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('User ID 999999 not found');
+    }
+
+    public function test_tax_preview_facts_table_outputs_excluded_form4952_expense_sources(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund'],
+                codes: ['20' => [['code' => 'B', 'value' => '123']]],
+            ),
+        ]);
+
+        $exitCode = Artisan::call('finance:tax-preview-facts', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--slice' => 'form4952',
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('excludedLine5', $output);
+        $this->assertStringContainsString('totalExcludedInvestmentExpenses', $output);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -126,5 +174,20 @@ class TaxPreviewFactsApiTest extends TestCase
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => false,
         ], $overrides));
+    }
+
+    /**
+     * @param  array<int|string, string>  $fields
+     * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @return array<string, mixed>
+     */
+    private function k1Data(array $fields = [], array $codes = []): array
+    {
+        return [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
+            'codes' => $codes,
+        ];
     }
 }

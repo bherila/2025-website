@@ -839,6 +839,10 @@ export default function TaxDocuments1099Section({
           accountLink={reviewModalLink ?? undefined}
           onClose={closeReviewModal}
           onDocumentSaved={replaceDocument}
+          onDocumentDeleted={() => {
+            closeReviewModal()
+            void reloadDocuments()
+          }}
           {...(onTaxFactsChange ? { onTaxFactsChange } : {})}
           onDocumentReviewed={() => {
             closeReviewModal()

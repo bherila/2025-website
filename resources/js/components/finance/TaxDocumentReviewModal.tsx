@@ -58,6 +58,7 @@ interface TaxDocumentReviewModalProps {
   /** Called when any document is reviewed so parent can refresh. */
   onDocumentReviewed?: () => void
   onDocumentSaved?: ((doc: TaxDocument) => void) | undefined
+  onDocumentDeleted?: ((doc: TaxDocument) => void) | undefined
   onTaxFactsChange?: ((facts: TaxPreviewFacts) => void) | undefined
 }
 
@@ -657,6 +658,7 @@ export default function TaxDocumentReviewModal({
   onClose,
   onDocumentReviewed,
   onDocumentSaved,
+  onDocumentDeleted,
   onTaxFactsChange,
 }: TaxDocumentReviewModalProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
@@ -894,6 +896,7 @@ export default function TaxDocumentReviewModal({
       toast.success('Document deleted')
       // Remove from local list
       const newDocs = documents.filter(d => d.id !== doc.id)
+      onDocumentDeleted?.(doc)
       if (newDocs.length === 0) {
         onDocumentReviewed?.()
         onClose()
