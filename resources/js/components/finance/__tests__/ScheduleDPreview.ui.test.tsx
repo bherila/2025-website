@@ -121,7 +121,7 @@ describe('ScheduleDPreview detail navigation', () => {
         schemaVersion: '2026.1',
         formType: '1065',
         fields: {
-          B: { value: 'AQR TA DELPHI PLUS FUND, LLC' },
+          B: { value: 'TAX AWARE HEDGE FUND FUND, LLC' },
           '8': { value: '1200' },
         },
         codes: {
@@ -142,8 +142,8 @@ describe('ScheduleDPreview detail navigation', () => {
     fireEvent.click(screen.getByText('Line 5 total — short-term gain or (loss) from partnerships'))
 
     expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
-    expect(screen.getAllByText('AQR TA DELPHI PLUS FUND, LLC — K-1 Box 8').length).toBeGreaterThan(1)
-    expect(screen.getAllByText('AQR TA DELPHI PLUS FUND, LLC — K-1 Box 11S (S/T non-portfolio)').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S (S/T non-portfolio)').length).toBeGreaterThan(1)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Go to K-1' })[0]!)
 
