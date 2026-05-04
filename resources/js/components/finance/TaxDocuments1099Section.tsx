@@ -31,9 +31,10 @@ import { fetchWrapper } from '@/fetchWrapper'
 import type { ForeignTaxSummary } from '@/finance/1116'
 import { useReviewModal } from '@/hooks/useReviewModal'
 import {
-  defaultReportingMode,
-  isBroker1099BLink,
+  effectiveReportingMode,
+  isBroker1099EntryLink,
   REPORTING_MODE_LABELS,
+  REPORTING_MODES,
   scheduleDSummaryEligibility,
 } from '@/lib/finance/capitalGainsReporting'
 import type { DocAmounts } from '@/lib/finance/taxDocumentUtils'
@@ -157,7 +158,6 @@ interface UploadModalState {
 }
 
 const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
-const REPORTING_MODE_OPTIONS = ['schedule_d_summary', 'form_8949_summary', 'form_8949_transactions'] as const
 // Form types shown as individual upload options in the per-account Add dropdown.
 // 'broker_1099' is intentionally omitted here — it is handled by the "Consolidated 1099" entry
 // which routes through the MultiAccountImportModal with a preselected account.
@@ -187,6 +187,7 @@ export default function TaxDocuments1099Section({
   const [assignDocId, setAssignDocId] = useState<number | null>(null)
   const [manualEntry, setManualEntry] = useState<ManualEntryState | null>(null)
   const [manualSaving, setManualSaving] = useState(false)
+  const [savingReportingModeLinkIds, setSavingReportingModeLinkIds] = useState<Set<number>>(() => new Set())
   const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
 
   useEffect(() => {
@@ -438,6 +439,7 @@ export default function TaxDocuments1099Section({
       return
     }
 
+    setSavingReportingModeLinkIds((current) => new Set(current).add(link.id))
     try {
       await fetchWrapper.patch(`/api/finance/tax-documents/${doc.id}/accounts/${link.id}`, {
         reporting_mode: nextMode,
@@ -446,29 +448,39 @@ export default function TaxDocuments1099Section({
       await reloadDocuments()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update reporting mode')
+    } finally {
+      setSavingReportingModeLinkIds((current) => {
+        const next = new Set(current)
+        next.delete(link.id)
+        return next
+      })
     }
   }
 
   const renderReportingModeSelector = (doc: TaxDocument, link?: TaxDocumentAccountLink) => {
-    if (!link || !isBroker1099BLink(link)) {
+    if (!link || !isBroker1099EntryLink(link)) {
       return null
     }
 
     const parsedData = parsedDataForReportingMode(doc, link)
     const eligibility = parsedData ? scheduleDSummaryEligibility(parsedData) : { eligible: true, warnings: [] }
-    const value = link.reporting_mode ?? (parsedData ? defaultReportingMode(parsedData) : 'form_8949_transactions')
+    const value = parsedData
+      ? effectiveReportingMode(parsedData, link.reporting_mode)
+      : link.reporting_mode ?? 'form_8949_transactions'
+    const isSaving = savingReportingModeLinkIds.has(link.id)
 
     return (
       <div className="flex min-w-[13rem] flex-col gap-1">
         <Select
           value={value}
+          disabled={isSaving}
           onValueChange={(next) => void handleReportingModeChange(doc, link, next as Broker1099BReportingMode)}
         >
           <SelectTrigger size="sm" className="h-7 w-full min-w-[13rem] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {REPORTING_MODE_OPTIONS.map(mode => (
+            {REPORTING_MODES.map(mode => (
               <SelectItem key={mode} value={mode} disabled={mode === 'schedule_d_summary' && !eligibility.eligible}>
                 {REPORTING_MODE_LABELS[mode]}
               </SelectItem>
@@ -634,7 +646,7 @@ export default function TaxDocuments1099Section({
         }
 
         const visibleColumns = MONEY_COLUMNS.filter(c => hasDataByKey[c.key])
-        const hasReportingColumn = allGroups.some((group) => group.rows.some((row) => isBroker1099BLink(row.link)))
+        const hasReportingColumn = allGroups.some((group) => group.rows.some((row) => isBroker1099EntryLink(row.link)))
         const baseColumnCount = hasReportingColumn ? 4 : 3
         const totalCols = baseColumnCount + visibleColumns.length
 

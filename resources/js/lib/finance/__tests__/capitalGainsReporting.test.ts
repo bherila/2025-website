@@ -115,9 +115,224 @@ describe('capital gains 1099-B reporting modes', () => {
 
     expect(report.scheduleDLineAmounts['1b']).toBe(-100)
     expect(report.form8949Lots).toHaveLength(1)
+    expect(report.sources).toHaveLength(1)
+    expect(report.sources[0]!.amount).toBe(-100)
     expect(report.form8949Lots[0]!.description).toBe('Taxable summary')
     expect(report.form8949Lots[0]!.adjustment_code).toBe('M,W')
     expect(report.form8949Lots[0]!.form_8949_box).toBe('A')
+  })
+
+  it('includes accrued market discount on summary Form 8949 lots', () => {
+    const parsedData = {
+      transactions: [
+        {
+          symbol: 'BOND',
+          proceeds: 1000,
+          cost_basis: 900,
+          realized_gain_loss: 80,
+          accrued_market_discount: 20,
+          is_short_term: false,
+          is_covered: true,
+          form_8949_box: 'D',
+        },
+      ],
+    }
+    const doc = makeTaxDocument({
+      parsed_data: parsedData,
+      account_links: [{
+        id: 51,
+        tax_document_id: 100,
+        account_id: 10,
+        form_type: '1099_b',
+        tax_year: 2025,
+        ai_identifier: null,
+        ai_account_name: null,
+        is_reviewed: true,
+        notes: null,
+        reporting_mode: 'form_8949_summary',
+        account: { acct_id: 10, acct_name: 'Taxable', acct_number: '99991234' },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }],
+    })
+
+    const report = buildCapitalGainsReportFromTaxDocuments([doc])
+
+    expect(report.form8949Lots).toHaveLength(1)
+    expect(report.form8949Lots[0]!.adjustment_code).toBe('M,D')
+    expect(report.form8949Lots[0]!.accrued_market_discount).toBe(20)
+  })
+
+  it('includes corrected standalone 1099-B tax documents', () => {
+    const report = buildCapitalGainsReportFromTaxDocuments([
+      makeTaxDocument({
+        form_type: '1099_b_c',
+        parsed_data: {
+          transactions: [
+            { symbol: 'AAPL', proceeds: 1000, cost_basis: 900, realized_gain_loss: 100, is_short_term: true, is_covered: true, form_8949_box: 'A' },
+          ],
+        },
+      }),
+    ])
+
+    expect(report.scheduleDLineAmounts['1a']).toBe(100)
+  })
+
+  it('preserves standalone 1099-B export link reporting modes', () => {
+    const exportDoc: Doc1099ExportEntry = {
+      formType: '1099_b',
+      payerName: 'Broker',
+      accountId: 101,
+      accountName: 'Taxable',
+      parsedData: {
+        transactions: [
+          { symbol: 'VOO', proceeds: 1000, cost_basis: 900, realized_gain_loss: 100, is_short_term: true, is_covered: true, form_8949_box: 'A' },
+        ],
+      },
+      accountLinks: [{
+        id: 3,
+        account_id: 101,
+        form_type: '1099_b',
+        reporting_mode: 'form_8949_summary',
+        ai_identifier: null,
+        ai_account_name: null,
+        account: { acct_id: 101, acct_name: 'Taxable', acct_number: '1111' },
+      }],
+    }
+
+    const report = buildCapitalGainsReportFrom1099ExportDocs([exportDoc])
+
+    expect(report.scheduleDLineAmounts['1b']).toBe(100)
+    expect(report.form8949Lots).toHaveLength(1)
+    expect(report.form8949Lots[0]!.account_link_id).toBe(3)
+  })
+
+  it('resolves totals-only records to Schedule D summary mode', () => {
+    const parsedData = {
+      b_st_gain_loss: 125,
+      b_lt_gain_loss: 250,
+    }
+
+    expect(effectiveReportingMode(parsedData, 'form_8949_transactions')).toBe('schedule_d_summary')
+
+    const report = buildCapitalGainsReportFromTaxDocuments([
+      makeTaxDocument({
+        parsed_data: parsedData,
+        account_links: [{
+          id: 52,
+          tax_document_id: 100,
+          account_id: 10,
+          form_type: '1099_b',
+          tax_year: 2025,
+          ai_identifier: null,
+          ai_account_name: null,
+          is_reviewed: true,
+          notes: null,
+          reporting_mode: 'form_8949_transactions',
+          account: { acct_id: 10, acct_name: 'Taxable', acct_number: '99991234' },
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    ])
+
+    expect(report.scheduleDLineAmounts['1a']).toBe(125)
+    expect(report.scheduleDLineAmounts['8a']).toBe(250)
+    expect(report.form8949Lots).toHaveLength(0)
+    expect(report.sources.every((source) => source.reportingMode === 'schedule_d_summary')).toBe(true)
+  })
+
+  it('does not classify Schedule D summary transactions with indeterminate term as short-term', () => {
+    const report = buildCapitalGainsReportFromTaxDocuments([
+      makeTaxDocument({
+        parsed_data: {
+          transactions: [
+            { symbol: 'UNK', proceeds: 1000, cost_basis: 900, realized_gain_loss: 100, is_covered: true },
+          ],
+        },
+        account_links: [{
+          id: 53,
+          tax_document_id: 100,
+          account_id: 10,
+          form_type: '1099_b',
+          tax_year: 2025,
+          ai_identifier: null,
+          ai_account_name: null,
+          is_reviewed: true,
+          notes: null,
+          reporting_mode: 'schedule_d_summary',
+          account: { acct_id: 10, acct_name: 'Taxable', acct_number: '99991234' },
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    ])
+
+    expect(report.scheduleDLineAmounts['1a']).toBeUndefined()
+    expect(report.scheduleDLineAmounts['8a']).toBeUndefined()
+  })
+
+  it('derives Schedule D summary line from explicit Form 8949 box when term flag is missing', () => {
+    const report = buildCapitalGainsReportFromTaxDocuments([
+      makeTaxDocument({
+        parsed_data: {
+          transactions: [
+            { symbol: 'BOXA', proceeds: 1000, cost_basis: 900, realized_gain_loss: 100, is_covered: true, form_8949_box: 'A' },
+            { symbol: 'BOXD', proceeds: 2000, cost_basis: 1500, realized_gain_loss: 500, is_covered: true, form_8949_box: 'D' },
+          ],
+        },
+        account_links: [{
+          id: 54,
+          tax_document_id: 100,
+          account_id: 10,
+          form_type: '1099_b',
+          tax_year: 2025,
+          ai_identifier: null,
+          ai_account_name: null,
+          is_reviewed: true,
+          notes: null,
+          reporting_mode: 'schedule_d_summary',
+          account: { acct_id: 10, acct_name: 'Taxable', acct_number: '99991234' },
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    ])
+
+    expect(report.scheduleDLineAmounts['1a']).toBe(100)
+    expect(report.scheduleDLineAmounts['8a']).toBe(500)
+    expect(report.form8949Lots).toHaveLength(0)
+  })
+
+  it('orders Form 8949 summary sources and lots by canonical box order', () => {
+    const report = buildCapitalGainsReportFromTaxDocuments([
+      makeTaxDocument({
+        parsed_data: {
+          transactions: [
+            { symbol: 'LONG', proceeds: 2000, cost_basis: 1500, realized_gain_loss: 500, is_short_term: false, is_covered: true, form_8949_box: 'D' },
+            { symbol: 'SHORT', proceeds: 1000, cost_basis: 900, realized_gain_loss: 100, is_short_term: true, is_covered: true, form_8949_box: 'A' },
+          ],
+        },
+        account_links: [{
+          id: 55,
+          tax_document_id: 100,
+          account_id: 10,
+          form_type: '1099_b',
+          tax_year: 2025,
+          ai_identifier: null,
+          ai_account_name: null,
+          is_reviewed: true,
+          notes: null,
+          reporting_mode: 'form_8949_summary',
+          account: { acct_id: 10, acct_name: 'Taxable', acct_number: '99991234' },
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    ])
+
+    expect(report.sources.map((source) => source.form8949Box)).toEqual(['A', 'D'])
+    expect(report.form8949Lots.map((lot) => lot.form_8949_box)).toEqual(['A', 'D'])
   })
 
   it('applies reporting modes per account on consolidated broker 1099 exports', () => {

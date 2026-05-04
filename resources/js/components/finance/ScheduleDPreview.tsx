@@ -380,7 +380,9 @@ export default function ScheduleDPreview({
           amount: src.amount,
           boxRef: src.line,
           ...(src.detail ? { detail: src.detail } : {}),
-          note: src.reportingMode === 'schedule_d_summary' ? 'Reporting mode: Schedule D Summary' : `Reporting mode: ${src.reportingMode === 'form_8949_summary' ? 'Form 8949 Summary' : 'Form 8949 Individual Transactions'}`,
+          ...(src.note || src.reportingMode === 'schedule_d_summary'
+            ? { note: src.note ?? 'Reporting mode: Schedule D Summary' }
+            : {}),
         })
       }
     }
@@ -463,7 +465,9 @@ export default function ScheduleDPreview({
           amount: src.amount,
           boxRef: src.line,
           ...(src.detail ? { detail: src.detail } : {}),
-          note: src.reportingMode === 'schedule_d_summary' ? 'Reporting mode: Schedule D Summary' : `Reporting mode: ${src.reportingMode === 'form_8949_summary' ? 'Form 8949 Summary' : 'Form 8949 Individual Transactions'}`,
+          ...(src.note || src.reportingMode === 'schedule_d_summary'
+            ? { note: src.note ?? 'Reporting mode: Schedule D Summary' }
+            : {}),
         })
       }
     }

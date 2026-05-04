@@ -34,6 +34,14 @@ const BOX_TO_SCHEDULE_D_LINE: Record<Form8949Box, ScheduleDBrokerLine> = {
   E: '9',
   F: '10',
 }
+const FORM_8949_BOX_ORDER: Record<Form8949Box, number> = {
+  A: 0,
+  B: 1,
+  C: 2,
+  D: 3,
+  E: 4,
+  F: 5,
+}
 const ST_GAIN_KEYS = ['b_st_gain_loss', 'b_st_reported_gain_loss'] as const
 const LT_GAIN_KEYS = ['b_lt_gain_loss', 'b_lt_reported_gain_loss'] as const
 const TOTAL_GAIN_KEYS = ['b_total_gain_loss', 'total_realized_gain_loss'] as const
@@ -55,6 +63,7 @@ interface BoxSummaryTotals {
   basis: currency
   gain: currency
   washSale: currency
+  accruedMarketDiscount: currency
 }
 
 export interface CapitalGainsReportSource {
@@ -65,6 +74,16 @@ export interface CapitalGainsReportSource {
   form8949Box?: Form8949Box
   reportingMode: Broker1099BReportingMode
   detail?: { formLabel: string; docId: number }
+}
+
+function reportingModeNote(mode: Broker1099BReportingMode, box?: Form8949Box): string {
+  if (mode === 'schedule_d_summary') {
+    return 'Reporting mode: Schedule D Summary'
+  }
+
+  return mode === 'form_8949_summary'
+    ? `Reporting mode: Form 8949 Summary${box ? `, Box ${box}` : ''}`
+    : `Reporting mode: Form 8949 Individual Transactions${box ? `, Box ${box}` : ''}`
 }
 
 export interface CapitalGainsReport {
@@ -193,6 +212,9 @@ export function effectiveReportingMode(
   parsedData: Record<string, unknown>,
   persistedMode?: Broker1099BReportingMode | null,
 ): Broker1099BReportingMode {
+  if (transactionsFromRecord(parsedData).length === 0) {
+    return 'schedule_d_summary'
+  }
   if (!persistedMode) {
     return defaultReportingMode(parsedData)
   }
@@ -234,11 +256,17 @@ function addLineAmount(
 }
 
 function lineForTransaction(transaction: Record<string, unknown>, mode: Broker1099BReportingMode): ScheduleDBrokerLine | null {
-  const isShortTerm = toBool(transaction.is_short_term)
-  if (mode === 'schedule_d_summary') {
-    return isShortTerm === false ? '8a' : '1a'
-  }
   const box = transactionBox(transaction)
+  if (mode === 'schedule_d_summary') {
+    if (box === 'A') {
+      return '1a'
+    }
+    if (box === 'D') {
+      return '8a'
+    }
+
+    return null
+  }
   return box ? BOX_TO_SCHEDULE_D_LINE[box] : null
 }
 
@@ -266,12 +294,22 @@ function summaryLotForBox(
       basis: acc.basis.add(toNum(transaction.cost_basis)),
       gain: acc.gain.add(transactionGain(transaction)),
       washSale: acc.washSale.add(positiveAmount(transaction.wash_sale_disallowed)),
+      accruedMarketDiscount: acc.accruedMarketDiscount.add(positiveAmount(transaction.accrued_market_discount)),
     }),
-    { proceeds: currency(0), basis: currency(0), gain: currency(0), washSale: currency(0) },
+    {
+      proceeds: currency(0),
+      basis: currency(0),
+      gain: currency(0),
+      washSale: currency(0),
+      accruedMarketDiscount: currency(0),
+    },
   )
   const codes = ['M']
-  if (totals.washSale.value > 0.005) {
+  if (totals.washSale.value !== 0) {
     codes.push('W')
+  }
+  if (totals.accruedMarketDiscount.value !== 0) {
+    codes.push('D')
   }
 
   return {
@@ -289,6 +327,7 @@ function summaryLotForBox(
     form_8949_box: box,
     is_covered: box === 'A' || box === 'D',
     wash_sale_disallowed: totals.washSale.value,
+    accrued_market_discount: totals.accruedMarketDiscount.value,
     account_name: record.accountName ?? null,
     account_last4: record.accountLast4 ?? null,
     account_link_id: record.link?.id ?? null,
@@ -297,10 +336,11 @@ function summaryLotForBox(
 }
 
 function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord): void {
-  const mode = effectiveReportingMode(record.parsedData, record.link?.reporting_mode)
+  const selectedMode = effectiveReportingMode(record.parsedData, record.link?.reporting_mode)
   const transactions = transactionsFromRecord(record.parsedData)
 
   if (transactions.length === 0) {
+    const mode: Broker1099BReportingMode = 'schedule_d_summary'
     const shortTermValue = readMoneyField(record.parsedData, ST_GAIN_KEYS)
     const longTermValue = readMoneyField(record.parsedData, LT_GAIN_KEYS)
     const totalValue = readMoneyField(record.parsedData, TOTAL_GAIN_KEYS)
@@ -314,7 +354,9 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
         line: '1a',
         label: `${record.label} — S/T 1099-B`,
         amount: stGain,
-        ...(usedTotalAsShortTermFallback ? { note: TOTAL_AS_ST_FALLBACK_NOTE } : {}),
+        ...(usedTotalAsShortTermFallback
+          ? { note: TOTAL_AS_ST_FALLBACK_NOTE }
+          : selectedMode === mode ? {} : { note: 'Reporting mode resolved to Schedule D Summary because this 1099-B has totals but no transaction detail.' }),
         reportingMode: mode,
         ...(record.docId ? { detail: { formLabel: formLabel(record.formType), docId: record.docId } } : {}),
       })
@@ -324,6 +366,7 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
         line: '8a',
         label: `${record.label} — L/T 1099-B`,
         amount: ltGain,
+        ...(selectedMode === mode ? {} : { note: 'Reporting mode resolved to Schedule D Summary because this 1099-B has totals but no transaction detail.' }),
         reportingMode: mode,
         ...(record.docId ? { detail: { formLabel: formLabel(record.formType), docId: record.docId } } : {}),
       })
@@ -332,29 +375,52 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
   }
 
   const transactionsByBox = new Map<Form8949Box, Record<string, unknown>[]>()
+  const summarySourcesByBox = new Map<Form8949Box, CapitalGainsReportSource>()
 
   for (const transaction of transactions) {
     const amount = transactionGain(transaction)
-    const line = lineForTransaction(transaction, mode)
+    const line = lineForTransaction(transaction, selectedMode)
+    const box = transactionBox(transaction)
     if (line) {
       addLineAmount(report.scheduleDLineAmounts, line, amount)
-      report.sources.push({
-        line,
-        label: `${record.label} — ${mode === 'form_8949_summary' ? 'Form 8949 summary' : sourceDescription(transaction)}`,
-        amount,
-        ...(transactionBox(transaction) ? { form8949Box: transactionBox(transaction)! } : {}),
-        reportingMode: mode,
-        ...(record.docId ? { detail: { formLabel: formLabel(record.formType), docId: record.docId } } : {}),
-      })
+      if (selectedMode === 'form_8949_summary' && box) {
+        const existing = summarySourcesByBox.get(box)
+        summarySourcesByBox.set(box, {
+          line,
+          label: `${record.label} — Form 8949 summary Box ${box}`,
+          amount: currency(existing?.amount ?? 0).add(amount).value,
+          form8949Box: box,
+          reportingMode: selectedMode,
+          note: reportingModeNote(selectedMode, box),
+          ...(record.docId ? { detail: { formLabel: formLabel(record.formType), docId: record.docId } } : {}),
+        })
+      } else {
+        report.sources.push({
+          line,
+          label: `${record.label} — ${sourceDescription(transaction)}`,
+          amount,
+          ...(box ? { form8949Box: box } : {}),
+          reportingMode: selectedMode,
+          ...(record.docId ? { detail: { formLabel: formLabel(record.formType), docId: record.docId } } : {}),
+        })
+      }
     }
 
-    const box = transactionBox(transaction)
-    if (mode === 'form_8949_summary' && box) {
+    if (selectedMode === 'form_8949_summary' && box) {
       transactionsByBox.set(box, [...(transactionsByBox.get(box) ?? []), transaction])
     }
   }
 
-  if (mode === 'form_8949_transactions') {
+  report.sources.push(
+    ...[...summarySourcesByBox.values()].sort((a, b) => {
+      if (!a.form8949Box || !b.form8949Box) {
+        return 0
+      }
+      return FORM_8949_BOX_ORDER[a.form8949Box] - FORM_8949_BOX_ORDER[b.form8949Box]
+    }),
+  )
+
+  if (selectedMode === 'form_8949_transactions') {
     report.form8949Lots.push(...broker1099TransactionsToLots(record.parsedData, {
       ...(record.docId !== undefined ? { tax_document_id: record.docId } : {}),
       ...(record.accountId !== null && record.accountId !== undefined ? { acct_id: record.accountId } : {}),
@@ -362,8 +428,8 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
       account_last4: record.accountLast4 ?? null,
       account_link_id: record.link?.id ?? null,
     }))
-  } else if (mode === 'form_8949_summary') {
-    for (const [box, boxTransactions] of transactionsByBox) {
+  } else if (selectedMode === 'form_8949_summary') {
+    for (const [box, boxTransactions] of [...transactionsByBox.entries()].sort(([a], [b]) => FORM_8949_BOX_ORDER[a] - FORM_8949_BOX_ORDER[b])) {
       report.form8949Lots.push(summaryLotForBox(box, record, boxTransactions))
     }
   }
@@ -377,7 +443,7 @@ function linkMatchesEntry(entry: Record<string, unknown>, link: Pick<TaxDocument
 }
 
 function recordsFromTaxDocument(doc: TaxDocument, accountId?: number): Broker1099BRecord[] {
-  if (!doc.is_reviewed || (doc.form_type !== '1099_b' && !isBroker1099DocumentType(doc.form_type))) {
+  if (!doc.is_reviewed || (doc.form_type !== '1099_b' && doc.form_type !== '1099_b_c' && !isBroker1099DocumentType(doc.form_type))) {
     return []
   }
 
@@ -457,13 +523,15 @@ function recordsFromExportDoc(doc: Doc1099ExportEntry): Broker1099BRecord[] {
   }
 
   if (!Array.isArray(doc.parsedData)) {
+    const link = (doc.accountLinks ?? []).find((candidate) => isBroker1099EntryType(candidate.form_type)) ?? null
     return isPlainRecord(doc.parsedData)
       ? [{
           formType: doc.formType,
           parsedData: doc.parsedData,
-          accountId: doc.accountId,
-          accountName: doc.accountName ?? null,
-          accountLast4: doc.accountLast4 ?? null,
+          link,
+          accountId: doc.accountId ?? link?.account_id,
+          accountName: doc.accountName ?? link?.account?.acct_name ?? null,
+          accountLast4: doc.accountLast4 ?? accountLast4FromValue(link?.account?.acct_number) ?? null,
           label: doc.accountName ?? doc.payerName,
         }]
       : []
@@ -506,6 +574,6 @@ export function buildCapitalGainsReportFrom1099ExportDocs(docs: Doc1099ExportEnt
   return report
 }
 
-export function isBroker1099BLink(link: Pick<TaxDocumentAccountLink, 'form_type'> | undefined): boolean {
+export function isBroker1099EntryLink(link: Pick<TaxDocumentAccountLink, 'form_type'> | undefined): boolean {
   return Boolean(link && isBroker1099EntryType(link.form_type))
 }

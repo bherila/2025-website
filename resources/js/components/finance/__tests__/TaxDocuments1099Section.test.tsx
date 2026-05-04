@@ -59,14 +59,16 @@ jest.mock('@/components/ui/label', () => ({
 jest.mock('@/components/ui/select', () => ({
   Select: ({
     children,
+    disabled,
     value,
     onValueChange,
   }: {
     children: React.ReactNode
+    disabled?: boolean
     value: string
     onValueChange: (value: string) => void
   }) => (
-    <select aria-label="Reporting mode" value={value} onChange={(event) => onValueChange(event.target.value)}>
+    <select aria-label="Reporting mode" disabled={disabled} value={value} onChange={(event) => onValueChange(event.target.value)}>
       {children}
     </select>
   ),
@@ -233,5 +235,63 @@ describe('TaxDocuments1099Section', () => {
       })
     })
     expect(onDocumentsReload).toHaveBeenCalled()
+  })
+
+  it('shows the effective reporting mode when the persisted mode is no longer eligible', () => {
+    const doc = makeDoc({
+      id: 23,
+      tax_year: 2025,
+      form_type: 'broker_1099',
+      is_reviewed: true,
+      genai_status: 'parsed',
+      parsed_data: [{
+        account_identifier: 'acct-7209',
+        account_name: 'E*TRADE',
+        form_type: '1099_b',
+        tax_year: 2025,
+        parsed_data: {
+          transactions: [
+            {
+              symbol: 'NVDA',
+              proceeds: 1000,
+              cost_basis: 1500,
+              realized_gain_loss: -500,
+              wash_sale_disallowed: 200,
+              is_short_term: true,
+              is_covered: true,
+              form_8949_box: 'A',
+            },
+          ],
+        },
+      }],
+      account_links: [{
+        id: 78,
+        tax_document_id: 23,
+        account_id: 9,
+        form_type: '1099_b',
+        tax_year: 2025,
+        ai_identifier: 'acct-7209',
+        ai_account_name: 'E*TRADE',
+        is_reviewed: true,
+        notes: null,
+        reporting_mode: 'schedule_d_summary',
+        account: { acct_id: 9, acct_name: 'fidelity taxable' },
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      }],
+    })
+
+    render(
+      <TaxDocuments1099Section
+        selectedYear={2025}
+        documents={[doc]}
+        accounts={[{ acct_id: 9, acct_name: 'fidelity taxable' }]}
+        activeAccountIds={[]}
+        isLoading={false}
+      />,
+    )
+
+    const select = screen.getByLabelText('Reporting mode') as HTMLSelectElement
+    expect(select.value).toBe('form_8949_transactions')
   })
 })
