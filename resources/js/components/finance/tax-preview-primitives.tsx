@@ -177,16 +177,30 @@ export function FormSubLine({ text }: { text: string }) {
   )
 }
 
-export function FormTotalLine({ label, value, double, boxRef }: { label: string; value: number | null; double?: boolean; boxRef?: string }) {
+export function FormTotalLine({
+  label,
+  value,
+  double,
+  boxRef,
+  onClick,
+}: {
+  label: string
+  value: number | null
+  double?: boolean
+  boxRef?: string
+  onClick?: () => void
+}) {
   const cls =
     value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`}
+      className={`flex items-center gap-2 px-3 py-2 border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5 ${onClick ? 'cursor-pointer hover:bg-primary/10 transition-colors' : ''}`}
+      {...(onClick ? { onClick } : {})}
     >
       {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
       <span className="flex-1 text-[13px]">{label}</span>
       <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
+      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
     </div>
   )
 }

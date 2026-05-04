@@ -335,7 +335,9 @@ export function getDocAmounts(
 ): DocAmounts {
   const result: DocAmounts = { interest: null, dividend: null, capGain: null, schC: null, other: null, foreignTax: null }
   const effectiveFormType = link ? link.form_type : doc.form_type
-  const effectiveReviewed = link ? link.is_reviewed : doc.is_reviewed
+  const effectiveReviewed = link
+    ? link.is_reviewed || (doc.form_type === 'broker_1099' && !Array.isArray(doc.parsed_data) && doc.is_reviewed)
+    : doc.is_reviewed
   if (!doc.parsed_data || !effectiveReviewed) {
     return result
   }

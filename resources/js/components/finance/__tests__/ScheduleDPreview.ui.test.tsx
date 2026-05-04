@@ -110,4 +110,43 @@ describe('ScheduleDPreview detail navigation', () => {
 
     expect(onGoToForm1040).toHaveBeenCalledTimes(1)
   })
+
+  it('opens Schedule D line 5 supporting details with per-source navigation', () => {
+    const onOpenDoc = jest.fn()
+    const k1Doc = makeTaxDocument({
+      id: 20,
+      form_type: 'k1',
+      original_filename: 'k1.pdf',
+      parsed_data: {
+        schemaVersion: '2026.1',
+        formType: '1065',
+        fields: {
+          B: { value: 'AQR TA DELPHI PLUS FUND, LLC' },
+          '8': { value: '1200' },
+        },
+        codes: {
+          '11': [{ code: 'S', value: '-500', notes: 'Net short-term capital loss' }],
+        },
+      },
+    })
+
+    render(
+      <ScheduleDPreview
+        reviewedK1Docs={[k1Doc]}
+        reviewed1099Docs={[]}
+        selectedYear={2025}
+        onOpenDoc={onOpenDoc}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Line 5 total — short-term gain or (loss) from partnerships'))
+
+    expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
+    expect(screen.getAllByText('AQR TA DELPHI PLUS FUND, LLC — K-1 Box 8').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('AQR TA DELPHI PLUS FUND, LLC — K-1 Box 11S (S/T non-portfolio)').length).toBeGreaterThan(1)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Go to K-1' })[0]!)
+
+    expect(onOpenDoc).toHaveBeenCalledWith(20)
+  })
 })

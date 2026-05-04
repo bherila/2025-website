@@ -1,11 +1,13 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import type { ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
@@ -43,6 +45,66 @@ interface CapGainLine {
   note?: string
   boxRef?: string
   detail?: ScheduleDDetailSource
+}
+
+function ScheduleDLine5DetailsModal({
+  open,
+  onClose,
+  sources,
+  total,
+  onOpenDoc,
+}: {
+  open: boolean
+  onClose: () => void
+  sources: CapGainLine[]
+  total: number
+  onOpenDoc?: (docId: number) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Schedule D Line 5 Supporting Details</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {sources.map((source, index) => (
+            <div key={`${source.label}-${index}`} className="rounded-md border border-border/60 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="text-sm font-medium leading-snug">{source.label}</div>
+                  {source.note && <div className="text-xs leading-snug text-muted-foreground">{source.note}</div>}
+                </div>
+                <div className={`font-currency shrink-0 text-right text-sm tabular-nums ${source.amount < 0 ? 'text-destructive' : 'text-success'}`}>
+                  {fmtAmt(source.amount)}
+                </div>
+              </div>
+              {source.detail && onOpenDoc && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-7 gap-1.5 px-2 text-xs"
+                  onClick={() => {
+                    onOpenDoc(source.detail!.docId)
+                    onClose()
+                  }}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  Go to {source.detail.formLabel}
+                </Button>
+              )}
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold">
+            <span>Line 5 total</span>
+            <span className={`font-currency tabular-nums ${total < 0 ? 'text-destructive' : 'text-success'}`}>
+              {fmtAmt(total)}
+            </span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function scheduleLossCarryover(value: number | null | undefined): number {
@@ -204,6 +266,7 @@ export default function ScheduleDPreview({
   onOpenDoc,
   onGoToForm1040,
 }: ScheduleDPreviewProps) {
+  const [line5DetailsOpen, setLine5DetailsOpen] = useState(false)
   const taxYear = selectedYear ?? new Date().getFullYear()
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -337,6 +400,8 @@ export default function ScheduleDPreview({
       boxRef: '6',
     })
   }
+  const line5SourceLines = stLines.filter((line) => line.boxRef === '5')
+  const line5Total = line5SourceLines.reduce((acc, line) => acc.add(line.amount), currency(0)).value
 
   // ── Long-term capital gains/losses ────────────────────────────────────────
   const ltLines: CapGainLine[] = []
@@ -454,10 +519,10 @@ export default function ScheduleDPreview({
   // ── Totals via lib/tax/scheduleD ─────────────────────────────────────────
   // Aggregate K-1 ST from Box 8 lines and LT from Box 9a/9b/9c/10 lines
   const k1ST = stLines
-    .filter((l) => l.label.includes('K-1'))
+    .filter((l) => l.boxRef === '5')
     .reduce((acc, l) => acc.add(l.amount), currency(0)).value
   const k1LT = ltLines
-    .filter((l) => l.label.includes('K-1'))
+    .filter((l) => l.boxRef === '12')
     .reduce((acc, l) => acc.add(l.amount), currency(0)).value
 
   const schD = scheduleD({
@@ -569,6 +634,14 @@ export default function ScheduleDPreview({
             </div>
           ))}
           {stLines.length === 0 && <FormLine label="No short-term items" raw="—" />}
+          {line5SourceLines.length > 0 && (
+            <FormTotalLine
+              boxRef="5"
+              label="Line 5 total — short-term gain or (loss) from partnerships"
+              value={line5Total}
+              onClick={() => setLine5DetailsOpen(true)}
+            />
+          )}
           <FormTotalLine boxRef="7" label="Net Short-Term" value={netST} />
         </FormBlock>
 
@@ -645,6 +718,13 @@ export default function ScheduleDPreview({
           </p>
         </Callout>
       )}
+      <ScheduleDLine5DetailsModal
+        open={line5DetailsOpen}
+        onClose={() => setLine5DetailsOpen(false)}
+        sources={line5SourceLines}
+        total={line5Total}
+        {...(onOpenDoc ? { onOpenDoc } : {})}
+      />
     </div>
   )
 }

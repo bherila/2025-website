@@ -270,7 +270,7 @@ describe('TaxPreviewContext', () => {
       genai_status: 'parsed',
       is_reviewed: true,
       tax_year: 2025,
-      misc_routing: 'sch_1_line_8',
+      misc_routing: null,
       parsed_data: {
         payer_name: 'Other Income Payer',
         box3_other_income: 900,
@@ -418,14 +418,14 @@ describe('TaxPreviewContext', () => {
     ]))
   })
 
-  it('aggregates Schedule 1 other income from broker_1099 1099-MISC child links', async () => {
+  it('aggregates Schedule 1 other income from broker_1099 1099-MISC child links by default', async () => {
     const brokerDoc = {
       id: 53,
       form_type: 'broker_1099',
       genai_status: 'parsed',
       is_reviewed: true,
       tax_year: 2025,
-      misc_routing: 'sch_1_line_8',
+      misc_routing: null,
       parsed_data: [
         {
           account_identifier: 'ACCT-1',
@@ -462,6 +462,45 @@ describe('TaxPreviewContext', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     expect(result.current.schedule1OtherIncome).toBe(450)
+  })
+
+  it('aggregates flat broker_1099 MISC boxes to Schedule 1 line 8z when the parent is reviewed', async () => {
+    const brokerDoc = {
+      id: 54,
+      form_type: 'broker_1099',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      misc_routing: null,
+      parsed_data: {
+        payer_name: 'Flat Broker',
+        box3_other_income: 3838.89,
+        box8_substitute_payments: 0.44,
+      },
+      original_filename: 'flat-broker.pdf',
+      account_links: [{
+        id: 540,
+        tax_document_id: 54,
+        account_id: 10,
+        form_type: '1099_misc',
+        tax_year: 2025,
+        ai_identifier: null,
+        is_reviewed: false,
+      }],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
+      return Promise.resolve(makeResponse([brokerDoc]))
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.schedule1OtherIncome).toBe(3839.33)
   })
 
   it('wires Schedule SE into the computed tax return when reviewed K-1 SE income exists', async () => {

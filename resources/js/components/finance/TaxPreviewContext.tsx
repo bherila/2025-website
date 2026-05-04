@@ -34,7 +34,7 @@ import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
 import { extractK1Form461Disclosure, getK1CodeItems, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
 import { parseMoneyOrZero } from '@/lib/finance/money'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { extractLinkParsedData, getDocAmounts, hasNonZeroNumericValue } from '@/lib/finance/taxDocumentUtils'
+import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { form461 } from '@/lib/tax/form461'
 import { calculateTax } from '@/lib/tax/taxBracket'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
@@ -832,12 +832,12 @@ export function TaxPreviewProvider({
             return
           }
           const entryData = extractLinkParsedData(doc, link)
+            ?? (!Array.isArray(doc.parsed_data) ? doc.parsed_data as Record<string, unknown> : null)
           if (entryData == null) {
             return
           }
           const effectiveRouting = link.misc_routing ?? doc.misc_routing
-          const shouldInclude = isLine8MiscRouting(effectiveRouting)
-            || (effectiveRouting == null && !hasNonZeroNumericValue(entryData, 'box1_rents', 'box2_royalties'))
+          const shouldInclude = isLine8MiscRouting(effectiveRouting) || effectiveRouting == null
           if (!shouldInclude) {
             return
           }
@@ -855,8 +855,7 @@ export function TaxPreviewProvider({
       }
 
       const effectiveRouting = doc.misc_routing
-      const shouldInclude = isLine8MiscRouting(effectiveRouting)
-        || (effectiveRouting == null && !hasNonZeroNumericValue(parsedData, 'box1_rents', 'box2_royalties'))
+      const shouldInclude = isLine8MiscRouting(effectiveRouting) || effectiveRouting == null
       if (!shouldInclude) {
         return
       }
@@ -1064,7 +1063,7 @@ export function TaxPreviewProvider({
       income1099,
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
-    const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs, form4952)
+    const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null
       return currency(acc).add(p?.box17_state_tax ?? 0).value
