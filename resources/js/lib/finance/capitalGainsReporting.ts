@@ -34,6 +34,14 @@ const BOX_TO_SCHEDULE_D_LINE: Record<Form8949Box, ScheduleDBrokerLine> = {
   E: '9',
   F: '10',
 }
+const FORM_8949_BOX_ORDER: Record<Form8949Box, number> = {
+  A: 0,
+  B: 1,
+  C: 2,
+  D: 3,
+  E: 4,
+  F: 5,
+}
 const ST_GAIN_KEYS = ['b_st_gain_loss', 'b_st_reported_gain_loss'] as const
 const LT_GAIN_KEYS = ['b_lt_gain_loss', 'b_lt_reported_gain_loss'] as const
 const TOTAL_GAIN_KEYS = ['b_total_gain_loss', 'total_realized_gain_loss'] as const
@@ -204,6 +212,9 @@ export function effectiveReportingMode(
   parsedData: Record<string, unknown>,
   persistedMode?: Broker1099BReportingMode | null,
 ): Broker1099BReportingMode {
+  if (transactionsFromRecord(parsedData).length === 0) {
+    return 'schedule_d_summary'
+  }
   if (!persistedMode) {
     return defaultReportingMode(parsedData)
   }
@@ -245,15 +256,17 @@ function addLineAmount(
 }
 
 function lineForTransaction(transaction: Record<string, unknown>, mode: Broker1099BReportingMode): ScheduleDBrokerLine | null {
-  const isShortTerm = toBool(transaction.is_short_term)
+  const box = transactionBox(transaction)
   if (mode === 'schedule_d_summary') {
-    if (isShortTerm === null) {
-      return null
+    if (box === 'A') {
+      return '1a'
+    }
+    if (box === 'D') {
+      return '8a'
     }
 
-    return isShortTerm === false ? '8a' : '1a'
+    return null
   }
-  const box = transactionBox(transaction)
   return box ? BOX_TO_SCHEDULE_D_LINE[box] : null
 }
 
@@ -292,10 +305,10 @@ function summaryLotForBox(
     },
   )
   const codes = ['M']
-  if (totals.washSale.value > 0.005) {
+  if (totals.washSale.value !== 0) {
     codes.push('W')
   }
-  if (totals.accruedMarketDiscount.value > 0.005) {
+  if (totals.accruedMarketDiscount.value !== 0) {
     codes.push('D')
   }
 
@@ -398,7 +411,14 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
     }
   }
 
-  report.sources.push(...summarySourcesByBox.values())
+  report.sources.push(
+    ...[...summarySourcesByBox.values()].sort((a, b) => {
+      if (!a.form8949Box || !b.form8949Box) {
+        return 0
+      }
+      return FORM_8949_BOX_ORDER[a.form8949Box] - FORM_8949_BOX_ORDER[b.form8949Box]
+    }),
+  )
 
   if (selectedMode === 'form_8949_transactions') {
     report.form8949Lots.push(...broker1099TransactionsToLots(record.parsedData, {
@@ -409,7 +429,7 @@ function addRecordToReport(report: CapitalGainsReport, record: Broker1099BRecord
       account_link_id: record.link?.id ?? null,
     }))
   } else if (selectedMode === 'form_8949_summary') {
-    for (const [box, boxTransactions] of transactionsByBox) {
+    for (const [box, boxTransactions] of [...transactionsByBox.entries()].sort(([a], [b]) => FORM_8949_BOX_ORDER[a] - FORM_8949_BOX_ORDER[b])) {
       report.form8949Lots.push(summaryLotForBox(box, record, boxTransactions))
     }
   }
