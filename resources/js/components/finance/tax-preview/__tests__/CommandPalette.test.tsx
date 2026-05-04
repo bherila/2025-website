@@ -78,6 +78,14 @@ const mockRegistry: FormRegistry = {
     presentation: 'app',
     ...sharedDefaults,
   },
+  'capital-gains-reconciliation': {
+    id: 'capital-gains-reconciliation',
+    label: 'Capital Gains Reconciliation',
+    shortLabel: 'Cap. Gains Recon.',
+    category: 'App',
+    presentation: 'app',
+    ...sharedDefaults,
+  },
   'form-1040': {
     id: 'form-1040',
     label: 'Form 1040 — U.S. Individual Income Tax Return',

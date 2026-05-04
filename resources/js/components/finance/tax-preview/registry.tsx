@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import ActionItemsTab from '@/components/finance/ActionItemsTab'
 import AdditionalTaxesPreview from '@/components/finance/AdditionalTaxesPreview'
+import CapitalGainsReconciliationPanel from '@/components/finance/CapitalGainsReconciliationPanel'
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4797Preview from '@/components/finance/Form4797Preview'
@@ -757,6 +758,10 @@ function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactEle
   return <TaxLotReconciliationPanel selectedYear={state.year} />
 }
 
+function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {
+  return <CapitalGainsReconciliationPanel selectedYear={state.year} />
+}
+
 
 /**
  * Registry of all forms. Read-only forms have full adapters wired to
@@ -1199,6 +1204,19 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: TaxLotReconciliationAdapter,
+    wide: true,
+  },
+  'capital-gains-reconciliation': {
+    id: 'capital-gains-reconciliation',
+    label: 'Capital Gains Reconciliation',
+    shortLabel: 'Cap. Gains Recon.',
+    keywords: [
+      'capital gains', 'reconciliation', '1099-B', 'wash sale', 'cross-account',
+      'Form 8949', 'Schedule D', 'lot reconciliation', 'adjustments',
+    ],
+    category: 'App',
+    presentation: 'app',
+    component: CapitalGainsReconciliationAdapter,
     wide: true,
   },
   'wks-se-401k': {

@@ -93,6 +93,15 @@ const mockRegistry: FormRegistry = {
     presentation: 'app',
     component: MockComponent,
   },
+  'capital-gains-reconciliation': {
+    id: 'capital-gains-reconciliation',
+    label: 'Capital Gains Reconciliation',
+    shortLabel: 'Cap. Gains Recon.',
+    keywords: [],
+    category: 'App',
+    presentation: 'app',
+    component: MockComponent,
+  },
   'form-1040': {
     id: 'form-1040',
     label: 'Form 1040',

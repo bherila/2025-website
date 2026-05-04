@@ -17,6 +17,7 @@ use App\Http\Controllers\Finance\PalCarryforwardController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
+use App\Http\Controllers\FinanceTool\CapitalGainsReconciliationController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
@@ -170,6 +171,11 @@ Route::middleware(['web', 'auth'])->post('/finance/lots/export-olt-xlsx', [Form8
 Route::middleware(['web', 'auth'])->get('/finance/lots/reconciliation', [FinanceLotsController::class, 'reconciliation']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots/reconciliation', [FinanceLotsController::class, 'accountReconciliation']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/reconciliation/apply', [FinanceLotsController::class, 'applyReconciliation']);
+
+// Capital Gains Reconciliation — shared engine endpoints
+Route::middleware(['web', 'auth'])->get('/finance/capital-gains/reconciliation', [CapitalGainsReconciliationController::class, 'reconciliation']);
+Route::middleware(['web', 'auth'])->get('/finance/capital-gains/wash-sales', [CapitalGainsReconciliationController::class, 'washSales']);
+Route::middleware(['web', 'auth'])->get('/finance/capital-gains/form-8949', [CapitalGainsReconciliationController::class, 'form8949']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/lots', [FinanceLotsController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots', [FinanceLotsController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/lots/import', [FinanceLotsController::class, 'importLots']);
