@@ -106,7 +106,7 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 **Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
 **Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (shell preload only)
 **API Controller**: `app/Http/Controllers/Finance/TaxPreviewDataController.php`
-**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`, `app/Services/Finance/TaxPreviewFactsService.php`
+**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`, `app/Services/Finance/TaxPreviewFactsService.php`, `app/Services/Finance/TaxPreviewFacts/Builders/*`
 **Components**: `resources/js/components/finance/TaxPreviewPage.tsx` + `TaxPreviewContext.tsx`
 
 ### Data Loading Architecture
@@ -131,7 +131,7 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 
 ### Backend Tax Facts
 
-`TaxPreviewFactsService` computes source-line facts from parsed tax documents and returns them in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
+`TaxPreviewFactsService` loads the tax-year context, partitions documents, and delegates source-line calculations to per-slice builders under `app/Services/Finance/TaxPreviewFacts/Builders/`. The assembled facts are returned in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
 
 ```bash
 php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
@@ -158,7 +158,7 @@ Each `TaxFactSource` carries review metadata:
 
 Totals intentionally include `needs_review` sources so the preview can estimate the return while showing exactly which source lines still need review in supporting-details modals.
 
-Maintainability rule: the fact layer is audit-first, and the service should trend toward per-slice builders as more form logic moves backend-side. Keep DTOs in `app/Services/Finance/TaxPreviewFacts/Data/`; when a new slice or a non-trivial refactor would make `TaxPreviewFactsService` materially larger, move that slice's collection/calculation logic into `app/Services/Finance/TaxPreviewFacts/Builders/{Slice}FactsBuilder.php` and leave the service as orchestration/compatibility glue.
+Maintainability rule: the fact layer is audit-first and slice-first. Keep DTOs in `app/Services/Finance/TaxPreviewFacts/Data/`; keep form collection/calculation logic in `app/Services/Finance/TaxPreviewFacts/Builders/{Slice}FactsBuilder.php`; keep shared parsed-data/source helpers in `TaxPreviewFactBuilder`; and keep `TaxPreviewFactsService` as orchestration/compatibility glue. New forms should add or extend a builder instead of adding private calculation methods to `TaxPreviewFactsService`.
 
 Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
 

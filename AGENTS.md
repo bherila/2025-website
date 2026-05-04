@@ -125,6 +125,7 @@ try {
 ### Backend DTO → TypeScript Codegen
 - Backend DTOs that are consumed by React should be explicit PHP DTO classes annotated with `#[TypeScript]`.
 - Tax Preview fact DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/`.
+- Tax Preview fact calculation lives in per-slice builders under `app/Services/Finance/TaxPreviewFacts/Builders/`; keep `TaxPreviewFactsService` as orchestration glue when adding new forms or slices.
 - Generated frontend types are committed under `resources/js/types/generated/`; never edit generated files manually.
 - After editing any `#[TypeScript]` DTO or `config/typescript-transformer.php`, run:
   ```bash
