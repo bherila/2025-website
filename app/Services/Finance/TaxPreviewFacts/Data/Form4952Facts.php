@@ -34,6 +34,9 @@ readonly class Form4952Facts
         public float $totalInvestmentExpenses,
         array $excludedInvestmentExpenseSources,
         public float $totalExcludedInvestmentExpenses,
+        public float $grossInvestmentIncomeFromScheduleB,
+        public float $grossInvestmentIncomeFromK1,
+        public float $grossInvestmentIncomeTotal,
         public float $netInvestmentIncomeBeforeQualifiedDividendElection,
         public float $totalQualifiedDividends,
         public float $deductibleInvestmentInterestExpense,
@@ -45,7 +48,7 @@ readonly class Form4952Facts
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float}
+     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float}
      */
     public function toArray(): array
     {
@@ -56,6 +59,9 @@ readonly class Form4952Facts
             'totalInvestmentExpenses' => $this->totalInvestmentExpenses,
             'excludedInvestmentExpenseSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->excludedInvestmentExpenseSources),
             'totalExcludedInvestmentExpenses' => $this->totalExcludedInvestmentExpenses,
+            'grossInvestmentIncomeFromScheduleB' => $this->grossInvestmentIncomeFromScheduleB,
+            'grossInvestmentIncomeFromK1' => $this->grossInvestmentIncomeFromK1,
+            'grossInvestmentIncomeTotal' => $this->grossInvestmentIncomeTotal,
             'netInvestmentIncomeBeforeQualifiedDividendElection' => $this->netInvestmentIncomeBeforeQualifiedDividendElection,
             'totalQualifiedDividends' => $this->totalQualifiedDividends,
             'deductibleInvestmentInterestExpense' => $this->deductibleInvestmentInterestExpense,

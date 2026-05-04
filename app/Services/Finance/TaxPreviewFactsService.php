@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
 use Carbon\CarbonImmutable;
@@ -39,7 +40,7 @@ class TaxPreviewFactsService
      */
     public static function supportedSlices(): array
     {
-        return ['all', 'schedule1', 'form4952'];
+        return ['all', 'schedule1', 'scheduleB', 'form4952'];
     }
 
     public function factsForYear(int $userId, int $year): TaxPreviewFacts
@@ -55,13 +56,19 @@ class TaxPreviewFactsService
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return $this->factsFromDocuments($year, $documents, $this->shortDividendItemizedDeduction($userId, $year));
+        return $this->factsFromDocuments(
+            $year,
+            $documents,
+            $this->shortDividendItemizedDeduction($userId, $year),
+            $this->marginInterestSources($userId, $year),
+        );
     }
 
     /**
      * @param  iterable<FileForTaxDocument>  $documents
+     * @param  TaxFactSource[]  $marginInterestSources
      */
-    public function factsFromDocuments(int $year, iterable $documents, float $shortDividendDeduction = 0.0): TaxPreviewFacts
+    public function factsFromDocuments(int $year, iterable $documents, float $shortDividendDeduction = 0.0, array $marginInterestSources = []): TaxPreviewFacts
     {
         $k1Docs = [];
         $docs1099 = [];
@@ -74,10 +81,13 @@ class TaxPreviewFactsService
             }
         }
 
+        $scheduleB = $this->scheduleBFacts($k1Docs, $docs1099);
+
         return new TaxPreviewFacts(
             year: $year,
             schedule1: $this->schedule1Facts($k1Docs, $docs1099),
-            form4952: $this->form4952Facts($k1Docs, $docs1099, $shortDividendDeduction),
+            scheduleB: $scheduleB,
+            form4952: $this->form4952Facts($k1Docs, $docs1099, $scheduleB, $shortDividendDeduction, $marginInterestSources),
         );
     }
 
@@ -102,6 +112,10 @@ class TaxPreviewFactsService
                 'year' => $facts['year'],
                 'schedule1' => $facts['schedule1'],
             ],
+            'scheduleB' => [
+                'year' => $facts['year'],
+                'scheduleB' => $facts['scheduleB'],
+            ],
             'form4952' => [
                 'year' => $facts['year'],
                 'form4952' => $facts['form4952'],
@@ -111,14 +125,14 @@ class TaxPreviewFactsService
     }
 
     /**
-     * @param  FileForTaxDocument[]  $reviewedK1Docs
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
      */
-    private function schedule1Facts(array $reviewedK1Docs, array $reviewed1099Docs): Schedule1Facts
+    private function schedule1Facts(array $k1Docs, array $docs1099): Schedule1Facts
     {
         $line5Sources = [];
 
-        foreach ($reviewedK1Docs as $doc) {
+        foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
             if ($data === null) {
                 continue;
@@ -153,7 +167,7 @@ class TaxPreviewFactsService
             );
         }
 
-        $line8zSources = $this->schedule1Line8zSources($reviewed1099Docs);
+        $line8zSources = $this->schedule1Line8zSources($docs1099);
 
         return new Schedule1Facts(
             line5Sources: $line5Sources,
@@ -165,14 +179,14 @@ class TaxPreviewFactsService
     }
 
     /**
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
+     * @param  FileForTaxDocument[]  $docs1099
      * @return TaxFactSource[]
      */
-    private function schedule1Line8zSources(array $reviewed1099Docs): array
+    private function schedule1Line8zSources(array $docs1099): array
     {
         $sources = [];
 
-        foreach ($reviewed1099Docs as $doc) {
+        foreach ($docs1099 as $doc) {
             $links = $doc->accountLinks;
             if ($links->isNotEmpty()) {
                 foreach ($links as $link) {
@@ -222,10 +236,127 @@ class TaxPreviewFactsService
     }
 
     /**
-     * @param  FileForTaxDocument[]  $reviewedK1Docs
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
      */
-    private function form4952Facts(array $reviewedK1Docs, array $reviewed1099Docs, float $shortDividendDeduction): Form4952Facts
+    private function scheduleBFacts(array $k1Docs, array $docs1099): ScheduleBFacts
+    {
+        $interestSources = [];
+        $ordinaryDividendSources = [];
+        $qualifiedDividendSources = [];
+
+        foreach ($docs1099 as $doc) {
+            foreach ($this->document1099IntEntries($doc) as $entry) {
+                $interestSources = [
+                    ...$interestSources,
+                    ...$this->scheduleB1099InterestSources($doc, $entry['link'], $entry['parsedData']),
+                ];
+            }
+
+            foreach ($this->document1099DivEntries($doc) as $entry) {
+                $ordinarySource = $this->scheduleB1099OrdinaryDividendSource($doc, $entry['link'], $entry['parsedData']);
+                if ($ordinarySource instanceof TaxFactSource) {
+                    $ordinaryDividendSources[] = $ordinarySource;
+                }
+
+                $qualifiedSource = $this->scheduleB1099QualifiedDividendSource($doc, $entry['link'], $entry['parsedData']);
+                if ($qualifiedSource instanceof TaxFactSource) {
+                    $qualifiedDividendSources[] = $qualifiedSource;
+                }
+            }
+        }
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            $interest = $this->k1Field($data, '5');
+            if ($interest !== 0.0) {
+                $interestSources[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-schedule-b-interest",
+                    label: $partnerName,
+                    amount: $this->roundMoney($interest),
+                    sourceType: 'k1_interest_income',
+                    taxDocumentId: $doc->id,
+                    formType: 'k1',
+                    box: '5',
+                    routing: 'schedule_b_line_1',
+                    routingReason: 'K-1 Box 5 interest income is listed on Schedule B Part I.',
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
+            }
+
+            $ordinaryDividends = $this->k1Field($data, '6a');
+            if ($ordinaryDividends !== 0.0) {
+                $ordinaryDividendSources[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-schedule-b-ordinary-dividends",
+                    label: $partnerName,
+                    amount: $this->roundMoney($ordinaryDividends),
+                    sourceType: 'k1_ordinary_dividends',
+                    taxDocumentId: $doc->id,
+                    formType: 'k1',
+                    box: '6a',
+                    routing: 'schedule_b_line_5',
+                    routingReason: 'K-1 Box 6a ordinary dividends are listed on Schedule B Part II.',
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
+            }
+
+            $qualifiedDividends = $this->k1Field($data, '6b');
+            if ($qualifiedDividends !== 0.0) {
+                $qualifiedDividendSources[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-qualified-dividends",
+                    label: $partnerName,
+                    amount: $this->roundMoney($qualifiedDividends),
+                    sourceType: 'k1_qualified_dividends',
+                    taxDocumentId: $doc->id,
+                    formType: 'k1',
+                    box: '6b',
+                    routing: 'form_1040_line_3a',
+                    routingReason: 'K-1 Box 6b qualified dividends are a subset of Box 6a and support Form 1040 line 3a / Form 4952 line 4b.',
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
+            }
+        }
+
+        $directInterestTotal = $this->sumSourcesByTypes($interestSources, ['1099_int_interest', '1099_int_treasury_interest']);
+        $interestTotal = $this->sumSources($interestSources);
+        $k1InterestTotal = $this->roundMoney($interestTotal - $directInterestTotal);
+        $directOrdinaryDividendTotal = $this->sumSourcesByTypes($ordinaryDividendSources, ['1099_div_ordinary_dividends']);
+        $ordinaryDividendTotal = $this->sumSources($ordinaryDividendSources);
+        $k1OrdinaryDividendTotal = $this->roundMoney($ordinaryDividendTotal - $directOrdinaryDividendTotal);
+        $qualifiedDividendTotal = $this->sumSources($qualifiedDividendSources);
+
+        return new ScheduleBFacts(
+            interestSources: $interestSources,
+            directInterestTotal: $directInterestTotal,
+            k1InterestTotal: $k1InterestTotal,
+            interestTotal: $interestTotal,
+            ordinaryDividendSources: $ordinaryDividendSources,
+            directOrdinaryDividendTotal: $directOrdinaryDividendTotal,
+            k1OrdinaryDividendTotal: $k1OrdinaryDividendTotal,
+            ordinaryDividendTotal: $ordinaryDividendTotal,
+            qualifiedDividendSources: $qualifiedDividendSources,
+            qualifiedDividendTotal: $qualifiedDividendTotal,
+            form4952Line5aTotal: $this->roundMoney($directInterestTotal + $directOrdinaryDividendTotal),
+        );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  TaxFactSource[]  $marginInterestSources
+     */
+    private function form4952Facts(array $k1Docs, array $docs1099, ScheduleBFacts $scheduleB, float $shortDividendDeduction, array $marginInterestSources = []): Form4952Facts
     {
         $investmentInterestSources = [];
         $investmentExpenseSources = [];
@@ -243,14 +374,17 @@ class TaxPreviewFactsService
             );
         }
 
-        foreach ($reviewedK1Docs as $doc) {
+        foreach ($marginInterestSources as $source) {
+            $investmentInterestSources[] = $source;
+        }
+
+        foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
             if ($data === null) {
                 continue;
             }
 
             $partnerName = $this->k1PartnerName($doc, $data);
-            $docInvestmentInterestTotal = 0.0;
             foreach (['H', 'G', 'AC', 'AD'] as $code) {
                 foreach ($this->k1CodeItems($data, '13', $code) as $index => $item) {
                     $rawAmount = $this->parseMoney($item['value'] ?? null);
@@ -258,7 +392,6 @@ class TaxPreviewFactsService
                         continue;
                     }
 
-                    $docInvestmentInterestTotal += abs($rawAmount);
                     $investmentInterestSources[] = new TaxFactSource(
                         id: "k1-{$doc->id}-13{$code}-{$index}",
                         label: "{$partnerName} — Box 13{$code}",
@@ -276,25 +409,6 @@ class TaxPreviewFactsService
                         reviewAction: $this->reviewAction($doc),
                     );
                 }
-            }
-
-            $diagnosticTotal = $this->k1DiagnosticInvestmentInterestTotal($data);
-            if ($diagnosticTotal !== null && $diagnosticTotal > $docInvestmentInterestTotal) {
-                $reconciliationAmount = $this->roundMoney($diagnosticTotal - $docInvestmentInterestTotal);
-                $investmentInterestSources[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-investment-interest-reconciliation",
-                    label: "{$partnerName} — K-1 investment interest reconciliation",
-                    amount: $this->roundMoney(-abs($reconciliationAmount)),
-                    sourceType: 'k1_investment_interest_reconciliation',
-                    taxDocumentId: $doc->id,
-                    formType: $this->formType($doc),
-                    routing: 'form_4952_line_1',
-                    routingReason: 'K-1 extraction diagnostics identify a Form 4952 total investment-interest amount larger than the itemized Box 13H/G/AC/AD rows.',
-                    notes: "Diagnostic total {$diagnosticTotal}; itemized Box 13 investment-interest rows {$docInvestmentInterestTotal}.",
-                    isReviewed: $this->sourceIsReviewed($doc),
-                    reviewStatus: $this->reviewStatus($doc),
-                    reviewAction: $this->reviewAction($doc),
-                );
             }
 
             foreach ($this->k1CodeItems($data, '20', 'B') as $index => $item) {
@@ -322,8 +436,8 @@ class TaxPreviewFactsService
             }
         }
 
-        foreach ($reviewed1099Docs as $doc) {
-            foreach ($this->reviewed1099IntEntries($doc) as $entry) {
+        foreach ($docs1099 as $doc) {
+            foreach ($this->document1099IntEntries($doc) as $entry) {
                 $amount = $this->numericValue($entry['parsedData'], 'box5_investment_expense');
                 if ($amount === null || $amount === 0.0) {
                     continue;
@@ -354,8 +468,11 @@ class TaxPreviewFactsService
         $totalInvestmentInterestExpense = abs($this->sumSources($investmentInterestSources));
         $totalInvestmentExpenses = abs($this->sumSources($investmentExpenseSources));
         $totalExcludedInvestmentExpenses = abs($this->sumSources($excludedInvestmentExpenseSources));
-        $niiBefore = max(0.0, $this->roundMoney($this->netInvestmentIncomeGross($reviewedK1Docs, $reviewed1099Docs) - $totalInvestmentExpenses));
-        $totalQualifiedDividends = $this->roundMoney($this->k1QualifiedDividends($reviewedK1Docs) + $this->direct1099QualifiedDividends($reviewed1099Docs));
+        $grossInvestmentIncomeFromScheduleB = $scheduleB->form4952Line5aTotal;
+        $grossInvestmentIncomeFromK1 = $this->k1Form4952GrossInvestmentIncome($k1Docs);
+        $grossInvestmentIncomeTotal = $this->roundMoney($grossInvestmentIncomeFromScheduleB + $grossInvestmentIncomeFromK1);
+        $totalQualifiedDividends = $scheduleB->qualifiedDividendTotal;
+        $niiBefore = max(0.0, $this->roundMoney($grossInvestmentIncomeTotal - $totalQualifiedDividends - $totalInvestmentExpenses));
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
         $carryforward = max(0.0, $this->roundMoney($totalInvestmentInterestExpense - $deductible));
 
@@ -366,6 +483,9 @@ class TaxPreviewFactsService
             totalInvestmentExpenses: $totalInvestmentExpenses,
             excludedInvestmentExpenseSources: $excludedInvestmentExpenseSources,
             totalExcludedInvestmentExpenses: $totalExcludedInvestmentExpenses,
+            grossInvestmentIncomeFromScheduleB: $grossInvestmentIncomeFromScheduleB,
+            grossInvestmentIncomeFromK1: $grossInvestmentIncomeFromK1,
+            grossInvestmentIncomeTotal: $grossInvestmentIncomeTotal,
             netInvestmentIncomeBeforeQualifiedDividendElection: $niiBefore,
             totalQualifiedDividends: $totalQualifiedDividends,
             deductibleInvestmentInterestExpense: $deductible,
@@ -376,7 +496,7 @@ class TaxPreviewFactsService
     /**
      * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
      */
-    private function reviewed1099IntEntries(FileForTaxDocument $doc): array
+    private function document1099IntEntries(FileForTaxDocument $doc): array
     {
         $entries = [];
         $links = $doc->accountLinks;
@@ -406,7 +526,7 @@ class TaxPreviewFactsService
     /**
      * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
      */
-    private function reviewed1099DivEntries(FileForTaxDocument $doc): array
+    private function document1099DivEntries(FileForTaxDocument $doc): array
     {
         $entries = [];
         $links = $doc->accountLinks;
@@ -434,110 +554,146 @@ class TaxPreviewFactsService
     }
 
     /**
-     * @param  FileForTaxDocument[]  $reviewedK1Docs
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
+     * @param  array<string, mixed>  $parsedData
+     * @return TaxFactSource[]
      */
-    private function netInvestmentIncomeGross(array $reviewedK1Docs, array $reviewed1099Docs): float
+    private function scheduleB1099InterestSources(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $parsedData): array
     {
-        $k1Interest = 0.0;
-        $k1OrdinaryDividends = 0.0;
-        $k1QualifiedDividends = 0.0;
-        $k1Section1256 = 0.0;
-        $k1Box20A = 0.0;
+        $sources = [];
+        $payer = $this->payerName($doc, $link, $parsedData);
 
-        foreach ($reviewedK1Docs as $doc) {
+        $box1 = $this->firstNumericOrNestedValue(
+            $parsedData,
+            ['box1_interest', 'int_1_interest_income'],
+            ['1_interest_income'],
+        );
+        if ($box1 !== null && $box1 !== 0.0) {
+            $sources[] = new TaxFactSource(
+                id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-interest-box1" : "doc-{$doc->id}-schedule-b-interest-box1",
+                label: $payer,
+                amount: $this->roundMoney($box1),
+                sourceType: '1099_int_interest',
+                taxDocumentId: $doc->id,
+                taxDocumentAccountId: $link?->id,
+                accountId: $link?->account_id,
+                formType: '1099_int',
+                box: '1',
+                routing: 'schedule_b_line_1',
+                routingReason: '1099-INT Box 1 interest income is listed on Schedule B Part I.',
+                isReviewed: $this->sourceIsReviewed($doc, $link),
+                reviewStatus: $this->reviewStatus($doc, $link),
+                reviewAction: $this->reviewAction($doc, $link),
+            );
+        }
+
+        $box3 = $this->firstNumericOrNestedValue(
+            $parsedData,
+            ['box3_savings_bond', 'int_3_us_savings_bonds'],
+            ['3_interest_on_us_savings_bonds_and_treasury_obligations'],
+        );
+        if ($box3 !== null && $box3 !== 0.0) {
+            $sources[] = new TaxFactSource(
+                id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-interest-box3" : "doc-{$doc->id}-schedule-b-interest-box3",
+                label: $payer,
+                amount: $this->roundMoney($box3),
+                sourceType: '1099_int_treasury_interest',
+                taxDocumentId: $doc->id,
+                taxDocumentAccountId: $link?->id,
+                accountId: $link?->account_id,
+                formType: '1099_int',
+                box: '3',
+                routing: 'schedule_b_line_1',
+                routingReason: '1099-INT Box 3 U.S. savings bond and Treasury obligation interest is listed on Schedule B Part I unless excluded on Form 8815.',
+                isReviewed: $this->sourceIsReviewed($doc, $link),
+                reviewStatus: $this->reviewStatus($doc, $link),
+                reviewAction: $this->reviewAction($doc, $link),
+            );
+        }
+
+        return $sources;
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function scheduleB1099OrdinaryDividendSource(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $parsedData): ?TaxFactSource
+    {
+        $amount = $this->firstNumericOrNestedValue(
+            $parsedData,
+            ['box1a_ordinary', 'div_1a_total_ordinary'],
+            ['1a_total_ordinary_dividends'],
+        );
+        if ($amount === null || $amount === 0.0) {
+            return null;
+        }
+
+        return new TaxFactSource(
+            id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule-b-ordinary-dividends" : "doc-{$doc->id}-schedule-b-ordinary-dividends",
+            label: $this->payerName($doc, $link, $parsedData),
+            amount: $this->roundMoney($amount),
+            sourceType: '1099_div_ordinary_dividends',
+            taxDocumentId: $doc->id,
+            taxDocumentAccountId: $link?->id,
+            accountId: $link?->account_id,
+            formType: '1099_div',
+            box: '1a',
+            routing: 'schedule_b_line_5',
+            routingReason: '1099-DIV Box 1a ordinary dividends are listed on Schedule B Part II.',
+            isReviewed: $this->sourceIsReviewed($doc, $link),
+            reviewStatus: $this->reviewStatus($doc, $link),
+            reviewAction: $this->reviewAction($doc, $link),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function scheduleB1099QualifiedDividendSource(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $parsedData): ?TaxFactSource
+    {
+        $amount = $this->firstNumericOrNestedValue(
+            $parsedData,
+            ['box1b_qualified', 'div_1b_qualified'],
+            ['1b_qualified_dividends'],
+        );
+        if ($amount === null || $amount === 0.0) {
+            return null;
+        }
+
+        return new TaxFactSource(
+            id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-qualified-dividends" : "doc-{$doc->id}-qualified-dividends",
+            label: $this->payerName($doc, $link, $parsedData),
+            amount: $this->roundMoney($amount),
+            sourceType: '1099_div_qualified_dividends',
+            taxDocumentId: $doc->id,
+            taxDocumentAccountId: $link?->id,
+            accountId: $link?->account_id,
+            formType: '1099_div',
+            box: '1b',
+            routing: 'form_1040_line_3a',
+            routingReason: '1099-DIV Box 1b qualified dividends are a subset of Box 1a and support Form 1040 line 3a / Form 4952 line 4b.',
+            isReviewed: $this->sourceIsReviewed($doc, $link),
+            reviewStatus: $this->reviewStatus($doc, $link),
+            reviewAction: $this->reviewAction($doc, $link),
+        );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     */
+    private function k1Form4952GrossInvestmentIncome(array $k1Docs): float
+    {
+        $total = 0.0;
+
+        foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
             if ($data === null) {
                 continue;
             }
 
-            $k1Interest += $this->k1Field($data, '5');
-            $k1OrdinaryDividends += $this->k1Field($data, '6a');
-            $k1QualifiedDividends += $this->k1Field($data, '6b');
-            $k1Section1256 += $this->sumK1CodeItems($data, '11', 'C');
-            $k1Box20A += $this->sumK1CodeItems($data, '20', 'A');
-        }
-
-        $directInterest = $this->direct1099Interest($reviewed1099Docs);
-        $directOrdinaryDividends = $this->direct1099OrdinaryDividends($reviewed1099Docs);
-        $directQualifiedDividends = $this->direct1099QualifiedDividends($reviewed1099Docs);
-        $directNonQualifiedDividends = $directOrdinaryDividends - $directQualifiedDividends;
-
-        if ($k1Box20A > 0.0) {
-            return $this->roundMoney($k1Box20A + $directInterest + $directNonQualifiedDividends);
-        }
-
-        return $this->roundMoney($k1Interest + ($k1OrdinaryDividends - $k1QualifiedDividends) + $k1Section1256 + $directInterest + $directNonQualifiedDividends);
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
-     */
-    private function direct1099Interest(array $reviewed1099Docs): float
-    {
-        $total = 0.0;
-
-        foreach ($reviewed1099Docs as $doc) {
-            foreach ($this->reviewed1099IntEntries($doc) as $entry) {
-                $total += $this->firstNumericValue($entry['parsedData'], ['box1_interest', 'int_1_interest_income']) ?? 0.0;
-            }
-        }
-
-        return $this->roundMoney($total);
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
-     */
-    private function direct1099OrdinaryDividends(array $reviewed1099Docs): float
-    {
-        $total = 0.0;
-
-        foreach ($reviewed1099Docs as $doc) {
-            foreach ($this->reviewed1099DivEntries($doc) as $entry) {
-                $total += $this->firstNumericOrNestedValue(
-                    $entry['parsedData'],
-                    ['box1a_ordinary', 'div_1a_total_ordinary'],
-                    ['1a_total_ordinary_dividends'],
-                ) ?? 0.0;
-            }
-        }
-
-        return $this->roundMoney($total);
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $reviewed1099Docs
-     */
-    private function direct1099QualifiedDividends(array $reviewed1099Docs): float
-    {
-        $total = 0.0;
-
-        foreach ($reviewed1099Docs as $doc) {
-            foreach ($this->reviewed1099DivEntries($doc) as $entry) {
-                $total += $this->firstNumericOrNestedValue(
-                    $entry['parsedData'],
-                    ['box1b_qualified', 'div_1b_qualified'],
-                    ['1b_qualified_dividends'],
-                ) ?? 0.0;
-            }
-        }
-
-        return $this->roundMoney($total);
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $reviewedK1Docs
-     */
-    private function k1QualifiedDividends(array $reviewedK1Docs): float
-    {
-        $total = 0.0;
-
-        foreach ($reviewedK1Docs as $doc) {
-            $data = $this->k1Data($doc);
-            if ($data !== null) {
-                $total += $this->k1Field($data, '6b');
-            }
+            $box20A = $this->sumK1CodeItems($data, '20', 'A');
+            $total += $box20A !== 0.0
+                ? $box20A
+                : $this->roundMoney($this->k1Field($data, '5') + $this->k1Field($data, '6a'));
         }
 
         return $this->roundMoney($total);
@@ -747,29 +903,6 @@ class TaxPreviewFactsService
     /**
      * @param  array<string, mixed>  $data
      */
-    private function k1DiagnosticInvestmentInterestTotal(array $data): ?float
-    {
-        $diagnostics = $data['diagnostics'] ?? $data['warnings'] ?? null;
-        if (! is_array($diagnostics)) {
-            return null;
-        }
-
-        foreach ($diagnostics as $diagnostic) {
-            if (! is_string($diagnostic) || ! str_contains(strtolower($diagnostic), 'total investment interest')) {
-                continue;
-            }
-
-            if (preg_match('/total investment interest\\s*\\(\\$?([0-9,]+(?:\\.\\d{1,2})?)\\)/i', $diagnostic, $matches) === 1) {
-                return $this->parseMoney($matches[1]);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
     private function sumK1CodeItems(array $data, string $box, string $code): float
     {
         return $this->roundMoney(array_reduce(
@@ -901,6 +1034,19 @@ class TaxPreviewFactsService
         return $this->roundMoney(array_reduce(
             $sources,
             static fn (float $total, TaxFactSource $source): float => $total + $source->amount,
+            0.0,
+        ));
+    }
+
+    /**
+     * @param  TaxFactSource[]  $sources
+     * @param  string[]  $sourceTypes
+     */
+    private function sumSourcesByTypes(array $sources, array $sourceTypes): float
+    {
+        return $this->roundMoney(array_reduce(
+            $sources,
+            static fn (float $total, TaxFactSource $source): float => $total + (in_array($source->sourceType, $sourceTypes, true) ? $source->amount : 0.0),
             0.0,
         ));
     }
@@ -1043,6 +1189,54 @@ class TaxPreviewFactsService
         }
 
         return $this->roundMoney($total);
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
+    private function marginInterestSources(int $userId, int $year): array
+    {
+        $accounts = FinAccounts::withoutGlobalScopes()
+            ->where('acct_owner', $userId)
+            ->get(['acct_id', 'acct_name'])
+            ->keyBy('acct_id');
+
+        if ($accounts->isEmpty()) {
+            return [];
+        }
+
+        $rows = FinAccountLineItems::whereIn('t_account', $accounts->keys()->all())
+            ->whereBetween('t_date', ["{$year}-01-01", "{$year}-12-31"])
+            ->where('t_amt', '<', 0)
+            ->where(function ($query): void {
+                $query->where('t_type', 'Margin Interest')
+                    ->orWhere('t_comment', 'like', '%MARGIN INTEREST%');
+            })
+            ->get(['t_account', 't_amt'])
+            ->groupBy('t_account');
+
+        $sources = [];
+        foreach ($rows as $accountId => $transactions) {
+            $amount = $this->roundMoney($transactions->sum(static fn (FinAccountLineItems $transaction): float => (float) $transaction->t_amt));
+            if ($amount === 0.0) {
+                continue;
+            }
+
+            $account = $accounts->get($accountId);
+            $accountName = $account instanceof FinAccounts ? $account->acct_name : "Account {$accountId}";
+            $sources[] = new TaxFactSource(
+                id: "account-{$accountId}-margin-interest",
+                label: "{$accountName} — Margin interest paid",
+                amount: $amount,
+                sourceType: 'brokerage_margin_interest',
+                accountId: (int) $accountId,
+                routing: 'form_4952_line_1',
+                routingReason: 'Brokerage margin-interest transactions are investment interest expense for Form 4952 Part I.',
+                isReviewed: true,
+            );
+        }
+
+        return $sources;
     }
 
     private function isShortDividend(FinAccountLineItems $transaction): bool

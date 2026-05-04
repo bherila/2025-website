@@ -21,7 +21,7 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 | `get_marriage_status` | Filing status by year |
 | `list_payslips` | Payslips filtered by `year`; returns all fields (earnings, taxes, deductions, 401k) |
 
-`get_tax_preview.taxFacts` is the agent-friendly audit trail for the highest-value tax debug paths. It currently includes Schedule 1 line 5 / line 8z facts and Form 4952 investment-interest / excluded-investment-expense facts. The same data is available from the CLI via `php artisan finance:tax-preview-facts`. Each fact source includes `isReviewed`, `reviewStatus`, and `reviewAction`; agents should call out `needs_review` sources as estimates rather than silently treating them as final.
+`get_tax_preview.taxFacts` is the agent-friendly audit trail for the highest-value tax debug paths. It currently includes Schedule 1 line 5 / line 8z facts, Schedule B interest/dividend facts, and Form 4952 investment-interest / gross-investment-income / excluded-investment-expense facts. The same data is available from the CLI via `php artisan finance:tax-preview-facts`. Each fact source includes `isReviewed`, `reviewStatus`, and `reviewAction`; agents should call out `needs_review` sources as estimates rather than silently treating them as final.
 
 ## Available Resources
 

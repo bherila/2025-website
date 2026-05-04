@@ -253,12 +253,14 @@ Supported slices:
 |-------|----------|
 | `all` | Every backend fact slice currently available |
 | `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8z 1099-MISC sources |
-| `form4952` | Investment-interest and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
+| `scheduleB` | Schedule B interest, ordinary dividend, and qualified dividend sources, including direct 1099 sources and K-1 sources |
+| `form4952` | Investment-interest, Schedule B gross-investment-income, K-1 gross-investment-income, and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
 
 Useful examples:
 
 ```bash
 php artisan finance:tax-preview-facts --year=2025 --slice=schedule1 --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=scheduleB --format=toon
 php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json | jq '.form4952'
 ```
 

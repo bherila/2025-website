@@ -9,7 +9,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
     protected $signature = 'finance:tax-preview-facts
         {--user= : User ID to inspect; defaults to FINANCE_CLI_USER_ID or 1}
         {--year= : Tax year; defaults to current year}
-        {--slice=all : Fact slice: all, schedule1, or form4952}
+        {--slice=all : Fact slice: all, schedule1, scheduleB, or form4952}
         {--format=table : Output format: table, json, or toon}';
 
     protected $description = 'Render backend tax-preview fact source lines for CLI debugging.';
@@ -27,7 +27,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         $slice = (string) ($this->option('slice') ?: 'all');
 
         if (! in_array($slice, TaxPreviewFactsService::supportedSlices(), true)) {
-            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, or form4952.");
+            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, or form4952.");
 
             return self::FAILURE;
         }
@@ -62,9 +62,38 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             }
         }
 
+        foreach (($facts['scheduleB']['interestSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['scheduleB', 'interest', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach (($facts['scheduleB']['ordinaryDividendSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['scheduleB', 'ordinaryDividends', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach (($facts['scheduleB']['qualifiedDividendSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['scheduleB', 'qualifiedDividends', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
         foreach (($facts['form4952']['investmentInterestSources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['form4952', 'line1', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach ([
+            'grossInvestmentIncomeFromScheduleB' => 'line4aScheduleB',
+            'grossInvestmentIncomeFromK1' => 'line4aK1',
+            'grossInvestmentIncomeTotal' => 'line4aTotal',
+            'netInvestmentIncomeBeforeQualifiedDividendElection' => 'line6',
+        ] as $key => $line) {
+            if (isset($facts['form4952'][$key])) {
+                $rows[] = ['form4952', $line, $key, $facts['form4952'][$key], ''];
             }
         }
 

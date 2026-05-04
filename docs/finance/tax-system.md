@@ -143,7 +143,8 @@ The current pilot covers the highest-value debug paths:
 |-------|-------|-----------------|
 | `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
 | `schedule1` | Schedule 1 line 8z / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
-| `form4952` | Form 4952 line 1 / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
+| `form4952` | Form 4952 line 1 / line 4a / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
 
 Each `TaxFactSource` carries review metadata:
 

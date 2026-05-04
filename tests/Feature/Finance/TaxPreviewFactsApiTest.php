@@ -23,6 +23,7 @@ class TaxPreviewFactsApiTest extends TestCase
                 'taxFacts' => [
                     'year',
                     'schedule1' => ['line5Sources', 'line5Total', 'line8zSources', 'line8zTotal', 'line9TotalOtherIncome'],
+                    'scheduleB' => ['interestSources', 'interestTotal', 'ordinaryDividendSources', 'ordinaryDividendTotal'],
                     'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses'],
                 ],
             ]);

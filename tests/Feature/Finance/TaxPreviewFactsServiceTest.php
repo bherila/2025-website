@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class TaxPreviewFactsServiceTest extends TestCase
@@ -130,7 +131,104 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('excluded_form_4952_line_5', $facts['form4952']['excludedInvestmentExpenseSources'][0]['routing']);
     }
 
-    public function test_form4952_adds_k1_diagnostic_reconciliation_when_total_exceeds_box13_rows(): void
+    public function test_schedule_b_collects_direct_and_k1_interest_and_dividend_sources(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => false,
+            'parsed_data' => [
+                [
+                    'form_type' => '1099_int',
+                    'tax_year' => 2025,
+                    'parsed_data' => [
+                        'payer_name' => 'Broker',
+                        'boxes' => [
+                            '1_interest_income' => 10,
+                            '3_interest_on_us_savings_bonds_and_treasury_obligations' => 5,
+                        ],
+                    ],
+                ],
+                [
+                    'form_type' => '1099_div',
+                    'tax_year' => 2025,
+                    'parsed_data' => [
+                        'payer_name' => 'Broker',
+                        'boxes' => [
+                            '1a_total_ordinary_dividends' => 20,
+                            '1b_qualified_dividends' => 8,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_int', 2025, isReviewed: true);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2025, isReviewed: true);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'Fund', '5' => '3', '6a' => '7', '6b' => '2']),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleB');
+
+        $this->assertSame(15.0, $facts['scheduleB']['directInterestTotal']);
+        $this->assertSame(3.0, $facts['scheduleB']['k1InterestTotal']);
+        $this->assertSame(18.0, $facts['scheduleB']['interestTotal']);
+        $this->assertSame(20.0, $facts['scheduleB']['directOrdinaryDividendTotal']);
+        $this->assertSame(7.0, $facts['scheduleB']['k1OrdinaryDividendTotal']);
+        $this->assertSame(27.0, $facts['scheduleB']['ordinaryDividendTotal']);
+        $this->assertSame(10.0, $facts['scheduleB']['qualifiedDividendTotal']);
+        $this->assertSame(35.0, $facts['scheduleB']['form4952Line5aTotal']);
+    }
+
+    public function test_form4952_uses_schedule_b_direct_income_k1_20a_and_margin_interest(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        DB::table('fin_account_line_items')->insert([
+            't_account' => $account->acct_id,
+            't_date' => '2025-12-31',
+            't_type' => 'Margin Interest',
+            't_amt' => -4,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 10, 'box3_savings_bond' => 5],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker', 'box1a_ordinary' => 20, 'box1b_qualified' => 8],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund', '5' => '3', '6a' => '7', '6b' => '2'],
+                codes: [
+                    '13' => [['code' => 'H', 'value' => '20']],
+                    '20' => [['code' => 'A', 'value' => '30']],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(24.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertSame(35.0, $facts['form4952']['grossInvestmentIncomeFromScheduleB']);
+        $this->assertSame(30.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
+        $this->assertSame(65.0, $facts['form4952']['grossInvestmentIncomeTotal']);
+        $this->assertSame(10.0, $facts['form4952']['totalQualifiedDividends']);
+        $this->assertSame(55.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
+        $this->assertSame('brokerage_margin_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
+    }
+
+    public function test_form4952_does_not_classify_full_return_diagnostic_as_k1_interest(): void
     {
         $user = $this->createUser();
         $this->createTaxDocument($user->id, [
@@ -145,9 +243,9 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
 
-        $this->assertSame(33897.0, $facts['form4952']['totalInvestmentInterestExpense']);
-        $this->assertSame('k1_investment_interest_reconciliation', $facts['form4952']['investmentInterestSources'][1]['sourceType']);
-        $this->assertSame(-7577.0, $facts['form4952']['investmentInterestSources'][1]['amount']);
+        $this->assertSame(26320.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertCount(1, $facts['form4952']['investmentInterestSources']);
+        $this->assertSame('k1_investment_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
     }
 
     private function createAccount(int $userId): FinAccounts
@@ -178,8 +276,9 @@ class TaxPreviewFactsServiceTest extends TestCase
     }
 
     /**
-     * @param  array<string, string>  $fields
-     * @param  array<string, array<int, array<string, string>>>  $codes
+     * @param  array<int|string, string>  $fields
+     * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @param  array<int, string>  $warnings
      * @return array<string, mixed>
      */
     private function k1Data(array $fields = [], array $codes = [], array $warnings = []): array
