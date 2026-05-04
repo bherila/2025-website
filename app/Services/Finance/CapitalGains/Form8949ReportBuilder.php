@@ -156,7 +156,9 @@ class Form8949ReportBuilder
         $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
         $adjustmentCode = null;
         if ($adjustmentAmount > 0) {
-            $adjustmentCode = $wsAdjustment?->isCrossAccount ? 'W' : 'W';
+            // IRS uses code 'W' for all wash-sale disallowances (§1091), whether same-account
+            // or cross-account.  Cross-account adjustments appear here as taxpayer-level facts.
+            $adjustmentCode = 'W';
         }
 
         $gainOrLoss = $txn->proceeds - $txn->costBasis + $adjustmentAmount;
