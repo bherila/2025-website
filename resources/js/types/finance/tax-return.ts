@@ -27,7 +27,7 @@ export interface UserDeductionEntry {
 }
 
 export interface ScheduleALines {
-  invIntSources: { label: string; amount: number; scheduleEDeductionEligible?: boolean }[]
+  invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
   /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered SALT categories). */
   saltPaid: number
@@ -87,7 +87,6 @@ export interface Form4952Lines {
     docId?: number
     box?: string
     code?: string
-    scheduleEDeductionEligible?: boolean
     allowedAmount?: number
   }[]
   totalInvIntExpense: number

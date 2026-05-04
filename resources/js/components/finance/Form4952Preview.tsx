@@ -3,7 +3,7 @@
 import currency from 'currency.js'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
-import { getK1CodeItems, isTraderFundK1, parseK1Field, routesInvestmentInterestToScheduleE } from '@/lib/finance/k1Utils'
+import { getK1CodeItems, parseK1Field } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -82,7 +82,6 @@ export function computeForm4952Lines({
           docId: doc.id,
           box: '13',
           code: item.code,
-          scheduleEDeductionEligible: routesInvestmentInterestToScheduleE(item) || (item.code.trim().toUpperCase() === 'H' && isTraderFundK1(data)),
         })
       }
     }
@@ -185,15 +184,10 @@ export function computeForm4952Lines({
     })
     invIntSourcesWithAllowance[largestIdx]!.allowedAmount = currency(finalDeductible).subtract(allocated).value
   }
-  const scheduleEDeductibleInvestmentInterestExpense = invIntSourcesWithAllowance.reduce(
-    (acc, source) => source.scheduleEDeductionEligible ? acc.add(source.allowedAmount ?? 0) : acc,
-    currency(0),
-  ).value
-
   return {
     invIntSources: invIntSourcesWithAllowance,
     totalInvIntExpense,
-    scheduleEDeductibleInvestmentInterestExpense,
+    scheduleEDeductibleInvestmentInterestExpense: 0,
     invExpSources,
     totalInvExp,
     niiBefore,
@@ -587,8 +581,8 @@ export default function Form4952Preview({
 
       <Callout kind="warn" title="⚠ Where This Flows on the Return">
         <p>
-          <strong>K-1 Box 13H investment interest:</strong> Deductible portion flows to Schedule E, Part II as a
-          nonpassive loss (for trader partnerships). Check your K-1 footnotes for specific instructions.
+          <strong>K-1 Box 13H investment interest:</strong> Deductible amounts stay on Form 4952 and flow to
+          Schedule A line 9. They are not subtracted again on Schedule E.
         </p>
         <p>
           <strong>Margin interest (brokerage):</strong> Flows to Schedule A (itemized deductions). Only beneficial if

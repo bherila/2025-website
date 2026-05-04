@@ -1033,7 +1033,7 @@ export function TaxPreviewProvider({
     if (totalInvestmentIncome !== 0) taxPositionRows.push({ item: 'Net investment income (interest + divs)', amount: totalInvestmentIncome, note: 'Before deductions; subject to NIIT (3.8%)' })
     if (k1StCapital !== 0 || k1LtCapital !== 0) taxPositionRows.push({ item: 'Net capital gain (loss) — K-1s', amount: totalCapitalGains, note: `S/T ${k1StCapital.toLocaleString()} · L/T ${k1LtCapital.toLocaleString()}` })
     if (scheduleD.has11SAmbiguous) taxPositionRows.push({ item: 'K-1 Box 11S character review needed', amount: scheduleD.ambiguous11SAmount, note: `${scheduleD.ambiguous11SCount} non-portfolio capital gain/loss line(s) need S/T or L/T classification before Schedule D routing.` })
-    if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — flows to Schedule E' })
+    if (k1InvInterest !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: k1InvInterest, note: 'From K-1 Box 13G/H — deductible amount flows to Schedule A line 9' })
     if (totalForeignTax !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: totalForeignTax, note: 'Dollar-for-dollar vs. income tax' })
     if (totalFederalWithholding > 0) {
       const federalWithholdingLabel = retirementDistributionSummary.federalWithholding > 0
@@ -1063,6 +1063,7 @@ export function TaxPreviewProvider({
       income1099,
       shortDividendDeduction: shortDividendSummary?.totalItemizedDeduction ?? 0,
     })
+    // Form 4952 deductible investment interest flows to Schedule A line 9; Schedule E should not subtract it again.
     const scheduleE = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
     const saltPaid = reviewedW2Docs.reduce((acc, doc) => {
       const p = doc.parsed_data as { box17_state_tax?: number | null } | null

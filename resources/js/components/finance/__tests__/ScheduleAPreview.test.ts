@@ -111,11 +111,11 @@ describe('computeScheduleALines — Box 13L (Issue 7)', () => {
     expect(result.totalInvIntExpense).toBe(7000)
   })
 
-  it('excludes Form 4952-allowed Box 13H from Schedule A when K-1 routes it to Schedule E', () => {
+  it('uses the full Form 4952 deductible amount on Schedule A line 9', () => {
     const data = makeK1Data({
       codes: {
         '13': [
-          { code: 'H', value: '5000', notes: 'Deductible portion flows to Schedule E Part II as nonpassive.' },
+          { code: 'H', value: '5000', notes: 'Subject to §163(d) via Form 4952.' },
         ],
       },
     })
@@ -125,7 +125,6 @@ describe('computeScheduleALines — Box 13L (Issue 7)', () => {
         invIntSources: [{
           label: 'Test Partnership — K-1 Box 13H',
           amount: -5000,
-          scheduleEDeductionEligible: true,
           allowedAmount: 3000,
         }],
         totalInvIntExpense: 5000,
@@ -139,7 +138,7 @@ describe('computeScheduleALines — Box 13L (Issue 7)', () => {
       },
     })
 
-    expect(result.totalInvIntExpense).toBe(0)
+    expect(result.totalInvIntExpense).toBe(3000)
   })
 
   it('aggregates Box 13L across multiple K-1s', () => {

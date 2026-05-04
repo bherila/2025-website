@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getK1CodeItems, isTraderFundK1, routesInvestmentInterestToScheduleE } from '@/lib/finance/k1Utils'
+import { getK1CodeItems } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
@@ -31,7 +31,6 @@ interface InvIntSource {
   label: string
   /** Negative means expense (charge). Positive means income. */
   amount: number
-  scheduleEDeductionEligible?: boolean
 }
 
 const SALT_CAP = 10_000
@@ -83,7 +82,6 @@ export function computeScheduleALines({
         invIntSources.push({
           label: `${partnerName} — K-1 Box 13H (investment interest)`,
           amount: currency(0).subtract(Math.abs(n)).value,
-          scheduleEDeductionEligible: routesInvestmentInterestToScheduleE(item) || (item.code.trim().toUpperCase() === 'H' && isTraderFundK1(data)),
         })
       }
     }
@@ -133,7 +131,7 @@ export function computeScheduleALines({
     currency(0),
   ).value
   const totalInvIntExpense = form4952
-    ? Math.max(0, currency(form4952.deductibleInvestmentInterestExpense).subtract(form4952.scheduleEDeductibleInvestmentInterestExpense).value)
+    ? form4952.deductibleInvestmentInterestExpense
     : rawInvIntExpense
 
   const buckets = bucketUserDeductions(userDeductions)

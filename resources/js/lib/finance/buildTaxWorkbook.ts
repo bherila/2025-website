@@ -650,8 +650,8 @@ export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   const srcLines = f.invIntSources.map((s) => ({
     description: s.label,
     amount: s.amount,
-    note: s.scheduleEDeductionEligible
-      ? `Allowed ${currency(s.allowedAmount ?? 0).format()} routes to Schedule E Part II; disallowed amount carries forward.`
+    note: s.allowedAmount !== undefined
+      ? `Allowed ${currency(s.allowedAmount).format()} on Form 4952 line 8; disallowed amount carries forward.`
       : undefined,
   }))
   const srcStart = 3
@@ -689,13 +689,6 @@ export function buildForm4952Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
       description: 'Line 7 — Disallowed investment interest expense carried to next year',
       amount: f.disallowedCarryforward,
     },
-    ...(f.scheduleEDeductibleInvestmentInterestExpense > 0
-      ? [{
-          description: 'Allowed Box 13H routed to Schedule E Part II nonpassive',
-          amount: f.scheduleEDeductibleInvestmentInterestExpense,
-          note: 'AQR-style K-1 footnote treatment; included in Schedule E, not Schedule A.',
-        } as XlsxRow]
-      : []),
     {
       line: '8',
       description: 'Line 8 — Investment interest expense deduction (smaller of Line 3 or Line 6)',

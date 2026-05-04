@@ -192,15 +192,27 @@ export function FormTotalLine({
 }) {
   const cls =
     value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-2 border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5 ${onClick ? 'cursor-pointer hover:bg-primary/10 transition-colors' : ''}`}
-      {...(onClick ? { onClick } : {})}
-    >
+  const content = (
+    <>
       {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
       <span className="flex-1 text-[13px]">{label}</span>
       <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
       {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
+    </>
+  )
+  const className = `flex w-full items-center gap-2 px-3 py-2 text-left border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5 ${onClick ? 'cursor-pointer hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2' : ''}`
+
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick}>
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <div className={className}>
+      {content}
     </div>
   )
 }

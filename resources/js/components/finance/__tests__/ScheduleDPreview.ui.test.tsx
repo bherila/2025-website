@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import React from 'react'
 
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -139,13 +139,14 @@ describe('ScheduleDPreview detail navigation', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Line 5 total — short-term gain or (loss) from partnerships'))
+    fireEvent.click(screen.getByRole('button', { name: /Line 5 total — short-term gain or \(loss\) from partnerships/ }))
 
     expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
-    expect(screen.getAllByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8').length).toBeGreaterThan(1)
-    expect(screen.getAllByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S (S/T non-portfolio)').length).toBeGreaterThan(1)
+    const modal = screen.getByRole('dialog', { name: 'Schedule D Line 5 Supporting Details' })
+    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8')).toBeInTheDocument()
+    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S (S/T non-portfolio)')).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Go to K-1' })[0]!)
+    fireEvent.click(within(modal).getAllByRole('button', { name: 'Go to K-1' })[0]!)
 
     expect(onOpenDoc).toHaveBeenCalledWith(20)
   })
