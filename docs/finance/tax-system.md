@@ -166,6 +166,16 @@ Tax document update/review/account-link routing endpoints preserve their legacy 
 
 The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. This pilot does not switch workbook or preview totals to backend facts yet.
 
+### Filed Return Reconciliation
+
+Use `finance:tax-reconcile` to compare backend `taxFacts` against a CPA-prepared or filed-return expected-line fixture:
+
+```bash
+php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/Finance/tax-return-reconciliations/2025-cpa-anonymized.json --format=json
+```
+
+Committed fixtures must be anonymized: line numbers, labels, expected amounts, fact paths, precision, and notes are OK; raw documents, taxpayer names, payer names, SSNs, account names, and account numbers are not. Keep private source artifacts in ignored `training_data/tax_reconciliation/` when they help local debugging. The default 2025 fixture currently verifies Schedule 1, Schedule B, and Form 4952 line values against the backend fact layer.
+
 ### Tab Structure
 
 Tab IDs are defined in `resources/js/components/finance/tax-tab-ids.ts`.

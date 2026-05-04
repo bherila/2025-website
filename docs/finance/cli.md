@@ -270,6 +270,34 @@ Fact source rows can include unreviewed parsed entries. Check `isReviewed`, `rev
 
 ---
 
+### `finance:tax-reconcile`
+
+Compare backend Tax Preview facts against an expected filed-return line fixture. This is intended for CPA-return reconciliation: the fixture stores anonymized line values, while raw/private return artifacts can stay in ignored `training_data/tax_reconciliation/`.
+
+```bash
+php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/Finance/tax-return-reconciliations/2025-cpa-anonymized.json --format=table
+```
+
+Supported fixture formats are JSON and TOON. Each fixture line declares:
+
+| Field | Meaning |
+|-------|---------|
+| `form` / `line` / `label` | Human-readable filed-return location |
+| `path` | Dot path into `taxFacts`, or a small derived path such as `schedule1.line10TotalAdditionalIncome` |
+| `expected` | Filed-return amount |
+| `precision` | Comparison rounding, usually `0` for filed whole-dollar forms and `2` for cent-level schedules |
+| `tolerance` | Optional per-line tolerance after rounding |
+
+The command exits `0` when all lines match and `1` when any line is missing or mismatched. Use JSON or TOON output when feeding results back into an agent:
+
+```bash
+php artisan finance:tax-reconcile --year=2025 --format=json | jq '.summary'
+```
+
+The committed fixture is anonymized and contains only expected line values. Do not commit raw CPA return PDFs, screenshots, SSNs, payer names, account names, or account numbers; keep those in ignored `training_data/tax_reconciliation/` if they are useful locally.
+
+---
+
 ### `finance:k1-migrate`
 
 Migrate legacy flat-format K-1 `parsed_data` records into the canonical structured shape. Migrated rows are stamped with `schemaVersion: "1.0"` — a marker distinct from `"2026.1"` (which `GenAiJobDispatcherService::coerceK1Args` writes for fresh AI extractions), so you can tell migrated-from-legacy data apart from AI-extracted data after the fact. One-time migration; safe to run repeatedly (only legacy rows without a `schemaVersion` key are touched).

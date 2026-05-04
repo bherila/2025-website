@@ -1,0 +1,144 @@
+{
+  "fixtureVersion": 1,
+  "label": "2025 CPA return anonymized line reconciliation",
+  "year": 2025,
+  "privacy": "Expected filed-return line values only. Names, SSNs, account numbers, and raw source documents are intentionally excluded.",
+  "lines": [
+    {
+      "form": "Schedule 1",
+      "line": "5",
+      "label": "Rental real estate, royalties, partnerships, S corporations, trusts, etc.",
+      "path": "schedule1.line5Total",
+      "expected": -83357,
+      "precision": 0
+    },
+    {
+      "form": "Schedule 1",
+      "line": "8z",
+      "label": "Other income",
+      "path": "schedule1.line8zTotal",
+      "expected": 3843,
+      "precision": 0
+    },
+    {
+      "form": "Schedule 1",
+      "line": "9",
+      "label": "Total other income",
+      "path": "schedule1.line9TotalOtherIncome",
+      "expected": 3843,
+      "precision": 0
+    },
+    {
+      "form": "Schedule 1",
+      "line": "10",
+      "label": "Additional income",
+      "path": "schedule1.line10TotalAdditionalIncome",
+      "expected": -79514,
+      "precision": 0
+    },
+    {
+      "form": "Schedule B",
+      "line": "2",
+      "label": "Interest total",
+      "path": "scheduleB.interestTotal",
+      "expected": 36189.36,
+      "precision": 2
+    },
+    {
+      "form": "Schedule B",
+      "line": "4",
+      "label": "Taxable interest",
+      "path": "scheduleB.interestTotal",
+      "expected": 36189.36,
+      "precision": 2
+    },
+    {
+      "form": "Schedule B",
+      "line": "6",
+      "label": "Ordinary dividends",
+      "path": "scheduleB.ordinaryDividendTotal",
+      "expected": 61284.71,
+      "precision": 2
+    },
+    {
+      "form": "Form 4952",
+      "line": "1",
+      "label": "Investment interest expense paid or accrued",
+      "path": "form4952.totalInvestmentInterestExpense",
+      "expected": 35074,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "3",
+      "label": "Total investment interest expense",
+      "path": "form4952.totalInvestmentInterestExpense",
+      "expected": 35074,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "4a",
+      "label": "Gross income from property held for investment",
+      "path": "form4952.grossInvestmentIncomeTotal",
+      "expected": 100673,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "4b",
+      "label": "Qualified dividends included on line 4a",
+      "path": "form4952.totalQualifiedDividends",
+      "expected": 37933,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "4c",
+      "label": "Line 4a less qualified dividends",
+      "path": "form4952.line4cNetInvestmentIncomeAfterQualifiedDividends",
+      "expected": 62740,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "4h",
+      "label": "Investment income",
+      "path": "form4952.netInvestmentIncomeBeforeQualifiedDividendElection",
+      "expected": 62740,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "5",
+      "label": "Investment expenses",
+      "path": "form4952.totalInvestmentExpenses",
+      "expected": 0,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "6",
+      "label": "Net investment income",
+      "path": "form4952.netInvestmentIncomeBeforeQualifiedDividendElection",
+      "expected": 62740,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "7",
+      "label": "Disallowed investment interest expense carryforward",
+      "path": "form4952.disallowedCarryforward",
+      "expected": 0,
+      "precision": 0
+    },
+    {
+      "form": "Form 4952",
+      "line": "8",
+      "label": "Investment interest expense deduction",
+      "path": "form4952.deductibleInvestmentInterestExpense",
+      "expected": 35074,
+      "precision": 0
+    }
+  ]
+}
