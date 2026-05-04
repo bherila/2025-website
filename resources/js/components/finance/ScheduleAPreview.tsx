@@ -1,21 +1,11 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TaxFactSourcesModal } from '@/components/finance/TaxFactSourcesModal'
 import { getK1CodeItems } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
@@ -197,96 +187,6 @@ interface ScheduleAPreviewProps {
   onOpenDoc?: (docId: number) => void
 }
 
-/** Modal showing all sources that contribute to investment interest expense. */
-function InvIntSourcesModal({
-  isOpen,
-  onClose,
-  sources,
-  total,
-  onOpenDoc,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  sources: InvestmentInterestDisplaySource[]
-  total: number
-  onOpenDoc?: (docId: number) => void
-}) {
-  const sourceNeedsReview = (source: InvestmentInterestDisplaySource) => 'isReviewed' in source && !source.isReviewed
-  const sourceTaxDocumentId = (source: InvestmentInterestDisplaySource) => 'taxDocumentId' in source ? source.taxDocumentId : null
-  const sourceReviewAction = (source: InvestmentInterestDisplaySource) => 'reviewAction' in source ? source.reviewAction : null
-  const sourceNotes = (source: InvestmentInterestDisplaySource) => 'notes' in source ? source.notes : null
-  const sourceFormType = (source: InvestmentInterestDisplaySource) => 'formType' in source ? source.formType : null
-  const hasUnreviewedSources = sources.some(sourceNeedsReview)
-
-  return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Investment Interest Expense — Data Sources</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          These items contribute to Schedule A Line 9 (Investment Interest Expense),
-          subject to the Form 4952 net investment income limitation.
-        </p>
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sources.map((src, i) => (
-                <TableRow key={i}>
-                  <TableCell className="space-y-1 text-sm">
-                    <div>{src.label}</div>
-                    {sourceNeedsReview(src) && (
-                      <div className="text-xs font-medium text-warning">Estimated — review required</div>
-                    )}
-                    {sourceNotes(src) && <div className="text-xs text-muted-foreground">{sourceNotes(src)}</div>}
-                    {sourceNeedsReview(src) && sourceReviewAction(src) && (
-                      <div className="text-xs text-warning">{sourceReviewAction(src)}</div>
-                    )}
-                    {sourceTaxDocumentId(src) !== null && onOpenDoc && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-1 h-7 gap-1.5 px-2 text-xs"
-                        onClick={() => {
-                          onOpenDoc(sourceTaxDocumentId(src)!)
-                          onClose()
-                        }}
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                        Go to {sourceFormType(src)?.replaceAll('_', '-').toUpperCase() ?? 'source'}
-                      </Button>
-                    )}
-                  </TableCell>
-                  <TableCell className={`text-right font-mono text-sm ${sourceNeedsReview(src) ? 'text-warning' : 'text-red-600 dark:text-red-400'}`}>
-                    {currency(Math.abs(src.amount)).format()}
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="font-semibold bg-muted/50">
-                <TableCell>Total</TableCell>
-                <TableCell className={`text-right font-mono ${hasUnreviewedSources ? 'text-warning' : 'text-red-600 dark:text-red-400'}`}>
-                  {currency(total).format()}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Reference: IRS Schedule A Line 9. Investment interest is deductible up to net investment
-          income (Form 4952). Excess carries forward.
-        </p>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export default function ScheduleAPreview({
   selectedYear,
   reviewedK1Docs = [],
@@ -465,11 +365,15 @@ export default function ScheduleAPreview({
       </FormBlock>
 
       {/* Investment interest drilldown modal */}
-      <InvIntSourcesModal
-        isOpen={showInvIntModal}
+      <TaxFactSourcesModal
+        open={showInvIntModal}
+        title="Investment Interest Expense — Data Sources"
         onClose={() => setShowInvIntModal(false)}
         sources={invIntModalSources}
         total={invIntModalTotal}
+        amountMode="absolute"
+        positiveAmountTone="destructive"
+        referenceText="Reference: IRS Schedule A Line 9. Investment interest is deductible up to net investment income (Form 4952). Excess carries forward."
         {...(onOpenDoc ? { onOpenDoc } : {})}
       />
     </div>

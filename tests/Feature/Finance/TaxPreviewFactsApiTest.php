@@ -23,9 +23,9 @@ class TaxPreviewFactsApiTest extends TestCase
             ->assertJsonStructure([
                 'taxFacts' => [
                     'year',
-                    'schedule1' => ['line5Sources', 'line5Total', 'line8zSources', 'line8zTotal', 'line9TotalOtherIncome'],
+                    'schedule1' => ['line5Sources', 'line5Total', 'line8Sources', 'line8bSources', 'line8bTotal', 'line8hSources', 'line8hTotal', 'line8iSources', 'line8iTotal', 'line8zSources', 'line8zTotal', 'line9TotalOtherIncome'],
                     'scheduleB' => ['interestSources', 'interestTotal', 'ordinaryDividendSources', 'ordinaryDividendTotal'],
-                    'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses'],
+                    'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses', 'line4cNetInvestmentIncomeAfterQualifiedDividends'],
                 ],
             ]);
     }

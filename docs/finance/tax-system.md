@@ -142,9 +142,9 @@ The current pilot covers the highest-value debug paths:
 | Slice | Lines | Source behavior |
 |-------|-------|-----------------|
 | `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
-| `schedule1` | Schedule 1 line 8z / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
+| `schedule1` | Schedule 1 line 8 family / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. Explicit Schedule 1 subroutes are bucketed into line 8b, 8h, 8i, or 8z; `line9TotalOtherIncome` is the sum of those line 8 buckets, not a synonym for line 8z. |
 | `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
-| `form4952` | Form 4952 line 1 / line 4a / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `form4952` | Form 4952 line 1 / line 4a / line 4c / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket, exposes line 4c after subtracting qualified dividends, and keeps line 5 investment expenses distinct so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
 | `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
 | `scheduleD` | Schedule D lines 1a-16 / line 21 | Schedule D facts combine Form 8949 rollups with K-1 Box 8/9/10, Box 11C Form 6781 60/40 allocations, Box 11S character routing, and 1099-DIV Box 2a capital-gain distributions. Ambiguous Box 11S rows are exposed as `needs_review` sources instead of being silently routed. |
 
@@ -157,6 +157,8 @@ Each `TaxFactSource` carries review metadata:
 | `reviewAction` | Human-readable pointer to the document/link that should be reviewed |
 
 Totals intentionally include `needs_review` sources so the preview can estimate the return while showing exactly which source lines still need review in supporting-details modals.
+
+Maintainability rule: the fact layer is audit-first, and the service should trend toward per-slice builders as more form logic moves backend-side. Keep DTOs in `app/Services/Finance/TaxPreviewFacts/Data/`; when a new slice or a non-trivial refactor would make `TaxPreviewFactsService` materially larger, move that slice's collection/calculation logic into `app/Services/Finance/TaxPreviewFacts/Builders/{Slice}FactsBuilder.php` and leave the service as orchestration/compatibility glue.
 
 Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
 

@@ -1,14 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { type EmptyLine,EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
-import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
 import type { Schedule1Lines } from '@/types/finance/tax-return'
 import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
@@ -117,85 +115,6 @@ function classifyPartIValue(value: number | null): 'visible' | 'null' | 'zero' {
   return value === 0 ? 'zero' : 'visible'
 }
 
-function sourcesNeedReview(sources: TaxFactSource[]): boolean {
-  return sources.some((source) => !source.isReviewed)
-}
-
-function sourceTargetLabel(source: TaxFactSource): string {
-  return source.formType?.replaceAll('_', '-').toUpperCase() ?? 'source'
-}
-
-function FactSourcesModal({
-  open,
-  title,
-  sources,
-  total,
-  onClose,
-  onOpenDoc,
-}: {
-  open: boolean
-  title: string
-  sources: TaxFactSource[]
-  total: number
-  onClose: () => void
-  onOpenDoc?: (docId: number) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          {sources.map((source) => (
-            <div
-              key={source.id}
-              className={`rounded-md border p-3 ${source.isReviewed ? 'border-border/60' : 'border-warning/50 bg-warning/10'}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <div className="text-sm font-medium leading-snug">{source.label}</div>
-                  {!source.isReviewed && (
-                    <div className="text-xs font-medium text-warning">Estimated — review required</div>
-                  )}
-                  {source.notes && <div className="text-xs leading-snug text-muted-foreground">{source.notes}</div>}
-                  {!source.isReviewed && source.reviewAction && (
-                    <div className="text-xs leading-snug text-warning">{source.reviewAction}</div>
-                  )}
-                </div>
-                <div className={`font-currency shrink-0 text-right text-sm tabular-nums ${source.isReviewed ? source.amount < 0 ? 'text-destructive' : 'text-success' : 'text-warning'}`}>
-                  {fmtAmt(source.amount)}
-                </div>
-              </div>
-              {source.taxDocumentId !== null && onOpenDoc && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 h-7 gap-1.5 px-2 text-xs"
-                  onClick={() => {
-                    onOpenDoc(source.taxDocumentId!)
-                    onClose()
-                  }}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  Go to {sourceTargetLabel(source)}
-                </Button>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold">
-            <span>Total</span>
-            <span className={`font-currency tabular-nums ${sourcesNeedReview(sources) ? 'text-warning' : total < 0 ? 'text-destructive' : 'text-success'}`}>
-              {fmtAmt(total)}
-            </span>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export default function Schedule1Preview({
   selectedYear,
   schedule1,
@@ -213,10 +132,17 @@ export default function Schedule1Preview({
   const partI = totals.partI
   const partII = totals.partII
   const line5Sources = taxFacts?.line5Sources ?? []
+  const line8Sources = taxFacts?.line8Sources ?? []
+  const line8bSources = taxFacts?.line8bSources ?? []
+  const line8hSources = taxFacts?.line8hSources ?? []
+  const line8iSources = taxFacts?.line8iSources ?? []
   const line8zSources = taxFacts?.line8zSources ?? []
-  const line5NeedsReview = sourcesNeedReview(line5Sources)
-  const line8zNeedsReview = sourcesNeedReview(line8zSources)
-  const lineOtherIncomeNeedsReview = line8zNeedsReview
+  const line5NeedsReview = taxFactSourcesNeedReview(line5Sources)
+  const line8bNeedsReview = taxFactSourcesNeedReview(line8bSources)
+  const line8hNeedsReview = taxFactSourcesNeedReview(line8hSources)
+  const line8iNeedsReview = taxFactSourcesNeedReview(line8iSources)
+  const line8zNeedsReview = taxFactSourcesNeedReview(line8zSources)
+  const lineOtherIncomeNeedsReview = taxFactSourcesNeedReview(line8Sources)
   const line10NeedsReview = line5NeedsReview || lineOtherIncomeNeedsReview
 
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
@@ -394,19 +320,61 @@ export default function Schedule1Preview({
         )}
         {line8b === 'visible' && (
           <>
-            <FormLine boxRef="8b" label="Gambling winnings" value={partI.line8b_gambling} />
+            <FormLine
+              boxRef="8b"
+              label="Gambling winnings"
+              value={partI.line8b_gambling}
+              isReviewed={line8bNeedsReview ? false : undefined}
+              {...(line8bSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8b Supporting Details',
+                      sources: line8bSources,
+                      total: taxFacts?.line8bTotal ?? partI.line8b_gambling ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
           </>
         )}
         {line8h === 'visible' && (
           <>
-            <FormLine boxRef="8h" label="Jury duty pay" value={partI.line8h_juryDuty} />
+            <FormLine
+              boxRef="8h"
+              label="Jury duty pay"
+              value={partI.line8h_juryDuty}
+              isReviewed={line8hNeedsReview ? false : undefined}
+              {...(line8hSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8h Supporting Details',
+                      sources: line8hSources,
+                      total: taxFacts?.line8hTotal ?? partI.line8h_juryDuty ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
           </>
         )}
         {line8i === 'visible' && (
           <>
-            <FormLine boxRef="8i" label="Prizes and awards" value={partI.line8i_prizes} />
+            <FormLine
+              boxRef="8i"
+              label="Prizes and awards"
+              value={partI.line8i_prizes}
+              isReviewed={line8iNeedsReview ? false : undefined}
+              {...(line8iSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8i Supporting Details',
+                      sources: line8iSources,
+                      total: taxFacts?.line8iTotal ?? partI.line8i_prizes ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
           </>
         )}
@@ -436,6 +404,15 @@ export default function Schedule1Preview({
             label="Total other income (sum of lines 8a-8z)"
             value={partI.line9_totalOther}
             isReviewed={lineOtherIncomeNeedsReview ? false : undefined}
+            {...(line8Sources.length > 0
+              ? {
+                  onClick: () => setActiveSources({
+                    title: 'Schedule 1 Line 9 Supporting Details',
+                    sources: line8Sources,
+                    total: taxFacts?.line9TotalOtherIncome ?? partI.line9_totalOther,
+                  }),
+                }
+              : {})}
           />
         )}
         <FormTotalLine
@@ -472,7 +449,7 @@ export default function Schedule1Preview({
         />
       </FormBlock>
       {activeSources && (
-        <FactSourcesModal
+        <TaxFactSourcesModal
           open
           title={activeSources.title}
           sources={activeSources.sources}

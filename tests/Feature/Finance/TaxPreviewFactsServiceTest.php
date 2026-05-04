@@ -60,6 +60,38 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertTrue($facts['schedule1']['line8zSources'][0]['isReviewed']);
     }
 
+    public function test_schedule1_line9_sums_line8_family_without_mislabeling_line8z(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'sch_1_8b',
+            'parsed_data' => ['box3_other_income' => 10],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'sch_1_8h',
+            'parsed_data' => ['box3_other_income' => 20],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'parsed_data' => ['box3_other_income' => 30],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertSame(10.0, $facts['schedule1']['line8bTotal']);
+        $this->assertSame(20.0, $facts['schedule1']['line8hTotal']);
+        $this->assertSame(0.0, $facts['schedule1']['line8iTotal']);
+        $this->assertSame(30.0, $facts['schedule1']['line8zTotal']);
+        $this->assertSame(60.0, $facts['schedule1']['line9TotalOtherIncome']);
+        $this->assertCount(3, $facts['schedule1']['line8Sources']);
+        $this->assertCount(1, $facts['schedule1']['line8zSources']);
+    }
+
     public function test_1099_misc_explicit_schedule_c_or_e_routing_excludes_line8z(): void
     {
         $user = $this->createUser();
@@ -225,6 +257,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(30.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
         $this->assertSame(65.0, $facts['form4952']['grossInvestmentIncomeTotal']);
         $this->assertSame(10.0, $facts['form4952']['totalQualifiedDividends']);
+        $this->assertSame(55.0, $facts['form4952']['line4cNetInvestmentIncomeAfterQualifiedDividends']);
         $this->assertSame(55.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
         $this->assertSame('brokerage_margin_interest', $facts['form4952']['investmentInterestSources'][0]['sourceType']);
     }

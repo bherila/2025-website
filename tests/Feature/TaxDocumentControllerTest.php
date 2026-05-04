@@ -268,14 +268,17 @@ class TaxDocumentControllerTest extends TestCase
     public function test_can_update_misc_routing(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc']);
 
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
-            'misc_routing' => 'sch_1_8z',
-        ]);
+        foreach (['sch_c', 'sch_e', 'sch_1_8z'] as $routing) {
+            $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc']);
 
-        $response->assertOk()->assertJsonFragment(['misc_routing' => 'sch_1_8z']);
-        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'misc_routing' => 'sch_1_8z']);
+            $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+                'misc_routing' => $routing,
+            ]);
+
+            $response->assertOk()->assertJsonFragment(['misc_routing' => $routing]);
+            $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'misc_routing' => $routing]);
+        }
     }
 
     public function test_mark_reviewed_persists_misc_routing(): void

@@ -19,7 +19,10 @@ use Illuminate\Support\Facades\DB;
 
 class TaxDocumentController extends Controller
 {
-    private const VALID_MISC_ROUTINGS = 'sch_c,sch_e,sch_1_line_8,sch_1_8b,sch_1_8h,sch_1_8i,sch_1_8z';
+    /**
+     * @var array<int, string>
+     */
+    private const VALID_MISC_ROUTINGS = ['sch_c', 'sch_e', 'sch_1_line_8', 'sch_1_8b', 'sch_1_8h', 'sch_1_8i', 'sch_1_8z'];
 
     protected FileStorageService $fileService;
 
@@ -133,7 +136,7 @@ class TaxDocumentController extends Controller
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
             'skip_gen_ai_processing' => 'nullable|boolean',
-            'misc_routing' => 'nullable|string|in:'.self::VALID_MISC_ROUTINGS,
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $userId = Auth::id();
@@ -329,7 +332,7 @@ class TaxDocumentController extends Controller
             'account_id' => 'nullable|integer|min:1',
             'is_reviewed' => 'nullable|boolean',
             'notes' => 'nullable|string',
-            'misc_routing' => 'nullable|string|in:'.self::VALID_MISC_ROUTINGS,
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
             'reporting_mode' => 'nullable|string|in:schedule_d_summary,form_8949_summary,form_8949_transactions',
         ]);
 
@@ -554,7 +557,7 @@ class TaxDocumentController extends Controller
             'notes' => 'nullable|string',
             'is_reviewed' => 'nullable|boolean',
             'parsed_data' => 'nullable|array',
-            'misc_routing' => 'nullable|string|in:'.self::VALID_MISC_ROUTINGS,
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)
@@ -644,7 +647,7 @@ class TaxDocumentController extends Controller
         $request->validate([
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
-            'misc_routing' => 'nullable|string|in:'.self::VALID_MISC_ROUTINGS,
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)

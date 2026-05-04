@@ -864,26 +864,15 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private function bulkUpdateLotTransactionIds(array $updates): void
     {
         foreach (array_chunk($updates, 500) as $chunk) {
-            $updatesById = [];
             foreach ($chunk as $update) {
-                $updatesById[$update['lot_id']] = $update;
+                FinAccountLot::query()
+                    ->whereKey($update['lot_id'])
+                    ->update([
+                        'open_t_id' => $update['open_t_id'],
+                        'close_t_id' => $update['close_t_id'],
+                        'updated_at' => now(),
+                    ]);
             }
-
-            $rows = DB::table('fin_account_lots')
-                ->whereIn('lot_id', array_keys($updatesById))
-                ->get()
-                ->map(function (object $row) use ($updatesById): array {
-                    $attributes = (array) $row;
-                    $update = $updatesById[(int) $attributes['lot_id']];
-                    $attributes['open_t_id'] = $update['open_t_id'];
-                    $attributes['close_t_id'] = $update['close_t_id'];
-                    $attributes['updated_at'] = now();
-
-                    return $attributes;
-                })
-                ->all();
-
-            FinAccountLot::query()->upsert($rows, ['lot_id'], ['open_t_id', 'close_t_id', 'updated_at']);
         }
     }
 

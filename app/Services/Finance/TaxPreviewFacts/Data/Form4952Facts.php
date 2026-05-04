@@ -37,6 +37,7 @@ readonly class Form4952Facts
         public float $grossInvestmentIncomeFromScheduleB,
         public float $grossInvestmentIncomeFromK1,
         public float $grossInvestmentIncomeTotal,
+        public float $line4cNetInvestmentIncomeAfterQualifiedDividends,
         public float $netInvestmentIncomeBeforeQualifiedDividendElection,
         public float $totalQualifiedDividends,
         public float $deductibleInvestmentInterestExpense,
@@ -48,7 +49,7 @@ readonly class Form4952Facts
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float}
+     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float}
      */
     public function toArray(): array
     {
@@ -62,6 +63,7 @@ readonly class Form4952Facts
             'grossInvestmentIncomeFromScheduleB' => $this->grossInvestmentIncomeFromScheduleB,
             'grossInvestmentIncomeFromK1' => $this->grossInvestmentIncomeFromK1,
             'grossInvestmentIncomeTotal' => $this->grossInvestmentIncomeTotal,
+            'line4cNetInvestmentIncomeAfterQualifiedDividends' => $this->line4cNetInvestmentIncomeAfterQualifiedDividends,
             'netInvestmentIncomeBeforeQualifiedDividendElection' => $this->netInvestmentIncomeBeforeQualifiedDividendElection,
             'totalQualifiedDividends' => $this->totalQualifiedDividends,
             'deductibleInvestmentInterestExpense' => $this->deductibleInvestmentInterestExpense,

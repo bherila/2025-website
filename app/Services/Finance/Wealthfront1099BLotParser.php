@@ -152,6 +152,7 @@ class Wealthfront1099BLotParser
         }
 
         $year = (int) $matches[3];
+        // Wealthfront 1099-B uses two-digit years; accept current/future filings through 2035 before falling back to 19xx legacy dates.
         $century = $year <= 35 ? 2000 : 1900;
 
         return sprintf('%04d-%02d-%02d', $century + $year, (int) $matches[1], (int) $matches[2]);

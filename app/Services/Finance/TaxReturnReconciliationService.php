@@ -128,12 +128,17 @@ class TaxReturnReconciliationService
      */
     private function actualValue(array $facts, string $path): ?float
     {
+        $direct = $this->numeric($this->valueAtPath($facts, $path));
+        if ($direct !== null) {
+            return $direct;
+        }
+
         $derived = $this->derivedValue($facts, $path);
         if ($derived !== null) {
             return $derived;
         }
 
-        return $this->numeric($this->valueAtPath($facts, $path));
+        return null;
     }
 
     /**

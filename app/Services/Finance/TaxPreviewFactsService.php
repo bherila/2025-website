@@ -200,14 +200,29 @@ class TaxPreviewFactsService
             );
         }
 
-        $line8zSources = $this->schedule1Line8zSources($docs1099);
+        $line8Sources = $this->schedule1Line8Sources($docs1099);
+        $line8bSources = $this->schedule1Line8SourcesFor($line8Sources, '8b');
+        $line8hSources = $this->schedule1Line8SourcesFor($line8Sources, '8h');
+        $line8iSources = $this->schedule1Line8SourcesFor($line8Sources, '8i');
+        $line8zSources = $this->schedule1Line8SourcesFor($line8Sources, '8z');
+        $line8bTotal = $this->sumSources($line8bSources);
+        $line8hTotal = $this->sumSources($line8hSources);
+        $line8iTotal = $this->sumSources($line8iSources);
+        $line8zTotal = $this->sumSources($line8zSources);
 
         return new Schedule1Facts(
             line5Sources: $line5Sources,
             line5Total: $this->sumSources($line5Sources),
+            line8Sources: $line8Sources,
+            line8bSources: $line8bSources,
+            line8bTotal: $line8bTotal,
+            line8hSources: $line8hSources,
+            line8hTotal: $line8hTotal,
+            line8iSources: $line8iSources,
+            line8iTotal: $line8iTotal,
             line8zSources: $line8zSources,
-            line8zTotal: $this->sumSources($line8zSources),
-            line9TotalOtherIncome: $this->sumSources($line8zSources),
+            line8zTotal: $line8zTotal,
+            line9TotalOtherIncome: $this->roundMoney($line8bTotal + $line8hTotal + $line8iTotal + $line8zTotal),
         );
     }
 
@@ -215,7 +230,7 @@ class TaxPreviewFactsService
      * @param  FileForTaxDocument[]  $docs1099
      * @return TaxFactSource[]
      */
-    private function schedule1Line8zSources(array $docs1099): array
+    private function schedule1Line8Sources(array $docs1099): array
     {
         $sources = [];
 
@@ -237,7 +252,7 @@ class TaxPreviewFactsService
                         continue;
                     }
 
-                    $amount = $this->miscAmount($doc, $link, $entryData);
+                    $amount = $this->miscAmount($entryData);
                     if ($amount === null || $amount === 0.0) {
                         continue;
                     }
@@ -257,7 +272,7 @@ class TaxPreviewFactsService
                 continue;
             }
 
-            $amount = $this->miscAmount($doc, null, $doc->parsed_data);
+            $amount = $this->miscAmount($doc->parsed_data);
             if ($amount === null || $amount === 0.0) {
                 continue;
             }
@@ -266,6 +281,28 @@ class TaxPreviewFactsService
         }
 
         return $sources;
+    }
+
+    /**
+     * @param  TaxFactSource[]  $sources
+     * @return TaxFactSource[]
+     */
+    private function schedule1Line8SourcesFor(array $sources, string $line): array
+    {
+        return array_values(array_filter(
+            $sources,
+            fn (TaxFactSource $source): bool => $this->schedule1Line8Destination($source->routing) === $line,
+        ));
+    }
+
+    private function schedule1Line8Destination(?string $routing): string
+    {
+        return match ($routing) {
+            'sch_1_8b' => '8b',
+            'sch_1_8h' => '8h',
+            'sch_1_8i' => '8i',
+            default => '8z',
+        };
     }
 
     /**
@@ -505,7 +542,8 @@ class TaxPreviewFactsService
         $grossInvestmentIncomeFromK1 = $this->k1Form4952GrossInvestmentIncome($k1Docs);
         $grossInvestmentIncomeTotal = $this->roundMoney($grossInvestmentIncomeFromScheduleB + $grossInvestmentIncomeFromK1);
         $totalQualifiedDividends = $this->form4952QualifiedDividendsIncludedInGross($k1Docs, $scheduleB);
-        $niiBefore = max(0.0, $this->roundMoney($grossInvestmentIncomeTotal - $totalQualifiedDividends - $totalInvestmentExpenses));
+        $line4c = $this->roundMoney($grossInvestmentIncomeTotal - $totalQualifiedDividends);
+        $niiBefore = max(0.0, $this->roundMoney($line4c - $totalInvestmentExpenses));
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
         $carryforward = max(0.0, $this->roundMoney($totalInvestmentInterestExpense - $deductible));
 
@@ -519,6 +557,7 @@ class TaxPreviewFactsService
             grossInvestmentIncomeFromScheduleB: $grossInvestmentIncomeFromScheduleB,
             grossInvestmentIncomeFromK1: $grossInvestmentIncomeFromK1,
             grossInvestmentIncomeTotal: $grossInvestmentIncomeTotal,
+            line4cNetInvestmentIncomeAfterQualifiedDividends: $line4c,
             netInvestmentIncomeBeforeQualifiedDividendElection: $niiBefore,
             totalQualifiedDividends: $totalQualifiedDividends,
             deductibleInvestmentInterestExpense: $deductible,
@@ -1219,7 +1258,7 @@ class TaxPreviewFactsService
     /**
      * @param  array<string, mixed>  $parsedData
      */
-    private function miscAmount(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $parsedData): ?float
+    private function miscAmount(array $parsedData): ?float
     {
         return $this->sumMiscValues($parsedData);
     }
