@@ -47,6 +47,7 @@ class TaxPreviewDataService
             'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
             'w2Documents' => $this->documentsForYear($userId, $year, FileForTaxDocument::W2_FORM_TYPES),
             'accountDocuments' => $this->documentsForYear($userId, $year, ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_b', 'broker_1099', 'k1']),
+            'priorYearAccountDocuments' => $this->documentsForYear($userId, $year - 1, ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_b', 'broker_1099', 'k1']),
             'scheduleCData' => $scheduleCData,
             'employmentEntities' => $this->employmentEntities($userId),
             'accounts' => $accounts,
@@ -132,8 +133,8 @@ class TaxPreviewDataService
             ->with([
                 'uploader:id,name',
                 'employmentEntity:id,display_name',
-                'account:acct_id,acct_name',
-                'accountLinks.account:acct_id,acct_name',
+                'account:acct_id,acct_name,acct_number',
+                'accountLinks.account:acct_id,acct_name,acct_number',
             ])
             ->orderBy('created_at', 'desc')
             ->get();

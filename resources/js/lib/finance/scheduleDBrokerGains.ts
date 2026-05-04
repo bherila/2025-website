@@ -68,6 +68,26 @@ function transactionDescription(transaction: Record<string, unknown>): string {
   return description || symbol || '1099-B transaction'
 }
 
+function readTransactionGain(source: Record<string, unknown>): number | null {
+  const reported = parseMoney(source.realized_gain_loss)
+  if (reported === null) {
+    return null
+  }
+
+  const washSale = Math.abs(parseMoney(source.wash_sale_disallowed) ?? 0)
+  if (washSale <= 0.005) {
+    return reported
+  }
+
+  const proceeds = parseMoney(source.proceeds) ?? 0
+  const basis = parseMoney(source.cost_basis) ?? 0
+  const unadjustedGain = currency(proceeds).subtract(basis).value
+
+  return Math.abs(reported - unadjustedGain) <= 0.005
+    ? currency(reported).add(washSale).value
+    : reported
+}
+
 export interface ScheduleDBrokerGains {
   shortTermGain: number
   longTermGain: number
@@ -90,7 +110,7 @@ export function readScheduleDBrokerGains(record: Record<string, unknown>): Sched
         }
 
         const source = transaction as Record<string, unknown>
-        const amount = parseMoney(source.realized_gain_loss)
+        const amount = readTransactionGain(source)
         if (amount === null || amount === 0) {
           return []
         }

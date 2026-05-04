@@ -40,12 +40,20 @@ import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
+
+function accountLast4FromValue(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null
+  }
+  const digits = String(value).replace(/\D/g, '')
+  return digits.length >= 4 ? digits.slice(-4) : null
+}
 
 export interface TaxPreviewShellData {
   year: number
@@ -67,6 +75,7 @@ export interface TaxPreviewDataset {
   pendingReviewCount: number
   w2Documents: TaxDocument[]
   accountDocuments: TaxDocument[]
+  priorYearAccountDocuments: TaxDocument[]
   scheduleCData: ScheduleCResponse
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
@@ -85,6 +94,7 @@ interface TaxPreviewContextValue {
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
+  priorYearCapitalLossCarryover: CapitalLossCarryoverLines | null
   reviewed1099RDocs: TaxDocument[]
   foreignTaxSummaries: ForeignTaxSummary[]
   scheduleCData: ScheduleCResponse | null
@@ -247,6 +257,7 @@ export function TaxPreviewProvider({
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
   const [w2Documents, setW2Documents] = useState<TaxDocument[]>([])
   const [accountDocuments, setAccountDocuments] = useState<TaxDocument[]>([])
+  const [priorYearAccountDocuments, setPriorYearAccountDocuments] = useState<TaxDocument[]>([])
   const [scheduleCData, setScheduleCData] = useState<ScheduleCResponse | null>(null)
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
@@ -531,6 +542,7 @@ export function TaxPreviewProvider({
       setPendingReviewCount(response.pendingReviewCount ?? 0)
       setW2Documents(Array.isArray(response.w2Documents) ? response.w2Documents : [])
       setAccountDocuments(Array.isArray(response.accountDocuments) ? response.accountDocuments : [])
+      setPriorYearAccountDocuments(Array.isArray(response.priorYearAccountDocuments) ? response.priorYearAccountDocuments : [])
       setScheduleCData(response.scheduleCData ?? null)
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
@@ -702,6 +714,20 @@ export function TaxPreviewProvider({
     [accountDocuments],
   )
 
+  const priorYearCapitalLossCarryover = useMemo<CapitalLossCarryoverLines | null>(() => {
+    const priorYearReviewedK1Docs = priorYearAccountDocuments.filter((doc) => doc.is_reviewed && doc.form_type === 'k1')
+    const priorYearReviewed1099Docs = priorYearAccountDocuments.filter((doc) => doc.is_reviewed && doc.form_type !== 'k1')
+    if (priorYearReviewedK1Docs.length === 0 && priorYearReviewed1099Docs.length === 0) {
+      return null
+    }
+
+    const priorScheduleD = computeScheduleD(priorYearReviewedK1Docs, priorYearReviewed1099Docs)
+    return computeCapitalLossCarryover(
+      priorScheduleD.schD.schD_line7,
+      priorScheduleD.schD.schD_line15,
+    )
+  }, [priorYearAccountDocuments])
+
   const foreignTaxSummaries = useMemo(
     () => collectForeignTaxSummaries(accountDocuments),
     [accountDocuments],
@@ -849,7 +875,10 @@ export function TaxPreviewProvider({
     const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
     const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
     const retirementDistributionSummary = compute1099RDistributionSummary(reviewed1099RDocs)
-    const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs)
+    const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs, {
+      shortTermCapitalLossCarryover: priorYearCapitalLossCarryover?.shortTermCarryover ?? 0,
+      longTermCapitalLossCarryover: priorYearCapitalLossCarryover?.longTermCarryover ?? 0,
+    })
 
     // ── Overview sheet data ───────────────────────────────────────────────────
     const k1Parsed = reviewedK1Docs
@@ -1262,12 +1291,31 @@ export function TaxPreviewProvider({
         })
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
       docs1099: reviewed1099Docs.map((doc) => {
-        const parsedData = (doc.parsed_data ?? {}) as Record<string, unknown>
-        const payerName = (parsedData.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+        const parsedData = (doc.parsed_data ?? {}) as Record<string, unknown> | Record<string, unknown>[]
+        const firstBrokerEntry = Array.isArray(parsedData)
+          ? parsedData.find((entry) => typeof entry.account_name === 'string')
+          : null
+        const payerName = !Array.isArray(parsedData)
+          ? (parsedData.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+          : (firstBrokerEntry?.account_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+        const accountLast4 = !Array.isArray(parsedData)
+          ? accountLast4FromValue(parsedData.account_number) ?? accountLast4FromValue(doc.account?.acct_number)
+          : accountLast4FromValue(doc.account?.acct_number)
         return {
           formType: doc.form_type,
           payerName,
           parsedData,
+          accountId: doc.account_id,
+          accountName: doc.account?.acct_name ?? null,
+          accountLast4,
+          accountLinks: (doc.account_links ?? []).map((link) => ({
+            id: link.id,
+            account_id: link.account_id,
+            form_type: link.form_type,
+            ai_identifier: link.ai_identifier,
+            ai_account_name: link.ai_account_name,
+            account: link.account,
+          })),
         }
       }),
       ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
@@ -1279,6 +1327,7 @@ export function TaxPreviewProvider({
     year,
     reviewed1099Docs,
     reviewedK1Docs,
+    priorYearCapitalLossCarryover,
     reviewedW2Docs,
     foreignTaxSummaries,
     income1099,
@@ -1319,6 +1368,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    priorYearCapitalLossCarryover,
     reviewed1099RDocs,
     foreignTaxSummaries,
     scheduleCData,
@@ -1387,6 +1437,7 @@ export function TaxPreviewProvider({
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
+    priorYearCapitalLossCarryover,
     reviewed1099RDocs,
     foreignTaxSummaries,
     scheduleCData,

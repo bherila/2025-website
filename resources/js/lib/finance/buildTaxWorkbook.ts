@@ -1,5 +1,6 @@
 import currency from 'currency.js'
 
+import { computeForm8949, type Form8949Box, type Form8949Lot,formatForm8949Date } from '@/components/finance/Form8949Preview'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
@@ -256,6 +257,30 @@ function numericValue(value: unknown): number {
 
 function isNonZero(value: number): boolean {
   return currency(value).value !== 0
+}
+
+function accountLast4(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null
+  }
+  const digits = String(value).replace(/\D/g, '')
+  return digits.length >= 4 ? digits.slice(-4) : null
+}
+
+function boolValue(value: unknown): boolean {
+  return value === true || value === 1 || value === '1' || value === 'true'
+}
+
+function form8949Box(value: unknown): Form8949Box | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const normalized = value.trim().toUpperCase()
+  return ['A', 'B', 'C', 'D', 'E', 'F'].includes(normalized) ? normalized as Form8949Box : null
+}
+
+function scalarMoneyValue(value: unknown): number | string | null {
+  return typeof value === 'number' || typeof value === 'string' ? value : null
 }
 
 function sumAmounts(rows: Array<{ amount: number }>): number {
@@ -761,6 +786,151 @@ export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | 
   }
 }
 
+type Doc1099Entry = NonNullable<TaxReturn1040['docs1099']>[number]
+type Doc1099AccountLink = NonNullable<Doc1099Entry['accountLinks']>[number]
+
+function brokerEntryMatchesLink(entry: Record<string, unknown>, link: Doc1099AccountLink): boolean {
+  const entryIdentifier = typeof entry.account_identifier === 'string' ? entry.account_identifier.trim().toLowerCase() : null
+  const linkIdentifier = link.ai_identifier?.trim().toLowerCase() ?? null
+  if (entryIdentifier && linkIdentifier && entryIdentifier === linkIdentifier) {
+    return true
+  }
+
+  const entryName = typeof entry.account_name === 'string' ? entry.account_name.trim().toLowerCase() : null
+  const linkName = link.ai_account_name?.trim().toLowerCase() ?? null
+  return Boolean(entryName && linkName && entryName === linkName)
+}
+
+function transactionToForm8949Lot(
+  transaction: Record<string, unknown>,
+  metadata: Pick<Form8949Lot, 'acct_id' | 'account_name' | 'account_last4' | 'account_link_id'>,
+): Form8949Lot {
+  return {
+    ...metadata,
+    symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
+    description: typeof transaction.description === 'string' ? transaction.description : null,
+    quantity: scalarMoneyValue(transaction.quantity),
+    purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
+    sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
+    cost_basis: scalarMoneyValue(transaction.cost_basis),
+    proceeds: scalarMoneyValue(transaction.proceeds),
+    realized_gain_loss: scalarMoneyValue(transaction.realized_gain_loss),
+    is_short_term: boolValue(transaction.is_short_term),
+    lot_source: '1099b',
+    form_8949_box: form8949Box(transaction.form_8949_box),
+    is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
+    accrued_market_discount: scalarMoneyValue(transaction.accrued_market_discount),
+    wash_sale_disallowed: scalarMoneyValue(transaction.wash_sale_disallowed),
+  }
+}
+
+function form8949LotsFrom1099ExportDocs(taxReturn: TaxReturn1040): Form8949Lot[] {
+  return (taxReturn.docs1099 ?? []).flatMap((doc) => {
+    if (doc.formType !== 'broker_1099' && doc.formType !== '1099_b' && doc.formType !== '1099_b_c') {
+      return []
+    }
+
+    if (!Array.isArray(doc.parsedData)) {
+      const transactions = Array.isArray(doc.parsedData.transactions) ? doc.parsedData.transactions : []
+      const last4 = doc.accountLast4 ?? accountLast4(doc.parsedData.account_number)
+      return transactions
+        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
+        .map((tx) => transactionToForm8949Lot(tx, {
+          ...(doc.accountId !== null && doc.accountId !== undefined ? { acct_id: doc.accountId } : {}),
+          account_name: doc.accountName ?? null,
+          account_last4: last4,
+        }))
+    }
+
+    return doc.parsedData.flatMap((entry) => {
+      if (entry.form_type !== '1099_b' && entry.form_type !== '1099_b_c') {
+        return []
+      }
+      const parsedData = entry.parsed_data
+      if (!parsedData || typeof parsedData !== 'object' || Array.isArray(parsedData)) {
+        return []
+      }
+      const parsedRecord = parsedData as Record<string, unknown>
+
+      const matchingLink = (doc.accountLinks ?? []).find((link) => brokerEntryMatchesLink(entry, link))
+      const transactions = Array.isArray(parsedRecord.transactions) ? parsedRecord.transactions : []
+      const last4 = accountLast4(entry.account_identifier)
+        ?? accountLast4(parsedRecord.account_number)
+        ?? accountLast4(matchingLink?.ai_identifier)
+        ?? accountLast4(matchingLink?.account?.acct_number)
+      return transactions
+        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
+        .map((tx) => transactionToForm8949Lot(tx, {
+          ...(matchingLink?.account_id !== null && matchingLink?.account_id !== undefined ? { acct_id: matchingLink.account_id } : {}),
+          account_name: typeof entry.account_name === 'string' ? entry.account_name : matchingLink?.account?.acct_name ?? null,
+          account_last4: last4,
+          account_link_id: matchingLink?.id ?? null,
+        }))
+    })
+  })
+}
+
+export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
+  const lots = form8949LotsFrom1099ExportDocs(taxReturn)
+  if (lots.length === 0) {
+    return null
+  }
+
+  const data = computeForm8949(lots)
+  const rows: XlsxRow[] = []
+  const addSection = (part: string, section: ReturnType<typeof computeForm8949>['shortTerm'][number]): void => {
+    rows.push({ isHeader: true, description: `${part} — ${section.label}` })
+    for (const row of section.rows) {
+      rows.push({
+        line: section.box,
+        description: row.description,
+        amount: row.gain,
+        note: joinNotes([
+          `Acquired: ${formatForm8949Date(row.dateAcquired) || '—'}`,
+          `Sold: ${formatForm8949Date(row.dateSold) || '—'}`,
+          `Proceeds: ${currency(row.proceeds).format()}`,
+          `Basis: ${currency(row.basis).format()}`,
+          row.code ? `Code: ${row.code}` : undefined,
+          row.code ? `Adjustment: ${currency(row.adjustment).format()}` : undefined,
+        ]),
+      })
+    }
+    rows.push({
+      line: section.box,
+      description: `${section.label} totals`,
+      amount: section.totals.gain,
+      note: joinNotes([
+        `Proceeds: ${currency(section.totals.proceeds).format()}`,
+        `Basis: ${currency(section.totals.basis).format()}`,
+        `Adjustment: ${currency(section.totals.adjustment).format()}`,
+      ]),
+      isTotal: true,
+    })
+  }
+
+  for (const section of data.shortTerm) {
+    addSection('Part I', section)
+  }
+  for (const section of data.longTerm) {
+    addSection('Part II', section)
+  }
+
+  rows.push({
+    description: 'Part I total gain or (loss)',
+    amount: data.partITotals.gain,
+    note: `Adjustment: ${currency(data.partITotals.adjustment).format()}`,
+    isTotal: true,
+  })
+  rows.push({
+    description: 'Part II total gain or (loss)',
+    amount: data.partIITotals.gain,
+    note: `Adjustment: ${currency(data.partIITotals.adjustment).format()}`,
+    isTotal: true,
+  })
+
+  return { name: 'Form 8949', rows }
+}
+
 export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null {
   if (!taxReturn.scheduleD) {
     return null
@@ -841,37 +1011,49 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
   }
 
   for (const doc of taxReturn.docs1099 ?? []) {
-    const parsed = doc.parsedData
-    const gains = readScheduleDBrokerGains(parsed)
+    const parsedEntries = Array.isArray(doc.parsedData)
+      ? doc.parsedData
+      : [{ form_type: doc.formType, account_name: doc.payerName, parsed_data: doc.parsedData }]
 
-    if (doc.formType === 'broker_1099' || doc.formType === '1099_b' || doc.formType === '1099_b_c') {
-      if (gains.transactionSources.length > 0) {
-        for (const source of gains.transactionSources) {
-          addSource(source.line, {
-            description: `${doc.payerName} — ${source.description}`,
-            amount: source.amount,
-            note: `Form 8949 Box ${source.form8949Box}`,
+    for (const entry of parsedEntries) {
+      const parsed = entry.parsed_data
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        continue
+      }
+      const parsedRecord = parsed as Record<string, unknown>
+      const payerName = typeof entry.account_name === 'string' ? entry.account_name : doc.payerName
+      const entryFormType = String(entry.form_type)
+      const gains = readScheduleDBrokerGains(parsedRecord)
+
+      if (entryFormType === 'broker_1099' || entryFormType === '1099_b' || entryFormType === '1099_b_c') {
+        if (gains.transactionSources.length > 0) {
+          for (const source of gains.transactionSources) {
+            addSource(source.line, {
+              description: `${payerName} — ${source.description}`,
+              amount: source.amount,
+              note: `Form 8949 Box ${source.form8949Box}`,
+            })
+          }
+        } else {
+          addSource('1a', {
+            description: `${payerName} — S/T 1099-B`,
+            amount: gains.shortTermGain,
+            note: gains.usedTotalAsShortTermFallback ? 'Used total realized gain/loss as short-term fallback because no ST/LT split was present.' : shortTerm1099BNote,
+          })
+          addSource('8a', {
+            description: `${payerName} — L/T 1099-B`,
+            amount: gains.longTermGain,
+            note: longTerm1099BNote,
           })
         }
-      } else {
-        addSource('1a', {
-          description: `${doc.payerName} — S/T 1099-B`,
-          amount: gains.shortTermGain,
-          note: gains.usedTotalAsShortTermFallback ? 'Used total realized gain/loss as short-term fallback because no ST/LT split was present.' : shortTerm1099BNote,
-        })
-        addSource('8a', {
-          description: `${doc.payerName} — L/T 1099-B`,
-          amount: gains.longTermGain,
-          note: longTerm1099BNote,
+      }
+
+      if (entryFormType === 'broker_1099' || entryFormType === '1099_div' || entryFormType === '1099_div_c') {
+        addSource('13', {
+          description: `${payerName} — 1099-DIV capital gain distributions`,
+          amount: numericValue(parsedRecord.box2a_cap_gain),
         })
       }
-    }
-
-    if (doc.formType === 'broker_1099' || doc.formType === '1099_div' || doc.formType === '1099_div_c') {
-      addSource('13', {
-        description: `${doc.payerName} — 1099-DIV capital gain distributions`,
-        amount: numericValue(parsed.box2a_cap_gain),
-      })
     }
   }
 
@@ -1482,6 +1664,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const scheduleBSheet = wrapSheet(buildScheduleBSheet(taxReturn))
   const scheduleCSheet = wrapSheet(buildScheduleCSheet(taxReturn))
   const scheduleDSheet = wrapSheet(buildScheduleDSheet(taxReturn))
+  const form8949Sheet = wrapSheet(buildForm8949Sheet(taxReturn))
   const scheduleESheet = wrapSheet(buildScheduleESheet(taxReturn))
   const scheduleSESheet = wrapSheet(buildScheduleSESheet(taxReturn))
   const form4952Sheet = wrapSheet(buildForm4952Sheet(taxReturn))
@@ -1523,12 +1706,28 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
   const docs1099Sheets = (taxReturn.docs1099 ?? []).map((entry) =>
     buildSheet(
       `${entry.formType.toUpperCase().replaceAll('_', '-')} ${entry.payerName}`,
-      Object.entries(entry.parsedData).map(([key, value]) => ({
-        line: key,
-        description: key,
-        amount: typeof value === 'number' ? value : undefined,
-        note: typeof value === 'number' ? undefined : String(value ?? ''),
-      })),
+      Array.isArray(entry.parsedData)
+        ? entry.parsedData.flatMap((docEntry, index) => {
+            const parsedData = docEntry.parsed_data
+            return [
+              { isHeader: true, description: `${String(docEntry.form_type ?? 'Form').toUpperCase().replaceAll('_', '-')} ${docEntry.account_name ?? index + 1}` },
+              { line: 'account_identifier', description: 'account_identifier', note: String(docEntry.account_identifier ?? '') },
+              ...(!parsedData || Array.isArray(parsedData)
+                ? []
+                : Object.entries(parsedData).map(([key, value]) => ({
+                    line: key,
+                    description: key,
+                    amount: typeof value === 'number' ? value : undefined,
+                    note: typeof value === 'number' ? undefined : String(value ?? ''),
+                  }))),
+            ]
+          })
+        : Object.entries(entry.parsedData).map(([key, value]) => ({
+            line: key,
+            description: key,
+            amount: typeof value === 'number' ? value : undefined,
+            note: typeof value === 'number' ? undefined : String(value ?? ''),
+          })),
     ),
   )
 
@@ -1540,6 +1739,7 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
     scheduleASheet,
     scheduleBSheet,
     scheduleCSheet,
+    form8949Sheet,
     scheduleDSheet,
     scheduleESheet,
     scheduleSESheet,

@@ -41,7 +41,7 @@
     {{-- Noop script to trigger Vite JS parsing (mirrors app layout) --}}
     <script>(_=>{let a})()</script>
   </head>
-  <body class="min-h-screen flex flex-col">
+  <body class="finance-shell min-h-screen flex flex-col">
     <main class="flex-1">
       @yield('content')
     </main>

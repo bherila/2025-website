@@ -121,7 +121,7 @@ export default function TaxDocumentsSection({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-2">W-2 Documents</h2>
+      <h2 className="finance-section-heading">W-2 Documents</h2>
 
       {w2Entities.length === 0 && (
         <p className="text-sm text-muted-foreground">No W-2 employers found.</p>
@@ -130,8 +130,8 @@ export default function TaxDocumentsSection({
       {w2Entities.map(entity => {
         const entityDocs = getDocsForEntity(entity.id)
         return (
-          <div key={entity.id} className="mb-4 border rounded-md overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+          <div key={entity.id} className="mb-4 overflow-hidden rounded-md border border-muted bg-card">
+            <div className="flex items-center justify-between border-b border-muted bg-muted/20 px-3 py-2">
               <span className="font-medium text-sm">{entity.display_name}</span>
               <div className="flex gap-2">
                 <DropdownMenu>
@@ -159,7 +159,7 @@ export default function TaxDocumentsSection({
             {entityDocs.length === 0 ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">No documents uploaded</div>
             ) : (
-              <Table>
+              <Table className="[&_tr]:border-muted">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Form</TableHead>

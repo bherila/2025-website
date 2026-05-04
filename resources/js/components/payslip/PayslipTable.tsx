@@ -13,6 +13,8 @@ import { updatePayslipEstimatedStatus } from '@/lib/api'
 
 import type { fin_payslip } from './payslipDbCols'
 
+const CURRENCY_TEXT = 'font-currency tabular-nums'
+
 interface Props {
   data: fin_payslip[]
   onRowEdited?: (row: fin_payslip) => void
@@ -21,7 +23,7 @@ interface Props {
 function Th({ right, children, sub }: { right?: boolean; children: ReactNode; sub?: string }) {
   return (
     <TableHead
-      className={`font-mono text-[10px] tracking-wide uppercase text-muted-foreground py-2.5 px-3 ${right ? 'text-right' : ''}`}
+      className={`text-[10px] font-semibold tracking-wide uppercase text-muted-foreground py-2.5 px-3 ${right ? 'text-right' : ''}`}
     >
       {children}
       {sub && <span className="block normal-case tracking-normal text-[9px] opacity-70 mt-0.5">{sub}</span>}
@@ -48,7 +50,7 @@ function fmtShort(val: number | null | undefined): string | null {
 // ─── Sub-text helper ─────────────────────────────────────────────────────────
 
 function SubText({ children }: { children: ReactNode }) {
-  return <span className="block text-[10px] text-gray-400 mt-0.5 leading-tight">{children}</span>
+  return <span className="block text-[10px] text-muted-foreground mt-0.5 leading-tight">{children}</span>
 }
 
 // ─── Tag badges ──────────────────────────────────────────────────────────────
@@ -56,17 +58,17 @@ function SubText({ children }: { children: ReactNode }) {
 type TagVariant = 'rsu' | 'bonus' | 'earn' | 'deduct' | 'estimated'
 
 const TAG_CLASSES: Record<TagVariant, string> = {
-  rsu: 'bg-blue-950/60 text-blue-200 border border-blue-800/50',
-  bonus: 'bg-yellow-950/60 text-yellow-300 border border-yellow-800/50 dark:border-yellow-700/40',
+  rsu: 'bg-info/10 text-info border border-info/25',
+  bonus: 'bg-warning/10 text-warning border border-warning/25',
   earn: 'bg-success/10 text-success border border-success/20',
-  deduct: 'bg-gray-800/60 text-gray-300 border border-gray-700/50',
+  deduct: 'bg-secondary text-secondary-foreground border border-border',
   estimated: 'bg-warning/10 text-warning border border-warning/20',
 }
 
 function Tag({ variant, children }: { variant: TagVariant; children: ReactNode }) {
   return (
     <span
-      className={`inline-block font-mono text-[9px] px-1.5 py-0.5 rounded-[2px] mr-1 mb-0.5 align-middle whitespace-nowrap leading-tight ${TAG_CLASSES[variant]}`}
+      className={`inline-block text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded-[2px] mr-1 mb-0.5 align-middle whitespace-nowrap leading-tight ${TAG_CLASSES[variant]}`}
     >
       {children}
     </span>
@@ -96,7 +98,7 @@ function AmountCell({
           : 'text-foreground'
 
   return (
-    <span className={colorClass}>
+    <span className={`${CURRENCY_TEXT} ${colorClass}`}>
       {fmt(value)}
       {sub}
     </span>
@@ -130,7 +132,7 @@ function WithYTD({
             {children}
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="font-mono text-xs">
+        <TooltipContent side="top" className="text-xs">
           YTD: {ytd.format()}
         </TooltipContent>
       </Tooltip>
@@ -170,7 +172,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
 
   return (
     <div className="overflow-x-auto">
-      <Table className="text-xs font-mono w-full">
+      <Table className="w-full text-xs">
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
             <Th sub="Period">Pay Date</Th>
@@ -181,7 +183,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             <Th right sub="OASDI / Med / SDI">FICA &amp; SDI</Th>
             <Th right sub="Pre-tax 401k + Benefits">Deductions</Th>
             <Th right>Net Pay</Th>
-            <Th>Est?</Th>
+            <Th right sub="Status">Est</Th>
             {onRowEdited && <Th>Edit</Th>}
           </TableRow>
         </TableHeader>
@@ -233,7 +235,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
             return (
               <TableRow
                 key={rid}
-                className={`border-border transition-colors hover:bg-muted/40 ${isEstimated ? 'bg-yellow-950/20' : ''}`}
+                className={`border-border transition-colors hover:bg-muted/40 ${isEstimated ? 'bg-warning/10' : ''}`}
               >
                 {/* Pay Date / Period */}
                 <TableCell className="py-2 px-3 align-top whitespace-nowrap">
@@ -255,9 +257,9 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                   {isRsu && <Tag variant="rsu">RSU VEST</Tag>}
                   {isBonus && <Tag variant="bonus">ANNUAL BONUS</Tag>}
                   {row.ps_comment ? (
-                    <span className="text-gray-400 italic">{row.ps_comment}</span>
+                    <span className="text-muted-foreground italic">{row.ps_comment}</span>
                   ) : !isRsu && !isBonus ? (
-                    <span className="text-gray-500">—</span>
+                    <span className="text-muted-foreground">—</span>
                   ) : null}
                 </TableCell>
 
@@ -273,7 +275,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 <TableCell className="py-2 px-3 text-right align-top">
                   {fedTotal.value > 0 ? (
                     <WithYTD row={row} field="ps_fed_tax" allData={data}>
-                      <span className="text-destructive">{fedTotal.format()}</span>
+                      <span className={`${CURRENCY_TEXT} text-destructive`}>{fedTotal.format()}</span>
                     </WithYTD>
                   ) : (
                     <span className="text-muted-foreground">—</span>
@@ -289,7 +291,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 {/* CA State Tax */}
                 <TableCell className="py-2 px-3 text-right align-top">
                   {stateTotal.value > 0 ? (
-                    <span className="text-destructive">{stateTotal.format()}</span>
+                    <span className={`${CURRENCY_TEXT} text-destructive`}>{stateTotal.format()}</span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -302,10 +304,10 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 <TableCell className="py-2 px-3 text-right align-top">
                   {ficaTotal.value > 0 ? (
                     <WithYTD row={row} field="ps_oasdi" allData={data}>
-                      <span className="text-destructive">{ficaTotal.format()}</span>
+                      <span className={`${CURRENCY_TEXT} text-destructive`}>{ficaTotal.format()}</span>
                     </WithYTD>
                   ) : (
-                    <span className="text-gray-500">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                   {ficaTotal.value > 0 && (
                     <SubText>
@@ -317,9 +319,9 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 {/* Pre-Tax Deductions */}
                 <TableCell className="py-2 px-3 text-right align-top">
                   {pretaxTotal.value > 0 ? (
-                    <span className="text-gray-300">{deductTags}</span>
+                    <span>{deductTags}</span>
                   ) : (
-                    <span className="text-gray-500">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                   {benefitsTotal.value > 0 && (
                     <SubText>M/D/V/FSA {fmtShort(benefitsTotal.value)}</SubText>
@@ -330,7 +332,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 <TableCell className="py-2 px-3 text-right align-top">
                   {row.earnings_net_pay ? (
                     <WithYTD row={row} field="earnings_net_pay" allData={data}>
-                      <span className="text-primary font-semibold">{fmt(row.earnings_net_pay)}</span>
+                      <span className={`${CURRENCY_TEXT} text-primary font-semibold`}>{fmt(row.earnings_net_pay)}</span>
                     </WithYTD>
                   ) : (
                     <span className="text-muted-foreground">—</span>
@@ -338,12 +340,16 @@ export function PayslipTable({ data, onRowEdited }: Props) {
                 </TableCell>
 
                 {/* Estimated */}
-                <TableCell className="py-2 px-3 align-top">
-                  <Checkbox
-                    checked={isEstimated}
-                    onCheckedChange={() => handleEstimatedToggle(row)}
-                    disabled={isLoading[key]}
-                  />
+                <TableCell className="py-2 px-3 align-top text-right">
+                  <div className="flex justify-end">
+                    <Checkbox
+                      aria-label={`Mark payslip ${row.pay_date ?? key} as estimated`}
+                      checked={isEstimated}
+                      onCheckedChange={() => handleEstimatedToggle(row)}
+                      disabled={isLoading[key] || !row.payslip_id}
+                      className="mt-0.5"
+                    />
+                  </div>
                 </TableCell>
 
                 {/* Actions */}

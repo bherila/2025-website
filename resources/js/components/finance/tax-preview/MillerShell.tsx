@@ -43,7 +43,7 @@ interface MillerShellProps {
  * those land in subsequent commits as forms migrate in.
  */
 export function MillerShell({ registry, homeView }: MillerShellProps): React.ReactElement {
-  const { route, pushColumn, replaceFrom, truncateTo } = useTaxRoute()
+  const { route, pushColumn, replaceFrom, truncateTo, navigate } = useTaxRoute()
   const state = useTaxPreview()
   const { openWorksheet, paletteOpen, setPaletteOpen } = useDockActions()
   const { addRecent } = useTaxPreviewPrefs(state.year)
@@ -111,10 +111,26 @@ export function MillerShell({ registry, homeView }: MillerShellProps): React.Rea
    */
   const dispatchDrill =
     (depth: number) =>
-    (target: { form: typeof route.columns[number]['form']; instance?: string }): void => {
+    (target: { form: typeof route.columns[number]['form']; instance?: string; placement?: 'right' | 'left-of-current' }): void => {
       const targetEntry = registry[target.form]
       if (targetEntry?.presentation === 'modal') {
         openWorksheet(target.form)
+        return
+      }
+      if (target.placement === 'left-of-current') {
+        const targetColumn = target.instance ? { form: target.form, instance: target.instance } : { form: target.form }
+        const currentColumn = route.columns[depth]
+        const precedingColumns = route.columns
+          .slice(0, depth)
+          .filter((column) => column.form !== target.form || column.instance !== target.instance)
+        navigate({
+          columns: [
+            ...precedingColumns,
+            targetColumn,
+            ...(currentColumn ? [currentColumn] : []),
+            ...route.columns.slice(depth + 1),
+          ],
+        })
         return
       }
       if (depth + 1 < route.columns.length) {

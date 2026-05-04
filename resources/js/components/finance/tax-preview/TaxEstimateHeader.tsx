@@ -19,6 +19,8 @@ import { useTaxPreview } from '../TaxPreviewContext'
 
 type Tier = 'slim' | 'expanded'
 
+const CURRENCY_TEXT = 'font-currency tabular-nums'
+
 interface KpiSummary {
   totalIncome: number
   totalTax: number
@@ -154,17 +156,18 @@ function SlimTier({
   onOpenFull: () => void
 }): React.ReactElement {
   return (
-    <div className="flex items-center gap-4 px-4 py-2 font-mono text-xs">
+    <div className="flex items-center gap-4 bg-accent/25 px-4 py-2 text-xs">
       <button
         type="button"
         onClick={onExpand}
         className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="uppercase tracking-wider">Estimate</span>
+        <span className="font-semibold uppercase tracking-wide">Estimate</span>
       </button>
       <span
         className={cn(
+          CURRENCY_TEXT,
           'font-semibold',
           summary.refundOrDue === 0 ? 'text-foreground' : summary.isRefund ? 'text-success' : 'text-destructive',
         )}
@@ -173,11 +176,11 @@ function SlimTier({
       </span>
       <span className="text-muted-foreground">·</span>
       <span className="text-foreground">
-        Effective <span className="text-muted-foreground">{fmtPct(summary.effectiveRate)}</span>
+        Effective <span className={`${CURRENCY_TEXT} text-muted-foreground`}>{fmtPct(summary.effectiveRate)}</span>
       </span>
       <span className="text-muted-foreground">·</span>
       <span className="text-foreground">
-        Withheld <span className="text-muted-foreground">{fmtPct(summary.withholdingRate)}</span>
+        Withheld <span className={`${CURRENCY_TEXT} text-muted-foreground`}>{fmtPct(summary.withholdingRate)}</span>
       </span>
       <button
         type="button"
@@ -186,7 +189,7 @@ function SlimTier({
         aria-label="Open full estimate detail"
       >
         <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="uppercase tracking-wider">Detail</span>
+        <span className="font-semibold uppercase tracking-wide">Detail</span>
       </button>
     </div>
   )
@@ -209,7 +212,7 @@ function ExpandedTier({
         <button
           type="button"
           onClick={onCollapse}
-          className="flex items-center gap-1 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
           Federal Estimate
@@ -261,19 +264,18 @@ function KpiCard({
   sub: string
   tone: 'success' | 'destructive' | 'warning' | 'foreground'
 }): React.ReactElement {
-  const valueClass =
-    tone === 'success'
-      ? 'text-success'
-      : tone === 'destructive'
-        ? 'text-destructive'
-        : tone === 'warning'
-          ? 'text-warning'
-          : 'text-foreground'
+  const toneClass = {
+    success: 'border-success/25 bg-success/10 text-success',
+    destructive: 'border-destructive/25 bg-destructive/10 text-destructive',
+    warning: 'border-warning/30 bg-warning/10 text-warning',
+    foreground: 'border-border bg-card text-foreground',
+  }[tone]
+
   return (
-    <div className="rounded-md border border-border bg-card p-3">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn('mt-1 font-mono text-lg font-semibold', valueClass)}>{value}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>
+    <div className={cn('rounded-md border p-3', toneClass)}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{label}</div>
+      <div className={cn('mt-1 text-lg font-semibold', CURRENCY_TEXT)}>{value}</div>
+      <div className="mt-0.5 text-xs opacity-75">{sub}</div>
     </div>
   )
 }
@@ -341,7 +343,7 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           {hasPayslipData &&
             state.activeTaxStates.map((stateCode) => (
               <div key={stateCode} className="space-y-2">
-                <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
+                <h4 className="finance-section-heading" data-tone="info">
                   {stateCode} State Taxes
                 </h4>
                 <TotalsTable
@@ -418,8 +420,8 @@ function Section({
     <section>
       <h3
         className={cn(
-          'mb-2 border-b border-border pb-1 font-mono text-xs font-semibold uppercase tracking-wider text-primary',
-          sticky && 'sticky top-0 bg-background',
+          'finance-section-heading',
+          sticky && 'sticky top-0 bg-background/95 backdrop-blur',
         )}
       >
         {title}
@@ -445,7 +447,7 @@ function DetailRow({
   return (
     <div className={cn('flex items-baseline justify-between gap-4 border-b border-border/40 py-1.5', bold && 'font-semibold')}>
       <span className="text-foreground">{label}</span>
-      <span className={valueClass}>{value}</span>
+      <span className={`${CURRENCY_TEXT} ${valueClass}`}>{value}</span>
     </div>
   )
 }

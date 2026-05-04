@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 
 /** One closed lot row, shaped to match the `fin_account_lots` closed-status API response. */
 export interface Form8949Lot {
@@ -27,6 +28,9 @@ export interface Form8949Lot {
   is_covered?: boolean | null
   accrued_market_discount?: number | string | null
   wash_sale_disallowed?: number | string | null
+  account_name?: string | null
+  account_last4?: string | null
+  account_link_id?: number | null
 }
 
 export type Form8949Box = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
@@ -71,6 +75,164 @@ function toBool(v: unknown): boolean {
   return v === true || v === 1 || v === '1'
 }
 
+function positiveNonZero(v: unknown): number | null {
+  const n = toNum(v)
+  return Math.abs(n) > 0.005 ? Math.abs(n) : null
+}
+
+export function formatForm8949Date(value: string | null | undefined, fallback = ''): string {
+  const raw = String(value ?? '').trim()
+  if (raw === '') {
+    return fallback
+  }
+  if (/^various$/i.test(raw)) {
+    return 'Various'
+  }
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso?.[1] && iso[2] && iso[3]) {
+    return `${Number(iso[2])}/${Number(iso[3])}/${iso[1].slice(2)}`
+  }
+
+  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})/)
+  if (slash?.[1] && slash[2] && slash[3]) {
+    return `${Number(slash[1])}/${Number(slash[2])}/${slash[3].length === 4 ? slash[3].slice(2) : slash[3]}`
+  }
+
+  return raw.split(/[T ]/)[0] ?? raw
+}
+
+function accountLast4(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null
+  }
+  const digits = String(value).replace(/\D/g, '')
+  return digits.length >= 4 ? digits.slice(-4) : null
+}
+
+function rowDescription(lot: Form8949Lot): string {
+  const symbol = lot.symbol?.trim()
+  const base = symbol || lot.description?.trim() || '1099-B transaction'
+  return lot.account_last4 ? `${base} • ${lot.account_last4}` : base
+}
+
+function entryMatchesLink(entry: Record<string, unknown>, link: TaxDocumentAccountLink): boolean {
+  const entryIdentifier = typeof entry.account_identifier === 'string' ? entry.account_identifier.trim().toLowerCase() : null
+  const linkIdentifier = link.ai_identifier?.trim().toLowerCase() ?? null
+  if (entryIdentifier && linkIdentifier && entryIdentifier === linkIdentifier) {
+    return true
+  }
+
+  const entryName = typeof entry.account_name === 'string' ? entry.account_name.trim().toLowerCase() : null
+  const linkName = link.ai_account_name?.trim().toLowerCase() ?? null
+  return Boolean(entryName && linkName && entryName === linkName)
+}
+
+function form8949Box(value: unknown): Form8949Box | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const normalized = value.trim().toUpperCase()
+  return ['A', 'B', 'C', 'D', 'E', 'F'].includes(normalized) ? normalized as Form8949Box : null
+}
+
+function transactionLot(
+  transaction: Record<string, unknown>,
+  metadata: Pick<Form8949Lot, 'tax_document_id' | 'acct_id' | 'account_name' | 'account_last4' | 'account_link_id'>,
+): Form8949Lot {
+  const quantity = transaction.quantity
+  const costBasis = transaction.cost_basis
+  const proceeds = transaction.proceeds
+  const realizedGainLoss = transaction.realized_gain_loss
+  const accruedMarketDiscount = transaction.accrued_market_discount
+  const washSaleDisallowed = transaction.wash_sale_disallowed
+
+  return {
+    ...metadata,
+    symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
+    description: typeof transaction.description === 'string' ? transaction.description : null,
+    quantity: typeof quantity === 'number' || typeof quantity === 'string' ? quantity : null,
+    purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
+    sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
+    cost_basis: typeof costBasis === 'number' || typeof costBasis === 'string' ? costBasis : null,
+    proceeds: typeof proceeds === 'number' || typeof proceeds === 'string' ? proceeds : null,
+    realized_gain_loss: typeof realizedGainLoss === 'number' || typeof realizedGainLoss === 'string' ? realizedGainLoss : null,
+    is_short_term: toBool(transaction.is_short_term),
+    lot_source: '1099b',
+    form_8949_box: form8949Box(transaction.form_8949_box),
+    is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
+    accrued_market_discount: typeof accruedMarketDiscount === 'number' || typeof accruedMarketDiscount === 'string' ? accruedMarketDiscount : null,
+    wash_sale_disallowed: typeof washSaleDisallowed === 'number' || typeof washSaleDisallowed === 'string' ? washSaleDisallowed : null,
+  }
+}
+
+export function form8949LotsFromTaxDocuments(docs: TaxDocument[], accountId?: number): Form8949Lot[] {
+  return docs.flatMap((doc) => {
+    if (!doc.is_reviewed || (doc.form_type !== '1099_b' && doc.form_type !== '1099_b_c' && doc.form_type !== 'broker_1099')) {
+      return []
+    }
+
+    const docAccountId = doc.account_id ?? undefined
+    if (doc.form_type !== 'broker_1099') {
+      if (accountId !== undefined && docAccountId !== accountId) {
+        return []
+      }
+      const parsed = !Array.isArray(doc.parsed_data) ? doc.parsed_data as Record<string, unknown> | null : null
+      const transactions = Array.isArray(parsed?.transactions) ? parsed.transactions : []
+      const last4 = accountLast4(parsed?.account_number) ?? accountLast4(doc.account?.acct_number)
+      return transactions
+        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
+        .map((tx) => transactionLot(tx, {
+          tax_document_id: doc.id,
+          ...(docAccountId !== undefined ? { acct_id: docAccountId } : {}),
+          account_name: doc.account?.acct_name ?? null,
+          account_last4: last4,
+        }))
+    }
+
+    if (!Array.isArray(doc.parsed_data)) {
+      return []
+    }
+
+    return doc.parsed_data.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+      const record = entry as unknown as Record<string, unknown>
+      if (record.form_type !== '1099_b' && record.form_type !== '1099_b_c') {
+        return []
+      }
+      const parsed = record.parsed_data
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return []
+      }
+
+      const matchingLink = (doc.account_links ?? []).find((link) =>
+        (link.form_type === '1099_b' || link.form_type === '1099_b_c') && entryMatchesLink(record, link),
+      )
+      const linkedAccountId = matchingLink?.account_id ?? undefined
+      if (accountId !== undefined && linkedAccountId !== accountId) {
+        return []
+      }
+      const parsedRecord = parsed as Record<string, unknown>
+      const transactions = Array.isArray(parsedRecord.transactions) ? parsedRecord.transactions : []
+      const last4 = accountLast4(record.account_identifier)
+        ?? accountLast4(parsedRecord.account_number)
+        ?? accountLast4(matchingLink?.ai_identifier)
+        ?? accountLast4(matchingLink?.account?.acct_number)
+      return transactions
+        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
+        .map((tx) => transactionLot(tx, {
+          tax_document_id: doc.id,
+          ...(linkedAccountId !== undefined ? { acct_id: linkedAccountId } : {}),
+          account_name: typeof record.account_name === 'string' ? record.account_name : matchingLink?.account?.acct_name ?? null,
+          account_last4: last4,
+          account_link_id: matchingLink?.id ?? null,
+        }))
+    })
+  })
+}
+
 /**
  * Box A/D = basis reported to IRS, B/E = basis not reported, C/F = not on a 1099-B.
  * `lot_source` is our proxy: '1099b' → A/D, 'broker_statement' / 'broker' → B/E,
@@ -109,15 +271,19 @@ export function computeForm8949(lots: Form8949Lot[]): Form8949Data {
     const box = classifyBox(lot)
     const proceeds = toNum(lot.proceeds)
     const basis = toNum(lot.cost_basis)
-    const gain = toNum(lot.realized_gain_loss)
-    // Adjustment column: proceeds - basis - adjustment = gain → adjustment = proceeds - basis - gain.
-    const adjustment = currency(proceeds).subtract(basis).subtract(gain).value
-    const code = Math.abs(adjustment) > 0.005 ? 'W' : ''
+    const unadjustedGain = currency(proceeds).subtract(basis).value
+    const washSale = positiveNonZero(lot.wash_sale_disallowed)
+    const gain = washSale !== null && Math.abs(toNum(lot.realized_gain_loss) - unadjustedGain) <= 0.005
+      ? currency(unadjustedGain).add(washSale).value
+      : toNum(lot.realized_gain_loss)
+    const inferredAdjustment = currency(gain).subtract(unadjustedGain).value
+    const adjustment = washSale ?? inferredAdjustment
+    const code = washSale !== null || Math.abs(inferredAdjustment) > 0.005 ? 'W' : ''
 
     const row: Form8949Row = {
-      description: lot.description?.trim() || lot.symbol || 'Unknown',
-      dateAcquired: lot.purchase_date ?? 'Various',
-      dateSold: lot.sale_date ?? '',
+      description: rowDescription(lot),
+      dateAcquired: formatForm8949Date(lot.purchase_date, 'Various'),
+      dateSold: formatForm8949Date(lot.sale_date),
       proceeds,
       basis,
       code,
@@ -169,11 +335,13 @@ export function computeForm8949(lots: Form8949Lot[]): Form8949Data {
 
 interface Form8949PreviewProps {
   selectedYear: number
+  reviewed1099Docs?: TaxDocument[]
+  accountId?: number
 }
 
 const ROW_CAP = 50
 
-export default function Form8949Preview({ selectedYear }: Form8949PreviewProps) {
+export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], accountId }: Form8949PreviewProps) {
   const [lots, setLots] = useState<Form8949Lot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
@@ -186,7 +354,8 @@ export default function Form8949Preview({ selectedYear }: Form8949PreviewProps) 
           `/api/finance/all/lots?status=closed&year=${selectedYear}`,
         )) as { lots?: Form8949Lot[] }
         if (cancelled) return
-        setLots(Array.isArray(res.lots) ? res.lots : [])
+        const fetchedLots = Array.isArray(res.lots) ? res.lots : []
+        setLots(accountId === undefined ? fetchedLots : fetchedLots.filter((lot) => lot.acct_id === accountId))
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : 'Failed to load lots')
@@ -196,9 +365,23 @@ export default function Form8949Preview({ selectedYear }: Form8949PreviewProps) 
     return () => {
       cancelled = true
     }
-  }, [selectedYear])
+  }, [selectedYear, accountId])
 
-  const data = useMemo(() => computeForm8949(lots ?? []), [lots])
+  const importedLots = useMemo(
+    () => form8949LotsFromTaxDocuments(reviewed1099Docs, accountId),
+    [reviewed1099Docs, accountId],
+  )
+  const mergedLots = useMemo(() => {
+    const fetchedLots = lots ?? []
+    const importedLotsWithoutDatabaseDuplicate = importedLots.filter((imported) => {
+      if (imported.tax_document_id == null) {
+        return true
+      }
+      return !fetchedLots.some((lot) => lot.tax_document_id === imported.tax_document_id && lot.acct_id === imported.acct_id)
+    })
+    return [...fetchedLots, ...importedLotsWithoutDatabaseDuplicate]
+  }, [lots, importedLots])
+  const data = useMemo(() => computeForm8949(mergedLots), [mergedLots])
 
   if (lots === null) {
     return (
@@ -214,10 +397,10 @@ export default function Form8949Preview({ selectedYear }: Form8949PreviewProps) 
     )
   }
 
-  if (lots.length === 0) {
+  if (mergedLots.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        No closed lots for {selectedYear}. Form 8949 reports per-transaction detail for
+        No closed lots or imported 1099-B transactions for {selectedYear}. Form 8949 reports per-transaction detail for
         securities sold during the year. Import a 1099-B or use the Lot Analyzer in the
         account view to populate this form.
       </div>
@@ -230,6 +413,7 @@ export default function Form8949Preview({ selectedYear }: Form8949PreviewProps) 
         <h2 className="text-base font-semibold mb-0.5">Form 8949 — Sales &amp; Other Dispositions of Capital Assets</h2>
         <p className="text-xs text-muted-foreground">
           Per-transaction detail backing Schedule D Part I (short-term) and Part II (long-term).
+          {accountId !== undefined ? ' Filtered to the selected account.' : ''}
         </p>
       </div>
 
@@ -292,7 +476,7 @@ function SectionRows({ section, showAll }: { section: Form8949Section; showAll: 
       <div className="bg-muted/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {section.label} · {section.rows.length} transaction{section.rows.length === 1 ? '' : 's'}
       </div>
-      <div className="grid grid-cols-[2fr_repeat(5,minmax(0,1fr))_auto] items-center gap-2 bg-muted/10 px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[1.45fr_3.5rem_3.5rem_repeat(3,minmax(4.5rem,1fr))_2rem] items-center gap-2 bg-muted/10 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
         <span>Description</span>
         <span className="text-right">Acquired</span>
         <span className="text-right">Sold</span>
@@ -304,7 +488,7 @@ function SectionRows({ section, showAll }: { section: Form8949Section; showAll: 
       {visible.map((row, i) => (
         <div
           key={i}
-          className="grid grid-cols-[2fr_repeat(5,minmax(0,1fr))_auto] items-center gap-2 px-3 py-1 text-[11px] tabular-nums"
+          className="grid grid-cols-[1.45fr_3.5rem_3.5rem_repeat(3,minmax(4.5rem,1fr))_2rem] items-center gap-2 px-3 py-1 text-[11px] tabular-nums"
         >
           <span className="truncate">{row.description}</span>
           <span className="text-right font-mono">{row.dateAcquired}</span>
@@ -320,7 +504,7 @@ function SectionRows({ section, showAll }: { section: Form8949Section; showAll: 
           {hiddenCount} more transaction{hiddenCount === 1 ? '' : 's'} hidden · click "Show all transactions" below
         </div>
       )}
-      <div className="grid grid-cols-[2fr_repeat(5,minmax(0,1fr))_auto] items-center gap-2 bg-muted/20 px-3 py-1 text-[11px] font-semibold tabular-nums">
+      <div className="grid grid-cols-[1.45fr_3.5rem_3.5rem_repeat(3,minmax(4.5rem,1fr))_2rem] items-center gap-2 bg-muted/20 px-3 py-1 text-[11px] font-semibold tabular-nums">
         <span>Totals ({section.box})</span>
         <span></span>
         <span></span>

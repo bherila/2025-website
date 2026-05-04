@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { EstimatedTaxPaymentsData } from '@/types/finance/tax-return'
 
+const CURRENCY_TEXT = 'font-currency tabular-nums'
+
 interface EstimatedTaxPaymentsSectionProps {
   planningYear: number
   priorYearTax: number
@@ -57,7 +59,7 @@ export default function EstimatedTaxPaymentsSection({
 
   return (
     <div className="space-y-4">
-      <h2 className="mt-4 text-lg font-semibold">
+      <h2 className="finance-heading-2 mt-4">
         Estimated Tax Payments — {planningYear} Planning
       </h2>
       {showMfsUnsupportedNotice ? (
@@ -84,7 +86,7 @@ export default function EstimatedTaxPaymentsSection({
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
             <Input
               id="prior-year-agi-input"
-              className="pl-6 font-mono"
+              className={`pl-6 ${CURRENCY_TEXT}`}
               value={priorYearAgi === 0 ? '' : String(priorYearAgi)}
               placeholder="0"
               onChange={handleAgiInputChange}
@@ -103,7 +105,7 @@ export default function EstimatedTaxPaymentsSection({
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
             <Input
               id="prior-year-tax-input"
-              className="pl-6 font-mono"
+              className={`pl-6 ${CURRENCY_TEXT}`}
               value={priorYearTax === 0 ? '' : String(priorYearTax)}
               placeholder="0"
               onChange={handleTaxInputChange}
@@ -144,11 +146,11 @@ export default function EstimatedTaxPaymentsSection({
           </FormBlock>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">{planningYear} Payment Schedule</h3>
-            <div className="overflow-hidden rounded-md border">
+            <h3 className="finance-section-heading" data-tone="info">{planningYear} Payment Schedule</h3>
+            <div className="overflow-hidden rounded-md border border-primary/25">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-accent/40">
                     <TableHead className="w-20">Quarter</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
@@ -157,9 +159,9 @@ export default function EstimatedTaxPaymentsSection({
                 <TableBody>
                   {quarterlyPayments.map((payment) => (
                     <TableRow key={payment.paymentNumber}>
-                      <TableCell className="font-mono text-sm">Q{payment.paymentNumber}</TableCell>
+                      <TableCell className="text-sm font-semibold text-info">Q{payment.paymentNumber}</TableCell>
                       <TableCell className="text-sm">{payment.dueDate}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className={`text-right text-sm ${CURRENCY_TEXT}`}>
                         {priorYearTax > 0
                           ? currency(payment.amount).format()
                           : <span className="text-muted-foreground">—</span>}
@@ -167,9 +169,9 @@ export default function EstimatedTaxPaymentsSection({
                     </TableRow>
                   ))}
                   {priorYearTax > 0 && (
-                    <TableRow className="bg-muted/30 font-semibold">
+                    <TableRow className="bg-primary/10 font-semibold">
                       <TableCell colSpan={2} className="text-sm">Total estimated payments</TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className={`text-right text-sm text-primary ${CURRENCY_TEXT}`}>
                         {currency(netDue).format()}
                       </TableCell>
                     </TableRow>
