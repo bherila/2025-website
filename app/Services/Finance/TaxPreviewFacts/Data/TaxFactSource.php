@@ -21,10 +21,13 @@ readonly class TaxFactSource
         public ?string $routing = null,
         public ?string $routingReason = null,
         public ?string $notes = null,
+        public bool $isReviewed = true,
+        public string $reviewStatus = 'reviewed',
+        public ?string $reviewAction = null,
     ) {}
 
     /**
-     * @return array{id:string,label:string,amount:float,sourceType:string,taxDocumentId:?int,taxDocumentAccountId:?int,accountId:?int,formType:?string,box:?string,code:?string,routing:?string,routingReason:?string,notes:?string}
+     * @return array{id:string,label:string,amount:float,sourceType:string,taxDocumentId:?int,taxDocumentAccountId:?int,accountId:?int,formType:?string,box:?string,code:?string,routing:?string,routingReason:?string,notes:?string,isReviewed:bool,reviewStatus:string,reviewAction:?string}
      */
     public function toArray(): array
     {
@@ -42,6 +45,9 @@ readonly class TaxFactSource
             'routing' => $this->routing,
             'routingReason' => $this->routingReason,
             'notes' => $this->notes,
+            'isReviewed' => $this->isReviewed,
+            'reviewStatus' => $this->reviewStatus,
+            'reviewAction' => $this->reviewAction,
         ];
     }
 }

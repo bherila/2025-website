@@ -1,10 +1,12 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   Table,
@@ -22,6 +24,7 @@ import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeduc
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines, ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -32,6 +35,8 @@ interface InvIntSource {
   /** Negative means expense (charge). Positive means income. */
   amount: number
 }
+
+type InvestmentInterestDisplaySource = InvIntSource | TaxFactSource
 
 const SALT_CAP = 10_000
 const SALT_CATEGORIES_LIST: readonly string[] = Array.from(SALT_CATEGORIES)
@@ -188,6 +193,8 @@ interface ScheduleAPreviewProps {
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
   form4952?: Form4952Lines | undefined
+  taxFacts?: Form4952Facts | null
+  onOpenDoc?: (docId: number) => void
 }
 
 /** Modal showing all sources that contribute to investment interest expense. */
@@ -196,12 +203,21 @@ function InvIntSourcesModal({
   onClose,
   sources,
   total,
+  onOpenDoc,
 }: {
   isOpen: boolean
   onClose: () => void
-  sources: InvIntSource[]
+  sources: InvestmentInterestDisplaySource[]
   total: number
+  onOpenDoc?: (docId: number) => void
 }) {
+  const sourceNeedsReview = (source: InvestmentInterestDisplaySource) => 'isReviewed' in source && !source.isReviewed
+  const sourceTaxDocumentId = (source: InvestmentInterestDisplaySource) => 'taxDocumentId' in source ? source.taxDocumentId : null
+  const sourceReviewAction = (source: InvestmentInterestDisplaySource) => 'reviewAction' in source ? source.reviewAction : null
+  const sourceNotes = (source: InvestmentInterestDisplaySource) => 'notes' in source ? source.notes : null
+  const sourceFormType = (source: InvestmentInterestDisplaySource) => 'formType' in source ? source.formType : null
+  const hasUnreviewedSources = sources.some(sourceNeedsReview)
+
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl">
@@ -223,15 +239,39 @@ function InvIntSourcesModal({
             <TableBody>
               {sources.map((src, i) => (
                 <TableRow key={i}>
-                  <TableCell className="text-sm">{src.label}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
+                  <TableCell className="space-y-1 text-sm">
+                    <div>{src.label}</div>
+                    {sourceNeedsReview(src) && (
+                      <div className="text-xs font-medium text-warning">Estimated — review required</div>
+                    )}
+                    {sourceNotes(src) && <div className="text-xs text-muted-foreground">{sourceNotes(src)}</div>}
+                    {sourceNeedsReview(src) && sourceReviewAction(src) && (
+                      <div className="text-xs text-warning">{sourceReviewAction(src)}</div>
+                    )}
+                    {sourceTaxDocumentId(src) !== null && onOpenDoc && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-1 h-7 gap-1.5 px-2 text-xs"
+                        onClick={() => {
+                          onOpenDoc(sourceTaxDocumentId(src)!)
+                          onClose()
+                        }}
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                        Go to {sourceFormType(src)?.replaceAll('_', '-').toUpperCase() ?? 'source'}
+                      </Button>
+                    )}
+                  </TableCell>
+                  <TableCell className={`text-right font-mono text-sm ${sourceNeedsReview(src) ? 'text-warning' : 'text-red-600 dark:text-red-400'}`}>
                     {currency(Math.abs(src.amount)).format()}
                   </TableCell>
                 </TableRow>
               ))}
               <TableRow className="font-semibold bg-muted/50">
                 <TableCell>Total</TableCell>
-                <TableCell className="text-right font-mono text-red-600 dark:text-red-400">
+                <TableCell className={`text-right font-mono ${hasUnreviewedSources ? 'text-warning' : 'text-red-600 dark:text-red-400'}`}>
                   {currency(total).format()}
                 </TableCell>
               </TableRow>
@@ -256,6 +296,8 @@ export default function ScheduleAPreview({
   isMarried = false,
   userDeductions = [],
   form4952,
+  taxFacts,
+  onOpenDoc,
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
@@ -278,6 +320,10 @@ export default function ScheduleAPreview({
   const charitableNoncash = buckets.charitable_noncash ?? 0
   const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
   const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
+  const invIntFactSources = taxFacts?.investmentInterestSources ?? []
+  const invIntModalSources: InvestmentInterestDisplaySource[] = invIntFactSources.length > 0 ? invIntFactSources : invIntSources
+  const invIntNeedsReview = invIntFactSources.some((source) => !source.isReviewed)
+  const invIntModalTotal = taxFacts?.deductibleInvestmentInterestExpense ?? totalInvIntExpense
 
   return (
     <div className="space-y-4">
@@ -332,7 +378,8 @@ export default function ScheduleAPreview({
             label="Investment interest expense (from Form 4952)"
             value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
             {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
-            {...(invIntSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
+            isReviewed={invIntNeedsReview ? false : undefined}
+            {...(invIntModalSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
           <FormTotalLine boxRef="10" label="Total interest" value={totalInterest} />
         </FormBlock>
@@ -421,8 +468,9 @@ export default function ScheduleAPreview({
       <InvIntSourcesModal
         isOpen={showInvIntModal}
         onClose={() => setShowInvIntModal(false)}
-        sources={invIntSources}
-        total={totalInvIntExpense}
+        sources={invIntModalSources}
+        total={invIntModalTotal}
+        {...(onOpenDoc ? { onOpenDoc } : {})}
       />
     </div>
   )

@@ -131,7 +131,7 @@ The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance
 
 ### Backend Tax Facts
 
-`TaxPreviewFactsService` computes source-line facts from reviewed tax documents and returns them in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
+`TaxPreviewFactsService` computes source-line facts from parsed tax documents and returns them in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
 
 ```bash
 php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
@@ -142,8 +142,18 @@ The current pilot covers the highest-value debug paths:
 | Slice | Lines | Source behavior |
 |-------|-------|-----------------|
 | `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
-| `schedule1` | Schedule 1 line 8z / line 9 / line 10 | Reviewed 1099-MISC sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
-| `form4952` | Form 4952 line 1 / line 5 / line 8 | Investment-interest sources are separated from investment-expense sources so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `schedule1` | Schedule 1 line 8z / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
+| `form4952` | Form 4952 line 1 / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+
+Each `TaxFactSource` carries review metadata:
+
+| Field | Meaning |
+|-------|---------|
+| `isReviewed` | `false` when the amount is calculated from an unreviewed document or account-link entry |
+| `reviewStatus` | `reviewed` or `needs_review`; UI should treat `needs_review` as an estimated/yellow value |
+| `reviewAction` | Human-readable pointer to the document/link that should be reviewed |
+
+Totals intentionally include `needs_review` sources so the preview can estimate the return while showing exactly which source lines still need review in supporting-details modals.
 
 Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
 
@@ -151,7 +161,7 @@ Frontend consumers import the generated DTO contracts from `resources/js/types/g
 php artisan typescript:transform
 ```
 
-Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset.
+Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset. When a source moves from `needs_review` to `reviewed`, replacing `taxFacts` is enough for supporting details and future line coloring to update without a full dataset refresh.
 
 The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. This pilot does not switch workbook or preview totals to backend facts yet.
 
@@ -618,6 +628,8 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 - K-1 **Box 20 Code B** (investment expenses) — collected into `invExpSources` and summed as `totalInvExp`. This is Form 4952 **Line 5** and reduces NII. It is **not** Part I interest expense.
 - `niiBefore = max(0, niiGross − totalInvExp)` — Form 4952 Line 6 (NII, floored at zero).
 
+**Backend facts pilot:** `TaxPreviewFactsService` follows the filed-return treatment for current debug output: K-1 Box 20B amounts are exposed under `excludedInvestmentExpenseSources` / `totalExcludedInvestmentExpenses`, while `investmentExpenseSources` / `totalInvestmentExpenses` represent amounts included on Form 4952 line 5. For the 2025 return this means line 5 is `0`, with Box 20B still available as excluded supporting detail.
+
 **Part III — Deduction and carryforward:**
 - Scenario A (no QD election): deductible = `min(Line 3, Line 6)`.
 - Scenarios B / C evaluate the 4g qualified-dividend election when Line 3 > Line 6, picking the best net benefit at 37% vs. the 13.2% QD rate delta.
@@ -628,7 +640,7 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 - Section 1256 net gain (Box 11 Code C) is added to reconstructed NII even without a formal Line 4g election. Aggressive treatment — a user wanting full §163(d) conformance should override by reporting Box 20 Code A instead.
 - Post-TCJA §212 misc-itemized suspension applies 2018–2025 — Box 20B investment expenses still reduce NII on Form 4952 Line 5 but are not deductible on Schedule A line 16.
 
-**XLSX:** Form 4952 sheet renders Part I sources, Line 3 total, Part II 20B sources, Line 5 total, Line 6 NII, Line 7 carryforward, Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
+**XLSX:** Form 4952 sheet currently renders from the client calculation output. Future workbook work should reuse `taxFacts.form4952` source lines for Part I sources, excluded 20B debug detail, Line 5 total, Line 6 NII, Line 7 carryforward, and Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
 
 ---
 

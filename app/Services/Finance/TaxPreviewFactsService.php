@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
@@ -10,6 +11,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
+use Carbon\CarbonImmutable;
 
 class TaxPreviewFactsService
 {
@@ -26,6 +28,10 @@ class TaxPreviewFactsService
         'box2_royalties',
         'box3_other_income',
         'box8_substitute_payments',
+        'misc_1_rents',
+        'misc_2_royalties',
+        'misc_3_other_income',
+        'misc_8_substitute_payments',
     ];
 
     /**
@@ -49,33 +55,29 @@ class TaxPreviewFactsService
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return $this->factsFromDocuments($year, $documents);
+        return $this->factsFromDocuments($year, $documents, $this->shortDividendItemizedDeduction($userId, $year));
     }
 
     /**
      * @param  iterable<FileForTaxDocument>  $documents
      */
-    public function factsFromDocuments(int $year, iterable $documents): TaxPreviewFacts
+    public function factsFromDocuments(int $year, iterable $documents, float $shortDividendDeduction = 0.0): TaxPreviewFacts
     {
-        $reviewedK1Docs = [];
-        $reviewed1099Docs = [];
+        $k1Docs = [];
+        $docs1099 = [];
 
         foreach ($documents as $document) {
-            if (! $document->is_reviewed) {
-                continue;
-            }
-
             if ($this->formType($document) === 'k1') {
-                $reviewedK1Docs[] = $document;
+                $k1Docs[] = $document;
             } else {
-                $reviewed1099Docs[] = $document;
+                $docs1099[] = $document;
             }
         }
 
         return new TaxPreviewFacts(
             year: $year,
-            schedule1: $this->schedule1Facts($reviewedK1Docs, $reviewed1099Docs),
-            form4952: $this->form4952Facts($reviewedK1Docs, $reviewed1099Docs),
+            schedule1: $this->schedule1Facts($k1Docs, $docs1099),
+            form4952: $this->form4952Facts($k1Docs, $docs1099, $shortDividendDeduction),
         );
     }
 
@@ -145,6 +147,9 @@ class TaxPreviewFactsService
                 routing: 'schedule_1_line_5',
                 routingReason: 'K-1 ordinary, rental, and Schedule E partnership-statement sources flow through Schedule E to Schedule 1 line 5.',
                 notes: "Box 1 {$box1}; Box 2 {$box2}; Box 3 {$box3}; Box 4 {$box4}; Box 11ZZ {$box11ZZ}; Box 13ZZ -{$box13ZZ}",
+                isReviewed: $this->sourceIsReviewed($doc),
+                reviewStatus: $this->reviewStatus($doc),
+                reviewAction: $this->reviewAction($doc),
             );
         }
 
@@ -220,10 +225,23 @@ class TaxPreviewFactsService
      * @param  FileForTaxDocument[]  $reviewedK1Docs
      * @param  FileForTaxDocument[]  $reviewed1099Docs
      */
-    private function form4952Facts(array $reviewedK1Docs, array $reviewed1099Docs): Form4952Facts
+    private function form4952Facts(array $reviewedK1Docs, array $reviewed1099Docs, float $shortDividendDeduction): Form4952Facts
     {
         $investmentInterestSources = [];
         $investmentExpenseSources = [];
+        $excludedInvestmentExpenseSources = [];
+
+        if ($shortDividendDeduction > 0.0) {
+            $investmentInterestSources[] = new TaxFactSource(
+                id: 'short-dividends-form4952-line1',
+                label: 'Short dividends — positions held > 45 days (IRS Pub. 550)',
+                amount: $this->roundMoney(-abs($shortDividendDeduction)),
+                sourceType: 'short_dividend_investment_interest',
+                routing: 'form_4952_line_1',
+                routingReason: 'Short-dividend substitute payments on short positions held more than 45 days are treated as investment interest expense.',
+                isReviewed: true,
+            );
+        }
 
         foreach ($reviewedK1Docs as $doc) {
             $data = $this->k1Data($doc);
@@ -232,6 +250,7 @@ class TaxPreviewFactsService
             }
 
             $partnerName = $this->k1PartnerName($doc, $data);
+            $docInvestmentInterestTotal = 0.0;
             foreach (['H', 'G', 'AC', 'AD'] as $code) {
                 foreach ($this->k1CodeItems($data, '13', $code) as $index => $item) {
                     $rawAmount = $this->parseMoney($item['value'] ?? null);
@@ -239,6 +258,7 @@ class TaxPreviewFactsService
                         continue;
                     }
 
+                    $docInvestmentInterestTotal += abs($rawAmount);
                     $investmentInterestSources[] = new TaxFactSource(
                         id: "k1-{$doc->id}-13{$code}-{$index}",
                         label: "{$partnerName} — Box 13{$code}",
@@ -251,8 +271,30 @@ class TaxPreviewFactsService
                         routing: 'form_4952_line_1',
                         routingReason: 'K-1 Box 13 investment-interest codes feed Form 4952 Part I.',
                         notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
+                        isReviewed: $this->sourceIsReviewed($doc),
+                        reviewStatus: $this->reviewStatus($doc),
+                        reviewAction: $this->reviewAction($doc),
                     );
                 }
+            }
+
+            $diagnosticTotal = $this->k1DiagnosticInvestmentInterestTotal($data);
+            if ($diagnosticTotal !== null && $diagnosticTotal > $docInvestmentInterestTotal) {
+                $reconciliationAmount = $this->roundMoney($diagnosticTotal - $docInvestmentInterestTotal);
+                $investmentInterestSources[] = new TaxFactSource(
+                    id: "k1-{$doc->id}-investment-interest-reconciliation",
+                    label: "{$partnerName} — K-1 investment interest reconciliation",
+                    amount: $this->roundMoney(-abs($reconciliationAmount)),
+                    sourceType: 'k1_investment_interest_reconciliation',
+                    taxDocumentId: $doc->id,
+                    formType: $this->formType($doc),
+                    routing: 'form_4952_line_1',
+                    routingReason: 'K-1 extraction diagnostics identify a Form 4952 total investment-interest amount larger than the itemized Box 13H/G/AC/AD rows.',
+                    notes: "Diagnostic total {$diagnosticTotal}; itemized Box 13 investment-interest rows {$docInvestmentInterestTotal}.",
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
+                );
             }
 
             foreach ($this->k1CodeItems($data, '20', 'B') as $index => $item) {
@@ -261,18 +303,21 @@ class TaxPreviewFactsService
                     continue;
                 }
 
-                $investmentExpenseSources[] = new TaxFactSource(
+                $excludedInvestmentExpenseSources[] = new TaxFactSource(
                     id: "k1-{$doc->id}-20B-{$index}",
                     label: "{$partnerName} — Box 20B (investment expenses)",
                     amount: $this->roundMoney(-abs($rawAmount)),
-                    sourceType: 'k1_investment_expense',
+                    sourceType: 'k1_excluded_investment_expense',
                     taxDocumentId: $doc->id,
                     formType: $this->formType($doc),
                     box: '20',
                     code: 'B',
-                    routing: 'form_4952_line_5',
-                    routingReason: 'K-1 Box 20B reduces Form 4952 net investment income; it is not Schedule A line 9 investment interest.',
+                    routing: 'excluded_form_4952_line_5',
+                    routingReason: 'K-1 Box 20B investment expenses are tracked for debugging but are excluded from the current Form 4952 line 5 return treatment.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
+                    isReviewed: $this->sourceIsReviewed($doc),
+                    reviewStatus: $this->reviewStatus($doc),
+                    reviewAction: $this->reviewAction($doc),
                 );
             }
         }
@@ -299,12 +344,16 @@ class TaxPreviewFactsService
                     box: '5',
                     routing: 'form_4952_line_1',
                     routingReason: 'The current client preview treats 1099-INT Box 5 as an investment-interest source for Form 4952.',
+                    isReviewed: $this->sourceIsReviewed($doc, $entry['link']),
+                    reviewStatus: $this->reviewStatus($doc, $entry['link']),
+                    reviewAction: $this->reviewAction($doc, $entry['link']),
                 );
             }
         }
 
         $totalInvestmentInterestExpense = abs($this->sumSources($investmentInterestSources));
         $totalInvestmentExpenses = abs($this->sumSources($investmentExpenseSources));
+        $totalExcludedInvestmentExpenses = abs($this->sumSources($excludedInvestmentExpenseSources));
         $niiBefore = max(0.0, $this->roundMoney($this->netInvestmentIncomeGross($reviewedK1Docs, $reviewed1099Docs) - $totalInvestmentExpenses));
         $totalQualifiedDividends = $this->roundMoney($this->k1QualifiedDividends($reviewedK1Docs) + $this->direct1099QualifiedDividends($reviewed1099Docs));
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
@@ -315,6 +364,8 @@ class TaxPreviewFactsService
             totalInvestmentInterestExpense: $totalInvestmentInterestExpense,
             investmentExpenseSources: $investmentExpenseSources,
             totalInvestmentExpenses: $totalInvestmentExpenses,
+            excludedInvestmentExpenseSources: $excludedInvestmentExpenseSources,
+            totalExcludedInvestmentExpenses: $totalExcludedInvestmentExpenses,
             netInvestmentIncomeBeforeQualifiedDividendElection: $niiBefore,
             totalQualifiedDividends: $totalQualifiedDividends,
             deductibleInvestmentInterestExpense: $deductible,
@@ -336,8 +387,33 @@ class TaxPreviewFactsService
                     continue;
                 }
 
-                $effectiveReviewed = $link->is_reviewed || ($this->formType($doc) === 'broker_1099' && $doc->is_reviewed && is_array($doc->parsed_data) && ! array_is_list($doc->parsed_data));
-                if (! $effectiveReviewed) {
+                $parsedData = $this->parsedDataForLink($doc, $link);
+                if ($parsedData !== null) {
+                    $entries[] = ['parsedData' => $parsedData, 'link' => $link];
+                }
+            }
+
+            return $entries;
+        }
+
+        if (in_array($this->formType($doc), ['1099_int', '1099_int_c'], true) && is_array($doc->parsed_data)) {
+            $entries[] = ['parsedData' => $doc->parsed_data, 'link' => null];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
+     */
+    private function reviewed1099DivEntries(FileForTaxDocument $doc): array
+    {
+        $entries = [];
+        $links = $doc->accountLinks;
+
+        if ($links->isNotEmpty()) {
+            foreach ($links as $link) {
+                if (! $link instanceof TaxDocumentAccount || ! in_array($link->form_type, ['1099_div', '1099_div_c'], true)) {
                     continue;
                 }
 
@@ -350,7 +426,7 @@ class TaxPreviewFactsService
             return $entries;
         }
 
-        if (in_array($this->formType($doc), ['1099_int', '1099_int_c'], true) && is_array($doc->parsed_data)) {
+        if (in_array($this->formType($doc), ['1099_div', '1099_div_c'], true) && is_array($doc->parsed_data)) {
             $entries[] = ['parsedData' => $doc->parsed_data, 'link' => null];
         }
 
@@ -402,10 +478,8 @@ class TaxPreviewFactsService
         $total = 0.0;
 
         foreach ($reviewed1099Docs as $doc) {
-            if (in_array($this->formType($doc), ['1099_int', '1099_int_c'], true) && is_array($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1_interest') ?? 0.0;
-            } elseif ($this->formType($doc) === 'broker_1099' && is_array($doc->parsed_data) && ! array_is_list($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1_interest') ?? 0.0;
+            foreach ($this->reviewed1099IntEntries($doc) as $entry) {
+                $total += $this->firstNumericValue($entry['parsedData'], ['box1_interest', 'int_1_interest_income']) ?? 0.0;
             }
         }
 
@@ -420,10 +494,12 @@ class TaxPreviewFactsService
         $total = 0.0;
 
         foreach ($reviewed1099Docs as $doc) {
-            if (in_array($this->formType($doc), ['1099_div', '1099_div_c'], true) && is_array($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1a_ordinary') ?? 0.0;
-            } elseif ($this->formType($doc) === 'broker_1099' && is_array($doc->parsed_data) && ! array_is_list($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1a_ordinary') ?? 0.0;
+            foreach ($this->reviewed1099DivEntries($doc) as $entry) {
+                $total += $this->firstNumericOrNestedValue(
+                    $entry['parsedData'],
+                    ['box1a_ordinary', 'div_1a_total_ordinary'],
+                    ['1a_total_ordinary_dividends'],
+                ) ?? 0.0;
             }
         }
 
@@ -438,10 +514,12 @@ class TaxPreviewFactsService
         $total = 0.0;
 
         foreach ($reviewed1099Docs as $doc) {
-            if (in_array($this->formType($doc), ['1099_div', '1099_div_c'], true) && is_array($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1b_qualified') ?? 0.0;
-            } elseif ($this->formType($doc) === 'broker_1099' && is_array($doc->parsed_data) && ! array_is_list($doc->parsed_data)) {
-                $total += $this->numericValue($doc->parsed_data, 'box1b_qualified') ?? 0.0;
+            foreach ($this->reviewed1099DivEntries($doc) as $entry) {
+                $total += $this->firstNumericOrNestedValue(
+                    $entry['parsedData'],
+                    ['box1b_qualified', 'div_1b_qualified'],
+                    ['1b_qualified_dividends'],
+                ) ?? 0.0;
             }
         }
 
@@ -491,6 +569,9 @@ class TaxPreviewFactsService
                 ? 'Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E.'
                 : '1099-MISC routing explicitly targets the Schedule 1 line 8 family.',
             notes: $this->miscBreakdownNote($parsedData),
+            isReviewed: $this->sourceIsReviewed($doc, $link),
+            reviewStatus: $this->reviewStatus($doc, $link),
+            reviewAction: $this->reviewAction($doc, $link),
         );
     }
 
@@ -499,16 +580,7 @@ class TaxPreviewFactsService
      */
     private function miscAmount(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $parsedData): ?float
     {
-        if ($link instanceof TaxDocumentAccount) {
-            $effectiveReviewed = $link->is_reviewed || ($this->formType($doc) === 'broker_1099' && $doc->is_reviewed && is_array($doc->parsed_data) && ! array_is_list($doc->parsed_data));
-            if (! $effectiveReviewed) {
-                return null;
-            }
-        } elseif (! $doc->is_reviewed) {
-            return null;
-        }
-
-        return $this->sumNumericValues($parsedData, self::MISC_PRIMARY_BOX_KEYS);
+        return $this->sumMiscValues($parsedData);
     }
 
     /**
@@ -521,6 +593,17 @@ class TaxPreviewFactsService
             $value = $this->numericValue($parsedData, $key);
             if ($value !== null && $value !== 0.0) {
                 $parts[] = "{$key} {$value}";
+            }
+        }
+        foreach ([
+            '1_rents',
+            '2_royalties',
+            '3_other_income',
+            '8_substitute_payments_in_lieu_of_dividends_or_interest',
+        ] as $key) {
+            $value = $this->nestedBoxValue($parsedData, $key);
+            if ($value !== null && $value !== 0.0) {
+                $parts[] = "boxes.{$key} {$value}";
             }
         }
 
@@ -664,6 +747,29 @@ class TaxPreviewFactsService
     /**
      * @param  array<string, mixed>  $data
      */
+    private function k1DiagnosticInvestmentInterestTotal(array $data): ?float
+    {
+        $diagnostics = $data['diagnostics'] ?? $data['warnings'] ?? null;
+        if (! is_array($diagnostics)) {
+            return null;
+        }
+
+        foreach ($diagnostics as $diagnostic) {
+            if (! is_string($diagnostic) || ! str_contains(strtolower($diagnostic), 'total investment interest')) {
+                continue;
+            }
+
+            if (preg_match('/total investment interest\\s*\\(\\$?([0-9,]+(?:\\.\\d{1,2})?)\\)/i', $diagnostic, $matches) === 1) {
+                return $this->parseMoney($matches[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function sumK1CodeItems(array $data, string $box, string $code): float
     {
         return $this->roundMoney(array_reduce(
@@ -697,6 +803,44 @@ class TaxPreviewFactsService
      * @param  array<string, mixed>  $data
      * @param  string[]  $keys
      */
+    private function firstNumericValue(array $data, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $value = $this->numericValue($data, $key);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  string[]  $keys
+     * @param  string[]  $nestedBoxKeys
+     */
+    private function firstNumericOrNestedValue(array $data, array $keys, array $nestedBoxKeys): ?float
+    {
+        $value = $this->firstNumericValue($data, $keys);
+        if ($value !== null) {
+            return $value;
+        }
+
+        foreach ($nestedBoxKeys as $key) {
+            $nestedValue = $this->nestedBoxValue($data, $key);
+            if ($nestedValue !== null) {
+                return $nestedValue;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  string[]  $keys
+     */
     private function sumNumericValues(array $data, array $keys): ?float
     {
         $total = 0.0;
@@ -704,6 +848,36 @@ class TaxPreviewFactsService
 
         foreach ($keys as $key) {
             $value = $this->numericValue($data, $key);
+            if ($value === null) {
+                continue;
+            }
+
+            $total += $value;
+            $hasValue = true;
+        }
+
+        if (! $hasValue || $total === 0.0) {
+            return null;
+        }
+
+        return $this->roundMoney($total);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function sumMiscValues(array $data): ?float
+    {
+        $total = $this->sumNumericValues($data, self::MISC_PRIMARY_BOX_KEYS) ?? 0.0;
+        $hasValue = $total !== 0.0;
+
+        foreach ([
+            '1_rents',
+            '2_royalties',
+            '3_other_income',
+            '8_substitute_payments_in_lieu_of_dividends_or_interest',
+        ] as $key) {
+            $value = $this->nestedBoxValue($data, $key);
             if ($value === null) {
                 continue;
             }
@@ -757,6 +931,29 @@ class TaxPreviewFactsService
         return (string) $doc->getAttribute('form_type');
     }
 
+    private function sourceIsReviewed(FileForTaxDocument $doc, ?TaxDocumentAccount $link = null): bool
+    {
+        return $link instanceof TaxDocumentAccount ? (bool) $link->is_reviewed : (bool) $doc->is_reviewed;
+    }
+
+    private function reviewStatus(FileForTaxDocument $doc, ?TaxDocumentAccount $link = null): string
+    {
+        return $this->sourceIsReviewed($doc, $link) ? 'reviewed' : 'needs_review';
+    }
+
+    private function reviewAction(FileForTaxDocument $doc, ?TaxDocumentAccount $link = null): ?string
+    {
+        if ($this->sourceIsReviewed($doc, $link)) {
+            return null;
+        }
+
+        if ($link instanceof TaxDocumentAccount) {
+            return "Review {$link->form_type} account link {$link->id} on tax document {$doc->id}.";
+        }
+
+        return "Review tax document {$doc->id}.";
+    }
+
     private function parseMoney(mixed $value): ?float
     {
         if ($value === null || $value === '') {
@@ -790,5 +987,102 @@ class TaxPreviewFactsService
     private function roundMoney(float $value): float
     {
         return round($value, 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function nestedBoxValue(array $data, string $key): ?float
+    {
+        $boxes = $data['boxes'] ?? null;
+        if (! is_array($boxes)) {
+            return null;
+        }
+
+        return $this->parseMoney($boxes[$key] ?? null);
+    }
+
+    private function shortDividendItemizedDeduction(int $userId, int $year): float
+    {
+        $accountIds = FinAccounts::withoutGlobalScopes()
+            ->where('acct_owner', $userId)
+            ->pluck('acct_id')
+            ->map(static fn (mixed $accountId): int => (int) $accountId)
+            ->all();
+
+        if ($accountIds === []) {
+            return 0.0;
+        }
+
+        $transactions = FinAccountLineItems::whereIn('t_account', $accountIds)
+            ->whereBetween('t_date', ["{$year}-01-01", "{$year}-12-31"])
+            ->orderBy('t_account')
+            ->orderBy('t_date')
+            ->get()
+            ->groupBy('t_account');
+
+        $total = 0.0;
+
+        foreach ($transactions as $accountTransactions) {
+            foreach ($accountTransactions as $transaction) {
+                if (! $this->isShortDividend($transaction)) {
+                    continue;
+                }
+
+                $shortOpenDate = $this->shortOpenDate($accountTransactions->all(), $transaction);
+                if ($shortOpenDate === null) {
+                    continue;
+                }
+
+                $dividendDate = CarbonImmutable::parse((string) $transaction->t_date);
+                $daysHeld = $shortOpenDate->diffInDays($dividendDate, false);
+                if ($daysHeld > 45) {
+                    $total += abs((float) $transaction->t_amt);
+                }
+            }
+        }
+
+        return $this->roundMoney($total);
+    }
+
+    private function isShortDividend(FinAccountLineItems $transaction): bool
+    {
+        if ($transaction->t_type !== 'Dividend' || (float) $transaction->t_amt >= 0.0) {
+            return false;
+        }
+
+        $description = strtoupper(trim((string) $transaction->t_description.' '.(string) $transaction->t_comment));
+
+        return str_contains($description, 'SHORT')
+            || str_contains($description, 'CHARGED')
+            || str_contains($description, 'SHORT SALE');
+    }
+
+    /**
+     * @param  FinAccountLineItems[]  $transactions
+     */
+    private function shortOpenDate(array $transactions, FinAccountLineItems $dividend): ?CarbonImmutable
+    {
+        $symbol = (string) $dividend->t_symbol;
+        if ($symbol === '') {
+            return null;
+        }
+
+        $dividendDate = (string) $dividend->t_date;
+        $openDate = null;
+
+        foreach ($transactions as $transaction) {
+            if ((string) $transaction->t_symbol !== $symbol
+                || $transaction->t_type !== 'Sell Short'
+                || (string) $transaction->t_date > $dividendDate) {
+                continue;
+            }
+
+            if ($openDate === null || (string) $transaction->t_date > $openDate) {
+                $openDate = (string) $transaction->t_date;
+            }
+        }
+
+        return $openDate !== null ? CarbonImmutable::parse($openDate) : null;
     }
 }

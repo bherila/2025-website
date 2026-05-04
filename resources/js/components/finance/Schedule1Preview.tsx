@@ -1,11 +1,16 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 
 import { type EmptyLine,EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
-import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Schedule1Lines } from '@/types/finance/tax-return'
+import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface Schedule1PreviewProps {
   selectedYear: number
@@ -14,6 +19,9 @@ interface Schedule1PreviewProps {
   onTabChange?: (tab: TaxTabId) => void
   /** Inline manual-entry control for line 2a alimony (pre-2019 decrees). */
   line2aAlimonyInput?: React.ReactNode
+  /** Backend audit facts, including unreviewed parsed sources. */
+  taxFacts?: Schedule1Facts | null
+  onOpenDoc?: (docId: number) => void
 }
 
 export interface Schedule1Line8Breakdown {
@@ -109,15 +117,107 @@ function classifyPartIValue(value: number | null): 'visible' | 'null' | 'zero' {
   return value === 0 ? 'zero' : 'visible'
 }
 
+function sourcesNeedReview(sources: TaxFactSource[]): boolean {
+  return sources.some((source) => !source.isReviewed)
+}
+
+function sourceTargetLabel(source: TaxFactSource): string {
+  return source.formType?.replaceAll('_', '-').toUpperCase() ?? 'source'
+}
+
+function FactSourcesModal({
+  open,
+  title,
+  sources,
+  total,
+  onClose,
+  onOpenDoc,
+}: {
+  open: boolean
+  title: string
+  sources: TaxFactSource[]
+  total: number
+  onClose: () => void
+  onOpenDoc?: (docId: number) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {sources.map((source) => (
+            <div
+              key={source.id}
+              className={`rounded-md border p-3 ${source.isReviewed ? 'border-border/60' : 'border-warning/50 bg-warning/10'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="text-sm font-medium leading-snug">{source.label}</div>
+                  {!source.isReviewed && (
+                    <div className="text-xs font-medium text-warning">Estimated — review required</div>
+                  )}
+                  {source.notes && <div className="text-xs leading-snug text-muted-foreground">{source.notes}</div>}
+                  {!source.isReviewed && source.reviewAction && (
+                    <div className="text-xs leading-snug text-warning">{source.reviewAction}</div>
+                  )}
+                </div>
+                <div className={`font-currency shrink-0 text-right text-sm tabular-nums ${source.isReviewed ? source.amount < 0 ? 'text-destructive' : 'text-success' : 'text-warning'}`}>
+                  {fmtAmt(source.amount)}
+                </div>
+              </div>
+              {source.taxDocumentId !== null && onOpenDoc && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-7 gap-1.5 px-2 text-xs"
+                  onClick={() => {
+                    onOpenDoc(source.taxDocumentId!)
+                    onClose()
+                  }}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  Go to {sourceTargetLabel(source)}
+                </Button>
+              )}
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold">
+            <span>Total</span>
+            <span className={`font-currency tabular-nums ${sourcesNeedReview(sources) ? 'text-warning' : total < 0 ? 'text-destructive' : 'text-success'}`}>
+              {fmtAmt(total)}
+            </span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function Schedule1Preview({
   selectedYear,
   schedule1,
   onTabChange,
   line2aAlimonyInput,
+  taxFacts,
+  onOpenDoc,
 }: Schedule1PreviewProps) {
+  const [activeSources, setActiveSources] = useState<{
+    title: string
+    sources: TaxFactSource[]
+    total: number
+  } | null>(null)
   const totals = schedule1 ?? computeSchedule1Totals({})
   const partI = totals.partI
   const partII = totals.partII
+  const line5Sources = taxFacts?.line5Sources ?? []
+  const line8zSources = taxFacts?.line8zSources ?? []
+  const line5NeedsReview = sourcesNeedReview(line5Sources)
+  const line8zNeedsReview = sourcesNeedReview(line8zSources)
+  const lineOtherIncomeNeedsReview = line8zNeedsReview
+  const line10NeedsReview = line5NeedsReview || lineOtherIncomeNeedsReview
 
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
   const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
@@ -266,6 +366,16 @@ export default function Schedule1Preview({
               boxRef="5"
               label="Rental real estate, royalties, partnerships, S corporations, trusts"
               value={partI.line5_rentalPartnerships}
+              isReviewed={line5NeedsReview ? false : undefined}
+              {...(line5Sources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 5 Supporting Details',
+                      sources: line5Sources,
+                      total: taxFacts?.line5Total ?? partI.line5_rentalPartnerships ?? 0,
+                    }),
+                  }
+                : {})}
             />
             <FormSubLine text="From Schedule E combined total" />
           </>
@@ -302,17 +412,37 @@ export default function Schedule1Preview({
         )}
         {line8z === 'visible' && (
           <>
-            <FormLine boxRef="8z" label="Other income" value={partI.line8z_otherIncome} />
-            <FormSubLine text="From reviewed 1099-MISC documents routed to Schedule 1 line 8" />
+            <FormLine
+              boxRef="8z"
+              label="Other income"
+              value={partI.line8z_otherIncome}
+              isReviewed={line8zNeedsReview ? false : undefined}
+              {...(line8zSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8z Supporting Details',
+                      sources: line8zSources,
+                      total: taxFacts?.line8zTotal ?? partI.line8z_otherIncome ?? 0,
+                    }),
+                  }
+                : {})}
+            />
+            <FormSubLine text="From 1099-MISC documents routed or defaulted to Schedule 1 line 8z" />
           </>
         )}
         {partI.line9_totalOther !== 0 && (
-          <FormTotalLine boxRef="9" label="Total other income (sum of lines 8a-8z)" value={partI.line9_totalOther} />
+          <FormTotalLine
+            boxRef="9"
+            label="Total other income (sum of lines 8a-8z)"
+            value={partI.line9_totalOther}
+            isReviewed={lineOtherIncomeNeedsReview ? false : undefined}
+          />
         )}
         <FormTotalLine
           boxRef="10"
           label="Total additional income (to Form 1040 line 8)"
           value={partI.line10_total}
+          isReviewed={line10NeedsReview ? false : undefined}
           double
         />
         <EmptyLinesDisclosure
@@ -341,6 +471,16 @@ export default function Schedule1Preview({
           {...(onTabChange ? { onGoToSource: onTabChange } : {})}
         />
       </FormBlock>
+      {activeSources && (
+        <FactSourcesModal
+          open
+          title={activeSources.title}
+          sources={activeSources.sources}
+          total={activeSources.total}
+          onClose={() => setActiveSources(null)}
+          {...(onOpenDoc ? { onOpenDoc } : {})}
+        />
+      )}
     </div>
   )
 }

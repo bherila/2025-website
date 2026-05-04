@@ -1,8 +1,10 @@
 export type Form4952Facts = {
 investmentInterestSources: Array<TaxFactSource>;
 investmentExpenseSources: Array<TaxFactSource>;
+excludedInvestmentExpenseSources: Array<TaxFactSource>;
 totalInvestmentInterestExpense: number;
 totalInvestmentExpenses: number;
+totalExcludedInvestmentExpenses: number;
 netInvestmentIncomeBeforeQualifiedDividendElection: number;
 totalQualifiedDividends: number;
 deductibleInvestmentInterestExpense: number;
@@ -29,6 +31,9 @@ code: string | null;
 routing: string | null;
 routingReason: string | null;
 notes: string | null;
+isReviewed: boolean;
+reviewStatus: string;
+reviewAction: string | null;
 };
 export type TaxPreviewFacts = {
 year: number;

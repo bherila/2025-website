@@ -47,7 +47,7 @@ export function DetailsButton({
   children,
 }: {
   onClick: () => void
-  isReviewed?: boolean
+  isReviewed?: boolean | undefined
   tooltip?: string
   children?: React.ReactNode
 }) {
@@ -113,6 +113,7 @@ export function FormLine({
   onDetails,
   detailsTooltip,
   detailsLabel,
+  isReviewed,
   control,
 }: {
   boxRef?: string
@@ -124,11 +125,12 @@ export function FormLine({
   onDetails?: () => void
   detailsTooltip?: string
   detailsLabel?: string
+  isReviewed?: boolean | undefined
   /** Custom right-side control (e.g. a number input). When provided, replaces the value display. */
   control?: React.ReactNode
 }) {
   const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
-  const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-success'
+  const cls = isReviewed === false ? 'text-warning' : n === null ? '' : n < 0 ? 'text-destructive' : 'text-success'
 
   if (note) {
     return (
@@ -161,7 +163,11 @@ export function FormLine({
       </span>
       {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />}
       {onDetails && (
-        <DetailsButton onClick={onDetails} {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}>
+        <DetailsButton
+          onClick={onDetails}
+          isReviewed={isReviewed}
+          {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}
+        >
           {detailsLabel}
         </DetailsButton>
       )}
@@ -183,15 +189,17 @@ export function FormTotalLine({
   double,
   boxRef,
   onClick,
+  isReviewed,
 }: {
   label: string
   value: number | null
   double?: boolean
   boxRef?: string
   onClick?: () => void
+  isReviewed?: boolean | undefined
 }) {
   const cls =
-    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
+    isReviewed === false ? 'text-warning' : value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
   const content = (
     <>
       {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}

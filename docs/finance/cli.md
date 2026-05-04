@@ -264,6 +264,8 @@ php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json
 
 The command is read-only and uses the same `TaxPreviewFactsService` that feeds `/api/finance/tax-preview-data` and the MCP `get_tax_preview` tool.
 
+Fact source rows can include unreviewed parsed entries. Check `isReviewed`, `reviewStatus`, and `reviewAction` in JSON/TOON output; `reviewStatus=needs_review` means the amount is included as an estimate and the named document/link should still be reviewed.
+
 ---
 
 ### `finance:k1-migrate`

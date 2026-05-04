@@ -80,6 +80,7 @@ function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
 }
 
 function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
   const alimonyInput = (
     <Schedule1AlimonyInput
       value={state.schedule1Line2aAlimony}
@@ -92,6 +93,8 @@ function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
       schedule1={state.taxReturn.schedule1}
       line2aAlimonyInput={alimonyInput}
       onTabChange={tabToDrill(onDrill)}
+      taxFacts={state.taxFacts?.schedule1 ?? null}
+      onOpenDoc={openTaxDocumentDetail}
     />
   )
 }
@@ -139,6 +142,7 @@ function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 }
 
 function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleAPreview
       selectedYear={state.year}
@@ -147,6 +151,8 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
       isMarried={state.isMarried}
       userDeductions={state.userDeductions}
       form4952={state.taxReturn.form4952}
+      taxFacts={state.taxFacts?.form4952 ?? null}
+      onOpenDoc={openTaxDocumentDetail}
       {...(state.shortDividendSummary ? { shortDividendSummary: state.shortDividendSummary } : {})}
     />
   )

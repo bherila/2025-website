@@ -55,6 +55,7 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(3839.33, $facts['schedule1']['line8zTotal']);
         $this->assertSame('default_schedule_1_8z', $facts['schedule1']['line8zSources'][0]['routing']);
+        $this->assertTrue($facts['schedule1']['line8zSources'][0]['isReviewed']);
     }
 
     public function test_1099_misc_explicit_schedule_c_or_e_routing_excludes_line8z(): void
@@ -97,9 +98,11 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(3.56, $facts['schedule1']['line8zTotal']);
         $this->assertSame('link-1-schedule1-8z', $facts['schedule1']['line8zSources'][0]['id']);
+        $this->assertFalse($facts['schedule1']['line8zSources'][0]['isReviewed']);
+        $this->assertSame('needs_review', $facts['schedule1']['line8zSources'][0]['reviewStatus']);
     }
 
-    public function test_form4952_distinguishes_investment_interest_from_investment_expenses(): void
+    public function test_form4952_distinguishes_included_investment_interest_from_excluded_investment_expenses(): void
     {
         $user = $this->createUser();
         $this->createTaxDocument($user->id, [
@@ -120,9 +123,31 @@ class TaxPreviewFactsServiceTest extends TestCase
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
 
         $this->assertSame(26320.0, $facts['form4952']['totalInvestmentInterestExpense']);
-        $this->assertSame(86555.0, $facts['form4952']['totalInvestmentExpenses']);
+        $this->assertSame(0.0, $facts['form4952']['totalInvestmentExpenses']);
+        $this->assertSame(86555.0, $facts['form4952']['totalExcludedInvestmentExpenses']);
         $this->assertSame('form_4952_line_1', $facts['form4952']['investmentInterestSources'][0]['routing']);
-        $this->assertSame('form_4952_line_5', $facts['form4952']['investmentExpenseSources'][0]['routing']);
+        $this->assertSame([], $facts['form4952']['investmentExpenseSources']);
+        $this->assertSame('excluded_form_4952_line_5', $facts['form4952']['excludedInvestmentExpenseSources'][0]['routing']);
+    }
+
+    public function test_form4952_adds_k1_diagnostic_reconciliation_when_total_exceeds_box13_rows(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'AQR'],
+                codes: ['13' => [['code' => 'H', 'value' => '26320']]],
+                warnings: ['QD election not needed because total investment interest ($33,897) is already allowed.'],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(33897.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertSame('k1_investment_interest_reconciliation', $facts['form4952']['investmentInterestSources'][1]['sourceType']);
+        $this->assertSame(-7577.0, $facts['form4952']['investmentInterestSources'][1]['amount']);
     }
 
     private function createAccount(int $userId): FinAccounts
@@ -157,13 +182,14 @@ class TaxPreviewFactsServiceTest extends TestCase
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @return array<string, mixed>
      */
-    private function k1Data(array $fields = [], array $codes = []): array
+    private function k1Data(array $fields = [], array $codes = [], array $warnings = []): array
     {
         return [
             'schemaVersion' => '2026.1',
             'formType' => 'K-1-1065',
             'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
             'codes' => $codes,
+            'warnings' => $warnings,
         ];
     }
 }
