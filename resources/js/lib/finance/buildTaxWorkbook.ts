@@ -3,13 +3,11 @@ import currency from 'currency.js'
 import { computeForm8949, formatForm8949Date } from '@/components/finance/Form8949Preview'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
-import {
-  form8949LotsFrom1099ExportDocs as extractForm8949LotsFrom1099ExportDocs,
-} from '@/lib/finance/form8949Extraction'
+import { buildCapitalGainsReportFrom1099ExportDocs } from '@/lib/finance/capitalGainsReporting'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
-import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
+import type { ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
 import type { EstimatedTaxPaymentsData, TaxReturn1040 } from '@/types/finance/tax-return'
 import type { XlsxRow, XlsxSheet, XlsxWorkbook } from '@/types/finance/xlsx-export'
 
@@ -774,7 +772,7 @@ export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | 
 }
 
 export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
-  const lots = extractForm8949LotsFrom1099ExportDocs(taxReturn.docs1099 ?? [])
+  const lots = buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []).form8949Lots
   if (lots.length === 0) {
     return null
   }
@@ -913,6 +911,16 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
     }
   }
 
+  for (const source of buildCapitalGainsReportFrom1099ExportDocs(taxReturn.docs1099 ?? []).sources) {
+    addSource(source.line, {
+      description: source.label,
+      amount: source.amount,
+      note: source.note ?? (source.reportingMode === 'schedule_d_summary'
+        ? (source.line === '1a' ? shortTerm1099BNote : longTerm1099BNote)
+        : `Form 8949${source.form8949Box ? ` Box ${source.form8949Box}` : ''}`),
+    })
+  }
+
   for (const doc of taxReturn.docs1099 ?? []) {
     const parsedEntries = Array.isArray(doc.parsedData)
       ? doc.parsedData
@@ -926,30 +934,6 @@ export function buildScheduleDSheet(taxReturn: TaxReturn1040): XlsxSheet | null 
       const parsedRecord = parsed as Record<string, unknown>
       const payerName = typeof entry.account_name === 'string' ? entry.account_name : doc.payerName
       const entryFormType = String(entry.form_type)
-      const gains = readScheduleDBrokerGains(parsedRecord)
-
-      if (entryFormType === 'broker_1099' || entryFormType === '1099_b' || entryFormType === '1099_b_c') {
-        if (gains.transactionSources.length > 0) {
-          for (const source of gains.transactionSources) {
-            addSource(source.line, {
-              description: `${payerName} — ${source.description}`,
-              amount: source.amount,
-              note: `Form 8949 Box ${source.form8949Box}`,
-            })
-          }
-        } else {
-          addSource('1a', {
-            description: `${payerName} — S/T 1099-B`,
-            amount: gains.shortTermGain,
-            note: gains.usedTotalAsShortTermFallback ? 'Used total realized gain/loss as short-term fallback because no ST/LT split was present.' : shortTerm1099BNote,
-          })
-          addSource('8a', {
-            description: `${payerName} — L/T 1099-B`,
-            amount: gains.longTermGain,
-            note: longTerm1099BNote,
-          })
-        }
-      }
 
       if (entryFormType === 'broker_1099' || entryFormType === '1099_div' || entryFormType === '1099_div_c') {
         addSource('13', {

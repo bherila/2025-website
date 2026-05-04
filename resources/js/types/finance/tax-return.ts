@@ -1,6 +1,7 @@
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
 import type { K3Section } from '@/types/finance/k1-data'
+import type { Broker1099BReportingMode } from '@/types/finance/tax-document'
 
 export type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
 
@@ -233,6 +234,7 @@ export interface Doc1099ExportEntry {
     id: number
     account_id: number | null
     form_type: string
+    reporting_mode?: Broker1099BReportingMode | null
     ai_identifier: string | null
     ai_account_name: string | null
     account: { acct_id: number; acct_name: string; acct_number?: string | null } | null

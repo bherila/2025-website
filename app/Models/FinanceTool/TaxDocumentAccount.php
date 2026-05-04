@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $is_reviewed
  * @property string|null $notes
  * @property string|null $misc_routing
+ * @property string|null $reporting_mode
  * @property bool $parsed_data_needs_review
  * @property array<int, array<string, string>>|null $parsed_data_warnings
  */
@@ -40,6 +41,7 @@ class TaxDocumentAccount extends Model
         'is_reviewed',
         'notes',
         'misc_routing',
+        'reporting_mode',
         'parsed_data_needs_review',
         'parsed_data_warnings',
     ];

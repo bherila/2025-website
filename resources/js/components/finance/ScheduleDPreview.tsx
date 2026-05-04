@@ -6,9 +6,10 @@ import { ChevronLeft } from 'lucide-react'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
+import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
-import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
-import { getDocAmounts, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
+import type { ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
+import { getDocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -130,34 +131,10 @@ export function computeScheduleD(
     }
   }
 
-  const brokerSources = reviewed1099Docs.flatMap((doc) => {
-    const records: Record<string, unknown>[] = []
-    if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
-      for (const [entry] of iterateReviewedBrokerEntries(doc)) {
-        if (entry.form_type === '1099_b' || entry.form_type === '1099_b_c') {
-          records.push(entry.parsed_data ?? {})
-        }
-      }
-    } else if (doc.form_type === 'broker_1099' || doc.form_type === '1099_b' || doc.form_type === '1099_b_c') {
-      records.push((doc.parsed_data ?? {}) as Record<string, unknown>)
-    }
-
-    return records.flatMap((p) => {
-      const gains = readScheduleDBrokerGains(p)
-      if (gains.shortTermGain === 0 && gains.longTermGain === 0 && gains.totalGain === 0) {
-        return []
-      }
-
-      return [{
-        stGain: gains.shortTermGain,
-        ltGain: gains.longTermGain,
-        lineAmounts: gains.lineAmounts,
-      }]
-    })
-  })
+  const capitalGainsReport = buildCapitalGainsReportFromTaxDocuments(reviewed1099Docs)
 
   const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
-    brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
+    capitalGainsReport.scheduleDLineAmounts[line] ?? 0
 
   const totalCapitalGainDistributions = reviewed1099Docs.reduce((acc, doc) => {
     const links = doc.account_links ?? []
@@ -271,65 +248,10 @@ export default function ScheduleDPreview({
   // Our imported broker_1099 documents (stored via finance:tax-import or Tax Preview UI)
   // use field names like b_st_reported_gain_loss / b_lt_gain_loss.
   // AI-extracted 1099_b documents use total_realized_gain_loss with is_short_term per lot.
-  type BrokerGainSource = {
-    label: string
-    stGain: number
-    ltGain: number
-    lineAmounts: Partial<Record<ScheduleDBrokerLine, number>>
-    detail: ScheduleDDetailSource
-  }
-  const brokerSources: BrokerGainSource[] = []
-
-  const brokerDocs = reviewed1099Docs.filter(
-    (d) => d.form_type === 'broker_1099' || d.form_type === '1099_b' || d.form_type === '1099_b_c',
-  )
-
-  for (const doc of brokerDocs) {
-    const records: { data: Record<string, unknown>; label: string; detail: ScheduleDDetailSource }[] = []
-
-    if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
-      for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
-        if (entry.form_type !== '1099_b' && entry.form_type !== '1099_b_c') {
-          continue
-        }
-
-        records.push({
-          data: entry.parsed_data ?? {},
-          label: link.account?.acct_name
-            ?? entry.account_name
-            ?? (entry.parsed_data?.payer_name as string | undefined)
-            ?? doc.original_filename
-            ?? 'Brokerage',
-          detail: { formLabel: formLabel(link.form_type), docId: doc.id },
-        })
-      }
-    } else {
-      const p = (doc.parsed_data ?? {}) as Record<string, unknown>
-      records.push({
-        data: p,
-        label: (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage',
-        detail: { formLabel: formLabel(doc.form_type), docId: doc.id },
-      })
-    }
-
-    for (const record of records) {
-      const gains = readScheduleDBrokerGains(record.data)
-
-      if (gains.shortTermGain !== 0 || gains.longTermGain !== 0 || gains.totalGain !== 0) {
-        brokerSources.push({
-          label: record.label,
-          stGain: gains.shortTermGain,
-          ltGain: gains.longTermGain,
-          lineAmounts: gains.lineAmounts,
-          detail: record.detail,
-        })
-      }
-    }
-  }
-
-  const hasBrokerData = brokerSources.length > 0
+  const capitalGainsReport = buildCapitalGainsReportFromTaxDocuments(reviewed1099Docs)
+  const hasBrokerData = capitalGainsReport.sources.length > 0
   const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
-    brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
+    capitalGainsReport.scheduleDLineAmounts[line] ?? 0
   const priorYearShortCarryover = priorYearCapitalLossCarryover?.shortTermCarryover ?? 0
   const priorYearLongCarryover = priorYearCapitalLossCarryover?.longTermCarryover ?? 0
 
@@ -388,9 +310,15 @@ export default function ScheduleDPreview({
 
   // broker_1099 / 1099-B short-term
   if (hasBrokerData) {
-    for (const src of brokerSources) {
-      if (src.stGain !== 0) {
-        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain, boxRef: '1a', detail: src.detail })
+    for (const src of capitalGainsReport.sources) {
+      if (src.line === '1a' || src.line === '1b' || src.line === '2' || src.line === '3') {
+        stLines.push({
+          label: src.label,
+          amount: src.amount,
+          boxRef: src.line,
+          ...(src.detail ? { detail: src.detail } : {}),
+          note: src.reportingMode === 'schedule_d_summary' ? 'Reporting mode: Schedule D Summary' : `Reporting mode: ${src.reportingMode === 'form_8949_summary' ? 'Form 8949 Summary' : 'Form 8949 Individual Transactions'}`,
+        })
       }
     }
   } else {
@@ -463,9 +391,15 @@ export default function ScheduleDPreview({
 
   // broker_1099 / 1099-B long-term
   if (hasBrokerData) {
-    for (const src of brokerSources) {
-      if (src.ltGain !== 0) {
-        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain, boxRef: '8a', detail: src.detail })
+    for (const src of capitalGainsReport.sources) {
+      if (src.line === '8a' || src.line === '8b' || src.line === '9' || src.line === '10') {
+        ltLines.push({
+          label: src.label,
+          amount: src.amount,
+          boxRef: src.line,
+          ...(src.detail ? { detail: src.detail } : {}),
+          note: src.reportingMode === 'schedule_d_summary' ? 'Reporting mode: Schedule D Summary' : `Reporting mode: ${src.reportingMode === 'form_8949_summary' ? 'Form 8949 Summary' : 'Form 8949 Individual Transactions'}`,
+        })
       }
     }
   } else {

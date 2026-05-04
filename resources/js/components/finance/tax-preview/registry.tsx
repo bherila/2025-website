@@ -11,7 +11,7 @@ import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
-import Form8949Preview, { form8949LotsFromTaxDocuments } from '@/components/finance/Form8949Preview'
+import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
@@ -48,6 +48,7 @@ import {
   buildScheduleESheet,
   buildScheduleSESheet,
 } from '@/lib/finance/buildTaxWorkbook'
+import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 
 import { useDockActions } from './DockActions'
 import type { DrillTarget, FormId, FormRegistry, FormRenderProps } from './formRegistry'
@@ -1144,7 +1145,7 @@ export const formRegistry: FormRegistry = {
       order: 39,
       build: buildForm8949Sheet,
     },
-    hasData: (state) => form8949LotsFromTaxDocuments(state.reviewed1099Docs).length > 0,
+    hasData: (state) => buildCapitalGainsReportFromTaxDocuments(state.reviewed1099Docs).form8949Lots.length > 0,
   },
   'action-items': {
     id: 'action-items',
