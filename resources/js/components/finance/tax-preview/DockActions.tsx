@@ -1,4 +1,5 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
@@ -47,7 +48,7 @@ const noopExportXlsx = (): void => {}
  * handlers through the registry shape.
  */
 export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: DockActionsProviderProps): React.ReactElement {
-  const { accountDocuments, refreshAll, year: selectedYear } = useTaxPreview()
+  const { accountDocuments, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
   const [worksheetId, setWorksheetId] = useState<FormId | null>(null)
@@ -56,22 +57,59 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
   const openWorksheet = useCallback((id: FormId) => setWorksheetId(id), [])
   const closeWorksheet = useCallback(() => setWorksheetId(null), [])
 
-  const reviewK1Doc = useCallback(
+  const removeReviewDocumentQueryParam = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete('review_document_id')
+    window.history.replaceState({}, '', url.toString())
+  }, [])
+
+  const openReviewDoc = useCallback(
     (docId: number) => {
-      const target = accountDocuments.find((doc) => doc.id === docId)
+      const target = [...accountDocuments, ...w2Documents].find((doc) => doc.id === docId)
       if (!target) {
-        return
+        return false
       }
       setReviewDoc(target)
       setReviewOpen(true)
+      return true
     },
-    [accountDocuments],
+    [accountDocuments, w2Documents],
   )
+
+  const reviewK1Doc = useCallback((docId: number) => {
+    openReviewDoc(docId)
+  }, [openReviewDoc])
 
   const openReviewQueue = useCallback(() => {
     setReviewDoc(undefined)
     setReviewOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || isLoading) {
+      return
+    }
+
+    const docParam = new URLSearchParams(window.location.search).get('review_document_id')
+    if (!docParam) {
+      return
+    }
+
+    const docId = Number(docParam)
+    if (!Number.isInteger(docId) || docId <= 0) {
+      removeReviewDocumentQueryParam()
+      return
+    }
+
+    if (!openReviewDoc(docId)) {
+      toast.error('Tax document is not available in the selected year')
+    }
+    removeReviewDocumentQueryParam()
+  }, [isLoading, openReviewDoc, removeReviewDocumentQueryParam])
 
   const bulkSetSbpElection = useCallback(
     async (active: boolean, docIds: number[]): Promise<string[]> => {
@@ -130,6 +168,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
         onClose={() => {
           setReviewDoc(undefined)
           setReviewOpen(false)
+          removeReviewDocumentQueryParam()
         }}
         onDocumentReviewed={() => {
           setReviewDoc(undefined)

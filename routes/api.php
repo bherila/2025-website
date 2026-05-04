@@ -2,6 +2,7 @@
 
 use App\GenAiProcessor\Http\Controllers\AdminGenAiJobsController;
 use App\GenAiProcessor\Http\Controllers\GenAiImportController;
+use App\Http\Controllers\AdminTaxNormalizationController;
 use App\Http\Controllers\Api\UserAiConfigurationController;
 use App\Http\Controllers\Api\UserAiModelsController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
@@ -292,6 +293,10 @@ Route::middleware(['web', 'auth'])->post('/admin/users/{id}/login-as', [UserMana
 Route::middleware(['web', 'auth'])->get('/admin/genai-jobs', [AdminGenAiJobsController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/admin/genai-jobs/{id}', [AdminGenAiJobsController::class, 'show']);
 Route::middleware(['web', 'auth'])->post('/admin/genai-jobs/{id}/requeue', [AdminGenAiJobsController::class, 'retry']);
+
+// Admin Tax Normalization Review API
+Route::middleware(['web', 'auth'])->get('/admin/tax-normalization-review', [AdminTaxNormalizationController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/admin/tax-normalization-review/acknowledge', [AdminTaxNormalizationController::class, 'acknowledge']);
 
 // File Management API routes
 

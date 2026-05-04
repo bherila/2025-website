@@ -38,6 +38,7 @@ export default defineConfig({
         'resources/js/client-management/portal.tsx',
         'resources/js/user-management.tsx',
         'resources/js/admin-genai-jobs.tsx',
+        'resources/js/admin-tax-normalization.tsx',
         'resources/js/utility-bill-tracker.tsx',
         'resources/js/login-passkey.tsx',
       ],
