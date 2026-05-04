@@ -171,7 +171,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
     ): TaxFactSource {
         $payer = $this->payerName($doc, $link, $parsedData);
         $factRouting = $routing !== null
-            ? TaxFactRouting::from($routing)
+            ? TaxFactRouting::tryFrom($routing) ?? TaxFactRouting::DefaultSchedule18z
             : TaxFactRouting::DefaultSchedule18z;
 
         return new TaxFactSource(
@@ -184,9 +184,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             accountId: $link?->account_id,
             formType: '1099_misc',
             routing: $factRouting,
-            routingReason: $routing === null
-                ? 'Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E.'
-                : '1099-MISC routing explicitly targets the Schedule 1 line 8 family.',
+            routingReason: $this->miscRoutingReason($routing, $factRouting),
             notes: $this->miscBreakdownNote($parsedData),
             isReviewed: $this->sourceIsReviewed($doc, $link),
             reviewStatus: $this->reviewStatus($doc, $link),
@@ -231,6 +229,21 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
 
     private function routesToLine8(?string $routing): bool
     {
-        return $routing === null || in_array($routing, self::LINE_8_ROUTINGS, true);
+        return $routing === null
+            || in_array($routing, self::LINE_8_ROUTINGS, true)
+            || ! in_array($routing, ['sch_c', 'sch_e'], true);
+    }
+
+    private function miscRoutingReason(?string $routing, TaxFactRouting $factRouting): string
+    {
+        if ($routing === null) {
+            return 'Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E.';
+        }
+
+        if ($factRouting === TaxFactRouting::DefaultSchedule18z) {
+            return "Unknown 1099-MISC routing '{$routing}' was treated as the Schedule 1 line 8z default.";
+        }
+
+        return '1099-MISC routing explicitly targets the Schedule 1 line 8 family.';
     }
 }

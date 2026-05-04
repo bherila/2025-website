@@ -194,6 +194,7 @@ class TaxPreviewFactsService
             ->whereBetween('t_date', ["{$year}-01-01", "{$year}-12-31"])
             ->orderBy('t_account')
             ->orderBy('t_date')
+            ->orderBy('t_id')
             ->get()
             ->groupBy('t_account');
 
@@ -293,32 +294,84 @@ class TaxPreviewFactsService
         }
 
         $dividendDate = (string) $dividend->t_date;
+        if ($this->hasLaterSameDayShortSaleOpen($transactions, $dividend, $symbol, $dividendDate)) {
+            return null;
+        }
+
         $openDate = null;
-        $latestCoverDate = null;
+        $openSequence = null;
+        $latestCoverSequence = null;
+        $sequence = 0;
 
         foreach ($transactions as $transaction) {
+            $sequence++;
             if ((string) $transaction->t_symbol !== $symbol || (string) $transaction->t_date > $dividendDate) {
                 continue;
             }
 
-            if ($transaction->t_type === 'Sell Short') {
+            if ($this->isShortSaleOpen($transaction)) {
                 $openDate = (string) $transaction->t_date;
+                $openSequence = $sequence;
             }
 
-            if ($transaction->t_type === 'Cover') {
-                $latestCoverDate = (string) $transaction->t_date;
+            if ($this->isShortSaleCover($transaction)) {
+                $latestCoverSequence = $sequence;
             }
 
-            if ($transaction === $dividend) {
+            if ($transaction->getKey() !== null && $transaction->getKey() === $dividend->getKey()) {
                 break;
             }
         }
 
-        if ($openDate !== null && $latestCoverDate !== null && $latestCoverDate >= $openDate) {
+        if ($openSequence !== null && $latestCoverSequence !== null && $latestCoverSequence > $openSequence) {
             return null;
         }
 
         return $openDate !== null ? CarbonImmutable::parse($openDate) : null;
+    }
+
+    private function isShortSaleOpen(FinAccountLineItems $transaction): bool
+    {
+        return $this->normalizedTransactionValue($transaction) === 'sell short';
+    }
+
+    private function isShortSaleCover(FinAccountLineItems $transaction): bool
+    {
+        return in_array($this->normalizedTransactionValue($transaction), ['cover', 'buy to cover'], true);
+    }
+
+    private function normalizedTransactionValue(FinAccountLineItems $transaction): string
+    {
+        $method = strtolower(trim((string) $transaction->t_method));
+        if ($method !== '') {
+            return $method;
+        }
+
+        return strtolower(trim((string) $transaction->t_type));
+    }
+
+    /**
+     * @param  FinAccountLineItems[]  $transactions
+     */
+    private function hasLaterSameDayShortSaleOpen(array $transactions, FinAccountLineItems $dividend, string $symbol, string $dividendDate): bool
+    {
+        $dividendKey = $dividend->getKey();
+        if ($dividendKey === null) {
+            return false;
+        }
+
+        foreach ($transactions as $transaction) {
+            if ((string) $transaction->t_symbol !== $symbol || (string) $transaction->t_date !== $dividendDate) {
+                continue;
+            }
+
+            $transactionKey = $transaction->getKey();
+            if ($transactionKey !== null && $transactionKey > $dividendKey && $this->isShortSaleOpen($transaction)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function roundMoney(float $value): float

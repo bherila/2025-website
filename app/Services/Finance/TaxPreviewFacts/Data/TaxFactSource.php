@@ -15,22 +15,22 @@ readonly class TaxFactSource
         public string $id,
         public string $label,
         public float $amount,
-        TaxFactSourceType|string $sourceType,
+        TaxFactSourceType $sourceType,
         public ?int $taxDocumentId = null,
         public ?int $taxDocumentAccountId = null,
         public ?int $accountId = null,
         public ?string $formType = null,
         public ?string $box = null,
         public ?string $code = null,
-        TaxFactRouting|string|null $routing = null,
+        ?TaxFactRouting $routing = null,
         public ?string $routingReason = null,
         public ?string $notes = null,
         public bool $isReviewed = true,
         public string $reviewStatus = 'reviewed',
         public ?string $reviewAction = null,
     ) {
-        $this->sourceType = $sourceType instanceof TaxFactSourceType ? $sourceType->value : $sourceType;
-        $this->routing = $routing instanceof TaxFactRouting ? $routing->value : $routing;
+        $this->sourceType = $sourceType->value;
+        $this->routing = $routing?->value;
     }
 
     /**

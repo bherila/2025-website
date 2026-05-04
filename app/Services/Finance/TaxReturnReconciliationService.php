@@ -185,7 +185,7 @@ class TaxReturnReconciliationService
             return null;
         }
 
-        return $this->roundMoney($left - $right);
+        return MoneyMath::subtract($left, $right);
     }
 
     /**

@@ -52,7 +52,7 @@ class MoneyMath
     public static function toCents(float|int|string $value): int
     {
         if (is_float($value)) {
-            return (int) round($value * 100);
+            return self::toCents(number_format($value, 4, '.', ''));
         }
 
         $raw = trim((string) $value);

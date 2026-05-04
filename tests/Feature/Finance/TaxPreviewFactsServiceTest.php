@@ -110,6 +110,23 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('sch_1_line_8', $facts['schedule1']['line8zSources'][0]['routing']);
     }
 
+    public function test_schedule1_stale_unknown_line8_routing_falls_back_to_line8z(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'stale_legacy_value',
+            'parsed_data' => ['box3_other_income' => 12.34],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertSame(12.34, $facts['schedule1']['line8zTotal']);
+        $this->assertSame('default_schedule_1_8z', $facts['schedule1']['line8zSources'][0]['routing']);
+        $this->assertStringContainsString('stale_legacy_value', $facts['schedule1']['line8zSources'][0]['routingReason']);
+    }
+
     public function test_1099_misc_explicit_schedule_c_or_e_routing_excludes_line8z(): void
     {
         $user = $this->createUser();
@@ -293,16 +310,22 @@ class TaxPreviewFactsServiceTest extends TestCase
                 't_symbol' => 'XYZ',
                 't_qty' => -10,
                 't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
             [
                 't_account' => $account->acct_id,
                 't_date' => '2025-02-01',
-                't_type' => 'Cover',
+                't_type' => 'Buy',
                 't_symbol' => 'XYZ',
                 't_qty' => 10,
                 't_amt' => -900,
+                't_method' => 'BUY TO COVER',
+                't_description' => null,
+                't_comment' => 'YOU BOUGHT SHORT COVER',
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -313,6 +336,9 @@ class TaxPreviewFactsServiceTest extends TestCase
                 't_symbol' => 'XYZ',
                 't_qty' => -10,
                 't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -321,8 +347,11 @@ class TaxPreviewFactsServiceTest extends TestCase
                 't_date' => '2025-03-20',
                 't_type' => 'Dividend',
                 't_symbol' => 'XYZ',
+                't_qty' => null,
                 't_amt' => -50,
+                't_method' => null,
                 't_description' => 'SHORT DIVIDEND CHARGED',
+                't_comment' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -332,6 +361,72 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(0.0, $facts['form4952']['totalInvestmentInterestExpense']);
         $this->assertSame([], $facts['form4952']['investmentInterestSources']);
+    }
+
+    public function test_short_dividend_same_day_cover_and_reopen_uses_transaction_sequence(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $now = now();
+        DB::table('fin_account_line_items')->insert([
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-01-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-03-01',
+                't_type' => 'Buy',
+                't_symbol' => 'XYZ',
+                't_qty' => 10,
+                't_amt' => -900,
+                't_method' => 'BUY TO COVER',
+                't_description' => null,
+                't_comment' => 'YOU BOUGHT SHORT COVER',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-03-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-04-20',
+                't_type' => 'Dividend',
+                't_symbol' => 'XYZ',
+                't_qty' => null,
+                't_amt' => -50,
+                't_method' => null,
+                't_description' => 'SHORT DIVIDEND CHARGED',
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(50.0, $facts['form4952']['totalInvestmentInterestExpense']);
+        $this->assertSame(-50.0, $facts['form4952']['investmentInterestSources'][0]['amount']);
     }
 
     public function test_form4952_reconstructs_k1_gross_investment_income_when_box_20a_is_absent(): void
