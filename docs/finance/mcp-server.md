@@ -8,7 +8,7 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 
 | Tool | Description |
 |------|-------------|
-| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items). For payslip data use `list_payslips`. |
+| `get_tax_preview` | Full tax preview dataset for a year (W-2s, 1099s, cap gains, Form 1116, Schedule C, action items, and backend `taxFacts` source lines). For payslip data use `list_payslips`. |
 | `list_tax_documents` | List tax documents filtered by `year`, `form_type`, `is_reviewed` |
 | `get_tax_document` | Single document by ID, including full `parsed_data` |
 | `list_accounts` | Financial accounts grouped into asset / liability / retirement |
@@ -20,6 +20,8 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 | `list_tags` | Transaction tags with tax characteristics |
 | `get_marriage_status` | Filing status by year |
 | `list_payslips` | Payslips filtered by `year`; returns all fields (earnings, taxes, deductions, 401k) |
+
+`get_tax_preview.taxFacts` is the agent-friendly audit trail for the highest-value tax debug paths. It currently includes Schedule 1 line 5 / line 8z facts and Form 4952 investment-interest / investment-expense facts. The same data is available from the CLI via `php artisan finance:tax-preview-facts`.
 
 ## Available Resources
 

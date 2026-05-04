@@ -36,7 +36,7 @@ All commands are scoped to the resolved user. No command can read or write anoth
 
 ## Output Formats
 
-Most commands accept `--format=table` (default) or `--format=json`. `finance:transactions` and `finance:import-transactions` also support `--format=toon`.
+Most commands accept `--format=table` (default) or `--format=json`. `finance:transactions`, `finance:import-transactions`, and `finance:tax-preview-facts` also support `--format=toon`.
 
 **Table** renders a monospaced, pipe-delimited grid suitable for terminal inspection.
 
@@ -236,6 +236,33 @@ php artisan finance:tax-render --year=YEAR [--form=FORM] [--format=table|json]
 ```
 
 `--year` is required. Pass `--form` (e.g. `w2`, `1099_int`, `k1`, `broker_1099`) to filter to one form type.
+
+---
+
+### `finance:tax-preview-facts`
+
+Render backend-auditable Tax Preview source lines for the configured user/year. This is a debugging contract for high-value tax paths; rendered Tax Preview totals still come from the React calculation system.
+
+```bash
+php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
+```
+
+Supported slices:
+
+| Slice | Contents |
+|-------|----------|
+| `all` | Every backend fact slice currently available |
+| `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8z 1099-MISC sources |
+| `form4952` | Investment-interest and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
+
+Useful examples:
+
+```bash
+php artisan finance:tax-preview-facts --year=2025 --slice=schedule1 --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json | jq '.form4952'
+```
+
+The command is read-only and uses the same `TaxPreviewFactsService` that feeds `/api/finance/tax-preview-data` and the MCP `get_tax_preview` tool.
 
 ---
 

@@ -106,7 +106,7 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 **Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
 **Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (shell preload only)
 **API Controller**: `app/Http/Controllers/Finance/TaxPreviewDataController.php`
-**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`
+**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`, `app/Services/Finance/TaxPreviewFactsService.php`
 **Components**: `resources/js/components/finance/TaxPreviewPage.tsx` + `TaxPreviewContext.tsx`
 
 ### Data Loading Architecture
@@ -125,8 +125,35 @@ Year changes are **full page navigations** (`window.location.href = ...`). Blade
 - Schedule C data
 - Employment entities
 - Accounts + active-account IDs
+- Backend `taxFacts` source lines for Schedule 1 and Form 4952 debug paths
 
-The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions.
+The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, stores backend `taxFacts`, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions. Tax totals are still rendered from the client-side calculation system; `taxFacts` is an audit/debug contract first.
+
+### Backend Tax Facts
+
+`TaxPreviewFactsService` computes source-line facts from reviewed tax documents and returns them in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
+
+```bash
+php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
+```
+
+The current pilot covers the highest-value debug paths:
+
+| Slice | Lines | Source behavior |
+|-------|-------|-----------------|
+| `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
+| `schedule1` | Schedule 1 line 8z / line 9 / line 10 | Reviewed 1099-MISC sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. |
+| `form4952` | Form 4952 line 1 / line 5 / line 8 | Investment-interest sources are separated from investment-expense sources so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+
+Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
+
+```bash
+php artisan typescript:transform
+```
+
+Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset.
+
+The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. This pilot does not switch workbook or preview totals to backend facts yet.
 
 ### Tab Structure
 
@@ -194,6 +221,9 @@ Use `php artisan finance:k1-codes --year=2025 --account=32 --box=11 --code=S --f
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
 | `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (still available for other pages) |
 | `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
+| `PUT` | `/api/finance/tax-documents/{id}?include_tax_facts=1` | Update a document and optionally return `{ document, taxFacts }` |
+| `PUT` | `/api/finance/tax-documents/{id}/mark-reviewed?include_tax_facts=1` | Mark reviewed and optionally return `{ document, taxFacts }` |
+| `PATCH` | `/api/finance/tax-documents/{id}/accounts/{linkId}?include_tax_facts=1` | Update an account-link routing/review state and optionally return `{ link, taxFacts }` |
 
 ---
 
