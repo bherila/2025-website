@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
+import { form8949LotsFromTaxDocuments, mergeForm8949Lots } from '@/lib/finance/form8949Extraction'
+import type { TaxDocument } from '@/types/finance/tax-document'
+
+export { form8949LotsFromTaxDocuments }
 
 /** One closed lot row, shaped to match the `fin_account_lots` closed-status API response. */
 export interface Form8949Lot {
@@ -102,135 +105,10 @@ export function formatForm8949Date(value: string | null | undefined, fallback = 
   return raw.split(/[T ]/)[0] ?? raw
 }
 
-function accountLast4(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    return null
-  }
-  const digits = String(value).replace(/\D/g, '')
-  return digits.length >= 4 ? digits.slice(-4) : null
-}
-
 function rowDescription(lot: Form8949Lot): string {
   const symbol = lot.symbol?.trim()
   const base = symbol || lot.description?.trim() || '1099-B transaction'
   return lot.account_last4 ? `${base} • ${lot.account_last4}` : base
-}
-
-function entryMatchesLink(entry: Record<string, unknown>, link: TaxDocumentAccountLink): boolean {
-  const entryIdentifier = typeof entry.account_identifier === 'string' ? entry.account_identifier.trim().toLowerCase() : null
-  const linkIdentifier = link.ai_identifier?.trim().toLowerCase() ?? null
-  if (entryIdentifier && linkIdentifier && entryIdentifier === linkIdentifier) {
-    return true
-  }
-
-  const entryName = typeof entry.account_name === 'string' ? entry.account_name.trim().toLowerCase() : null
-  const linkName = link.ai_account_name?.trim().toLowerCase() ?? null
-  return Boolean(entryName && linkName && entryName === linkName)
-}
-
-function form8949Box(value: unknown): Form8949Box | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-  const normalized = value.trim().toUpperCase()
-  return ['A', 'B', 'C', 'D', 'E', 'F'].includes(normalized) ? normalized as Form8949Box : null
-}
-
-function transactionLot(
-  transaction: Record<string, unknown>,
-  metadata: Pick<Form8949Lot, 'tax_document_id' | 'acct_id' | 'account_name' | 'account_last4' | 'account_link_id'>,
-): Form8949Lot {
-  const quantity = transaction.quantity
-  const costBasis = transaction.cost_basis
-  const proceeds = transaction.proceeds
-  const realizedGainLoss = transaction.realized_gain_loss
-  const accruedMarketDiscount = transaction.accrued_market_discount
-  const washSaleDisallowed = transaction.wash_sale_disallowed
-
-  return {
-    ...metadata,
-    symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
-    description: typeof transaction.description === 'string' ? transaction.description : null,
-    quantity: typeof quantity === 'number' || typeof quantity === 'string' ? quantity : null,
-    purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
-    sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
-    cost_basis: typeof costBasis === 'number' || typeof costBasis === 'string' ? costBasis : null,
-    proceeds: typeof proceeds === 'number' || typeof proceeds === 'string' ? proceeds : null,
-    realized_gain_loss: typeof realizedGainLoss === 'number' || typeof realizedGainLoss === 'string' ? realizedGainLoss : null,
-    is_short_term: toBool(transaction.is_short_term),
-    lot_source: '1099b',
-    form_8949_box: form8949Box(transaction.form_8949_box),
-    is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
-    accrued_market_discount: typeof accruedMarketDiscount === 'number' || typeof accruedMarketDiscount === 'string' ? accruedMarketDiscount : null,
-    wash_sale_disallowed: typeof washSaleDisallowed === 'number' || typeof washSaleDisallowed === 'string' ? washSaleDisallowed : null,
-  }
-}
-
-export function form8949LotsFromTaxDocuments(docs: TaxDocument[], accountId?: number): Form8949Lot[] {
-  return docs.flatMap((doc) => {
-    if (!doc.is_reviewed || (doc.form_type !== '1099_b' && doc.form_type !== '1099_b_c' && doc.form_type !== 'broker_1099')) {
-      return []
-    }
-
-    const docAccountId = doc.account_id ?? undefined
-    if (doc.form_type !== 'broker_1099') {
-      if (accountId !== undefined && docAccountId !== accountId) {
-        return []
-      }
-      const parsed = !Array.isArray(doc.parsed_data) ? doc.parsed_data as Record<string, unknown> | null : null
-      const transactions = Array.isArray(parsed?.transactions) ? parsed.transactions : []
-      const last4 = accountLast4(parsed?.account_number) ?? accountLast4(doc.account?.acct_number)
-      return transactions
-        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
-        .map((tx) => transactionLot(tx, {
-          tax_document_id: doc.id,
-          ...(docAccountId !== undefined ? { acct_id: docAccountId } : {}),
-          account_name: doc.account?.acct_name ?? null,
-          account_last4: last4,
-        }))
-    }
-
-    if (!Array.isArray(doc.parsed_data)) {
-      return []
-    }
-
-    return doc.parsed_data.flatMap((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return []
-      }
-      const record = entry as unknown as Record<string, unknown>
-      if (record.form_type !== '1099_b' && record.form_type !== '1099_b_c') {
-        return []
-      }
-      const parsed = record.parsed_data
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return []
-      }
-
-      const matchingLink = (doc.account_links ?? []).find((link) =>
-        (link.form_type === '1099_b' || link.form_type === '1099_b_c') && entryMatchesLink(record, link),
-      )
-      const linkedAccountId = matchingLink?.account_id ?? undefined
-      if (accountId !== undefined && linkedAccountId !== accountId) {
-        return []
-      }
-      const parsedRecord = parsed as Record<string, unknown>
-      const transactions = Array.isArray(parsedRecord.transactions) ? parsedRecord.transactions : []
-      const last4 = accountLast4(record.account_identifier)
-        ?? accountLast4(parsedRecord.account_number)
-        ?? accountLast4(matchingLink?.ai_identifier)
-        ?? accountLast4(matchingLink?.account?.acct_number)
-      return transactions
-        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
-        .map((tx) => transactionLot(tx, {
-          tax_document_id: doc.id,
-          ...(linkedAccountId !== undefined ? { acct_id: linkedAccountId } : {}),
-          account_name: typeof record.account_name === 'string' ? record.account_name : matchingLink?.account?.acct_name ?? null,
-          account_last4: last4,
-          account_link_id: matchingLink?.id ?? null,
-        }))
-    })
-  })
 }
 
 /**
@@ -371,16 +249,7 @@ export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], a
     () => form8949LotsFromTaxDocuments(reviewed1099Docs, accountId),
     [reviewed1099Docs, accountId],
   )
-  const mergedLots = useMemo(() => {
-    const fetchedLots = lots ?? []
-    const importedLotsWithoutDatabaseDuplicate = importedLots.filter((imported) => {
-      if (imported.tax_document_id == null) {
-        return true
-      }
-      return !fetchedLots.some((lot) => lot.tax_document_id === imported.tax_document_id && lot.acct_id === imported.acct_id)
-    })
-    return [...fetchedLots, ...importedLotsWithoutDatabaseDuplicate]
-  }, [lots, importedLots])
+  const mergedLots = useMemo(() => mergeForm8949Lots(lots ?? [], importedLots), [lots, importedLots])
   const data = useMemo(() => computeForm8949(mergedLots), [mergedLots])
 
   if (lots === null) {

@@ -2,10 +2,10 @@
 
 import currency from 'currency.js'
 import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
-import { type ReactNode,useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { computeForm8949, type Form8949Box, type Form8949Lot } from '@/components/finance/Form8949Preview'
+import { computeForm8949, type Form8949Lot } from '@/components/finance/Form8949Preview'
 import { isFK1StructuredData, K1ReviewPanel } from '@/components/finance/k1'
 import ManualJsonAttachModal from '@/components/finance/ManualJsonAttachModal'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
@@ -37,6 +37,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
+import { broker1099TransactionsToLots } from '@/lib/finance/form8949Extraction'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
@@ -275,14 +276,6 @@ function payerDisplayName(data: Record<string, unknown>, fallback: string): stri
   return typeof payerName === 'string' && payerName.trim() !== '' ? payerName : fallback
 }
 
-function form8949Box(value: unknown): Form8949Box | null {
-  if (value === 'A' || value === 'B' || value === 'C' || value === 'D' || value === 'E' || value === 'F') {
-    return value
-  }
-
-  return null
-}
-
 function renderReviewLine(data: Record<string, unknown>, field: ReviewLineDef): ReactNode {
   const value = data[field.key]
   const boxRef = field.box
@@ -322,38 +315,6 @@ function objectReviewBlock(title: string, value: unknown): ReactNode {
       })}
     </FormBlock>
   )
-}
-
-function transactionsToLots(transactions: unknown): Form8949Lot[] {
-  if (!Array.isArray(transactions)) {
-    return []
-  }
-
-  return transactions.flatMap((transaction) => {
-    if (!isPlainRecord(transaction)) {
-      return []
-    }
-
-    const isShortTerm = typeof transaction.is_short_term === 'boolean'
-      ? transaction.is_short_term
-      : transaction.is_short_term === 1 || transaction.is_short_term === '1' || transaction.is_short_term === 'true'
-
-    return [{
-      symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
-      description: typeof transaction.description === 'string' ? transaction.description : null,
-      quantity: transaction.quantity as number | string | null,
-      purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
-      sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
-      proceeds: transaction.proceeds as number | string | null,
-      cost_basis: transaction.cost_basis as number | string | null,
-      realized_gain_loss: transaction.realized_gain_loss as number | string | null,
-      is_short_term: isShortTerm,
-      form_8949_box: form8949Box(transaction.form_8949_box),
-      is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
-      accrued_market_discount: transaction.accrued_market_discount as number | string | null,
-      wash_sale_disallowed: transaction.wash_sale_disallowed as number | string | null,
-    }]
-  })
 }
 
 function Form8949MiniSection({
@@ -417,7 +378,7 @@ function Standard1099ReviewPanel({
   const payer = payerDisplayName(normalized, payerFallback)
 
   if (formType === '1099_b' || formType === '1099_b_c') {
-    const lots = transactionsToLots(normalized.transactions)
+    const lots = broker1099TransactionsToLots(normalized, {})
     const gains = computeForm8949(lots)
     const hasLots = lots.length > 0
 

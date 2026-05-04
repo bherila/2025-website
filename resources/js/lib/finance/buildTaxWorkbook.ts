@@ -1,8 +1,11 @@
 import currency from 'currency.js'
 
-import { computeForm8949, type Form8949Box, type Form8949Lot,formatForm8949Date } from '@/components/finance/Form8949Preview'
+import { computeForm8949, formatForm8949Date } from '@/components/finance/Form8949Preview'
 import { ALL_K1_CODES, K1_SPEC_BY_BOX } from '@/components/finance/k1'
 import { renderK3SectionsRows } from '@/finance/1116/k3-row-renderer'
+import {
+  form8949LotsFrom1099ExportDocs as extractForm8949LotsFrom1099ExportDocs,
+} from '@/lib/finance/form8949Extraction'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
@@ -15,6 +18,14 @@ export { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES }
 function joinNotes(parts: Array<string | null | undefined>): string | undefined {
   const notes = parts.filter((part): part is string => Boolean(part))
   return notes.length > 0 ? notes.join(' | ') : undefined
+}
+
+function parsedDataEntries(value: unknown): Array<[string, unknown]> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return []
+  }
+
+  return Object.entries(value as Record<string, unknown>)
 }
 
 function parseDestinationRows(
@@ -257,30 +268,6 @@ function numericValue(value: unknown): number {
 
 function isNonZero(value: number): boolean {
   return currency(value).value !== 0
-}
-
-function accountLast4(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    return null
-  }
-  const digits = String(value).replace(/\D/g, '')
-  return digits.length >= 4 ? digits.slice(-4) : null
-}
-
-function boolValue(value: unknown): boolean {
-  return value === true || value === 1 || value === '1' || value === 'true'
-}
-
-function form8949Box(value: unknown): Form8949Box | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-  const normalized = value.trim().toUpperCase()
-  return ['A', 'B', 'C', 'D', 'E', 'F'].includes(normalized) ? normalized as Form8949Box : null
-}
-
-function scalarMoneyValue(value: unknown): number | string | null {
-  return typeof value === 'number' || typeof value === 'string' ? value : null
 }
 
 function sumAmounts(rows: Array<{ amount: number }>): number {
@@ -786,92 +773,8 @@ export function buildShortDividendsSheet(taxReturn: TaxReturn1040): XlsxSheet | 
   }
 }
 
-type Doc1099Entry = NonNullable<TaxReturn1040['docs1099']>[number]
-type Doc1099AccountLink = NonNullable<Doc1099Entry['accountLinks']>[number]
-
-function brokerEntryMatchesLink(entry: Record<string, unknown>, link: Doc1099AccountLink): boolean {
-  const entryIdentifier = typeof entry.account_identifier === 'string' ? entry.account_identifier.trim().toLowerCase() : null
-  const linkIdentifier = link.ai_identifier?.trim().toLowerCase() ?? null
-  if (entryIdentifier && linkIdentifier && entryIdentifier === linkIdentifier) {
-    return true
-  }
-
-  const entryName = typeof entry.account_name === 'string' ? entry.account_name.trim().toLowerCase() : null
-  const linkName = link.ai_account_name?.trim().toLowerCase() ?? null
-  return Boolean(entryName && linkName && entryName === linkName)
-}
-
-function transactionToForm8949Lot(
-  transaction: Record<string, unknown>,
-  metadata: Pick<Form8949Lot, 'acct_id' | 'account_name' | 'account_last4' | 'account_link_id'>,
-): Form8949Lot {
-  return {
-    ...metadata,
-    symbol: typeof transaction.symbol === 'string' ? transaction.symbol : null,
-    description: typeof transaction.description === 'string' ? transaction.description : null,
-    quantity: scalarMoneyValue(transaction.quantity),
-    purchase_date: typeof transaction.purchase_date === 'string' ? transaction.purchase_date : null,
-    sale_date: typeof transaction.sale_date === 'string' ? transaction.sale_date : null,
-    cost_basis: scalarMoneyValue(transaction.cost_basis),
-    proceeds: scalarMoneyValue(transaction.proceeds),
-    realized_gain_loss: scalarMoneyValue(transaction.realized_gain_loss),
-    is_short_term: boolValue(transaction.is_short_term),
-    lot_source: '1099b',
-    form_8949_box: form8949Box(transaction.form_8949_box),
-    is_covered: typeof transaction.is_covered === 'boolean' ? transaction.is_covered : null,
-    accrued_market_discount: scalarMoneyValue(transaction.accrued_market_discount),
-    wash_sale_disallowed: scalarMoneyValue(transaction.wash_sale_disallowed),
-  }
-}
-
-function form8949LotsFrom1099ExportDocs(taxReturn: TaxReturn1040): Form8949Lot[] {
-  return (taxReturn.docs1099 ?? []).flatMap((doc) => {
-    if (doc.formType !== 'broker_1099' && doc.formType !== '1099_b' && doc.formType !== '1099_b_c') {
-      return []
-    }
-
-    if (!Array.isArray(doc.parsedData)) {
-      const transactions = Array.isArray(doc.parsedData.transactions) ? doc.parsedData.transactions : []
-      const last4 = doc.accountLast4 ?? accountLast4(doc.parsedData.account_number)
-      return transactions
-        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
-        .map((tx) => transactionToForm8949Lot(tx, {
-          ...(doc.accountId !== null && doc.accountId !== undefined ? { acct_id: doc.accountId } : {}),
-          account_name: doc.accountName ?? null,
-          account_last4: last4,
-        }))
-    }
-
-    return doc.parsedData.flatMap((entry) => {
-      if (entry.form_type !== '1099_b' && entry.form_type !== '1099_b_c') {
-        return []
-      }
-      const parsedData = entry.parsed_data
-      if (!parsedData || typeof parsedData !== 'object' || Array.isArray(parsedData)) {
-        return []
-      }
-      const parsedRecord = parsedData as Record<string, unknown>
-
-      const matchingLink = (doc.accountLinks ?? []).find((link) => brokerEntryMatchesLink(entry, link))
-      const transactions = Array.isArray(parsedRecord.transactions) ? parsedRecord.transactions : []
-      const last4 = accountLast4(entry.account_identifier)
-        ?? accountLast4(parsedRecord.account_number)
-        ?? accountLast4(matchingLink?.ai_identifier)
-        ?? accountLast4(matchingLink?.account?.acct_number)
-      return transactions
-        .filter((tx): tx is Record<string, unknown> => Boolean(tx && typeof tx === 'object'))
-        .map((tx) => transactionToForm8949Lot(tx, {
-          ...(matchingLink?.account_id !== null && matchingLink?.account_id !== undefined ? { acct_id: matchingLink.account_id } : {}),
-          account_name: typeof entry.account_name === 'string' ? entry.account_name : matchingLink?.account?.acct_name ?? null,
-          account_last4: last4,
-          account_link_id: matchingLink?.id ?? null,
-        }))
-    })
-  })
-}
-
 export function buildForm8949Sheet(taxReturn: TaxReturn1040): XlsxSheet | null {
-  const lots = form8949LotsFrom1099ExportDocs(taxReturn)
+  const lots = extractForm8949LotsFrom1099ExportDocs(taxReturn.docs1099 ?? [])
   if (lots.length === 0) {
     return null
   }
@@ -1708,21 +1611,18 @@ export function buildTaxWorkbook(taxReturn: TaxReturn1040): XlsxWorkbook {
       `${entry.formType.toUpperCase().replaceAll('_', '-')} ${entry.payerName}`,
       Array.isArray(entry.parsedData)
         ? entry.parsedData.flatMap((docEntry, index) => {
-            const parsedData = docEntry.parsed_data
             return [
               { isHeader: true, description: `${String(docEntry.form_type ?? 'Form').toUpperCase().replaceAll('_', '-')} ${docEntry.account_name ?? index + 1}` },
               { line: 'account_identifier', description: 'account_identifier', note: String(docEntry.account_identifier ?? '') },
-              ...(!parsedData || Array.isArray(parsedData)
-                ? []
-                : Object.entries(parsedData).map(([key, value]) => ({
-                    line: key,
-                    description: key,
-                    amount: typeof value === 'number' ? value : undefined,
-                    note: typeof value === 'number' ? undefined : String(value ?? ''),
-                  }))),
+              ...parsedDataEntries(docEntry.parsed_data).map(([key, value]) => ({
+                line: key,
+                description: key,
+                amount: typeof value === 'number' ? value : undefined,
+                note: typeof value === 'number' ? undefined : String(value ?? ''),
+              })),
             ]
           })
-        : Object.entries(entry.parsedData).map(([key, value]) => ({
+        : parsedDataEntries(entry.parsedData).map(([key, value]) => ({
             line: key,
             description: key,
             amount: typeof value === 'number' ? value : undefined,

@@ -572,10 +572,15 @@ describe('TaxPreviewContext', () => {
       if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
       if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
       if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
-      return Promise.resolve({
+      if (url === '/api/finance/tax-preview-data?year=2025') return Promise.resolve({
         ...makeResponse([]),
-        priorYearAccountDocuments: [priorYearBrokerDoc],
+        availableYears: [2025, 2024],
       })
+      if (url === '/api/finance/tax-preview-data?year=2024') return Promise.resolve({
+        ...makeResponse([priorYearBrokerDoc]),
+        availableYears: [2025, 2024],
+      })
+      return Promise.resolve(makeResponse())
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })

@@ -30,6 +30,7 @@ import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
+import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
 import { extractK1Form461Disclosure, getK1CodeItems, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
 import { parseMoneyOrZero } from '@/lib/finance/money'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
@@ -46,14 +47,6 @@ import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
-
-function accountLast4FromValue(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    return null
-  }
-  const digits = String(value).replace(/\D/g, '')
-  return digits.length >= 4 ? digits.slice(-4) : null
-}
 
 export interface TaxPreviewShellData {
   year: number
@@ -75,7 +68,6 @@ export interface TaxPreviewDataset {
   pendingReviewCount: number
   w2Documents: TaxDocument[]
   accountDocuments: TaxDocument[]
-  priorYearAccountDocuments: TaxDocument[]
   scheduleCData: ScheduleCResponse
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
@@ -257,7 +249,7 @@ export function TaxPreviewProvider({
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
   const [w2Documents, setW2Documents] = useState<TaxDocument[]>([])
   const [accountDocuments, setAccountDocuments] = useState<TaxDocument[]>([])
-  const [priorYearAccountDocuments, setPriorYearAccountDocuments] = useState<TaxDocument[]>([])
+  const [priorYearCapitalLossCarryover, setPriorYearCapitalLossCarryover] = useState<CapitalLossCarryoverLines | null>(null)
   const [scheduleCData, setScheduleCData] = useState<ScheduleCResponse | null>(null)
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
@@ -531,6 +523,78 @@ export function TaxPreviewProvider({
     [realEstateProfessionalKey],
   )
 
+  const priorYearCarryoverCache = useRef<Map<number, CapitalLossCarryoverLines | null>>(new Map())
+  const carryoverRequestId = useRef(0)
+
+  const normalizeAvailableYears = useCallback((input: unknown): number[] => {
+    if (!Array.isArray(input)) {
+      return []
+    }
+
+    return [...new Set(input)]
+      .map((year) => Number(year))
+      .filter((year) => Number.isInteger(year) && year > 0)
+      .sort((a, b) => b - a)
+  }, [])
+
+  const getPriorYearCarryover = useCallback(async function getPriorYearCarryover(
+    availableYears: number[],
+    targetYear: number,
+    visitedYears: Set<number> = new Set(),
+  ): Promise<CapitalLossCarryoverLines | null> {
+    if (targetYear <= 0 || visitedYears.has(targetYear)) {
+      return null
+    }
+
+    const cached = priorYearCarryoverCache.current.get(targetYear)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    try {
+      const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?year=${targetYear}`)) as TaxPreviewDataset
+      const docs = Array.isArray(response.accountDocuments) ? response.accountDocuments : []
+      const reviewedK1Docs = docs.filter((doc) => doc.is_reviewed && doc.form_type === 'k1')
+      const reviewed1099Docs = docs.filter((doc) => doc.is_reviewed && doc.form_type !== 'k1')
+      const nextYear = availableYears.find((year) => year < targetYear)
+      const priorCarryover = nextYear === undefined || nextYear <= 0
+        ? null
+        : await getPriorYearCarryover(availableYears, nextYear, new Set(visitedYears).add(targetYear))
+
+      const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs, {
+        shortTermCapitalLossCarryover: priorCarryover?.shortTermCarryover ?? 0,
+        longTermCapitalLossCarryover: priorCarryover?.longTermCarryover ?? 0,
+      })
+      const carryover = computeCapitalLossCarryover(scheduleD.schD.schD_line7, scheduleD.schD.schD_line15)
+      priorYearCarryoverCache.current.set(targetYear, carryover)
+      return carryover
+    } catch {
+      // On endpoint errors for prior-year recursion, fall back to null so current-year
+      // calculations still render safely.
+      priorYearCarryoverCache.current.set(targetYear, null)
+      return null
+    }
+  }, [])
+
+  const refreshPriorYearCarryover = useCallback(async (yearsFromResponse: number[], targetYear: number) => {
+    const requestId = ++carryoverRequestId.current
+    if (targetYear <= 0) {
+      setPriorYearCapitalLossCarryover(null)
+      return
+    }
+
+    const normalizedYears = normalizeAvailableYears(yearsFromResponse)
+    if (normalizedYears.length === 0) {
+      setPriorYearCapitalLossCarryover(null)
+      return
+    }
+
+    const carryover = await getPriorYearCarryover(normalizedYears, targetYear, new Set())
+    if (carryoverRequestId.current === requestId) {
+      setPriorYearCapitalLossCarryover(carryover)
+    }
+  }, [getPriorYearCarryover, normalizeAvailableYears])
+
   const refreshAll = useCallback(async () => {
     if (!hasLoadedOnce.current) {
       setIsLoading(true)
@@ -542,20 +606,21 @@ export function TaxPreviewProvider({
       setPendingReviewCount(response.pendingReviewCount ?? 0)
       setW2Documents(Array.isArray(response.w2Documents) ? response.w2Documents : [])
       setAccountDocuments(Array.isArray(response.accountDocuments) ? response.accountDocuments : [])
-      setPriorYearAccountDocuments(Array.isArray(response.priorYearAccountDocuments) ? response.priorYearAccountDocuments : [])
       setScheduleCData(response.scheduleCData ?? null)
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
       setActiveAccountIds(Array.isArray(response.activeAccountIds) ? response.activeAccountIds : [])
       setError(null)
+      priorYearCarryoverCache.current.clear()
+      await refreshPriorYearCarryover(response.availableYears, year - 1)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tax preview data')
+      setPriorYearCapitalLossCarryover(null)
     } finally {
       hasLoadedOnce.current = true
       setIsLoading(false)
     }
-  }, [year])
-
+  }, [refreshPriorYearCarryover, year])
   useEffect(() => {
     void refreshAll()
   }, [refreshAll])
@@ -713,20 +778,6 @@ export function TaxPreviewProvider({
     () => accountDocuments.filter((doc) => doc.is_reviewed && doc.form_type === 'k1'),
     [accountDocuments],
   )
-
-  const priorYearCapitalLossCarryover = useMemo<CapitalLossCarryoverLines | null>(() => {
-    const priorYearReviewedK1Docs = priorYearAccountDocuments.filter((doc) => doc.is_reviewed && doc.form_type === 'k1')
-    const priorYearReviewed1099Docs = priorYearAccountDocuments.filter((doc) => doc.is_reviewed && doc.form_type !== 'k1')
-    if (priorYearReviewedK1Docs.length === 0 && priorYearReviewed1099Docs.length === 0) {
-      return null
-    }
-
-    const priorScheduleD = computeScheduleD(priorYearReviewedK1Docs, priorYearReviewed1099Docs)
-    return computeCapitalLossCarryover(
-      priorScheduleD.schD.schD_line7,
-      priorScheduleD.schD.schD_line15,
-    )
-  }, [priorYearAccountDocuments])
 
   const foreignTaxSummaries = useMemo(
     () => collectForeignTaxSummaries(accountDocuments),

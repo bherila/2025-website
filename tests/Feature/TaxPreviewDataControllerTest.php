@@ -32,7 +32,6 @@ class TaxPreviewDataControllerTest extends TestCase
                 'pendingReviewCount',
                 'w2Documents',
                 'accountDocuments',
-                'priorYearAccountDocuments',
                 'scheduleCData' => ['available_years', 'years', 'entities'],
                 'employmentEntities',
                 'accounts',
@@ -90,52 +89,13 @@ class TaxPreviewDataControllerTest extends TestCase
             ->assertJsonPath('accountDocuments.0.parsed_data_needs_review', true);
     }
 
-    public function test_tax_preview_data_endpoint_returns_prior_year_account_documents_for_carryovers(): void
+    public function test_tax_preview_data_endpoint_does_not_return_prior_year_payload(): void
     {
         $user = $this->createUser();
 
-        FileForTaxDocument::create([
-            'user_id' => $user->id,
-            'tax_year' => 2024,
-            'form_type' => '1099_b',
-            'account_id' => null,
-            'original_filename' => 'prior-1099-b.pdf',
-            'stored_filename' => 'prior-1099-b.pdf',
-            's3_path' => '',
-            'mime_type' => 'application/pdf',
-            'file_size_bytes' => 0,
-            'file_hash' => str_repeat('b', 64),
-            'uploaded_by_user_id' => $user->id,
-            'is_reviewed' => true,
-            'genai_status' => 'parsed',
-            'parsed_data' => [
-                'payer_name' => 'Prior Broker',
-                'total_realized_gain_loss' => -10000,
-                'b_st_reported_gain_loss' => -10000,
-            ],
-        ]);
-
-        FileForTaxDocument::create([
-            'user_id' => $user->id,
-            'tax_year' => 2025,
-            'form_type' => '1099_b',
-            'account_id' => null,
-            'original_filename' => 'current-1099-b.pdf',
-            'stored_filename' => 'current-1099-b.pdf',
-            's3_path' => '',
-            'mime_type' => 'application/pdf',
-            'file_size_bytes' => 0,
-            'file_hash' => str_repeat('c', 64),
-            'uploaded_by_user_id' => $user->id,
-            'is_reviewed' => true,
-            'genai_status' => 'parsed',
-            'parsed_data' => ['payer_name' => 'Current Broker'],
-        ]);
-
         $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
 
-        $response->assertOk()
-            ->assertJsonPath('accountDocuments.0.original_filename', 'current-1099-b.pdf')
-            ->assertJsonPath('priorYearAccountDocuments.0.original_filename', 'prior-1099-b.pdf');
+        $response->assertOk();
+        $response->assertJsonMissingPath('priorYearAccountDocuments');
     }
 }
