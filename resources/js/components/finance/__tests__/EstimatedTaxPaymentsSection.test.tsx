@@ -54,4 +54,27 @@ describe('EstimatedTaxPaymentsSection', () => {
     expect(screen.queryByText(/Safe Harbor Computation/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/2026 Payment Schedule/i)).not.toBeInTheDocument()
   })
+
+  it('aligns safe harbor rows without an empty left gutter', () => {
+    const { container } = render(
+      <EstimatedTaxPaymentsSection
+        planningYear={2026}
+        priorYearTax={100_001}
+        priorYearAgi={200_000}
+        onPriorYearTaxChange={() => {}}
+        onPriorYearAgiChange={() => {}}
+        estimatedTaxPayments={estimatedTaxPayments}
+        showMfsUnsupportedNotice={false}
+      />,
+    )
+
+    const agiRow = screen.getByText('2025 prior year AGI').closest('div')
+    const totalRow = screen.getByText('Safe harbor amount (110%)').closest('div')
+
+    expect(agiRow).not.toBeNull()
+    expect(totalRow).not.toBeNull()
+    expect(agiRow?.querySelector('.w-10')).toBeNull()
+    expect(totalRow?.querySelector('.w-10')).toBeNull()
+    expect(container.querySelector('.w-5.shrink-0')).toBeNull()
+  })
 })

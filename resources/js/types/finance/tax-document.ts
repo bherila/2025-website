@@ -358,7 +358,7 @@ export interface TaxDocumentAccountLink {
   parsed_data_needs_review?: boolean
   parsed_data_warnings?: ParsedDataWarning[]
   has_original_parsed_data?: boolean
-  account: { acct_id: number; acct_name: string } | null
+  account: { acct_id: number; acct_name: string; acct_number?: string | null } | null
   created_at: string
   updated_at: string
 }
@@ -398,7 +398,7 @@ export interface TaxDocument {
   uploader: { id: number; name: string } | null
   employment_entity: { id: number; display_name: string } | null
   /** @deprecated Legacy eager-load. Use accountLinks instead. */
-  account: { acct_id: number; acct_name: string } | null
+  account: { acct_id: number; acct_name: string; acct_number?: string | null } | null
   /** Canonical account associations — one per account/form pair for this PDF. */
   account_links: TaxDocumentAccountLink[]
   created_at: string

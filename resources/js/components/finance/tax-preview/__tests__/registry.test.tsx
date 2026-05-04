@@ -34,4 +34,9 @@ describe('formRegistry', () => {
     expect(formRegistry['form-1040']!.category).toBe('Form')
     expect(formRegistry.home!.category).toBe('App')
   })
+
+  it('renders Estimate at the same wide column width as Documents', () => {
+    expect(formRegistry.estimate!.wide).toBe(true)
+    expect(formRegistry.documents!.wide).toBe(true)
+  })
 })

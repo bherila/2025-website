@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { parseMoney } from '@/lib/finance/money'
 
+const CURRENCY_TEXT = 'font-currency tabular-nums'
+const BOX_REF_CLASS = 'text-[10px] text-muted-foreground w-10 shrink-0 select-none'
+
 // ── Value helpers ─────────────────────────────────────────────────────────────
 
 export function parseFieldVal(v: string | null | undefined): number | null {
@@ -29,33 +32,45 @@ export function fmtAmt(n: number, precision = 0): string {
 
 export function AmountCell({ val, className = '' }: { val: string | number | null | undefined; className?: string }) {
   const n = typeof val === 'number' ? val : parseFieldVal(val as string | null | undefined)
-  if (n === null) return <span className={`font-mono text-muted-foreground ${className}`}>—</span>
-  if (n === 0) return <span className={`font-mono text-foreground ${className}`}>$0</span>
-  const cls = n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
-  return <span className={`font-mono tabular-nums ${cls} ${className}`}>{fmtAmt(n)}</span>
+  if (n === null) return <span className={`text-muted-foreground ${className}`}>—</span>
+  if (n === 0) return <span className={`${CURRENCY_TEXT} text-foreground ${className}`}>$0</span>
+  const cls = n < 0 ? 'text-destructive' : 'text-success'
+  return <span className={`${CURRENCY_TEXT} ${cls} ${className}`}>{fmtAmt(n)}</span>
 }
 
 // ── Shared details button ─────────────────────────────────────────────────────
 
-export function DetailsButton({ onClick, isReviewed }: { onClick: () => void; isReviewed?: boolean }) {
+export function DetailsButton({
+  onClick,
+  isReviewed,
+  tooltip = 'View Details',
+  children,
+}: {
+  onClick: () => void
+  isReviewed?: boolean
+  tooltip?: string
+  children?: React.ReactNode
+}) {
   const colorClass = isReviewed === undefined
     ? 'text-muted-foreground hover:text-foreground'
     : isReviewed
-      ? 'text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300'
-      : 'text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300'
+      ? 'text-success hover:text-success/80'
+      : 'text-warning hover:text-warning/80'
+  const isTextButton = children !== undefined
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          className={`h-5 w-5 shrink-0 ${colorClass}`}
+          size={isTextButton ? 'sm' : 'icon'}
+          className={`${isTextButton ? 'h-6 shrink-0 px-2 text-[11px]' : 'h-5 w-5 shrink-0'} ${colorClass}`}
           onClick={(e) => { e.stopPropagation(); onClick() }}
+          aria-label={tooltip}
         >
-          <Search className="h-3 w-3" />
+          {children ?? <Search className="h-3 w-3" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>View Details</TooltipContent>
+      <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   )
 }
@@ -96,6 +111,8 @@ export function FormLine({
   note,
   onClick,
   onDetails,
+  detailsTooltip,
+  detailsLabel,
   control,
 }: {
   boxRef?: string
@@ -105,16 +122,18 @@ export function FormLine({
   note?: boolean
   onClick?: () => void
   onDetails?: () => void
+  detailsTooltip?: string
+  detailsLabel?: string
   /** Custom right-side control (e.g. a number input). When provided, replaces the value display. */
   control?: React.ReactNode
 }) {
   const n = typeof value === 'number' ? value : parseFieldVal(value as string | null | undefined)
-  const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+  const cls = n === null ? '' : n < 0 ? 'text-destructive' : 'text-success'
 
   if (note) {
     return (
       <div className="px-3 py-1.5 space-y-0.5">
-        <span className="text-[10px] font-mono font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
         <p className="text-[12px] text-muted-foreground leading-snug">{raw}</p>
       </div>
     )
@@ -123,7 +142,7 @@ export function FormLine({
   if (control) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none">{boxRef ? `${boxRef}.` : ''}</span>
+        {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
         <span className="flex-1 text-[13px]">{label}</span>
         <span className="shrink-0">{control}</span>
       </div>
@@ -135,14 +154,17 @@ export function FormLine({
       className={`flex items-start gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
       onClick={onClick}
     >
-      <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none pt-0.5">{boxRef ? `${boxRef}.` : ''}</span>
+      {boxRef && <span className={`${BOX_REF_CLASS} pt-0.5`}>{boxRef}.</span>}
       <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono tabular-nums text-[13px] min-w-[80px] max-w-[45%] text-right break-words ${cls}`}>
+      <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] max-w-[45%] text-right break-words ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
       {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />}
-      {onDetails && <DetailsButton onClick={onDetails} />}
-      {!onClick && !onDetails && <span className="w-5 shrink-0" />}
+      {onDetails && (
+        <DetailsButton onClick={onDetails} {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}>
+          {detailsLabel}
+        </DetailsButton>
+      )}
     </div>
   )
 }
@@ -157,14 +179,14 @@ export function FormSubLine({ text }: { text: string }) {
 
 export function FormTotalLine({ label, value, double, boxRef }: { label: string; value: number | null; double?: boolean; boxRef?: string }) {
   const cls =
-    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-500'
+    value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
   return (
     <div
       className={`flex items-center gap-2 px-3 py-2 border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`}
     >
-      <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0 select-none">{boxRef ? `${boxRef}.` : ''}</span>
+      {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
       <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`font-mono text-[13px] tabular-nums min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
+      <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
     </div>
   )
 }

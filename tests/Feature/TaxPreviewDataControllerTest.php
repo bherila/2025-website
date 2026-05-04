@@ -88,4 +88,14 @@ class TaxPreviewDataControllerTest extends TestCase
             ->assertJsonPath('accountDocuments.0.parsed_data.box1b_qualified', 88.10)
             ->assertJsonPath('accountDocuments.0.parsed_data_needs_review', true);
     }
+
+    public function test_tax_preview_data_endpoint_does_not_return_prior_year_payload(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
+
+        $response->assertOk();
+        $response->assertJsonMissingPath('priorYearAccountDocuments');
+    }
 }

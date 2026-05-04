@@ -50,6 +50,7 @@ export interface InstanceRef {
 export interface DrillTarget {
   form: FormId
   instance?: string
+  placement?: 'right' | 'left-of-current'
 }
 
 export interface FormRenderProps {

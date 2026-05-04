@@ -132,8 +132,8 @@ class TaxPreviewDataService
             ->with([
                 'uploader:id,name',
                 'employmentEntity:id,display_name',
-                'account:acct_id,acct_name',
-                'accountLinks.account:acct_id,acct_name',
+                'account:acct_id,acct_name,acct_number',
+                'accountLinks.account:acct_id,acct_name,acct_number',
             ])
             ->orderBy('created_at', 'desc')
             ->get();

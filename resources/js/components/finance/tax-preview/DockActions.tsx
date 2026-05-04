@@ -17,6 +17,8 @@ interface DockActionsValue {
   isExportingXlsx: boolean
   /** Open the document review modal for a specific K-1 document by id. */
   reviewK1Doc: (docId: number) => void
+  /** Open the document review modal for any tax document by id. */
+  openTaxDocumentDetail: (docId: number) => void
   /** Open the review modal in "select a document" mode (no specific doc). */
   openReviewQueue: () => void
   /** Bulk-update the K-3 sourcedByPartnerAsUSSource election across multiple K-1s. */
@@ -84,6 +86,10 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
     openReviewDoc(docId)
   }, [openReviewDoc])
 
+  const openTaxDocumentDetail = useCallback((docId: number) => {
+    openReviewDoc(docId)
+  }, [openReviewDoc])
+
   const openReviewQueue = useCallback(() => {
     setReviewDoc(undefined)
     setReviewOpen(true)
@@ -148,6 +154,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
       exportXlsx: exportXlsx ?? noopExportXlsx,
       isExportingXlsx: isExportingXlsx ?? false,
       reviewK1Doc,
+      openTaxDocumentDetail,
       openReviewQueue,
       bulkSetSbpElection,
       openWorksheet,
@@ -155,7 +162,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
       paletteOpen,
       setPaletteOpen,
     }),
-    [exportXlsx, isExportingXlsx, reviewK1Doc, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
+    [exportXlsx, isExportingXlsx, reviewK1Doc, openTaxDocumentDetail, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
   )
 
   return (

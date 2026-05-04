@@ -130,5 +130,6 @@ describe('TaxDocuments1099Section', () => {
     expect(screen.getByText('fidelity taxable')).toBeTruthy()
     expect(screen.getByText(/Broker 1099.*Processing/)).toBeTruthy()
     expect(screen.queryByText('Pending imports — awaiting account assignment')).toBeNull()
+    expect(screen.getByText('fidelity taxable').closest('table')?.parentElement).toHaveClass('border-muted')
   })
 })

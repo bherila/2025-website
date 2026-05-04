@@ -1,15 +1,19 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronLeft } from 'lucide-react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { Button } from '@/components/ui/button'
 import { getK1CodeItems, parseK1Field, resolve11SCharacter } from '@/lib/finance/k1Utils'
 import { readScheduleDBrokerGains, type ScheduleDBrokerLine } from '@/lib/finance/scheduleDBrokerGains'
 import { getDocAmounts, iterateReviewedBrokerEntries } from '@/lib/finance/taxDocumentUtils'
 import { scheduleD } from '@/lib/tax/scheduleD'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { CapitalLossCarryoverLines } from '@/types/finance/tax-return'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -17,6 +21,51 @@ interface ScheduleDPreviewProps {
   reviewedK1Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   selectedYear?: number
+  priorYearCapitalLossCarryover?: Pick<CapitalLossCarryoverLines, 'shortTermCarryover' | 'longTermCarryover'> | null
+  onOpenDoc?: (docId: number) => void
+  onGoToForm1040?: () => void
+}
+
+interface ScheduleDCarryoverOptions {
+  shortTermCapitalLossCarryover?: number
+  longTermCapitalLossCarryover?: number
+}
+
+interface ScheduleDDetailSource {
+  formLabel: string
+  docId: number
+}
+
+interface CapGainLine {
+  label: string
+  amount: number
+  note?: string
+  boxRef?: string
+  detail?: ScheduleDDetailSource
+}
+
+function scheduleLossCarryover(value: number | null | undefined): number {
+  if (value == null || value === 0) {
+    return 0
+  }
+
+  return currency(0).subtract(Math.abs(value)).value
+}
+
+function formLabel(formType: string): string {
+  return FORM_TYPE_LABELS[formType] ?? formType.toUpperCase()
+}
+
+function lineDetailProps(line: CapGainLine, onOpenDoc?: (docId: number) => void) {
+  if (!line.detail || !onOpenDoc) {
+    return {}
+  }
+
+  return {
+    onDetails: () => onOpenDoc(line.detail!.docId),
+    detailsLabel: 'Detail',
+    detailsTooltip: `Open ${line.detail.formLabel} detail`,
+  }
 }
 
 export interface ScheduleDComputedData {
@@ -31,7 +80,11 @@ export interface ScheduleDComputedData {
   has11SAmbiguous: boolean
 }
 
-export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs: TaxDocument[]): ScheduleDComputedData {
+export function computeScheduleD(
+  reviewedK1Docs: TaxDocument[],
+  reviewed1099Docs: TaxDocument[],
+  carryovers: ScheduleDCarryoverOptions = {},
+): ScheduleDComputedData {
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
     .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
@@ -140,12 +193,14 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
     line2_gain_loss: brokerLineAmount('2'),
     line3_gain_loss: currency(brokerLineAmount('3')).add(total6781ST).value,
     line5: k1ST,
+    line6_carryover: scheduleLossCarryover(carryovers.shortTermCapitalLossCarryover),
     line8a_gain_loss: brokerLineAmount('8a'),
     line8b_gain_loss: brokerLineAmount('8b'),
     line9_gain_loss: brokerLineAmount('9'),
     line10_gain_loss: currency(brokerLineAmount('10')).add(total6781LT).value,
     line12: k1LT,
     line13_capital_gain_distributions: totalCapitalGainDistributions,
+    line14_carryover: scheduleLossCarryover(carryovers.longTermCapitalLossCarryover),
   })
 
   const combined = schD.schD_line16
@@ -164,7 +219,14 @@ export function computeScheduleD(reviewedK1Docs: TaxDocument[], reviewed1099Docs
   }
 }
 
-export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, selectedYear }: ScheduleDPreviewProps) {
+export default function ScheduleDPreview({
+  reviewedK1Docs,
+  reviewed1099Docs,
+  selectedYear,
+  priorYearCapitalLossCarryover = null,
+  onOpenDoc,
+  onGoToForm1040,
+}: ScheduleDPreviewProps) {
   const taxYear = selectedYear ?? new Date().getFullYear()
   const k1Parsed = reviewedK1Docs
     .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
@@ -179,7 +241,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   }
 
   // ── Form 6781 — Section 1256 ──────────────────────────────────────────────
-  type Sec1256Source = { label: string; amount: number; lt: number; st: number }
+  type Sec1256Source = { label: string; amount: number; lt: number; st: number; detail: ScheduleDDetailSource }
   const sec1256Sources: Sec1256Source[] = []
 
   for (const { doc, data } of k1Parsed) {
@@ -194,6 +256,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           amount: n,
           lt: currency(n).multiply(0.6).value,
           st: currency(n).multiply(0.4).value,
+          detail: { formLabel: 'K-1', docId: doc.id },
         })
       }
     }
@@ -213,6 +276,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     stGain: number
     ltGain: number
     lineAmounts: Partial<Record<ScheduleDBrokerLine, number>>
+    detail: ScheduleDDetailSource
   }
   const brokerSources: BrokerGainSource[] = []
 
@@ -221,7 +285,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   )
 
   for (const doc of brokerDocs) {
-    const records: { data: Record<string, unknown>; label: string }[] = []
+    const records: { data: Record<string, unknown>; label: string; detail: ScheduleDDetailSource }[] = []
 
     if (doc.form_type === 'broker_1099' && Array.isArray(doc.parsed_data)) {
       for (const [entry, link] of iterateReviewedBrokerEntries(doc)) {
@@ -236,6 +300,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
             ?? (entry.parsed_data?.payer_name as string | undefined)
             ?? doc.original_filename
             ?? 'Brokerage',
+          detail: { formLabel: formLabel(link.form_type), docId: doc.id },
         })
       }
     } else {
@@ -243,6 +308,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       records.push({
         data: p,
         label: (p.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? 'Brokerage',
+        detail: { formLabel: formLabel(doc.form_type), docId: doc.id },
       })
     }
 
@@ -255,6 +321,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           stGain: gains.shortTermGain,
           ltGain: gains.longTermGain,
           lineAmounts: gains.lineAmounts,
+          detail: record.detail,
         })
       }
     }
@@ -263,9 +330,10 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   const hasBrokerData = brokerSources.length > 0
   const brokerLineAmount = (line: ScheduleDBrokerLine): number =>
     brokerSources.reduce((acc, source) => acc.add(source.lineAmounts[line] ?? 0), currency(0)).value
+  const priorYearShortCarryover = priorYearCapitalLossCarryover?.shortTermCarryover ?? 0
+  const priorYearLongCarryover = priorYearCapitalLossCarryover?.longTermCarryover ?? 0
 
   // ── Short-term capital gains/losses ──────────────────────────────────────
-  type CapGainLine = { label: string; amount: number; note?: string; boxRef?: string }
   const stLines: CapGainLine[] = []
   const ambiguous11SLines: CapGainLine[] = []
 
@@ -276,7 +344,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
     const box8 = parseK1Field(data, '8')
     if (box8 !== 0) {
-      stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8, boxRef: '5' })
+      stLines.push({ label: `${partnerName} — K-1 Box 8`, amount: box8, boxRef: '5', detail: { formLabel: 'K-1', docId: doc.id } })
     }
     // Box 11S — non-portfolio capital gain/loss (AQR/trader-fund supplemental statements).
     // Only the lines whose notes mark them as short-term land on Schedule D line 5.
@@ -290,6 +358,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           label: `${partnerName} — K-1 Box 11S (S/T non-portfolio)`,
           amount: n,
           boxRef: '5',
+          detail: { formLabel: 'K-1', docId: doc.id },
         }
         if (item.notes) line.note = item.notes
         stLines.push(line)
@@ -305,20 +374,23 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   }
 
   // Form 6781 40% ST allocation
-  if (total6781ST !== 0) {
-    stLines.push({
-      label: 'Form 6781 40% S/T allocation (Sec. 1256)',
-      amount: total6781ST,
-      note: '40% of Section 1256 gain/(loss) is always short-term',
-      boxRef: '3',
-    })
+  for (const src of sec1256Sources) {
+    if (src.st !== 0) {
+      stLines.push({
+        label: `${src.label} — Form 6781 40% S/T allocation`,
+        amount: src.st,
+        note: '40% of Section 1256 gain/(loss) is always short-term',
+        boxRef: '3',
+        detail: src.detail,
+      })
+    }
   }
 
   // broker_1099 / 1099-B short-term
   if (hasBrokerData) {
     for (const src of brokerSources) {
       if (src.stGain !== 0) {
-        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain, boxRef: '1a' })
+        stLines.push({ label: `${src.label} — ST 1099-B`, amount: src.stGain, boxRef: '1a', detail: src.detail })
       }
     }
   } else {
@@ -327,6 +399,14 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       amount: 0,
       note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
       boxRef: '1a',
+    })
+  }
+  if (priorYearShortCarryover > 0) {
+    stLines.push({
+      label: `${taxYear - 1} short-term capital loss carryover`,
+      amount: scheduleLossCarryover(priorYearShortCarryover),
+      note: `Pulled from the ${taxYear - 1} tax preview return's capital loss carryover calculation.`,
+      boxRef: '6',
     })
   }
 
@@ -341,13 +421,13 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     const box9c = parseK1Field(data, '9c')
     const box10 = parseK1Field(data, '10')
 
-    if (box9a !== 0) ltLines.push({ label: `${partnerName} — K-1 Box 9a (L/T)`, amount: box9a, boxRef: '12' })
+    if (box9a !== 0) ltLines.push({ label: `${partnerName} — K-1 Box 9a (L/T)`, amount: box9a, boxRef: '12', detail: { formLabel: 'K-1', docId: doc.id } })
     if (box9b !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 9b (28% rate)`, amount: box9b, note: '28% collectibles rate', boxRef: '12' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 9b (28% rate)`, amount: box9b, note: '28% collectibles rate', boxRef: '12', detail: { formLabel: 'K-1', docId: doc.id } })
     if (box9c !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain', boxRef: '12' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 9c (§1250 unrec.)`, amount: box9c, note: 'Unrecaptured §1250 gain', boxRef: '12', detail: { formLabel: 'K-1', docId: doc.id } })
     if (box10 !== 0)
-      ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II', boxRef: '12' })
+      ltLines.push({ label: `${partnerName} — K-1 Box 10 (§1231)`, amount: box10, note: '§1231 gain flows to Part II', boxRef: '12', detail: { formLabel: 'K-1', docId: doc.id } })
 
     // Box 11S — long-term sub-lines. Ambiguous lines are shown separately below instead of routed.
     const sItems = getK1CodeItems(data, '11', 'S')
@@ -360,6 +440,7 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           label: `${partnerName} — K-1 Box 11S (L/T non-portfolio)`,
           amount: n,
           boxRef: '12',
+          detail: { formLabel: 'K-1', docId: doc.id },
         }
         if (item.notes) line.note = item.notes
         ltLines.push(line)
@@ -368,20 +449,23 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
   }
 
   // Form 6781 60% LT allocation
-  if (total6781LT !== 0) {
-    ltLines.push({
-      label: 'Form 6781 60% L/T allocation (Sec. 1256)',
-      amount: total6781LT,
-      note: '60% of Section 1256 gain/(loss) is always long-term',
-      boxRef: '10',
-    })
+  for (const src of sec1256Sources) {
+    if (src.lt !== 0) {
+      ltLines.push({
+        label: `${src.label} — Form 6781 60% L/T allocation`,
+        amount: src.lt,
+        note: '60% of Section 1256 gain/(loss) is always long-term',
+        boxRef: '10',
+        detail: src.detail,
+      })
+    }
   }
 
   // broker_1099 / 1099-B long-term
   if (hasBrokerData) {
     for (const src of brokerSources) {
       if (src.ltGain !== 0) {
-        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain, boxRef: '8a' })
+        ltLines.push({ label: `${src.label} — LT 1099-B`, amount: src.ltGain, boxRef: '8a', detail: src.detail })
       }
     }
   } else {
@@ -390,6 +474,46 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
       amount: 0,
       note: 'Upload and review a 1099-B or broker_1099 document to include brokerage transactions',
       boxRef: '8a',
+    })
+  }
+  let totalCapitalGainDistributions = currency(0)
+  for (const doc of reviewed1099Docs) {
+    const links = doc.account_links ?? []
+    if (links.length > 0) {
+      for (const link of links) {
+        if (link.form_type !== '1099_div' && link.form_type !== '1099_div_c') {
+          continue
+        }
+        const capGain = getDocAmounts(doc, link).capGain ?? 0
+        if (capGain !== 0) {
+          totalCapitalGainDistributions = totalCapitalGainDistributions.add(capGain)
+          ltLines.push({
+            label: `${link.account?.acct_name ?? doc.original_filename ?? '1099-DIV'} — capital gain distributions`,
+            amount: capGain,
+            boxRef: '13',
+            detail: { formLabel: formLabel(link.form_type), docId: doc.id },
+          })
+        }
+      }
+    } else if (doc.form_type === '1099_div' || doc.form_type === '1099_div_c') {
+      const capGain = getDocAmounts(doc).capGain ?? 0
+      if (capGain !== 0) {
+        totalCapitalGainDistributions = totalCapitalGainDistributions.add(capGain)
+        ltLines.push({
+          label: `${((doc.parsed_data ?? {}) as Record<string, unknown>).payer_name as string | undefined ?? doc.account?.acct_name ?? doc.original_filename ?? '1099-DIV'} — capital gain distributions`,
+          amount: capGain,
+          boxRef: '13',
+          detail: { formLabel: formLabel(doc.form_type), docId: doc.id },
+        })
+      }
+    }
+  }
+  if (priorYearLongCarryover > 0) {
+    ltLines.push({
+      label: `${taxYear - 1} long-term capital loss carryover`,
+      amount: scheduleLossCarryover(priorYearLongCarryover),
+      note: `Pulled from the ${taxYear - 1} tax preview return's capital loss carryover calculation.`,
+      boxRef: '14',
     })
   }
 
@@ -408,11 +532,14 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
     line2_gain_loss: brokerLineAmount('2'),
     line3_gain_loss: currency(brokerLineAmount('3')).add(total6781ST).value,
     line5: k1ST,                        // ST from K-1 partnerships (Line 5)
+    line6_carryover: scheduleLossCarryover(priorYearShortCarryover),
     line8a_gain_loss: brokerLineAmount('8a'), // LT brokerage summary without Form 8949 detail
     line8b_gain_loss: brokerLineAmount('8b'),
     line9_gain_loss: brokerLineAmount('9'),
     line10_gain_loss: currency(brokerLineAmount('10')).add(total6781LT).value,
     line12: k1LT,                       // LT from K-1 partnerships (Line 12)
+    line13_capital_gain_distributions: totalCapitalGainDistributions.value,
+    line14_carryover: scheduleLossCarryover(priorYearLongCarryover),
   })
 
   const netST = schD.schD_line7
@@ -436,7 +563,11 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           <FormBlock title="Form 6781 — Section 1256 Contracts &amp; Straddles">
             {sec1256Sources.map((src, i) => (
               <div key={i}>
-                <FormLine label={src.label} value={src.amount} />
+                <FormLine
+                  label={src.label}
+                  value={src.amount}
+                  {...lineDetailProps({ label: src.label, amount: src.amount, detail: src.detail }, onOpenDoc)}
+                />
                 <FormSubLine
                   text={`60% long-term = ${fmtAmt(src.lt)} · 40% short-term = ${fmtAmt(src.st)} → Form 6781 Part I`}
                 />
@@ -494,7 +625,12 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
         <FormBlock title="Schedule D Part I — Short-Term">
           {stLines.map((line, i) => (
             <div key={i}>
-              <FormLine {...(line.boxRef ? { boxRef: line.boxRef } : {})} label={line.label} value={line.amount} />
+              <FormLine
+                {...(line.boxRef ? { boxRef: line.boxRef } : {})}
+                label={line.label}
+                value={line.amount}
+                {...lineDetailProps(line, onOpenDoc)}
+              />
               {line.note && <FormSubLine text={line.note} />}
             </div>
           ))}
@@ -505,7 +641,12 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
         <FormBlock title="Schedule D Part II — Long-Term">
           {ltLines.map((line, i) => (
             <div key={i}>
-              <FormLine {...(line.boxRef ? { boxRef: line.boxRef } : {})} label={line.label} value={line.amount} />
+              <FormLine
+                {...(line.boxRef ? { boxRef: line.boxRef } : {})}
+                label={line.label}
+                value={line.amount}
+                {...lineDetailProps(line, onOpenDoc)}
+              />
               {line.note && <FormSubLine text={line.note} />}
             </div>
           ))}
@@ -523,7 +664,26 @@ export default function ScheduleDPreview({ reviewedK1Docs, reviewed1099Docs, sel
           <>
             <FormLine
               boxRef="21"
-              label={`Capital loss applied to ${taxYear} return`}
+              label={(
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>Capital loss applied to {taxYear} return</span>
+                  {onGoToForm1040 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1.5 px-2 text-[11px]"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onGoToForm1040()
+                      }}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                      Form 1040 line 7
+                    </Button>
+                  )}
+                </span>
+              )}
               value={appliedToReturn}
             />
             <FormLine

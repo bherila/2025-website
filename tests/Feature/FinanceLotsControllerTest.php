@@ -13,6 +13,7 @@ class FinanceLotsControllerTest extends TestCase
         $acctId = DB::table('fin_accounts')->insertGetId([
             'acct_owner' => $userId,
             'acct_name' => 'Test Brokerage',
+            'acct_number' => 'Brokerage 1234',
             'acct_last_balance' => '100000',
         ]);
 
@@ -143,6 +144,7 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertArrayHasKey('proceeds', $lot);
         $this->assertArrayHasKey('is_short_term', $lot);
         $this->assertArrayHasKey('lot_source', $lot);
+        $this->assertSame('1234', $lot['account_last4']);
     }
 
     public function test_show_all_lots_closed_filters_out_other_years(): void

@@ -1,4 +1,12 @@
-import { classifyBox, computeForm8949, type Form8949Lot } from '../Form8949Preview'
+import type { TaxDocument } from '@/types/finance/tax-document'
+
+import {
+  classifyBox,
+  computeForm8949,
+  type Form8949Lot,
+  form8949LotsFromTaxDocuments,
+  formatForm8949Date,
+} from '../Form8949Preview'
 
 function mkLot(overrides: Partial<Form8949Lot> = {}): Form8949Lot {
   return {
@@ -92,9 +100,25 @@ describe('computeForm8949', () => {
     const data = computeForm8949(lots)
     const row = data.shortTerm[0]!.rows[0]!
     expect(row.code).toBe('W')
-    // Adjustment = proceeds − basis − realized_gain_loss → 1000 − 1500 − 0 = -500.
-    // Negative adjustment = disallowed loss added back; magnitude is what matters.
-    expect(row.adjustment).toBe(-500)
+    // Adjustment = realized gain − unadjusted gain → 0 − (1000 − 1500) = 500.
+    expect(row.adjustment).toBe(500)
+  })
+
+  it('uses explicit imported wash-sale amounts when 1099-B reports unadjusted gain/loss separately', () => {
+    const data = computeForm8949([
+      mkLot({
+        is_short_term: 1,
+        proceeds: 1000,
+        cost_basis: 1500,
+        realized_gain_loss: -500,
+        wash_sale_disallowed: 200,
+      }),
+    ])
+
+    const row = data.shortTerm[0]!.rows[0]!
+    expect(row.code).toBe('W')
+    expect(row.adjustment).toBe(200)
+    expect(row.gain).toBe(-300)
   })
 
   it('leaves the code blank when proceeds − basis already equals gain (no adjustment)', () => {
@@ -105,5 +129,88 @@ describe('computeForm8949', () => {
     const row = data.shortTerm[0]!.rows[0]!
     expect(row.code).toBe('')
     expect(row.adjustment).toBe(0)
+  })
+})
+
+describe('formatForm8949Date', () => {
+  it('formats date-only values compactly without constructing timezone-sensitive Dates', () => {
+    expect(formatForm8949Date('2025-01-09T00:00:00.000000Z')).toBe('1/9/25')
+    expect(formatForm8949Date('2025-12-31 13:45:00')).toBe('12/31/25')
+    expect(formatForm8949Date('various')).toBe('Various')
+  })
+})
+
+describe('form8949LotsFromTaxDocuments', () => {
+  it('extracts broker 1099-B lots for the selected account with compact account last4 descriptions', () => {
+    const doc = {
+      id: 12,
+      user_id: 1,
+      tax_year: 2025,
+      form_type: 'broker_1099',
+      employment_entity_id: null,
+      account_id: null,
+      original_filename: 'broker.pdf',
+      stored_filename: null,
+      s3_path: null,
+      mime_type: 'application/pdf',
+      file_size_bytes: 1,
+      file_hash: 'broker',
+      is_reviewed: true,
+      notes: null,
+      human_file_size: '1 B',
+      download_count: 0,
+      genai_job_id: null,
+      genai_status: 'parsed',
+      parsed_data: [{
+        account_identifier: '367 671847 209',
+        account_name: 'E*TRADE from Morgan Stanley',
+        form_type: '1099_b',
+        tax_year: 2025,
+        parsed_data: {
+          transactions: [
+            {
+              symbol: 'NVDA',
+              description: 'NVIDIA CORP',
+              purchase_date: '2025-01-09T00:00:00Z',
+              sale_date: '2025-02-14T00:00:00Z',
+              proceeds: 1000,
+              cost_basis: 1500,
+              realized_gain_loss: -500,
+              wash_sale_disallowed: 200,
+              is_short_term: true,
+              form_8949_box: 'A',
+              is_covered: true,
+            },
+          ],
+        },
+      }],
+      uploader: null,
+      employment_entity: null,
+      account: null,
+      account_links: [{
+        id: 10,
+        tax_document_id: 12,
+        account_id: 1,
+        form_type: '1099_b',
+        tax_year: 2025,
+        ai_identifier: '367 671847 209',
+        ai_account_name: 'E*TRADE from Morgan Stanley',
+        is_reviewed: true,
+        notes: null,
+        account: { acct_id: 1, acct_name: 'ben e-trade', acct_number: null },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }],
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    } satisfies TaxDocument
+
+    const lots = form8949LotsFromTaxDocuments([doc], 1)
+    const rows = computeForm8949(lots).shortTerm[0]!.rows
+
+    expect(lots).toHaveLength(1)
+    expect(lots[0]!.account_last4).toBe('7209')
+    expect(form8949LotsFromTaxDocuments([doc], 2)).toHaveLength(0)
+    expect(rows[0]!.description).toBe('NVDA • 7209')
   })
 })

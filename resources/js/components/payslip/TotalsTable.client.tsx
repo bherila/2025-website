@@ -7,6 +7,8 @@ import { calculateTax } from '@/lib/tax/taxBracket'
 
 import type { fin_payslip } from './payslipDbCols'
 
+const CURRENCY_TEXT = 'font-currency tabular-nums'
+
 // ─── Aggregation helpers ─────────────────────────────────────────────────────
 
 function totalIncome(data: fin_payslip[]) {
@@ -54,7 +56,6 @@ function totalRetirementSavings(data: fin_payslip[]) {
   )
 }
 
-
 function fmtCurrency(val: currency | number): string {
   return currency(val).format()
 }
@@ -78,10 +79,10 @@ function SummaryCard({
   valueClass?: string
 }) {
   return (
-    <div className="border border-border bg-card rounded-sm p-3">
-      <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground mb-1.5">{label}</div>
-      <div className={`font-mono text-lg font-semibold leading-tight ${valueClass}`}>{value}</div>
-      {sub && <div className="font-mono text-[10px] text-muted-foreground mt-1">{sub}</div>}
+    <div className="rounded-sm border border-border bg-card p-3">
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`${CURRENCY_TEXT} text-lg font-semibold leading-tight ${valueClass}`}>{value}</div>
+      {sub && <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>}
     </div>
   )
 }
@@ -98,7 +99,7 @@ function BracketBlock({
   return (
     <div className="border border-border bg-card rounded-sm overflow-hidden">
       <div className="px-3 py-2 border-b border-border bg-muted/30">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-info">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-info">
           {label}
         </span>
       </div>
@@ -108,16 +109,16 @@ function BracketBlock({
           return (
             <div
               key={i}
-              className={`flex items-baseline justify-between gap-3 py-1 font-mono text-[11px] ${
+              className={`flex items-baseline justify-between gap-3 py-1 text-[11px] ${
                 isLast
                   ? 'border-t border-border mt-1 pt-2 font-semibold'
                   : 'border-b border-dashed border-border/50'
               }`}
             >
-              <span className="text-muted-foreground">
+              <span className={`text-muted-foreground ${CURRENCY_TEXT}`}>
                 {fmtCurrency(t.amt)} @ {t.bracket.multiply(100).value.toFixed(0)}%
               </span>
-              <span className={isLast ? 'text-primary' : 'text-foreground'}>{fmtCurrency(t.tax)}</span>
+              <span className={`${CURRENCY_TEXT} ${isLast ? 'text-primary' : 'text-foreground'}`}>{fmtCurrency(t.tax)}</span>
             </div>
           )
         })}
@@ -139,7 +140,7 @@ function Td({
 }) {
   return (
     <TableCell
-      className={`font-mono text-xs py-2 px-3 ${right ? 'text-right tabular-nums' : ''} ${className}`}
+      className={`py-2 px-3 text-xs ${right ? `text-right ${CURRENCY_TEXT}` : ''} ${className}`}
     >
       {children}
     </TableCell>
@@ -149,7 +150,7 @@ function Td({
 function Th({ children, right }: { children: ReactNode; right?: boolean }) {
   return (
     <TableHead
-      className={`font-mono text-[10px] uppercase tracking-wide text-muted-foreground py-2 px-3 ${right ? 'text-right' : ''}`}
+      className={`py-2 px-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${right ? 'text-right' : ''}`}
     >
       {children}
     </TableHead>

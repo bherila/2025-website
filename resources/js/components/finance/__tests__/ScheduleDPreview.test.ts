@@ -130,6 +130,19 @@ describe('computeScheduleD', () => {
     expect(result.schD.schD_line16).toBe(650)
   })
 
+  it('pulls prior-year capital loss carryovers into Schedule D lines 6 and 14', () => {
+    const result = computeScheduleD([], [], {
+      shortTermCapitalLossCarryover: 7000,
+      longTermCapitalLossCarryover: 2000,
+    })
+
+    expect(result.schD.schD_line6).toBe(-7000)
+    expect(result.schD.schD_line14).toBe(-2000)
+    expect(result.netST).toBe(-7000)
+    expect(result.netLT).toBe(-2000)
+    expect(result.appliedToReturn).toBe(-3000)
+  })
+
   it('does not use combined 1099-B total as short-term fallback when long-term detail is present', () => {
     const result = computeScheduleD([], [
       make1099DivDoc({

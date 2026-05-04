@@ -35,8 +35,8 @@ export function DockHeaderBar({
 
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
-      <h1 className="text-base font-semibold tracking-tight">Tax Preview</h1>
-      <Badge variant="outline" className="text-xs">
+      <h1 className="finance-nav-title">Tax Preview</h1>
+      <Badge variant="outline" className="border-primary/30 bg-primary/10 text-xs text-primary">
         Dock
       </Badge>
       <YearSelectorWithNav
@@ -50,7 +50,7 @@ export function DockHeaderBar({
         type="button"
         variant="outline"
         size="sm"
-        className="h-7 gap-1.5 px-2.5 text-xs"
+        className="h-7 gap-1.5 border-info/30 bg-info/10 px-2.5 text-xs text-info hover:bg-info/15"
         onClick={() => setPaletteOpen(true)}
         aria-label="Open command palette"
       >
@@ -65,7 +65,7 @@ export function DockHeaderBar({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 gap-1.5 px-2.5 text-xs"
+          className="h-7 gap-1.5 border-warning/35 bg-warning/10 px-2.5 text-xs text-warning hover:bg-warning/15"
           onClick={openReviewQueue}
         >
           <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -76,7 +76,7 @@ export function DockHeaderBar({
         type="button"
         variant="outline"
         size="sm"
-        className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
+        className="ml-auto h-7 gap-1.5 border-primary/30 bg-accent px-2.5 text-xs text-accent-foreground hover:bg-accent/80"
         onClick={exportXlsx}
         disabled={isExportingXlsx}
       >

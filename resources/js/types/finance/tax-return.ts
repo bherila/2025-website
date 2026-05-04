@@ -225,7 +225,18 @@ export interface K3ExportEntry {
 export interface Doc1099ExportEntry {
   formType: string
   payerName: string
-  parsedData: Record<string, unknown>
+  parsedData: Record<string, unknown> | Record<string, unknown>[]
+  accountId?: number | null
+  accountName?: string | null
+  accountLast4?: string | null
+  accountLinks?: {
+    id: number
+    account_id: number | null
+    form_type: string
+    ai_identifier: string | null
+    ai_account_name: string | null
+    account: { acct_id: number; acct_name: string; acct_number?: string | null } | null
+  }[]
 }
 
 export interface OverviewSection {

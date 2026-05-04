@@ -548,4 +548,49 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.form8582?.activities[0]?.priorYearUnallowed).toBe(-4000)
     expect(result.current.taxReturn.form8582?.totalPriorYearUnallowed).toBe(-4000)
   })
+
+  it('feeds prior-year capital loss carryovers into current-year Schedule D', async () => {
+    const priorYearBrokerDoc = {
+      id: 101,
+      form_type: '1099_b',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2024,
+      parsed_data: {
+        payer_name: 'Prior Broker',
+        transactions: [
+          { description: 'Prior short loss', realized_gain_loss: -10_000, is_short_term: true, form_8949_box: 'A', is_covered: true },
+          { description: 'Prior long loss', realized_gain_loss: -5_000, is_short_term: false, form_8949_box: 'D', is_covered: true },
+        ],
+      },
+      original_filename: 'prior-broker.pdf',
+      account_links: [],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-preview-data?year=2025') return Promise.resolve({
+        ...makeResponse([]),
+        availableYears: [2025, 2024],
+      })
+      if (url === '/api/finance/tax-preview-data?year=2024') return Promise.resolve({
+        ...makeResponse([priorYearBrokerDoc]),
+        availableYears: [2025, 2024],
+      })
+      return Promise.resolve(makeResponse())
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.priorYearCapitalLossCarryover).toEqual(expect.objectContaining({
+      shortTermCarryover: 7000,
+      longTermCarryover: 5000,
+    }))
+    expect(result.current.taxReturn.scheduleD?.schD_line6).toBe(-7000)
+    expect(result.current.taxReturn.scheduleD?.schD_line14).toBe(-5000)
+  })
 })

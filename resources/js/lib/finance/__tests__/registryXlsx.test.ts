@@ -6,6 +6,7 @@ import {
   buildEstimatedTaxSheet,
   buildForm1040Sheet,
   buildForm1116Sheet,
+  buildForm8949Sheet,
   buildOverviewSheet,
   buildScheduleASheet,
   buildScheduleBSheet,
@@ -195,6 +196,95 @@ describe('XLSX registry integration', () => {
       expect(sheet?.rows.find((row) => row.line === '9')?.formula).toMatch(/^=SUM\(C\d+:C\d+\)$/)
       expect(sheet?.rows.some((row) => row.description === 'Fidelity — S/T 1099-B')).toBe(false)
       expect(sheet?.rows.some((row) => row.description === 'Fidelity — L/T 1099-B')).toBe(false)
+    })
+
+    it('uses explicit 1099-B wash-sale amounts when routing Form 8949-backed Schedule D lines', () => {
+      const tr = {
+        ...baseReturn,
+        scheduleD: {
+          schD_line1b_gain_loss: -300,
+          schD_line7: -300,
+          schD_line15: 0,
+          schD_line16: -300,
+          schD_line21: -300,
+        } as never,
+        docs1099: [
+          {
+            formType: '1099_b',
+            payerName: 'E*TRADE',
+            parsedData: {
+              transactions: [
+                {
+                  symbol: 'NVDA',
+                  proceeds: 1000,
+                  cost_basis: 1500,
+                  realized_gain_loss: -500,
+                  wash_sale_disallowed: 200,
+                  is_short_term: true,
+                  form_8949_box: 'A',
+                  is_covered: true,
+                },
+              ],
+            },
+          },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildScheduleDSheet(tr)
+
+      expect(sheet?.rows.find((row) => row.description === 'E*TRADE — NVDA')?.amount).toBe(-300)
+    })
+
+    it('builds a Form 8949 sheet from imported 1099-B transactions with compact dates and account last4', () => {
+      const tr = {
+        ...baseReturn,
+        docs1099: [
+          {
+            formType: 'broker_1099',
+            payerName: 'E*TRADE from Morgan Stanley',
+            parsedData: [{
+              account_identifier: '367 671847 209',
+              account_name: 'E*TRADE from Morgan Stanley',
+              form_type: '1099_b',
+              tax_year: 2025,
+              parsed_data: {
+                transactions: [
+                  {
+                    symbol: 'NVDA',
+                    description: 'NVIDIA CORP',
+                    purchase_date: '2025-01-09T00:00:00Z',
+                    sale_date: '2025-02-14T00:00:00Z',
+                    proceeds: 1000,
+                    cost_basis: 1500,
+                    realized_gain_loss: -500,
+                    wash_sale_disallowed: 200,
+                    is_short_term: true,
+                    form_8949_box: 'A',
+                    is_covered: true,
+                  },
+                ],
+              },
+            }],
+            accountLinks: [{
+              id: 10,
+              account_id: 1,
+              form_type: '1099_b',
+              ai_identifier: '367 671847 209',
+              ai_account_name: 'E*TRADE from Morgan Stanley',
+              account: { acct_id: 1, acct_name: 'ben e-trade', acct_number: null },
+            }],
+          },
+        ],
+      } as TaxReturn1040
+
+      const sheet = buildForm8949Sheet(tr)
+      const detail = sheet?.rows.find((row) => row.description === 'NVDA • 7209')
+
+      expect(detail?.amount).toBe(-300)
+      expect(detail?.note).toContain('Acquired: 1/9/25')
+      expect(detail?.note).toContain('Sold: 2/14/25')
+      expect(detail?.note).toContain('Code: W')
+      expect(detail?.note).toContain('Adjustment: $200.00')
     })
 
     it('notes when total 1099-B gain is used as the short-term fallback', () => {

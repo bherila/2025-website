@@ -11,7 +11,7 @@ import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
-import Form8949Preview from '@/components/finance/Form8949Preview'
+import Form8949Preview, { form8949LotsFromTaxDocuments } from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
@@ -39,6 +39,7 @@ import {
   buildForm4952Sheet,
   buildForm6251Sheet,
   buildForm8582Sheet,
+  buildForm8949Sheet,
   buildForm8995Sheet,
   buildOverviewSheet,
   buildScheduleBSheet,
@@ -164,12 +165,16 @@ function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function ScheduleDAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleDPreview
       reviewedK1Docs={state.reviewedK1Docs}
       reviewed1099Docs={state.reviewed1099Docs}
       selectedYear={state.year}
+      priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
+      onOpenDoc={openTaxDocumentDetail}
+      onGoToForm1040={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}
     />
   )
 }
@@ -490,8 +495,44 @@ function Form8606NumericInput({
   )
 }
 
-function Form8949Adapter({ state }: FormRenderProps): React.ReactElement {
-  return <Form8949Preview selectedYear={state.year} />
+function Form8949Adapter({ state, instance }: FormRenderProps): React.ReactElement {
+  const accountId = instance?.key !== undefined && instance.key !== 'all' ? Number(instance.key) : undefined
+  const accountFilter = typeof accountId === 'number' && Number.isFinite(accountId) ? { accountId } : {}
+  return (
+    <Form8949Preview
+      selectedYear={state.year}
+      reviewed1099Docs={state.reviewed1099Docs}
+      {...accountFilter}
+    />
+  )
+}
+
+function form8949Instances(state: FormRenderProps['state']): { key: string; label: string }[] {
+  const accountIds = new Set<number>()
+
+  for (const doc of state.reviewed1099Docs) {
+    if ((doc.form_type === '1099_b' || doc.form_type === '1099_b_c') && doc.account_id !== null) {
+      accountIds.add(doc.account_id)
+      continue
+    }
+
+    if (doc.form_type !== 'broker_1099') {
+      continue
+    }
+
+    for (const link of doc.account_links ?? []) {
+      if ((link.form_type === '1099_b' || link.form_type === '1099_b_c') && link.account_id !== null) {
+        accountIds.add(link.account_id)
+      }
+    }
+  }
+
+  return [
+    { key: 'all', label: 'All' },
+    ...state.accounts
+      .filter((account) => accountIds.has(account.acct_id))
+      .map((account) => ({ key: String(account.acct_id), label: account.acct_name })),
+  ]
 }
 
 function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
@@ -1093,7 +1134,17 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8949Adapter,
-    hasData: (state) => state.reviewed1099Docs.length > 0 || state.reviewedK1Docs.length > 0,
+    instances: {
+      list: form8949Instances,
+      create: () => ({ key: 'all', label: 'All' }),
+      allowCreate: false,
+    },
+    xlsx: {
+      sheetName: () => 'Form 8949',
+      order: 39,
+      build: buildForm8949Sheet,
+    },
+    hasData: (state) => form8949LotsFromTaxDocuments(state.reviewed1099Docs).length > 0,
   },
   'action-items': {
     id: 'action-items',
@@ -1112,6 +1163,7 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: EstimateAdapter,
+    wide: true,
     xlsx: {
       sheetName: () => 'Est. Tax Payments',
       order: 200,

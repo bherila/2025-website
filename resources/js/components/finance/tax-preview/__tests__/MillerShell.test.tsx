@@ -40,6 +40,9 @@ function MockComponent({ instance, onDrill }: FormRenderProps): React.ReactEleme
       <button type="button" onClick={() => onDrill({ form: 'wks-se-401k' })}>
         drill-worksheet
       </button>
+      <button type="button" onClick={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}>
+        drill-left
+      </button>
     </div>
   )
 }
@@ -298,6 +301,19 @@ describe('MillerShell', () => {
     const drillBtn = screen.getByRole('button', { name: 'drill-column' })
     fireEvent.click(drillBtn)
     expect(window.location.hash).toBe('#/form-1040/sch-1')
+  })
+
+  it('can insert a backflow form to the left of the current column', () => {
+    window.location.hash = '#/sch-d'
+    render(
+      <Wrapper>
+        <MillerShell registry={mockRegistry} homeView={null} />
+      </Wrapper>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'drill-left' }))
+
+    expect(window.location.hash).toBe('#/form-1040/sch-d')
   })
 
   it('drilling into a modal-presentation form opens a worksheet dialog without changing the hash', async () => {

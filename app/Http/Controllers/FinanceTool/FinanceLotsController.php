@@ -43,6 +43,9 @@ class FinanceLotsController extends Controller
             : ['acct_id', 'cost_basis', 'purchase_date', 'sale_date'];
 
         $query = FinAccountLot::whereIn('acct_id', $accountIds)->select($selectColumns);
+        if ($status === 'closed') {
+            $query->with('account:acct_id,acct_number');
+        }
         if (! $request->boolean('include_superseded')) {
             $query->whereNull('superseded_by_lot_id');
         }
@@ -66,6 +69,16 @@ class FinanceLotsController extends Controller
         }
 
         $lots = $query->orderBy('purchase_date', 'desc')->get();
+        if ($status === 'closed') {
+            $lots->each(function (FinAccountLot $lot): void {
+                $account = $lot->account;
+                $lot->setAttribute(
+                    'account_last4',
+                    $account instanceof FinAccounts ? $this->accountLast4($account->acct_number) : null,
+                );
+                $lot->unsetRelation('account');
+            });
+        }
 
         return response()->json(['lots' => $lots]);
     }
@@ -262,6 +275,20 @@ class FinanceLotsController extends Controller
         }
 
         return $lot;
+    }
+
+    private function accountLast4(?string $accountNumber): ?string
+    {
+        if ($accountNumber === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $accountNumber);
+        if (! is_string($digits) || strlen($digits) < 4) {
+            return null;
+        }
+
+        return substr($digits, -4);
     }
 
     /**

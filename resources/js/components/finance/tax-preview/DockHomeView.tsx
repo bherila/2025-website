@@ -60,8 +60,8 @@ export function DockHomeView(): React.ReactElement {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tax Preview</h1>
+      <header className="space-y-1 border-b border-primary/25 pb-4">
+        <h1 className="finance-heading-1">Tax Preview</h1>
         <p className="text-sm text-muted-foreground">
           Drill-down preview shell. Click any form to open it as a column. Browser back/forward navigates the column
           stack; click the form name in the header bar to return here.
@@ -69,9 +69,9 @@ export function DockHomeView(): React.ReactElement {
       </header>
 
       {pinnedEntries.length > 0 && (
-        <Card>
+        <Card className="border-primary/25 bg-accent/20">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="finance-card-heading">
               Pinned
             </CardTitle>
           </CardHeader>
@@ -95,9 +95,9 @@ export function DockHomeView(): React.ReactElement {
       )}
 
       {recentEntries.length > 0 && (
-        <Card>
+        <Card className="border-info/25 bg-info/5">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="finance-card-heading" data-tone="info">
               Recent
             </CardTitle>
             <button
@@ -127,9 +127,9 @@ export function DockHomeView(): React.ReactElement {
         </Card>
       )}
 
-      <Card>
+      <Card className="border-success/25 bg-success/5">
         <CardHeader>
-          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <CardTitle className="finance-card-heading" data-tone="success">
             App
           </CardTitle>
         </CardHeader>
@@ -149,9 +149,9 @@ export function DockHomeView(): React.ReactElement {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-primary/20">
         <CardHeader>
-          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <CardTitle className="finance-card-heading">
             Forms
           </CardTitle>
         </CardHeader>
@@ -176,9 +176,9 @@ export function DockHomeView(): React.ReactElement {
       </Card>
 
       {worksheets.length > 0 && (
-        <Card>
+        <Card className="border-warning/25 bg-warning/5">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="finance-card-heading" data-tone="warning">
               Worksheets
             </CardTitle>
           </CardHeader>
@@ -245,7 +245,7 @@ function FormGrid({ label, entries, taxPreview, onOpen, isPinned, onTogglePin }:
   })
   return (
     <div className="space-y-2">
-      <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</h3>
+      <h3 className="finance-kicker">{label}</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map((entry) => (
           <FormButton
@@ -287,20 +287,20 @@ function FormButton({
   onTogglePin?: () => void
 }): React.ReactElement {
   return (
-    <div className={`group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:bg-muted ${inactive ? 'opacity-50' : ''}`}>
+    <div className={`group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary/40 hover:bg-accent/30 ${inactive ? 'opacity-50' : ''}`}>
       <button
         type="button"
         onClick={() => onOpen(id)}
         className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <FileText className="h-4 w-4 shrink-0 self-start pt-0.5 text-muted-foreground" aria-hidden="true" />
+        <FileText className="h-4 w-4 shrink-0 self-start pt-0.5 text-info" aria-hidden="true" />
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm font-medium text-foreground">{shortLabel}</span>
           <span className="truncate text-xs text-muted-foreground">{label}</span>
           {keyAmounts && keyAmounts.length > 0 && (
             <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
               {keyAmounts.map((ka) => (
-                <span key={ka.label} className="inline-flex items-baseline gap-1 font-mono text-[10px]">
+                <span key={ka.label} className="inline-flex items-baseline gap-1 font-currency text-[10px] tabular-nums">
                   <span className="text-muted-foreground">{ka.label}</span>
                   <span className={ka.value < 0 ? 'text-destructive' : 'text-foreground'}>
                     {formatKeyValue(ka.value)}

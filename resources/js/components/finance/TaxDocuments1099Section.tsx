@@ -491,7 +491,7 @@ export default function TaxDocuments1099Section({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-base font-semibold">Account Documents</h3>
+        <h3 className="finance-section-heading-inline" data-tone="info">Account Documents</h3>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -580,8 +580,8 @@ export default function TaxDocuments1099Section({
         }
 
         return (
-          <div className="border rounded-md overflow-hidden">
-            <Table>
+          <div className="overflow-hidden rounded-md border border-muted bg-card">
+            <Table className="[&_tr]:border-muted">
               <TableHeader>
                 <TableRow>
                   <TableHead>Account</TableHead>
@@ -596,7 +596,7 @@ export default function TaxDocuments1099Section({
               </TableHeader>
               <TableBody>
                 {visibleColumns.length > 0 && (
-                  <TableRow className="bg-muted/40 hover:bg-muted/50 border-b-2">
+                  <TableRow className="border-b border-muted bg-muted/20 hover:bg-muted/30">
                     <TableCell colSpan={3} className="font-semibold text-sm">Total</TableCell>
                     {visibleColumns.map(col => (
                       <MoneyCell key={col.key} value={totalsByKey[col.key].value} isTotal />

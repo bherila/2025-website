@@ -14,12 +14,50 @@ import { parseMoney } from '@/lib/finance/money'
 import type { FK1StructuredData, MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { isFK1StructuredData, isLine8MiscRouting } from '@/types/finance/tax-document'
 
+interface LinkMatchableEntry {
+  account_identifier?: string | null
+  account_name?: string | null
+}
+
+interface EntryMatchableLink {
+  ai_identifier?: string | null
+  ai_account_name?: string | null
+}
+
+function normalizeMatchValue(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim().toLowerCase()
+  return trimmed === '' ? null : trimmed
+}
+
+/**
+ * Whether a parsed_data entry corresponds to a particular account link.
+ *
+ * Match priority (any one is sufficient):
+ *   1. `account_identifier` ↔ `ai_identifier` (canonical broker-assigned key)
+ *   2. `account_name`       ↔ `ai_account_name` (display-name fallback for cases
+ *      where the AI extraction couldn't assign an identifier)
+ */
+export function brokerEntryMatchesLink(entry: LinkMatchableEntry, link: EntryMatchableLink): boolean {
+  const entryIdentifier = normalizeMatchValue(entry.account_identifier)
+  const linkIdentifier = normalizeMatchValue(link.ai_identifier)
+  if (entryIdentifier && linkIdentifier && entryIdentifier === linkIdentifier) {
+    return true
+  }
+
+  const entryName = normalizeMatchValue(entry.account_name)
+  const linkName = normalizeMatchValue(link.ai_account_name)
+  return Boolean(entryName && linkName && entryName === linkName)
+}
+
 /**
  * Find the account link that corresponds to a parsed_data entry.
  *
  * When only one link shares the form_type it is returned unconditionally.
- * When multiple links share the form_type, ai_identifier is required to match
- * (both sides must be non-empty); returns undefined when the match is ambiguous.
+ * When multiple links share the form_type, identifier or account-name must match
+ * unambiguously; returns undefined when the match is ambiguous.
  */
 export function findMatchingLink(
   entry: MultiAccountParsedEntry,
@@ -28,10 +66,7 @@ export function findMatchingLink(
   const candidates = links.filter(l => l.form_type === entry.form_type)
   if (candidates.length === 1) return candidates[0]
   if (candidates.length === 0) return undefined
-  // Multiple candidates — require ai_identifier to match (only when both sides are non-empty).
-  const identified = candidates.filter(
-    l => l.ai_identifier && entry.account_identifier && l.ai_identifier === entry.account_identifier,
-  )
+  const identified = candidates.filter(l => brokerEntryMatchesLink(entry, l))
   return identified.length === 1 ? identified[0] : undefined
 }
 
@@ -40,8 +75,8 @@ export function findMatchingLink(
  * Inverse of findMatchingLink.
  *
  * When only one entry shares the form_type it is returned unconditionally.
- * When multiple entries share the form_type, ai_identifier is required to match
- * (both sides must be non-empty); returns undefined when the match is ambiguous.
+ * When multiple entries share the form_type, identifier or account-name must
+ * match unambiguously; returns undefined when the match is ambiguous.
  */
 export function findMatchingEntry(
   link: TaxDocumentAccountLink,
@@ -50,10 +85,7 @@ export function findMatchingEntry(
   const candidates = entries.filter(e => e.form_type === link.form_type)
   if (candidates.length === 1) return candidates[0]
   if (candidates.length === 0) return undefined
-  // Multiple candidates — require ai_identifier to match (only when both sides are non-empty).
-  const identified = candidates.filter(
-    e => link.ai_identifier && e.account_identifier && e.account_identifier === link.ai_identifier,
-  )
+  const identified = candidates.filter(e => brokerEntryMatchesLink(e, link))
   return identified.length === 1 ? identified[0] : undefined
 }
 

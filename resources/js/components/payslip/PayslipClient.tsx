@@ -21,7 +21,7 @@ interface PayslipClientProps {
 
 const EmptyState = ({ selectedYear }: { selectedYear: string }) => (
   <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-    <p className="font-mono text-sm text-muted-foreground">No payslips found for {selectedYear}</p>
+    <p className="text-sm text-muted-foreground">No payslips found for {selectedYear}</p>
     <Button asChild size="sm">
       <a href={`/finance/payslips/entry?year=${selectedYear}`}>
         <PlusCircle className="mr-2 h-4 w-4" /> Add Payslip
@@ -75,17 +75,17 @@ export default function PayslipClient({
       <FinanceNavbar activeSection="payslips" />
       <Container fluid>
         {/* ── Header bar ─────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
           {/* Year tabs */}
-          <div className="flex items-center gap-0 border border-border rounded-md overflow-hidden">
+          <div className="flex items-center gap-0 overflow-hidden rounded-md border border-border bg-background">
             {availableYears.map((year) => (
               <a
                 key={year}
                 href={`?year=${year}`}
-                className={`font-mono text-xs px-3 py-1.5 border-r border-border last:border-r-0 transition-colors ${
+                className={`border-r border-border px-3 py-1.5 text-xs font-medium transition-colors last:border-r-0 ${
                   year === selectedYear
                     ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 }`}
               >
                 {year}
@@ -108,11 +108,11 @@ export default function PayslipClient({
         </div>
 
         {/* ── Section title ────────────────────────────────────────────────── */}
-        <div className="px-4 py-3">
-          <h2 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary">
+        <div className="border-b border-border/60 bg-accent/30 px-4 py-3">
+          <h2 className="finance-heading-2" data-tone="accent">
             {selectedYear} Payslip Ledger
           </h2>
-          <p className="font-mono text-[10px] text-muted-foreground mt-0.5">
+          <p className="font-currency text-[11px] tabular-nums text-muted-foreground mt-0.5">
             {selectedYear}-01-01 — {selectedYear}-12-31
           </p>
         </div>
@@ -136,7 +136,7 @@ export default function PayslipClient({
 
             <div className="mt-8 px-4 pb-8 space-y-8">
               <div>
-                <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary mb-3 pb-2 border-b border-border">
+                <h3 className="finance-section-heading mb-3 pb-2">
                   Federal Tax Summary
                 </h3>
                 <TotalsTable
@@ -145,7 +145,7 @@ export default function PayslipClient({
                 />
               </div>
               <div>
-                <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-primary mb-3 pb-2 border-b border-border">
+                <h3 className="finance-section-heading mb-3 pb-2" data-tone="info">
                   California State Tax Summary
                 </h3>
                 <TotalsTable
