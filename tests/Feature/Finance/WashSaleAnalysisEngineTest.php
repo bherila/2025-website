@@ -216,6 +216,91 @@ class WashSaleAnalysisEngineTest extends TestCase
         $this->assertCount(1, $adjustments);
     }
 
+    public function test_same_day_replacement_purchase_is_flagged(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+
+        $this->makeLot($account, [
+            'symbol' => 'AMD',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-01',
+            'sale_date' => '2024-06-01',
+            'cost_basis' => 1000,
+            'proceeds' => 800,
+        ]);
+
+        $this->makeLot($account, [
+            'symbol' => 'AMD',
+            'quantity' => 10,
+            'purchase_date' => '2024-06-01',
+            'sale_date' => null,
+        ]);
+
+        $adjustments = $this->engine->analyze([$account->acct_id], 2024);
+
+        $this->assertCount(1, $adjustments);
+        $this->assertEquals(200.0, $adjustments[0]->disallowedLoss);
+    }
+
+    public function test_loss_is_allocated_across_multiple_replacement_purchases(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+
+        $this->makeLot($account, [
+            'symbol' => 'TSLA',
+            'quantity' => 100,
+            'purchase_date' => '2024-01-01',
+            'sale_date' => '2024-06-01',
+            'cost_basis' => 2000,
+            'proceeds' => 1000,
+        ]);
+
+        foreach ([30, 30, 50] as $index => $quantity) {
+            $this->makeLot($account, [
+                'symbol' => 'TSLA',
+                'quantity' => $quantity,
+                'purchase_date' => '2024-06-'.str_pad((string) ($index + 2), 2, '0', STR_PAD_LEFT),
+                'sale_date' => null,
+            ]);
+        }
+
+        $adjustments = $this->engine->analyze([$account->acct_id], 2024);
+
+        $this->assertCount(3, $adjustments);
+        $this->assertEquals([300.0, 300.0, 400.0], array_map(fn (WashSaleAdjustment $adjustment): float => $adjustment->disallowedLoss, $adjustments));
+    }
+
+    public function test_replacement_purchase_quantity_is_consumed_across_loss_sales(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+
+        foreach (['2024-06-01', '2024-06-02'] as $saleDate) {
+            $this->makeLot($account, [
+                'symbol' => 'NVDA',
+                'quantity' => 50,
+                'purchase_date' => '2024-01-01',
+                'sale_date' => $saleDate,
+                'cost_basis' => 1000,
+                'proceeds' => 500,
+            ]);
+        }
+
+        $this->makeLot($account, [
+            'symbol' => 'NVDA',
+            'quantity' => 75,
+            'purchase_date' => '2024-06-10',
+            'sale_date' => null,
+        ]);
+
+        $adjustments = $this->engine->analyze([$account->acct_id], 2024);
+
+        $this->assertCount(2, $adjustments);
+        $this->assertEquals([500.0, 250.0], array_map(fn (WashSaleAdjustment $adjustment): float => $adjustment->disallowedLoss, $adjustments));
+    }
+
     public function test_empty_account_ids_returns_empty(): void
     {
         $adjustments = $this->engine->analyze([], 2024);
@@ -328,6 +413,56 @@ class WashSaleAnalysisEngineTest extends TestCase
         $this->assertFalse($rows[0]->isSummaryRow);
     }
 
+    public function test_report_builder_matches_adjustment_by_sale_lot_id_across_source_prefixes(): void
+    {
+        $txn = new CanonicalCapitalGainTransaction(
+            id: '1099b:42',
+            source: '1099b',
+            symbol: 'TSLA',
+            description: 'Tesla Inc.',
+            cusip: null,
+            quantity: 10.0,
+            dateAcquired: '2024-01-01',
+            dateSold: '2024-12-01',
+            proceeds: 800.0,
+            costBasis: 1000.0,
+            washSaleDisallowed: 0.0,
+            realizedGainLoss: -200.0,
+            isShortTerm: true,
+            form8949Box: 'A',
+            isCovered: true,
+            accruedMarketDiscount: null,
+            accountId: 1,
+            accountName: 'Brokerage A',
+            taxDocumentId: 10,
+            lotId: 42,
+            closeTransactionId: null,
+        );
+
+        $adj = new WashSaleAdjustment(
+            id: 'ws:lot:42:lot:99',
+            lossSaleId: 'account_lot:42',
+            replacementPurchaseId: 'account_lot:99',
+            symbol: 'TSLA',
+            saleDateStr: '2024-12-01',
+            replacementDateStr: '2024-12-15',
+            disallowedLoss: 200.0,
+            saleAccountId: 1,
+            saleAccountName: 'Brokerage A',
+            replacementAccountId: 2,
+            replacementAccountName: 'Brokerage B',
+            isCrossAccount: true,
+            reason: 'Cross-account wash sale',
+            saleLotId: 42,
+            replacementLotId: 99,
+        );
+
+        $rows = $this->reportBuilder->buildRows([$txn], [$adj], 'form_8949_transactions');
+
+        $this->assertEquals(200.0, $rows[0]->adjustmentAmount);
+        $this->assertEquals('W', $rows[0]->adjustmentCode);
+    }
+
     public function test_schedule_d_rollup_groups_by_box(): void
     {
         $idCounter = 0;
@@ -380,6 +515,94 @@ class WashSaleAnalysisEngineTest extends TestCase
         $this->assertFalse($ltRollup->isShortTerm);
         $this->assertEquals(500.0, $ltRollup->netGainOrLoss);
         $this->assertEquals('8b', $ltRollup->scheduleDLine);
+    }
+
+    public function test_schedule_d_summary_uses_direct_summary_lines_for_covered_unadjusted_boxes(): void
+    {
+        $shortTerm = new CanonicalCapitalGainTransaction(
+            id: 'account_lot:1',
+            source: 'account_lot',
+            symbol: 'AAPL',
+            description: 'Apple Inc.',
+            cusip: null,
+            quantity: 10.0,
+            dateAcquired: '2024-01-01',
+            dateSold: '2024-12-01',
+            proceeds: 1000.0,
+            costBasis: 800.0,
+            washSaleDisallowed: 0.0,
+            realizedGainLoss: 200.0,
+            isShortTerm: true,
+            form8949Box: 'A',
+            isCovered: true,
+            accruedMarketDiscount: null,
+            accountId: 1,
+            accountName: 'Brokerage',
+            taxDocumentId: null,
+            lotId: 1,
+            closeTransactionId: null,
+        );
+        $longTerm = new CanonicalCapitalGainTransaction(
+            id: 'account_lot:2',
+            source: 'account_lot',
+            symbol: 'MSFT',
+            description: 'Microsoft Corp.',
+            cusip: null,
+            quantity: 10.0,
+            dateAcquired: '2022-01-01',
+            dateSold: '2024-12-01',
+            proceeds: 2000.0,
+            costBasis: 1500.0,
+            washSaleDisallowed: 0.0,
+            realizedGainLoss: 500.0,
+            isShortTerm: false,
+            form8949Box: 'D',
+            isCovered: true,
+            accruedMarketDiscount: null,
+            accountId: 1,
+            accountName: 'Brokerage',
+            taxDocumentId: null,
+            lotId: 2,
+            closeTransactionId: null,
+        );
+
+        $rollup = $this->reportBuilder->buildScheduleDRollup([$shortTerm, $longTerm], [], 'schedule_d_summary');
+
+        $this->assertEquals('1a', $rollup[0]->scheduleDLine);
+        $this->assertEquals('8a', $rollup[1]->scheduleDLine);
+    }
+
+    public function test_unknown_term_transaction_is_not_defaulted_to_box_c(): void
+    {
+        $txn = new CanonicalCapitalGainTransaction(
+            id: 'account_lot:1',
+            source: 'account_lot',
+            symbol: 'AAPL',
+            description: 'Apple Inc.',
+            cusip: null,
+            quantity: 10.0,
+            dateAcquired: null,
+            dateSold: '2024-12-01',
+            proceeds: 1000.0,
+            costBasis: 800.0,
+            washSaleDisallowed: 0.0,
+            realizedGainLoss: 200.0,
+            isShortTerm: null,
+            form8949Box: null,
+            isCovered: true,
+            accruedMarketDiscount: null,
+            accountId: 1,
+            accountName: 'Brokerage',
+            taxDocumentId: null,
+            lotId: 1,
+            closeTransactionId: null,
+        );
+
+        $rows = $this->reportBuilder->buildRows([$txn], [], 'form_8949_transactions');
+        $rollup = $this->reportBuilder->buildScheduleDRollup([$txn]);
+
+        $this->assertNull($rows[0]->form8949Box);
+        $this->assertEmpty($rollup);
     }
 
     // -------------------------------------------------------------------------

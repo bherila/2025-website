@@ -11,6 +11,8 @@ namespace App\Services\Finance\CapitalGains;
  */
 class WashSaleAdjustment
 {
+    private const SYMBOL_MATCH_NOTE = 'Matched by normalized ticker symbol. Review manually for other substantially identical securities such as options, share classes, or paired funds.';
+
     public function __construct(
         /** Stable identifier for this adjustment, e.g. "ws:lot:42:lot:99" */
         public readonly string $id,
@@ -45,5 +47,7 @@ class WashSaleAdjustment
         public readonly ?int $saleLotId,
         /** Lot_id of the replacement lot in fin_account_lots, when applicable */
         public readonly ?int $replacementLotId,
+        /** Detection scope and limitations for the match heuristic */
+        public readonly string $detectionNote = self::SYMBOL_MATCH_NOTE,
     ) {}
 }

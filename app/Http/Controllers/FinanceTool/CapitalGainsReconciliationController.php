@@ -92,6 +92,7 @@ class CapitalGainsReconciliationController extends Controller
             'reason' => $adj->reason,
             'sale_lot_id' => $adj->saleLotId,
             'replacement_lot_id' => $adj->replacementLotId,
+            'detection_note' => $adj->detectionNote,
         ], $adjustments);
 
         return response()->json([
@@ -134,7 +135,7 @@ class CapitalGainsReconciliationController extends Controller
         $transactions = $this->loadCanonicalTransactions($accountIds, $taxYear);
 
         $rows = $this->reportBuilder->buildRows($transactions, $adjustments, $reportingMode);
-        $scheduleDRollup = $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments);
+        $scheduleDRollup = $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode);
 
         $rowsPayload = array_map(fn ($row): array => [
             'form_8949_box' => $row->form8949Box,
@@ -180,6 +181,10 @@ class CapitalGainsReconciliationController extends Controller
     /**
      * Load closed account lots for the given accounts/year as canonical transactions.
      *
+     * This endpoint uses account lots as the reconciliation source of truth and
+     * excludes imported 1099-B copies so matched reported/account rows are not
+     * counted twice in Form 8949 or Schedule D totals.
+     *
      * @param  int[]  $accountIds
      * @return CanonicalCapitalGainTransaction[]
      */
@@ -195,6 +200,11 @@ class CapitalGainsReconciliationController extends Controller
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->whereNull('superseded_by_lot_id')
+            ->whereNull('tax_document_id')
+            ->where(function ($query): void {
+                $query->whereNull('lot_source')
+                    ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
+            })
             ->with(['account:acct_id,acct_name'])
             ->orderBy('acct_id')
             ->orderBy('symbol')

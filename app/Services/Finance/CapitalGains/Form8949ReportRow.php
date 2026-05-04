@@ -12,8 +12,8 @@ namespace App\Services\Finance\CapitalGains;
 class Form8949ReportRow
 {
     public function __construct(
-        /** IRS Form 8949 box (A–F) that governs this row */
-        public readonly string $form8949Box,
+        /** IRS Form 8949 box (A–F) that governs this row, null when term/coverage is indeterminate */
+        public readonly ?string $form8949Box,
         /** Description — col (a) of the underlying transaction(s) */
         public readonly string $description,
         /** Date acquired — col (b), may be "various" */
@@ -40,7 +40,7 @@ class Form8949ReportRow
         public readonly ?string $accountName,
         /** Tax document ID that sourced this row */
         public readonly ?int $taxDocumentId,
-        /** Canonical transaction ID(s) that make up this row */
+        /** Canonical transaction ID that makes up this row */
         public readonly ?string $sourceTransactionId,
     ) {}
 }

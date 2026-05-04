@@ -1,5 +1,6 @@
 'use client'
 
+import currency from 'currency.js'
 import { AlertTriangle, ArrowLeftRight, CheckCircle2, Loader2, RefreshCw, Scale, ShieldAlert } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -31,6 +32,7 @@ interface WashSaleAdjustment {
   reason: string
   sale_lot_id: number | null
   replacement_lot_id: number | null
+  detection_note: string
 }
 
 interface WashSaleResponse {
@@ -42,7 +44,7 @@ interface WashSaleResponse {
 }
 
 interface Form8949Row {
-  form_8949_box: string
+  form_8949_box: string | null
   description: string
   date_acquired: string | null
   date_sold: string
@@ -238,7 +240,7 @@ function WashSalesPanel({ selectedYear }: { selectedYear: number }) {
                     {fmtAmt(adj.disallowed_loss, 2)}
                   </TableCell>
                   <TableCell>
-                    <span className="line-clamp-2 max-w-xs text-xs text-muted-foreground" title={adj.reason}>
+                    <span className="line-clamp-2 max-w-xs text-xs text-muted-foreground" title={`${adj.reason} ${adj.detection_note}`}>
                       {adj.reason}
                     </span>
                   </TableCell>
@@ -305,8 +307,8 @@ function Form8949AdjustmentsPanel({ selectedYear }: { selectedYear: number }) {
     return null
   }
 
-  const totalNetGain = data.schedule_d_rollup.reduce((acc, r) => acc + r.net_gain_or_loss, 0)
-  const totalAdjustment = data.schedule_d_rollup.reduce((acc, r) => acc + r.total_adjustment, 0)
+  const totalNetGain = data.schedule_d_rollup.reduce((acc, r) => acc.add(r.net_gain_or_loss), currency(0)).value
+  const totalAdjustment = data.schedule_d_rollup.reduce((acc, r) => acc.add(r.total_adjustment), currency(0)).value
 
   return (
     <div className="space-y-6">
@@ -404,7 +406,7 @@ function Form8949AdjustmentsPanel({ selectedYear }: { selectedYear: number }) {
               <TableBody>
                 {data.rows.map((row, i) => (
                   <TableRow key={`${row.source_transaction_id ?? i}-${row.date_sold}`}>
-                    <TableCell className="font-mono font-semibold">{row.form_8949_box}</TableCell>
+                    <TableCell className="font-mono font-semibold">{row.form_8949_box ?? '—'}</TableCell>
                     <TableCell className="max-w-[180px] truncate text-xs" title={row.description}>{row.description}</TableCell>
                     <TableCell className="text-xs">{row.date_acquired ?? '—'}</TableCell>
                     <TableCell className="text-xs">{row.date_sold}</TableCell>

@@ -5,6 +5,7 @@ namespace App\Services\Finance\CapitalGains;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -13,6 +14,8 @@ use Illuminate\Support\Collection;
  * Detects wash sales at the taxpayer level — both within a single account and
  * across multiple accounts — by querying fin_account_lots for all sales and
  * purchases within the IRS 61-day window (30 days before/after the sale date).
+ * Matching is currently symbol-based; options, share classes, and paired funds
+ * still need human review as potentially substantially identical securities.
  *
  * A wash sale is triggered when:
  *   1. A security (or substantially identical security) is sold at a loss.
@@ -64,10 +67,10 @@ class WashSaleAnalysisEngine
         /** @var array<string, Collection<int, FinAccountLot>> $purchasesBySymbol */
         $purchasesBySymbol = $purchases->groupBy(fn (FinAccountLot $lot): string => $this->normalizeSymbol((string) $lot->symbol))->all();
 
+        $remainingPurchaseQuantities = $this->remainingPurchaseQuantities($purchases);
         $adjustments = [];
         foreach ($lossSales as $sale) {
-            $adjustment = $this->detectWashSale($sale, $purchasesBySymbol);
-            if ($adjustment !== null) {
+            foreach ($this->detectWashSales($sale, $purchasesBySymbol, $remainingPurchaseQuantities) as $adjustment) {
                 $adjustments[] = $adjustment;
             }
         }
@@ -85,20 +88,42 @@ class WashSaleAnalysisEngine
      */
     public function detectWashSale(FinAccountLot $sale, array $purchasesBySymbol): ?WashSaleAdjustment
     {
+        $remainingPurchaseQuantities = $this->remainingPurchaseQuantities(collect($purchasesBySymbol)->flatten());
+
+        return $this->detectWashSales($sale, $purchasesBySymbol, $remainingPurchaseQuantities)[0] ?? null;
+    }
+
+    /**
+     * Detect every wash-sale replacement for a single loss-sale lot.
+     *
+     * @param  array<string, Collection<int, FinAccountLot>>  $purchasesBySymbol
+     * @param  array<int, float>  $remainingPurchaseQuantities
+     * @return WashSaleAdjustment[]
+     */
+    public function detectWashSales(FinAccountLot $sale, array $purchasesBySymbol, array &$remainingPurchaseQuantities): array
+    {
         if (! $this->isLossSale($sale)) {
-            return null;
+            return [];
         }
 
         $saleDate = $this->parseDate($sale->sale_date);
         if ($saleDate === null) {
-            return null;
+            return [];
         }
 
+        $saleQty = abs((float) $sale->quantity);
+        if ($saleQty <= 0) {
+            return [];
+        }
+
+        $remainingSaleQty = $saleQty;
+        $lossPerShare = $this->totalLoss($sale) / $saleQty;
         $saleSymbol = $this->normalizeSymbol((string) $sale->symbol);
         $candidates = $purchasesBySymbol[$saleSymbol] ?? collect();
 
         $saleAccount = $sale->account;
         $saleAccountName = $saleAccount instanceof FinAccounts ? (string) $saleAccount->acct_name : null;
+        $adjustments = [];
 
         foreach ($candidates as $purchase) {
             if ((int) $purchase->lot_id === (int) $sale->lot_id) {
@@ -114,8 +139,15 @@ class WashSaleAnalysisEngine
                 continue;
             }
 
-            $disallowedLoss = $this->computeDisallowedLoss($sale, $purchase);
-            if ($disallowedLoss <= 0) {
+            $purchaseLotId = (int) $purchase->lot_id;
+            $availablePurchaseQty = $remainingPurchaseQuantities[$purchaseLotId] ?? abs((float) $purchase->quantity);
+            if ($availablePurchaseQty <= 0) {
+                continue;
+            }
+
+            $matchedQty = min($remainingSaleQty, $availablePurchaseQty);
+            $disallowedLoss = round($lossPerShare * $matchedQty, 4);
+            if ($matchedQty <= 0 || $disallowedLoss <= 0) {
                 continue;
             }
 
@@ -123,7 +155,7 @@ class WashSaleAnalysisEngine
             $purchaseAccount = $purchase->account;
             $purchaseAccountName = $purchaseAccount instanceof FinAccounts ? (string) $purchaseAccount->acct_name : null;
 
-            return new WashSaleAdjustment(
+            $adjustments[] = new WashSaleAdjustment(
                 id: "ws:lot:{$sale->lot_id}:lot:{$purchase->lot_id}",
                 lossSaleId: "account_lot:{$sale->lot_id}",
                 replacementPurchaseId: "account_lot:{$purchase->lot_id}",
@@ -140,9 +172,16 @@ class WashSaleAnalysisEngine
                 saleLotId: (int) $sale->lot_id,
                 replacementLotId: (int) $purchase->lot_id,
             );
+
+            $remainingPurchaseQuantities[$purchaseLotId] = $availablePurchaseQty - $matchedQty;
+            $remainingSaleQty -= $matchedQty;
+
+            if ($remainingSaleQty <= 0) {
+                break;
+            }
         }
 
-        return null;
+        return $adjustments;
     }
 
     // -------------------------------------------------------------------------
@@ -161,9 +200,10 @@ class WashSaleAnalysisEngine
             ->whereNull('superseded_by_lot_id')
             ->whereNotNull('proceeds')
             ->where(function ($query): void {
-                $query->whereRaw('CAST(realized_gain_loss AS DECIMAL(12,4)) < 0')
-                    ->orWhereRaw('(realized_gain_loss IS NULL AND CAST(proceeds AS DECIMAL(12,4)) - CAST(cost_basis AS DECIMAL(12,4)) < 0)');
+                $query->where('realized_gain_loss', '<', 0)
+                    ->orWhereRaw('(realized_gain_loss IS NULL AND proceeds - cost_basis < 0)');
             })
+            ->where(fn ($query) => $this->accountLotSourceQuery($query))
             ->with(['account:acct_id,acct_name'])
             ->orderBy('sale_date')
             ->orderBy('lot_id')
@@ -181,6 +221,7 @@ class WashSaleAnalysisEngine
             ->whereBetween('purchase_date', [$windowStart->format('Y-m-d'), $windowEnd->format('Y-m-d')])
             ->whereNull('superseded_by_lot_id')
             ->whereNotNull('purchase_date')
+            ->where(fn ($query) => $this->accountLotSourceQuery($query))
             ->with(['account:acct_id,acct_name'])
             ->orderBy('purchase_date')
             ->orderBy('lot_id')
@@ -228,27 +269,13 @@ class WashSaleAnalysisEngine
         $washStart = $saleDate->copy()->subDays(self::WASH_WINDOW_DAYS);
         $washEnd = $saleDate->copy()->addDays(self::WASH_WINDOW_DAYS);
 
-        if ($purchaseDate->isSameDay($saleDate)) {
-            return false;
-        }
-
         return $purchaseDate->greaterThanOrEqualTo($washStart)
             && $purchaseDate->lessThanOrEqualTo($washEnd);
     }
 
-    private function computeDisallowedLoss(FinAccountLot $sale, FinAccountLot $purchase): float
+    private function totalLoss(FinAccountLot $sale): float
     {
-        $saleQty = abs((float) $sale->quantity);
-        $purchaseQty = abs((float) $purchase->quantity);
-        $totalLoss = abs((float) ($sale->realized_gain_loss ?? ((float) $sale->proceeds - (float) $sale->cost_basis)));
-
-        if ($saleQty <= 0) {
-            return 0.0;
-        }
-
-        $ratio = min(1.0, $purchaseQty / $saleQty);
-
-        return round($totalLoss * $ratio, 4);
+        return abs((float) ($sale->realized_gain_loss ?? ((float) $sale->proceeds - (float) $sale->cost_basis)));
     }
 
     private function normalizeSymbol(string $symbol): string
@@ -275,5 +302,31 @@ class WashSaleAnalysisEngine
 
         return "Purchased substantially identical stock ({$symbol}) on {$purchaseDateStr} "
             .'within the 30-day wash sale window (§1091).';
+    }
+
+    /**
+     * @param  Collection<int, FinAccountLot>  $purchases
+     * @return array<int, float>
+     */
+    private function remainingPurchaseQuantities(Collection $purchases): array
+    {
+        $remaining = [];
+        foreach ($purchases as $purchase) {
+            $remaining[(int) $purchase->lot_id] = abs((float) $purchase->quantity);
+        }
+
+        return $remaining;
+    }
+
+    /**
+     * @param  Builder<FinAccountLot>  $query
+     */
+    private function accountLotSourceQuery(Builder $query): void
+    {
+        $query->whereNull('tax_document_id')
+            ->where(function ($sourceQuery): void {
+                $sourceQuery->whereNull('lot_source')
+                    ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
+            });
     }
 }

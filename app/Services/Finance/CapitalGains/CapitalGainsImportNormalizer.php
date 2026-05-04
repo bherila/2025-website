@@ -122,7 +122,7 @@ class CapitalGainsImportNormalizer
             return $txn->form8949Box;
         }
 
-        $isShortTerm = $txn->isShortTerm;
+        $isShortTerm = $txn->isShortTerm ?? $this->inferShortTermFromDates($txn->dateAcquired, $txn->dateSold);
         if ($isShortTerm === null) {
             return null;
         }
@@ -152,5 +152,21 @@ class CapitalGainsImportNormalizer
 
         // Strip time component if present
         return substr($str, 0, 10);
+    }
+
+    private function inferShortTermFromDates(?string $dateAcquired, string $dateSold): ?bool
+    {
+        if ($dateAcquired === null || strtolower($dateAcquired) === 'various' || trim($dateSold) === '') {
+            return null;
+        }
+
+        try {
+            $acquired = new \DateTimeImmutable($dateAcquired);
+            $sold = new \DateTimeImmutable($dateSold);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $acquired->diff($sold)->days <= 365;
     }
 }

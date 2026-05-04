@@ -27,7 +27,7 @@ class Form8949ReportBuilder
     /** Form 8949 boxes that are short-term */
     private const SHORT_TERM_BOXES = ['A', 'B', 'C'];
 
-    /** Form 8949 box → Schedule D line mapping */
+    /** Form 8949 box -> Schedule D line mapping */
     private const BOX_TO_SCHEDULE_D_LINE = [
         'A' => '1b',
         'B' => '2',
@@ -54,36 +54,30 @@ class Form8949ReportBuilder
         array $adjustments = [],
         string $reportingMode = 'form_8949_transactions',
     ): array {
-        // Build a lookup of transactions affected by cross-account wash-sale adjustments
         $adjustedIds = $this->adjustedTransactionIds($adjustments);
-
-        // Build per-box buckets for summary rows
         $summaryBuckets = [];
         $individualRows = [];
 
         foreach ($transactions as $txn) {
-            $box = $this->normalizer->inferForm8949Box($txn) ?? 'C'; // Default uncovered ST
+            $box = $this->normalizer->inferForm8949Box($txn);
 
             $wsAdjustment = $adjustedIds[$txn->id] ?? null;
             $needsIndividualRow = ($reportingMode === 'form_8949_transactions')
-                || ($wsAdjustment !== null);   // cross-account adjustment forces individual row
+                || ($wsAdjustment !== null)
+                || ($box === null);
 
             if ($needsIndividualRow) {
                 $individualRows[] = $this->buildIndividualRow($txn, $box, $wsAdjustment);
             } elseif ($reportingMode === 'form_8949_summary') {
                 $summaryBuckets[$box][] = $txn;
-            } else {
-                // schedule_d_summary — no Form 8949 rows at all; callers use buildScheduleDRollup()
             }
         }
 
-        // Build summary rows for form_8949_summary mode
         foreach ($summaryBuckets as $box => $txnsForBox) {
             $individualRows[] = $this->buildSummaryRow($box, $txnsForBox);
         }
 
-        // Sort: short-term first (A→C), long-term second (D→F)
-        usort($individualRows, fn (Form8949ReportRow $a, Form8949ReportRow $b): int => $a->form8949Box <=> $b->form8949Box);
+        usort($individualRows, fn (Form8949ReportRow $a, Form8949ReportRow $b): int => ($a->form8949Box ?? 'Z') <=> ($b->form8949Box ?? 'Z'));
 
         return $individualRows;
     }
@@ -97,15 +91,22 @@ class Form8949ReportBuilder
      * @param  WashSaleAdjustment[]  $adjustments
      * @return ScheduleDRollupInput[]
      */
-    public function buildScheduleDRollup(array $transactions, array $adjustments = []): array
-    {
+    public function buildScheduleDRollup(
+        array $transactions,
+        array $adjustments = [],
+        string $reportingMode = 'form_8949_transactions',
+    ): array {
         $adjustedIds = $this->adjustedTransactionIds($adjustments);
 
         /** @var array<string, array{proceeds: float, basis: float, adjustment: float, count: int}> $buckets */
         $buckets = [];
 
         foreach ($transactions as $txn) {
-            $box = $this->normalizer->inferForm8949Box($txn) ?? 'C';
+            $box = $this->normalizer->inferForm8949Box($txn);
+            if ($box === null) {
+                continue;
+            }
+
             $wsAdjustment = $adjustedIds[$txn->id] ?? null;
 
             $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
@@ -123,7 +124,7 @@ class Form8949ReportBuilder
         $results = [];
         foreach ($buckets as $box => $totals) {
             $isShortTerm = in_array($box, self::SHORT_TERM_BOXES, true);
-            $scheduleDLine = self::BOX_TO_SCHEDULE_D_LINE[$box] ?? '?';
+            $scheduleDLine = $this->scheduleDLineForBox($box, $reportingMode, $totals['adjustment']);
             $netGain = $totals['proceeds'] - $totals['basis'] + $totals['adjustment'];
 
             $results[] = new ScheduleDRollupInput(
@@ -149,15 +150,15 @@ class Form8949ReportBuilder
 
     private function buildIndividualRow(
         CanonicalCapitalGainTransaction $txn,
-        string $box,
+        ?string $box,
         ?WashSaleAdjustment $wsAdjustment,
     ): Form8949ReportRow {
-        $isShortTerm = in_array($box, self::SHORT_TERM_BOXES, true);
+        $isShortTerm = $box !== null
+            ? in_array($box, self::SHORT_TERM_BOXES, true)
+            : ($txn->isShortTerm ?? false);
         $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
         $adjustmentCode = null;
         if ($adjustmentAmount > 0) {
-            // IRS uses code 'W' for all wash-sale disallowances (§1091), whether same-account
-            // or cross-account.  Cross-account adjustments appear here as taxpayer-level facts.
             $adjustmentCode = 'W';
         }
 
@@ -204,7 +205,7 @@ class Form8949ReportBuilder
 
         $gainOrLoss = $totalProceeds - $totalBasis + $totalAdjustment;
         $count = count($transactions);
-        $description = "{$count} transaction(s) — see statement";
+        $description = "{$count} transactions - see attached statement";
 
         return new Form8949ReportRow(
             form8949Box: $box,
@@ -241,8 +242,28 @@ class Form8949ReportBuilder
         $result = [];
         foreach ($adjustments as $adj) {
             $result[$adj->lossSaleId] = $adj;
+
+            if ($adj->saleLotId !== null) {
+                $result["account_lot:{$adj->saleLotId}"] = $adj;
+                $result["1099b:{$adj->saleLotId}"] = $adj;
+            }
         }
 
         return $result;
+    }
+
+    private function scheduleDLineForBox(string $box, string $reportingMode, float $adjustmentAmount): string
+    {
+        if ($reportingMode === 'schedule_d_summary' && abs($adjustmentAmount) <= 0.005) {
+            if ($box === 'A') {
+                return '1a';
+            }
+
+            if ($box === 'D') {
+                return '8a';
+            }
+        }
+
+        return self::BOX_TO_SCHEDULE_D_LINE[$box] ?? '?';
     }
 }
