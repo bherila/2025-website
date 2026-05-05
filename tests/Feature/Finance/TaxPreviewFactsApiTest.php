@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\TaxPreviewDataService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -179,6 +180,80 @@ class TaxPreviewFactsApiTest extends TestCase
         $this->assertSame(0, $exitCode);
         $this->assertStringContainsString('excludedLine5', $output);
         $this->assertStringContainsString('totalExcludedInvestmentExpenses', $output);
+    }
+
+    public function test_tax_preview_facts_table_outputs_all_schedule_a_source_buckets(): void
+    {
+        $user = $this->createUser();
+        UserDeduction::create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'category' => 'sales_tax',
+            'description' => 'Sales tax',
+            'amount' => 20,
+        ]);
+        UserDeduction::create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'category' => 'mortgage_interest',
+            'description' => 'Mortgage interest',
+            'amount' => 30,
+        ]);
+        UserDeduction::create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'category' => 'charitable_cash',
+            'description' => 'Cash gift',
+            'amount' => 40,
+        ]);
+
+        $exitCode = Artisan::call('finance:tax-preview-facts', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--slice' => 'scheduleA',
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('line5c', $output);
+        $this->assertStringContainsString('Sales tax', $output);
+        $this->assertStringContainsString('line8a', $output);
+        $this->assertStringContainsString('Mortgage interest', $output);
+        $this->assertStringContainsString('line11', $output);
+        $this->assertStringContainsString('Cash gift', $output);
+    }
+
+    public function test_tax_preview_facts_table_outputs_all_schedule_e_source_buckets(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'Trader Fund',
+                    '1' => '100',
+                    '4' => '25',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                ],
+                codes: [
+                    '11' => [['code' => 'ZZ', 'value' => '10']],
+                    '13' => [['code' => 'ZZ', 'value' => '3']],
+                ],
+            ),
+        ]);
+
+        $exitCode = Artisan::call('finance:tax-preview-facts', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--slice' => 'scheduleE',
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('box1Sources', $output);
+        $this->assertStringContainsString('box4Sources', $output);
+        $this->assertStringContainsString('traderNiiSources', $output);
     }
 
     /**

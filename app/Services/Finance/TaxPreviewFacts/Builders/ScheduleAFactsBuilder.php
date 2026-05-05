@@ -212,7 +212,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         return match ($category) {
             DeductionCategory::StateEstTax->value => TaxFactRouting::ScheduleALine5a,
             DeductionCategory::SalesTax->value => TaxFactRouting::ScheduleALine5c,
-            DeductionCategory::RealEstateTax->value => TaxFactRouting::ScheduleALine6,
+            DeductionCategory::RealEstateTax->value => TaxFactRouting::ScheduleALine5b,
             DeductionCategory::MortgageInterest->value => TaxFactRouting::ScheduleALine8a,
             DeductionCategory::CharitableCash->value => TaxFactRouting::ScheduleALine11,
             DeductionCategory::CharitableNoncash->value => TaxFactRouting::ScheduleALine12,
@@ -237,9 +237,10 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
     {
         return match ($year) {
             2025 => $marriedFilingJointly ? 30000.0 : 15000.0,
+            2026 => $marriedFilingJointly ? 32200.0 : 16100.0,
             2024 => $marriedFilingJointly ? 29200.0 : 14600.0,
             2023 => $marriedFilingJointly ? 27700.0 : 13850.0,
-            default => $marriedFilingJointly ? 30000.0 : 15000.0,
+            default => $marriedFilingJointly ? 32200.0 : 16100.0,
         };
     }
 }

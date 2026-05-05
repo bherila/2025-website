@@ -869,7 +869,20 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(175.0, $facts['scheduleA']['otherItemizedTotal']);
         $this->assertSame(18125.0, $facts['scheduleA']['totalItemizedDeductions']);
         $this->assertTrue($facts['scheduleA']['shouldItemizeSingle']);
-        $this->assertSame('schedule_a_line_16', $facts['scheduleA']['otherItemizedSources'][1]['routing']);
+        $k1PortfolioSource = collect($facts['scheduleA']['otherItemizedSources'])->firstWhere('sourceType', 'k1_portfolio_deduction');
+        $this->assertNotNull($k1PortfolioSource);
+        $this->assertSame('schedule_a_line_16', $k1PortfolioSource['routing']);
+        $this->assertSame('schedule_a_line_5b', $facts['scheduleA']['realEstateTaxSources'][0]['routing']);
+    }
+
+    public function test_schedule_a_uses_2026_standard_deduction_values(): void
+    {
+        $user = $this->createUser();
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2026, 'scheduleA');
+
+        $this->assertSame(16100.0, $facts['scheduleA']['standardDeductionSingle']);
+        $this->assertSame(32200.0, $facts['scheduleA']['standardDeductionMarriedFilingJointly']);
     }
 
     public function test_schedule_e_collects_routed_misc_and_k1_partnership_sources(): void
@@ -917,7 +930,7 @@ class TaxPreviewFactsServiceTest extends TestCase
             'form_type' => 'k1',
             'is_reviewed' => true,
             'parsed_data' => $this->k1Data(
-                fields: ['B' => 'Foreign Fund', '5' => '100', '21' => '150'],
+                fields: ['B' => 'Foreign Fund', '5' => '100'],
                 codes: [],
                 k3: [
                     'sections' => [
@@ -933,6 +946,10 @@ class TaxPreviewFactsServiceTest extends TestCase
                         [
                             'sectionId' => 'part3_section2',
                             'data' => ['derivedPassiveAssetRatio' => 0.25],
+                        ],
+                        [
+                            'sectionId' => 'part3_section4',
+                            'data' => ['grandTotalUSD' => 150],
                         ],
                     ],
                 ],

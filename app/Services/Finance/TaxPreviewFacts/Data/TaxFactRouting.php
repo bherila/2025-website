@@ -20,6 +20,7 @@ enum TaxFactRouting: string
     case NeedsReviewScheduleDLine5Or12 = 'needs_review_schedule_d_line_5_or_12';
     case Schedule1Line5 = 'schedule_1_line_5';
     case ScheduleALine5a = 'schedule_a_line_5a';
+    case ScheduleALine5b = 'schedule_a_line_5b';
     case ScheduleALine5c = 'schedule_a_line_5c';
     case ScheduleALine6 = 'schedule_a_line_6';
     case ScheduleALine8a = 'schedule_a_line_8a';

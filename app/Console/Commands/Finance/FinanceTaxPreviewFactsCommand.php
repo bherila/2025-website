@@ -137,10 +137,13 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         foreach ([
-            'miscIncomeSources' => 'misc',
             'stateIncomeTaxSources' => 'line5a',
-            'realEstateTaxSources' => 'line6',
+            'realEstateTaxSources' => 'line5b',
+            'salesTaxSources' => 'line5c',
+            'mortgageInterestSources' => 'line8a',
             'investmentInterestSources' => 'line9',
+            'charitableCashSources' => 'line11',
+            'charitableNoncashSources' => 'line12',
             'otherItemizedSources' => 'line16',
         ] as $key => $line) {
             foreach (($facts['scheduleA'][$key] ?? []) as $source) {
@@ -167,7 +170,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             }
         }
 
-        foreach (['miscIncomeSources', 'box2Sources', 'box3Sources', 'box11ZZSources', 'box13ZZSources'] as $key) {
+        foreach (['miscIncomeSources', 'box1Sources', 'box2Sources', 'box3Sources', 'box4Sources', 'box11ZZSources', 'box13ZZSources', 'traderNiiSources'] as $key) {
             foreach (($facts['scheduleE'][$key] ?? []) as $source) {
                 if (is_array($source)) {
                     $rows[] = ['scheduleE', $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];

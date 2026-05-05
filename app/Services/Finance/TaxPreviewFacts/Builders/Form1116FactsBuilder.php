@@ -194,6 +194,20 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             return 0.0;
         }
 
+        $topLevelGrand = $this->parseMoney($section['grandTotalUSD'] ?? null);
+        if ($topLevelGrand !== null && $topLevelGrand !== 0.0) {
+            return $topLevelGrand;
+        }
+
+        if (is_array($section['countries'] ?? null)) {
+            return $this->sumMoney(array_map(
+                fn (mixed $country): float => is_array($country)
+                    ? ($this->parseMoney($country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null) ?? 0.0)
+                    : 0.0,
+                $section['countries'],
+            ));
+        }
+
         foreach ($section as $key => $value) {
             if (! str_contains((string) $key, 'foreignTax') && ! str_contains((string) $key, 'foreign_tax')) {
                 continue;
