@@ -65,7 +65,7 @@ class TaxPreviewFactsServiceTest extends TestCase
     public function test_schedule1_line9_sums_line8_family_without_mislabeling_line8z(): void
     {
         $user = $this->createUser();
-        $this->createTaxDocument($user->id, [
+        $line8bDoc = $this->createTaxDocument($user->id, [
             'form_type' => '1099_misc',
             'is_reviewed' => true,
             'misc_routing' => 'sch_1_8b',
@@ -92,6 +92,25 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(60.0, $facts['schedule1']['line9TotalOtherIncome']);
         $this->assertCount(3, $facts['schedule1']['line8Sources']);
         $this->assertCount(1, $facts['schedule1']['line8zSources']);
+        $this->assertSame("doc-{$line8bDoc->id}-schedule1-8b", $facts['schedule1']['line8bSources'][0]['id']);
+        $this->assertSame("doc-{$line8bDoc->id}-schedule1-8b", $facts['schedule1']['line8Sources'][0]['id']);
+    }
+
+    public function test_reviewed_zero_1099_misc_keeps_audit_source(): void
+    {
+        $user = $this->createUser();
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Zero Payer', 'box3_other_income' => 0],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertSame(0.0, $facts['schedule1']['line8zTotal']);
+        $this->assertCount(1, $facts['schedule1']['line8zSources']);
+        $this->assertSame("doc-{$document->id}-schedule1-8z", $facts['schedule1']['line8zSources'][0]['id']);
+        $this->assertSame(0.0, $facts['schedule1']['line8zSources'][0]['amount']);
     }
 
     public function test_schedule1_legacy_line8_routing_defaults_to_line8z(): void
@@ -413,7 +432,7 @@ class TaxPreviewFactsServiceTest extends TestCase
                 't_date' => '2025-04-20',
                 't_type' => 'Dividend',
                 't_symbol' => 'XYZ',
-                't_qty' => null,
+                't_qty' => 10,
                 't_amt' => -50,
                 't_method' => null,
                 't_description' => 'SHORT DIVIDEND CHARGED',
@@ -454,6 +473,58 @@ class TaxPreviewFactsServiceTest extends TestCase
                 't_type' => 'Dividend',
                 't_symbol' => 'XYZ',
                 't_qty' => null,
+                't_amt' => -50,
+                't_method' => null,
+                't_description' => 'SHORT DIVIDEND CHARGED',
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(50.0, $facts['form4952']['totalInvestmentInterestExpense']);
+    }
+
+    public function test_short_dividend_uses_fifo_open_lot_when_short_positions_are_stacked(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $now = now();
+        DB::table('fin_account_line_items')->insert([
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-01-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-03-25',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-04-20',
+                't_type' => 'Dividend',
+                't_symbol' => 'XYZ',
+                't_qty' => 10,
                 't_amt' => -50,
                 't_method' => null,
                 't_description' => 'SHORT DIVIDEND CHARGED',
@@ -671,6 +742,35 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(-3000.0, $facts['scheduleD']['line21LimitedLossOrGain']);
         $this->assertSame(-3000.0, $facts['scheduleD']['limitedBusinessCapGains']);
         $this->assertSame(0.0, $facts['scheduleD']['limitedPersonalCapGains']);
+    }
+
+    public function test_schedule_d_limited_capital_gains_allocates_same_sign_losses_with_cents_math(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $this->createLot($account, [
+            'symbol' => 'MSFT',
+            'description' => 'Microsoft Corp.',
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-11-01',
+            'cost_basis' => 3000,
+            'proceeds' => 1000,
+            'form_8949_box' => 'A',
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'Business Loss Fund', '8' => '-4000']),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(-6000.0, $facts['scheduleD']['line16Combined']);
+        $this->assertSame(-3000.0, $facts['scheduleD']['line21LimitedLossOrGain']);
+        $this->assertSame(-4000.0, $facts['scheduleD']['totalBusinessCapGains']);
+        $this->assertSame(-2000.0, $facts['scheduleD']['totalPersonalCapGains']);
+        $this->assertSame(-2000.0, $facts['scheduleD']['limitedBusinessCapGains']);
+        $this->assertSame(-1000.0, $facts['scheduleD']['limitedPersonalCapGains']);
     }
 
     public function test_facts_from_documents_requires_user_id_for_capital_gains_documents(): void

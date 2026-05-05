@@ -30,6 +30,8 @@ class Wealthfront1099BLotParserTest extends TestCase
         $this->assertCount(3, $lots);
         $this->assertSame('002824100', $lots[0]['symbol']);
         $this->assertSame('2025-04-14', $lots[0]['purchase_date']);
+        $this->assertTrue($lots[0]['date_acquired_various']);
+        $this->assertStringContainsString('Date acquired reported as Various', $lots[0]['additional_info']);
         $this->assertSame(-7.79, $lots[0]['realized_gain_loss']);
         $this->assertSame(11.9, $lots[1]['wash_sale_disallowed']);
         $this->assertTrue($lots[1]['is_short_term']);
@@ -48,6 +50,44 @@ class Wealthfront1099BLotParserTest extends TestCase
         ]));
 
         $this->assertSame([], $lots);
+    }
+
+    public function test_parse_handles_blank_wash_sale_column(): void
+    {
+        $parser = new Wealthfront1099BLotParser;
+
+        $lots = $parser->parse(implode("\n", [
+            'SHORT TERM TRANSACTIONS FOR COVERED TAX LOTS (Box 12 is checked)',
+            'APPLE INC COM / CUSIP: 037833100 / Symbol: AAPL',
+            '05/01/25    1.000    200.00    04/01/25    150.00        50.00    Sale',
+        ]));
+
+        $this->assertCount(1, $lots);
+        $this->assertSame(0.0, $lots[0]['wash_sale_disallowed']);
+        $this->assertSame(50.0, $lots[0]['realized_gain_loss']);
+    }
+
+    public function test_parse_handles_continued_security_headers(): void
+    {
+        $parser = new Wealthfront1099BLotParser;
+
+        $lots = $parser->parse(implode("\n", [
+            'SHORT TERM TRANSACTIONS FOR COVERED TAX LOTS (Box 12 is checked)',
+            "APPLE INC COM (cont'd) / CUSIP: 037833100 / Symbol:",
+            '05/01/25    1.000    200.00    04/01/25    150.00    ...    50.00    Sale',
+        ]));
+
+        $this->assertCount(1, $lots);
+        $this->assertSame('APPLE INC COM', $lots[0]['description']);
+        $this->assertSame('037833100', $lots[0]['symbol']);
+    }
+
+    public function test_parse_returns_empty_for_empty_or_uncovered_text(): void
+    {
+        $parser = new Wealthfront1099BLotParser;
+
+        $this->assertSame([], $parser->parse(''));
+        $this->assertSame([], $parser->parse('Detail for Dividends'."\n".'APPLE INC COM / CUSIP: 037833100 / Symbol: AAPL'));
     }
 
     public function test_text_from_pdf_rejects_invalid_paths_with_typed_exception(): void

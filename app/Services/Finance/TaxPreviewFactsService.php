@@ -367,24 +367,31 @@ class TaxPreviewFactsService
             return null;
         }
 
-        $openDate = null;
-        $openSequence = null;
-        $latestCoverSequence = null;
-        $sequence = 0;
+        $openLots = [];
 
         foreach ($transactions as $transaction) {
-            $sequence++;
             if ((string) $transaction->t_symbol !== $symbol || (string) $transaction->t_date > $dividendDate) {
                 continue;
             }
 
             if ($this->isShortSaleOpen($transaction)) {
-                $openDate = (string) $transaction->t_date;
-                $openSequence = $sequence;
+                $openLots[] = [
+                    'date' => (string) $transaction->t_date,
+                    'quantity' => $this->shortPositionQuantity($transaction),
+                ];
             }
 
             if ($this->isShortSaleCover($transaction)) {
-                $latestCoverSequence = $sequence;
+                $remainingCoverQuantity = $this->shortPositionQuantity($transaction);
+                while ($remainingCoverQuantity > 0.0 && $openLots !== []) {
+                    $openLots[0]['quantity'] -= $remainingCoverQuantity;
+                    if ($openLots[0]['quantity'] > 0.0) {
+                        $remainingCoverQuantity = 0.0;
+                    } else {
+                        $remainingCoverQuantity = abs($openLots[0]['quantity']);
+                        array_shift($openLots);
+                    }
+                }
             }
 
             if ($transaction->getKey() !== null && $transaction->getKey() === $dividend->getKey()) {
@@ -392,11 +399,14 @@ class TaxPreviewFactsService
             }
         }
 
-        if ($openSequence !== null && $latestCoverSequence !== null && $latestCoverSequence > $openSequence) {
+        if ($openLots === []) {
             return null;
         }
 
-        return $openDate !== null ? CarbonImmutable::parse($openDate) : null;
+        $dividendQuantity = abs((float) $dividend->t_qty);
+        $selectedOpenLot = $dividendQuantity > 0.0 ? $openLots[0] : $openLots[array_key_last($openLots)];
+
+        return CarbonImmutable::parse($selectedOpenLot['date']);
     }
 
     private function isShortSaleOpen(FinAccountLineItems $transaction): bool
@@ -407,6 +417,13 @@ class TaxPreviewFactsService
     private function isShortSaleCover(FinAccountLineItems $transaction): bool
     {
         return in_array($this->normalizedTransactionValue($transaction), ['cover', 'buy to cover'], true);
+    }
+
+    private function shortPositionQuantity(FinAccountLineItems $transaction): float
+    {
+        $quantity = abs((float) $transaction->t_qty);
+
+        return $quantity > 0.0 ? $quantity : 1.0;
     }
 
     private function normalizedTransactionValue(FinAccountLineItems $transaction): string

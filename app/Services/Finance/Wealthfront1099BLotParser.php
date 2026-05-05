@@ -128,7 +128,7 @@ class Wealthfront1099BLotParser
             .'(?<proceeds>[\d,.]+)\s+'
             .'(?<purchase_date>Various|\d{2}\/\d{2}\/\d{2})\s+'
             .'(?<cost_basis>[\d,.]+)\s+'
-            .'(?:(?<wash_sale>[\d,.]+)\s+W|\.{3})\s+'
+            .'(?:(?<wash_sale>[\d,.]+)\s+W|\.{3}|[-—–])?\s+'
             .'(?<gain_loss>-?[\d,.]+)\s*'
             .'(?<additional_info>.*)$/i';
 
@@ -141,7 +141,13 @@ class Wealthfront1099BLotParser
             return null;
         }
 
+        $dateAcquiredVarious = strcasecmp(trim($matches['purchase_date']), 'Various') === 0;
         $purchaseDate = $this->parseDate($matches['purchase_date']) ?? $saleDate;
+        $additionalInfo = trim($matches['additional_info']);
+        if ($dateAcquiredVarious) {
+            $additionalInfo = trim('Date acquired reported as Various. '.$additionalInfo);
+        }
+        $washSale = (string) $matches['wash_sale'];
 
         return [
             'symbol' => $symbol,
@@ -153,12 +159,13 @@ class Wealthfront1099BLotParser
             'cost_basis' => round($this->amount($matches['cost_basis']), 4),
             'proceeds' => round($this->amount($matches['proceeds']), 4),
             'realized_gain_loss' => round($this->amount($matches['gain_loss']), 4),
-            'wash_sale_disallowed' => round($this->amount($matches['wash_sale']), 4),
+            'wash_sale_disallowed' => round($this->amount($washSale), 4),
             'is_short_term' => $isShortTerm,
             'form_8949_box' => $isShortTerm ? 'A' : 'D',
             'is_covered' => true,
+            'date_acquired_various' => $dateAcquiredVarious,
             'skip_transaction_matching' => true,
-            'additional_info' => trim($matches['additional_info']),
+            'additional_info' => $additionalInfo,
         ];
     }
 

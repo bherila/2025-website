@@ -127,7 +127,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             }
 
             $amount = $this->miscAmount($doc->parsed_data);
-            if ($amount === null || $amount === 0.0) {
+            if ($amount === null) {
                 continue;
             }
 
@@ -171,9 +171,10 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
     ): TaxFactSource {
         $payer = $this->payerName($doc, $link, $parsedData);
         $factRouting = $this->line8FactRouting($routing);
+        $line = $this->schedule1Line8Destination($routing);
 
         return new TaxFactSource(
-            id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule1-8z" : "doc-{$doc->id}-schedule1-8z",
+            id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-schedule1-{$line}" : "doc-{$doc->id}-schedule1-{$line}",
             label: "{$payer} — 1099-MISC other income",
             amount: $amount,
             sourceType: TaxFactSourceType::Form1099MiscOtherIncome,

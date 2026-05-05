@@ -387,13 +387,14 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             return $this->limitedMixedSignCapitalGains($line21, $businessCapGains, $personalCapGains);
         }
 
-        $businessRatio = $line16 === 0.0 ? 0.0 : $businessCapGains / $line16;
-        $personalRatio = $line16 === 0.0 ? 0.0 : $personalCapGains / $line16;
+        $denominator = abs(MoneyMath::toCents($line16));
+        if ($denominator === 0) {
+            return ['business' => 0.0, 'personal' => 0.0];
+        }
 
-        return [
-            'business' => $this->roundMoney($line21 * $businessRatio),
-            'personal' => $this->roundMoney($line21 * $personalRatio),
-        ];
+        $allocated = MoneyMath::allocateRatio($line21, abs(MoneyMath::toCents($businessCapGains)), $denominator);
+
+        return ['business' => $allocated['allocated'], 'personal' => $allocated['remainder']];
     }
 
     private function hasMixedSigns(float $businessCapGains, float $personalCapGains): bool

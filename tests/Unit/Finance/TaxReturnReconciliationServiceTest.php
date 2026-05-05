@@ -65,4 +65,25 @@ class TaxReturnReconciliationServiceTest extends TestCase
 
         (new TaxReturnReconciliationService)->reconcile(['year' => 2025], ['lines' => []]);
     }
+
+    public function test_derived_values_are_missing_when_a_component_is_missing(): void
+    {
+        $fixture = [
+            'lines' => [
+                ['form' => 'Schedule 1', 'line' => '10', 'path' => 'schedule1.line10TotalAdditionalIncome', 'expected' => 10],
+                ['form' => 'Form 4952', 'line' => '4c', 'path' => 'form4952.line4cNetInvestmentIncomeAfterQualifiedDividends', 'expected' => 20],
+            ],
+        ];
+        $facts = [
+            'schedule1' => ['line5Total' => 10],
+            'form4952' => ['grossInvestmentIncomeTotal' => 50],
+        ];
+
+        $result = (new TaxReturnReconciliationService)->reconcile($facts, $fixture);
+
+        $this->assertSame('fail', $result['summary']['status']);
+        $this->assertSame(2, $result['summary']['missing']);
+        $this->assertSame('missing', $result['results'][0]['status']);
+        $this->assertSame('missing', $result['results'][1]['status']);
+    }
 }

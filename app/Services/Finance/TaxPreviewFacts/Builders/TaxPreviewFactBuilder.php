@@ -329,7 +329,7 @@ abstract class TaxPreviewFactBuilder
             $hasValue = true;
         }
 
-        if (! $hasValue || $total === 0.0) {
+        if (! $hasValue) {
             return null;
         }
 
@@ -341,8 +341,9 @@ abstract class TaxPreviewFactBuilder
      */
     protected function sumMiscValues(array $data): ?float
     {
-        $total = $this->sumNumericValues($data, self::MISC_PRIMARY_BOX_KEYS) ?? 0.0;
-        $hasValue = $total !== 0.0;
+        $primaryTotal = $this->sumNumericValues($data, self::MISC_PRIMARY_BOX_KEYS);
+        $total = $primaryTotal ?? 0.0;
+        $hasValue = $primaryTotal !== null;
 
         foreach ([
             '1_rents',
@@ -359,7 +360,7 @@ abstract class TaxPreviewFactBuilder
             $hasValue = true;
         }
 
-        if (! $hasValue || $total === 0.0) {
+        if (! $hasValue) {
             return null;
         }
 

@@ -296,6 +296,7 @@ class FinanceLotsImportCommandTest extends TestCase
             'form_8949_box' => 'A',
             'is_covered' => 1,
             'tax_document_id' => $taxDocument->id,
+            'reconciliation_notes' => 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.',
         ]);
         $this->assertDatabaseHas('fin_account_lots', [
             'acct_id' => $this->acctId,

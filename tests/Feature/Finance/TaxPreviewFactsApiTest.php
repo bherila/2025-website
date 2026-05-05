@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\TaxPreviewDataService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -38,6 +39,20 @@ class TaxPreviewFactsApiTest extends TestCase
 
         $response->assertOk()
             ->assertJsonMissingPath('taxFacts');
+    }
+
+    public function test_tax_preview_data_service_loads_accounts_without_auth_context(): void
+    {
+        $user = $this->createUser();
+        $account = FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
+            'acct_owner' => $user->id,
+            'acct_name' => 'CLI Brokerage',
+        ]));
+
+        $dataset = app(TaxPreviewDataService::class)->datasetForYear($user->id, 2025);
+
+        $this->assertSame($account->acct_id, $dataset['accounts'][0]['acct_id']);
+        $this->assertArrayNotHasKey('taxFacts', $dataset);
     }
 
     public function test_tax_document_update_preserves_legacy_shape_without_tax_fact_opt_in(): void

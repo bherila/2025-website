@@ -153,7 +153,7 @@ class TaxPreviewDataService
      */
     private function accounts(int $userId): array
     {
-        return FinAccounts::where('acct_owner', $userId)
+        return FinAccounts::forOwner($userId)
             ->orderBy('when_closed', 'asc')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')

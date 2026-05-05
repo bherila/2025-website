@@ -325,7 +325,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'description' => trim((string) ($row['description'] ?? '')),
                 'cusip' => isset($row['cusip']) ? strtoupper(trim((string) $row['cusip'])) : null,
                 'quantity' => (float) $row['quantity'],
-                'purchase_date' => $purchaseDate ?? $saleDate,   // "various" → use sale_date as placeholder
+                'purchase_date' => $purchaseDate ?? $saleDate,
                 'sale_date' => $saleDate,
                 'cost_basis' => round((float) $row['cost_basis'], 4),
                 'proceeds' => round((float) $row['proceeds'], 4),
@@ -334,6 +334,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'is_short_term' => (bool) ($row['is_short_term'] ?? true),
                 'form_8949_box' => isset($row['form_8949_box']) ? strtoupper(trim((string) $row['form_8949_box'])) : null,
                 'is_covered' => array_key_exists('is_covered', $row) ? (bool) $row['is_covered'] : null,
+                'date_acquired_various' => $purchaseDate === null,
+                'reconciliation_notes' => $purchaseDate === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
@@ -438,6 +440,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'is_short_term' => $isShortTermBool,
                 'form_8949_box' => strtoupper($get('form_8949_box')) ?: null,
                 'is_covered' => $get('is_covered') !== '' ? ! in_array(strtolower($get('is_covered')), ['0', 'false', 'no', 'n'], true) : null,
+                'date_acquired_various' => $purchaseDate === null,
+                'reconciliation_notes' => $purchaseDate === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
@@ -537,6 +541,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'realized_gain_loss' => round($gainLoss, 4),
                 'wash_sale_disallowed' => round($washSale, 4),
                 'is_short_term' => ! $this->isLongTerm,
+                'date_acquired_various' => $dateAcquired === null,
+                'reconciliation_notes' => $dateAcquired === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
@@ -685,6 +691,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             'form_8949_box' => $lot['form_8949_box'] ?? null,
             'is_covered' => $lot['is_covered'] ?? null,
             'wash_sale_disallowed' => $lot['wash_sale_disallowed'] ?? 0,
+            'reconciliation_notes' => $lot['reconciliation_notes'] ?? ((bool) ($lot['date_acquired_various'] ?? false) ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null),
             'created_at' => $now,
             'updated_at' => $now,
         ];
