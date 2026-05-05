@@ -36,7 +36,7 @@ All commands are scoped to the resolved user. No command can read or write anoth
 
 ## Output Formats
 
-Most commands accept `--format=table` (default) or `--format=json`. `finance:transactions` and `finance:import-transactions` also support `--format=toon`.
+Most commands accept `--format=table` (default) or `--format=json`. `finance:transactions`, `finance:import-transactions`, and `finance:tax-preview-facts` also support `--format=toon`.
 
 **Table** renders a monospaced, pipe-delimited grid suitable for terminal inspection.
 
@@ -239,6 +239,68 @@ php artisan finance:tax-render --year=YEAR [--form=FORM] [--format=table|json]
 
 ---
 
+### `finance:tax-preview-facts`
+
+Render backend-auditable Tax Preview source lines for the configured user/year. This is a debugging contract for high-value tax paths; rendered Tax Preview totals still come from the React calculation system.
+
+```bash
+php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
+```
+
+Supported slices:
+
+| Slice | Contents |
+|-------|----------|
+| `all` | Every backend fact slice currently available |
+| `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8z 1099-MISC sources |
+| `scheduleB` | Schedule B interest, ordinary dividend, and qualified dividend sources, including direct 1099 sources and K-1 sources |
+| `form4952` | Investment-interest, Schedule B gross-investment-income, K-1 gross-investment-income, and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
+| `scheduleD` | Schedule D line totals and supporting K-1/Form 6781/1099-DIV source lines, with Form 8949 rollups from the PHP capital-gains engine |
+| `form8949` | Canonical Form 8949 rows, Schedule D rollups, and PHP wash-sale adjustments |
+
+Useful examples:
+
+```bash
+php artisan finance:tax-preview-facts --year=2025 --slice=schedule1 --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=scheduleB --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json | jq '.form4952'
+php artisan finance:tax-preview-facts --year=2025 --slice=form8949 --format=json | jq '.form8949.washSaleAdjustments'
+```
+
+The command is read-only and uses the same `TaxPreviewFactsService` that feeds `/api/finance/tax-preview-data` and the MCP `get_tax_preview` tool.
+
+Fact source rows can include unreviewed parsed entries. Check `isReviewed`, `reviewStatus`, and `reviewAction` in JSON/TOON output; `reviewStatus=needs_review` means the amount is included as an estimate and the named document/link should still be reviewed.
+
+---
+
+### `finance:tax-reconcile`
+
+Compare backend Tax Preview facts against an expected filed-return line fixture. This is intended for CPA-return reconciliation: the fixture stores anonymized line values, while raw/private return artifacts can stay in ignored `training_data/tax_reconciliation/`.
+
+```bash
+php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/Finance/tax-return-reconciliations/2025-cpa-anonymized.json --format=table
+```
+
+Supported fixture formats are JSON and TOON. Each fixture line declares:
+
+| Field | Meaning |
+|-------|---------|
+| `form` / `line` / `label` | Human-readable filed-return location |
+| `path` | Dot path into `taxFacts`, or a small derived path such as `schedule1.line10TotalAdditionalIncome` |
+| `expected` | Filed-return amount |
+| `precision` | Comparison rounding, usually `0` for filed whole-dollar forms and `2` for cent-level schedules |
+| `tolerance` | Optional per-line tolerance after rounding |
+
+The command exits `0` when all lines match and `1` when any line is missing or mismatched. Use JSON or TOON output when feeding results back into an agent:
+
+```bash
+php artisan finance:tax-reconcile --year=2025 --format=json | jq '.summary'
+```
+
+The committed fixture is anonymized and contains only expected line values. Do not commit raw CPA return PDFs, screenshots, SSNs, payer names, account names, or account numbers; keep those in ignored `training_data/tax_reconciliation/` if they are useful locally.
+
+---
+
 ### `finance:k1-migrate`
 
 Migrate legacy flat-format K-1 `parsed_data` records into the canonical structured shape. Migrated rows are stamped with `schemaVersion: "1.0"` — a marker distinct from `"2026.1"` (which `GenAiJobDispatcherService::coerceK1Args` writes for fresh AI extractions), so you can tell migrated-from-legacy data apart from AI-extracted data after the fact. One-time migration; safe to run repeatedly (only legacy rows without a `schemaVersion` key are touched).
@@ -251,7 +313,7 @@ php artisan finance:k1-migrate [--dry-run]
 
 ### `finance:lots-import`
 
-Import 1099-B closed-lot records into `fin_account_lots`. Accepts **JSON**, **CSV**, **TOON**, or **Fidelity pdftotext** input.
+Import 1099-B closed-lot records into `fin_account_lots`. Accepts **JSON**, **CSV**, **TOON**, **Fidelity pdftotext**, or supported broker PDFs. Wealthfront consolidated 1099 PDFs are parsed directly through the bundled PHP PDF parser, so they do not require `pdftotext` on the server.
 
 ```bash
 # JSON (broker_1099 format — see --schema)
@@ -266,12 +328,16 @@ php artisan finance:lots-import --account=33 --file=lots.toon
 # Fidelity 1099-B PDF via pdftotext
 pdftotext -layout "2025 1099 Fidelity.pdf" - | php artisan finance:lots-import --account=33
 
+# Wealthfront consolidated 1099 PDF, stamped back to a tax document
+php artisan finance:lots-import --account=33 --tax-document=19 --file="2025 1099 Wealthfront.pdf" --clear
+
 # Print expected schema for all formats
 php artisan finance:lots-import --schema
 ```
 
 **Options**
 - `--account` — target `fin_accounts.acct_id` (required)
+- `--tax-document` — optional `fin_tax_documents.id`; stamps imported lots with their source tax document
 - `--file` — path to input file; omit to read from stdin
 - `--input-format` — force format: `json` | `csv` | `toon` | `text` (auto-detected by default)
 - `--dry-run` — parse and preview without writing
@@ -281,7 +347,7 @@ php artisan finance:lots-import --schema
 
 **Duplicate detection:** skips rows where the same `(acct_id, symbol, quantity, purchase_date, sale_date, proceeds, cost_basis)` already exists (within $0.01 rounding).
 
-**Transaction linking:** for each imported lot, attempts to find a matching `fin_account_line_items` opening (buy) and closing (sell) transaction and sets `open_t_id` / `close_t_id`.
+**Transaction linking:** for each imported lot, attempts to find a matching `fin_account_line_items` opening (buy) and closing (sell) transaction and sets `open_t_id` / `close_t_id`. Wealthfront PDF lots skip this step because the statement lot rows are CUSIP-based and do not reliably expose ticker symbols for account-line matching.
 
 **Taxable disposition types parsed from pdftotext:** `Sale`, `Merger` (cash mergers), `Cash In Lieu` (fractional share payouts).
 

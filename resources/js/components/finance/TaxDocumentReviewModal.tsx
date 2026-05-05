@@ -43,6 +43,7 @@ import { parseMoney } from '@/lib/finance/money'
 import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
 import type { MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 interface TaxDocumentReviewModalProps {
   open: boolean
@@ -56,6 +57,19 @@ interface TaxDocumentReviewModalProps {
   onClose: () => void
   /** Called when any document is reviewed so parent can refresh. */
   onDocumentReviewed?: () => void
+  onDocumentSaved?: ((doc: TaxDocument) => void) | undefined
+  onDocumentDeleted?: ((doc: TaxDocument) => void) | undefined
+  onTaxFactsChange?: ((facts: TaxPreviewFacts) => void) | undefined
+}
+
+interface TaxDocumentMutationResponse {
+  document: TaxDocument
+  taxFacts?: TaxPreviewFacts
+}
+
+interface TaxDocumentLinkMutationResponse {
+  link: TaxDocumentAccountLink
+  taxFacts?: TaxPreviewFacts
 }
 
 type MiscRoutingSelectValue = MiscRouting | 'auto'
@@ -643,6 +657,9 @@ export default function TaxDocumentReviewModal({
   payslips = [],
   onClose,
   onDocumentReviewed,
+  onDocumentSaved,
+  onDocumentDeleted,
+  onTaxFactsChange,
 }: TaxDocumentReviewModalProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -824,14 +841,20 @@ export default function TaxDocumentReviewModal({
           return
         }
         const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
-        const updatedDoc = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: updatedArray })) as TaxDocument
+        const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: updatedArray })) as TaxDocumentMutationResponse
+        const updatedDoc = response.document
+        if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
         const updatedLinkData = extractLinkParsedData(updatedDoc, propAccountLink)
         setEditData((updatedLinkData ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
         setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
+        onDocumentSaved?.(updatedDoc)
       } else {
-        const updatedDoc = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, { parsed_data: parsedData })) as TaxDocument
+        const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: parsedData })) as TaxDocumentMutationResponse
+        const updatedDoc = response.document
+        if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
         setEditData((updatedDoc.parsed_data ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
         setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
+        onDocumentSaved?.(updatedDoc)
       }
       toast.success('Extracted data updated')
       onDocumentReviewed?.()
@@ -841,7 +864,7 @@ export default function TaxDocumentReviewModal({
       setSaving(false)
       setJsonEditOpen(false)
     }
-  }, [onDocumentReviewed, isLinkReview, propAccountLink])
+  }, [onDocumentReviewed, onDocumentSaved, onTaxFactsChange, isLinkReview, propAccountLink])
 
   const loadOriginalParsedDataForEdit = useCallback(async (): Promise<unknown> => {
     if (!activeDoc) {
@@ -873,6 +896,7 @@ export default function TaxDocumentReviewModal({
       toast.success('Document deleted')
       // Remove from local list
       const newDocs = documents.filter(d => d.id !== doc.id)
+      onDocumentDeleted?.(doc)
       if (newDocs.length === 0) {
         onDocumentReviewed?.()
         onClose()
@@ -907,10 +931,19 @@ export default function TaxDocumentReviewModal({
         if (propAccountLink.form_type === '1099_misc') {
           linkPayload.misc_routing = miscRouting === 'auto' ? null : miscRouting
         }
-        await fetchWrapper.patch(
-          `/api/finance/tax-documents/${doc.id}/accounts/${propAccountLink.id}`,
+        const linkResponse = (await fetchWrapper.patch(
+          `/api/finance/tax-documents/${doc.id}/accounts/${propAccountLink.id}?include_tax_facts=1`,
           linkPayload,
-        )
+        )) as TaxDocumentLinkMutationResponse
+        if (linkResponse.taxFacts) onTaxFactsChange?.(linkResponse.taxFacts)
+        if (linkResponse.link) {
+          const documentWithUpdatedLink = {
+            ...doc,
+            account_links: (doc.account_links ?? []).map(link => link.id === linkResponse.link.id ? linkResponse.link : link),
+          }
+          setDocuments(prev => prev.map(d => d.id === doc.id ? documentWithUpdatedLink : d))
+          onDocumentSaved?.(documentWithUpdatedLink)
+        }
 
         // Also persist the edited parsed_data back into the parent's array,
         // but only when the parent parsed_data shape is valid and the target entry exists.
@@ -923,9 +956,12 @@ export default function TaxDocumentReviewModal({
             toast.error('Unable to save parent parsed data: account entry was not found in document parsed data')
           } else {
             const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, editData as Record<string, unknown>)
-            await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, {
+            const docResponse = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, {
               parsed_data: updatedArray,
-            })
+            })) as TaxDocumentMutationResponse
+            if (docResponse.taxFacts) onTaxFactsChange?.(docResponse.taxFacts)
+            setDocuments(prev => prev.map(d => d.id === doc.id ? docResponse.document : d))
+            onDocumentSaved?.(docResponse.document)
           }
         }
         toast.success(isReviewToggling ? 'Account link marked as reviewed' : 'Changes saved')
@@ -946,10 +982,14 @@ export default function TaxDocumentReviewModal({
         }
 
         if (isReviewed && isReviewToggling) {
-          await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed`, payload)
+          const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}/mark-reviewed?include_tax_facts=1`, payload)) as TaxDocumentMutationResponse
+          if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+          onDocumentSaved?.(response.document)
           toast.success('Document marked as reviewed')
         } else {
-          await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}`, payload)
+          const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, payload)) as TaxDocumentMutationResponse
+          if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+          onDocumentSaved?.(response.document)
           toast.success(isReviewToggling ? 'Review status updated' : 'Changes saved')
         }
 

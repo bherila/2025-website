@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
+use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,11 @@ use Illuminate\Support\Facades\DB;
 
 class TaxDocumentController extends Controller
 {
+    /**
+     * @var array<int, string>
+     */
+    private const VALID_MISC_ROUTINGS = ['sch_c', 'sch_e', 'sch_1_line_8', 'sch_1_8b', 'sch_1_8h', 'sch_1_8i', 'sch_1_8z'];
+
     protected FileStorageService $fileService;
 
     protected GenAiJobDispatcherService $dispatcherService;
@@ -26,16 +32,20 @@ class TaxDocumentController extends Controller
 
     protected TaxDocumentParsedDataNormalizer $parsedDataNormalizer;
 
+    protected TaxPreviewFactsService $taxPreviewFactsService;
+
     public function __construct(
         FileStorageService $fileService,
         GenAiJobDispatcherService $dispatcherService,
         TaxDocumentCreationService $creationService,
         TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
+        TaxPreviewFactsService $taxPreviewFactsService,
     ) {
         $this->fileService = $fileService;
         $this->dispatcherService = $dispatcherService;
         $this->creationService = $creationService;
         $this->parsedDataNormalizer = $parsedDataNormalizer;
+        $this->taxPreviewFactsService = $taxPreviewFactsService;
     }
 
     public function index(Request $request): JsonResponse
@@ -126,7 +136,7 @@ class TaxDocumentController extends Controller
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
             'skip_gen_ai_processing' => 'nullable|boolean',
-            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $userId = Auth::id();
@@ -322,7 +332,7 @@ class TaxDocumentController extends Controller
             'account_id' => 'nullable|integer|min:1',
             'is_reviewed' => 'nullable|boolean',
             'notes' => 'nullable|string',
-            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
             'reporting_mode' => 'nullable|string|in:schedule_d_summary,form_8949_summary,form_8949_transactions',
         ]);
 
@@ -351,7 +361,9 @@ class TaxDocumentController extends Controller
 
         $link->save();
 
-        return response()->json($link->load('account:acct_id,acct_name,acct_number'));
+        $responseLink = $link->load('account:acct_id,acct_name,acct_number');
+
+        return $this->jsonWithOptionalTaxFacts($request, 'link', $responseLink, (int) $doc->tax_year);
     }
 
     /**
@@ -545,7 +557,7 @@ class TaxDocumentController extends Controller
             'notes' => 'nullable|string',
             'is_reviewed' => 'nullable|boolean',
             'parsed_data' => 'nullable|array',
-            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)
@@ -583,7 +595,12 @@ class TaxDocumentController extends Controller
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
-        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
+        return $this->jsonWithOptionalTaxFacts(
+            $request,
+            'document',
+            $this->parsedDataNormalizer->documentForResponse($doc),
+            (int) $doc->tax_year,
+        );
     }
 
     /**
@@ -630,7 +647,7 @@ class TaxDocumentController extends Controller
         $request->validate([
             'notes' => 'nullable|string',
             'parsed_data' => 'nullable|array',
-            'misc_routing' => 'nullable|string|in:sch_c,sch_e,sch_1_line_8',
+            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
         ]);
 
         $doc = FileForTaxDocument::where('id', $id)
@@ -663,7 +680,24 @@ class TaxDocumentController extends Controller
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
 
-        return response()->json($this->parsedDataNormalizer->documentForResponse($doc));
+        return $this->jsonWithOptionalTaxFacts(
+            $request,
+            'document',
+            $this->parsedDataNormalizer->documentForResponse($doc),
+            (int) $doc->tax_year,
+        );
+    }
+
+    private function jsonWithOptionalTaxFacts(Request $request, string $payloadKey, mixed $payload, int $year): JsonResponse
+    {
+        if (! $request->boolean('include_tax_facts')) {
+            return response()->json($payload);
+        }
+
+        return response()->json([
+            $payloadKey => $payload,
+            'taxFacts' => $this->taxPreviewFactsService->arrayForYear((int) Auth::id(), $year),
+        ]);
     }
 
     /**

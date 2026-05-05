@@ -28,6 +28,8 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 
 - **"Where does X live?"** — grep the service/model name. Models live under `app/Models/FinanceTool/`, controllers under `app/Http/Controllers/FinanceTool/`, and pages under `resources/js/components/finance/`.
 - **"How does Schedule Z get its value?"** — start in `resources/js/components/finance/TaxPreviewContext.tsx`; it fetches the consolidated dataset and runs `compute*` functions. From there, jump into the specific preview file (`Schedule1Preview.tsx`, `Form1040Preview.tsx`, etc.).
+- **"How do I debug Schedule 1, Schedule B, Form 4952, Schedule D, or Form 8949 source lines from the backend?"** — use `php artisan finance:tax-preview-facts --year=YYYY --slice=scheduleD --format=toon` and see [tax-system.md § Backend Tax Facts](tax-system.md#backend-tax-facts).
+- **"How do I compare backend tax facts to a CPA-prepared return?"** — use `php artisan finance:tax-reconcile --year=YYYY --format=json` with an anonymized expected-line fixture and see [tax-system.md § Filed Return Reconciliation](tax-system.md#filed-return-reconciliation).
 - **"Where are the Schedule C tax characteristics defined?"** — `app/Models/FinanceTool/FinAccountTag.php::TAX_CHARACTERISTICS`. Categories are `sch_c_income`, `sch_c_expense`, `sch_c_home_office`, `other`, `w2_income`.
 - **"How do I add a new form to the dock UI?"** — see [tax-preview-dock.md § Adding a new form](tax-preview-dock.md#adding-a-new-form).
 - **"Where do the XLSX export sheets come from?"** — the `xlsx` field on each `FormRegistryEntry` in `resources/js/components/finance/tax-preview/registry.tsx`. The builders themselves live in `resources/js/lib/finance/buildTaxWorkbook.ts`.

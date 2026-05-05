@@ -334,7 +334,7 @@ describe('TaxDocumentReviewModal — SBP election save-while-reviewed', () => {
 
     const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
 
-    expect(url).toBe('/api/finance/tax-documents/1')
+    expect(url).toBe('/api/finance/tax-documents/1?include_tax_facts=1')
     expect(payload).not.toHaveProperty('is_reviewed')
     expect(
       (payload.parsed_data as Record<string, unknown> & { k3Elections: { sourcedByPartnerAsUSSource: boolean } })
@@ -357,7 +357,7 @@ describe('TaxDocumentReviewModal — 1099-MISC routing', () => {
     await waitFor(() => expect(fetchWrapper.put).toHaveBeenCalledTimes(1))
 
     const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
-    expect(url).toBe('/api/finance/tax-documents/2')
+    expect(url).toBe('/api/finance/tax-documents/2?include_tax_facts=1')
     expect(payload.misc_routing).toBe('sch_c')
   })
 })

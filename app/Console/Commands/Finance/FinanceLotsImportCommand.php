@@ -2,7 +2,11 @@
 
 namespace App\Console\Commands\Finance;
 
+use App\Models\FinanceTool\FinAccountLot;
+use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
+use App\Services\Finance\Wealthfront1099BLotParser;
 use HelgeSverre\Toon\Toon;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,8 +29,8 @@ use Illuminate\Support\Facades\DB;
  *           Auto-detected when the file does not start with "{" or contain CSV
  *           headers.  Use --input-format=toon to force.
  *
- *  TEXT  – Raw pdftotext -layout output from a Fidelity 1099-B PDF.
- *           Auto-detected when the file contains "FORM 1099-B".
+ *  TEXT  – Raw broker 1099-B text output, or a Wealthfront PDF read directly
+ *           by the command.
  *
  * Usage:
  *   # JSON
@@ -39,8 +43,9 @@ use Illuminate\Support\Facades\DB;
  *   # TOON
  *   php artisan finance:lots-import --account=33 --file=lots.toon
  *
- *   # Fidelity pdftotext
+ *   # Fidelity pdftotext or Wealthfront PDF
  *   pdftotext -layout "2025 1099.pdf" - | php artisan finance:lots-import --account=33
+ *   php artisan finance:lots-import --account=33 --file="2025 1099 Wealthfront.pdf"
  *
  *   # Print expected schema
  *   php artisan finance:lots-import --schema
@@ -49,6 +54,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 {
     protected $signature = 'finance:lots-import
         {--account= : Target fin_accounts.acct_id (required unless --schema)}
+        {--tax-document= : Optional fin_tax_documents.id to stamp imported lots}
         {--file= : Path to input file; omit to read from stdin}
         {--input-format= : Force input format: json | csv | toon | text (auto-detected by default)}
         {--dry-run : Show what would be imported without writing to the database}
@@ -56,23 +62,17 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         {--schema : Print expected input schemas and exit}
         {--format=table : Output format: table or json}';
 
-    protected $description = 'Import 1099-B lots (JSON / CSV / TOON / Fidelity pdftotext) into fin_account_lots';
-
-    // ── CSV column constants ──────────────────────────────────────────────────
+    protected $description = 'Import 1099-B lots (JSON / CSV / TOON / broker PDF/text) into fin_account_lots';
 
     private const CSV_REQUIRED_COLS = ['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'realized_gain_loss'];
 
     private const CSV_OPTIONAL_COLS = ['description', 'cusip', 'wash_sale_disallowed', 'is_short_term', 'form_8949_box', 'is_covered'];
-
-    // ── pdftotext parser state ────────────────────────────────────────────────
 
     private string $currentSymbol = '';
 
     private string $currentDescription = '';
 
     private bool $isLongTerm = false;
-
-    // ── main ──────────────────────────────────────────────────────────────────
 
     public function handle(): int
     {
@@ -154,7 +154,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             $this->info("Cleared {$deleted} existing lot record(s) for account {$acctId}.");
         }
 
-        [$inserted, $skipped] = $this->persistLots($acctId, $lots);
+        $taxDocumentId = $this->taxDocumentId();
+        if ($taxDocumentId === false) {
+            return 1;
+        }
+
+        [$inserted, $skipped] = $this->persistLots($acctId, $lots, $taxDocumentId, skipDuplicateCheck: $doClear);
 
         $this->info("Imported: {$inserted} inserted, {$skipped} skipped (duplicate).");
 
@@ -168,8 +173,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return 0;
     }
 
-    // ── input ─────────────────────────────────────────────────────────────────
-
     private function readInput(): ?string
     {
         $filePath = $this->option('file');
@@ -181,7 +184,17 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 return null;
             }
 
-            $raw = file_get_contents($filePath);
+            if (strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'pdf') {
+                try {
+                    $raw = app(Wealthfront1099BLotParser::class)->textFromPdf($filePath);
+                } catch (WealthfrontPdfParseException $exception) {
+                    $this->error($exception->getMessage());
+
+                    return null;
+                }
+            } else {
+                $raw = file_get_contents($filePath);
+            }
         } else {
             $raw = '';
             while (! feof(STDIN)) {
@@ -257,8 +270,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return 'text';
     }
 
-    // ── JSON parser ───────────────────────────────────────────────────────────
-
     /**
      * Parse broker_1099 JSON (the format used by the AI-extracted 1099b.json).
      *
@@ -286,6 +297,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         $lots = [];
         foreach ($txns as $i => $row) {
+            if (! is_array($row)) {
+                $this->warn("Row {$i}: expected an object — skipped.");
+
+                continue;
+            }
+
             $missing = array_diff(self::CSV_REQUIRED_COLS, array_keys($row));
             if (! empty($missing)) {
                 $this->warn("Row {$i}: missing fields ".implode(', ', $missing).' — skipped.');
@@ -293,33 +310,37 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 continue;
             }
 
-            $purchaseDate = $this->normaliseDateField($row['purchase_date']);
-            $saleDate = $this->normaliseDateField($row['sale_date']);
+            $symbol = $this->normaliseSymbol($row);
+            $purchaseDate = $this->normaliseDateField((string) $row['purchase_date']);
+            $saleDate = $this->normaliseDateField((string) $row['sale_date']);
 
             if (! $saleDate) {
-                $this->warn("Row {$i} ({$row['symbol']}): invalid sale_date '{$row['sale_date']}' — skipped.");
+                $this->warn("Row {$i} ({$symbol}): invalid sale_date '{$row['sale_date']}' — skipped.");
 
                 continue;
             }
 
             $lots[] = [
-                'symbol' => strtoupper(trim($row['symbol'])),
-                'description' => trim($row['description'] ?? ''),
+                'symbol' => $symbol,
+                'description' => trim((string) ($row['description'] ?? '')),
+                'cusip' => isset($row['cusip']) ? strtoupper(trim((string) $row['cusip'])) : null,
                 'quantity' => (float) $row['quantity'],
-                'purchase_date' => $purchaseDate ?? $saleDate,   // "various" → use sale_date as placeholder
+                'purchase_date' => $purchaseDate ?? $saleDate,
                 'sale_date' => $saleDate,
                 'cost_basis' => round((float) $row['cost_basis'], 4),
                 'proceeds' => round((float) $row['proceeds'], 4),
                 'realized_gain_loss' => round((float) $row['realized_gain_loss'], 4),
                 'wash_sale_disallowed' => round((float) ($row['wash_sale_disallowed'] ?? 0), 4),
                 'is_short_term' => (bool) ($row['is_short_term'] ?? true),
+                'form_8949_box' => isset($row['form_8949_box']) ? strtoupper(trim((string) $row['form_8949_box'])) : null,
+                'is_covered' => array_key_exists('is_covered', $row) ? (bool) $row['is_covered'] : null,
+                'date_acquired_various' => $purchaseDate === null,
+                'reconciliation_notes' => $purchaseDate === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
         return $lots;
     }
-
-    // ── TOON parser ───────────────────────────────────────────────────────────
 
     /**
      * Parse TOON-encoded lot data (helgesverre/toon).
@@ -349,8 +370,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         return $this->parseJson($asJson);
     }
-
-    // ── CSV parser ────────────────────────────────────────────────────────────
 
     /**
      * Parse a flat CSV file.  The first row must be a header row.
@@ -410,6 +429,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             $lots[] = [
                 'symbol' => $symbol,
                 'description' => $get('description'),
+                'cusip' => strtoupper($get('cusip')) ?: null,
                 'quantity' => (float) str_replace(',', '', $get('quantity')),
                 'purchase_date' => $purchaseDate ?? $saleDate,
                 'sale_date' => $saleDate,
@@ -418,24 +438,30 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'realized_gain_loss' => round((float) str_replace(',', '', $get('realized_gain_loss')), 4),
                 'wash_sale_disallowed' => round((float) str_replace(',', '', $get('wash_sale_disallowed')), 4),
                 'is_short_term' => $isShortTermBool,
+                'form_8949_box' => strtoupper($get('form_8949_box')) ?: null,
+                'is_covered' => $get('is_covered') !== '' ? ! in_array(strtolower($get('is_covered')), ['0', 'false', 'no', 'n'], true) : null,
+                'date_acquired_various' => $purchaseDate === null,
+                'reconciliation_notes' => $purchaseDate === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
         return $lots;
     }
 
-    // ── pdftotext parser ──────────────────────────────────────────────────────
-
     /**
-     * Parse Fidelity 1099-B pdftotext -layout output.
+     * Parse broker 1099-B text output.
      *
-     * Recognises Sale and Merger action rows in both short-term and long-term
-     * sections.
+     * Recognises the canonical Wealthfront layout first, then falls back to the
+     * original Fidelity row parser.
      *
      * @return array<int, array<string, mixed>>
      */
     private function parseText(string $text): array
     {
+        if (stripos($text, 'Wealthfront Brokerage LLC') !== false) {
+            return app(Wealthfront1099BLotParser::class)->parse($text);
+        }
+
         $lots = [];
         $this->isLongTerm = false;
         $this->currentSymbol = '';
@@ -506,6 +532,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             $lots[] = [
                 'symbol' => $this->currentSymbol,
                 'description' => $this->currentDescription,
+                'cusip' => null,
                 'quantity' => $qty,
                 'purchase_date' => $dateAcquired ?? $dateSold,
                 'sale_date' => $dateSold,
@@ -514,13 +541,13 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'realized_gain_loss' => round($gainLoss, 4),
                 'wash_sale_disallowed' => round($washSale, 4),
                 'is_short_term' => ! $this->isLongTerm,
+                'date_acquired_various' => $dateAcquired === null,
+                'reconciliation_notes' => $dateAcquired === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
             ];
         }
 
         return $lots;
     }
-
-    // ── persistence ───────────────────────────────────────────────────────────
 
     /**
      * Insert parsed lots, skipping exact duplicates already in the table.
@@ -531,108 +558,384 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      * @param  array<int, array<string, mixed>>  $lots
      * @return array{0: int, 1: int} [inserted, skipped]
      */
-    private function persistLots(int $acctId, array $lots): array
+    private function persistLots(int $acctId, array $lots, ?int $taxDocumentId = null, bool $skipDuplicateCheck = false): array
     {
-        $inserted = 0;
-        $skipped = 0;
         $now = now();
+        $lotsToInsert = $skipDuplicateCheck ? $this->filterDuplicateLotsInMemory($lots) : $this->filterDuplicateLots($acctId, $lots);
+        $skipped = count($lots) - count($lotsToInsert);
+
+        if (empty($lotsToInsert)) {
+            return [0, $skipped];
+        }
+
+        foreach (array_chunk($lotsToInsert, 500) as $chunk) {
+            $rows = array_map(
+                fn (array $lot): array => $this->makeLotInsertRow($acctId, $lot, $taxDocumentId, $now),
+                $chunk,
+            );
+
+            FinAccountLot::query()->insert($rows);
+        }
+
+        $this->bulkMatchTransactions($acctId, $taxDocumentId, $lotsToInsert);
+
+        return [count($lotsToInsert), $skipped];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterDuplicateLotsInMemory(array $lots): array
+    {
+        $filtered = [];
+        $seenKeys = [];
 
         foreach ($lots as $lot) {
-            // Duplicate check
-            $exists = DB::table('fin_account_lots')
-                ->where('acct_id', $acctId)
-                ->where('symbol', $lot['symbol'])
-                ->whereRaw('ABS(quantity - ?) < 0.0001', [$lot['quantity']])
-                ->where('purchase_date', $lot['purchase_date'])
-                ->where('sale_date', $lot['sale_date'])
-                ->whereRaw('ABS(proceeds - ?) < 0.01', [$lot['proceeds']])
-                ->whereRaw('ABS(cost_basis - ?) < 0.01', [$lot['cost_basis']])
-                ->exists();
-
-            if ($exists) {
-                $skipped++;
-
+            $key = $this->lotDuplicateKey($lot);
+            if (isset($seenKeys[$key])) {
                 continue;
             }
 
-            $costPerUnit = $lot['quantity'] > 0
-                ? round($lot['cost_basis'] / $lot['quantity'], 8)
-                : null;
-
-            $closeId = $this->findClosingTransaction($acctId, $lot);
-            $openId = $this->findOpeningTransaction($acctId, $lot);
-
-            DB::table('fin_account_lots')->insert([
-                'acct_id' => $acctId,
-                'symbol' => $lot['symbol'],
-                'description' => $lot['description'],
-                'quantity' => $lot['quantity'],
-                'purchase_date' => $lot['purchase_date'],
-                'cost_basis' => $lot['cost_basis'],
-                'cost_per_unit' => $costPerUnit,
-                'sale_date' => $lot['sale_date'],
-                'proceeds' => $lot['proceeds'],
-                'realized_gain_loss' => $lot['realized_gain_loss'],
-                'is_short_term' => $lot['is_short_term'] ? 1 : 0,
-                'lot_source' => 'import_1099b',
-                'open_t_id' => $openId,
-                'close_t_id' => $closeId,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-            $inserted++;
+            $seenKeys[$key] = true;
+            $filtered[] = $lot;
         }
 
-        return [$inserted, $skipped];
+        return $filtered;
     }
 
     /**
-     * Find the closing (sell/disposal) transaction for a lot.
-     *
-     * Handles sign conventions per type:
-     *  - Sell / Sell Short / Merger / Cash In Lieu / Transfer: qty is negative
-     *  - Cover (buy-to-cover a short): qty is positive
-     * We match on ABS(qty) and allow either sign.
-     *
-     * @param  array<string, mixed>  $lot
+     * @param  array<int, array<string, mixed>>  $lots
+     * @return array<int, array<string, mixed>>
      */
-    private function findClosingTransaction(int $acctId, array $lot): ?int
+    private function filterDuplicateLots(int $acctId, array $lots): array
     {
-        $row = DB::table('fin_account_line_items')
-            ->where('t_account', $acctId)
-            ->where('t_symbol', $lot['symbol'])
-            ->where('t_date', $lot['sale_date'])
-            ->whereIn('t_type', ['Sell', 'Cover', 'Sell Short', 'Transfer', 'Merger', 'Cash In Lieu'])
-            ->orderByRaw('ABS(ABS(t_qty) - ?) ASC', [$lot['quantity']])
-            ->first(['t_id']);
+        $symbols = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['symbol'], $lots)));
+        $purchaseDates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['purchase_date'], $lots)));
+        $saleDates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['sale_date'], $lots)));
+        $existingKeys = [];
 
-        return $row?->t_id;
+        if (! empty($symbols) && ! empty($purchaseDates) && ! empty($saleDates)) {
+            $existingRows = DB::table('fin_account_lots')
+                ->where('acct_id', $acctId)
+                ->whereIn('symbol', $symbols)
+                ->whereIn('purchase_date', $purchaseDates)
+                ->whereIn('sale_date', $saleDates)
+                ->get(['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis']);
+
+            foreach ($existingRows as $row) {
+                $existingKeys[$this->lotDuplicateKey((array) $row)] = true;
+            }
+        }
+
+        $filtered = [];
+        foreach ($lots as $lot) {
+            $key = $this->lotDuplicateKey($lot);
+            if (isset($existingKeys[$key])) {
+                continue;
+            }
+
+            $existingKeys[$key] = true;
+            $filtered[] = $lot;
+        }
+
+        return $filtered;
     }
 
     /**
-     * Find the opening (buy) transaction for a lot.
-     *
-     * For long positions: Buy / Reinvest / Transfer with positive qty.
-     * For short positions: 'Sell Short' with negative qty (short opening).
-     * We match on ABS(qty) regardless of sign.
-     *
      * @param  array<string, mixed>  $lot
      */
-    private function findOpeningTransaction(int $acctId, array $lot): ?int
+    private function lotDuplicateKey(array $lot): string
     {
-        $row = DB::table('fin_account_line_items')
-            ->where('t_account', $acctId)
-            ->where('t_symbol', $lot['symbol'])
-            ->where('t_date', $lot['purchase_date'])
-            ->whereIn('t_type', ['Buy', 'Sell Short', 'Transfer', 'Reinvest'])
-            ->orderByRaw('ABS(ABS(t_qty) - ?) ASC', [$lot['quantity']])
-            ->first(['t_id']);
-
-        return $row?->t_id;
+        return implode('|', [
+            (string) $lot['symbol'],
+            number_format((float) $lot['quantity'], 4, '.', ''),
+            (string) $lot['purchase_date'],
+            (string) $lot['sale_date'],
+            number_format((float) $lot['proceeds'], 2, '.', ''),
+            number_format((float) $lot['cost_basis'], 2, '.', ''),
+        ]);
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    /**
+     * @param  array<string, mixed>  $lot
+     * @return array<string, mixed>
+     */
+    private function makeLotInsertRow(
+        int $acctId,
+        array $lot,
+        ?int $taxDocumentId,
+        Carbon $now,
+    ): array {
+        $costPerUnit = $lot['quantity'] > 0
+            ? round($lot['cost_basis'] / $lot['quantity'], 8)
+            : null;
+
+        return [
+            'acct_id' => $acctId,
+            'symbol' => $lot['symbol'],
+            'description' => $lot['description'],
+            'cusip' => $lot['cusip'] ?? null,
+            'quantity' => $lot['quantity'],
+            'purchase_date' => $lot['purchase_date'],
+            'cost_basis' => $lot['cost_basis'],
+            'cost_per_unit' => $costPerUnit,
+            'sale_date' => $lot['sale_date'],
+            'proceeds' => $lot['proceeds'],
+            'realized_gain_loss' => $lot['realized_gain_loss'],
+            'is_short_term' => $lot['is_short_term'] ? 1 : 0,
+            'lot_source' => 'import_1099b',
+            'open_t_id' => null,
+            'close_t_id' => null,
+            'tax_document_id' => $taxDocumentId,
+            'form_8949_box' => $lot['form_8949_box'] ?? null,
+            'is_covered' => $lot['is_covered'] ?? null,
+            'wash_sale_disallowed' => $lot['wash_sale_disallowed'] ?? 0,
+            'reconciliation_notes' => $lot['reconciliation_notes'] ?? ((bool) ($lot['date_acquired_various'] ?? false) ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     */
+    private function bulkMatchTransactions(int $acctId, ?int $taxDocumentId, array $lots): void
+    {
+        $matchingLots = [];
+        foreach ($lots as $lot) {
+            if (! (bool) ($lot['skip_transaction_matching'] ?? false)) {
+                $matchingLots[$this->lotDuplicateKey($lot)] = $lot;
+            }
+        }
+
+        if (empty($matchingLots)) {
+            return;
+        }
+
+        $matchingLotRows = array_values($matchingLots);
+        $insertedLots = $this->loadInsertedLots($acctId, $taxDocumentId, $matchingLotRows);
+        if (empty($insertedLots)) {
+            return;
+        }
+
+        $openingCandidates = $this->loadTransactionCandidates(
+            $acctId,
+            $matchingLotRows,
+            'purchase_date',
+            ['Buy', 'Sell Short', 'Transfer', 'Reinvest'],
+        );
+        $closingCandidates = $this->loadTransactionCandidates(
+            $acctId,
+            $matchingLotRows,
+            'sale_date',
+            ['Sell', 'Cover', 'Sell Short', 'Transfer', 'Merger', 'Cash In Lieu'],
+        );
+
+        $updates = [];
+        foreach ($insertedLots as $insertedLot) {
+            $key = $this->lotDuplicateKey($insertedLot);
+            $lot = $matchingLots[$key] ?? null;
+            if ($lot === null) {
+                continue;
+            }
+
+            $openId = $this->bestTransactionId($openingCandidates, (string) $lot['symbol'], (string) $lot['purchase_date'], (float) $lot['quantity']);
+            $closeId = $this->bestTransactionId($closingCandidates, (string) $lot['symbol'], (string) $lot['sale_date'], (float) $lot['quantity']);
+            if ($openId === null && $closeId === null) {
+                continue;
+            }
+
+            $updates[] = [
+                'lot_id' => (int) $insertedLot['lot_id'],
+                'open_t_id' => $openId,
+                'close_t_id' => $closeId,
+            ];
+        }
+
+        $this->bulkUpdateLotTransactionIds($updates);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @return array<string, array<string, mixed>>
+     */
+    private function loadInsertedLots(int $acctId, ?int $taxDocumentId, array $lots): array
+    {
+        $lotKeys = [];
+        $symbols = [];
+        $purchaseDates = [];
+        $saleDates = [];
+
+        foreach ($lots as $index => $lot) {
+            $key = $this->lotDuplicateKey($lot);
+            $lotKeys[$key] = $lot + ['_index' => $index];
+            $symbols[] = (string) $lot['symbol'];
+            $purchaseDates[] = (string) $lot['purchase_date'];
+            $saleDates[] = (string) $lot['sale_date'];
+        }
+
+        $query = DB::table('fin_account_lots')
+            ->where('acct_id', $acctId)
+            ->where('lot_source', 'import_1099b')
+            ->whereIn('symbol', array_values(array_unique($symbols)))
+            ->whereIn('purchase_date', array_values(array_unique($purchaseDates)))
+            ->whereIn('sale_date', array_values(array_unique($saleDates)));
+
+        if ($taxDocumentId === null) {
+            $query->whereNull('tax_document_id');
+        } else {
+            $query->where('tax_document_id', $taxDocumentId);
+        }
+
+        $insertedLots = [];
+        $rows = $query->get(['lot_id', 'symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis']);
+        foreach ($rows as $row) {
+            $rowArray = (array) $row;
+            $key = $this->lotDuplicateKey($rowArray);
+            if (isset($lotKeys[$key])) {
+                $insertedLots[$key] = $rowArray;
+            }
+        }
+
+        return $insertedLots;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @param  array<int, string>  $types
+     * @return array<string, array<int, object>>
+     */
+    private function loadTransactionCandidates(int $acctId, array $lots, string $dateField, array $types): array
+    {
+        $symbols = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['symbol'], $lots)));
+        $dates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot[$dateField], $lots)));
+        if (empty($symbols) || empty($dates)) {
+            return [];
+        }
+
+        $rows = DB::table('fin_account_line_items')
+            ->where('t_account', $acctId)
+            ->whereIn('t_symbol', $symbols)
+            ->whereIn('t_date', $dates)
+            ->whereIn('t_type', $types)
+            ->get(['t_id', 't_symbol', 't_date', 't_qty']);
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            $grouped[$this->transactionCandidateKey((string) $row->t_symbol, (string) $row->t_date)][] = $row;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param  array<string, array<int, object>>  $candidates
+     */
+    private function bestTransactionId(array $candidates, string $symbol, string $date, float $quantity): ?int
+    {
+        $rows = $candidates[$this->transactionCandidateKey($symbol, $date)] ?? [];
+        $bestId = null;
+        $bestDelta = null;
+
+        foreach ($rows as $row) {
+            $delta = abs(abs((float) $row->t_qty) - $quantity);
+            if ($bestDelta === null || $delta < $bestDelta) {
+                $bestId = (int) $row->t_id;
+                $bestDelta = $delta;
+            }
+        }
+
+        return $bestId;
+    }
+
+    private function transactionCandidateKey(string $symbol, string $date): string
+    {
+        return $symbol.'|'.$date;
+    }
+
+    /**
+     * @param  array<int, array{lot_id: int, open_t_id: int|null, close_t_id: int|null}>  $updates
+     */
+    private function bulkUpdateLotTransactionIds(array $updates): void
+    {
+        foreach (array_chunk($updates, 500) as $chunk) {
+            $lotIds = array_map(static fn (array $update): int => $update['lot_id'], $chunk);
+            FinAccountLot::query()
+                ->whereIn('lot_id', $lotIds)
+                ->update([
+                    'open_t_id' => DB::raw($this->caseLotUpdateSql($chunk, 'open_t_id')),
+                    'close_t_id' => DB::raw($this->caseLotUpdateSql($chunk, 'close_t_id')),
+                    'updated_at' => now(),
+                ]);
+        }
+    }
+
+    /**
+     * @param  array<int, array{lot_id: int, open_t_id: int|null, close_t_id: int|null}>  $updates
+     */
+    private function caseLotUpdateSql(array $updates, string $field): string
+    {
+        $cases = ['CASE lot_id'];
+
+        foreach ($updates as $update) {
+            $value = $update[$field] === null ? 'NULL' : (string) (int) $update[$field];
+            $cases[] = sprintf('WHEN %d THEN %s', $update['lot_id'], $value);
+        }
+
+        $cases[] = "ELSE {$field}";
+        $cases[] = 'END';
+
+        return implode(' ', $cases);
+    }
+
+    private function taxDocumentId(): int|false|null
+    {
+        $raw = $this->option('tax-document');
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        $taxDocumentId = (int) $raw;
+        if ($taxDocumentId <= 0 || (string) $taxDocumentId !== (string) $raw) {
+            $this->error('--tax-document must be a positive integer.');
+
+            return false;
+        }
+
+        $exists = DB::table('fin_tax_documents')
+            ->where('id', $taxDocumentId)
+            ->where('user_id', $this->userId())
+            ->exists();
+
+        if (! $exists) {
+            $this->error("Tax document {$taxDocumentId} not found or does not belong to user {$this->userId()}.");
+
+            return false;
+        }
+
+        return $taxDocumentId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function normaliseSymbol(array $row): string
+    {
+        $symbol = strtoupper(trim((string) ($row['symbol'] ?? '')));
+        if ($symbol !== '') {
+            return $symbol;
+        }
+
+        $cusip = strtoupper(trim((string) ($row['cusip'] ?? '')));
+        if ($cusip !== '') {
+            return $cusip;
+        }
+
+        $description = preg_replace('/[^A-Z0-9]+/i', '', (string) ($row['description'] ?? 'LOT')) ?? 'LOT';
+
+        return strtoupper(substr($description, 0, 20)) ?: 'LOT';
+    }
 
     /**
      * Parse "MM/DD/YY" → "YYYY-MM-DD".
@@ -687,8 +990,6 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     {
         return (float) str_replace(',', '', trim($raw));
     }
-
-    // ── schema ────────────────────────────────────────────────────────────────
 
     private function printSchema(): void
     {
@@ -755,16 +1056,17 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->line('Files with .toon extension are auto-detected. Use --input-format=toon to force.');
         $this->line('');
 
-        $this->line('=== Fidelity pdftotext text format ===');
+        $this->line('=== Broker PDF/text format ===');
         $this->line('');
+        $this->line('Fidelity pdftotext remains supported for Fidelity statements.');
         $this->line('Extract with:  pdftotext -layout "2025 1099 Fidelity.pdf" - | \\');
         $this->line('               php artisan finance:lots-import --account=<id>');
+        $this->line('Or import a supported broker PDF directly:');
+        $this->line('               php artisan finance:lots-import --account=<id> --file="2025 1099 Wealthfront.pdf"');
         $this->line('');
         $this->line('The file must contain "FORM 1099-B" and "Short-term transactions" or');
-        $this->line('"Long-term transactions" section headers (standard Fidelity layout).');
+        $this->line('"Long-term transactions" section headers, or the standard Wealthfront covered-lot layout.');
     }
-
-    // ── output ────────────────────────────────────────────────────────────────
 
     /** @param  array<int, array<string, mixed>>  $lots */
     private function renderLotsTable(array $lots): void

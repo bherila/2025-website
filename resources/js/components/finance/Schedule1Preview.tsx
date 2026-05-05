@@ -1,11 +1,14 @@
 'use client'
 
 import currency from 'currency.js'
+import { useState } from 'react'
 
 import { type EmptyLine,EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
 import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
+import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
 import type { Schedule1Lines } from '@/types/finance/tax-return'
+import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface Schedule1PreviewProps {
   selectedYear: number
@@ -14,6 +17,9 @@ interface Schedule1PreviewProps {
   onTabChange?: (tab: TaxTabId) => void
   /** Inline manual-entry control for line 2a alimony (pre-2019 decrees). */
   line2aAlimonyInput?: React.ReactNode
+  /** Backend audit facts, including unreviewed parsed sources. */
+  taxFacts?: Schedule1Facts | null
+  onOpenDoc?: (docId: number) => void
 }
 
 export interface Schedule1Line8Breakdown {
@@ -114,10 +120,30 @@ export default function Schedule1Preview({
   schedule1,
   onTabChange,
   line2aAlimonyInput,
+  taxFacts,
+  onOpenDoc,
 }: Schedule1PreviewProps) {
+  const [activeSources, setActiveSources] = useState<{
+    title: string
+    sources: TaxFactSource[]
+    total: number
+  } | null>(null)
   const totals = schedule1 ?? computeSchedule1Totals({})
   const partI = totals.partI
   const partII = totals.partII
+  const line5Sources = taxFacts?.line5Sources ?? []
+  const line8Sources = taxFacts?.line8Sources ?? []
+  const line8bSources = taxFacts?.line8bSources ?? []
+  const line8hSources = taxFacts?.line8hSources ?? []
+  const line8iSources = taxFacts?.line8iSources ?? []
+  const line8zSources = taxFacts?.line8zSources ?? []
+  const line5NeedsReview = taxFactSourcesNeedReview(line5Sources)
+  const line8bNeedsReview = taxFactSourcesNeedReview(line8bSources)
+  const line8hNeedsReview = taxFactSourcesNeedReview(line8hSources)
+  const line8iNeedsReview = taxFactSourcesNeedReview(line8iSources)
+  const line8zNeedsReview = taxFactSourcesNeedReview(line8zSources)
+  const lineOtherIncomeNeedsReview = taxFactSourcesNeedReview(line8Sources)
+  const line10NeedsReview = line5NeedsReview || lineOtherIncomeNeedsReview
 
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
   const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
@@ -266,6 +292,16 @@ export default function Schedule1Preview({
               boxRef="5"
               label="Rental real estate, royalties, partnerships, S corporations, trusts"
               value={partI.line5_rentalPartnerships}
+              isReviewed={line5NeedsReview ? false : undefined}
+              {...(line5Sources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 5 Supporting Details',
+                      sources: line5Sources,
+                      total: taxFacts?.line5Total ?? partI.line5_rentalPartnerships ?? 0,
+                    }),
+                  }
+                : {})}
             />
             <FormSubLine text="From Schedule E combined total" />
           </>
@@ -284,35 +320,106 @@ export default function Schedule1Preview({
         )}
         {line8b === 'visible' && (
           <>
-            <FormLine boxRef="8b" label="Gambling winnings" value={partI.line8b_gambling} />
+            <FormLine
+              boxRef="8b"
+              label="Gambling winnings"
+              value={partI.line8b_gambling}
+              isReviewed={line8bNeedsReview ? false : undefined}
+              {...(line8bSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8b Supporting Details',
+                      sources: line8bSources,
+                      total: taxFacts?.line8bTotal ?? partI.line8b_gambling ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
           </>
         )}
         {line8h === 'visible' && (
           <>
-            <FormLine boxRef="8h" label="Jury duty pay" value={partI.line8h_juryDuty} />
+            <FormLine
+              boxRef="8h"
+              label="Jury duty pay"
+              value={partI.line8h_juryDuty}
+              isReviewed={line8hNeedsReview ? false : undefined}
+              {...(line8hSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8h Supporting Details',
+                      sources: line8hSources,
+                      total: taxFacts?.line8hTotal ?? partI.line8h_juryDuty ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
           </>
         )}
         {line8i === 'visible' && (
           <>
-            <FormLine boxRef="8i" label="Prizes and awards" value={partI.line8i_prizes} />
+            <FormLine
+              boxRef="8i"
+              label="Prizes and awards"
+              value={partI.line8i_prizes}
+              isReviewed={line8iNeedsReview ? false : undefined}
+              {...(line8iSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8i Supporting Details',
+                      sources: line8iSources,
+                      total: taxFacts?.line8iTotal ?? partI.line8i_prizes ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
           </>
         )}
         {line8z === 'visible' && (
           <>
-            <FormLine boxRef="8z" label="Other income" value={partI.line8z_otherIncome} />
-            <FormSubLine text="From reviewed 1099-MISC documents routed to Schedule 1 line 8" />
+            <FormLine
+              boxRef="8z"
+              label="Other income"
+              value={partI.line8z_otherIncome}
+              isReviewed={line8zNeedsReview ? false : undefined}
+              {...(line8zSources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 8z Supporting Details',
+                      sources: line8zSources,
+                      total: taxFacts?.line8zTotal ?? partI.line8z_otherIncome ?? 0,
+                    }),
+                  }
+                : {})}
+            />
+            <FormSubLine text="From 1099-MISC documents routed or defaulted to Schedule 1 line 8z" />
           </>
         )}
         {partI.line9_totalOther !== 0 && (
-          <FormTotalLine boxRef="9" label="Total other income (sum of lines 8a-8z)" value={partI.line9_totalOther} />
+          <FormTotalLine
+            boxRef="9"
+            label="Total other income (sum of lines 8a-8z)"
+            value={partI.line9_totalOther}
+            isReviewed={lineOtherIncomeNeedsReview ? false : undefined}
+            {...(line8Sources.length > 0
+              ? {
+                  onClick: () => setActiveSources({
+                    title: 'Schedule 1 Line 9 Supporting Details',
+                    sources: line8Sources,
+                    total: taxFacts?.line9TotalOtherIncome ?? partI.line9_totalOther,
+                  }),
+                }
+              : {})}
+          />
         )}
         <FormTotalLine
           boxRef="10"
           label="Total additional income (to Form 1040 line 8)"
           value={partI.line10_total}
+          isReviewed={line10NeedsReview ? false : undefined}
           double
         />
         <EmptyLinesDisclosure
@@ -341,6 +448,16 @@ export default function Schedule1Preview({
           {...(onTabChange ? { onGoToSource: onTabChange } : {})}
         />
       </FormBlock>
+      {activeSources && (
+        <TaxFactSourcesModal
+          open
+          title={activeSources.title}
+          sources={activeSources.sources}
+          total={activeSources.total}
+          onClose={() => setActiveSources(null)}
+          {...(onOpenDoc ? { onOpenDoc } : {})}
+        />
+      )}
     </div>
   )
 }

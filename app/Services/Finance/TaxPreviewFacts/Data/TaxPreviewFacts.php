@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Services\Finance\TaxPreviewFacts\Data;
+
+use Spatie\TypeScriptTransformer\Attributes\TypeScript;
+
+#[TypeScript]
+readonly class TaxPreviewFacts
+{
+    public function __construct(
+        public int $year,
+        public Schedule1Facts $schedule1,
+        public ScheduleBFacts $scheduleB,
+        public Form4952Facts $form4952,
+        public ScheduleDFacts $scheduleD,
+        public Form8949Facts $form8949,
+    ) {}
+
+    /**
+     * @return array{year:int,schedule1:array<string,mixed>,scheduleB:array<string,mixed>,form4952:array<string,mixed>,scheduleD:array<string,mixed>,form8949:array<string,mixed>}
+     */
+    public function toArray(): array
+    {
+        return [
+            'year' => $this->year,
+            'schedule1' => $this->schedule1->toArray(),
+            'scheduleB' => $this->scheduleB->toArray(),
+            'form4952' => $this->form4952->toArray(),
+            'scheduleD' => $this->scheduleD->toArray(),
+            'form8949' => $this->form8949->toArray(),
+        ];
+    }
+}

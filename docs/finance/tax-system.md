@@ -106,7 +106,7 @@ Marriage/filing status is stored per year as a JSON column (`marriage_status_by_
 **Route**: `GET /finance/tax-preview` (canonical), `GET /finance/schedule-c` (301 redirect)
 **Controller**: `app/Http/Controllers/Finance/TaxPreviewController.php` (shell preload only)
 **API Controller**: `app/Http/Controllers/Finance/TaxPreviewDataController.php`
-**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`
+**Services**: `app/Services/Finance/TaxPreviewDataService.php`, `app/Services/Finance/ScheduleCSummaryService.php`, `app/Services/Finance/TaxPreviewFactsService.php`, `app/Services/Finance/TaxPreviewFacts/Builders/*`
 **Components**: `resources/js/components/finance/TaxPreviewPage.tsx` + `TaxPreviewContext.tsx`
 
 ### Data Loading Architecture
@@ -125,8 +125,62 @@ Year changes are **full page navigations** (`window.location.href = ...`). Blade
 - Schedule C data
 - Employment entities
 - Accounts + active-account IDs
+- Backend `taxFacts` source lines for Schedule 1, Schedule B, Form 4952, Schedule D, and Form 8949 debug paths
 
-The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions.
+The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, stores backend `taxFacts`, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions. Tax totals are still rendered from the client-side calculation system; `taxFacts` is an audit/debug contract first.
+
+### Backend Tax Facts
+
+`TaxPreviewFactsService` loads the tax-year context, partitions documents, and delegates source-line calculations to per-slice builders under `app/Services/Finance/TaxPreviewFacts/Builders/`. The assembled facts are returned in the `taxFacts` key on `/api/finance/tax-preview-data`, MCP `get_tax_preview`, and the read-only CLI command:
+
+```bash
+php artisan finance:tax-preview-facts --user=1 --year=2025 --slice=schedule1 --format=toon
+```
+
+The current pilot covers the highest-value debug paths:
+
+| Slice | Lines | Source behavior |
+|-------|-------|-----------------|
+| `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
+| `schedule1` | Schedule 1 line 8 family / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. Explicit Schedule 1 subroutes are bucketed into line 8b, 8h, 8i, or 8z; `line9TotalOtherIncome` is the sum of those line 8 buckets, not a synonym for line 8z. |
+| `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
+| `form4952` | Form 4952 line 1 / line 4a / line 4c / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket, exposes line 4c after subtracting qualified dividends, and keeps line 5 investment expenses distinct so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
+| `scheduleD` | Schedule D lines 1a-16 / line 21 | Schedule D facts combine Form 8949 rollups with K-1 Box 8/9/10, Box 11C Form 6781 60/40 allocations, Box 11S character routing, and 1099-DIV Box 2a capital-gain distributions. Ambiguous Box 11S rows are exposed as `needs_review` sources instead of being silently routed. |
+
+Each `TaxFactSource` carries review metadata:
+
+| Field | Meaning |
+|-------|---------|
+| `isReviewed` | `false` when the amount is calculated from an unreviewed document or account-link entry |
+| `reviewStatus` | `reviewed` or `needs_review`; UI should treat `needs_review` as an estimated/yellow value |
+| `reviewAction` | Human-readable pointer to the document/link that should be reviewed |
+
+Totals intentionally include `needs_review` sources so the preview can estimate the return while showing exactly which source lines still need review in supporting-details modals.
+
+Maintainability rule: the fact layer is audit-first and slice-first. Keep DTOs in `app/Services/Finance/TaxPreviewFacts/Data/`; keep form collection/calculation logic in `app/Services/Finance/TaxPreviewFacts/Builders/{Slice}FactsBuilder.php`; keep shared parsed-data/source helpers in `TaxPreviewFactBuilder`; and keep `TaxPreviewFactsService` as orchestration/compatibility glue. New forms should add or extend a builder instead of adding private calculation methods to `TaxPreviewFactsService`.
+
+Money math in backend tax facts should route through `App\Services\Finance\MoneyMath` or the builder helpers that wrap it. The fact layer stores/output dollars as floats for API compatibility, but sums, differences, and 60/40 allocations should be rounded through integer cents so source totals reconcile predictably to filed-return line amounts. `TaxFactSource` routing/source-type values should be produced from the PHP backed enums and serialized as strings; the frontend contract remains string-based.
+
+Frontend consumers import the generated DTO contracts from `resources/js/types/generated/tax-preview-facts.ts`. The PHP DTOs live in `app/Services/Finance/TaxPreviewFacts/Data/` and are regenerated with:
+
+```bash
+php artisan typescript:transform
+```
+
+Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset. When a source moves from `needs_review` to `reviewed`, replacing `taxFacts` is enough for supporting details and future line coloring to update without a full dataset refresh.
+
+The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. Capital gains are now shared through the PHP `CapitalGainsTaxReportService`; avoid adding new Schedule D/Form 8949 wash-sale or lot-routing logic to the React-only analyzer unless it is purely UI exploration.
+
+### Filed Return Reconciliation
+
+Use `finance:tax-reconcile` to compare backend `taxFacts` against a CPA-prepared or filed-return expected-line fixture:
+
+```bash
+php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/Finance/tax-return-reconciliations/2025-cpa-anonymized.json --format=json
+```
+
+Committed fixtures must be anonymized: line numbers, labels, expected amounts, fact paths, precision, and notes are OK; raw documents, taxpayer names, payer names, SSNs, account names, and account numbers are not. Keep private source artifacts in ignored `training_data/tax_reconciliation/` when they help local debugging. The default 2025 fixture currently verifies Schedule 1, Schedule B, and Form 4952 line values against the backend fact layer; add Schedule D/Form 8949 lines as filed-return fixtures become available.
 
 ### Tab Structure
 
@@ -194,6 +248,9 @@ Use `php artisan finance:k1-codes --year=2025 --account=32 --box=11 --code=S --f
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
 | `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (still available for other pages) |
 | `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
+| `PUT` | `/api/finance/tax-documents/{id}?include_tax_facts=1` | Update a document and optionally return `{ document, taxFacts }` |
+| `PUT` | `/api/finance/tax-documents/{id}/mark-reviewed?include_tax_facts=1` | Mark reviewed and optionally return `{ document, taxFacts }` |
+| `PATCH` | `/api/finance/tax-documents/{id}/accounts/{linkId}?include_tax_facts=1` | Update an account-link routing/review state and optionally return `{ link, taxFacts }` |
 
 ---
 
@@ -269,7 +326,7 @@ This helps with local QA and screenshot generation for the Tax Preview and tags 
 
 The `fin_tax_documents` table stores uploaded tax form PDFs (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, 1099-MISC, 1099-NEC, 1099-R, 1099-B, Broker Consolidated 1099, K-1, Form 1116) for each user. Documents are stored in S3 and referenced by their path. Uploaded PDFs are automatically processed by the GenAI system to extract structured field data.
 
-Consolidated brokerage 1099s (form_type `broker_1099`) contain multiple form types (1099-DIV, 1099-INT, 1099-MISC, 1099-B) for one or more accounts within the same PDF. These are processed via the `tax_form_multi_account_import` job type, which creates one `fin_tax_document_accounts` row per detected form/account combination. For 1099-B entries the AI also extracts individual transaction lots, which are automatically upserted into `fin_account_lots` and linked to matching native `fin_account_line_items` buy/sell rows when those transactions already exist. The import does not create synthetic 1099-B sell line items.
+Consolidated brokerage 1099s (form_type `broker_1099`) contain multiple form types (1099-DIV, 1099-INT, 1099-MISC, 1099-B) for one or more accounts within the same PDF. These are processed via the `tax_form_multi_account_import` job type, which creates one `fin_tax_document_accounts` row per detected form/account combination. For 1099-B entries the AI also extracts individual transaction lots, which are automatically upserted into `fin_account_lots` and linked to matching native `fin_account_line_items` buy/sell rows when those transactions already exist. Wealthfront 1099-B lots can also be parsed directly from the PDF by `finance:lots-import`, using the PHP PDF parser instead of an external `pdftotext` binary. The import does not create synthetic 1099-B sell line items.
 
 ### Table Schema
 
@@ -588,6 +645,8 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 - K-1 **Box 20 Code B** (investment expenses) — collected into `invExpSources` and summed as `totalInvExp`. This is Form 4952 **Line 5** and reduces NII. It is **not** Part I interest expense.
 - `niiBefore = max(0, niiGross − totalInvExp)` — Form 4952 Line 6 (NII, floored at zero).
 
+**Backend facts pilot:** `TaxPreviewFactsService` follows the filed-return treatment for current debug output: K-1 Box 20B amounts are exposed under `excludedInvestmentExpenseSources` / `totalExcludedInvestmentExpenses`, while `investmentExpenseSources` / `totalInvestmentExpenses` represent amounts included on Form 4952 line 5. For the 2025 return this means line 5 is `0`, with Box 20B still available as excluded supporting detail.
+
 **Part III — Deduction and carryforward:**
 - Scenario A (no QD election): deductible = `min(Line 3, Line 6)`.
 - Scenarios B / C evaluate the 4g qualified-dividend election when Line 3 > Line 6, picking the best net benefit at 37% vs. the 13.2% QD rate delta.
@@ -598,7 +657,7 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 - Section 1256 net gain (Box 11 Code C) is added to reconstructed NII even without a formal Line 4g election. Aggressive treatment — a user wanting full §163(d) conformance should override by reporting Box 20 Code A instead.
 - Post-TCJA §212 misc-itemized suspension applies 2018–2025 — Box 20B investment expenses still reduce NII on Form 4952 Line 5 but are not deductible on Schedule A line 16.
 
-**XLSX:** Form 4952 sheet renders Part I sources, Line 3 total, Part II 20B sources, Line 5 total, Line 6 NII, Line 7 carryforward, Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
+**XLSX:** Form 4952 sheet currently renders from the client calculation output. Future workbook work should reuse `taxFacts.form4952` source lines for Part I sources, excluded 20B debug detail, Line 5 total, Line 6 NII, Line 7 carryforward, and Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
 
 ---
 

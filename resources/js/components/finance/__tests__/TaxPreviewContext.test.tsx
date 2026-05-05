@@ -35,6 +35,7 @@ function makeDoc(id: number, genai_status: string, form_type = '1099_int') {
 
 function makeResponse(docs: object[] = []) {
   return {
+    year: 2025,
     availableYears: [2025],
     payslips: [],
     pendingReviewCount: 0,
@@ -44,6 +45,134 @@ function makeResponse(docs: object[] = []) {
     employmentEntities: [],
     accounts: [],
     activeAccountIds: [],
+    taxFacts: null,
+  }
+}
+
+function makeTaxFacts() {
+  return {
+    year: 2025,
+    schedule1: {
+      line5Sources: [],
+      line5Total: 0,
+      line8zSources: [{
+        id: 'doc-1-schedule1-8z',
+        label: 'Fidelity — 1099-MISC other income',
+        amount: 42,
+        sourceType: '1099_misc_other_income',
+        taxDocumentId: 1,
+        taxDocumentAccountId: null,
+        accountId: null,
+        formType: '1099_misc',
+        box: null,
+        code: null,
+        routing: 'default_schedule_1_8z',
+        routingReason: 'Default route',
+        notes: null,
+        isReviewed: true,
+        reviewStatus: 'reviewed',
+        reviewAction: null,
+      }],
+      line8Sources: [{
+        id: 'doc-1-schedule1-8z',
+        label: 'Fidelity — 1099-MISC other income',
+        amount: 42,
+        sourceType: '1099_misc_other_income',
+        taxDocumentId: 1,
+        taxDocumentAccountId: null,
+        accountId: null,
+        formType: '1099_misc',
+        box: null,
+        code: null,
+        routing: 'default_schedule_1_8z',
+        routingReason: 'Default route',
+        notes: null,
+        isReviewed: true,
+        reviewStatus: 'reviewed',
+        reviewAction: null,
+      }],
+      line8bSources: [],
+      line8bTotal: 0,
+      line8hSources: [],
+      line8hTotal: 0,
+      line8iSources: [],
+      line8iTotal: 0,
+      line8zTotal: 42,
+      line9TotalOtherIncome: 42,
+    },
+    scheduleB: {
+      interestSources: [],
+      directInterestTotal: 0,
+      k1InterestTotal: 0,
+      interestTotal: 0,
+      ordinaryDividendSources: [],
+      directOrdinaryDividendTotal: 0,
+      k1OrdinaryDividendTotal: 0,
+      ordinaryDividendTotal: 0,
+      qualifiedDividendSources: [],
+      qualifiedDividendTotal: 0,
+      form4952Line5aTotal: 0,
+    },
+    form4952: {
+      investmentInterestSources: [],
+      totalInvestmentInterestExpense: 0,
+      investmentExpenseSources: [],
+      totalInvestmentExpenses: 0,
+      excludedInvestmentExpenseSources: [],
+      totalExcludedInvestmentExpenses: 0,
+      grossInvestmentIncomeFromScheduleB: 0,
+      grossInvestmentIncomeFromK1: 0,
+      grossInvestmentIncomeTotal: 0,
+      line4cNetInvestmentIncomeAfterQualifiedDividends: 0,
+      netInvestmentIncomeBeforeQualifiedDividendElection: 0,
+      totalQualifiedDividends: 0,
+      deductibleInvestmentInterestExpense: 0,
+      disallowedCarryforward: 0,
+    },
+    scheduleD: {
+      form8949Rollups: [],
+      line1aGainLoss: 0,
+      line1bGainLoss: 0,
+      line2GainLoss: 0,
+      line3Sources: [],
+      line3GainLoss: 0,
+      line4GainLoss: 0,
+      line5Sources: [],
+      line5GainLoss: 0,
+      line6Carryover: 0,
+      line7NetShortTerm: 0,
+      line8aGainLoss: 0,
+      line8bGainLoss: 0,
+      line9GainLoss: 0,
+      line10Sources: [],
+      line10GainLoss: 0,
+      line11GainLoss: 0,
+      line12Sources: [],
+      line12GainLoss: 0,
+      line13Sources: [],
+      line13CapitalGainDistributions: 0,
+      line14Carryover: 0,
+      line15NetLongTerm: 0,
+      line16Combined: 0,
+      line21LimitedLossOrGain: 0,
+      appliedToReturn: 0,
+      carryforward: 0,
+      totalBusinessCapGains: 0,
+      totalPersonalCapGains: 0,
+      limitedBusinessCapGains: 0,
+      limitedPersonalCapGains: 0,
+      ambiguous11SSources: [],
+      ambiguous11SAmount: 0,
+    },
+    form8949: {
+      reportingMode: 'form_8949_transactions',
+      rows: [],
+      scheduleDRollups: [],
+      washSaleAdjustments: [],
+      rowCount: 0,
+      washSaleAdjustmentCount: 0,
+      washSaleAdjustmentTotal: 0,
+    },
   }
 }
 
@@ -56,6 +185,19 @@ beforeEach(() => jest.clearAllMocks())
 // --- tests -----------------------------------------------------------------
 
 describe('TaxPreviewContext', () => {
+  it('stores backend tax facts from the dataset and allows patch replacement', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([]))
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setTaxFacts(makeTaxFacts()))
+
+    expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
+    expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
+  })
+
   it('does not show loading spinner on background polls', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
@@ -611,7 +753,7 @@ describe('TaxPreviewContext', () => {
       if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
       if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
       if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
-      if (url === '/api/finance/tax-preview-data?year=2025') return Promise.resolve({
+      if (url === '/api/finance/tax-preview-data?year=2025&include_tax_facts=1') return Promise.resolve({
         ...makeResponse([]),
         availableYears: [2025, 2024],
       })

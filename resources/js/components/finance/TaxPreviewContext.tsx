@@ -42,6 +42,7 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
 import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
@@ -72,6 +73,11 @@ export interface TaxPreviewDataset {
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
+  taxFacts?: TaxPreviewFacts | null
+}
+
+interface RefreshAllOptions {
+  includeTaxFacts?: boolean
 }
 
 interface TaxPreviewContextValue {
@@ -94,6 +100,8 @@ interface TaxPreviewContextValue {
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
+  taxFacts: TaxPreviewFacts | null
+  setTaxFacts: Dispatch<SetStateAction<TaxPreviewFacts | null>>
   income1099: {
     interestIncome: currency
     dividendIncome: currency
@@ -175,7 +183,7 @@ interface TaxPreviewContextValue {
   setEmploymentEntities: Dispatch<SetStateAction<EmploymentEntity[]>>
   setAccounts: Dispatch<SetStateAction<TaxPreviewAccount[]>>
   setActiveAccountIds: Dispatch<SetStateAction<number[]>>
-  refreshAll: () => Promise<void>
+  refreshAll: (options?: RefreshAllOptions) => Promise<void>
 }
 
 const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
@@ -254,6 +262,7 @@ export function TaxPreviewProvider({
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
   const [accounts, setAccounts] = useState<TaxPreviewAccount[]>([])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
+  const [taxFacts, setTaxFacts] = useState<TaxPreviewFacts | null>(null)
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
@@ -595,12 +604,17 @@ export function TaxPreviewProvider({
     }
   }, [getPriorYearCarryover, normalizeAvailableYears])
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (options: RefreshAllOptions = {}) => {
+    const includeTaxFacts = options.includeTaxFacts ?? true
     if (!hasLoadedOnce.current) {
       setIsLoading(true)
     }
     try {
-      const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?year=${year}`)) as TaxPreviewDataset
+      const params = new URLSearchParams({ year: String(year) })
+      if (includeTaxFacts) {
+        params.set('include_tax_facts', '1')
+      }
+      const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?${params.toString()}`)) as TaxPreviewDataset
       setAvailableYears(response.availableYears ?? [])
       setPayslips(Array.isArray(response.payslips) ? response.payslips : [])
       setPendingReviewCount(response.pendingReviewCount ?? 0)
@@ -610,6 +624,9 @@ export function TaxPreviewProvider({
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
       setActiveAccountIds(Array.isArray(response.activeAccountIds) ? response.activeAccountIds : [])
+      if (includeTaxFacts || response.taxFacts !== undefined) {
+        setTaxFacts(response.taxFacts ?? null)
+      }
       setError(null)
       priorYearCarryoverCache.current.clear()
       await refreshPriorYearCarryover(response.availableYears, year - 1)
@@ -708,7 +725,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
     if (!hasInFlight) return
-    const id = setInterval(() => void refreshAll(), POLLING_INTERVAL_MS)
+    const id = setInterval(() => void refreshAll({ includeTaxFacts: false }), POLLING_INTERVAL_MS)
     return () => clearInterval(id)
   }, [allDocuments, refreshAll])
 
@@ -1428,6 +1445,7 @@ export function TaxPreviewProvider({
     employmentEntities,
     accounts,
     activeAccountIds,
+    taxFacts,
     income1099,
     schedule1OtherIncome,
     schedule1Line8Breakdown,
@@ -1476,6 +1494,7 @@ export function TaxPreviewProvider({
     setEmploymentEntities,
     setAccounts,
     setActiveAccountIds,
+    setTaxFacts,
     refreshAll,
   }), [
     year,
@@ -1497,6 +1516,7 @@ export function TaxPreviewProvider({
     employmentEntities,
     accounts,
     activeAccountIds,
+    taxFacts,
     income1099,
     schedule1OtherIncome,
     schedule1Line8Breakdown,

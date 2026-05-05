@@ -5,15 +5,7 @@ import { useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TaxFactSourcesModal } from '@/components/finance/TaxFactSourcesModal'
 import { getK1CodeItems } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
@@ -22,6 +14,7 @@ import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeduc
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines, ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -32,6 +25,8 @@ interface InvIntSource {
   /** Negative means expense (charge). Positive means income. */
   amount: number
 }
+
+type InvestmentInterestDisplaySource = InvIntSource | TaxFactSource
 
 const SALT_CAP = 10_000
 const SALT_CATEGORIES_LIST: readonly string[] = Array.from(SALT_CATEGORIES)
@@ -188,63 +183,8 @@ interface ScheduleAPreviewProps {
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
   form4952?: Form4952Lines | undefined
-}
-
-/** Modal showing all sources that contribute to investment interest expense. */
-function InvIntSourcesModal({
-  isOpen,
-  onClose,
-  sources,
-  total,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  sources: InvIntSource[]
-  total: number
-}) {
-  return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Investment Interest Expense — Data Sources</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          These items contribute to Schedule A Line 9 (Investment Interest Expense),
-          subject to the Form 4952 net investment income limitation.
-        </p>
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sources.map((src, i) => (
-                <TableRow key={i}>
-                  <TableCell className="text-sm">{src.label}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400">
-                    {currency(Math.abs(src.amount)).format()}
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="font-semibold bg-muted/50">
-                <TableCell>Total</TableCell>
-                <TableCell className="text-right font-mono text-red-600 dark:text-red-400">
-                  {currency(total).format()}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Reference: IRS Schedule A Line 9. Investment interest is deductible up to net investment
-          income (Form 4952). Excess carries forward.
-        </p>
-      </DialogContent>
-    </Dialog>
-  )
+  taxFacts?: Form4952Facts | null
+  onOpenDoc?: (docId: number) => void
 }
 
 export default function ScheduleAPreview({
@@ -256,6 +196,8 @@ export default function ScheduleAPreview({
   isMarried = false,
   userDeductions = [],
   form4952,
+  taxFacts,
+  onOpenDoc,
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
 
@@ -278,6 +220,10 @@ export default function ScheduleAPreview({
   const charitableNoncash = buckets.charitable_noncash ?? 0
   const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
   const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
+  const invIntFactSources = taxFacts?.investmentInterestSources ?? []
+  const invIntModalSources: InvestmentInterestDisplaySource[] = invIntFactSources.length > 0 ? invIntFactSources : invIntSources
+  const invIntNeedsReview = invIntFactSources.some((source) => !source.isReviewed)
+  const invIntModalTotal = taxFacts?.deductibleInvestmentInterestExpense ?? totalInvIntExpense
 
   return (
     <div className="space-y-4">
@@ -332,7 +278,8 @@ export default function ScheduleAPreview({
             label="Investment interest expense (from Form 4952)"
             value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
             {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
-            {...(invIntSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
+            isReviewed={invIntNeedsReview ? false : undefined}
+            {...(invIntModalSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
           <FormTotalLine boxRef="10" label="Total interest" value={totalInterest} />
         </FormBlock>
@@ -418,11 +365,16 @@ export default function ScheduleAPreview({
       </FormBlock>
 
       {/* Investment interest drilldown modal */}
-      <InvIntSourcesModal
-        isOpen={showInvIntModal}
+      <TaxFactSourcesModal
+        open={showInvIntModal}
+        title="Investment Interest Expense — Data Sources"
         onClose={() => setShowInvIntModal(false)}
-        sources={invIntSources}
-        total={totalInvIntExpense}
+        sources={invIntModalSources}
+        total={invIntModalTotal}
+        amountMode="absolute"
+        positiveAmountTone="destructive"
+        referenceText="Reference: IRS Schedule A Line 9. Investment interest is deductible up to net investment income (Form 4952). Excess carries forward."
+        {...(onOpenDoc ? { onOpenDoc } : {})}
       />
     </div>
   )

@@ -41,6 +41,7 @@ import type { DocAmounts } from '@/lib/finance/taxDocumentUtils'
 import { extractLinkParsedData, getDocAmounts, getPayerName, hasReviewedContent } from '@/lib/finance/taxDocumentUtils'
 import type { Broker1099BReportingMode, F1099DivParsedData, F1099IntParsedData, TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { TAX_TABS } from './tax-tab-ids'
 
@@ -130,6 +131,8 @@ interface TaxDocuments1099SectionProps {
   activeAccountIds?: number[] | undefined
   isLoading?: boolean | undefined
   onDocumentsReload?: (() => void | Promise<void>) | undefined
+  onDocumentsListChange?: ((docs: TaxDocument[]) => void) | undefined
+  onTaxFactsChange?: ((facts: TaxPreviewFacts) => void) | undefined
   /** Called whenever reviewed documents change (for Form 1040 data source drill-down). */
   onDocumentsChange?: (docs: TaxDocument[]) => void
   /** Navigate to another Tax Preview tab (used by column-header drill-down buttons). */
@@ -170,6 +173,8 @@ export default function TaxDocuments1099Section({
   activeAccountIds: controlledActiveAccountIds,
   isLoading: controlledLoading,
   onDocumentsReload,
+  onDocumentsListChange,
+  onTaxFactsChange,
   onDocumentsChange,
   onNavigate,
   foreignTaxSummaries = [],
@@ -189,6 +194,14 @@ export default function TaxDocuments1099Section({
   const [manualSaving, setManualSaving] = useState(false)
   const [savingReportingModeLinkIds, setSavingReportingModeLinkIds] = useState<Set<number>>(() => new Set())
   const { reviewDoc: reviewModalDoc, reviewLink: reviewModalLink, openReview: openReviewModal, closeReview: closeReviewModal } = useReviewModal()
+
+  const replaceDocument = useCallback((updatedDoc: TaxDocument) => {
+    setDocuments((current) => {
+      const next = current.map(doc => doc.id === updatedDoc.id ? updatedDoc : doc)
+      onDocumentsListChange?.(next)
+      return next
+    })
+  }, [onDocumentsListChange])
 
   useEffect(() => {
     onDocumentsChange?.(documents.filter(hasReviewedContent))
@@ -441,11 +454,20 @@ export default function TaxDocuments1099Section({
 
     setSavingReportingModeLinkIds((current) => new Set(current).add(link.id))
     try {
-      await fetchWrapper.patch(`/api/finance/tax-documents/${doc.id}/accounts/${link.id}`, {
+      const response = (await fetchWrapper.patch(`/api/finance/tax-documents/${doc.id}/accounts/${link.id}?include_tax_facts=1`, {
         reporting_mode: nextMode,
-      })
+      })) as { link: TaxDocumentAccountLink; taxFacts?: TaxPreviewFacts }
+      const updatedLink = response.link
+      if (updatedLink) {
+        replaceDocument({
+          ...doc,
+          account_links: (doc.account_links ?? []).map(existing => existing.id === updatedLink.id ? updatedLink : existing),
+        })
+      }
+      if (response.taxFacts) {
+        onTaxFactsChange?.(response.taxFacts)
+      }
       toast.success('Reporting mode updated')
-      await reloadDocuments()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update reporting mode')
     } finally {
@@ -816,13 +838,15 @@ export default function TaxDocuments1099Section({
           document={reviewModalDoc}
           accountLink={reviewModalLink ?? undefined}
           onClose={closeReviewModal}
+          onDocumentSaved={replaceDocument}
+          onDocumentDeleted={() => {
+            closeReviewModal()
+            void reloadDocuments()
+          }}
+          {...(onTaxFactsChange ? { onTaxFactsChange } : {})}
           onDocumentReviewed={() => {
             closeReviewModal()
-            if (onDocumentsReload) {
-              void onDocumentsReload()
-            } else {
-              void fetchDocuments()
-            }
+            void reloadDocuments()
           }}
         />
       )}

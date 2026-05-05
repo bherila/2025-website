@@ -268,14 +268,17 @@ class TaxDocumentControllerTest extends TestCase
     public function test_can_update_misc_routing(): void
     {
         $user = $this->createUser();
-        $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc']);
 
-        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
-            'misc_routing' => 'sch_e',
-        ]);
+        foreach (['sch_c', 'sch_e', 'sch_1_8z'] as $routing) {
+            $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc']);
 
-        $response->assertOk()->assertJsonFragment(['misc_routing' => 'sch_e']);
-        $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'misc_routing' => 'sch_e']);
+            $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}", [
+                'misc_routing' => $routing,
+            ]);
+
+            $response->assertOk()->assertJsonFragment(['misc_routing' => $routing]);
+            $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id, 'misc_routing' => $routing]);
+        }
     }
 
     public function test_mark_reviewed_persists_misc_routing(): void
@@ -292,6 +295,23 @@ class TaxDocumentControllerTest extends TestCase
             'id' => $doc->id,
             'is_reviewed' => 1,
             'misc_routing' => 'sch_1_line_8',
+        ]);
+    }
+
+    public function test_mark_reviewed_accepts_schedule_1_subroute_misc_routing(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, ['form_type' => '1099_misc', 'is_reviewed' => false]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed", [
+            'misc_routing' => 'sch_1_8i',
+        ]);
+
+        $response->assertOk()->assertJsonFragment(['misc_routing' => 'sch_1_8i']);
+        $this->assertDatabaseHas('fin_tax_documents', [
+            'id' => $doc->id,
+            'is_reviewed' => 1,
+            'misc_routing' => 'sch_1_8i',
         ]);
     }
 
@@ -726,6 +746,35 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertDatabaseHas('fin_tax_document_accounts', [
             'id' => $link->id,
             'reporting_mode' => 'form_8949_summary',
+        ]);
+    }
+
+    public function test_can_update_account_link_misc_routing_to_schedule_1_subroute(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id);
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+        ]);
+        $link = TaxDocumentAccount::create([
+            'tax_document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => '1099_misc',
+            'tax_year' => 2024,
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
+            'misc_routing' => 'sch_1_8h',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('misc_routing', 'sch_1_8h');
+
+        $this->assertDatabaseHas('fin_tax_document_accounts', [
+            'id' => $link->id,
+            'misc_routing' => 'sch_1_8h',
         ]);
     }
 

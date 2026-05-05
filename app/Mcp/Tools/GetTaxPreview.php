@@ -10,7 +10,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Get the full tax preview dataset for a given year, including W-2s, 1099s, Schedule C, capital gains, Form 1116 foreign tax data, and action items. For payslip data use the list_payslips tool.')]
+#[Description('Get the full tax preview dataset for a given year, including W-2s, 1099s, Schedule C, capital gains, Form 1116 foreign tax data, action items, and backend tax fact source lines. For payslip data use the list_payslips tool.')]
 class GetTaxPreview extends Tool
 {
     public function __construct(
@@ -22,7 +22,7 @@ class GetTaxPreview extends Tool
         $year = (int) ($request->input('year') ?? date('Y'));
         $userId = (int) Auth::id();
 
-        $data = $this->service->datasetForYear($userId, $year);
+        $data = $this->service->datasetForYear($userId, $year, true);
 
         // Payslips are exposed via the list_payslips tool instead
         unset($data['payslips']);

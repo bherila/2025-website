@@ -21,7 +21,9 @@ jest.mock('@/components/finance/MultiAccountImportModal', () => ({
 
 jest.mock('@/components/finance/TaxDocumentReviewModal', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ open, onDocumentReviewed }: { open?: boolean; onDocumentReviewed?: () => void }) => open
+    ? <button onClick={onDocumentReviewed}>review-modal-reviewed</button>
+    : null,
 }))
 
 jest.mock('@/components/finance/TaxDocumentUploadModal', () => ({
@@ -230,11 +232,11 @@ describe('TaxDocuments1099Section', () => {
     fireEvent.change(select, { target: { value: 'form_8949_summary' } })
 
     await waitFor(() => {
-      expect(mockedFetchWrapper.patch).toHaveBeenCalledWith('/api/finance/tax-documents/22/accounts/77', {
+      expect(mockedFetchWrapper.patch).toHaveBeenCalledWith('/api/finance/tax-documents/22/accounts/77?include_tax_facts=1', {
         reporting_mode: 'form_8949_summary',
       })
     })
-    expect(onDocumentsReload).toHaveBeenCalled()
+    expect(onDocumentsReload).not.toHaveBeenCalled()
   })
 
   it('shows the effective reporting mode when the persisted mode is no longer eligible', () => {
@@ -293,5 +295,34 @@ describe('TaxDocuments1099Section', () => {
 
     const select = screen.getByLabelText('Reporting mode') as HTMLSelectElement
     expect(select.value).toBe('form_8949_transactions')
+  })
+
+  it('refreshes provider data after a review modal completes', async () => {
+    const onDocumentsReload = jest.fn().mockResolvedValue(undefined)
+    const doc = makeDoc({
+      id: 24,
+      tax_year: 2025,
+      form_type: '1099_misc',
+      is_reviewed: false,
+      genai_status: 'parsed',
+      parsed_data: { payer_name: 'Broker', box3_other_income: 10 },
+      account_id: 9,
+    })
+
+    render(
+      <TaxDocuments1099Section
+        selectedYear={2025}
+        documents={[doc]}
+        accounts={[{ acct_id: 9, acct_name: 'fidelity taxable' }]}
+        activeAccountIds={[]}
+        isLoading={false}
+        onDocumentsReload={onDocumentsReload}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('1099-MISC — Review'))
+    fireEvent.click(screen.getByText('review-modal-reviewed'))
+
+    await waitFor(() => expect(onDocumentsReload).toHaveBeenCalledTimes(1))
   })
 })

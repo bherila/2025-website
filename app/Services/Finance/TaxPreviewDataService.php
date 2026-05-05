@@ -13,6 +13,7 @@ class TaxPreviewDataService
     public function __construct(
         private ScheduleCSummaryService $scheduleCSummaryService,
         private TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
+        private TaxPreviewFactsService $taxPreviewFactsService,
     ) {}
 
     /**
@@ -35,12 +36,12 @@ class TaxPreviewDataService
      *
      * @return array<string, mixed>
      */
-    public function datasetForYear(int $userId, int $year): array
+    public function datasetForYear(int $userId, int $year, bool $includeTaxFacts = false): array
     {
         $accounts = $this->accounts($userId);
         $scheduleCData = $this->scheduleCSummaryService->getSummary($userId);
 
-        return [
+        $data = [
             'year' => $year,
             'availableYears' => $this->availableYears($userId, array_map(static fn (string $scheduleCYear): int => (int) $scheduleCYear, $scheduleCData['available_years'] ?? [])),
             'payslips' => $this->payslipsForYear($userId, $year),
@@ -52,6 +53,12 @@ class TaxPreviewDataService
             'accounts' => $accounts,
             'activeAccountIds' => $this->activeAccountIdsForYear($accounts, $year),
         ];
+
+        if ($includeTaxFacts) {
+            $data['taxFacts'] = $this->taxPreviewFactsService->arrayForYear($userId, $year);
+        }
+
+        return $data;
     }
 
     /**
@@ -146,7 +153,7 @@ class TaxPreviewDataService
      */
     private function accounts(int $userId): array
     {
-        return FinAccounts::where('acct_owner', $userId)
+        return FinAccounts::forOwner($userId)
             ->orderBy('when_closed', 'asc')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')
