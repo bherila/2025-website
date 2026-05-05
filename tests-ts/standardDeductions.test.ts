@@ -1,4 +1,4 @@
-import { getStandardDeduction } from '@/lib/tax/standardDeductions'
+import { getSaltCap, getStandardDeduction } from '@/lib/tax/standardDeductions'
 
 describe('getStandardDeduction', () => {
   it('returns the federal value for 2024 single', () => {
@@ -7,6 +7,18 @@ describe('getStandardDeduction', () => {
 
   it('returns the federal value for 2024 MFJ', () => {
     expect(getStandardDeduction(2024, 'Married Filing Jointly')).toBe(29_200)
+  })
+
+  it('returns OBBBA-updated federal values for 2025 and 2026', () => {
+    expect(getStandardDeduction(2025, 'Single')).toBe(15_750)
+    expect(getStandardDeduction(2025, 'Married Filing Jointly')).toBe(31_500)
+    expect(getStandardDeduction(2026, 'Single')).toBe(16_100)
+    expect(getStandardDeduction(2026, 'Married Filing Jointly')).toBe(32_200)
+  })
+
+  it('returns the year-specific SALT cap', () => {
+    expect(getSaltCap(2024)).toBe(10_000)
+    expect(getSaltCap(2025)).toBe(40_000)
   })
 
   it('returns the CA state value for 2024 single (not the federal value)', () => {

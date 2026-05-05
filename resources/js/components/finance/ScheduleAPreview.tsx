@@ -9,8 +9,7 @@ import { TaxFactSourcesModal } from '@/components/finance/TaxFactSourcesModal'
 import { getK1CodeItems } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { SALT_CATEGORIES } from '@/lib/tax/deductionCategories'
-import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
+import { type FilingStatus, getSaltCap, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines, ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
@@ -27,9 +26,6 @@ interface InvIntSource {
 }
 
 type InvestmentInterestDisplaySource = InvIntSource | TaxFactSource
-
-const SALT_CAP = 10_000
-const SALT_CATEGORIES_LIST: readonly string[] = Array.from(SALT_CATEGORIES)
 
 /** Bucket user deductions by category in a single pass. */
 function bucketUserDeductions(userDeductions: UserDeductionEntry[]): Record<string, number> {
@@ -130,15 +126,17 @@ export function computeScheduleALines({
     : rawInvIntExpense
 
   const buckets = bucketUserDeductions(userDeductions)
-  const userSalt = SALT_CATEGORIES_LIST.reduce(
-    (acc, cat) => currency(acc).add(buckets[cat] ?? 0).value,
-    0,
-  )
+  const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
+  const salesTax = buckets.sales_tax ?? 0
+  const realEstateTax = buckets.real_estate_tax ?? 0
+  const selectedLine5a = Math.max(stateIncomeTax, salesTax)
   const mortgageInterest = buckets.mortgage_interest ?? 0
   const charitable = currency(buckets.charitable_cash ?? 0).add(buckets.charitable_noncash ?? 0).value
   const otherDeductions = buckets.other ?? 0
 
-  const saltDeduction = Math.min(currency(saltPaid).add(userSalt).value, SALT_CAP)
+  const saltPaidBeforeCap = currency(selectedLine5a).add(realEstateTax).value
+  const saltCap = getSaltCap(year)
+  const saltDeduction = Math.min(saltPaidBeforeCap, saltCap)
   const totalOtherItemized = otherItemizedSources.reduce(
     (acc, s) => acc.add(s.amount),
     currency(0),
@@ -150,7 +148,7 @@ export function computeScheduleALines({
     .add(otherDeductions)
     .add(totalOtherItemized).value
   // MFJ/MFS sharing: isMarried collapses both into MFJ for now. MFS users should
-  // treat the $10k SALT cap as $5k and expect different brackets; unsupported until
+  // expect a smaller separate-return SALT cap and different brackets; unsupported until
   // MFJ-vs-MFS is added to the marriage-status settings.
   const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
   const standardDeduction = getStandardDeduction(year, filingStatus)
@@ -159,7 +157,7 @@ export function computeScheduleALines({
   return {
     invIntSources,
     totalInvIntExpense,
-    saltPaid: currency(saltPaid).add(userSalt).value,
+    saltPaid: saltPaidBeforeCap,
     saltDeduction,
     mortgageInterest,
     charitable,
@@ -178,7 +176,7 @@ interface ScheduleAPreviewProps {
   reviewedK1Docs?: TaxDocument[]
   reviewed1099Docs?: TaxDocument[]
   shortDividendSummary?: ShortDividendSummary
-  /** State and local taxes paid (from W-2 Box 17). Capped at $10,000 on the form. */
+  /** State and local taxes paid (from W-2 Box 17). Capped on Schedule A line 7. */
   saltPaid?: number
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
@@ -216,9 +214,12 @@ export default function ScheduleAPreview({
   const buckets = bucketUserDeductions(userDeductions)
   const realEstateTax = buckets.real_estate_tax ?? 0
   const salesTax = buckets.sales_tax ?? 0
+  const saltCap = getSaltCap(selectedYear)
   const charitableCash = buckets.charitable_cash ?? 0
   const charitableNoncash = buckets.charitable_noncash ?? 0
   const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
+  const line5aLabel = salesTax > stateIncomeTax ? 'State/local general sales taxes' : 'State income tax withheld / estimated tax paid'
+  const line5aAmount = Math.max(stateIncomeTax, salesTax)
   const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
   const invIntFactSources = taxFacts?.investmentInterestSources ?? []
   const invIntModalSources: InvestmentInterestDisplaySource[] = invIntFactSources.length > 0 ? invIntFactSources : invIntSources
@@ -243,26 +244,27 @@ export default function ScheduleAPreview({
         <FormBlock title="Part II — Taxes You Paid">
           <FormLine
             boxRef="5a"
-            label="State income tax withheld / estimated tax paid"
-            {...(stateIncomeTax > 0 ? { value: stateIncomeTax } : { raw: '—' })}
+            label={line5aLabel}
+            {...(line5aAmount > 0 ? { value: line5aAmount } : { raw: '—' })}
           />
           <FormLine
-            boxRef="5c"
-            label="State/local general sales taxes"
-            {...(salesTax > 0 ? { value: salesTax } : { raw: '—' })}
-          />
-          <FormLine
-            boxRef="6"
+            boxRef="5b"
             label="Real estate taxes"
             {...(realEstateTax > 0 ? { value: realEstateTax } : { raw: '—' })}
           />
+          <FormLine
+            boxRef="5c"
+            label="Personal property taxes"
+            raw="—"
+          />
+          <FormLine boxRef="6" label="Other taxes" raw="—" />
           <FormTotalLine
             boxRef="7"
-            label={`Total SALT (capped at $${SALT_CAP.toLocaleString()})`}
+            label={`Total SALT (capped at $${saltCap.toLocaleString()})`}
             value={saltDeduction}
           />
-          {totalSaltPaidBeforeCap >= SALT_CAP && (
-            <FormLine label="Note" raw={`SALT cap reached — state taxes above $${SALT_CAP.toLocaleString()} are not deductible`} />
+          {totalSaltPaidBeforeCap >= saltCap && (
+            <FormLine label="Note" raw={`SALT cap reached — state taxes above $${saltCap.toLocaleString()} are not deductible`} />
           )}
         </FormBlock>
 

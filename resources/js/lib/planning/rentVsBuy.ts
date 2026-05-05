@@ -1,9 +1,8 @@
 import currency from 'currency.js'
 
-import { type FilingStatus, getLatestStandardDeductionYear, getStandardDeduction } from '@/lib/tax/standardDeductions'
+import { type FilingStatus, getLatestStandardDeductionYear, getSaltCap, getStandardDeduction } from '@/lib/tax/standardDeductions'
 
 const MONTHS_PER_YEAR = 12
-const SALT_CAP = 10_000
 const MORTGAGE_INTEREST_DEDUCTION_CAP = 750_000
 const CAPITAL_GAINS_EXCLUSION_SINGLE = 250_000
 const CAPITAL_GAINS_EXCLUSION_MARRIED = 500_000
@@ -385,7 +384,7 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
       annualRentCashOutflow = roundMoney(addMoney(annualRentCashOutflow, rentMonthlyOutflow))
     }
 
-    const deductiblePropertyTax = minMoney(annualPropertyTax, SALT_CAP)
+    const deductiblePropertyTax = minMoney(annualPropertyTax, getSaltCap(latestTaxYear))
     const itemizedDeduction = roundMoney(addMoney(annualDeductibleMortgageInterest, deductiblePropertyTax))
     const standardDeduction = getStandardDeduction(latestTaxYear, inputs.filingStatus)
     const taxBenefit = standardDeduction > 0 && itemizedDeduction > standardDeduction

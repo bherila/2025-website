@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -825,6 +826,289 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(25.0, $facts['form8949']['rows'][0]['gainOrLoss']);
     }
 
+    public function test_schedule_a_collects_itemized_sources_and_applies_salt_cap(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box17_state_tax' => 6000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 1000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund'],
+                codes: ['13' => [
+                    ['code' => 'H', 'value' => '200'],
+                    ['code' => 'L', 'value' => '75'],
+                ]],
+            ),
+        ]);
+        $this->createUserDeduction($user->id, 'state_est_tax', 3000, 'Estimated CA tax');
+        $this->createUserDeduction($user->id, 'sales_tax', 2000, 'Sales tax');
+        $this->createUserDeduction($user->id, 'real_estate_tax', 4000, 'Property tax');
+        $this->createUserDeduction($user->id, 'mortgage_interest', 7000, 'Mortgage interest');
+        $this->createUserDeduction($user->id, 'charitable_cash', 500, 'Cash gift');
+        $this->createUserDeduction($user->id, 'charitable_noncash', 250, 'Noncash gift');
+        $this->createUserDeduction($user->id, 'other', 100, 'Other itemized');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleA');
+
+        $this->assertSame(9000.0, $facts['scheduleA']['stateIncomeTaxTotal']);
+        $this->assertSame(2000.0, $facts['scheduleA']['salesTaxTotal']);
+        $this->assertSame('state_income_tax', $facts['scheduleA']['selectedLine5aType']);
+        $this->assertSame(9000.0, $facts['scheduleA']['selectedLine5aTotal']);
+        $this->assertSame(13000.0, $facts['scheduleA']['saltPaidBeforeCap']);
+        $this->assertSame(40000.0, $facts['scheduleA']['saltCap']);
+        $this->assertSame(13000.0, $facts['scheduleA']['saltDeduction']);
+        $this->assertSame(200.0, $facts['scheduleA']['grossInvestmentInterestTotal']);
+        $this->assertSame(200.0, $facts['scheduleA']['investmentInterestTotal']);
+        $this->assertSame(0.0, $facts['scheduleA']['disallowedInvestmentInterest']);
+        $this->assertSame(7200.0, $facts['scheduleA']['totalInterest']);
+        $this->assertSame(750.0, $facts['scheduleA']['charitableTotal']);
+        $this->assertSame(175.0, $facts['scheduleA']['otherItemizedTotal']);
+        $this->assertSame(21125.0, $facts['scheduleA']['totalItemizedDeductions']);
+        $this->assertTrue($facts['scheduleA']['shouldItemizeSingle']);
+        $k1PortfolioSource = collect($facts['scheduleA']['otherItemizedSources'])->firstWhere('sourceType', 'k1_portfolio_deduction');
+        $this->assertNotNull($k1PortfolioSource);
+        $this->assertSame('schedule_a_line_16', $k1PortfolioSource['routing']);
+        $this->assertSame('schedule_a_line_5b', $facts['scheduleA']['realEstateTaxSources'][0]['routing']);
+        $this->assertSame('schedule_a_line_5a', $facts['scheduleA']['salesTaxSources'][0]['routing']);
+    }
+
+    public function test_schedule_a_uses_2026_standard_deduction_values(): void
+    {
+        $user = $this->createUser();
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2026, 'scheduleA');
+
+        $this->assertSame(16100.0, $facts['scheduleA']['standardDeductionSingle']);
+        $this->assertSame(32200.0, $facts['scheduleA']['standardDeductionMarriedFilingJointly']);
+    }
+
+    public function test_schedule_a_selects_larger_line5a_alternative_before_salt_cap(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'state_est_tax', 5000, 'State tax');
+        $this->createUserDeduction($user->id, 'sales_tax', 7000, 'Sales tax');
+        $this->createUserDeduction($user->id, 'real_estate_tax', 45000, 'Property tax');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleA');
+
+        $this->assertSame('sales_tax', $facts['scheduleA']['selectedLine5aType']);
+        $this->assertSame(7000.0, $facts['scheduleA']['selectedLine5aTotal']);
+        $this->assertSame(52000.0, $facts['scheduleA']['saltPaidBeforeCap']);
+        $this->assertSame(40000.0, $facts['scheduleA']['saltDeduction']);
+    }
+
+    public function test_schedule_a_exposes_gross_and_disallowed_investment_interest(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund'],
+                codes: ['13' => [['code' => 'H', 'value' => '1000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleA');
+
+        $this->assertSame(1000.0, $facts['scheduleA']['grossInvestmentInterestTotal']);
+        $this->assertSame(0.0, $facts['scheduleA']['investmentInterestTotal']);
+        $this->assertSame(1000.0, $facts['scheduleA']['disallowedInvestmentInterest']);
+    }
+
+    public function test_schedule_e_collects_routed_misc_and_k1_partnership_sources(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'sch_e',
+            'parsed_data' => ['payer_name' => 'Tenant', 'box1_rents' => 50],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'Trader Fund',
+                    '1' => '100',
+                    '2' => '-20',
+                    '3' => '10',
+                    '4' => '5',
+                    '5' => '7',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                ],
+                codes: [
+                    '11' => [['code' => 'ZZ', 'value' => '30']],
+                    '13' => [['code' => 'ZZ', 'value' => '12']],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleE');
+
+        $this->assertSame(50.0, $facts['scheduleE']['miscIncomeTotal']);
+        $this->assertSame(-10.0, $facts['scheduleE']['totalPassive']);
+        $this->assertSame(123.0, $facts['scheduleE']['totalNonpassive']);
+        $this->assertSame(18.0, $facts['scheduleE']['totalTraderNii']);
+        $this->assertSame(163.0, $facts['scheduleE']['grandTotal']);
+    }
+
+    public function test_form1116_collects_k3_and_1099_foreign_tax_sources(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund', '5' => '100'],
+                codes: [],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section2',
+                            'data' => [
+                                'rows' => [
+                                    ['line' => '55', 'col_c_passive' => 1000, 'col_d_general' => 50, 'col_f_sourced_by_partner' => 200, 'col_g_total' => 1250],
+                                    ['line' => '39', 'col_g_total' => 80],
+                                ],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part3_section2',
+                            'data' => ['derivedPassiveAssetRatio' => 0.25],
+                        ],
+                        [
+                            'sectionId' => 'part3_section4',
+                            'data' => ['grandTotalUSD' => 150],
+                        ],
+                    ],
+                ],
+            ),
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 15],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Int', 'box6_foreign_tax' => 3],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(1300.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(50.0, $facts['form1116']['totalGeneralIncome']);
+        $this->assertSame(168.0, $facts['form1116']['totalForeignTaxes']);
+        $this->assertSame(20.0, $facts['form1116']['totalLine4b']);
+        $this->assertSame(200.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertSame('credit', $facts['form1116']['recommendation']);
+        $this->assertFalse($facts['form1116']['turboTaxAlert']);
+    }
+
+    public function test_form1116_sourced_by_partner_election_excludes_sbp_from_passive_income(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section2',
+                            'data' => [
+                                'rows' => [
+                                    ['line' => '55', 'col_c_passive' => 1000, 'col_f_sourced_by_partner' => 200],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                k3Elections: ['sourcedByPartnerAsUSSource' => true],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(1000.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(200.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertSame('Sourced-by-partner-as-U.S.-source election active.', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+    }
+
+    public function test_form1116_marks_estimated_1099_div_foreign_income_as_needs_review(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 15],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertFalse($facts['form1116']['passiveIncomeSources'][0]['isReviewed']);
+        $this->assertSame('needs_review', $facts['form1116']['passiveIncomeSources'][0]['reviewStatus']);
+        $this->assertStringContainsString('Confirm gross foreign-source dividend income', $facts['form1116']['passiveIncomeSources'][0]['reviewAction']);
+        $this->assertTrue($facts['form1116']['foreignTaxSources'][0]['isReviewed']);
+    }
+
+    public function test_form8960_collects_nii_components_from_backend_facts(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 100],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker', 'box1a_ordinary' => 200],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'NII Fund',
+                    '2' => '300',
+                    '8' => '500',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                ],
+                codes: [
+                    '11' => [['code' => 'ZZ', 'value' => '40']],
+                    '13' => [['code' => 'ZZ', 'value' => '10']],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8960');
+
+        $this->assertSame(100.0, $facts['form8960']['taxableInterest']);
+        $this->assertSame(200.0, $facts['form8960']['ordinaryDividends']);
+        $this->assertSame(500.0, $facts['form8960']['netCapGains']);
+        $this->assertSame(300.0, $facts['form8960']['passiveIncome']);
+        $this->assertSame(30.0, $facts['form8960']['nonpassiveTradingIncome']);
+        $this->assertSame(1130.0, $facts['form8960']['grossNII']);
+        $this->assertSame(1130.0, $facts['form8960']['netInvestmentIncome']);
+        $this->assertTrue($facts['form8960']['needsMagi']);
+    }
+
     private function createAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
@@ -882,20 +1166,43 @@ class TaxPreviewFactsServiceTest extends TestCase
         ], $overrides));
     }
 
+    private function createUserDeduction(int $userId, string $category, float $amount, string $description): UserDeduction
+    {
+        return UserDeduction::create([
+            'user_id' => $userId,
+            'tax_year' => 2025,
+            'category' => $category,
+            'description' => $description,
+            'amount' => $amount,
+        ]);
+    }
+
     /**
      * @param  array<int|string, string>  $fields
      * @param  array<int|string, array<int, array<string, string>>>  $codes
      * @param  array<int, string>  $warnings
+     * @param  array<string, mixed>|null  $k3
+     * @param  array<string, mixed>  $k3Elections
      * @return array<string, mixed>
      */
-    private function k1Data(array $fields = [], array $codes = [], array $warnings = []): array
+    private function k1Data(array $fields = [], array $codes = [], array $warnings = [], ?array $k3 = null, array $k3Elections = []): array
     {
-        return [
+        $data = [
             'schemaVersion' => '2026.1',
             'formType' => 'K-1-1065',
             'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
             'codes' => $codes,
             'warnings' => $warnings,
         ];
+
+        if ($k3 !== null) {
+            $data['k3'] = $k3;
+        }
+
+        if ($k3Elections !== []) {
+            $data['k3Elections'] = $k3Elections;
+        }
+
+        return $data;
     }
 }
