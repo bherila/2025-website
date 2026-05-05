@@ -7,6 +7,12 @@ use App\Models\FinanceTool\FinAccounts;
 
 class CapitalGainsTaxReportService
 {
+    private const array REPORTED_LOT_SOURCES = [
+        FinAccountLot::SOURCE_1099B,
+        FinAccountLot::SOURCE_1099B_UNDERSCORE,
+        'import_1099b',
+    ];
+
     public function __construct(
         private readonly WashSaleAnalysisEngine $washSaleEngine,
         private readonly Form8949ReportBuilder $reportBuilder,
@@ -38,9 +44,9 @@ class CapitalGainsTaxReportService
     /**
      * Load closed account lots for the given accounts/year as canonical transactions.
      *
-     * This uses account lots as the reconciliation source of truth and excludes
-     * imported 1099-B copies so matched reported/account rows are not counted
-     * twice in Form 8949 or Schedule D totals.
+     * This uses account lots as the reconciliation source of truth. Imported
+     * 1099-B lots are included until they have been matched to native account
+     * transactions; matched reported/account rows are not counted twice.
      *
      * @param  int[]  $accountIds
      * @return CanonicalCapitalGainTransaction[]
@@ -55,10 +61,14 @@ class CapitalGainsTaxReportService
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->whereNull('superseded_by_lot_id')
-            ->whereNull('tax_document_id')
             ->where(function ($query): void {
                 $query->whereNull('lot_source')
-                    ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
+                    ->orWhereNotIn('lot_source', self::REPORTED_LOT_SOURCES)
+                    ->orWhere(function ($reportedLotQuery): void {
+                        $reportedLotQuery->whereNotNull('tax_document_id')
+                            ->whereIn('lot_source', self::REPORTED_LOT_SOURCES)
+                            ->whereNull('close_t_id');
+                    });
             })
             ->with(['account:acct_id,acct_name'])
             ->orderBy('acct_id')

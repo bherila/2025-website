@@ -28,7 +28,7 @@ class TaxPreviewDataController extends Controller
         }
 
         return response()->json(
-            $this->taxPreviewDataService->datasetForYear((int) Auth::id(), $year),
+            $this->taxPreviewDataService->datasetForYear((int) Auth::id(), $year, $request->boolean('include_tax_facts')),
         );
     }
 }

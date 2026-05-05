@@ -2,6 +2,8 @@
 
 namespace App\Services\Finance;
 
+use InvalidArgumentException;
+
 class TaxReturnReconciliationService
 {
     /**
@@ -12,8 +14,12 @@ class TaxReturnReconciliationService
     public function reconcile(array $facts, array $fixture, ?float $defaultTolerance = null): array
     {
         $results = [];
+        $fixtureLines = $this->fixtureLines($fixture);
+        if ($fixtureLines === []) {
+            throw new InvalidArgumentException('Tax reconciliation fixture must contain at least one valid line.');
+        }
 
-        foreach ($this->fixtureLines($fixture) as $line) {
+        foreach ($fixtureLines as $line) {
             $precision = $this->linePrecision($line);
             $tolerance = $this->lineTolerance($line, $defaultTolerance);
             $expected = $this->numeric($line['expected'] ?? null);
@@ -23,7 +29,7 @@ class TaxReturnReconciliationService
             $roundedExpected = $expected !== null ? $this->roundMoney($expected, $precision) : null;
             $roundedActual = $actual !== null ? $this->roundMoney($actual, $precision) : null;
             $delta = $roundedExpected !== null && $roundedActual !== null
-                ? $this->roundMoney($roundedActual - $roundedExpected, max(2, $precision))
+                ? $this->roundMoney(MoneyMath::subtract($roundedActual, $roundedExpected), max(2, $precision))
                 : null;
 
             if ($actual === null) {

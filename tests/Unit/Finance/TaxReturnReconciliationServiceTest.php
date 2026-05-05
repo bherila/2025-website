@@ -3,6 +3,7 @@
 namespace Tests\Unit\Finance;
 
 use App\Services\Finance\TaxReturnReconciliationService;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 class TaxReturnReconciliationServiceTest extends TestCase
@@ -55,5 +56,13 @@ class TaxReturnReconciliationServiceTest extends TestCase
         $this->assertSame(1, $result['summary']['missing']);
         $this->assertSame('mismatched', $result['results'][0]['status']);
         $this->assertSame('missing', $result['results'][1]['status']);
+    }
+
+    public function test_rejects_fixture_without_valid_lines(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('must contain at least one valid line');
+
+        (new TaxReturnReconciliationService)->reconcile(['year' => 2025], ['lines' => []]);
     }
 }

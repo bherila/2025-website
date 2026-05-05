@@ -22,7 +22,7 @@ class GetTaxPreview extends Tool
         $year = (int) ($request->input('year') ?? date('Y'));
         $userId = (int) Auth::id();
 
-        $data = $this->service->datasetForYear($userId, $year);
+        $data = $this->service->datasetForYear($userId, $year, true);
 
         // Payslips are exposed via the list_payslips tool instead
         unset($data['payslips']);

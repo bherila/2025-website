@@ -36,12 +36,12 @@ class TaxPreviewDataService
      *
      * @return array<string, mixed>
      */
-    public function datasetForYear(int $userId, int $year): array
+    public function datasetForYear(int $userId, int $year, bool $includeTaxFacts = false): array
     {
         $accounts = $this->accounts($userId);
         $scheduleCData = $this->scheduleCSummaryService->getSummary($userId);
 
-        return [
+        $data = [
             'year' => $year,
             'availableYears' => $this->availableYears($userId, array_map(static fn (string $scheduleCYear): int => (int) $scheduleCYear, $scheduleCData['available_years'] ?? [])),
             'payslips' => $this->payslipsForYear($userId, $year),
@@ -52,8 +52,13 @@ class TaxPreviewDataService
             'employmentEntities' => $this->employmentEntities($userId),
             'accounts' => $accounts,
             'activeAccountIds' => $this->activeAccountIdsForYear($accounts, $year),
-            'taxFacts' => $this->taxPreviewFactsService->arrayForYear($userId, $year),
         ];
+
+        if ($includeTaxFacts) {
+            $data['taxFacts'] = $this->taxPreviewFactsService->arrayForYear($userId, $year);
+        }
+
+        return $data;
     }
 
     /**

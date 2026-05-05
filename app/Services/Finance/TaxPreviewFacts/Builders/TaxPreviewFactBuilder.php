@@ -125,6 +125,23 @@ abstract class TaxPreviewFactBuilder
             return is_array($entry['parsed_data'] ?? null) ? $entry['parsed_data'] : null;
         }
 
+        $linkIdentifier = $this->normalizedIdentifier($link->ai_identifier);
+        if ($linkIdentifier !== null) {
+            $identified = array_values(array_filter($candidates, function (array $entry) use ($linkIdentifier): bool {
+                $identifier = $this->normalizedIdentifier($entry['account_identifier'] ?? null);
+
+                return $identifier !== null && $identifier === $linkIdentifier;
+            }));
+
+            if (count($identified) === 1) {
+                return is_array($identified[0]['parsed_data'] ?? null) ? $identified[0]['parsed_data'] : null;
+            }
+
+            if (count($identified) > 1) {
+                return null;
+            }
+        }
+
         $identified = array_values(array_filter($candidates, function (array $entry) use ($link): bool {
             $identifier = $this->normalizedIdentifier($entry['account_identifier'] ?? null);
             $linkIdentifier = $this->normalizedIdentifier($link->ai_identifier);

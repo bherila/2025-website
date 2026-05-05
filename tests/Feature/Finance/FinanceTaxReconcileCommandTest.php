@@ -60,6 +60,41 @@ class FinanceTaxReconcileCommandTest extends TestCase
             ->expectsOutputToContain('"status": "fail"');
     }
 
+    public function test_tax_reconcile_command_rejects_missing_user(): void
+    {
+        $fixture = $this->fixturePath('matching.json', [
+            'year' => 2025,
+            'lines' => [
+                ['form' => 'Schedule B', 'line' => '2', 'path' => 'scheduleB.interestTotal', 'expected' => 10.25, 'precision' => 2],
+            ],
+        ]);
+
+        $this->artisan('finance:tax-reconcile', [
+            '--user' => 999999,
+            '--year' => 2025,
+            '--fixture' => $fixture,
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('User ID 999999 not found');
+    }
+
+    public function test_tax_reconcile_command_rejects_fixture_without_valid_lines(): void
+    {
+        $user = $this->createUser();
+        $fixture = $this->fixturePath('empty.json', [
+            'year' => 2025,
+            'lines' => [],
+        ]);
+
+        $this->artisan('finance:tax-reconcile', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--fixture' => $fixture,
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('Tax reconciliation fixture must contain at least one valid line');
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      */

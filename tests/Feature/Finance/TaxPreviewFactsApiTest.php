@@ -13,11 +13,11 @@ class TaxPreviewFactsApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_tax_preview_data_endpoint_includes_tax_facts(): void
+    public function test_tax_preview_data_endpoint_includes_tax_facts_when_requested(): void
     {
         $user = $this->createUser();
 
-        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025&include_tax_facts=1');
 
         $response->assertOk()
             ->assertJsonStructure([
@@ -28,6 +28,16 @@ class TaxPreviewFactsApiTest extends TestCase
                     'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses', 'line4cNetInvestmentIncomeAfterQualifiedDividends'],
                 ],
             ]);
+    }
+
+    public function test_tax_preview_data_endpoint_omits_tax_facts_by_default(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
+
+        $response->assertOk()
+            ->assertJsonMissingPath('taxFacts');
     }
 
     public function test_tax_document_update_preserves_legacy_shape_without_tax_fact_opt_in(): void

@@ -73,7 +73,11 @@ export interface TaxPreviewDataset {
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
-  taxFacts: TaxPreviewFacts | null
+  taxFacts?: TaxPreviewFacts | null
+}
+
+interface RefreshAllOptions {
+  includeTaxFacts?: boolean
 }
 
 interface TaxPreviewContextValue {
@@ -179,7 +183,7 @@ interface TaxPreviewContextValue {
   setEmploymentEntities: Dispatch<SetStateAction<EmploymentEntity[]>>
   setAccounts: Dispatch<SetStateAction<TaxPreviewAccount[]>>
   setActiveAccountIds: Dispatch<SetStateAction<number[]>>
-  refreshAll: () => Promise<void>
+  refreshAll: (options?: RefreshAllOptions) => Promise<void>
 }
 
 const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
@@ -600,12 +604,17 @@ export function TaxPreviewProvider({
     }
   }, [getPriorYearCarryover, normalizeAvailableYears])
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (options: RefreshAllOptions = {}) => {
+    const includeTaxFacts = options.includeTaxFacts ?? true
     if (!hasLoadedOnce.current) {
       setIsLoading(true)
     }
     try {
-      const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?year=${year}`)) as TaxPreviewDataset
+      const params = new URLSearchParams({ year: String(year) })
+      if (includeTaxFacts) {
+        params.set('include_tax_facts', '1')
+      }
+      const response = (await fetchWrapper.get(`/api/finance/tax-preview-data?${params.toString()}`)) as TaxPreviewDataset
       setAvailableYears(response.availableYears ?? [])
       setPayslips(Array.isArray(response.payslips) ? response.payslips : [])
       setPendingReviewCount(response.pendingReviewCount ?? 0)
@@ -615,7 +624,9 @@ export function TaxPreviewProvider({
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
       setActiveAccountIds(Array.isArray(response.activeAccountIds) ? response.activeAccountIds : [])
-      setTaxFacts(response.taxFacts ?? null)
+      if (includeTaxFacts || response.taxFacts !== undefined) {
+        setTaxFacts(response.taxFacts ?? null)
+      }
       setError(null)
       priorYearCarryoverCache.current.clear()
       await refreshPriorYearCarryover(response.availableYears, year - 1)
@@ -714,7 +725,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
     if (!hasInFlight) return
-    const id = setInterval(() => void refreshAll(), POLLING_INTERVAL_MS)
+    const id = setInterval(() => void refreshAll({ includeTaxFacts: false }), POLLING_INTERVAL_MS)
     return () => clearInterval(id)
   }, [allDocuments, refreshAll])
 

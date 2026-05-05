@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -428,6 +429,45 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(-50.0, $facts['form4952']['investmentInterestSources'][0]['amount']);
     }
 
+    public function test_short_dividend_holding_period_can_start_before_tax_year(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $now = now();
+        DB::table('fin_account_line_items')->insert([
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2024-12-01',
+                't_type' => 'Sell Short',
+                't_symbol' => 'XYZ',
+                't_qty' => -10,
+                't_amt' => 1000,
+                't_method' => 'SELL SHORT',
+                't_description' => null,
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                't_account' => $account->acct_id,
+                't_date' => '2025-01-20',
+                't_type' => 'Dividend',
+                't_symbol' => 'XYZ',
+                't_qty' => null,
+                't_amt' => -50,
+                't_method' => null,
+                't_description' => 'SHORT DIVIDEND CHARGED',
+                't_comment' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
+
+        $this->assertSame(50.0, $facts['form4952']['totalInvestmentInterestExpense']);
+    }
+
     public function test_form4952_reconstructs_k1_gross_investment_income_when_box_20a_is_absent(): void
     {
         $user = $this->createUser();
@@ -447,6 +487,37 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(160.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
         $this->assertSame(0.0, $facts['form4952']['totalQualifiedDividends']);
         $this->assertSame(160.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
+    }
+
+    public function test_broker_1099_link_matching_prefers_identifier_before_name_fallback(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                [
+                    'account_identifier' => '1111',
+                    'account_name' => 'Shared Account Name',
+                    'form_type' => '1099_int',
+                    'tax_year' => 2025,
+                    'parsed_data' => ['payer_name' => 'Broker', 'box1_interest' => 10],
+                ],
+                [
+                    'account_identifier' => '2222',
+                    'account_name' => 'Shared Account Name',
+                    'form_type' => '1099_int',
+                    'tax_year' => 2025,
+                    'parsed_data' => ['payer_name' => 'Broker', 'box1_interest' => 99],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_int', 2025, aiIdentifier: '1111', aiAccountName: 'Shared Account Name');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleB');
+
+        $this->assertSame(10.0, $facts['scheduleB']['interestTotal']);
     }
 
     public function test_form4952_does_not_classify_full_return_diagnostic_as_k1_interest(): void
@@ -615,6 +686,45 @@ class TaxPreviewFactsServiceTest extends TestCase
         app(TaxPreviewFactsService::class)->factsFromDocuments(2025, [$document]);
     }
 
+    public function test_tax_preview_slice_avoids_capital_gains_report_when_not_needed(): void
+    {
+        $user = $this->createUser();
+        $this->mock(
+            CapitalGainsTaxReportService::class,
+            fn ($mock) => $mock->shouldReceive('reportForUserYear')->never(),
+        );
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertArrayHasKey('schedule1', $facts);
+        $this->assertArrayNotHasKey('form8949', $facts);
+    }
+
+    public function test_unmatched_imported_1099b_lots_feed_form8949_facts(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [],
+        ]);
+        $this->createLot($account, [
+            'tax_document_id' => $document->id,
+            'lot_source' => 'import_1099b',
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 125,
+            'cost_basis' => 100,
+            'close_t_id' => null,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8949');
+
+        $this->assertSame(1, $facts['form8949']['rowCount']);
+        $this->assertSame(25.0, $facts['form8949']['rows'][0]['gainOrLoss']);
+    }
+
     private function createAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
@@ -648,6 +758,8 @@ class TaxPreviewFactsServiceTest extends TestCase
             'form_8949_box' => $overrides['form_8949_box'] ?? 'A',
             'is_covered' => $overrides['is_covered'] ?? true,
             'wash_sale_disallowed' => $overrides['wash_sale_disallowed'] ?? null,
+            'open_t_id' => $overrides['open_t_id'] ?? null,
+            'close_t_id' => $overrides['close_t_id'] ?? null,
         ]);
     }
 

@@ -42,16 +42,7 @@ class TaxPreviewFactsService
 
     public function factsForYear(int $userId, int $year): TaxPreviewFacts
     {
-        $documents = FileForTaxDocument::where('user_id', $userId)
-            ->where('tax_year', $year)
-            ->whereIn('form_type', FileForTaxDocument::ACCOUNT_FORM_TYPES)
-            ->with([
-                'employmentEntity:id,display_name',
-                'account:acct_id,acct_name,acct_number',
-                'accountLinks.account:acct_id,acct_name,acct_number',
-            ])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $documents = $this->documentsForYear($userId, $year);
 
         return $this->factsFromDocuments(
             $year,
@@ -108,9 +99,79 @@ class TaxPreviewFactsService
      */
     public function arrayForYear(int $userId, int $year, string $slice = 'all'): array
     {
-        $facts = $this->factsForYear($userId, $year)->toArray();
+        if ($slice === 'all') {
+            return $this->factsForYear($userId, $year)->toArray();
+        }
 
-        return $this->sliceArray($facts, $slice);
+        $documents = $this->documentsForYear($userId, $year);
+        [$k1Docs, $docs1099] = $this->partitionDocuments($documents);
+
+        return match ($slice) {
+            'schedule1' => [
+                'year' => $year,
+                'schedule1' => $this->schedule1FactsBuilder->build($k1Docs, $docs1099)->toArray(),
+            ],
+            'scheduleB' => [
+                'year' => $year,
+                'scheduleB' => $this->scheduleBFactsBuilder->build($k1Docs, $docs1099)->toArray(),
+            ],
+            'form4952' => [
+                'year' => $year,
+                'form4952' => $this->form4952FactsBuilder->build(
+                    $k1Docs,
+                    $docs1099,
+                    $this->scheduleBFactsBuilder->build($k1Docs, $docs1099),
+                    $this->shortDividendItemizedDeduction($userId, $year),
+                    $this->marginInterestSources($userId, $year),
+                )->toArray(),
+            ],
+            'scheduleD' => [
+                'year' => $year,
+                'scheduleD' => $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'])->toArray(),
+            ],
+            'form8949' => [
+                'year' => $year,
+                'form8949' => $this->form8949FactsBuilder->build($this->capitalGainsTaxReportService->reportForUserYear($userId, $year))->toArray(),
+            ],
+            default => $this->factsForYear($userId, $year)->toArray(),
+        };
+    }
+
+    /**
+     * @return iterable<FileForTaxDocument>
+     */
+    private function documentsForYear(int $userId, int $year): iterable
+    {
+        return FileForTaxDocument::where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->whereIn('form_type', FileForTaxDocument::ACCOUNT_FORM_TYPES)
+            ->with([
+                'employmentEntity:id,display_name',
+                'account:acct_id,acct_name,acct_number',
+                'accountLinks.account:acct_id,acct_name,acct_number',
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+
+    /**
+     * @param  iterable<FileForTaxDocument>  $documents
+     * @return array{0:FileForTaxDocument[],1:FileForTaxDocument[]}
+     */
+    private function partitionDocuments(iterable $documents): array
+    {
+        $k1Docs = [];
+        $docs1099 = [];
+
+        foreach ($documents as $document) {
+            if ($this->formType($document) === 'k1') {
+                $k1Docs[] = $document;
+            } else {
+                $docs1099[] = $document;
+            }
+        }
+
+        return [$k1Docs, $docs1099];
     }
 
     /**
@@ -190,8 +251,11 @@ class TaxPreviewFactsService
             return 0.0;
         }
 
+        $yearStart = "{$year}-01-01";
+        $yearEnd = "{$year}-12-31";
+
         $transactions = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->whereBetween('t_date', ["{$year}-01-01", "{$year}-12-31"])
+            ->whereBetween('t_date', [($year - 1).'-01-01', $yearEnd])
             ->orderBy('t_account')
             ->orderBy('t_date')
             ->orderBy('t_id')
@@ -202,6 +266,11 @@ class TaxPreviewFactsService
 
         foreach ($transactions as $accountTransactions) {
             foreach ($accountTransactions as $transaction) {
+                $transactionDate = (string) $transaction->t_date;
+                if ($transactionDate < $yearStart || $transactionDate > $yearEnd) {
+                    continue;
+                }
+
                 if (! $this->isShortDividend($transaction)) {
                     continue;
                 }

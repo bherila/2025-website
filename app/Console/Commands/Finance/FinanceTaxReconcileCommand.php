@@ -2,11 +2,13 @@
 
 namespace App\Console\Commands\Finance;
 
+use App\Models\User;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxReturnReconciliationService;
 use HelgeSverre\Toon\DecodeOptions;
 use HelgeSverre\Toon\Exceptions\DecodeException;
 use HelgeSverre\Toon\Toon;
+use InvalidArgumentException;
 
 class FinanceTaxReconcileCommand extends BaseFinanceCommand
 {
@@ -42,8 +44,21 @@ class FinanceTaxReconcileCommand extends BaseFinanceCommand
         $year = (int) ($this->option('year') ?: ($fixture['year'] ?? date('Y')));
         $tolerance = $this->option('tolerance');
         $defaultTolerance = is_numeric($tolerance) ? (float) $tolerance : null;
+
+        if (! $this->userExists($userId)) {
+            $this->error("User ID {$userId} not found. Pass --user for a valid user or set FINANCE_CLI_USER_ID.");
+
+            return self::FAILURE;
+        }
+
         $facts = $this->taxPreviewFactsService->arrayForYear($userId, $year);
-        $result = $this->reconciliationService->reconcile($facts, $fixture, $defaultTolerance);
+        try {
+            $result = $this->reconciliationService->reconcile($facts, $fixture, $defaultTolerance);
+        } catch (InvalidArgumentException $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
 
         $headers = ['Status', 'Form', 'Line', 'Expected', 'Actual', 'Delta', 'Path'];
         $rows = $this->tableRows($result);
@@ -100,6 +115,11 @@ class FinanceTaxReconcileCommand extends BaseFinanceCommand
         }
 
         return $toon;
+    }
+
+    private function userExists(int $userId): bool
+    {
+        return User::query()->whereKey($userId)->exists();
     }
 
     /**

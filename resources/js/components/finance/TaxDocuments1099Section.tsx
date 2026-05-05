@@ -846,6 +846,7 @@ export default function TaxDocuments1099Section({
           {...(onTaxFactsChange ? { onTaxFactsChange } : {})}
           onDocumentReviewed={() => {
             closeReviewModal()
+            void reloadDocuments()
           }}
         />
       )}

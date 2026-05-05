@@ -30,10 +30,9 @@ class Form8949FactsBuilder extends TaxPreviewFactBuilder
             $capitalGainsReport['adjustments'],
         );
 
-        $washSaleTotal = $this->roundMoney(array_reduce(
+        $washSaleTotal = $this->sumMoney(array_map(
+            static fn (WashSaleAdjustment $adjustment): float => $adjustment->disallowedLoss,
             $capitalGainsReport['adjustments'],
-            static fn (float $total, WashSaleAdjustment $adjustment): float => $total + $adjustment->disallowedLoss,
-            0.0,
         ));
 
         return new Form8949Facts(
