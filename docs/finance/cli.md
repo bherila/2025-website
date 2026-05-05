@@ -255,7 +255,7 @@ Supported slices:
 | `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8 family 1099-MISC sources |
 | `scheduleB` | Schedule B interest, ordinary dividend, and qualified dividend sources, including direct 1099 sources and K-1 sources |
 | `form4952` | Investment-interest, Schedule B gross-investment-income, K-1 gross-investment-income, and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
-| `scheduleA` | W-2 Box 17, user-entered itemized deductions, K-1 Box 13L, SALT cap, investment interest, and standard-deduction comparison facts |
+| `scheduleA` | W-2 Box 17, user-entered itemized deductions, selected Schedule A line 5a income/sales tax alternative, K-1 Box 13L, SALT cap, gross/deductible investment interest, and standard-deduction comparison facts |
 | `scheduleE` | Routed 1099-MISC Schedule E income plus K-1 Boxes 1/2/3/4/5/11ZZ/13ZZ passive, nonpassive, and trader-NII facts |
 | `scheduleD` | Schedule D line totals and supporting K-1/Form 6781/1099-DIV source lines, with Form 8949 rollups from the PHP capital-gains engine |
 | `form8949` | Canonical Form 8949 rows, Schedule D rollups, and PHP wash-sale adjustments |

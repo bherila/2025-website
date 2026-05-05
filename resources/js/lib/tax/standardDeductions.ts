@@ -1,7 +1,7 @@
 /**
  * Standard deductions by year, filing status, and state.
  *
- * Federal: IRS Rev. Proc. (2022-38, 2023-34, 2024-40, 2025-49).
+ * Federal: IRS Rev. Proc. (2022-38, 2023-34, 2025-32).
  * California: FTB 540 instructions.
  * New York: IT-201 instructions (IT-201 line 34 standard deduction).
  *
@@ -27,12 +27,19 @@ const STATUS_KEY: Record<FilingStatus, StatusKey> = {
 
 type YearTable = Partial<Record<StatusKey, number>>
 
+const SALT_CAP_BY_YEAR: Record<number, number> = {
+  2023: 10_000,
+  2024: 10_000,
+  2025: 40_000,
+  2026: 40_000,
+}
+
 /** Federal standard deduction by year. */
 const FEDERAL: Record<number, YearTable> = {
   2023: { single: 13_850, mfj: 27_700, mfs: 13_850, hoh: 20_800 },
   2024: { single: 14_600, mfj: 29_200, mfs: 14_600, hoh: 21_900 },
-  2025: { single: 15_000, mfj: 30_000, mfs: 15_000, hoh: 22_500 },
-  2026: { single: 15_750, mfj: 31_500, mfs: 15_750, hoh: 23_625 },
+  2025: { single: 15_750, mfj: 31_500, mfs: 15_750, hoh: 23_625 },
+  2026: { single: 16_100, mfj: 32_200, mfs: 16_100, hoh: 24_150 },
 }
 
 /** California FTB 540 standard deduction. */
@@ -61,6 +68,12 @@ function getStandardDeductionTable(state = ''): Record<number, YearTable> | unde
 export function getLatestStandardDeductionYear(state = ''): number {
   const table = getStandardDeductionTable(state)
   return table ? Math.max(...Object.keys(table).map(Number)) : 0
+}
+
+export function getSaltCap(year: number): number {
+  const latestYear = Math.max(...Object.keys(SALT_CAP_BY_YEAR).map(Number))
+
+  return SALT_CAP_BY_YEAR[year] ?? SALT_CAP_BY_YEAR[latestYear] ?? 10_000
 }
 
 /**

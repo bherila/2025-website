@@ -139,7 +139,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         foreach ([
             'stateIncomeTaxSources' => 'line5a',
             'realEstateTaxSources' => 'line5b',
-            'salesTaxSources' => 'line5c',
+            'salesTaxSources' => 'line5a',
             'mortgageInterestSources' => 'line8a',
             'investmentInterestSources' => 'line9',
             'charitableCashSources' => 'line11',

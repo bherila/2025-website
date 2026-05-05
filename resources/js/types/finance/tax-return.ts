@@ -29,9 +29,9 @@ export interface UserDeductionEntry {
 export interface ScheduleALines {
   invIntSources: { label: string; amount: number }[]
   totalInvIntExpense: number
-  /** Raw SALT paid before the $10,000 cap (W-2 Box 17 + user-entered SALT categories). */
+  /** Raw SALT paid before the cap: selected line 5a income/sales tax plus real estate tax. */
   saltPaid: number
-  /** SALT paid capped at $10,000. */
+  /** SALT paid capped at the year-specific federal limit. */
   saltDeduction: number
   /** User-entered mortgage interest. */
   mortgageInterest: number

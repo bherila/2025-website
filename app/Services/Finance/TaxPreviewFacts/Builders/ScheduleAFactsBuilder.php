@@ -14,7 +14,12 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
 {
-    private const float SALT_CAP = 10000.0;
+    private const array STANDARD_DEDUCTIONS = [
+        2023 => ['single' => 13850.0, 'mfj' => 27700.0],
+        2024 => ['single' => 14600.0, 'mfj' => 29200.0],
+        2025 => ['single' => 15750.0, 'mfj' => 31500.0],
+        2026 => ['single' => 16100.0, 'mfj' => 32200.0],
+    ];
 
     /**
      * @param  FileForTaxDocument[]  $k1Docs
@@ -40,10 +45,15 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $stateIncomeTaxTotal = $this->sumSources($stateIncomeTaxSources);
         $salesTaxTotal = $this->sumSources($salesTaxSources);
         $realEstateTaxTotal = $this->sumSources($realEstateTaxSources);
-        $saltPaidBeforeCap = $this->sumMoney([$stateIncomeTaxTotal, $salesTaxTotal, $realEstateTaxTotal]);
-        $saltDeduction = min(self::SALT_CAP, $saltPaidBeforeCap);
+        $line5aSelection = $this->line5aSelection($stateIncomeTaxTotal, $salesTaxTotal);
+        $selectedLine5aTotal = $line5aSelection['amount'];
+        $saltPaidBeforeCap = $this->sumMoney([$selectedLine5aTotal, $realEstateTaxTotal]);
+        $saltCap = $this->saltCap($year);
+        $saltDeduction = min($saltCap, $saltPaidBeforeCap);
         $mortgageInterestTotal = $this->sumSources($mortgageInterestSources);
         $investmentInterestTotal = $form4952->deductibleInvestmentInterestExpense;
+        $grossInvestmentInterestTotal = $form4952->totalInvestmentInterestExpense;
+        $disallowedInvestmentInterest = max(0.0, $this->subtractMoney($grossInvestmentInterestTotal, $investmentInterestTotal));
         $charitableCashTotal = $this->sumSources($charitableCashSources);
         $charitableNoncashTotal = $this->sumSources($charitableNoncashSources);
         $charitableTotal = $this->sumMoney([$charitableCashTotal, $charitableNoncashTotal]);
@@ -58,15 +68,19 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             stateIncomeTaxTotal: $stateIncomeTaxTotal,
             salesTaxSources: $salesTaxSources,
             salesTaxTotal: $salesTaxTotal,
+            selectedLine5aType: $line5aSelection['type'],
+            selectedLine5aTotal: $selectedLine5aTotal,
             realEstateTaxSources: $realEstateTaxSources,
             realEstateTaxTotal: $realEstateTaxTotal,
             saltPaidBeforeCap: $saltPaidBeforeCap,
-            saltCap: self::SALT_CAP,
+            saltCap: $saltCap,
             saltDeduction: $saltDeduction,
             mortgageInterestSources: $mortgageInterestSources,
             mortgageInterestTotal: $mortgageInterestTotal,
             investmentInterestSources: $form4952->investmentInterestSources,
+            grossInvestmentInterestTotal: $grossInvestmentInterestTotal,
             investmentInterestTotal: $investmentInterestTotal,
+            disallowedInvestmentInterest: $disallowedInvestmentInterest,
             totalInterest: $totalInterest,
             charitableCashSources: $charitableCashSources,
             charitableCashTotal: $charitableCashTotal,
@@ -211,7 +225,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
     {
         return match ($category) {
             DeductionCategory::StateEstTax->value => TaxFactRouting::ScheduleALine5a,
-            DeductionCategory::SalesTax->value => TaxFactRouting::ScheduleALine5c,
+            DeductionCategory::SalesTax->value => TaxFactRouting::ScheduleALine5a,
             DeductionCategory::RealEstateTax->value => TaxFactRouting::ScheduleALine5b,
             DeductionCategory::MortgageInterest->value => TaxFactRouting::ScheduleALine8a,
             DeductionCategory::CharitableCash->value => TaxFactRouting::ScheduleALine11,
@@ -233,14 +247,28 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         };
     }
 
+    /**
+     * @return array{type:string,amount:float}
+     */
+    private function line5aSelection(float $stateIncomeTaxTotal, float $salesTaxTotal): array
+    {
+        if ($salesTaxTotal > $stateIncomeTaxTotal) {
+            return ['type' => 'sales_tax', 'amount' => $salesTaxTotal];
+        }
+
+        return ['type' => 'state_income_tax', 'amount' => $stateIncomeTaxTotal];
+    }
+
+    private function saltCap(int $year): float
+    {
+        return $year >= 2025 ? 40000.0 : 10000.0;
+    }
+
     private function standardDeduction(int $year, bool $marriedFilingJointly): float
     {
-        return match ($year) {
-            2025 => $marriedFilingJointly ? 30000.0 : 15000.0,
-            2026 => $marriedFilingJointly ? 32200.0 : 16100.0,
-            2024 => $marriedFilingJointly ? 29200.0 : 14600.0,
-            2023 => $marriedFilingJointly ? 27700.0 : 13850.0,
-            default => $marriedFilingJointly ? 32200.0 : 16100.0,
-        };
+        $latestYear = max(array_keys(self::STANDARD_DEDUCTIONS));
+        $deductions = self::STANDARD_DEDUCTIONS[$year] ?? self::STANDARD_DEDUCTIONS[$latestYear];
+
+        return $marriedFilingJointly ? $deductions['mfj'] : $deductions['single'];
     }
 }

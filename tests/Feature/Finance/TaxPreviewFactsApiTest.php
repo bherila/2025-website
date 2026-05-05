@@ -215,7 +215,7 @@ class TaxPreviewFactsApiTest extends TestCase
         $output = Artisan::output();
 
         $this->assertSame(0, $exitCode);
-        $this->assertStringContainsString('line5c', $output);
+        $this->assertStringContainsString('line5a', $output);
         $this->assertStringContainsString('Sales tax', $output);
         $this->assertStringContainsString('line8a', $output);
         $this->assertStringContainsString('Mortgage interest', $output);

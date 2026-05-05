@@ -141,6 +141,35 @@ describe('computeScheduleALines — Box 13L (Issue 7)', () => {
     expect(result.totalInvIntExpense).toBe(3000)
   })
 
+  it('uses either state income tax or sales tax on line 5a before adding real estate tax', () => {
+    const result = computeScheduleALines({
+      year: 2025,
+      saltPaid: 3000,
+      userDeductions: [
+        { id: 1, category: 'state_est_tax', description: null, amount: 1000 },
+        { id: 2, category: 'sales_tax', description: null, amount: 6000 },
+        { id: 3, category: 'real_estate_tax', description: null, amount: 5000 },
+      ],
+    })
+
+    expect(result.saltPaid).toBe(11000)
+    expect(result.saltDeduction).toBe(11000)
+  })
+
+  it('applies the 2025 SALT cap', () => {
+    const result = computeScheduleALines({
+      year: 2025,
+      userDeductions: [
+        { id: 1, category: 'state_est_tax', description: null, amount: 50000 },
+        { id: 2, category: 'sales_tax', description: null, amount: 1000 },
+        { id: 3, category: 'real_estate_tax', description: null, amount: 5000 },
+      ],
+    })
+
+    expect(result.saltPaid).toBe(55000)
+    expect(result.saltDeduction).toBe(40000)
+  })
+
   it('aggregates Box 13L across multiple K-1s', () => {
     const dataA = makeK1Data({ codes: { '13': [{ code: 'L', value: '1500' }] } })
     const dataB = makeK1Data({ codes: { '13': [{ code: 'L', value: '2500' }] } })

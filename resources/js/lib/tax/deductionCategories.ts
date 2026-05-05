@@ -25,7 +25,7 @@ export const DEDUCTION_CATEGORY_LABELS: Record<DeductionCategory, string> = {
   other: 'Other deduction',
 }
 
-/** Categories that contribute to the $10k SALT cap (Schedule A Line 7). */
+/** Categories that contribute to the SALT cap (Schedule A Line 7). */
 export const SALT_CATEGORIES: ReadonlySet<DeductionCategory> = new Set([
   'real_estate_tax',
   'state_est_tax',

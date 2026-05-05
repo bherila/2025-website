@@ -92,7 +92,20 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 }
 
                 $payer = $this->payerName($doc, $entry['link'], $entry['parsedData']);
-                $passiveIncomeSources[] = $this->documentSource($doc, $entry['link'], "{$payer} — 1099-DIV estimated foreign source income", $this->roundMoney($foreignTax / self::ASSUMED_FOREIGN_WITHHOLDING_RATE), TaxFactSourceType::Form1099DivForeignTax, TaxFactRouting::Form1116Line1a, '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.', '1099_div', '7');
+                $passiveIncomeSources[] = $this->documentSource(
+                    $doc,
+                    $entry['link'],
+                    "{$payer} — 1099-DIV estimated foreign source income",
+                    $this->roundMoney($foreignTax / self::ASSUMED_FOREIGN_WITHHOLDING_RATE),
+                    TaxFactSourceType::Form1099DivForeignTax,
+                    TaxFactRouting::Form1116Line1a,
+                    '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.',
+                    '1099_div',
+                    '7',
+                    false,
+                    'needs_review',
+                    'Confirm gross foreign-source dividend income; this source is estimated from 1099-DIV Box 7 foreign tax.',
+                );
                 $foreignTaxSources[] = $this->documentSource($doc, $entry['link'], "{$payer} — 1099-DIV Box 7 foreign tax", $foreignTax, TaxFactSourceType::Form1099DivForeignTax, TaxFactRouting::Form1116Line8, '1099-DIV Box 7 foreign tax supports Form 1116 line 8.', '1099_div', '7');
             }
 
@@ -402,9 +415,22 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         );
     }
 
-    private function documentSource(FileForTaxDocument $doc, ?TaxDocumentAccount $link, string $label, float $amount, TaxFactSourceType $sourceType, TaxFactRouting $routing, string $routingReason, string $formType, string $box): TaxFactSource
-    {
+    private function documentSource(
+        FileForTaxDocument $doc,
+        ?TaxDocumentAccount $link,
+        string $label,
+        float $amount,
+        TaxFactSourceType $sourceType,
+        TaxFactRouting $routing,
+        string $routingReason,
+        string $formType,
+        string $box,
+        ?bool $isReviewed = null,
+        ?string $reviewStatus = null,
+        ?string $reviewAction = null,
+    ): TaxFactSource {
         $idPrefix = $link instanceof TaxDocumentAccount ? "link-{$link->id}" : "doc-{$doc->id}";
+        $sourceIsReviewed = $isReviewed ?? $this->sourceIsReviewed($doc, $link);
 
         return new TaxFactSource(
             id: "{$idPrefix}-{$sourceType->value}-{$box}",
@@ -418,9 +444,9 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             box: $box,
             routing: $routing,
             routingReason: $routingReason,
-            isReviewed: $this->sourceIsReviewed($doc, $link),
-            reviewStatus: $this->reviewStatus($doc, $link),
-            reviewAction: $this->reviewAction($doc, $link),
+            isReviewed: $sourceIsReviewed,
+            reviewStatus: $reviewStatus ?? ($sourceIsReviewed ? 'reviewed' : 'needs_review'),
+            reviewAction: $reviewAction ?? ($sourceIsReviewed ? null : $this->reviewAction($doc, $link)),
         );
     }
 }

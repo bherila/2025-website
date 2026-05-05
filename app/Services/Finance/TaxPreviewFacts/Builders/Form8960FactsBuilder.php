@@ -10,6 +10,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use UnexpectedValueException;
 
 class Form8960FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -103,11 +104,16 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
 
     private function cloneFor8960(TaxFactSource $source, TaxFactRouting $routing, string $routingReason): TaxFactSource
     {
+        $sourceType = TaxFactSourceType::tryFrom($source->sourceType);
+        if (! $sourceType instanceof TaxFactSourceType) {
+            throw new UnexpectedValueException("Cannot clone tax fact source {$source->id} for Form 8960 because source type {$source->sourceType} is not recognized.");
+        }
+
         return new TaxFactSource(
             id: "{$source->id}-form8960",
             label: $source->label,
             amount: $source->amount,
-            sourceType: TaxFactSourceType::tryFrom($source->sourceType) ?? TaxFactSourceType::Form1099IntInterest,
+            sourceType: $sourceType,
             taxDocumentId: $source->taxDocumentId,
             taxDocumentAccountId: $source->taxDocumentAccountId,
             accountId: $source->accountId,

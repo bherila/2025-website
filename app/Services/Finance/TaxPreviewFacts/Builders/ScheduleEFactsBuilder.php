@@ -279,6 +279,8 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             ...$notes,
         ])));
 
+        // Some K-1 packages deny entity-level trader status while still reporting
+        // trader-style deductions that belong in the Form 8960 NII audit trail.
         if (preg_match('/\b(?:not|isn\'t|is not|was not|no)\s+(?:a\s+)?trader in securities\b/i', $haystack)) {
             foreach (['trader deductions', 'trading activities', 'trading in financial instruments', 'trading in financial instruments/commodities'] as $needle) {
                 if (str_contains($haystack, $needle)) {

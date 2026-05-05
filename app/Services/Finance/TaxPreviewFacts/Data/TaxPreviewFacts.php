@@ -21,7 +21,7 @@ readonly class TaxPreviewFacts
     ) {}
 
     /**
-     * @return array<string, mixed>
+     * @return array{year:int,schedule1:array<string,mixed>,scheduleB:array<string,mixed>,form4952:array<string,mixed>,scheduleA:array<string,mixed>,scheduleE:array<string,mixed>,scheduleD:array<string,mixed>,form8949:array<string,mixed>,form1116:array<string,mixed>,form8960:array<string,mixed>}
      */
     public function toArray(): array
     {
