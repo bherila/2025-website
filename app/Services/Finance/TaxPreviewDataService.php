@@ -47,7 +47,7 @@ class TaxPreviewDataService
             'payslips' => $this->payslipsForYear($userId, $year),
             'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
             'w2Documents' => $this->documentsForYear($userId, $year, FileForTaxDocument::W2_FORM_TYPES),
-            'accountDocuments' => $this->documentsForYear($userId, $year, ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_b', 'broker_1099', 'k1']),
+            'accountDocuments' => $this->documentsForYear($userId, $year, FileForTaxDocument::ACCOUNT_FORM_TYPES),
             'scheduleCData' => $scheduleCData,
             'employmentEntities' => $this->employmentEntities($userId),
             'accounts' => $accounts,

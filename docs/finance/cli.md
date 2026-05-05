@@ -252,17 +252,23 @@ Supported slices:
 | Slice | Contents |
 |-------|----------|
 | `all` | Every backend fact slice currently available |
-| `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8z 1099-MISC sources |
+| `schedule1` | Schedule 1 line 5 K-1/Schedule E sources and line 8 family 1099-MISC sources |
 | `scheduleB` | Schedule B interest, ordinary dividend, and qualified dividend sources, including direct 1099 sources and K-1 sources |
 | `form4952` | Investment-interest, Schedule B gross-investment-income, K-1 gross-investment-income, and investment-expense source buckets for Form 4952 / Schedule A line 9 debugging |
+| `scheduleA` | W-2 Box 17, user-entered itemized deductions, K-1 Box 13L, SALT cap, investment interest, and standard-deduction comparison facts |
+| `scheduleE` | Routed 1099-MISC Schedule E income plus K-1 Boxes 1/2/3/4/5/11ZZ/13ZZ passive, nonpassive, and trader-NII facts |
 | `scheduleD` | Schedule D line totals and supporting K-1/Form 6781/1099-DIV source lines, with Form 8949 rollups from the PHP capital-gains engine |
 | `form8949` | Canonical Form 8949 rows, Schedule D rollups, and PHP wash-sale adjustments |
+| `form1116` | K-1/K-3 passive/general foreign income, line 4b apportionment, sourced-by-partner election metadata, and 1099/K-1 foreign tax facts |
+| `form8960` | Net investment income components from Schedule B, Schedule D, Schedule E, and Form 4952; MAGI-dependent tax remains nullable until MAGI is backend-owned |
 
 Useful examples:
 
 ```bash
 php artisan finance:tax-preview-facts --year=2025 --slice=schedule1 --format=toon
 php artisan finance:tax-preview-facts --year=2025 --slice=scheduleB --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=scheduleE --format=toon
+php artisan finance:tax-preview-facts --year=2025 --slice=form1116 --format=json | jq '.form1116'
 php artisan finance:tax-preview-facts --year=2025 --slice=form4952 --format=json | jq '.form4952'
 php artisan finance:tax-preview-facts --year=2025 --slice=form8949 --format=json | jq '.form8949.washSaleAdjustments'
 ```

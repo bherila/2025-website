@@ -125,7 +125,7 @@ Year changes are **full page navigations** (`window.location.href = ...`). Blade
 - Schedule C data
 - Employment entities
 - Accounts + active-account IDs
-- Backend `taxFacts` source lines for Schedule 1, Schedule B, Form 4952, Schedule D, and Form 8949 debug paths
+- Backend `taxFacts` source lines for Schedule 1, Schedule A, Schedule B, Schedule D, Schedule E, Form 1116, Form 4952, Form 8949, and Form 8960 debug paths
 
 The React mini-SPA is wrapped in `TaxPreviewProvider`, which loads `/api/finance/tax-preview-data?year=YYYY`, exposes getters/setters for shared data, stores backend `taxFacts`, derives reviewed document subsets, computes 1099 totals and Schedule C net income, and provides `refreshAll()` for mutation sync after upload/review/edit actions. Tax totals are still rendered from the client-side calculation system; `taxFacts` is an audit/debug contract first.
 
@@ -145,8 +145,12 @@ The current pilot covers the highest-value debug paths:
 | `schedule1` | Schedule 1 line 8 family / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. Explicit Schedule 1 subroutes are bucketed into line 8b, 8h, 8i, or 8z; `line9TotalOtherIncome` is the sum of those line 8 buckets, not a synonym for line 8z. |
 | `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
 | `form4952` | Form 4952 line 1 / line 4a / line 4c / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket, exposes line 4c after subtracting qualified dividends, and keeps line 5 investment expenses distinct so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `scheduleA` | Schedule A lines 5a/5c/6/7/8a/9/11/12/16/17 | W-2 Box 17 state tax, user-entered itemized deductions, K-1 Box 13L portfolio deductions, and Form 4952 deductible investment interest are exposed with source metadata. The builder applies the SALT cap and returns both single and MFJ standard-deduction comparisons because filing status is not yet backend-owned by this fact slice. |
+| `scheduleE` | Schedule E Part I/II partnership and rental buckets | Explicitly routed Schedule E 1099-MISC sources and K-1 Boxes 1/2/3/4/5/11ZZ/13ZZ are separated into passive, nonpassive, and trader-fund NII totals. Trader-fund detection mirrors the existing K-1 utility logic so Form 8960 can reuse the same backend source facts. |
 | `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
 | `scheduleD` | Schedule D lines 1a-16 / line 21 | Schedule D facts combine Form 8949 rollups with K-1 Box 8/9/10, Box 11C Form 6781 60/40 allocations, Box 11S character routing, and 1099-DIV Box 2a capital-gain distributions. Ambiguous Box 11S rows are exposed as `needs_review` sources instead of being silently routed. |
+| `form1116` | Form 1116 passive/general income, line 4b, and foreign tax | K-1/K-3 passive and general category income, sourced-by-partner election state, K-1 Box 21 / K-3 foreign tax, and 1099-DIV/1099-INT foreign tax are exposed. 1099-DIV foreign-source income is estimated from Box 7 at the same default 15% withholding rate as the React calculator. |
+| `form8960` | Form 8960 NII components | Schedule B interest/dividends, positive Schedule D net capital gains, Schedule E passive income, trader-fund nonpassive NII, and Form 4952 investment-interest deductions are composed into backend NII facts. MAGI-dependent NIIT tax is intentionally nullable until MAGI and filing status are moved into backend-owned facts. |
 
 Each `TaxFactSource` carries review metadata:
 
@@ -170,7 +174,7 @@ php artisan typescript:transform
 
 Tax document update/review/account-link routing endpoints preserve their legacy response shape by default. Callers that pass `?include_tax_facts=1` receive `{ document, taxFacts }` or `{ link, taxFacts }`, allowing React to merge the changed document/link and replace only the fact patch instead of reloading the whole Tax Preview dataset. When a source moves from `needs_review` to `reviewed`, replacing `taxFacts` is enough for supporting details and future line coloring to update without a full dataset refresh.
 
-The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. Capital gains are now shared through the PHP `CapitalGainsTaxReportService`; avoid adding new Schedule D/Form 8949 wash-sale or lot-routing logic to the React-only analyzer unless it is purely UI exploration.
+The fact DTO shape is source-line oriented on purpose: XLSX builders can reuse the same backend-auditable facts later for workbook detail rows and cross-checks. Capital gains are now shared through the PHP `CapitalGainsTaxReportService`; Schedule A, Schedule E, Form 1116, and Form 8960 now have backend source facts as well. Avoid adding new duplicated tax math to React-only analyzers unless it is purely UI exploration.
 
 ### Filed Return Reconciliation
 

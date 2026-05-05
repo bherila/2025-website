@@ -10,7 +10,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
     protected $signature = 'finance:tax-preview-facts
         {--user= : User ID to inspect; defaults to FINANCE_CLI_USER_ID or 1}
         {--year= : Tax year; defaults to current year}
-        {--slice=all : Fact slice: all, schedule1, scheduleB, form4952, scheduleD, or form8949}
+        {--slice=all : Fact slice: all, schedule1, scheduleB, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960}
         {--format=table : Output format: table, json, or toon}';
 
     protected $description = 'Render backend tax-preview fact source lines for CLI debugging.';
@@ -38,7 +38,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         if (! in_array($slice, TaxPreviewFactsService::supportedSlices(), true)) {
-            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, form4952, scheduleD, or form8949.");
+            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960.");
 
             return self::FAILURE;
         }
@@ -125,6 +125,57 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         foreach ([
+            'saltDeduction' => 'line7',
+            'totalInterest' => 'line10',
+            'charitableTotal' => 'line14',
+            'otherItemizedTotal' => 'line16',
+            'totalItemizedDeductions' => 'line17',
+        ] as $key => $line) {
+            if (isset($facts['scheduleA'][$key])) {
+                $rows[] = ['scheduleA', $line, $key, $facts['scheduleA'][$key], ''];
+            }
+        }
+
+        foreach ([
+            'miscIncomeSources' => 'misc',
+            'stateIncomeTaxSources' => 'line5a',
+            'realEstateTaxSources' => 'line6',
+            'investmentInterestSources' => 'line9',
+            'otherItemizedSources' => 'line16',
+        ] as $key => $line) {
+            foreach (($facts['scheduleA'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['scheduleA', $line, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
+            }
+        }
+
+        foreach ([
+            'miscIncomeTotal',
+            'totalBox1',
+            'totalBox2',
+            'totalBox3',
+            'totalBox4',
+            'totalBox11ZZ',
+            'totalBox13ZZ',
+            'totalPassive',
+            'totalNonpassive',
+            'grandTotal',
+        ] as $key) {
+            if (isset($facts['scheduleE'][$key])) {
+                $rows[] = ['scheduleE', $key, $key, $facts['scheduleE'][$key], ''];
+            }
+        }
+
+        foreach (['miscIncomeSources', 'box2Sources', 'box3Sources', 'box11ZZSources', 'box13ZZSources'] as $key) {
+            foreach (($facts['scheduleE'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['scheduleE', $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
+            }
+        }
+
+        foreach ([
             'line1aGainLoss' => 'line1a',
             'line1bGainLoss' => 'line1b',
             'line2GainLoss' => 'line2',
@@ -173,6 +224,46 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         foreach (($facts['form8949']['washSaleAdjustments'] ?? []) as $adjustment) {
             if (is_array($adjustment)) {
                 $rows[] = ['form8949', 'washSale', $adjustment['symbol'] ?? '', $adjustment['disallowedLoss'] ?? 0, $adjustment['id'] ?? ''];
+            }
+        }
+
+        foreach ([
+            'totalPassiveIncome',
+            'totalGeneralIncome',
+            'totalForeignTaxes',
+            'totalLine4b',
+        ] as $key) {
+            if (isset($facts['form1116'][$key])) {
+                $rows[] = ['form1116', $key, $key, $facts['form1116'][$key], ''];
+            }
+        }
+
+        foreach (['passiveIncomeSources', 'generalIncomeSources', 'foreignTaxSources', 'line4bSources'] as $key) {
+            foreach (($facts['form1116'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['form1116', $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
+            }
+        }
+
+        foreach ([
+            'taxableInterest',
+            'ordinaryDividends',
+            'netCapGains',
+            'passiveIncome',
+            'nonpassiveTradingIncome',
+            'investmentInterestExpense',
+            'grossNII',
+            'netInvestmentIncome',
+        ] as $key) {
+            if (isset($facts['form8960'][$key])) {
+                $rows[] = ['form8960', $key, $key, $facts['form8960'][$key], ''];
+            }
+        }
+
+        foreach (($facts['form8960']['componentSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['form8960', $source['routing'] ?? 'component', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
             }
         }
 

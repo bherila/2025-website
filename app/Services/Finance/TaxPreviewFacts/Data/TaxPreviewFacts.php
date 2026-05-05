@@ -12,12 +12,16 @@ readonly class TaxPreviewFacts
         public Schedule1Facts $schedule1,
         public ScheduleBFacts $scheduleB,
         public Form4952Facts $form4952,
+        public ScheduleAFacts $scheduleA,
+        public ScheduleEFacts $scheduleE,
         public ScheduleDFacts $scheduleD,
         public Form8949Facts $form8949,
+        public Form1116Facts $form1116,
+        public Form8960Facts $form8960,
     ) {}
 
     /**
-     * @return array{year:int,schedule1:array<string,mixed>,scheduleB:array<string,mixed>,form4952:array<string,mixed>,scheduleD:array<string,mixed>,form8949:array<string,mixed>}
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -26,8 +30,12 @@ readonly class TaxPreviewFacts
             'schedule1' => $this->schedule1->toArray(),
             'scheduleB' => $this->scheduleB->toArray(),
             'form4952' => $this->form4952->toArray(),
+            'scheduleA' => $this->scheduleA->toArray(),
+            'scheduleE' => $this->scheduleE->toArray(),
             'scheduleD' => $this->scheduleD->toArray(),
             'form8949' => $this->form8949->toArray(),
+            'form1116' => $this->form1116->toArray(),
+            'form8960' => $this->form8960->toArray(),
         ];
     }
 }
