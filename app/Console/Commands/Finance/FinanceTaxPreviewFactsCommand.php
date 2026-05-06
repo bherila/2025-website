@@ -10,7 +10,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
     protected $signature = 'finance:tax-preview-facts
         {--user= : User ID to inspect; defaults to FINANCE_CLI_USER_ID or 1}
         {--year= : Tax year; defaults to current year}
-        {--slice=all : Fact slice: all, schedule1, scheduleB, scheduleC, scheduleSE, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960}
+        {--slice=all : Fact slice; see TaxPreviewFactsService::supportedSlices()}
         {--format=table : Output format: table, json, or toon}';
 
     protected $description = 'Render backend tax-preview fact source lines for CLI debugging.';
@@ -38,7 +38,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         if (! in_array($slice, TaxPreviewFactsService::supportedSlices(), true)) {
-            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, scheduleC, scheduleSE, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960.");
+            $this->error("Unsupported --slice '{$slice}'. Use ".implode(', ', TaxPreviewFactsService::supportedSlices()).'.');
 
             return self::FAILURE;
         }

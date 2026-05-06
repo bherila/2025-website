@@ -29,8 +29,8 @@ readonly class ScheduleCFacts
         public float $homeOfficeDisallowed,
         public float $homeOfficePriorCarryforward,
         public float $netProfit,
-        public QuarterTotals $netProfitByQuarter,
-        public float $deductiblePortionRoutedToSchedule1,
+        public QuarterTotals $netProfitCumulativeByQuarter,
+        public float $netProfitRoutedToSchedule1,
         array $line31Sources,
     ) {
         $this->entities = $entities;
@@ -47,8 +47,8 @@ readonly class ScheduleCFacts
             homeOfficeDisallowed: 0.0,
             homeOfficePriorCarryforward: 0.0,
             netProfit: 0.0,
-            netProfitByQuarter: QuarterTotals::empty(),
-            deductiblePortionRoutedToSchedule1: 0.0,
+            netProfitCumulativeByQuarter: QuarterTotals::empty(),
+            netProfitRoutedToSchedule1: 0.0,
             line31Sources: [],
         );
     }
@@ -66,8 +66,8 @@ readonly class ScheduleCFacts
             'homeOfficeDisallowed' => $this->homeOfficeDisallowed,
             'homeOfficePriorCarryforward' => $this->homeOfficePriorCarryforward,
             'netProfit' => $this->netProfit,
-            'netProfitByQuarter' => $this->netProfitByQuarter->toArray(),
-            'deductiblePortionRoutedToSchedule1' => $this->deductiblePortionRoutedToSchedule1,
+            'netProfitCumulativeByQuarter' => $this->netProfitCumulativeByQuarter->toArray(),
+            'netProfitRoutedToSchedule1' => $this->netProfitRoutedToSchedule1,
             'line31Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line31Sources),
         ];
     }

@@ -1129,8 +1129,34 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(15000.0, $facts['scheduleC']['grossReceiptsTotal']);
         $this->assertSame(1200.0, $facts['scheduleC']['expensesTotal']);
         $this->assertSame(13800.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame(13800.0, $facts['scheduleC']['netProfitRoutedToSchedule1']);
         $this->assertSame(13800.0, $facts['schedule1']['line3Total']);
         $this->assertCount(2, $facts['scheduleC']['entities']);
+    }
+
+    public function test_schedule_c_cumulative_quarter_totals_allocate_home_office_and_reconcile_q4(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Quarterly LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 100);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-05-01', 200);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-08-01', 300);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-11-01', 400);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-12-01', -100);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+
+        $this->assertSame(900.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame([
+            'q1' => 90.0,
+            'q2' => 270.0,
+            'q3' => 540.0,
+            'q4' => 900.0,
+        ], $facts['scheduleC']['netProfitCumulativeByQuarter']);
     }
 
     public function test_schedule_c_home_office_limits_and_carries_forward(): void
@@ -1193,6 +1219,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(26100.0, $facts['scheduleSE']['socialSecurityTaxableEarnings']);
         $this->assertSame($facts['scheduleSE']['deductibleSeTax'], $facts['schedule1']['line15Total']);
         $this->assertSame(10000.0, collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_schedule_c')['amount']);
+        $this->assertSame('schedule_se_line_1a', collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_k1_box_14c')['routing']);
     }
 
     public function test_schedule_se_uses_payslips_when_w2_is_not_reviewed_and_parsable(): void

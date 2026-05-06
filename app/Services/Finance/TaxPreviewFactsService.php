@@ -35,6 +35,8 @@ use InvalidArgumentException;
 
 class TaxPreviewFactsService
 {
+    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'scheduleB', 'scheduleC', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form1116', 'form8960'];
+
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
         private readonly Schedule1FactsBuilder $schedule1FactsBuilder,
@@ -55,7 +57,7 @@ class TaxPreviewFactsService
      */
     public static function supportedSlices(): array
     {
-        return ['all', 'schedule1', 'scheduleB', 'scheduleC', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form1116', 'form8960'];
+        return self::SUPPORTED_SLICES;
     }
 
     public function factsForYear(int $userId, int $year): TaxPreviewFacts

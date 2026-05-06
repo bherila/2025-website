@@ -10,7 +10,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
-use UnexpectedValueException;
+use LogicException;
 
 class Schedule1FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -125,7 +125,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
     {
         $sourceType = TaxFactSourceType::tryFrom($source->sourceType);
         if (! $sourceType instanceof TaxFactSourceType) {
-            throw new UnexpectedValueException("Cannot clone tax fact source {$source->id} because source type {$source->sourceType} is not recognized.");
+            throw new LogicException("Cannot clone tax fact source {$source->id} because source type {$source->sourceType} is not recognized.");
         }
 
         return new TaxFactSource(

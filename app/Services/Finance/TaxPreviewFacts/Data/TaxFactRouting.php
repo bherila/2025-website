@@ -45,6 +45,7 @@ enum TaxFactRouting: string
     case ScheduleELine3 = 'schedule_e_line_3';
     case ScheduleELine28 = 'schedule_e_line_28';
     case ScheduleELine32 = 'schedule_e_line_32';
+    case ScheduleSELine1a = 'schedule_se_line_1a';
     case ScheduleSELine2 = 'schedule_se_line_2';
     case ScheduleSELine4a = 'schedule_se_line_4a';
     case ScheduleSELine7 = 'schedule_se_line_7';

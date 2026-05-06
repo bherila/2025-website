@@ -112,8 +112,8 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
             $partnerName = $this->k1PartnerName($doc, $data);
             $sources = [
                 ...$sources,
-                ...$this->k1Box14Sources($doc, $partnerName, $data, 'A', TaxFactSourceType::ScheduleSEK1Box14A, 'net earnings from self-employment'),
-                ...$this->k1Box14Sources($doc, $partnerName, $data, 'C', TaxFactSourceType::ScheduleSEK1Box14C, 'farm self-employment earnings'),
+                ...$this->k1Box14Sources($doc, $partnerName, $data, 'A', TaxFactSourceType::ScheduleSEK1Box14A, TaxFactRouting::ScheduleSELine2, 'net earnings from self-employment', 'K-1 Box 14A nonfarm self-employment earnings flow to Schedule SE line 2.'),
+                ...$this->k1Box14Sources($doc, $partnerName, $data, 'C', TaxFactSourceType::ScheduleSEK1Box14C, TaxFactRouting::ScheduleSELine1a, 'farm self-employment earnings', 'K-1 Box 14C farm self-employment earnings flow to Schedule SE line 1a.'),
             ];
         }
 
@@ -124,7 +124,7 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
      * @param  array<string, mixed>  $data
      * @return TaxFactSource[]
      */
-    private function k1Box14Sources(FileForTaxDocument $doc, string $partnerName, array $data, string $code, TaxFactSourceType $sourceType, string $label): array
+    private function k1Box14Sources(FileForTaxDocument $doc, string $partnerName, array $data, string $code, TaxFactSourceType $sourceType, TaxFactRouting $routing, string $label, string $routingReason): array
     {
         $sources = [];
 
@@ -143,8 +143,8 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
                 formType: $this->formType($doc),
                 box: '14',
                 code: $code,
-                routing: TaxFactRouting::ScheduleSELine2,
-                routingReason: 'K-1 Box 14 self-employment earnings flow to Schedule SE line 2.',
+                routing: $routing,
+                routingReason: $routingReason,
                 notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                 isReviewed: $this->sourceIsReviewed($doc),
                 reviewStatus: $this->reviewStatus($doc),
@@ -224,12 +224,11 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
             return [];
         }
 
-        $amount = FinPayslips::withoutGlobalScopes()
+        $amount = (float) FinPayslips::withoutGlobalScopes()
             ->where('uid', $userId)
             ->where('pay_date', '>=', "{$year}-01-01")
             ->where('pay_date', '<=', "{$year}-12-31")
-            ->get([$field])
-            ->reduce(fn (float $total, FinPayslips $payslip): float => $this->sumMoney([$total, (float) $payslip->getAttribute($field)]), 0.0);
+            ->sum($field);
 
         if ($amount === 0.0) {
             return [];

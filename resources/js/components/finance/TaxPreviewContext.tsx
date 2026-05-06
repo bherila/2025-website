@@ -38,7 +38,7 @@ import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, OverviewRow, ScheduleSEEntrySourceType, ScheduleSELines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
@@ -187,36 +187,19 @@ const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
 const POLLING_INTERVAL_MS = 5_000
-const SOCIAL_SECURITY_WAGE_BASE_BY_YEAR: Record<number, number> = {
-  2018: 128_400,
-  2019: 132_900,
-  2020: 137_700,
-  2021: 142_800,
-  2022: 147_000,
-  2023: 160_200,
-  2024: 168_600,
-  2025: 176_100,
-  2026: 183_600,
-}
 
 function buildEmptyScheduleCNetIncome() {
   return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
 }
 
-function socialSecurityWageBase(selectedYear: number): number {
-  return SOCIAL_SECURITY_WAGE_BASE_BY_YEAR[selectedYear] ?? 183_600
-}
-
-function buildEmptyScheduleSE(selectedYear: number, isMarried: boolean) {
-  const wageBase = socialSecurityWageBase(selectedYear)
-
+function buildEmptyScheduleSE(isMarried: boolean) {
   return {
     entries: [],
     netEarningsFromSE: 0,
     seTaxableEarnings: 0,
-    socialSecurityWageBase: wageBase,
+    socialSecurityWageBase: 0,
     socialSecurityWages: 0,
-    remainingSocialSecurityWageBase: wageBase,
+    remainingSocialSecurityWageBase: 0,
     socialSecurityTaxableEarnings: 0,
     socialSecurityTax: 0,
     medicareWages: 0,
@@ -227,6 +210,28 @@ function buildEmptyScheduleSE(selectedYear: number, isMarried: boolean) {
     additionalMedicareTax: 0,
     seTax: 0,
     deductibleSeTax: 0,
+  }
+}
+
+function toScheduleSEEntrySourceType(sourceType: string): ScheduleSEEntrySourceType {
+  switch (sourceType) {
+    case 'schedule_se_k1_box_14a':
+    case 'schedule_se_k1_box_14c':
+    case 'schedule_se_schedule_c':
+      return sourceType
+    default:
+      throw new Error(`Unsupported Schedule SE entry source type: ${sourceType}`)
+  }
+}
+
+function toScheduleSELines(scheduleSE: NonNullable<TaxPreviewFacts['scheduleSE']> | ReturnType<typeof buildEmptyScheduleSE>): ScheduleSELines {
+  return {
+    ...scheduleSE,
+    entries: scheduleSE.entries.map(entry => ({
+      label: entry.label,
+      amount: entry.amount,
+      sourceType: toScheduleSEEntrySourceType(entry.sourceType),
+    })),
   }
 }
 
@@ -985,7 +990,7 @@ export function TaxPreviewProvider({
 
     return {
       total: backendScheduleC.netProfit,
-      byQuarter: backendScheduleC.netProfitByQuarter,
+      byQuarter: backendScheduleC.netProfitCumulativeByQuarter,
     }
   }, [taxFacts])
 
@@ -1216,7 +1221,7 @@ export function TaxPreviewProvider({
       totalExpenses: scheduleFTotalExpenses,
     })
 
-    const scheduleSE = taxFacts?.scheduleSE ?? buildEmptyScheduleSE(year, isMarried)
+    const scheduleSE = toScheduleSELines(taxFacts?.scheduleSE ?? buildEmptyScheduleSE(isMarried))
 
     const schedule1 = computeSchedule1Totals({
       scheduleCNetIncome: scheduleCNetIncome.total,

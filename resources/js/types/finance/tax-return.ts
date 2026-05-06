@@ -100,8 +100,13 @@ export interface Form4952Lines {
   disallowedCarryforward: number
 }
 
+export type ScheduleSEEntrySourceType =
+  | 'schedule_se_k1_box_14a'
+  | 'schedule_se_k1_box_14c'
+  | 'schedule_se_schedule_c'
+
 export interface ScheduleSELines {
-  entries: { label: string; amount: number; sourceType: string }[]
+  entries: { label: string; amount: number; sourceType: ScheduleSEEntrySourceType }[]
   netEarningsFromSE: number
   seTaxableEarnings: number
   socialSecurityWageBase: number

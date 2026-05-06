@@ -31,6 +31,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         }
 
         $entities = [];
+        $entitiesByKey = [];
         $line31Sources = [];
 
         foreach (($yearData['entities'] ?? []) as $entityData) {
@@ -40,6 +41,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
 
             $entity = $this->entityFact($year, $entityData, $homeOfficeCalcs);
             $entities[] = $entity;
+            $entitiesByKey[$this->entityKey($entityData)] = $entity;
             $line31Sources[] = new TaxFactSource(
                 id: $this->entitySourceId($entityData, 'line31'),
                 label: "{$entity->entityName} — Schedule C net profit",
@@ -59,8 +61,8 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             homeOfficeDisallowed: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficeDisallowed, $entities)),
             homeOfficePriorCarryforward: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficePriorCarryforward, $entities)),
             netProfit: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->netProfit, $entities)),
-            netProfitByQuarter: $this->netProfitByQuarter($year, $yearData, $homeOfficeCalcs),
-            deductiblePortionRoutedToSchedule1: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->netProfit, $entities)),
+            netProfitCumulativeByQuarter: $this->netProfitCumulativeByQuarter($year, $yearData, $homeOfficeCalcs, $entitiesByKey),
+            netProfitRoutedToSchedule1: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->netProfit, $entities)),
             line31Sources: $line31Sources,
         );
     }
@@ -68,13 +70,19 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  array<string, mixed>  $yearData
      * @param  array<string, array{allowable:float,disallowed:float,priorCarryForward:float,reason:string}>  $homeOfficeCalcs
+     * @param  array<string, ScheduleCEntityFact>  $entitiesByKey
      */
-    private function netProfitByQuarter(int $year, array $yearData, array $homeOfficeCalcs): QuarterTotals
+    private function netProfitCumulativeByQuarter(int $year, array $yearData, array $homeOfficeCalcs, array $entitiesByKey): QuarterTotals
     {
         $quarters = ['q1' => 0.0, 'q2' => 0.0, 'q3' => 0.0, 'q4' => 0.0];
 
         foreach (($yearData['entities'] ?? []) as $entityData) {
             if (! is_array($entityData)) {
+                continue;
+            }
+
+            $entity = $entitiesByKey[$this->entityKey($entityData)] ?? null;
+            if (! $entity instanceof ScheduleCEntityFact) {
                 continue;
             }
 
@@ -96,7 +104,6 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             $q1GrossNet = $this->subtractMoney($quarterSums['q1']['income'], $quarterSums['q1']['expense']);
             $q2GrossNet = $this->subtractMoney($quarterSums['q2']['income'], $quarterSums['q2']['expense']);
             $q3GrossNet = $this->subtractMoney($quarterSums['q3']['income'], $quarterSums['q3']['expense']);
-            $entity = $this->entityFact($year, $entityData, $homeOfficeCalcs);
             $q1Net = $this->subtractMoney($q1GrossNet, $this->roundMoney($q1GrossNet * $homeOfficeScale));
             $q2Net = $this->subtractMoney($q2GrossNet, $this->roundMoney($q2GrossNet * $homeOfficeScale));
             $q3Net = $this->subtractMoney($q3GrossNet, $this->roundMoney($q3GrossNet * $homeOfficeScale));

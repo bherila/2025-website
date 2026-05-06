@@ -63,8 +63,8 @@ function makeTaxFacts(): TaxPreviewFacts {
       homeOfficeDisallowed: 0,
       homeOfficePriorCarryforward: 0,
       netProfit: 0,
-      netProfitByQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 },
-      deductiblePortionRoutedToSchedule1: 0,
+      netProfitCumulativeByQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 },
+      netProfitRoutedToSchedule1: 0,
     },
     scheduleSE: {
       entries: [],
@@ -841,7 +841,7 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
   })
 
-  it('uses the selected year wage base while backend Schedule SE facts are empty', async () => {
+  it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {
     const wrapper2024 = ({ children }: { children: React.ReactNode }) => (
       <TaxPreviewProvider initialData={{ year: 2024, availableYears: [2024] }}>{children}</TaxPreviewProvider>
     )
@@ -858,8 +858,8 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(168_600)
-    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(168_600)
+    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(0)
+    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(0)
   })
 
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {

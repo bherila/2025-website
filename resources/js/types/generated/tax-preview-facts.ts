@@ -171,8 +171,8 @@ homeOfficeAllowable: number;
 homeOfficeDisallowed: number;
 homeOfficePriorCarryforward: number;
 netProfit: number;
-netProfitByQuarter: QuarterTotals;
-deductiblePortionRoutedToSchedule1: number;
+netProfitCumulativeByQuarter: QuarterTotals;
+netProfitRoutedToSchedule1: number;
 };
 export type ScheduleDFacts = {
 form8949Rollups: Array<ScheduleDRollupFact>;
