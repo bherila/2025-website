@@ -197,6 +197,7 @@ function buildEmptyScheduleSE(isMarried: boolean) {
     entries: [],
     netEarningsFromSE: 0,
     seTaxableEarnings: 0,
+    // Backend facts own wage-base values; zero keeps the placeholder from showing a guessed year amount.
     socialSecurityWageBase: 0,
     socialSecurityWages: 0,
     remainingSocialSecurityWageBase: 0,
@@ -213,24 +214,13 @@ function buildEmptyScheduleSE(isMarried: boolean) {
   }
 }
 
-function toScheduleSEEntrySourceType(sourceType: string): ScheduleSEEntrySourceType {
-  switch (sourceType) {
-    case 'schedule_se_k1_box_14a':
-    case 'schedule_se_k1_box_14c':
-    case 'schedule_se_schedule_c':
-      return sourceType
-    default:
-      throw new Error(`Unsupported Schedule SE entry source type: ${sourceType}`)
-  }
-}
-
 function toScheduleSELines(scheduleSE: NonNullable<TaxPreviewFacts['scheduleSE']> | ReturnType<typeof buildEmptyScheduleSE>): ScheduleSELines {
   return {
     ...scheduleSE,
     entries: scheduleSE.entries.map(entry => ({
       label: entry.label,
       amount: entry.amount,
-      sourceType: toScheduleSEEntrySourceType(entry.sourceType),
+      sourceType: entry.sourceType as ScheduleSEEntrySourceType,
     })),
   }
 }
@@ -772,27 +762,38 @@ export function TaxPreviewProvider({
   // Fire a toast when any document transitions from in-flight → parsed.
   useEffect(() => {
     const prev = prevDocStatusRef.current
+    let shouldRefreshTaxFacts = false
+
     for (const doc of allDocuments) {
       const prevStatus = prev.get(doc.id)
+      const currentStatus = doc.genai_status ?? ''
       if (prevStatus && IN_FLIGHT_STATUSES.has(prevStatus) && doc.genai_status === 'parsed') {
         const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
         toast.success(`${label} is ready to review`, {
           description: doc.original_filename ?? undefined,
         })
       }
+      if (prevStatus && IN_FLIGHT_STATUSES.has(prevStatus) && !IN_FLIGHT_STATUSES.has(currentStatus)) {
+        shouldRefreshTaxFacts = true
+      }
     }
+
     const next = new Map<number, string>()
     for (const doc of allDocuments) {
       if (doc.genai_status) next.set(doc.id, doc.genai_status)
     }
     prevDocStatusRef.current = next
-  }, [allDocuments])
+
+    if (shouldRefreshTaxFacts) {
+      void refreshAll()
+    }
+  }, [allDocuments, refreshAll])
 
   // Poll every 5 s while any document is still being processed by the AI.
   useEffect(() => {
     const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
     if (!hasInFlight) return
-    const id = setInterval(() => void refreshAll(), POLLING_INTERVAL_MS)
+    const id = setInterval(() => void refreshAll({ includeTaxFacts: false }), POLLING_INTERVAL_MS)
     return () => clearInterval(id)
   }, [allDocuments, refreshAll])
 

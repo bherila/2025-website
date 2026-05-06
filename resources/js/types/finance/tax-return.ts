@@ -104,6 +104,7 @@ export type ScheduleSEEntrySourceType =
   | 'schedule_se_k1_box_14a'
   | 'schedule_se_k1_box_14c'
   | 'schedule_se_schedule_c'
+  | (string & {})
 
 export interface ScheduleSELines {
   entries: { label: string; amount: number; sourceType: ScheduleSEEntrySourceType }[]

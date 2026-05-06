@@ -363,6 +363,24 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
   })
 
+  it('preserves unknown Schedule SE source types from backend facts', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([]))
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    const facts = makeTaxFactsWithScheduleSE()
+    facts.scheduleSE.entries = facts.scheduleSE.entries.map(entry => ({
+      ...entry,
+      sourceType: 'schedule_se_schedule_f',
+    }))
+
+    act(() => result.current.setTaxFacts(facts))
+
+    expect(result.current.taxReturn.scheduleSE?.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
+  })
+
   it('does not show loading spinner on background polls', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
@@ -400,7 +418,7 @@ describe('TaxPreviewContext', () => {
     spy.mockRestore()
   })
 
-  it('refreshes tax facts during document polling', async () => {
+  it('keeps document polling lightweight while status remains in-flight', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
@@ -418,6 +436,32 @@ describe('TaxPreviewContext', () => {
       pollCallback()
     })
 
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
+    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1')
+    spy.mockRestore()
+  })
+
+  it('refreshes tax facts when document polling observes a terminal status transition', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
+      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'parsed')]))
+      .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
+
+    const spy = jest.spyOn(globalThis, 'setInterval')
+    renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+
+    const poll = spy.mock.calls.find(([, delay]) => delay === 5_000)?.[0]
+    expect(typeof poll).toBe('function')
+
+    const pollCallback = poll as () => void
+    (fetchWrapper.get as jest.Mock).mockClear()
+    await act(async () => {
+      pollCallback()
+    })
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1'))
     spy.mockRestore()
   })
