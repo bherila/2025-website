@@ -1107,7 +1107,83 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(30.0, $facts['form8960']['nonpassiveTradingIncome']);
         $this->assertSame(1130.0, $facts['form8960']['grossNII']);
         $this->assertSame(1130.0, $facts['form8960']['netInvestmentIncome']);
-        $this->assertTrue($facts['form8960']['needsMagi']);
+        $this->assertSame(1130.0, $facts['form8960']['magi']);
+        $this->assertFalse($facts['form8960']['needsMagi']);
+    }
+
+    public function test_salt_cap_phases_down_using_estimated_magi_in_facts_for_year(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'state_est_tax', 60000, 'State tax');
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 510000],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(37000.0, $facts['scheduleA']['saltCap']);
+        $this->assertSame(37000.0, $facts['scheduleA']['saltDeduction']);
+        $this->assertSame(510000.0, $facts['form8960']['magi']);
+    }
+
+    public function test_salt_cap_uses_floor_after_full_phase_down(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'state_est_tax', 60000, 'State tax');
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 600000],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleA');
+
+        $this->assertSame(10000.0, $facts['scheduleA']['saltCap']);
+        $this->assertSame(10000.0, $facts['scheduleA']['saltDeduction']);
+    }
+
+    public function test_salt_cap_without_magi_uses_flat_2025_cap(): void
+    {
+        $user = $this->createUser();
+        $deduction = $this->createUserDeduction($user->id, 'state_est_tax', 60000, 'State tax');
+
+        $facts = app(TaxPreviewFactsService::class)->factsFromDocuments(
+            year: 2025,
+            documents: [],
+            userDeductions: [$deduction],
+        );
+
+        $this->assertSame(40000.0, $facts->scheduleA->saltCap);
+        $this->assertSame(40000.0, $facts->scheduleA->saltDeduction);
+        $this->assertTrue($facts->form8960->needsMagi);
+    }
+
+    public function test_form8960_synthesized_source_ids_are_scoped_by_user_and_year(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 1000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Investment Fund'],
+                codes: ['13' => [['code' => 'H', 'value' => '50']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8960');
+
+        $sourceIds = array_column($facts['form8960']['componentSources'], 'id');
+        $investmentInterestId = collect($sourceIds)->first(fn (string $id): bool => str_contains($id, 'form4952-form8960-line9a'));
+
+        $this->assertNotNull($investmentInterestId);
+        $this->assertStringStartsWith("{$user->id}-2025-", $investmentInterestId);
     }
 
     public function test_schedule_c_builds_per_entity_rollups_and_feeds_schedule1_line3(): void

@@ -22,11 +22,27 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
     ];
 
     /**
+     * OBBBA SALT phase-down rules for years where the temporary cap applies.
+     *
+     * The cap is reduced by `rate` of MAGI above `threshold`, but never below `floor`.
+     * Keep this table explicit so future statutory changes do not silently skip phase-down.
+     *
+     * @var array<int, array{base: float, threshold: float, floor: float, rate: float}>
+     */
+    private const array SALT_CAP_RULES = [
+        2025 => ['base' => 40000.0, 'threshold' => 500000.0, 'floor' => 10000.0, 'rate' => 0.30],
+        2026 => ['base' => 40400.0, 'threshold' => 505000.0, 'floor' => 10000.0, 'rate' => 0.30],
+        2027 => ['base' => 40804.0, 'threshold' => 510050.0, 'floor' => 10000.0, 'rate' => 0.30],
+        2028 => ['base' => 41212.04, 'threshold' => 515150.5, 'floor' => 10000.0, 'rate' => 0.30],
+        2029 => ['base' => 41624.16, 'threshold' => 520302.01, 'floor' => 10000.0, 'rate' => 0.30],
+    ];
+
+    /**
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $w2Docs
      * @param  UserDeduction[]  $userDeductions
      */
-    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year): ScheduleAFacts
+    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year, ?float $magi = null): ScheduleAFacts
     {
         $stateIncomeTaxSources = [
             ...$this->w2StateTaxSources($w2Docs),
@@ -48,7 +64,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $line5aSelection = $this->line5aSelection($stateIncomeTaxTotal, $salesTaxTotal);
         $selectedLine5aTotal = $line5aSelection['amount'];
         $saltPaidBeforeCap = $this->sumMoney([$selectedLine5aTotal, $realEstateTaxTotal]);
-        $saltCap = $this->saltCap($year);
+        $saltCap = $this->saltCap($year, $magi);
         $saltDeduction = min($saltCap, $saltPaidBeforeCap);
         $mortgageInterestTotal = $this->sumSources($mortgageInterestSources);
         $investmentInterestTotal = $form4952->deductibleInvestmentInterestExpense;
@@ -259,9 +275,20 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         return ['type' => 'state_income_tax', 'amount' => $stateIncomeTaxTotal];
     }
 
-    private function saltCap(int $year): float
+    private function saltCap(int $year, ?float $magi = null): float
     {
-        return $year >= 2025 ? 40000.0 : 10000.0;
+        if ($year < 2025 || $year > 2029) {
+            return 10000.0;
+        }
+
+        $rule = self::SALT_CAP_RULES[$year];
+        if ($magi === null) {
+            return $rule['base'];
+        }
+
+        $excess = max(0.0, $this->subtractMoney($magi, $rule['threshold']));
+
+        return $this->roundMoney(max($rule['floor'], $this->subtractMoney($rule['base'], $excess * $rule['rate'])));
     }
 
     private function standardDeduction(int $year, bool $marriedFilingJointly): float

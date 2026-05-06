@@ -10,7 +10,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
-use UnexpectedValueException;
+use LogicException;
 
 class Form8960FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -18,7 +18,7 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
 
     private const float MARRIED_FILING_JOINTLY_THRESHOLD = 250000.0;
 
-    public function build(ScheduleBFacts $scheduleB, ScheduleEFacts $scheduleE, ScheduleDFacts $scheduleD, Form4952Facts $form4952, ?float $magi = null): Form8960Facts
+    public function build(ScheduleBFacts $scheduleB, ScheduleEFacts $scheduleE, ScheduleDFacts $scheduleD, Form4952Facts $form4952, ?float $magi = null, ?int $userId = null, ?int $year = null): Form8960Facts
     {
         $taxableInterest = $scheduleB->interestTotal;
         $ordinaryDividends = $scheduleB->ordinaryDividendTotal;
@@ -47,15 +47,16 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
             niitTaxSingle: $this->niitTax($magi, self::SINGLE_THRESHOLD, $netInvestmentIncome),
             niitTaxMarriedFilingJointly: $this->niitTax($magi, self::MARRIED_FILING_JOINTLY_THRESHOLD, $netInvestmentIncome),
             needsMagi: $magi === null,
-            componentSources: $this->componentSources($scheduleB, $scheduleE, $scheduleD, $form4952, $netCapGains),
+            componentSources: $this->componentSources($scheduleB, $scheduleE, $scheduleD, $form4952, $netCapGains, $userId, $year),
         );
     }
 
     /**
      * @return TaxFactSource[]
      */
-    private function componentSources(ScheduleBFacts $scheduleB, ScheduleEFacts $scheduleE, ScheduleDFacts $scheduleD, Form4952Facts $form4952, float $netCapGains): array
+    private function componentSources(ScheduleBFacts $scheduleB, ScheduleEFacts $scheduleE, ScheduleDFacts $scheduleD, Form4952Facts $form4952, float $netCapGains, ?int $userId, ?int $year): array
     {
+        $idPrefix = $userId !== null && $year !== null ? "{$userId}-{$year}-" : '';
         $sources = [
             ...array_map(
                 fn (TaxFactSource $source): TaxFactSource => $this->cloneFor8960($source, TaxFactRouting::Form8960Line1, 'Schedule B interest is net investment income for Form 8960 line 1.'),
@@ -77,7 +78,7 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
 
         if ($form4952->deductibleInvestmentInterestExpense > 0.0) {
             $sources[] = new TaxFactSource(
-                id: 'form4952-form8960-line9a',
+                id: "{$idPrefix}form4952-form8960-line9a",
                 label: 'Form 4952 allowed investment interest expense',
                 amount: -$form4952->deductibleInvestmentInterestExpense,
                 sourceType: TaxFactSourceType::Form8960InvestmentInterestDeduction,
@@ -89,7 +90,7 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
 
         if ($netCapGains > 0.0) {
             $sources[] = new TaxFactSource(
-                id: 'schedule-d-form8960-line5a',
+                id: "{$idPrefix}schedule-d-form8960-line5a",
                 label: 'Schedule D net capital gain',
                 amount: $netCapGains,
                 sourceType: TaxFactSourceType::Form8960NetCapitalGain,
@@ -106,7 +107,7 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
     {
         $sourceType = TaxFactSourceType::tryFrom($source->sourceType);
         if (! $sourceType instanceof TaxFactSourceType) {
-            throw new UnexpectedValueException("Cannot clone tax fact source {$source->id} for Form 8960 because source type {$source->sourceType} is not recognized.");
+            throw new LogicException("Cannot clone tax fact source {$source->id} for Form 8960 because source type {$source->sourceType} is not recognized.");
         }
 
         return new TaxFactSource(

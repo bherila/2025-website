@@ -24,7 +24,9 @@ use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleEFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleSEFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -86,6 +88,7 @@ class TaxPreviewFactsService
         array $marginInterestSources = [],
         ?int $userId = null,
         array $userDeductions = [],
+        ?float $magi = null,
     ): TaxPreviewFacts {
         $k1Docs = [];
         $docs1099 = [];
@@ -114,20 +117,22 @@ class TaxPreviewFactsService
             ? $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)
             : $this->emptyCapitalGainsReport($year);
         $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $capitalGainsReport['scheduleDRollup']);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE);
+        $estimatedMagi = $magi ?? ($userId !== null ? $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD) : null);
 
         return new TaxPreviewFacts(
             year: $year,
             scheduleC: $scheduleC,
             scheduleSE: $scheduleSE,
-            schedule1: $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE),
+            schedule1: $schedule1,
             scheduleB: $scheduleB,
             form4952: $form4952,
-            scheduleA: $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year),
+            scheduleA: $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $estimatedMagi),
             scheduleE: $scheduleE,
             scheduleD: $scheduleD,
             form8949: $this->form8949FactsBuilder->build($capitalGainsReport),
             form1116: $this->form1116FactsBuilder->build($k1Docs, $docs1099),
-            form8960: $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952),
+            form8960: $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $estimatedMagi, $userId, $year),
         );
     }
 
@@ -184,6 +189,7 @@ class TaxPreviewFactsService
                         $this->marginInterestSources($userId, $year),
                     ),
                     $year,
+                    $this->estimatedMagiForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year),
                 )->toArray(),
             ],
             'scheduleE' => [
@@ -204,7 +210,7 @@ class TaxPreviewFactsService
             ],
             'form8960' => [
                 'year' => $year,
-                'form8960' => $this->form8960FactsForSlice($k1Docs, $docs1099, $userId, $year)->toArray(),
+                'form8960' => $this->form8960FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
             ],
             default => $this->factsForYear($userId, $year)->toArray(),
         };
@@ -332,8 +338,9 @@ class TaxPreviewFactsService
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
+     * @param  FileForTaxDocument[]  $w2Docs
      */
-    private function form8960FactsForSlice(array $k1Docs, array $docs1099, int $userId, int $year): Form8960Facts
+    private function form8960FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form8960Facts
     {
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
         $form4952 = $this->form4952FactsBuilder->build(
@@ -346,7 +353,107 @@ class TaxPreviewFactsService
         $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
         $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
 
-        return $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952);
+        $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
+        $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $year, $userId, $this->isMarried($userId, $year));
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE);
+        $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
+
+        return $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  FileForTaxDocument[]  $w2Docs
+     */
+    private function estimatedMagiForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): float
+    {
+        $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
+        $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
+        $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $year, $userId, $this->isMarried($userId, $year));
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE);
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
+
+        return $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $w2Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     */
+    private function estimatedMagi(array $w2Docs, array $docs1099, ScheduleBFacts $scheduleB, Schedule1Facts $schedule1, ScheduleDFacts $scheduleD): float
+    {
+        $capitalGainOrLoss = $scheduleD->line21LimitedLossOrGain !== 0.0
+            ? $scheduleD->line21LimitedLossOrGain
+            : $scheduleD->line16Combined;
+
+        return $this->roundMoney(
+            $this->w2Wages($w2Docs)
+            + $scheduleB->interestTotal
+            + $scheduleB->ordinaryDividendTotal
+            + $this->retirementTaxableIncome($docs1099)
+            + $capitalGainOrLoss
+            + $schedule1->line3Total
+            + $schedule1->line5Total
+            + $schedule1->line9TotalOtherIncome
+            - $schedule1->line15Total
+        );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $w2Docs
+     */
+    private function w2Wages(array $w2Docs): float
+    {
+        $total = 0.0;
+
+        foreach ($w2Docs as $doc) {
+            if (! is_array($doc->parsed_data)) {
+                continue;
+            }
+
+            $total += $this->firstNumericValue($doc->parsed_data, ['box1_wages', 'wages_tips_other_compensation', 'wages']) ?? 0.0;
+        }
+
+        return $this->roundMoney($total);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $docs1099
+     */
+    private function retirementTaxableIncome(array $docs1099): float
+    {
+        $total = 0.0;
+
+        foreach ($docs1099 as $doc) {
+            if ($this->formType($doc) !== '1099_r' || ! is_array($doc->parsed_data)) {
+                continue;
+            }
+
+            $total += $this->firstNumericValue($doc->parsed_data, ['box2a_taxable_amount', 'taxable_amount']) ?? 0.0;
+        }
+
+        return $this->roundMoney($total);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $keys
+     */
+    private function firstNumericValue(array $data, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $value = $data[$key] ?? null;
+            if (is_int($value) || is_float($value)) {
+                return (float) $value;
+            }
+
+            if (is_string($value) && is_numeric(str_replace([',', '$'], '', $value))) {
+                return (float) str_replace([',', '$'], '', $value);
+            }
+        }
+
+        return null;
     }
 
     private function isMarried(?int $userId, int $year): bool
