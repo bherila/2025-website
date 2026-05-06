@@ -9,6 +9,8 @@ readonly class TaxPreviewFacts
 {
     public function __construct(
         public int $year,
+        public ScheduleCFacts $scheduleC,
+        public ScheduleSEFacts $scheduleSE,
         public Schedule1Facts $schedule1,
         public ScheduleBFacts $scheduleB,
         public Form4952Facts $form4952,
@@ -21,12 +23,14 @@ readonly class TaxPreviewFacts
     ) {}
 
     /**
-     * @return array{year:int,schedule1:array<string,mixed>,scheduleB:array<string,mixed>,form4952:array<string,mixed>,scheduleA:array<string,mixed>,scheduleE:array<string,mixed>,scheduleD:array<string,mixed>,form8949:array<string,mixed>,form1116:array<string,mixed>,form8960:array<string,mixed>}
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
         return [
             'year' => $this->year,
+            'scheduleC' => $this->scheduleC->toArray(),
+            'scheduleSE' => $this->scheduleSE->toArray(),
             'schedule1' => $this->schedule1->toArray(),
             'scheduleB' => $this->scheduleB->toArray(),
             'form4952' => $this->form4952->toArray(),

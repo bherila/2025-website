@@ -101,7 +101,7 @@ export interface Form4952Lines {
 }
 
 export interface ScheduleSELines {
-  entries: { label: string; amount: number; sourceType: 'k1_box14_a' | 'k1_box14_c' | 'schedule_c' | 'schedule_f' }[]
+  entries: { label: string; amount: number; sourceType: string }[]
   netEarningsFromSE: number
   seTaxableEarnings: number
   socialSecurityWageBase: number

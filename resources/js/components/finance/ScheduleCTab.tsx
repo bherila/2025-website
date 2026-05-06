@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import type { ScheduleCFacts } from '@/types/generated/tax-preview-facts'
 
 import type { CategoryTotal, EntityData, YearData } from './ScheduleCPreview'
 import { computeHomeOfficeCalcs } from './ScheduleCPreview'
@@ -17,6 +18,7 @@ interface ScheduleCTabProps {
   selectedYear: number
   scheduleCData: YearData[]
   reviewed1099Docs?: TaxDocument[]
+  taxFacts?: ScheduleCFacts | null
 }
 
 function sumCategories(cats: Record<string, CategoryTotal>): number {
@@ -176,7 +178,7 @@ function Form8829Preview({ entity, carryForward, netIncome }: Form8829Props) {
   )
 }
 
-export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099Docs = [] }: ScheduleCTabProps) {
+export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099Docs = [], taxFacts = null }: ScheduleCTabProps) {
   // Filter to selected year
   const yearData = useMemo(() => {
     return scheduleCData.filter((yd) => Number(yd.year) === selectedYear)
@@ -184,6 +186,9 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
 
   // Compute home-office carry-forward per entity across all years (reuses shared pure function)
   const homeOfficeCalcs = useMemo(() => computeHomeOfficeCalcs(scheduleCData), [scheduleCData])
+  const backendEntityFacts = useMemo(() => {
+    return new Map((taxFacts?.entities ?? []).map((entity) => [String(entity.entityId ?? 'unassigned'), entity]))
+  }, [taxFacts])
 
   const scheduleCDocumentRows = useMemo(() => {
     const rows: Array<{ key: string; label: string; amount: number }> = []
@@ -271,10 +276,14 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
               const entityKey = String(entity.entity_id ?? 'unassigned')
               const mapKey = `${yd.year}-${entityKey}`
               const calc = homeOfficeCalcs.get(mapKey)
+              const backendEntity = backendEntityFacts.get(entityKey)
+              const homeOfficeAllowable = backendEntity?.homeOfficeAllowable ?? calc?.allowable ?? 0
+              const homeOfficePriorCarryForward = backendEntity?.homeOfficePriorCarryforward ?? calc?.priorCarryForward ?? 0
               const hasHomeOffice = Object.keys(entity.schedule_c_home_office).length > 0
               const incomeTotal = sumCategories(entity.schedule_c_income ?? {})
               const expenseTotal = sumCategories(entity.schedule_c_expense)
-              const netIncome = currency(incomeTotal).subtract(expenseTotal).value
+              const netIncome = backendEntity?.netProfitBeforeHomeOffice ?? currency(incomeTotal).subtract(expenseTotal).value
+              const netProfit = backendEntity?.netProfit ?? currency(netIncome).subtract(homeOfficeAllowable).value
 
               return (
                 <div key={entity.entity_id ?? `unassigned-${idx}`} className="space-y-4">
@@ -310,23 +319,23 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
                   <FormBlock title="Schedule C — Net Profit (Loss)">
                     <FormLine label="Gross income" value={incomeTotal} />
                     <FormLine label="Less: total expenses" value={-expenseTotal} />
-                    {calc && calc.allowable > 0 && (
-                      <FormLine label="Less: home office deduction (Form 8829)" value={-calc.allowable} />
+                    {homeOfficeAllowable > 0 && (
+                      <FormLine label="Less: home office deduction (Form 8829)" value={-homeOfficeAllowable} />
                     )}
                     <FormTotalLine
                       label="Net profit (loss) — flows to Form 1040 Line 8"
-                      value={currency(netIncome).subtract(calc?.allowable ?? 0).value}
+                      value={netProfit}
                       double
                     />
                   </FormBlock>
 
                   {/* Form 8829 — Home Office */}
-                  {(hasHomeOffice || (calc && calc.priorCarryForward > 0)) && (
+                  {(hasHomeOffice || homeOfficePriorCarryForward > 0) && (
                     <Form8829Preview
                       entity={entity}
                       entityKey={entityKey}
                       yearData={yd}
-                      carryForward={calc?.priorCarryForward ?? 0}
+                      carryForward={homeOfficePriorCarryForward}
                       netIncome={netIncome}
                     />
                   )}

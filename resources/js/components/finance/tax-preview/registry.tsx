@@ -201,12 +201,10 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
   const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleSEPreview
+      taxFacts={state.taxFacts?.scheduleSE ?? null}
       reviewedK1Docs={state.reviewedK1Docs}
-      scheduleCNetIncome={state.scheduleCNetIncome.total}
       selectedYear={state.year}
       isMarried={state.isMarried}
-      reviewedW2Docs={state.reviewedW2Docs}
-      payslips={state.payslips}
       onOpenDoc={reviewK1Doc}
       onGoToScheduleC={() => onDrill({ form: 'sch-c' })}
     />
@@ -331,6 +329,7 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
       selectedYear={state.year}
       scheduleCData={state.scheduleCData?.years ?? []}
       reviewed1099Docs={state.reviewed1099Docs}
+      taxFacts={state.taxFacts?.scheduleC ?? null}
     />
   )
 }
