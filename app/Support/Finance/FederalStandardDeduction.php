@@ -39,6 +39,9 @@ final class FederalStandardDeduction
         return self::amount($year, 'hoh');
     }
 
+    /**
+     * Clamp years outside the supported table to the nearest known value.
+     */
     private static function amount(int $year, string $status): float
     {
         if (array_key_exists($year, self::BY_YEAR)) {
