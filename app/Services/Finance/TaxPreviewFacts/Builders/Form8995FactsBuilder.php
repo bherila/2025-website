@@ -8,7 +8,6 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
-use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
@@ -23,7 +22,6 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
     public function build(
         array $k1Docs,
         ScheduleCFacts $scheduleC,
-        ScheduleEFacts $scheduleE,
         ScheduleFFacts $scheduleF,
         ScheduleSEFacts $scheduleSE,
         ScheduleDFacts $scheduleD,
@@ -33,7 +31,6 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
     ): Form8995Facts {
         $entities = [
             ...$this->scheduleCEntities($scheduleC, $scheduleSE),
-            ...$this->scheduleEEntities($scheduleE),
             ...$this->scheduleFEntities($scheduleF, $scheduleSE),
             ...$this->k1Entities($k1Docs),
         ];
@@ -156,14 +153,6 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
             ),
         ];
-    }
-
-    /**
-     * @return Form8995EntityFact[]
-     */
-    private function scheduleEEntities(ScheduleEFacts $scheduleE): array
-    {
-        return [];
     }
 
     /**
@@ -348,6 +337,10 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
+     * Allocates the deductible half-SE-tax by positive source amount.
+     *
+     * This is an approximation when multiple activities exceed the Social Security wage base because the capped Social Security portion is not strictly proportional across sources.
+     *
      * @param  TaxFactSourceType[]  $sourceTypes
      */
     private function allocatedDeductibleSeTax(ScheduleSEFacts $scheduleSE, array $sourceTypes): float
