@@ -67,6 +67,12 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             }
         }
 
+        foreach (($facts['schedule1']['line4Sources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['schedule1', 'line4', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
         foreach (($facts['schedule1']['line6Sources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['schedule1', 'line6', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
@@ -303,6 +309,40 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         foreach ([
+            'partINet1231' => 'line7',
+            'partIIOrdinary' => 'line18b',
+            'partIIIRecapture' => 'partIII',
+            'netToSchedule1Line4' => 'schedule1Line4',
+            'netToScheduleDLongTerm' => 'scheduleDLongTerm',
+        ] as $key => $line) {
+            if (isset($facts['form4797'][$key])) {
+                $rows[] = ['form4797', $line, $key, $facts['form4797'][$key], ''];
+            }
+        }
+
+        foreach (['partISources', 'partIISources', 'partIIISources', 'schedule1Sources', 'scheduleDSources'] as $key) {
+            foreach (($facts['form4797'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['form4797', $source['routing'] ?? $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
+            }
+        }
+
+        foreach ([
+            'line1_nondeductibleContributions',
+            'line2_priorYearBasis',
+            'line6_yearEndFmv',
+            'line7_distributionsNotConverted',
+            'line8_convertedToRoth',
+            'line14_basisCarriedForward',
+            'taxableToForm1040Line4b',
+        ] as $key) {
+            if (isset($facts['form8606'][$key])) {
+                $rows[] = ['form8606', $key, $key, $facts['form8606'][$key], ''];
+            }
+        }
+
+        foreach ([
             'totalPassiveIncome',
             'totalGeneralIncome',
             'totalForeignTaxes',
@@ -364,6 +404,45 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
                 if (is_array($source)) {
                     $rows[] = ['form8995', $source['routing'] ?? $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
                 }
+            }
+        }
+
+        foreach ([
+            'amti',
+            'exemption',
+            'amtTaxBase',
+            'tentativeMinTax',
+            'regularTaxAfterCredits',
+            'amt',
+        ] as $key) {
+            if (isset($facts['form6251'][$key])) {
+                $rows[] = ['form6251', $key, $key, $facts['form6251'][$key], ''];
+            }
+        }
+
+        foreach (($facts['form6251']['sourceEntries'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['form6251', 'line'.($source['line'] ?? ''), $source['label'] ?? '', $source['amount'] ?? 0, $source['code'] ?? ''];
+            }
+        }
+
+        foreach ([
+            'totalPassiveIncome',
+            'totalPassiveLoss',
+            'totalPriorYearUnallowed',
+            'netPassiveResult',
+            'rentalAllowance',
+            'totalAllowedLoss',
+            'totalSuspendedLoss',
+        ] as $key) {
+            if (isset($facts['form8582'][$key])) {
+                $rows[] = ['form8582', $key, $key, $facts['form8582'][$key], ''];
+            }
+        }
+
+        foreach (($facts['form8582']['activities'] ?? []) as $activity) {
+            if (is_array($activity)) {
+                $rows[] = ['form8582', 'activity', $activity['activityName'] ?? '', $activity['overallGainOrLoss'] ?? 0, $activity['ein'] ?? ''];
             }
         }
 

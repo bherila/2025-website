@@ -43,6 +43,12 @@ enum TaxFactSourceType: string
     case Form1099IntInvestmentExpense = '1099_int_investment_expense';
     case Form1099IntTreasuryInterest = '1099_int_treasury_interest';
     case Form1099MiscOtherIncome = '1099_misc_other_income';
+    case Form1099RDistribution = '1099_r_distribution';
+    case Form4797PartI1231Gain = 'form_4797_part_i_1231_gain';
+    case Form4797PartI1231Loss = 'form_4797_part_i_1231_loss';
+    case Form4797PartIIOrdinaryGain = 'form_4797_part_ii_ordinary_gain';
+    case Form4797PartIIOrdinaryLoss = 'form_4797_part_ii_ordinary_loss';
+    case Form4797PartIIIRecapture = 'form_4797_part_iii_recapture';
     case Form8995K1Box17 = 'form_8995_k1_box_17';
     case Form8995K1Box20Aa = 'form_8995_k1_box_20aa';
     case Form8995K1Box20Ab = 'form_8995_k1_box_20ab';

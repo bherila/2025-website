@@ -38,13 +38,44 @@ import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, OverviewRow, ScheduleSEEntrySourceType, ScheduleSELines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form6251Lines, Form8582Lines, OverviewRow, ScheduleSEEntrySourceType, ScheduleSELines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
 import type { ScheduleCResponse } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
+
+function form6251FactsToLines(facts: TaxPreviewFacts['form6251'] | undefined, fallback: Form6251Lines): Form6251Lines {
+  if (!facts) {
+    return fallback
+  }
+
+  const line2aSource: Form6251Lines['line2aSource'] = facts.line2aSource === 'salt_deduction' || facts.line2aSource === 'standard_deduction'
+    ? facts.line2aSource
+    : 'none'
+  const filingStatus: Form6251Lines['filingStatus'] = facts.filingStatus === 'mfj' ? 'mfj' : 'single'
+
+  return {
+    ...facts,
+    line2aSource,
+    filingStatus,
+  }
+}
+
+function form8582FactsToLines(facts: TaxPreviewFacts['form8582'] | undefined, fallback: Form8582Lines): Form8582Lines {
+  if (!facts) {
+    return fallback
+  }
+
+  return {
+    ...facts,
+    activities: facts.activities.map((activity) => ({
+      ...activity,
+      ein: activity.ein ?? undefined,
+    })),
+  }
+}
 
 export interface TaxPreviewShellData {
   year: number
@@ -1211,11 +1242,12 @@ export function TaxPreviewProvider({
     }).filter(s => s.wages > 0)
 
     const form8959 = computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
-    const form4797 = computeForm4797({
+    const localForm4797 = computeForm4797({
       partINet1231: form4797PartINet1231,
       partIIOrdinary: form4797PartIIOrdinary,
       partIIIRecapture: form4797PartIIIRecapture,
     })
+    const form4797 = taxFacts?.form4797?.hasActivity ? taxFacts.form4797 : localForm4797
 
     const scheduleFComputed = taxFacts?.scheduleF
       ? scheduleFFactsToLines(taxFacts.scheduleF)
@@ -1299,7 +1331,7 @@ export function TaxPreviewProvider({
     // regular FTC amount on the AMT side so AMT still reflects foreign-tax-credit
     // interaction instead of assuming line 8 is always zero.
     const estimatedAmtForeignTaxCredit = form1116.totalForeignTaxes
-    const form6251 = computeForm6251Lines({
+    const localForm6251 = computeForm6251Lines({
       taxableIncome: taxableIncomeEstimate,
       year,
       isMarried,
@@ -1322,6 +1354,7 @@ export function TaxPreviewProvider({
       regularForeignTaxCredit: form1116.totalForeignTaxes,
       amtForeignTaxCredit: estimatedAmtForeignTaxCredit,
     })
+    const form6251 = form6251FactsToLines(taxFacts?.form6251, localForm6251)
     const schedule2 = {
       altMinimumTax: form6251.amt,
       selfEmploymentTax: scheduleSE.seTax,
@@ -1345,20 +1378,22 @@ export function TaxPreviewProvider({
     // codebase has a rental property tracker (user-entered per-property data).
     // Currently only K-1-based activities flow through Form 8582.
     // See TODO B.6 — scheduleERentals is ready to accept DirectRentalProperty[] entries.
-    const form8582 = computeForm8582({
+    const localForm8582 = computeForm8582({
       reviewedK1Docs,
       magi: form8582EstimatedMagi,
       isMarried,
       palCarryforwards,
       realEstateProfessional,
     })
+    const form8582 = !realEstateProfessional ? form8582FactsToLines(taxFacts?.form8582, localForm8582) : localForm8582
 
-    const form8606 = computeForm8606({
+    const localForm8606 = computeForm8606({
       nondeductibleContributions: form8606NondeductibleContributions,
       priorYearBasis: form8606PriorYearBasis,
       yearEndFmv: form8606YearEndFmv,
       reviewed1099RDocs,
     })
+    const form8606 = taxFacts?.form8606?.hasActivity ? taxFacts.form8606 : localForm8606
 
     const estimatedTaxPayments = !isMarried && priorYearTax > 0
       ? computeEstimatedTaxPayments({
