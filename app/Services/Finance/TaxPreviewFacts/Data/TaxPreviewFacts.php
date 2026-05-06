@@ -19,9 +19,13 @@ readonly class TaxPreviewFacts
         public ScheduleEFacts $scheduleE,
         public ScheduleDFacts $scheduleD,
         public Form8949Facts $form8949,
+        public Form4797Facts $form4797,
+        public Form8606Facts $form8606,
         public Form1116Facts $form1116,
         public Form8960Facts $form8960,
         public Form8995Facts $form8995,
+        public Form6251Facts $form6251,
+        public Form8582Facts $form8582,
     ) {}
 
     /**
@@ -41,9 +45,13 @@ readonly class TaxPreviewFacts
             'scheduleE' => $this->scheduleE->toArray(),
             'scheduleD' => $this->scheduleD->toArray(),
             'form8949' => $this->form8949->toArray(),
+            'form4797' => $this->form4797->toArray(),
+            'form8606' => $this->form8606->toArray(),
             'form1116' => $this->form1116->toArray(),
             'form8960' => $this->form8960->toArray(),
             'form8995' => $this->form8995->toArray(),
+            'form6251' => $this->form6251->toArray(),
+            'form8582' => $this->form8582->toArray(),
         ];
     }
 }

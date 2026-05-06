@@ -4,6 +4,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
@@ -19,9 +20,10 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null): Schedule1Facts
+    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null, ?Form4797Facts $form4797 = null): Schedule1Facts
     {
         $line3Sources = $scheduleC instanceof ScheduleCFacts ? $this->scheduleCLine3Sources($scheduleC) : [];
+        $line4Sources = $form4797 instanceof Form4797Facts ? $form4797->schedule1Sources : [];
         $line5Sources = [];
         $line6Sources = $scheduleF instanceof ScheduleFFacts ? $this->scheduleFLine6Sources($scheduleF) : [];
 
@@ -73,6 +75,8 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         return new Schedule1Facts(
             line3Sources: $line3Sources,
             line3Total: $this->sumSources($line3Sources),
+            line4Sources: $line4Sources,
+            line4Total: $this->sumSources($line4Sources),
             line5Sources: $line5Sources,
             line5Total: $this->sumSources($line5Sources),
             line6Sources: $line6Sources,

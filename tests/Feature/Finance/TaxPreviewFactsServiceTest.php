@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\PalCarryforward;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
@@ -1368,6 +1369,131 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(-5000.0, $facts['schedule1']['line6Total']);
         $this->assertSame(-5000.0, $facts['scheduleSE']['netEarningsFromSE']);
         $this->assertSame(0.0, $facts['scheduleSE']['seTax']);
+    }
+
+    public function test_form4797_manual_facts_feed_schedule1_and_schedule_d(): void
+    {
+        $ordinaryUser = $this->createUser();
+        $this->createUserDeduction($ordinaryUser->id, 'form4797_part_i_1231_loss', 4000, 'Section 1231 loss');
+        $this->createUserDeduction($ordinaryUser->id, 'form4797_part_ii_ordinary_gain', 500, 'Ordinary gain');
+        $this->createUserDeduction($ordinaryUser->id, 'form4797_part_iii_recapture', 200, 'Recapture');
+
+        $ordinaryFacts = app(TaxPreviewFactsService::class)->arrayForYear($ordinaryUser->id, 2025);
+
+        $this->assertSame(-4000.0, $ordinaryFacts['form4797']['partINet1231']);
+        $this->assertSame(-3300.0, $ordinaryFacts['form4797']['netToSchedule1Line4']);
+        $this->assertSame(0.0, $ordinaryFacts['form4797']['netToScheduleDLongTerm']);
+        $this->assertSame(-3300.0, $ordinaryFacts['schedule1']['line4Total']);
+
+        $capitalUser = $this->createUser();
+        $this->createUserDeduction($capitalUser->id, 'form4797_part_i_1231_gain', 6000, 'Section 1231 gain');
+
+        $capitalFacts = app(TaxPreviewFactsService::class)->arrayForYear($capitalUser->id, 2025);
+
+        $this->assertSame(6000.0, $capitalFacts['form4797']['partINet1231']);
+        $this->assertSame(0.0, $capitalFacts['form4797']['netToSchedule1Line4']);
+        $this->assertSame(6000.0, $capitalFacts['form4797']['netToScheduleDLongTerm']);
+        $this->assertSame(0.0, $capitalFacts['schedule1']['line4Total']);
+        $this->assertSame(6000.0, $capitalFacts['scheduleD']['line12GainLoss']);
+    }
+
+    public function test_form8606_backend_facts_use_manual_basis_and_ira_1099r(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'form8606_nondeductible_contributions', 7000, 'Nondeductible IRA contribution');
+        $this->createUserDeduction($user->id, 'form8606_prior_year_basis', 15000, 'Prior-year IRA basis');
+        $this->createUserDeduction($user->id, 'form8606_year_end_fmv', 90000, 'IRA year-end FMV');
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_r',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'IRA Custodian',
+                'box1_gross_distribution' => 20000,
+                'box2a_taxable_amount' => 20000,
+                'box7_distribution_code' => '2',
+                'box7_ira_sep_simple' => true,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8606');
+
+        $this->assertSame(22000.0, $facts['form8606']['line3_totalBasis']);
+        $this->assertSame(20000.0, $facts['form8606']['line8_convertedToRoth']);
+        $this->assertSame(110000.0, $facts['form8606']['line9_total']);
+        $this->assertSame(0.2, $facts['form8606']['line10_proRataRatio']);
+        $this->assertSame(4000.0, $facts['form8606']['line11_basisInConversion']);
+        $this->assertSame(18000.0, $facts['form8606']['line14_basisCarriedForward']);
+        $this->assertSame(16000.0, $facts['form8606']['line18_taxableConversions']);
+        $this->assertSame(16000.0, $facts['form8606']['taxableToForm1040Line4b']);
+    }
+
+    public function test_form6251_backend_facts_map_k1_amt_items(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'AMT Fund'],
+                codes: ['17' => [
+                    ['code' => 'A', 'value' => '100'],
+                    ['code' => 'B', 'value' => '200'],
+                    ['code' => 'C', 'value' => '50'],
+                    ['code' => 'D', 'value' => '1000'],
+                    ['code' => 'E', 'value' => '300'],
+                    ['code' => 'F', 'value' => '25'],
+                ]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form6251');
+
+        $this->assertSame(15750.0, $facts['form6251']['line2aTaxesOrStandardDeduction']);
+        $this->assertSame('standard_deduction', $facts['form6251']['line2aSource']);
+        $this->assertSame(50.0, $facts['form6251']['line2dDepletion']);
+        $this->assertSame(200.0, $facts['form6251']['line2kDispositionOfProperty']);
+        $this->assertSame(100.0, $facts['form6251']['line2lPost1986Depreciation']);
+        $this->assertSame(700.0, $facts['form6251']['line2tIntangibleDrillingCosts']);
+        $this->assertSame(25.0, $facts['form6251']['line3OtherAdjustments']);
+        $this->assertTrue($facts['form6251']['requiresStatementReview']);
+    }
+
+    public function test_form8582_backend_facts_limit_passive_loss_with_carryforward(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 200000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: [
+                'A' => '12-3456789',
+                'B' => 'Passive Rental LLC',
+                'G' => 'Limited Partner',
+                '2' => '-30000',
+            ]),
+        ]);
+        PalCarryforward::create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'activity_name' => 'Passive Rental LLC',
+            'activity_ein' => '12-3456789',
+            'ordinary_carryover' => -5000,
+            'short_term_carryover' => 0,
+            'long_term_carryover' => 0,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8582');
+
+        $this->assertSame(-30000.0, $facts['form8582']['totalPassiveLoss']);
+        $this->assertSame(-5000.0, $facts['form8582']['totalPriorYearUnallowed']);
+        $this->assertSame(0.0, $facts['form8582']['rentalAllowance']);
+        $this->assertSame(0.0, $facts['form8582']['totalAllowedLoss']);
+        $this->assertSame(35000.0, $facts['form8582']['totalSuspendedLoss']);
+        $this->assertTrue($facts['form8582']['isLossLimited']);
     }
 
     public function test_form8995_below_threshold_uses_qbi_component_capped_by_taxable_income(): void

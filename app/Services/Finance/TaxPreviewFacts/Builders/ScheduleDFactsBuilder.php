@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDRollupFact;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
@@ -19,7 +20,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $docs1099
      * @param  ScheduleDRollupInput[]  $rollups
      */
-    public function build(array $k1Docs, array $docs1099, array $rollups): ScheduleDFacts
+    public function build(array $k1Docs, array $docs1099, array $rollups, ?Form4797Facts $form4797 = null): ScheduleDFacts
     {
         $lineBuckets = $this->emptyScheduleDLineBuckets();
         foreach ($rollups as $rollup) {
@@ -37,7 +38,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line3Sources = $section1256Sources['shortTerm'];
         $line10Sources = $section1256Sources['longTerm'];
         $line5Sources = $this->scheduleDLine5Sources($k1Docs);
-        $line12Sources = $this->scheduleDLine12Sources($k1Docs);
+        $line12Sources = [
+            ...$this->scheduleDLine12Sources($k1Docs),
+            ...($form4797 instanceof Form4797Facts ? $form4797->scheduleDSources : []),
+        ];
         $line13Sources = $this->scheduleDLine13Sources($docs1099);
         $ambiguous11SSources = $this->scheduleDAmbiguous11SSources($k1Docs);
 

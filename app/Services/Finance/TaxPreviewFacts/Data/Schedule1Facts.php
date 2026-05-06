@@ -15,6 +15,11 @@ readonly class Schedule1Facts
     /**
      * @var TaxFactSource[]
      */
+    public array $line4Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $line5Sources;
 
     /**
@@ -54,6 +59,7 @@ readonly class Schedule1Facts
 
     /**
      * @param  TaxFactSource[]  $line3Sources
+     * @param  TaxFactSource[]  $line4Sources
      * @param  TaxFactSource[]  $line5Sources
      * @param  TaxFactSource[]  $line6Sources
      * @param  TaxFactSource[]  $line8Sources
@@ -66,6 +72,8 @@ readonly class Schedule1Facts
     public function __construct(
         array $line3Sources,
         public float $line3Total,
+        array $line4Sources,
+        public float $line4Total,
         array $line5Sources,
         public float $line5Total,
         array $line6Sources,
@@ -84,6 +92,7 @@ readonly class Schedule1Facts
         public float $line15Total,
     ) {
         $this->line3Sources = $line3Sources;
+        $this->line4Sources = $line4Sources;
         $this->line5Sources = $line5Sources;
         $this->line6Sources = $line6Sources;
         $this->line8Sources = $line8Sources;
@@ -102,6 +111,8 @@ readonly class Schedule1Facts
         return [
             'line3Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line3Sources),
             'line3Total' => $this->line3Total,
+            'line4Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line4Sources),
+            'line4Total' => $this->line4Total,
             'line5Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line5Sources),
             'line5Total' => $this->line5Total,
             'line6Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line6Sources),

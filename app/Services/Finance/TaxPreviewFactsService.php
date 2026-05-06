@@ -5,6 +5,7 @@ namespace App\Services\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\PalCarryforward;
 use App\Models\FinanceTool\UserDeduction;
 use App\Models\User;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
@@ -12,7 +13,11 @@ use App\Services\Finance\CapitalGains\Form8949ReportRow;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
 use App\Services\Finance\CapitalGains\WashSaleAdjustment;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form1116FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form4797FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4952FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form6251FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form8582FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form8606FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8949FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8960FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8995FactsBuilder;
@@ -24,6 +29,8 @@ use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleDFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleEFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleFFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleSEFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8582Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
@@ -42,7 +49,7 @@ use InvalidArgumentException;
 
 class TaxPreviewFactsService
 {
-    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'scheduleB', 'scheduleC', 'scheduleF', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form1116', 'form8960', 'form8995'];
+    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'scheduleB', 'scheduleC', 'scheduleF', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582'];
 
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
@@ -56,9 +63,13 @@ class TaxPreviewFactsService
         private readonly ScheduleSEFactsBuilder $scheduleSEFactsBuilder,
         private readonly ScheduleDFactsBuilder $scheduleDFactsBuilder,
         private readonly Form8949FactsBuilder $form8949FactsBuilder,
+        private readonly Form4797FactsBuilder $form4797FactsBuilder,
+        private readonly Form8606FactsBuilder $form8606FactsBuilder,
         private readonly Form1116FactsBuilder $form1116FactsBuilder,
         private readonly Form8960FactsBuilder $form8960FactsBuilder,
         private readonly Form8995FactsBuilder $form8995FactsBuilder,
+        private readonly Form6251FactsBuilder $form6251FactsBuilder,
+        private readonly Form8582FactsBuilder $form8582FactsBuilder,
     ) {}
 
     /**
@@ -116,6 +127,8 @@ class TaxPreviewFactsService
         $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
         $scheduleC = $userId !== null ? $this->scheduleCFactsBuilder->build($userId, $year) : ScheduleCFacts::empty();
         $scheduleF = $this->scheduleFFactsBuilder->build($userDeductions);
+        $form4797 = $this->form4797FactsBuilder->build($userDeductions);
+        $form8606 = $this->form8606FactsBuilder->build($docs1099, $userDeductions);
         $isMarried = $this->isMarried($userId, $year);
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
         if ($userId === null && $this->containsCapitalGainsDocuments($docs1099)) {
@@ -125,11 +138,19 @@ class TaxPreviewFactsService
         $capitalGainsReport = $userId !== null
             ? $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)
             : $this->emptyCapitalGainsReport($year);
-        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $capitalGainsReport['scheduleDRollup']);
-        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF);
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $capitalGainsReport['scheduleDRollup'], $form4797);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $estimatedMagi = $userId !== null ? $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD) : null;
         $deductionMagi = $magi ?? $estimatedMagi;
         $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $year, $isMarried);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $deductionMagi);
+        $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport);
+        $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
+        $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year);
+        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleE, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried);
+        $taxableIncome = $this->estimatedTaxableIncome($deductionMagi ?? 0.0, $scheduleA, $form8995->deduction, $isMarried);
+        $form6251 = $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $taxableIncome, $form1116->totalForeignTaxes, $year, $isMarried);
+        $form8582 = $this->form8582FactsBuilder->build($k1Docs, $userId !== null ? $this->palCarryforwardsForYear($userId, $year) : [], $deductionMagi ?? 0.0, $isMarried);
 
         return new TaxPreviewFacts(
             year: $year,
@@ -139,13 +160,17 @@ class TaxPreviewFactsService
             schedule1: $schedule1,
             scheduleB: $scheduleB,
             form4952: $form4952,
-            scheduleA: $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $deductionMagi),
+            scheduleA: $scheduleA,
             scheduleE: $scheduleE,
             scheduleD: $scheduleD,
-            form8949: $this->form8949FactsBuilder->build($capitalGainsReport),
-            form1116: $this->form1116FactsBuilder->build($k1Docs, $docs1099),
-            form8960: $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year),
-            form8995: $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleE, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried),
+            form8949: $form8949,
+            form4797: $form4797,
+            form8606: $form8606,
+            form1116: $form1116,
+            form8960: $form8960,
+            form8995: $form8995,
+            form6251: $form6251,
+            form8582: $form8582,
         );
     }
 
@@ -202,11 +227,19 @@ class TaxPreviewFactsService
             ],
             'scheduleD' => [
                 'year' => $year,
-                'scheduleD' => $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'])->toArray(),
+                'scheduleD' => $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year)))->toArray(),
             ],
             'form8949' => [
                 'year' => $year,
                 'form8949' => $this->form8949FactsBuilder->build($this->capitalGainsTaxReportService->reportForUserYear($userId, $year))->toArray(),
+            ],
+            'form4797' => [
+                'year' => $year,
+                'form4797' => $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year))->toArray(),
+            ],
+            'form8606' => [
+                'year' => $year,
+                'form8606' => $this->form8606FactsBuilder->build($docs1099, $this->userDeductionsForYear($userId, $year))->toArray(),
             ],
             'form1116' => [
                 'year' => $year,
@@ -219,6 +252,14 @@ class TaxPreviewFactsService
             'form8995' => [
                 'year' => $year,
                 'form8995' => $this->form8995FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
+            ],
+            'form6251' => [
+                'year' => $year,
+                'form6251' => $this->form6251FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
+            ],
+            'form8582' => [
+                'year' => $year,
+                'form8582' => $this->form8582FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
             ],
             default => $this->factsForYear($userId, $year)->toArray(),
         };
@@ -311,6 +352,14 @@ class TaxPreviewFactsService
                 'year' => $facts['year'],
                 'form8949' => $facts['form8949'],
             ],
+            'form4797' => [
+                'year' => $facts['year'],
+                'form4797' => $facts['form4797'],
+            ],
+            'form8606' => [
+                'year' => $facts['year'],
+                'form8606' => $facts['form8606'],
+            ],
             'form1116' => [
                 'year' => $facts['year'],
                 'form1116' => $facts['form1116'],
@@ -322,6 +371,14 @@ class TaxPreviewFactsService
             'form8995' => [
                 'year' => $facts['year'],
                 'form8995' => $facts['form8995'],
+            ],
+            'form6251' => [
+                'year' => $facts['year'],
+                'form6251' => $facts['form6251'],
+            ],
+            'form8582' => [
+                'year' => $facts['year'],
+                'form8582' => $facts['form8582'],
             ],
             default => $facts,
         };
@@ -336,9 +393,10 @@ class TaxPreviewFactsService
     {
         $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
         $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $this->isMarried($userId, $year));
 
-        return $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF);
+        return $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
     }
 
     /**
@@ -368,7 +426,8 @@ class TaxPreviewFactsService
             $this->marginInterestSources($userId, $year),
         );
         $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
-        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
+        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
 
         return $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, null, $userId, $year);
     }
@@ -390,9 +449,10 @@ class TaxPreviewFactsService
         );
         $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
         $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $this->isMarried($userId, $year));
-        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF);
-        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
         $estimatedMagi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
 
         return $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $this->userDeductionsForYear($userId, $year), $form4952, $year, $estimatedMagi);
@@ -407,15 +467,61 @@ class TaxPreviewFactsService
     {
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
         $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
-        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
+        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
         $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
         $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
         $isMarried = $this->isMarried($userId, $year);
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
-        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
 
         return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleE, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  FileForTaxDocument[]  $w2Docs
+     */
+    private function form6251FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form6251Facts
+    {
+        $userDeductions = $this->userDeductionsForYear($userId, $year);
+        $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
+        $form4952 = $this->form4952FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $this->shortDividendItemizedDeduction($userId, $year), $this->marginInterestSources($userId, $year));
+        $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
+        $scheduleF = $this->scheduleFFactsBuilder->build($userDeductions);
+        $form4797 = $this->form4797FactsBuilder->build($userDeductions);
+        $isMarried = $this->isMarried($userId, $year);
+        $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
+        $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi);
+        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $this->scheduleEFactsBuilder->build($k1Docs, $docs1099), $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
+        $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
+
+        return $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried), $form1116->totalForeignTaxes, $year, $isMarried);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  FileForTaxDocument[]  $w2Docs
+     */
+    private function form8582FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form8582Facts
+    {
+        $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
+        $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
+        $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $isMarried = $this->isMarried($userId, $year);
+        $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
+        $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
+        $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
+        $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
+
+        return $this->form8582FactsBuilder->build($k1Docs, $this->palCarryforwardsForYear($userId, $year), $magi, $isMarried);
     }
 
     /**
@@ -435,6 +541,7 @@ class TaxPreviewFactsService
             + $this->retirementTaxableIncome($docs1099)
             + $capitalGainOrLoss
             + $schedule1->line3Total
+            + $schedule1->line4Total
             + $schedule1->line5Total
             + $schedule1->line6Total
             + $schedule1->line9TotalOtherIncome
@@ -454,6 +561,16 @@ class TaxPreviewFactsService
             : FederalStandardDeduction::single($year);
 
         return max(0.0, MoneyMath::subtract($estimatedMagi, $standardDeduction));
+    }
+
+    private function estimatedTaxableIncome(float $estimatedMagi, ScheduleAFacts $scheduleA, float $qbiDeduction, bool $isMarried): float
+    {
+        $shouldItemize = $isMarried ? $scheduleA->shouldItemizeMarriedFilingJointly : $scheduleA->shouldItemizeSingle;
+        $deduction = $shouldItemize
+            ? $scheduleA->totalItemizedDeductions
+            : ($isMarried ? $scheduleA->standardDeductionMarriedFilingJointly : $scheduleA->standardDeductionSingle);
+
+        return max(0.0, MoneyMath::subtract(MoneyMath::subtract($estimatedMagi, $deduction), $qbiDeduction));
     }
 
     /**
@@ -537,6 +654,19 @@ class TaxPreviewFactsService
     private function userDeductionsForYear(int $userId, int $year): array
     {
         return UserDeduction::query()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->orderBy('id')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * @return PalCarryforward[]
+     */
+    private function palCarryforwardsForYear(int $userId, int $year): array
+    {
+        return PalCarryforward::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->orderBy('id')

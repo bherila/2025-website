@@ -12,6 +12,9 @@ enum TaxFactRouting: string
     case Form1116Line8 = 'form_1116_line_8';
     case Form1116SourcedByPartner = 'form_1116_sourced_by_partner';
     case Form4952Line1 = 'form_4952_line_1';
+    case Form4797PartILine7 = 'form_4797_part_i_line_7';
+    case Form4797PartIILine18b = 'form_4797_part_ii_line_18b';
+    case Form4797PartIIIRecapture = 'form_4797_part_iii_recapture';
     case Form8995Line1 = 'form_8995_line_1';
     case Form8995Line5 = 'form_8995_line_5';
     case Form8995Line6 = 'form_8995_line_6';
@@ -27,6 +30,7 @@ enum TaxFactRouting: string
     case Form8960Line9a = 'form_8960_line_9a';
     case NeedsReviewScheduleDLine5Or12 = 'needs_review_schedule_d_line_5_or_12';
     case Schedule1Line5 = 'schedule_1_line_5';
+    case Schedule1Line4 = 'schedule_1_line_4';
     case Schedule1Line3 = 'schedule_1_line_3';
     case Schedule1Line6 = 'schedule_1_line_6';
     case Schedule1Line15 = 'schedule_1_line_15';
