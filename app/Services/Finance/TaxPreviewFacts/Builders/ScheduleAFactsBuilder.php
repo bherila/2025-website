@@ -22,19 +22,15 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
     ];
 
     /**
-     * OBBBA SALT phase-down rules for years where the temporary cap applies.
+     * OBBBA SALT phase-down rules for years with published parameters.
      *
      * The cap is reduced by `rate` of MAGI above `threshold`, but never below `floor`.
-     * Keep this table explicit so future statutory changes do not silently skip phase-down.
+     * Keep this table explicit so unpublished years do not silently use placeholder values.
      *
      * @var array<int, array{base: float, threshold: float, floor: float, rate: float}>
      */
     private const array SALT_CAP_RULES = [
         2025 => ['base' => 40000.0, 'threshold' => 500000.0, 'floor' => 10000.0, 'rate' => 0.30],
-        2026 => ['base' => 40400.0, 'threshold' => 505000.0, 'floor' => 10000.0, 'rate' => 0.30],
-        2027 => ['base' => 40804.0, 'threshold' => 510050.0, 'floor' => 10000.0, 'rate' => 0.30],
-        2028 => ['base' => 41212.04, 'threshold' => 515150.5, 'floor' => 10000.0, 'rate' => 0.30],
-        2029 => ['base' => 41624.16, 'threshold' => 520302.01, 'floor' => 10000.0, 'rate' => 0.30],
     ];
 
     /**
@@ -278,6 +274,10 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
     private function saltCap(int $year, ?float $magi = null): float
     {
         if ($year < 2025 || $year > 2029) {
+            return 10000.0;
+        }
+
+        if (! array_key_exists($year, self::SALT_CAP_RULES)) {
             return 10000.0;
         }
 
