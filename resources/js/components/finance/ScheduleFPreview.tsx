@@ -3,6 +3,7 @@
 import currency from 'currency.js'
 
 import { Callout, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import type { ScheduleFFacts } from '@/types/generated/tax-preview-facts'
 
 export interface ScheduleFInputs {
   /** Line 9 — Gross income (cash method). Sum of lines 1b / 2 / 3a–3b / 4a–4b / 5a–8 on the real form. */
@@ -26,6 +27,15 @@ export function computeScheduleF({
     totalExpenses,
     netProfitOrLoss: currency(grossFarmIncome).subtract(totalExpenses).value,
     hasActivity: grossFarmIncome !== 0 || totalExpenses !== 0,
+  }
+}
+
+export function scheduleFFactsToLines(facts: ScheduleFFacts): ScheduleFLines {
+  return {
+    grossFarmIncome: facts.grossFarmIncome,
+    totalExpenses: facts.totalFarmExpenses,
+    netProfitOrLoss: facts.netFarmProfit,
+    hasActivity: facts.hasActivity,
   }
 }
 

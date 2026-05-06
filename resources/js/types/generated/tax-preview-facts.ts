@@ -77,6 +77,37 @@ niitTaxSingle: number | null;
 niitTaxMarriedFilingJointly: number | null;
 needsMagi: boolean;
 };
+export type Form8995EntityFact = {
+sources: Array<TaxFactSource>;
+entityKey: string;
+label: string;
+sourceKind: string;
+qbiIncome: number;
+reitDividends: number;
+ptpIncome: number;
+qbiComponent: number;
+isSstb: boolean;
+sectionNotes: string | null;
+};
+export type Form8995Facts = {
+entities: Array<Form8995EntityFact>;
+line1Sources: Array<TaxFactSource>;
+line6Sources: Array<TaxFactSource>;
+reviewSources: Array<TaxFactSource>;
+totalQbi: number;
+totalQbiComponent: number;
+qualifiedReitDividends: number;
+qualifiedPtpIncome: number;
+reitPtpComponent: number;
+taxableIncomeBeforeQbi: number;
+netCapitalGain: number;
+taxableIncomeLessNetCapitalGain: number;
+taxableIncomeCap: number;
+deduction: number;
+thresholdSingle: number;
+thresholdMarriedFilingJointly: number;
+aboveThreshold: boolean;
+};
 export type QuarterTotals = {
 q1: number;
 q2: number;
@@ -86,6 +117,7 @@ q4: number;
 export type Schedule1Facts = {
 line3Sources: Array<TaxFactSource>;
 line5Sources: Array<TaxFactSource>;
+line6Sources: Array<TaxFactSource>;
 line8zSources: Array<TaxFactSource>;
 line8Sources: Array<TaxFactSource>;
 line8bSources: Array<TaxFactSource>;
@@ -94,6 +126,7 @@ line8iSources: Array<TaxFactSource>;
 line15Sources: Array<TaxFactSource>;
 line3Total: number;
 line5Total: number;
+line6Total: number;
 line8bTotal: number;
 line8hTotal: number;
 line8iTotal: number;
@@ -241,6 +274,15 @@ totalPassive: number;
 totalNonpassive: number;
 grandTotal: number;
 };
+export type ScheduleFFacts = {
+grossIncomeSources: Array<TaxFactSource>;
+expenseSources: Array<TaxFactSource>;
+line34Sources: Array<TaxFactSource>;
+grossFarmIncome: number;
+totalFarmExpenses: number;
+netFarmProfit: number;
+hasActivity: boolean;
+};
 export type ScheduleSEFacts = {
 entries: Array<TaxFactSource>;
 wageSources: Array<TaxFactSource>;
@@ -282,6 +324,7 @@ reviewAction: string | null;
 export type TaxPreviewFacts = {
 year: number;
 scheduleC: ScheduleCFacts;
+scheduleF: ScheduleFFacts;
 scheduleSE: ScheduleSEFacts;
 schedule1: Schedule1Facts;
 scheduleB: ScheduleBFacts;
@@ -292,6 +335,7 @@ scheduleD: ScheduleDFacts;
 form8949: Form8949Facts;
 form1116: Form1116Facts;
 form8960: Form8960Facts;
+form8995: Form8995Facts;
 };
 export type WashSaleAdjustmentFact = {
 id: string;

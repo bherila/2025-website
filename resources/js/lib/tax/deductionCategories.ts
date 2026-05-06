@@ -1,5 +1,5 @@
 /**
- * Schedule A user-entered deduction categories.
+ * User-entered tax-preview categories.
  * Kept in sync with `App\Enums\Finance\DeductionCategory`.
  */
 
@@ -11,6 +11,8 @@ export const DEDUCTION_CATEGORIES = [
   'charitable_cash',
   'charitable_noncash',
   'other',
+  'schedule_f_gross_income',
+  'schedule_f_expenses',
 ] as const
 
 export type DeductionCategory = (typeof DEDUCTION_CATEGORIES)[number]
@@ -23,6 +25,8 @@ export const DEDUCTION_CATEGORY_LABELS: Record<DeductionCategory, string> = {
   charitable_cash: 'Charitable — cash',
   charitable_noncash: 'Charitable — non-cash',
   other: 'Other deduction',
+  schedule_f_gross_income: 'Schedule F — gross farm income',
+  schedule_f_expenses: 'Schedule F — total farm expenses',
 }
 
 /** Categories that contribute to the SALT cap (Schedule A Line 7). */

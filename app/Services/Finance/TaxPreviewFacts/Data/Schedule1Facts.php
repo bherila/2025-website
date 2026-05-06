@@ -20,6 +20,11 @@ readonly class Schedule1Facts
     /**
      * @var TaxFactSource[]
      */
+    public array $line6Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $line8zSources;
 
     /**
@@ -50,6 +55,7 @@ readonly class Schedule1Facts
     /**
      * @param  TaxFactSource[]  $line3Sources
      * @param  TaxFactSource[]  $line5Sources
+     * @param  TaxFactSource[]  $line6Sources
      * @param  TaxFactSource[]  $line8Sources
      * @param  TaxFactSource[]  $line8bSources
      * @param  TaxFactSource[]  $line8hSources
@@ -62,6 +68,8 @@ readonly class Schedule1Facts
         public float $line3Total,
         array $line5Sources,
         public float $line5Total,
+        array $line6Sources,
+        public float $line6Total,
         array $line8Sources,
         array $line8bSources,
         public float $line8bTotal,
@@ -77,6 +85,7 @@ readonly class Schedule1Facts
     ) {
         $this->line3Sources = $line3Sources;
         $this->line5Sources = $line5Sources;
+        $this->line6Sources = $line6Sources;
         $this->line8Sources = $line8Sources;
         $this->line8bSources = $line8bSources;
         $this->line8hSources = $line8hSources;
@@ -95,6 +104,8 @@ readonly class Schedule1Facts
             'line3Total' => $this->line3Total,
             'line5Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line5Sources),
             'line5Total' => $this->line5Total,
+            'line6Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line6Sources),
+            'line6Total' => $this->line6Total,
             'line8Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line8Sources),
             'line8bSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line8bSources),
             'line8bTotal' => $this->line8bTotal,

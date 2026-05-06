@@ -9,14 +9,14 @@ import { compute1099RDistributionSummary, computeForm1040Lines } from '@/compone
 import { computeForm4797 } from '@/components/finance/Form4797Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8606 } from '@/components/finance/Form8606Preview'
-import { computeForm8995 } from '@/components/finance/Form8995Preview'
+import { form8995FactsToLines } from '@/components/finance/Form8995Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeSchedule1Totals } from '@/components/finance/Schedule1Preview'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
 import { computeScheduleD } from '@/components/finance/ScheduleDPreview'
 import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
-import { computeScheduleF } from '@/components/finance/ScheduleFPreview'
+import { computeScheduleF, scheduleFFactsToLines } from '@/components/finance/ScheduleFPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -1217,10 +1217,12 @@ export function TaxPreviewProvider({
       partIIIRecapture: form4797PartIIIRecapture,
     })
 
-    const scheduleFComputed = computeScheduleF({
-      grossFarmIncome: scheduleFGrossIncome,
-      totalExpenses: scheduleFTotalExpenses,
-    })
+    const scheduleFComputed = taxFacts?.scheduleF
+      ? scheduleFFactsToLines(taxFacts.scheduleF)
+      : computeScheduleF({
+          grossFarmIncome: scheduleFGrossIncome,
+          totalExpenses: scheduleFTotalExpenses,
+        })
 
     const scheduleSE = toScheduleSELines(taxFacts?.scheduleSE ?? buildEmptyScheduleSE(isMarried))
 
@@ -1265,12 +1267,21 @@ export function TaxPreviewProvider({
         .filter(r => r.netPassive !== 0)
         .map(r => ({ label: r.partnerName, amount: r.netPassive })),
     })
-    const form8995 = computeForm8995({
-      reviewedK1Docs,
-      totalIncome: totalIncomeEstimate,
-      selectedYear: year,
-      isMarried,
-    })
+    const form8995 = taxFacts?.form8995
+      ? form8995FactsToLines(taxFacts.form8995)
+      : {
+          entries: [],
+          totalQBI: 0,
+          totalQBIComponent: 0,
+          totalIncome: totalIncomeEstimate,
+          estimatedTaxableIncome: 0,
+          stdDedApplied: 0,
+          taxableIncomeCap: 0,
+          estimatedDeduction: 0,
+          aboveThreshold: false,
+          thresholdSingle: 0,
+          thresholdMFJ: 0,
+        }
     const deductionUsed = scheduleA.shouldItemize ? scheduleA.totalItemizedDeductions : scheduleA.standardDeduction
     const taxableIncomeEstimate = Math.max(
       0,

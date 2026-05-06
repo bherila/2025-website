@@ -132,18 +132,20 @@ export default function Schedule1Preview({
   const partI = totals.partI
   const partII = totals.partII
   const line5Sources = taxFacts?.line5Sources ?? []
+  const line6Sources = taxFacts?.line6Sources ?? []
   const line8Sources = taxFacts?.line8Sources ?? []
   const line8bSources = taxFacts?.line8bSources ?? []
   const line8hSources = taxFacts?.line8hSources ?? []
   const line8iSources = taxFacts?.line8iSources ?? []
   const line8zSources = taxFacts?.line8zSources ?? []
   const line5NeedsReview = taxFactSourcesNeedReview(line5Sources)
+  const line6NeedsReview = taxFactSourcesNeedReview(line6Sources)
   const line8bNeedsReview = taxFactSourcesNeedReview(line8bSources)
   const line8hNeedsReview = taxFactSourcesNeedReview(line8hSources)
   const line8iNeedsReview = taxFactSourcesNeedReview(line8iSources)
   const line8zNeedsReview = taxFactSourcesNeedReview(line8zSources)
   const lineOtherIncomeNeedsReview = taxFactSourcesNeedReview(line8Sources)
-  const line10NeedsReview = line5NeedsReview || lineOtherIncomeNeedsReview
+  const line10NeedsReview = line5NeedsReview || line6NeedsReview || lineOtherIncomeNeedsReview
 
   const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
   const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
@@ -308,7 +310,21 @@ export default function Schedule1Preview({
         )}
         {line6 === 'visible' && (
           <>
-            <FormLine boxRef="6" label="Farm income or (loss)" value={partI.line6_farmIncome} />
+            <FormLine
+              boxRef="6"
+              label="Farm income or (loss)"
+              value={partI.line6_farmIncome}
+              isReviewed={line6NeedsReview ? false : undefined}
+              {...(line6Sources.length > 0
+                ? {
+                    onClick: () => setActiveSources({
+                      title: 'Schedule 1 Line 6 Supporting Details',
+                      sources: line6Sources,
+                      total: taxFacts?.line6Total ?? partI.line6_farmIncome ?? 0,
+                    }),
+                  }
+                : {})}
+            />
             <FormSubLine text="From Schedule F net profit/loss" />
           </>
         )}

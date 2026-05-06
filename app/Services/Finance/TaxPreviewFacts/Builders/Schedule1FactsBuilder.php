@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -18,10 +19,11 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null): Schedule1Facts
+    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null): Schedule1Facts
     {
         $line3Sources = $scheduleC instanceof ScheduleCFacts ? $this->scheduleCLine3Sources($scheduleC) : [];
         $line5Sources = [];
+        $line6Sources = $scheduleF instanceof ScheduleFFacts ? $this->scheduleFLine6Sources($scheduleF) : [];
 
         foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
@@ -73,6 +75,8 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             line3Total: $this->sumSources($line3Sources),
             line5Sources: $line5Sources,
             line5Total: $this->sumSources($line5Sources),
+            line6Sources: $line6Sources,
+            line6Total: $this->sumSources($line6Sources),
             line8Sources: $line8Sources,
             line8bSources: $line8bSources,
             line8bTotal: $line8bTotal,
@@ -96,6 +100,17 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         return array_map(
             fn (TaxFactSource $source): TaxFactSource => $this->cloneSource($source, TaxFactRouting::Schedule1Line3, 'Schedule C line 31 flows to Schedule 1 line 3.'),
             $scheduleC->line31Sources,
+        );
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
+    private function scheduleFLine6Sources(ScheduleFFacts $scheduleF): array
+    {
+        return array_map(
+            fn (TaxFactSource $source): TaxFactSource => $this->cloneSource($source, TaxFactRouting::Schedule1Line6, 'Schedule F line 34 flows to Schedule 1 line 6.'),
+            $scheduleF->line34Sources,
         );
     }
 

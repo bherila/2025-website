@@ -1298,6 +1298,175 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('schedule_se_line_1a', collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_k1_box_14c')['routing']);
     }
 
+    public function test_schedule_f_flows_to_schedule1_line6_and_schedule_se_line1b(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'schedule_f_gross_income', 12000, 'Farm gross income');
+        $this->createUserDeduction($user->id, 'schedule_f_expenses', 5000, 'Farm expenses');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $scheduleFEntry = collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_schedule_f');
+
+        $this->assertSame(7000.0, $facts['scheduleF']['netFarmProfit']);
+        $this->assertSame(7000.0, $facts['schedule1']['line6Total']);
+        $this->assertSame(7000.0, $facts['scheduleSE']['netEarningsFromSE']);
+        $this->assertNotNull($scheduleFEntry);
+        $this->assertSame(7000.0, $scheduleFEntry['amount']);
+        $this->assertSame('schedule_se_line_1b', $scheduleFEntry['routing']);
+    }
+
+    public function test_schedule_f_loss_keeps_negative_sign_in_schedule1_and_schedule_se(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'schedule_f_gross_income', 3000, 'Farm gross income');
+        $this->createUserDeduction($user->id, 'schedule_f_expenses', 8000, 'Farm expenses');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(-5000.0, $facts['scheduleF']['netFarmProfit']);
+        $this->assertSame(-5000.0, $facts['schedule1']['line6Total']);
+        $this->assertSame(-5000.0, $facts['scheduleSE']['netEarningsFromSE']);
+        $this->assertSame(0.0, $facts['scheduleSE']['seTax']);
+    }
+
+    public function test_form8995_below_threshold_uses_qbi_component_capped_by_taxable_income(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 100000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertSame(100000.0, $facts['form8995']['totalQbi']);
+        $this->assertSame(20000.0, $facts['form8995']['totalQbiComponent']);
+        $this->assertSame(84250.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(16850.0, $facts['form8995']['taxableIncomeCap']);
+        $this->assertSame(16850.0, $facts['form8995']['deduction']);
+        $this->assertFalse($facts['form8995']['aboveThreshold']);
+    }
+
+    public function test_form8995_above_threshold_emits_needs_review_source(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 450000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertTrue($facts['form8995']['aboveThreshold']);
+        $this->assertSame('needs_review', $facts['form8995']['reviewSources'][0]['reviewStatus']);
+        $this->assertSame('form_8995_line_13', $facts['form8995']['reviewSources'][0]['routing']);
+    }
+
+    public function test_form8995_reduces_schedule_c_qbi_by_deductible_half_se_tax(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'QBI Sole Prop');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 100000);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $scheduleCEntity = collect($facts['form8995']['entities'])->firstWhere('sourceKind', 'schedule_c');
+
+        $this->assertNotNull($scheduleCEntity);
+        $this->assertEqualsWithDelta(92935.22, $scheduleCEntity['qbiIncome'], 0.01);
+        $this->assertEqualsWithDelta(92935.22, $facts['form8995']['totalQbi'], 0.01);
+    }
+
+    public function test_form8995_net_capital_gain_reduces_taxable_income_cap(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 50000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+        $this->createLot($account, [
+            'purchase_date' => '2024-01-01',
+            'sale_date' => '2025-01-02',
+            'cost_basis' => 10000,
+            'proceeds' => 50000,
+            'is_short_term' => false,
+            'form_8949_box' => 'D',
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertSame(40000.0, $facts['form8995']['netCapitalGain']);
+        $this->assertSame(74250.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(34250.0, $facts['form8995']['taxableIncomeLessNetCapitalGain']);
+        $this->assertSame(6850.0, $facts['form8995']['taxableIncomeCap']);
+        $this->assertSame(6850.0, $facts['form8995']['deduction']);
+    }
+
+    public function test_form8995_collects_k1_box20_qbi_reit_and_ptp_codes(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 100000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [
+                    ['code' => 'Z', 'value' => '100'],
+                    ['code' => 'AA', 'value' => '10'],
+                    ['code' => 'AB', 'value' => '20'],
+                    ['code' => 'AC', 'value' => '30'],
+                    ['code' => 'AD', 'value' => '40'],
+                ]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $sourceTypes = collect($facts['form8995']['entities'][0]['sources'])->pluck('sourceType')->all();
+
+        $this->assertSame(100.0, $facts['form8995']['totalQbi']);
+        $this->assertSame(40.0, $facts['form8995']['qualifiedReitDividends']);
+        $this->assertSame(60.0, $facts['form8995']['qualifiedPtpIncome']);
+        $this->assertContains('form_8995_k1_box_20z', $sourceTypes);
+        $this->assertContains('form_8995_k1_box_20aa', $sourceTypes);
+        $this->assertContains('form_8995_k1_box_20ab', $sourceTypes);
+        $this->assertContains('form_8995_k1_box_20ac', $sourceTypes);
+        $this->assertContains('form_8995_k1_box_20ad', $sourceTypes);
+    }
+
     public function test_schedule_se_uses_payslips_when_w2_is_not_reviewed_and_parsable(): void
     {
         $user = $this->createUser();

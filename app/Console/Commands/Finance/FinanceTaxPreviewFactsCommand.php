@@ -67,6 +67,12 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             }
         }
 
+        foreach (($facts['schedule1']['line6Sources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['schedule1', 'line6', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
         foreach (($facts['schedule1']['line8zSources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['schedule1', 'line8z', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
@@ -112,6 +118,24 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
                     if (is_array($source)) {
                         $rows[] = ['scheduleC', $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
                     }
+                }
+            }
+        }
+
+        foreach ([
+            'grossFarmIncome' => 'line9',
+            'totalFarmExpenses' => 'line33',
+            'netFarmProfit' => 'line34',
+        ] as $key => $line) {
+            if (isset($facts['scheduleF'][$key])) {
+                $rows[] = ['scheduleF', $line, $key, $facts['scheduleF'][$key], ''];
+            }
+        }
+
+        foreach (['grossIncomeSources', 'expenseSources', 'line34Sources'] as $key) {
+            foreach (($facts['scheduleF'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['scheduleF', $source['routing'] ?? $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
                 }
             }
         }
@@ -315,6 +339,31 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         foreach (($facts['form8960']['componentSources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['form8960', $source['routing'] ?? 'component', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach ([
+            'totalQbi',
+            'totalQbiComponent',
+            'qualifiedReitDividends',
+            'qualifiedPtpIncome',
+            'reitPtpComponent',
+            'taxableIncomeBeforeQbi',
+            'netCapitalGain',
+            'taxableIncomeLessNetCapitalGain',
+            'taxableIncomeCap',
+            'deduction',
+        ] as $key) {
+            if (isset($facts['form8995'][$key])) {
+                $rows[] = ['form8995', $key, $key, $facts['form8995'][$key], ''];
+            }
+        }
+
+        foreach (['line1Sources', 'line6Sources', 'reviewSources'] as $key) {
+            foreach (($facts['form8995'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['form8995', $source['routing'] ?? $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
             }
         }
 

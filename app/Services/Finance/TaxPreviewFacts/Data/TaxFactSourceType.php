@@ -43,6 +43,17 @@ enum TaxFactSourceType: string
     case Form1099IntInvestmentExpense = '1099_int_investment_expense';
     case Form1099IntTreasuryInterest = '1099_int_treasury_interest';
     case Form1099MiscOtherIncome = '1099_misc_other_income';
+    case Form8995K1Box17 = 'form_8995_k1_box_17';
+    case Form8995K1Box20Aa = 'form_8995_k1_box_20aa';
+    case Form8995K1Box20Ab = 'form_8995_k1_box_20ab';
+    case Form8995K1Box20Ac = 'form_8995_k1_box_20ac';
+    case Form8995K1Box20Ad = 'form_8995_k1_box_20ad';
+    case Form8995K1Box20Z = 'form_8995_k1_box_20z';
+    case Form8995NeedsReview = 'form_8995_needs_review';
+    case Form8995PtpIncome = 'form_8995_ptp_income';
+    case Form8995ReitDividends = 'form_8995_reit_dividends';
+    case Form8995ScheduleCQbi = 'form_8995_schedule_c_qbi';
+    case Form8995ScheduleEQbi = 'form_8995_schedule_e_qbi';
     case Form8960InvestmentInterestDeduction = 'form_8960_investment_interest_deduction';
     case Form8960NetCapitalGain = 'form_8960_net_capital_gain';
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
@@ -61,6 +72,8 @@ enum TaxFactSourceType: string
     case ScheduleSEW2MedicareWages = 'schedule_se_w2_medicare_wages';
     case ScheduleSEPayslipSocialSecurityWages = 'schedule_se_payslip_social_security_wages';
     case ScheduleSEPayslipMedicareWages = 'schedule_se_payslip_medicare_wages';
+    case ScheduleFExpenses = 'schedule_f_expenses';
+    case ScheduleFGrossIncome = 'schedule_f_gross_income';
     case UserDeductionCharitableCash = 'user_deduction_charitable_cash';
     case UserDeductionCharitableNoncash = 'user_deduction_charitable_noncash';
     case UserDeductionMortgageInterest = 'user_deduction_mortgage_interest';

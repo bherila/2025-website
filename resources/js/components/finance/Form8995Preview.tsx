@@ -1,39 +1,53 @@
 'use client'
 
-import { isFK1StructuredData } from '@/components/finance/k1'
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import { computeForm8995Lines } from '@/finance/8995/k1-to-8995'
-import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form8995Lines } from '@/types/finance/tax-return'
+import type { Form8995Facts } from '@/types/generated/tax-preview-facts'
 
 export type { Form8995Lines } from '@/types/finance/tax-return'
 
 interface Form8995PreviewProps {
-  reviewedK1Docs: TaxDocument[]
-  /** Form 1040 Line 9 total income estimate — used to compute estimated taxable income. */
-  totalIncome: number
+  taxFacts?: Form8995Facts | null
   selectedYear: number
   isMarried?: boolean
 }
 
-export function computeForm8995({ reviewedK1Docs, totalIncome, selectedYear, isMarried = false }: Form8995PreviewProps): Form8995Lines {
-  const k1Data = reviewedK1Docs
-    .map((d) => {
-      const data = isFK1StructuredData(d.parsed_data) ? d.parsed_data : null
-      if (!data) return null
-      const label = (data as FK1StructuredData).fields['B']?.value?.split('\n')[0]
-        ?? d.employment_entity?.display_name
-        ?? 'Partnership'
-      return { data: data as FK1StructuredData, label }
-    })
-    .filter((x): x is { data: FK1StructuredData; label: string } => x !== null)
-
-  return computeForm8995Lines(k1Data, totalIncome, selectedYear, isMarried)
+export function form8995FactsToLines(facts: Form8995Facts): Form8995Lines {
+  return {
+    entries: facts.entities.map((entity) => ({
+      label: entity.label,
+      qbiIncome: entity.qbiIncome,
+      w2Wages: 0,
+      reitDividends: entity.reitDividends,
+      ptpIncome: entity.ptpIncome,
+      isSstb: entity.isSstb,
+      sectionNotes: entity.sectionNotes ?? '',
+      qbiComponent: entity.qbiComponent,
+    })),
+    totalQBI: facts.totalQbi,
+    totalQBIComponent: facts.totalQbiComponent,
+    totalIncome: facts.taxableIncomeBeforeQbi,
+    estimatedTaxableIncome: facts.taxableIncomeBeforeQbi,
+    stdDedApplied: 0,
+    taxableIncomeCap: facts.taxableIncomeCap,
+    estimatedDeduction: facts.deduction,
+    aboveThreshold: facts.aboveThreshold,
+    thresholdSingle: facts.thresholdSingle,
+    thresholdMFJ: facts.thresholdMarriedFilingJointly,
+  }
 }
 
-export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedYear, isMarried = false }: Form8995PreviewProps) {
-  const computed = computeForm8995({ reviewedK1Docs, totalIncome, selectedYear, isMarried })
+export default function Form8995Preview({ taxFacts, selectedYear, isMarried = false }: Form8995PreviewProps) {
+  const computed = taxFacts ? form8995FactsToLines(taxFacts) : null
+
+  if (!computed) {
+    return (
+      <div className="py-12 text-center text-muted-foreground text-sm">
+        QBI facts are still loading.
+      </div>
+    )
+  }
+
   const {
     entries,
     totalQBI,
@@ -50,9 +64,9 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
   if (entries.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground text-sm">
-        No Section 199A / QBI data found in reviewed K-1 documents.
+        No Section 199A / QBI data found in backend tax facts.
         <br />
-        QBI is reported in K-1 Box 20 Code Z (TY 2023+). Review K-1 documents to see Form 8995 analysis.
+        Review K-1 documents, Schedule C activity, or qualified Schedule E activity to see Form 8995 analysis.
       </div>
     )
   }
@@ -69,7 +83,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
       </div>
 
       {aboveThreshold ? (
-        <Callout kind="warn" title="⚠ Income Exceeds Phase-In Threshold — W-2 Wage Limitation May Apply">
+        <Callout kind="warn" title="Income Exceeds Phase-In Threshold — W-2 Wage Limitation May Apply">
           <p>
             Estimated taxable income (<strong>{fmtAmt(estimatedTaxableIncome, 0)}</strong>) exceeds the{' '}
             {isMarried ? 'MFJ' : 'single'} threshold of{' '}
@@ -79,7 +93,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
           </p>
         </Callout>
       ) : (
-        <Callout kind="good" title="✓ Below Threshold — Simplified Calculation Applies">
+        <Callout kind="good" title="Below Threshold — Simplified Calculation Applies">
           <p>
             Estimated taxable income (<strong>{fmtAmt(estimatedTaxableIncome, 0)}</strong>) is below the{' '}
             {isMarried ? 'MFJ' : 'single'} threshold of{' '}
@@ -90,7 +104,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
       )}
 
       {/* Per-partnership breakdown */}
-      <FormBlock title="Per-Partnership QBI Breakdown (Box 20 Code Z)">
+      <FormBlock title="Per-Entity QBI Breakdown">
         {entries.map((entry, i) => (
           <div key={i} className="space-y-0.5 pb-2 border-b last:border-0 last:pb-0">
             <FormLine label={`${entry.label} — QBI income`} value={entry.qbiIncome} />
@@ -118,16 +132,16 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
 
       {/* Taxable income cap */}
       <FormBlock title="Taxable Income Cap (Form 8995 Line 15)">
-        <FormLine label="Total income (Form 1040 Line 9 estimate)" value={totalIncome} />
+        <FormLine label="Taxable income before QBI deduction" value={estimatedTaxableIncome} />
         <FormLine
-          label={`Less: estimated standard deduction (${selectedYear} ${isMarried ? 'MFJ' : 'Single'})`}
-          value={-stdDedApplied}
+          label="Less: net capital gain"
+          value={-(taxFacts?.netCapitalGain ?? 0)}
         />
-        <FormLine label="Estimated taxable income (Line 15 proxy)" value={estimatedTaxableIncome} />
-        <FormLine label="20% of estimated taxable income (cap)" value={taxableIncomeCap} />
+        <FormLine label="Taxable income less net capital gain" value={taxFacts?.taxableIncomeLessNetCapitalGain ?? estimatedTaxableIncome} />
+        <FormLine label="20% cap" value={taxableIncomeCap} />
         <FormLine
           label="Note"
-          raw="Actual taxable income includes capital gains, K-1 income, Schedule E, etc. — enter from your return."
+          raw={`Backend facts estimate taxable income for ${selectedYear} ${isMarried ? 'MFJ' : 'Single'} before applying the QBI deduction.`}
         />
       </FormBlock>
 
@@ -144,7 +158,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
       </FormBlock>
 
       {/* Callouts */}
-      <Callout kind="warn" title="⚠ QBI Deduction Does NOT Reduce Net Investment Income (NIIT)">
+      <Callout kind="warn" title="QBI Deduction Does NOT Reduce Net Investment Income (NIIT)">
         <p>
           The QBI deduction reduces regular taxable income (Form 1040 Line 15) but has{' '}
           <strong>no effect on Net Investment Income</strong> (Form 8960). Passive K-1 income remains
@@ -153,14 +167,14 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
         </p>
       </Callout>
 
-      <Callout kind="good" title="✓ QBI Deduction Is Allowed for AMT (Form 6251)">
+      <Callout kind="good" title="QBI Deduction Is Allowed for AMT (Form 6251)">
         <p>
           Post-TCJA, the Sec. 199A deduction is fully allowed for Alternative Minimum Tax purposes.
           Do <strong>not</strong> add it back on Form 6251.
         </p>
       </Callout>
 
-      <Callout kind="warn" title="⚠ State Conformity Varies — Check Your State">
+      <Callout kind="warn" title="State Conformity Varies — Check Your State">
         <p>
           Many states do <strong>not</strong> conform to the Sec. 199A deduction (California, New York,
           New Jersey, Massachusetts, Illinois, and others). The deduction shown here applies to your
@@ -168,7 +182,7 @@ export default function Form8995Preview({ reviewedK1Docs, totalIncome, selectedY
         </p>
       </Callout>
 
-      <Callout kind="info" title="ℹ Where This Flows on the Return">
+      <Callout kind="info" title="Where This Flows on the Return">
         <p>
           The QBI deduction flows to <strong>Form 1040 Line 13</strong>. It is a below-the-line
           deduction — it reduces <em>taxable</em> income but not AGI. It is available whether you
