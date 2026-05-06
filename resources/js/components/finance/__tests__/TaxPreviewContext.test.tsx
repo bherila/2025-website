@@ -427,10 +427,14 @@ describe('TaxPreviewContext', () => {
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
 
-    const poll = spy.mock.calls.find(([, delay]) => delay === 5_000)?.[0]
-    expect(typeof poll).toBe('function')
+    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
+    expect(pollCalls).toHaveLength(1)
+    const pollCall = pollCalls[0]
+    if (pollCall === undefined) {
+      throw new Error('Expected exactly one tax-preview polling interval')
+    }
 
-    const pollCallback = poll as () => void
+    const pollCallback = pollCall[0] as () => void
     (fetchWrapper.get as jest.Mock).mockClear()
     await act(async () => {
       pollCallback()
@@ -452,10 +456,14 @@ describe('TaxPreviewContext', () => {
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
 
-    const poll = spy.mock.calls.find(([, delay]) => delay === 5_000)?.[0]
-    expect(typeof poll).toBe('function')
+    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
+    expect(pollCalls).toHaveLength(1)
+    const pollCall = pollCalls[0]
+    if (pollCall === undefined) {
+      throw new Error('Expected exactly one tax-preview polling interval')
+    }
 
-    const pollCallback = poll as () => void
+    const pollCallback = pollCall[0] as () => void
     (fetchWrapper.get as jest.Mock).mockClear()
     await act(async () => {
       pollCallback()
