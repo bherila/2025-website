@@ -792,7 +792,7 @@ export function TaxPreviewProvider({
   useEffect(() => {
     const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
     if (!hasInFlight) return
-    const id = setInterval(() => void refreshAll({ includeTaxFacts: false }), POLLING_INTERVAL_MS)
+    const id = setInterval(() => void refreshAll(), POLLING_INTERVAL_MS)
     return () => clearInterval(id)
   }, [allDocuments, refreshAll])
 

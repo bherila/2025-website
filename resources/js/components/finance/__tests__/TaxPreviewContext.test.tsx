@@ -400,6 +400,28 @@ describe('TaxPreviewContext', () => {
     spy.mockRestore()
   })
 
+  it('refreshes tax facts during document polling', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
+
+    const spy = jest.spyOn(globalThis, 'setInterval')
+    renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+
+    const poll = spy.mock.calls.find(([, delay]) => delay === 5_000)?.[0]
+    expect(typeof poll).toBe('function')
+
+    const pollCallback = poll as () => void
+    (fetchWrapper.get as jest.Mock).mockClear()
+    await act(async () => {
+      pollCallback()
+    })
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1'))
+    spy.mockRestore()
+  })
+
   it('does not register setInterval when all documents are already parsed', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
