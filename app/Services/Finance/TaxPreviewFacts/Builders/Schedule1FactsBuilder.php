@@ -5,9 +5,12 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use LogicException;
 
 class Schedule1FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -15,8 +18,9 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099): Schedule1Facts
+    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null): Schedule1Facts
     {
+        $line3Sources = $scheduleC instanceof ScheduleCFacts ? $this->scheduleCLine3Sources($scheduleC) : [];
         $line5Sources = [];
 
         foreach ($k1Docs as $doc) {
@@ -65,6 +69,8 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         $line8zTotal = $this->sumSources($line8zSources);
 
         return new Schedule1Facts(
+            line3Sources: $line3Sources,
+            line3Total: $this->sumSources($line3Sources),
             line5Sources: $line5Sources,
             line5Total: $this->sumSources($line5Sources),
             line8Sources: $line8Sources,
@@ -77,6 +83,68 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             line8zSources: $line8zSources,
             line8zTotal: $line8zTotal,
             line9TotalOtherIncome: $this->sumMoney([$line8bTotal, $line8hTotal, $line8iTotal, $line8zTotal]),
+            line15Sources: $scheduleSE instanceof ScheduleSEFacts ? $this->scheduleSELine15Sources($scheduleSE) : [],
+            line15Total: $scheduleSE instanceof ScheduleSEFacts ? $scheduleSE->deductibleSeTax : 0.0,
+        );
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
+    private function scheduleCLine3Sources(ScheduleCFacts $scheduleC): array
+    {
+        return array_map(
+            fn (TaxFactSource $source): TaxFactSource => $this->cloneSource($source, TaxFactRouting::Schedule1Line3, 'Schedule C line 31 flows to Schedule 1 line 3.'),
+            $scheduleC->line31Sources,
+        );
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
+    private function scheduleSELine15Sources(ScheduleSEFacts $scheduleSE): array
+    {
+        if ($scheduleSE->deductibleSeTax === 0.0) {
+            return [];
+        }
+
+        return [
+            new TaxFactSource(
+                id: 'schedule-se-schedule1-line15',
+                label: 'Deductible half of self-employment tax',
+                amount: $scheduleSE->deductibleSeTax,
+                sourceType: TaxFactSourceType::ScheduleSEDeductibleTax,
+                routing: TaxFactRouting::Schedule1Line15,
+                routingReason: 'Schedule SE line 13 flows to Schedule 1 line 15.',
+                notes: "Schedule SE tax {$scheduleSE->seTax}",
+            ),
+        ];
+    }
+
+    private function cloneSource(TaxFactSource $source, TaxFactRouting $routing, string $routingReason): TaxFactSource
+    {
+        $sourceType = TaxFactSourceType::tryFrom($source->sourceType);
+        if (! $sourceType instanceof TaxFactSourceType) {
+            throw new LogicException("Cannot clone tax fact source {$source->id} because source type {$source->sourceType} is not recognized.");
+        }
+
+        return new TaxFactSource(
+            id: "{$source->id}-schedule1",
+            label: $source->label,
+            amount: $source->amount,
+            sourceType: $sourceType,
+            taxDocumentId: $source->taxDocumentId,
+            taxDocumentAccountId: $source->taxDocumentAccountId,
+            accountId: $source->accountId,
+            formType: $source->formType,
+            box: $source->box,
+            code: $source->code,
+            routing: $routing,
+            routingReason: $routingReason,
+            notes: $source->notes,
+            isReviewed: $source->isReviewed,
+            reviewStatus: $source->reviewStatus,
+            reviewAction: $source->reviewAction,
         );
     }
 

@@ -14,11 +14,9 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import { computeSchedule1Totals } from '@/components/finance/Schedule1Preview'
 import { computeScheduleALines } from '@/components/finance/ScheduleAPreview'
 import { computeScheduleB } from '@/components/finance/ScheduleBPreview'
-import { computeScheduleCNetIncome } from '@/components/finance/ScheduleCPreview'
 import { computeScheduleD } from '@/components/finance/ScheduleDPreview'
 import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import { computeScheduleF } from '@/components/finance/ScheduleFPreview'
-import { computeScheduleSE } from '@/components/finance/ScheduleSEPreview'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -28,7 +26,6 @@ import { computeForm8582, type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPO
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeForm8960Lines } from '@/finance/8960/form8960'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
-import { computeMedicareWages } from '@/finance/scheduleSE/computeScheduleSE'
 import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
 import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
 import { extractK1Form461Disclosure, getK1CodeItems, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
@@ -41,11 +38,11 @@ import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, OverviewRow, ScheduleSEEntrySourceType, ScheduleSELines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
-import type { ScheduleCResponse, YearData } from './ScheduleCPreview'
+import type { ScheduleCResponse } from './ScheduleCPreview'
 
 const FEDERAL_TAX_STATE = ''
 
@@ -193,6 +190,66 @@ const POLLING_INTERVAL_MS = 5_000
 
 function buildEmptyScheduleCNetIncome() {
   return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
+}
+
+function buildEmptyScheduleSE(isMarried: boolean) {
+  return {
+    entries: [],
+    netEarningsFromSE: 0,
+    seTaxableEarnings: 0,
+    // Backend facts own wage-base values; zero keeps the placeholder from showing a guessed year amount.
+    socialSecurityWageBase: 0,
+    socialSecurityWages: 0,
+    remainingSocialSecurityWageBase: 0,
+    socialSecurityTaxableEarnings: 0,
+    socialSecurityTax: 0,
+    medicareWages: 0,
+    medicareTaxableEarnings: 0,
+    medicareTax: 0,
+    additionalMedicareThreshold: isMarried ? 250_000 : 200_000,
+    additionalMedicareTaxableEarnings: 0,
+    additionalMedicareTax: 0,
+    seTax: 0,
+    deductibleSeTax: 0,
+  }
+}
+
+function toScheduleSELines(scheduleSE: NonNullable<TaxPreviewFacts['scheduleSE']> | ReturnType<typeof buildEmptyScheduleSE>): ScheduleSELines {
+  return {
+    ...scheduleSE,
+    entries: scheduleSE.entries.map(entry => ({
+      label: entry.label,
+      amount: entry.amount,
+      sourceType: entry.sourceType as ScheduleSEEntrySourceType,
+    })),
+  }
+}
+
+function sumW2Field(reviewedW2Docs: TaxDocument[], field: keyof W2ParsedData, fallbackField?: keyof W2ParsedData): number {
+  return reviewedW2Docs.reduce((acc, doc) => {
+    const parsed = doc.parsed_data as W2ParsedData | null
+    const primary = parsed?.[field]
+    const fallback = fallbackField ? parsed?.[fallbackField] : null
+    const numericValue = typeof primary === 'number'
+      ? primary
+      : typeof fallback === 'number'
+        ? fallback
+        : 0
+
+    return acc.add(numericValue)
+  }, currency(0)).value
+}
+
+function sumPayslipField(payslips: fin_payslip[], field: keyof fin_payslip): number {
+  return payslips.reduce((acc, row) => acc.add(Number(row[field] ?? 0)), currency(0)).value
+}
+
+function computeMedicareWages(reviewedW2Docs: TaxDocument[], payslips: fin_payslip[] = []): number {
+  if (reviewedW2Docs.length > 0) {
+    return sumW2Field(reviewedW2Docs, 'box5_medicare_wages', 'box1_wages')
+  }
+
+  return sumPayslipField(payslips, 'taxable_wages_medicare')
 }
 
 function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
@@ -705,21 +762,32 @@ export function TaxPreviewProvider({
   // Fire a toast when any document transitions from in-flight → parsed.
   useEffect(() => {
     const prev = prevDocStatusRef.current
+    let shouldRefreshTaxFacts = false
+
     for (const doc of allDocuments) {
       const prevStatus = prev.get(doc.id)
+      const currentStatus = doc.genai_status ?? ''
       if (prevStatus && IN_FLIGHT_STATUSES.has(prevStatus) && doc.genai_status === 'parsed') {
         const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
         toast.success(`${label} is ready to review`, {
           description: doc.original_filename ?? undefined,
         })
       }
+      if (prevStatus && IN_FLIGHT_STATUSES.has(prevStatus) && !IN_FLIGHT_STATUSES.has(currentStatus)) {
+        shouldRefreshTaxFacts = true
+      }
     }
+
     const next = new Map<number, string>()
     for (const doc of allDocuments) {
       if (doc.genai_status) next.set(doc.id, doc.genai_status)
     }
     prevDocStatusRef.current = next
-  }, [allDocuments])
+
+    if (shouldRefreshTaxFacts) {
+      void refreshAll()
+    }
+  }, [allDocuments, refreshAll])
 
   // Poll every 5 s while any document is still being processed by the AI.
   useEffect(() => {
@@ -918,10 +986,14 @@ export function TaxPreviewProvider({
   )
 
   const scheduleCNetIncome = useMemo(() => {
-    if (!scheduleCData?.years) return buildEmptyScheduleCNetIncome()
+    const backendScheduleC = taxFacts?.scheduleC
+    if (!backendScheduleC) return buildEmptyScheduleCNetIncome()
 
-    return computeScheduleCNetIncome(scheduleCData.years as YearData[], year)
-  }, [scheduleCData, year])
+    return {
+      total: backendScheduleC.netProfit,
+      byQuarter: backendScheduleC.netProfitCumulativeByQuarter,
+    }
+  }, [taxFacts])
 
   const w2GrossIncome = useMemo(() => payslips.reduce((acc, row) => acc
     .add(row.ps_salary ?? 0)
@@ -1150,15 +1222,7 @@ export function TaxPreviewProvider({
       totalExpenses: scheduleFTotalExpenses,
     })
 
-    const scheduleSE = computeScheduleSE({
-      reviewedK1Docs,
-      scheduleCNetIncome: scheduleCNetIncome.total,
-      selectedYear: year,
-      isMarried,
-      reviewedW2Docs,
-      payslips,
-      scheduleFNetProfit: scheduleFComputed.netProfitOrLoss,
-    })
+    const scheduleSE = toScheduleSELines(taxFacts?.scheduleSE ?? buildEmptyScheduleSE(isMarried))
 
     const schedule1 = computeSchedule1Totals({
       scheduleCNetIncome: scheduleCNetIncome.total,
@@ -1423,6 +1487,7 @@ export function TaxPreviewProvider({
     form4797PartIIIRecapture,
     scheduleFGrossIncome,
     scheduleFTotalExpenses,
+    taxFacts,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({

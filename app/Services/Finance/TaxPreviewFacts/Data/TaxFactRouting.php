@@ -19,6 +19,8 @@ enum TaxFactRouting: string
     case Form8960Line9a = 'form_8960_line_9a';
     case NeedsReviewScheduleDLine5Or12 = 'needs_review_schedule_d_line_5_or_12';
     case Schedule1Line5 = 'schedule_1_line_5';
+    case Schedule1Line3 = 'schedule_1_line_3';
+    case Schedule1Line15 = 'schedule_1_line_15';
     case ScheduleALine5a = 'schedule_a_line_5a';
     case ScheduleALine5b = 'schedule_a_line_5b';
     case ScheduleALine5c = 'schedule_a_line_5c';
@@ -31,6 +33,10 @@ enum TaxFactRouting: string
     case ScheduleALine17 = 'schedule_a_line_17';
     case ScheduleBLine1 = 'schedule_b_line_1';
     case ScheduleBLine5 = 'schedule_b_line_5';
+    case ScheduleCLine1 = 'schedule_c_line_1';
+    case ScheduleCLine28 = 'schedule_c_line_28';
+    case ScheduleCLine30 = 'schedule_c_line_30';
+    case ScheduleCLine31 = 'schedule_c_line_31';
     case ScheduleDLine3 = 'schedule_d_line_3';
     case ScheduleDLine5 = 'schedule_d_line_5';
     case ScheduleDLine10 = 'schedule_d_line_10';
@@ -39,6 +45,14 @@ enum TaxFactRouting: string
     case ScheduleELine3 = 'schedule_e_line_3';
     case ScheduleELine28 = 'schedule_e_line_28';
     case ScheduleELine32 = 'schedule_e_line_32';
+    case ScheduleSELine1a = 'schedule_se_line_1a';
+    case ScheduleSELine2 = 'schedule_se_line_2';
+    case ScheduleSELine4a = 'schedule_se_line_4a';
+    case ScheduleSELine7 = 'schedule_se_line_7';
+    case ScheduleSELine10 = 'schedule_se_line_10';
+    case ScheduleSELine11 = 'schedule_se_line_11';
+    case ScheduleSELine12 = 'schedule_se_line_12';
+    case ScheduleSELine13 = 'schedule_se_line_13';
     case Schedule1LegacyLine8 = 'sch_1_line_8';
     case Schedule1Line8b = 'sch_1_8b';
     case Schedule1Line8h = 'sch_1_8h';

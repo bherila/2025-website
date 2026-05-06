@@ -10,7 +10,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
     protected $signature = 'finance:tax-preview-facts
         {--user= : User ID to inspect; defaults to FINANCE_CLI_USER_ID or 1}
         {--year= : Tax year; defaults to current year}
-        {--slice=all : Fact slice: all, schedule1, scheduleB, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960}
+        {--slice=all : Fact slice; see TaxPreviewFactsService::supportedSlices()}
         {--format=table : Output format: table, json, or toon}';
 
     protected $description = 'Render backend tax-preview fact source lines for CLI debugging.';
@@ -38,7 +38,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         }
 
         if (! in_array($slice, TaxPreviewFactsService::supportedSlices(), true)) {
-            $this->error("Unsupported --slice '{$slice}'. Use all, schedule1, scheduleB, form4952, scheduleA, scheduleE, scheduleD, form8949, form1116, or form8960.");
+            $this->error("Unsupported --slice '{$slice}'. Use ".implode(', ', TaxPreviewFactsService::supportedSlices()).'.');
 
             return self::FAILURE;
         }
@@ -88,6 +88,54 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         foreach (($facts['scheduleB']['qualifiedDividendSources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['scheduleB', 'qualifiedDividends', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach ([
+            'grossReceiptsTotal' => 'line1',
+            'expensesTotal' => 'line28',
+            'homeOfficeAllowable' => 'line30',
+            'netProfit' => 'line31',
+        ] as $key => $line) {
+            if (isset($facts['scheduleC'][$key])) {
+                $rows[] = ['scheduleC', $line, $key, $facts['scheduleC'][$key], ''];
+            }
+        }
+
+        foreach (($facts['scheduleC']['entities'] ?? []) as $entity) {
+            if (! is_array($entity)) {
+                continue;
+            }
+
+            foreach (['grossReceiptSources', 'expenseSources', 'homeOfficeSources'] as $key) {
+                foreach (($entity[$key] ?? []) as $source) {
+                    if (is_array($source)) {
+                        $rows[] = ['scheduleC', $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                    }
+                }
+            }
+        }
+
+        foreach ([
+            'netEarningsFromSE',
+            'seTaxableEarnings',
+            'socialSecurityTaxableEarnings',
+            'socialSecurityTax',
+            'medicareTax',
+            'additionalMedicareTax',
+            'seTax',
+            'deductibleSeTax',
+        ] as $key) {
+            if (isset($facts['scheduleSE'][$key])) {
+                $rows[] = ['scheduleSE', $key, $key, $facts['scheduleSE'][$key], ''];
+            }
+        }
+
+        foreach (['entries', 'wageSources', 'scheduleFSources'] as $key) {
+            foreach (($facts['scheduleSE'][$key] ?? []) as $source) {
+                if (is_array($source)) {
+                    $rows[] = ['scheduleSE', $source['routing'] ?? $key, $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+                }
             }
         }
 

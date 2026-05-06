@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react'
 
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleSEFacts } from '@/types/generated/tax-preview-facts'
 
-import ScheduleSEPreview, { computeScheduleSE } from '../ScheduleSEPreview'
+import ScheduleSEPreview from '../ScheduleSEPreview'
 
 function makeK1Doc(code: string, value: string): TaxDocument {
   return {
@@ -25,27 +26,37 @@ function makeK1Doc(code: string, value: string): TaxDocument {
 }
 
 describe('ScheduleSEPreview', () => {
-  it('extracts Box 14C farm income into Schedule SE inputs', () => {
-    const computed = computeScheduleSE({
-      reviewedK1Docs: [makeK1Doc('C', '12000')],
-      scheduleCNetIncome: 0,
-      selectedYear: 2024,
-    })
-
-    expect(computed.entries).toEqual([
-      expect.objectContaining({
-        label: 'Farm LP — Box 14C farm income',
-        amount: 12_000,
-        sourceType: 'k1_box14_c',
-      }),
-    ])
-  })
-
   it('renders self-employment tax and the deductible half', () => {
+    const taxFacts = {
+      entries: [{
+        id: 'k1-1-schedule-se-box-14A-0',
+        label: 'Farm LP — K-1 Box 14A net earnings from self-employment',
+        amount: 100_000,
+        sourceType: 'schedule_se_k1_box_14a',
+      }],
+      netEarningsFromSE: 100_000,
+      seTaxableEarnings: 92_350,
+      socialSecurityWageBase: 168_600,
+      socialSecurityWages: 0,
+      remainingSocialSecurityWageBase: 168_600,
+      socialSecurityTaxableEarnings: 92_350,
+      socialSecurityTax: 11_451.4,
+      medicareWages: 0,
+      medicareTaxableEarnings: 92_350,
+      medicareTax: 2678.15,
+      additionalMedicareThreshold: 200_000,
+      additionalMedicareTaxableEarnings: 0,
+      additionalMedicareTax: 0,
+      seTax: 14_129.55,
+      deductibleSeTax: 7064.78,
+      wageSources: [],
+      scheduleFSources: [],
+    } as unknown as ScheduleSEFacts
+
     render(
       <ScheduleSEPreview
+        taxFacts={taxFacts}
         reviewedK1Docs={[makeK1Doc('A', '100000')]}
-        scheduleCNetIncome={0}
         selectedYear={2024}
       />,
     )

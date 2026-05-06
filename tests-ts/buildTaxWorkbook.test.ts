@@ -152,7 +152,7 @@ describe('buildTaxWorkbook', () => {
       },
       scheduleE: { grandTotal: 100, totalPassive: 60, totalNonpassive: 40, totalTraderNii: 0 },
       scheduleSE: {
-        entries: [{ label: 'Blue Harbor — Box 14A', amount: 10_000, sourceType: 'k1_box14_a' }],
+        entries: [{ label: 'Blue Harbor — Box 14A', amount: 10_000, sourceType: 'schedule_se_k1_box_14a' }],
         netEarningsFromSE: 10_000,
         seTaxableEarnings: 9_235,
         socialSecurityWageBase: 176_100,
@@ -217,7 +217,7 @@ describe('buildTaxWorkbook', () => {
 
   it('adds a Schedule SE worksheet when self-employment tax data is present', () => {
     const scheduleSEFixture = {
-      entries: [{ label: 'Acme LP — Box 14A', amount: 100_000, sourceType: 'k1_box14_a' as const }],
+      entries: [{ label: 'Acme LP — Box 14A', amount: 100_000, sourceType: 'schedule_se_k1_box_14a' as const }],
       netEarningsFromSE: 100_000,
       seTaxableEarnings: 92_350,
       socialSecurityWageBase: 168_600,

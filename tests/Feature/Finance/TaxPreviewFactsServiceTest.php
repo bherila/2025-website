@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
@@ -1109,12 +1110,224 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertTrue($facts['form8960']['needsMagi']);
     }
 
+    public function test_schedule_c_builds_per_entity_rollups_and_feeds_schedule1_line3(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $consultingEntityId = $this->createEmploymentEntity($user->id, 'Consulting LLC');
+        $writingEntityId = $this->createEmploymentEntity($user->id, 'Writing Studio');
+
+        $consultingIncomeTag = $this->createScheduleCTag($user->id, $consultingEntityId, 'business_income', 'Consulting income');
+        $consultingExpenseTag = $this->createScheduleCTag($user->id, $consultingEntityId, 'sce_office_expenses', 'Consulting office');
+        $writingIncomeTag = $this->createScheduleCTag($user->id, $writingEntityId, 'business_income', 'Writing income');
+        $this->tagTransaction($account->acct_id, $consultingIncomeTag, '2025-02-01', 10000);
+        $this->tagTransaction($account->acct_id, $consultingExpenseTag, '2025-03-01', -1200);
+        $this->tagTransaction($account->acct_id, $writingIncomeTag, '2025-04-01', 5000);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(15000.0, $facts['scheduleC']['grossReceiptsTotal']);
+        $this->assertSame(1200.0, $facts['scheduleC']['expensesTotal']);
+        $this->assertSame(13800.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame(13800.0, $facts['scheduleC']['netProfitRoutedToSchedule1']);
+        $this->assertSame(13800.0, $facts['schedule1']['line3Total']);
+        $this->assertCount(2, $facts['scheduleC']['entities']);
+    }
+
+    public function test_schedule_c_cumulative_quarter_totals_allocate_home_office_and_reconcile_q4(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Quarterly LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 100);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-05-01', 200);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-08-01', 300);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-11-01', 400);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-12-01', -100);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+
+        $this->assertSame(900.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame([
+            'q1' => 90.0,
+            'q2' => 270.0,
+            'q3' => 540.0,
+            'q4' => 900.0,
+        ], $facts['scheduleC']['netProfitCumulativeByQuarter']);
+    }
+
+    public function test_schedule_c_home_office_limits_and_carries_forward(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Small Profit LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $expenseTag = $this->createScheduleCTag($user->id, $entityId, 'sce_supplies', 'Supplies');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2024-02-01', 1000);
+        $this->tagTransaction($account->acct_id, $expenseTag, '2024-02-15', -700);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2024-03-01', -500);
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 2000);
+        $this->tagTransaction($account->acct_id, $expenseTag, '2025-02-15', -1000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-03-01', -100);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+        $priorYearFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024, 'scheduleC');
+
+        $this->assertSame(200.0, $facts['scheduleC']['homeOfficePriorCarryforward']);
+        $this->assertSame(300.0, $facts['scheduleC']['homeOfficeAllowable']);
+        $this->assertSame(0.0, $facts['scheduleC']['homeOfficeDisallowed']);
+        $this->assertSame(700.0, $facts['scheduleC']['netProfit']);
+        $priorYearHomeOfficeSources = collect($priorYearFacts['scheduleC']['entities'][0]['homeOfficeSources']);
+        $this->assertSame(500.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_claimed')['amount']);
+        $this->assertSame(-200.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_disallowed')['amount']);
+        $this->assertSame(300.0, $priorYearHomeOfficeSources->sum('amount'));
+    }
+
+    public function test_schedule_se_uses_schedule_c_k1_and_w2_inputs_and_feeds_schedule1_line15(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'SE Business');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 10000);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 150000, 'box3_ss_wages' => 150000, 'box5_medicare_wages' => 150000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'SE Fund'],
+                codes: ['14' => [
+                    ['code' => 'A', 'value' => '20000'],
+                    ['code' => 'C', 'value' => '5000'],
+                ]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(35000.0, $facts['scheduleSE']['netEarningsFromSE']);
+        $this->assertSame(26100.0, $facts['scheduleSE']['remainingSocialSecurityWageBase']);
+        $this->assertSame(26100.0, $facts['scheduleSE']['socialSecurityTaxableEarnings']);
+        $this->assertSame($facts['scheduleSE']['deductibleSeTax'], $facts['schedule1']['line15Total']);
+        $this->assertSame(10000.0, collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_schedule_c')['amount']);
+        $this->assertSame('schedule_se_line_1a', collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_k1_box_14c')['routing']);
+    }
+
+    public function test_schedule_se_uses_payslips_when_w2_is_not_reviewed_and_parsable(): void
+    {
+        $user = $this->createUser();
+        FinPayslips::withoutEvents(fn (): FinPayslips => FinPayslips::create([
+            'uid' => $user->id,
+            'period_start' => '2025-06-01',
+            'period_end' => '2025-06-15',
+            'pay_date' => '2025-06-15',
+            'taxable_wages_oasdi' => 50000,
+            'taxable_wages_medicare' => 52000,
+        ]));
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => false,
+            'parsed_data' => ['employer_name' => 'Unreviewed Employer', 'box1_wages' => 180000, 'box3_ss_wages' => 180000, 'box5_medicare_wages' => 180000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'SE Fund'], codes: ['14' => [['code' => 'A', 'value' => '100000']]]),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleSE');
+        $wageSources = collect($facts['scheduleSE']['wageSources']);
+
+        $this->assertSame(50000.0, $facts['scheduleSE']['socialSecurityWages']);
+        $this->assertSame(52000.0, $facts['scheduleSE']['medicareWages']);
+        $this->assertTrue($wageSources->contains('sourceType', 'schedule_se_payslip_social_security_wages'));
+        $this->assertTrue($wageSources->contains('sourceType', 'schedule_se_payslip_medicare_wages'));
+        $this->assertFalse($wageSources->contains('sourceType', 'schedule_se_w2_social_security_wages'));
+    }
+
+    public function test_schedule_se_additional_medicare_uses_single_and_mfj_thresholds(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 180000, 'box3_ss_wages' => 180000, 'box5_medicare_wages' => 180000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'SE Fund'], codes: ['14' => [['code' => 'A', 'value' => '100000']]]),
+        ]);
+
+        $singleFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleSE');
+        $user->forceFill(['marriage_status_by_year' => ['2025' => true]])->save();
+        $mfjFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleSE');
+
+        $this->assertSame(200000.0, $singleFacts['scheduleSE']['additionalMedicareThreshold']);
+        $this->assertSame(250000.0, $mfjFacts['scheduleSE']['additionalMedicareThreshold']);
+        $this->assertLessThan($singleFacts['scheduleSE']['additionalMedicareTax'], $mfjFacts['scheduleSE']['additionalMedicareTax']);
+        $this->assertGreaterThan(0, $mfjFacts['scheduleSE']['additionalMedicareTax']);
+    }
+
     private function createAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
             'acct_owner' => $userId,
             'acct_name' => 'Brokerage',
         ]));
+    }
+
+    private function createEmploymentEntity(int $userId, string $displayName): int
+    {
+        return (int) DB::table('fin_employment_entity')->insertGetId([
+            'user_id' => $userId,
+            'display_name' => $displayName,
+            'start_date' => '2024-01-01',
+            'type' => 'sch_c',
+            'is_current' => true,
+            'is_spouse' => false,
+            'is_hidden' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createScheduleCTag(int $userId, int $entityId, string $taxCharacteristic, string $label): int
+    {
+        return (int) DB::table('fin_account_tag')->insertGetId([
+            'tag_userid' => (string) $userId,
+            'tag_color' => '#2563eb',
+            'tag_label' => $label,
+            'tax_characteristic' => $taxCharacteristic,
+            'employment_entity_id' => $entityId,
+        ]);
+    }
+
+    private function tagTransaction(int $accountId, int $tagId, string $date, float $amount): void
+    {
+        $transactionId = (int) DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $accountId,
+            't_date' => $date,
+            't_type' => 'Debit',
+            't_amt' => $amount,
+            't_description' => 'Tagged Schedule C transaction',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('fin_account_line_item_tag_map')->insert([
+            't_id' => $transactionId,
+            'tag_id' => $tagId,
+        ]);
     }
 
     /**

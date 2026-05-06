@@ -1,7 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
+import currency from 'currency.js'
 import React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: { get: jest.fn() },
@@ -49,10 +51,44 @@ function makeResponse(docs: object[] = []) {
   }
 }
 
-function makeTaxFacts() {
+function makeTaxFacts(): TaxPreviewFacts {
   return {
     year: 2025,
+    scheduleC: {
+      entities: [],
+      line31Sources: [],
+      grossReceiptsTotal: 0,
+      expensesTotal: 0,
+      homeOfficeAllowable: 0,
+      homeOfficeDisallowed: 0,
+      homeOfficePriorCarryforward: 0,
+      netProfit: 0,
+      netProfitCumulativeByQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 },
+      netProfitRoutedToSchedule1: 0,
+    },
+    scheduleSE: {
+      entries: [],
+      wageSources: [],
+      scheduleFSources: [],
+      netEarningsFromSE: 0,
+      seTaxableEarnings: 0,
+      socialSecurityWageBase: 176100,
+      socialSecurityWages: 0,
+      remainingSocialSecurityWageBase: 176100,
+      socialSecurityTaxableEarnings: 0,
+      socialSecurityTax: 0,
+      medicareWages: 0,
+      medicareTaxableEarnings: 0,
+      medicareTax: 0,
+      additionalMedicareThreshold: 200000,
+      additionalMedicareTaxableEarnings: 0,
+      additionalMedicareTax: 0,
+      seTax: 0,
+      deductibleSeTax: 0,
+    },
     schedule1: {
+      line3Sources: [],
+      line3Total: 0,
       line5Sources: [],
       line5Total: 0,
       line8zSources: [{
@@ -99,6 +135,8 @@ function makeTaxFacts() {
       line8iTotal: 0,
       line8zTotal: 42,
       line9TotalOtherIncome: 42,
+      line15Sources: [],
+      line15Total: 0,
     },
     scheduleB: {
       interestSources: [],
@@ -264,7 +302,43 @@ function makeTaxFacts() {
       needsMagi: true,
       componentSources: [],
     },
-  }
+  } as unknown as TaxPreviewFacts
+}
+
+function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000): TaxPreviewFacts {
+  const facts = makeTaxFacts()
+  const seTaxableEarnings = currency(netEarningsFromSE).multiply(0.9235).value
+  const socialSecurityTax = currency(seTaxableEarnings).multiply(0.124).value
+  const medicareTax = currency(seTaxableEarnings).multiply(0.029).value
+  const seTax = currency(socialSecurityTax).add(medicareTax).value
+
+  facts.scheduleSE = {
+    entries: [{
+      id: 'k1-77-schedule-se-box-14A-0',
+      label: 'SE Partnership — K-1 Box 14A net earnings from self-employment',
+      amount: netEarningsFromSE,
+      sourceType: 'schedule_se_k1_box_14a',
+    }],
+    wageSources: [],
+    scheduleFSources: [],
+    netEarningsFromSE,
+    seTaxableEarnings,
+    socialSecurityWageBase: 176100,
+    socialSecurityWages: 0,
+    remainingSocialSecurityWageBase: 176100,
+    socialSecurityTaxableEarnings: seTaxableEarnings,
+    socialSecurityTax,
+    medicareWages: 0,
+    medicareTaxableEarnings: seTaxableEarnings,
+    medicareTax,
+    additionalMedicareThreshold: 200000,
+    additionalMedicareTaxableEarnings: 0,
+    additionalMedicareTax: 0,
+    seTax,
+    deductibleSeTax: currency(seTax).divide(2).value,
+  } as unknown as TaxPreviewFacts['scheduleSE']
+
+  return facts
 }
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -287,6 +361,24 @@ describe('TaxPreviewContext', () => {
 
     expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
     expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
+  })
+
+  it('preserves unknown Schedule SE source types from backend facts', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([]))
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    const facts = makeTaxFactsWithScheduleSE()
+    facts.scheduleSE.entries = facts.scheduleSE.entries.map(entry => ({
+      ...entry,
+      sourceType: 'schedule_se_schedule_f',
+    }))
+
+    act(() => result.current.setTaxFacts(facts))
+
+    expect(result.current.taxReturn.scheduleSE?.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
   })
 
   it('does not show loading spinner on background polls', async () => {
@@ -323,6 +415,62 @@ describe('TaxPreviewContext', () => {
     renderHook(() => useTaxPreview(), { wrapper })
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+    spy.mockRestore()
+  })
+
+  it('keeps document polling lightweight while status remains in-flight', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
+
+    const spy = jest.spyOn(globalThis, 'setInterval')
+    renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+
+    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
+    expect(pollCalls).toHaveLength(1)
+    const pollCall = pollCalls[0]
+    if (pollCall === undefined) {
+      throw new Error('Expected exactly one tax-preview polling interval')
+    }
+
+    const pollCallback = pollCall[0] as () => void
+    (fetchWrapper.get as jest.Mock).mockClear()
+    await act(async () => {
+      pollCallback()
+    })
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
+    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1')
+    spy.mockRestore()
+  })
+
+  it('refreshes tax facts when document polling observes a terminal status transition', async () => {
+    (fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
+      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'parsed')]))
+      .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
+
+    const spy = jest.spyOn(globalThis, 'setInterval')
+    renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+
+    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
+    expect(pollCalls).toHaveLength(1)
+    const pollCall = pollCalls[0]
+    if (pollCall === undefined) {
+      throw new Error('Expected exactly one tax-preview polling interval')
+    }
+
+    const pollCallback = pollCall[0] as () => void
+    (fetchWrapper.get as jest.Mock).mockClear()
+    await act(async () => {
+      pollCallback()
+    })
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1'))
     spy.mockRestore()
   })
 
@@ -617,7 +765,7 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve([])
       }
 
-      return Promise.resolve(makeResponse([k1Doc, ira1099R, pension1099R]))
+      return Promise.resolve({ ...makeResponse([k1Doc, ira1099R, pension1099R]), taxFacts: makeTaxFactsWithScheduleSE() })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
@@ -756,7 +904,7 @@ describe('TaxPreviewContext', () => {
     }
 
     ;(fetchWrapper.get as jest.Mock)
-      .mockResolvedValueOnce(makeResponse([k1Doc]))
+      .mockResolvedValueOnce({ ...makeResponse([k1Doc]), taxFacts: makeTaxFactsWithScheduleSE() })
       .mockResolvedValue([])
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
@@ -765,6 +913,27 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.scheduleSE?.netEarningsFromSE).toBe(10_000)
     expect(result.current.taxReturn.schedule2?.selfEmploymentTax).toBeCloseTo(1_412.96, 2)
     expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
+  })
+
+  it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {
+    const wrapper2024 = ({ children }: { children: React.ReactNode }) => (
+      <TaxPreviewProvider initialData={{ year: 2024, availableYears: [2024] }}>{children}</TaxPreviewProvider>
+    )
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2024') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2024') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2024') return Promise.resolve([])
+
+      return Promise.resolve({ ...makeResponse([]), year: 2024, availableYears: [2024] })
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(0)
+    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(0)
   })
 
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
