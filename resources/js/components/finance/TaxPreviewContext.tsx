@@ -187,19 +187,36 @@ const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
 const POLLING_INTERVAL_MS = 5_000
+const SOCIAL_SECURITY_WAGE_BASE_BY_YEAR: Record<number, number> = {
+  2018: 128_400,
+  2019: 132_900,
+  2020: 137_700,
+  2021: 142_800,
+  2022: 147_000,
+  2023: 160_200,
+  2024: 168_600,
+  2025: 176_100,
+  2026: 183_600,
+}
 
 function buildEmptyScheduleCNetIncome() {
   return { total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }
 }
 
+function socialSecurityWageBase(selectedYear: number): number {
+  return SOCIAL_SECURITY_WAGE_BASE_BY_YEAR[selectedYear] ?? 183_600
+}
+
 function buildEmptyScheduleSE(selectedYear: number, isMarried: boolean) {
+  const wageBase = socialSecurityWageBase(selectedYear)
+
   return {
     entries: [],
     netEarningsFromSE: 0,
     seTaxableEarnings: 0,
-    socialSecurityWageBase: selectedYear >= 2026 ? 183_600 : 176_100,
+    socialSecurityWageBase: wageBase,
     socialSecurityWages: 0,
-    remainingSocialSecurityWageBase: selectedYear >= 2026 ? 183_600 : 176_100,
+    remainingSocialSecurityWageBase: wageBase,
     socialSecurityTaxableEarnings: 0,
     socialSecurityTax: 0,
     medicareWages: 0,
@@ -965,11 +982,10 @@ export function TaxPreviewProvider({
   const scheduleCNetIncome = useMemo(() => {
     const backendScheduleC = taxFacts?.scheduleC
     if (!backendScheduleC) return buildEmptyScheduleCNetIncome()
-    const byQuarter = backendScheduleC.netProfitByQuarter as unknown as { q1: number; q2: number; q3: number; q4: number }
 
     return {
       total: backendScheduleC.netProfit,
-      byQuarter,
+      byQuarter: backendScheduleC.netProfitByQuarter,
     }
   }, [taxFacts])
 

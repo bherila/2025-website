@@ -841,6 +841,27 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
   })
 
+  it('uses the selected year wage base while backend Schedule SE facts are empty', async () => {
+    const wrapper2024 = ({ children }: { children: React.ReactNode }) => (
+      <TaxPreviewProvider initialData={{ year: 2024, availableYears: [2024] }}>{children}</TaxPreviewProvider>
+    )
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2024') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2024') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2024') return Promise.resolve([])
+
+      return Promise.resolve({ ...makeResponse([]), year: 2024, availableYears: [2024] })
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(168_600)
+    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(168_600)
+  })
+
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
     const k1Doc = {
       id: 88,

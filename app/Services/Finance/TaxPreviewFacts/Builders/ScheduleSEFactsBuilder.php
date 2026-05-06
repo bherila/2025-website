@@ -47,11 +47,13 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
             ...$this->scheduleCEntries($scheduleC),
         ];
         $scheduleFSources = [$this->scheduleFNeedsReviewSource()];
-        $socialSecurityWageSources = $w2Docs !== []
-            ? $this->w2WageSources($w2Docs, 'box3_ss_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2SocialSecurityWages, 'Social Security wages')
+        $socialSecurityW2Sources = $this->w2WageSources($w2Docs, 'box3_ss_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2SocialSecurityWages, 'Social Security wages');
+        $medicareW2Sources = $this->w2WageSources($w2Docs, 'box5_medicare_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2MedicareWages, 'Medicare wages');
+        $socialSecurityWageSources = $socialSecurityW2Sources !== []
+            ? $socialSecurityW2Sources
             : $this->payslipWageSources($userId, $year, 'taxable_wages_oasdi', TaxFactSourceType::ScheduleSEPayslipSocialSecurityWages, 'Social Security wages');
-        $medicareWageSources = $w2Docs !== []
-            ? $this->w2WageSources($w2Docs, 'box5_medicare_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2MedicareWages, 'Medicare wages')
+        $medicareWageSources = $medicareW2Sources !== []
+            ? $medicareW2Sources
             : $this->payslipWageSources($userId, $year, 'taxable_wages_medicare', TaxFactSourceType::ScheduleSEPayslipMedicareWages, 'Medicare wages');
 
         $netEarningsFromSE = $this->sumSources($entries);
@@ -183,7 +185,7 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
         $sources = [];
 
         foreach ($w2Docs as $doc) {
-            if (! is_array($doc->parsed_data)) {
+            if (! $this->sourceIsReviewed($doc) || ! is_array($doc->parsed_data)) {
                 continue;
             }
 

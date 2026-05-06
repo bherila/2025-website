@@ -48,6 +48,7 @@ enum TaxFactSourceType: string
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
     case ScheduleCGrossReceipts = 'schedule_c_gross_receipts';
     case ScheduleCHomeOfficeAllowable = 'schedule_c_home_office_allowable';
+    case ScheduleCHomeOfficeClaimed = 'schedule_c_home_office_claimed';
     case ScheduleCHomeOfficeDisallowed = 'schedule_c_home_office_disallowed';
     case ScheduleCHomeOfficePriorCarryforward = 'schedule_c_home_office_prior_carryforward';
     case ScheduleCNetProfit = 'schedule_c_net_profit';

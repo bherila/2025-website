@@ -77,6 +77,12 @@ niitTaxSingle: number | null;
 niitTaxMarriedFilingJointly: number | null;
 needsMagi: boolean;
 };
+export type QuarterTotals = {
+q1: number;
+q2: number;
+q3: number;
+q4: number;
+};
 export type Schedule1Facts = {
 line3Sources: Array<TaxFactSource>;
 line5Sources: Array<TaxFactSource>;
@@ -165,7 +171,7 @@ homeOfficeAllowable: number;
 homeOfficeDisallowed: number;
 homeOfficePriorCarryforward: number;
 netProfit: number;
-netProfitByQuarter: Array<any>;
+netProfitByQuarter: QuarterTotals;
 deductiblePortionRoutedToSchedule1: number;
 };
 export type ScheduleDFacts = {

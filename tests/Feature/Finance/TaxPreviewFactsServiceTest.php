@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
@@ -1149,11 +1150,16 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-03-01', -100);
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+        $priorYearFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024, 'scheduleC');
 
         $this->assertSame(200.0, $facts['scheduleC']['homeOfficePriorCarryforward']);
         $this->assertSame(300.0, $facts['scheduleC']['homeOfficeAllowable']);
         $this->assertSame(0.0, $facts['scheduleC']['homeOfficeDisallowed']);
         $this->assertSame(700.0, $facts['scheduleC']['netProfit']);
+        $priorYearHomeOfficeSources = collect($priorYearFacts['scheduleC']['entities'][0]['homeOfficeSources']);
+        $this->assertSame(500.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_claimed')['amount']);
+        $this->assertSame(-200.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_disallowed')['amount']);
+        $this->assertSame(300.0, $priorYearHomeOfficeSources->sum('amount'));
     }
 
     public function test_schedule_se_uses_schedule_c_k1_and_w2_inputs_and_feeds_schedule1_line15(): void
@@ -1189,6 +1195,38 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(10000.0, collect($facts['scheduleSE']['entries'])->firstWhere('sourceType', 'schedule_se_schedule_c')['amount']);
     }
 
+    public function test_schedule_se_uses_payslips_when_w2_is_not_reviewed_and_parsable(): void
+    {
+        $user = $this->createUser();
+        FinPayslips::withoutEvents(fn (): FinPayslips => FinPayslips::create([
+            'uid' => $user->id,
+            'period_start' => '2025-06-01',
+            'period_end' => '2025-06-15',
+            'pay_date' => '2025-06-15',
+            'taxable_wages_oasdi' => 50000,
+            'taxable_wages_medicare' => 52000,
+        ]));
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => false,
+            'parsed_data' => ['employer_name' => 'Unreviewed Employer', 'box1_wages' => 180000, 'box3_ss_wages' => 180000, 'box5_medicare_wages' => 180000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'SE Fund'], codes: ['14' => [['code' => 'A', 'value' => '100000']]]),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleSE');
+        $wageSources = collect($facts['scheduleSE']['wageSources']);
+
+        $this->assertSame(50000.0, $facts['scheduleSE']['socialSecurityWages']);
+        $this->assertSame(52000.0, $facts['scheduleSE']['medicareWages']);
+        $this->assertTrue($wageSources->contains('sourceType', 'schedule_se_payslip_social_security_wages'));
+        $this->assertTrue($wageSources->contains('sourceType', 'schedule_se_payslip_medicare_wages'));
+        $this->assertFalse($wageSources->contains('sourceType', 'schedule_se_w2_social_security_wages'));
+    }
+
     public function test_schedule_se_additional_medicare_uses_single_and_mfj_thresholds(): void
     {
         $user = $this->createUser();
@@ -1209,7 +1247,7 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(200000.0, $singleFacts['scheduleSE']['additionalMedicareThreshold']);
         $this->assertSame(250000.0, $mfjFacts['scheduleSE']['additionalMedicareThreshold']);
-        $this->assertGreaterThan($mfjFacts['scheduleSE']['additionalMedicareTax'], $singleFacts['scheduleSE']['additionalMedicareTax']);
+        $this->assertLessThan($singleFacts['scheduleSE']['additionalMedicareTax'], $mfjFacts['scheduleSE']['additionalMedicareTax']);
         $this->assertGreaterThan(0, $mfjFacts['scheduleSE']['additionalMedicareTax']);
     }
 

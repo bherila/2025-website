@@ -4,6 +4,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\ScheduleCSummaryService;
+use App\Services\Finance\TaxPreviewFacts\Data\QuarterTotals;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCEntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
@@ -67,9 +68,8 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  array<string, mixed>  $yearData
      * @param  array<string, array{allowable:float,disallowed:float,priorCarryForward:float,reason:string}>  $homeOfficeCalcs
-     * @return array{q1:float,q2:float,q3:float,q4:float}
      */
-    private function netProfitByQuarter(int $year, array $yearData, array $homeOfficeCalcs): array
+    private function netProfitByQuarter(int $year, array $yearData, array $homeOfficeCalcs): QuarterTotals
     {
         $quarters = ['q1' => 0.0, 'q2' => 0.0, 'q3' => 0.0, 'q4' => 0.0];
 
@@ -108,12 +108,12 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             $quarters['q4'] = $this->sumMoney([$quarters['q4'], $q4Net]);
         }
 
-        return [
-            'q1' => $quarters['q1'],
-            'q2' => $this->sumMoney([$quarters['q1'], $quarters['q2']]),
-            'q3' => $this->sumMoney([$quarters['q1'], $quarters['q2'], $quarters['q3']]),
-            'q4' => $this->sumMoney([$quarters['q1'], $quarters['q2'], $quarters['q3'], $quarters['q4']]),
-        ];
+        return new QuarterTotals(
+            q1: $quarters['q1'],
+            q2: $this->sumMoney([$quarters['q1'], $quarters['q2']]),
+            q3: $this->sumMoney([$quarters['q1'], $quarters['q2'], $quarters['q3']]),
+            q4: $this->sumMoney([$quarters['q1'], $quarters['q2'], $quarters['q3'], $quarters['q4']]),
+        );
     }
 
     /**
@@ -204,7 +204,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         ];
         $grossReceiptSources = $this->categorySources($entityData, 'schedule_c_income', TaxFactSourceType::ScheduleCGrossReceipts, TaxFactRouting::ScheduleCLine1);
         $expenseSources = $this->categorySources($entityData, 'schedule_c_expense', TaxFactSourceType::ScheduleCExpenseCategory, TaxFactRouting::ScheduleCLine28);
-        $homeOfficeSources = $this->categorySources($entityData, 'schedule_c_home_office', TaxFactSourceType::ScheduleCHomeOfficeAllowable, TaxFactRouting::ScheduleCLine30);
+        $homeOfficeSources = $this->categorySources($entityData, 'schedule_c_home_office', TaxFactSourceType::ScheduleCHomeOfficeClaimed, TaxFactRouting::ScheduleCLine30);
         $entityName = $this->entityName($entityData);
         $grossReceipts = $this->sumSources($grossReceiptSources);
         $expenses = $this->sumSources($expenseSources);
@@ -217,7 +217,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         }
 
         if ($calc['disallowed'] !== 0.0) {
-            $homeOfficeSources[] = $this->homeOfficeAdjustmentSource($entityData, $entityName, 'disallowed', $calc['disallowed'], TaxFactSourceType::ScheduleCHomeOfficeDisallowed, 'Home-office deduction disallowed this year and carried forward.');
+            $homeOfficeSources[] = $this->homeOfficeAdjustmentSource($entityData, $entityName, 'disallowed', -$calc['disallowed'], TaxFactSourceType::ScheduleCHomeOfficeDisallowed, 'Home-office deduction disallowed this year and carried forward.');
         }
 
         return new ScheduleCEntityFact(

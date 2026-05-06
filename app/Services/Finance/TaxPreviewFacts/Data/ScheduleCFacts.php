@@ -19,7 +19,6 @@ readonly class ScheduleCFacts
 
     /**
      * @param  ScheduleCEntityFact[]  $entities
-     * @param  array{q1:float,q2:float,q3:float,q4:float}  $netProfitByQuarter
      * @param  TaxFactSource[]  $line31Sources
      */
     public function __construct(
@@ -30,7 +29,7 @@ readonly class ScheduleCFacts
         public float $homeOfficeDisallowed,
         public float $homeOfficePriorCarryforward,
         public float $netProfit,
-        public array $netProfitByQuarter,
+        public QuarterTotals $netProfitByQuarter,
         public float $deductiblePortionRoutedToSchedule1,
         array $line31Sources,
     ) {
@@ -48,7 +47,7 @@ readonly class ScheduleCFacts
             homeOfficeDisallowed: 0.0,
             homeOfficePriorCarryforward: 0.0,
             netProfit: 0.0,
-            netProfitByQuarter: ['q1' => 0.0, 'q2' => 0.0, 'q3' => 0.0, 'q4' => 0.0],
+            netProfitByQuarter: QuarterTotals::empty(),
             deductiblePortionRoutedToSchedule1: 0.0,
             line31Sources: [],
         );
@@ -67,7 +66,7 @@ readonly class ScheduleCFacts
             'homeOfficeDisallowed' => $this->homeOfficeDisallowed,
             'homeOfficePriorCarryforward' => $this->homeOfficePriorCarryforward,
             'netProfit' => $this->netProfit,
-            'netProfitByQuarter' => $this->netProfitByQuarter,
+            'netProfitByQuarter' => $this->netProfitByQuarter->toArray(),
             'deductiblePortionRoutedToSchedule1' => $this->deductiblePortionRoutedToSchedule1,
             'line31Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line31Sources),
         ];
