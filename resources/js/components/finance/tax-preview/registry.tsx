@@ -229,11 +229,9 @@ function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
-  const totalIncome = state.taxReturn.form8995?.totalIncome ?? 0
   return (
     <Form8995Preview
-      reviewedK1Docs={state.reviewedK1Docs}
-      totalIncome={totalIncome}
+      taxFacts={state.taxFacts?.form8995 ?? null}
       selectedYear={state.year}
       isMarried={state.isMarried}
     />

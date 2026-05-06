@@ -10,6 +10,7 @@ readonly class TaxPreviewFacts
     public function __construct(
         public int $year,
         public ScheduleCFacts $scheduleC,
+        public ScheduleFFacts $scheduleF,
         public ScheduleSEFacts $scheduleSE,
         public Schedule1Facts $schedule1,
         public ScheduleBFacts $scheduleB,
@@ -20,6 +21,7 @@ readonly class TaxPreviewFacts
         public Form8949Facts $form8949,
         public Form1116Facts $form1116,
         public Form8960Facts $form8960,
+        public Form8995Facts $form8995,
     ) {}
 
     /**
@@ -30,6 +32,7 @@ readonly class TaxPreviewFacts
         return [
             'year' => $this->year,
             'scheduleC' => $this->scheduleC->toArray(),
+            'scheduleF' => $this->scheduleF->toArray(),
             'scheduleSE' => $this->scheduleSE->toArray(),
             'schedule1' => $this->schedule1->toArray(),
             'scheduleB' => $this->scheduleB->toArray(),
@@ -40,6 +43,7 @@ readonly class TaxPreviewFacts
             'form8949' => $this->form8949->toArray(),
             'form1116' => $this->form1116->toArray(),
             'form8960' => $this->form8960->toArray(),
+            'form8995' => $this->form8995->toArray(),
         ];
     }
 }

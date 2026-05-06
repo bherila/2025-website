@@ -5,6 +5,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinPayslips;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -40,13 +41,14 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $w2Docs
      */
-    public function build(array $k1Docs, array $w2Docs, ScheduleCFacts $scheduleC, int $year, ?int $userId, bool $isMarried): ScheduleSEFacts
+    public function build(array $k1Docs, array $w2Docs, ScheduleCFacts $scheduleC, ScheduleFFacts $scheduleF, int $year, ?int $userId, bool $isMarried): ScheduleSEFacts
     {
+        $scheduleFSources = $this->scheduleFEntries($scheduleF);
         $entries = [
             ...$this->k1Entries($k1Docs),
+            ...$scheduleFSources,
             ...$this->scheduleCEntries($scheduleC),
         ];
-        $scheduleFSources = [$this->scheduleFNeedsReviewSource()];
         $socialSecurityW2Sources = $this->w2WageSources($w2Docs, 'box3_ss_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2SocialSecurityWages, 'Social Security wages');
         $medicareW2Sources = $this->w2WageSources($w2Docs, 'box5_medicare_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2MedicareWages, 'Medicare wages');
         $socialSecurityWageSources = $socialSecurityW2Sources !== []
@@ -246,18 +248,25 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
         ];
     }
 
-    private function scheduleFNeedsReviewSource(): TaxFactSource
+    /**
+     * @return TaxFactSource[]
+     */
+    private function scheduleFEntries(ScheduleFFacts $scheduleF): array
     {
-        return new TaxFactSource(
-            id: 'schedule-f-schedule-se-needs-review',
-            label: 'Schedule F net farm profit',
-            amount: 0.0,
-            sourceType: TaxFactSourceType::ScheduleSEScheduleF,
-            routing: TaxFactRouting::ScheduleSELine4a,
-            routingReason: 'Schedule F is not migrated to backend facts yet; backend Schedule SE defaults farm self-employment earnings to zero.',
-            isReviewed: false,
-            reviewStatus: 'needs_review',
-            reviewAction: 'Review Schedule F manually if farm self-employment income applies.',
+        return array_map(
+            fn (TaxFactSource $source): TaxFactSource => new TaxFactSource(
+                id: "{$source->id}-schedule-se-line1b",
+                label: $source->label,
+                amount: $source->amount,
+                sourceType: TaxFactSourceType::ScheduleSEScheduleF,
+                routing: TaxFactRouting::ScheduleSELine1b,
+                routingReason: 'Schedule F line 34 farm profit or loss flows to Schedule SE line 1b for farm self-employment earnings.',
+                notes: $source->notes,
+                isReviewed: $source->isReviewed,
+                reviewStatus: $source->reviewStatus,
+                reviewAction: $source->reviewAction,
+            ),
+            $scheduleF->line34Sources,
         );
     }
 

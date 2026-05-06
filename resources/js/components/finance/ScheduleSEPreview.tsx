@@ -29,7 +29,7 @@ export default function ScheduleSEPreview({
         <div>
           <h2 className="text-base font-semibold mb-0.5">Schedule SE — Self-Employment Tax</h2>
           <p className="text-xs text-muted-foreground">
-            No self-employment earnings found from reviewed K-1 Box 14 items or Schedule C.
+            No self-employment earnings found from reviewed K-1 Box 14 items, Schedule C, or Schedule F.
           </p>
         </div>
         {(reviewedK1Docs.length > 0 || onGoToScheduleC) && (
@@ -64,7 +64,7 @@ export default function ScheduleSEPreview({
         )}
         {reviewedK1Docs.length === 0 && !onGoToScheduleC && (
           <p className="text-center text-muted-foreground text-sm py-8">
-            Add a Schedule C or review a K-1 with Box 14 earnings to populate this schedule.
+            Add a Schedule C, Schedule F, or review a K-1 with Box 14 earnings to populate this schedule.
           </p>
         )}
       </div>
@@ -106,8 +106,8 @@ export default function ScheduleSEPreview({
       )}
 
       {scheduleFNeedsReview && (
-        <Callout kind="info" title="Schedule F is not migrated yet">
-          Farm self-employment earnings default to zero in backend Schedule SE facts for {selectedYear}.
+        <Callout kind="info" title="Schedule F needs review">
+          Review farm self-employment earnings before relying on Schedule SE for {selectedYear}.
         </Callout>
       )}
 
