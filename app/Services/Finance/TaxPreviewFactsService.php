@@ -36,6 +36,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
+use App\Support\Finance\FederalStandardDeduction;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
@@ -448,20 +449,11 @@ class TaxPreviewFactsService
      */
     private function taxableIncomeBeforeQbi(float $estimatedMagi, int $year, bool $isMarried): float
     {
-        return max(0.0, MoneyMath::subtract($estimatedMagi, $this->standardDeduction($year, $isMarried)));
-    }
+        $standardDeduction = $isMarried
+            ? FederalStandardDeduction::marriedFilingJointly($year)
+            : FederalStandardDeduction::single($year);
 
-    private function standardDeduction(int $year, bool $isMarried): float
-    {
-        $deductions = [
-            2023 => ['single' => 13850.0, 'mfj' => 27700.0],
-            2024 => ['single' => 14600.0, 'mfj' => 29200.0],
-            2025 => ['single' => 15750.0, 'mfj' => 31500.0],
-            2026 => ['single' => 16100.0, 'mfj' => 32200.0],
-        ];
-        $row = $deductions[$year] ?? $deductions[2026];
-
-        return $isMarried ? $row['mfj'] : $row['single'];
+        return max(0.0, MoneyMath::subtract($estimatedMagi, $standardDeduction));
     }
 
     /**

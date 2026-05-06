@@ -893,6 +893,16 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(32200.0, $facts['scheduleA']['standardDeductionMarriedFilingJointly']);
     }
 
+    public function test_schedule_a_uses_2018_standard_deduction_values(): void
+    {
+        $user = $this->createUser();
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2018, 'scheduleA');
+
+        $this->assertSame(12000.0, $facts['scheduleA']['standardDeductionSingle']);
+        $this->assertSame(24000.0, $facts['scheduleA']['standardDeductionMarriedFilingJointly']);
+    }
+
     public function test_schedule_a_uses_legacy_salt_cap_for_unpublished_2026_parameters(): void
     {
         $user = $this->createUser();
@@ -1430,6 +1440,32 @@ class TaxPreviewFactsServiceTest extends TestCase
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
 
         $this->assertSame(34250.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(1000.0, $facts['form8995']['totalQbi']);
+    }
+
+    public function test_form8995_uses_historical_standard_deduction_for_taxable_income_cap(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'tax_year' => 2018,
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'tax_year' => 2018,
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '1000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2018, 'form8995');
+
+        $this->assertSame(38000.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(7600.0, $facts['form8995']['taxableIncomeCap']);
         $this->assertSame(1000.0, $facts['form8995']['totalQbi']);
     }
 

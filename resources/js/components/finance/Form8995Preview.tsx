@@ -53,7 +53,6 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
     totalQBI,
     totalQBIComponent,
     estimatedTaxableIncome,
-    stdDedApplied,
     taxableIncomeCap,
     estimatedDeduction,
     aboveThreshold,
