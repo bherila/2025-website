@@ -145,7 +145,7 @@ class TaxPreviewFactsService
             form8949: $this->form8949FactsBuilder->build($capitalGainsReport),
             form1116: $this->form1116FactsBuilder->build($k1Docs, $docs1099),
             form8960: $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year),
-            form8995: $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleE, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried),
+            form8995: $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried),
         );
     }
 
@@ -406,7 +406,6 @@ class TaxPreviewFactsService
     private function form8995FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form8995Facts
     {
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
-        $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
         $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup']);
         $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
         $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
@@ -415,7 +414,7 @@ class TaxPreviewFactsService
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
 
-        return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleE, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
+        return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
     }
 
     /**

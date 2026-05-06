@@ -45,8 +45,11 @@ final class FederalStandardDeduction
             return self::BY_YEAR[$year][$status];
         }
 
+        $earliestYear = min(array_keys(self::BY_YEAR));
         $latestYear = max(array_keys(self::BY_YEAR));
 
-        return $year > $latestYear ? self::BY_YEAR[$latestYear][$status] : 0.0;
+        return $year > $latestYear
+            ? self::BY_YEAR[$latestYear][$status]
+            : self::BY_YEAR[$earliestYear][$status];
     }
 }
