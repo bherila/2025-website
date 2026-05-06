@@ -84,7 +84,7 @@ readonly class Form8995Facts
     }
 
     /**
-     * Falls back to the latest known IRS threshold until a newer year is explicitly added.
+     * Uses the latest known IRS threshold for future years until a newer year is explicitly added.
      *
      * @return array{single: float, mfj: float}
      */
@@ -102,7 +102,13 @@ readonly class Form8995Facts
             2026 => ['single' => 201750.0, 'mfj' => 403500.0],
         ];
 
-        return $thresholds[$year] ?? $thresholds[2026];
+        if (array_key_exists($year, $thresholds)) {
+            return $thresholds[$year];
+        }
+
+        $latestYear = max(array_keys($thresholds));
+
+        return $year > $latestYear ? $thresholds[$latestYear] : ['single' => 0.0, 'mfj' => 0.0];
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -1467,6 +1468,12 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(38000.0, $facts['form8995']['taxableIncomeBeforeQbi']);
         $this->assertSame(7600.0, $facts['form8995']['taxableIncomeCap']);
         $this->assertSame(1000.0, $facts['form8995']['totalQbi']);
+    }
+
+    public function test_form8995_thresholds_only_fall_back_to_latest_for_future_years(): void
+    {
+        $this->assertSame(['single' => 0.0, 'mfj' => 0.0], Form8995Facts::thresholds(2017));
+        $this->assertSame(['single' => 201750.0, 'mfj' => 403500.0], Form8995Facts::thresholds(2027));
     }
 
     public function test_form8995_excludes_schedule_e_rental_income_by_default(): void
