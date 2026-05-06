@@ -11,6 +11,7 @@ use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFactsService;
+use App\Support\Finance\FederalStandardDeduction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -904,12 +905,29 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(24000.0, $facts['scheduleA']['standardDeductionMarriedFilingJointly']);
     }
 
+    public function test_federal_standard_deduction_clamps_years_outside_known_table(): void
+    {
+        $this->assertSame(12000.0, FederalStandardDeduction::single(2017));
+        $this->assertSame(32200.0, FederalStandardDeduction::marriedFilingJointly(2027));
+    }
+
     public function test_schedule_a_uses_legacy_salt_cap_for_unpublished_2026_parameters(): void
     {
         $user = $this->createUser();
         $this->createUserDeduction($user->id, 'state_est_tax', 60000, 'State tax', 2026);
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2026, 'scheduleA');
+
+        $this->assertSame(10000.0, $facts['scheduleA']['saltCap']);
+        $this->assertSame(10000.0, $facts['scheduleA']['saltDeduction']);
+    }
+
+    public function test_schedule_a_uses_legacy_salt_cap_for_out_of_table_year(): void
+    {
+        $user = $this->createUser();
+        $this->createUserDeduction($user->id, 'state_est_tax', 60000, 'State tax', 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024, 'scheduleA');
 
         $this->assertSame(10000.0, $facts['scheduleA']['saltCap']);
         $this->assertSame(10000.0, $facts['scheduleA']['saltDeduction']);

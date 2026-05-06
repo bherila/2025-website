@@ -267,10 +267,6 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
 
     private function saltCap(int $year, ?float $magi = null): float
     {
-        if ($year < 2025 || $year > 2029) {
-            return 10000.0;
-        }
-
         if (! array_key_exists($year, self::SALT_CAP_RULES)) {
             return 10000.0;
         }
