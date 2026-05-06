@@ -3,11 +3,13 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleSEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -22,6 +24,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         array $k1Docs,
         ScheduleCFacts $scheduleC,
         ScheduleEFacts $scheduleE,
+        ScheduleFFacts $scheduleF,
         ScheduleSEFacts $scheduleSE,
         ScheduleDFacts $scheduleD,
         float $taxableIncomeBeforeQbi,
@@ -31,6 +34,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $entities = [
             ...$this->scheduleCEntities($scheduleC, $scheduleSE),
             ...$this->scheduleEEntities($scheduleE),
+            ...$this->scheduleFEntities($scheduleF, $scheduleSE),
             ...$this->k1Entities($k1Docs),
         ];
 
@@ -91,7 +95,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             return [];
         }
 
-        $qbiIncome = $this->subtractMoney($scheduleC->netProfit, $scheduleSE->deductibleSeTax);
+        $deductibleSeTax = $this->allocatedDeductibleSeTax($scheduleSE, [TaxFactSourceType::ScheduleSEScheduleC]);
+        $qbiIncome = $this->subtractMoney($scheduleC->netProfit, $deductibleSeTax);
 
         return [
             new Form8995EntityFact(
@@ -105,8 +110,44 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                         amount: $qbiIncome,
                         sourceType: TaxFactSourceType::Form8995ScheduleCQbi,
                         routing: TaxFactRouting::Form8995Line1,
-                        routingReason: 'Schedule C QBI starts with line 31 and is reduced by deductible half of self-employment tax.',
-                        notes: "Schedule C net {$scheduleC->netProfit}; deductible half SE tax {$scheduleSE->deductibleSeTax}.",
+                        routingReason: 'Schedule C QBI starts with line 31 and is reduced by the Schedule C share of deductible half self-employment tax.',
+                        notes: "Schedule C net {$scheduleC->netProfit}; allocated deductible half SE tax {$deductibleSeTax}.",
+                    ),
+                ],
+                qbiIncome: $qbiIncome,
+                reitDividends: 0.0,
+                ptpIncome: 0.0,
+                qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
+            ),
+        ];
+    }
+
+    /**
+     * @return Form8995EntityFact[]
+     */
+    private function scheduleFEntities(ScheduleFFacts $scheduleF, ScheduleSEFacts $scheduleSE): array
+    {
+        if ($scheduleF->netFarmProfit === 0.0) {
+            return [];
+        }
+
+        $deductibleSeTax = $this->allocatedDeductibleSeTax($scheduleSE, [TaxFactSourceType::ScheduleSEScheduleF]);
+        $qbiIncome = $this->subtractMoney($scheduleF->netFarmProfit, $deductibleSeTax);
+
+        return [
+            new Form8995EntityFact(
+                entityKey: 'schedule-f',
+                label: 'Schedule F farming activity',
+                sourceKind: 'schedule_f',
+                sources: [
+                    new TaxFactSource(
+                        id: 'schedule-f-form-8995-line1',
+                        label: 'Schedule F net farm profit after half-SE-tax adjustment',
+                        amount: $qbiIncome,
+                        sourceType: TaxFactSourceType::Form8995ScheduleFQbi,
+                        routing: TaxFactRouting::Form8995Line1,
+                        routingReason: 'Schedule F QBI starts with line 34 and is reduced by the Schedule F share of deductible half self-employment tax.',
+                        notes: "Schedule F net {$scheduleF->netFarmProfit}; allocated deductible half SE tax {$deductibleSeTax}.",
                     ),
                 ],
                 qbiIncome: $qbiIncome,
@@ -122,31 +163,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
      */
     private function scheduleEEntities(ScheduleEFacts $scheduleE): array
     {
-        if ($scheduleE->miscIncomeTotal === 0.0) {
-            return [];
-        }
-
-        return [
-            new Form8995EntityFact(
-                entityKey: 'schedule-e-rental',
-                label: 'Qualified Schedule E rental activities',
-                sourceKind: 'schedule_e',
-                sources: [
-                    new TaxFactSource(
-                        id: 'schedule-e-form-8995-line1',
-                        label: 'Schedule E qualified rental income',
-                        amount: $scheduleE->miscIncomeTotal,
-                        sourceType: TaxFactSourceType::Form8995ScheduleEQbi,
-                        routing: TaxFactRouting::Form8995Line1,
-                        routingReason: 'Schedule E rental income marked as a Section 199A trade or business flows to Form 8995 line 1.',
-                    ),
-                ],
-                qbiIncome: $scheduleE->miscIncomeTotal,
-                reitDividends: 0.0,
-                ptpIncome: 0.0,
-                qbiComponent: $this->roundMoney(max(0.0, $scheduleE->miscIncomeTotal) * 0.2),
-            ),
-        ];
+        return [];
     }
 
     /**
@@ -167,11 +184,11 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             $statementA = is_array($data['statementA'] ?? null) ? $data['statementA'] : [];
             $sources = [
                 ...$this->k1CodeSources($doc, $partnerName, $data, '17', 'V', TaxFactSourceType::Form8995K1Box17, TaxFactRouting::Form8995Line1, 'S corporation Section 199A QBI'),
-                ...(array_key_exists('qualifiedBusinessIncome', $statementA) ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'Z', TaxFactSourceType::Form8995K1Box20Z, TaxFactRouting::Form8995Line1, 'partnership Section 199A QBI')),
-                ...(array_key_exists('reitDividends', $statementA) ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AA', TaxFactSourceType::Form8995K1Box20Aa, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
-                ...(array_key_exists('ptpIncome', $statementA) ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AB', TaxFactSourceType::Form8995K1Box20Ab, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
-                ...(array_key_exists('reitDividends', $statementA) ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AC', TaxFactSourceType::Form8995K1Box20Ac, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
-                ...(array_key_exists('ptpIncome', $statementA) ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AD', TaxFactSourceType::Form8995K1Box20Ad, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
+                ...($this->statementAHasAmount($statementA, 'qualifiedBusinessIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'Z', TaxFactSourceType::Form8995K1Box20Z, TaxFactRouting::Form8995Line1, 'partnership Section 199A QBI')),
+                ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AA', TaxFactSourceType::Form8995K1Box20Aa, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
+                ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AB', TaxFactSourceType::Form8995K1Box20Ab, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
+                ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AC', TaxFactSourceType::Form8995K1Box20Ac, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
+                ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AD', TaxFactSourceType::Form8995K1Box20Ad, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
             ];
 
             if ($statementA !== []) {
@@ -318,5 +335,60 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             reviewStatus: 'needs_review',
             reviewAction: 'Review Form 8995-A W-2 wage, UBIA, and SSTB limitations before filing.',
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $statementA
+     */
+    private function statementAHasAmount(array $statementA, string $field): bool
+    {
+        $amount = $this->parseMoney($statementA[$field] ?? null);
+
+        return $amount !== null && $amount !== 0.0;
+    }
+
+    /**
+     * @param  TaxFactSourceType[]  $sourceTypes
+     */
+    private function allocatedDeductibleSeTax(ScheduleSEFacts $scheduleSE, array $sourceTypes): float
+    {
+        if ($scheduleSE->deductibleSeTax <= 0.0) {
+            return 0.0;
+        }
+
+        $matchingCents = $this->positiveSourceCents($scheduleSE->entries, $sourceTypes);
+        $totalCents = $this->positiveSourceCents($scheduleSE->entries);
+
+        if ($matchingCents === 0 || $totalCents === 0) {
+            return 0.0;
+        }
+
+        return MoneyMath::allocateRatio($scheduleSE->deductibleSeTax, $matchingCents, $totalCents)['allocated'];
+    }
+
+    /**
+     * @param  TaxFactSource[]  $sources
+     * @param  TaxFactSourceType[]|null  $sourceTypes
+     */
+    private function positiveSourceCents(array $sources, ?array $sourceTypes = null): int
+    {
+        $sourceTypeValues = $sourceTypes === null
+            ? null
+            : array_map(static fn (TaxFactSourceType $sourceType): string => $sourceType->value, $sourceTypes);
+
+        $cents = 0;
+        foreach ($sources as $source) {
+            if ($source->amount <= 0.0) {
+                continue;
+            }
+
+            if (is_array($sourceTypeValues) && ! in_array($source->sourceType, $sourceTypeValues, true)) {
+                continue;
+            }
+
+            $cents += MoneyMath::toCents($source->amount);
+        }
+
+        return $cents;
     }
 }

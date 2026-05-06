@@ -84,6 +84,8 @@ readonly class Form8995Facts
     }
 
     /**
+     * Falls back to the latest known IRS threshold until a newer year is explicitly added.
+     *
      * @return array{single: float, mfj: float}
      */
     public static function thresholds(int $year): array

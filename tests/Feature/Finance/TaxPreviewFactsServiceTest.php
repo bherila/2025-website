@@ -1380,6 +1380,46 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('form_8995_line_13', $facts['form8995']['reviewSources'][0]['routing']);
     }
 
+    public function test_form8995_slice_estimates_taxable_income_when_magi_is_not_provided(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '1000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertSame(34250.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(1000.0, $facts['form8995']['totalQbi']);
+    }
+
+    public function test_form8995_excludes_schedule_e_rental_income_by_default(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'misc_routing' => 'sch_e',
+            'parsed_data' => ['payer_name' => 'Tenant', 'box1_rents' => 50000],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(50000.0, $facts['scheduleE']['miscIncomeTotal']);
+        $this->assertSame(0.0, $facts['form8995']['totalQbi']);
+        $this->assertNull(collect($facts['form8995']['entities'])->firstWhere('sourceKind', 'schedule_e'));
+    }
+
     public function test_form8995_reduces_schedule_c_qbi_by_deductible_half_se_tax(): void
     {
         $user = $this->createUser();
@@ -1394,6 +1434,28 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertNotNull($scheduleCEntity);
         $this->assertEqualsWithDelta(92935.22, $scheduleCEntity['qbiIncome'], 0.01);
         $this->assertEqualsWithDelta(92935.22, $facts['form8995']['totalQbi'], 0.01);
+    }
+
+    public function test_form8995_includes_schedule_f_and_allocates_half_se_tax_by_source(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'QBI Sole Prop');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 10000);
+        $this->createUserDeduction($user->id, 'schedule_f_gross_income', 15000, 'Farm gross income');
+        $this->createUserDeduction($user->id, 'schedule_f_expenses', 5000, 'Farm expenses');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $scheduleCEntity = collect($facts['form8995']['entities'])->firstWhere('sourceKind', 'schedule_c');
+        $scheduleFEntity = collect($facts['form8995']['entities'])->firstWhere('sourceKind', 'schedule_f');
+
+        $this->assertNotNull($scheduleCEntity);
+        $this->assertNotNull($scheduleFEntity);
+        $this->assertSame(9293.52, $scheduleCEntity['qbiIncome']);
+        $this->assertSame(9293.52, $scheduleFEntity['qbiIncome']);
+        $this->assertSame(18587.04, $facts['form8995']['totalQbi']);
+        $this->assertSame('form_8995_schedule_f_qbi', $scheduleFEntity['sources'][0]['sourceType']);
     }
 
     public function test_form8995_net_capital_gain_reduces_taxable_income_cap(): void
@@ -1465,6 +1527,27 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertContains('form_8995_k1_box_20ab', $sourceTypes);
         $this->assertContains('form_8995_k1_box_20ac', $sourceTypes);
         $this->assertContains('form_8995_k1_box_20ad', $sourceTypes);
+    }
+
+    public function test_form8995_uses_k1_box20_when_statement_a_value_is_empty(): void
+    {
+        $user = $this->createUser();
+        $k1Data = $this->k1Data(
+            fields: ['B' => 'QBI Fund'],
+            codes: ['20' => [['code' => 'Z', 'value' => '1000']]],
+        );
+        $k1Data['statementA'] = ['qualifiedBusinessIncome' => null];
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $k1Data,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $sourceTypes = collect($facts['form8995']['entities'][0]['sources'])->pluck('sourceType')->all();
+
+        $this->assertSame(1000.0, $facts['form8995']['totalQbi']);
+        $this->assertContains('form_8995_k1_box_20z', $sourceTypes);
     }
 
     public function test_schedule_se_uses_payslips_when_w2_is_not_reviewed_and_parsable(): void

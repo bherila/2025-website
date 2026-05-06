@@ -54,6 +54,7 @@ enum TaxFactSourceType: string
     case Form8995ReitDividends = 'form_8995_reit_dividends';
     case Form8995ScheduleCQbi = 'form_8995_schedule_c_qbi';
     case Form8995ScheduleEQbi = 'form_8995_schedule_e_qbi';
+    case Form8995ScheduleFQbi = 'form_8995_schedule_f_qbi';
     case Form8960InvestmentInterestDeduction = 'form_8960_investment_interest_deduction';
     case Form8960NetCapitalGain = 'form_8960_net_capital_gain';
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
