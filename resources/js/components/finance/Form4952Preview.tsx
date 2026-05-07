@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines } from '@/types/finance/tax-return'
+import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 export type { Form4952Lines } from '@/types/finance/tax-return'
 
@@ -27,6 +28,30 @@ function parseK1Codes(data: FK1StructuredData, box: string, filterCodes?: string
 
 type InvIntSource = Form4952Lines['invIntSources'][number]
 
+function sourceLines(sources: TaxFactSource[]): InvIntSource[] {
+  return sources.map((source) => ({
+    label: source.label,
+    amount: source.amount,
+    ...(source.taxDocumentId !== null ? { docId: source.taxDocumentId } : {}),
+    ...(source.box ? { box: source.box } : {}),
+    ...(source.code ? { code: source.code } : {}),
+  }))
+}
+
+function form4952FactsToLines(facts: Form4952Facts): Form4952Lines {
+  return {
+    invIntSources: sourceLines(facts.investmentInterestSources),
+    totalInvIntExpense: facts.totalInvestmentInterestExpense,
+    scheduleEDeductibleInvestmentInterestExpense: facts.deductibleInvestmentInterestExpense,
+    invExpSources: sourceLines(facts.investmentExpenseSources),
+    totalInvExp: facts.totalInvestmentExpenses,
+    niiBefore: facts.netInvestmentIncomeBeforeQualifiedDividendElection,
+    totalQualDiv: facts.totalQualifiedDividends,
+    deductibleInvestmentInterestExpense: facts.deductibleInvestmentInterestExpense,
+    disallowedCarryforward: facts.disallowedCarryforward,
+  }
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Form4952PreviewProps {
@@ -43,6 +68,7 @@ interface Form4952PreviewProps {
    * Pass the `totalItemizedDeduction` from `analyzeShortDividends()`.
    */
   shortDividendDeduction?: number
+  form4952Facts?: Form4952Facts | null
 }
 
 export function computeForm4952Lines({
@@ -202,13 +228,16 @@ export default function Form4952Preview({
   reviewed1099Docs,
   income1099,
   shortDividendDeduction = 0,
+  form4952Facts = null,
 }: Form4952PreviewProps) {
-  const computedLines = computeForm4952Lines({
-    reviewedK1Docs,
-    reviewed1099Docs,
-    income1099,
-    shortDividendDeduction,
-  })
+  const computedLines = form4952Facts
+    ? form4952FactsToLines(form4952Facts)
+    : computeForm4952Lines({
+        reviewedK1Docs,
+        reviewed1099Docs,
+        income1099,
+        shortDividendDeduction,
+      })
 
   // ── Gather investment interest expense (already computed) ───────────────
   const invIntSources = computedLines.invIntSources

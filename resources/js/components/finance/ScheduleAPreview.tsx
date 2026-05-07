@@ -224,7 +224,8 @@ export default function ScheduleAPreview({
     ? 'State/local general sales taxes'
     : 'State income tax withheld / estimated tax paid'
   const line5aAmount = scheduleAFacts?.selectedLine5aTotal ?? Math.max(stateIncomeTax, salesTax)
-  const totalInterest = scheduleAFacts?.totalInterest ?? currency(mortgageInterest).add(totalInvIntExpense).value
+  const totalInvIntExpenseDisplay = form4952Facts?.deductibleInvestmentInterestExpense ?? totalInvIntExpense
+  const totalInterest = scheduleAFacts?.totalInterest ?? currency(mortgageInterest).add(totalInvIntExpenseDisplay).value
   const invIntFactSources = form4952Facts?.investmentInterestSources ?? []
   const invIntModalSources: InvestmentInterestDisplaySource[] = invIntFactSources.length > 0 ? invIntFactSources : invIntSources
   const invIntNeedsReview = invIntFactSources.some((source) => !source.isReviewed)
@@ -297,8 +298,8 @@ export default function ScheduleAPreview({
           <FormLine
             boxRef="9"
             label="Investment interest expense (from Form 4952)"
-            value={totalInvIntExpense > 0 ? totalInvIntExpense : null}
-            {...(totalInvIntExpense === 0 ? { raw: '—' } : {})}
+            value={totalInvIntExpenseDisplay > 0 ? totalInvIntExpenseDisplay : null}
+            {...(totalInvIntExpenseDisplay === 0 ? { raw: '—' } : {})}
             isReviewed={invIntNeedsReview ? false : undefined}
             {...(invIntModalSources.length > 0 ? { onClick: () => setShowInvIntModal(true) } : {})}
           />
@@ -360,7 +361,7 @@ export default function ScheduleAPreview({
       <FormBlock title="Standard Deduction vs. Itemized — Which Is Better?">
         <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'Married Filing Jointly' : 'Single'})`} value={standardDeductionDisplay} />
         <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductionsDisplay} />
-        <FormLine label="Investment interest (Line 9)" value={totalInvIntExpense} />
+        <FormLine label="Investment interest (Line 9)" value={totalInvIntExpenseDisplay} />
         <FormLine
           label="SALT (Line 7)"
           {...(saltDeductionDisplay > 0 ? { value: saltDeductionDisplay } : { raw: '—' })}

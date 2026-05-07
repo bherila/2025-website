@@ -1,19 +1,25 @@
 import currency from 'currency.js'
 
+import { form1040FactsToLines } from '@/components/finance/Form1040Preview'
 import { form8995FactsToLines } from '@/components/finance/Form8995Preview'
+import { isFK1StructuredData } from '@/components/finance/k1'
 import { scheduleFFactsToLines } from '@/components/finance/ScheduleFPreview'
+import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
+import { k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
+import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type {
   CapitalLossCarryoverLines,
   Form461Lines,
   Form1116Lines,
-  Form4797Lines,
   Form4952Lines,
   Form6251Lines,
   Form8582Lines,
-  Form8606Lines,
   Form8959Lines,
   Form8960Lines,
+  OverviewRow,
   Schedule1Lines,
   Schedule2Lines,
   ScheduleALines,
@@ -29,10 +35,8 @@ import type {
   Form4952Facts,
   Form6251Facts,
   Form8582Facts,
-  Form8606Facts,
   Form8960Facts,
   Schedule1Facts,
-  Schedule3Facts,
   ScheduleAFacts,
   ScheduleBFacts,
   ScheduleCFacts,
@@ -56,6 +60,244 @@ export function sourceLines(sources: TaxFactSource[]): { label: string; amount: 
     amount: source.amount,
     ...(source.taxDocumentId !== null ? { docId: source.taxDocumentId } : {}),
   }))
+}
+
+function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]): NonNullable<TaxReturn1040['k1Docs']> {
+  return reviewedK1Docs
+    .map((doc) => {
+      if (!isFK1StructuredData(doc.parsed_data)) {
+        return null
+      }
+
+      const entityName =
+        doc.parsed_data.fields['B']?.value?.split('\n')[0] ??
+        doc.employment_entity?.display_name ??
+        doc.original_filename ??
+        `K1-${doc.id}`
+      const ein = doc.parsed_data.fields['A']?.value ?? undefined
+      const fields = Object.fromEntries(
+        Object.entries(doc.parsed_data.fields)
+          .filter(([, field]) => field?.value !== null && field?.value !== undefined && field?.value !== '')
+          .map(([key, field]) => {
+            const n = Number(field.value)
+            return [key, Number.isNaN(n) ? String(field.value) : n]
+          }),
+      )
+      const codes = Object.fromEntries(
+        Object.entries(doc.parsed_data.codes).map(([box, items]) => [
+          box,
+          items.map(item => ({
+            code: item.code,
+            value: item.value,
+            ...(item.notes ? { notes: item.notes } : {}),
+            ...(item.character ? { character: item.character } : {}),
+          })),
+        ]),
+      )
+
+      return {
+        entityName,
+        ...(ein ? { ein } : {}),
+        fields,
+        codes,
+        ...(doc.parsed_data.k3?.sections ? { k3Sections: doc.parsed_data.k3.sections } : {}),
+        ...(doc.parsed_data.passiveActivities?.length ? { passiveActivities: doc.parsed_data.passiveActivities } : {}),
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+}
+
+export function buildTaxReturnForWorkbook({
+  year,
+  taxFacts,
+  isMarried,
+  reviewedW2Docs,
+  reviewedK1Docs,
+  reviewed1099Docs,
+  form8959,
+  form461,
+  capitalLossCarryover,
+  estimatedTaxPayments,
+  shortDividendSummary,
+}: {
+  year: number
+  taxFacts: TaxPreviewFacts | null
+  isMarried: boolean
+  reviewedW2Docs: TaxDocument[]
+  reviewedK1Docs: TaxDocument[]
+  reviewed1099Docs: TaxDocument[]
+  form8959: Form8959Lines
+  form461: Form461Lines
+  capitalLossCarryover: CapitalLossCarryoverLines
+  estimatedTaxPayments?: TaxReturn1040['estimatedTaxPayments']
+  shortDividendSummary: ShortDividendSummary | null
+}): TaxReturn1040 {
+  const structuredK1Docs = reviewedK1Docs
+    .map((doc) => ({ doc, data: isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null }))
+    .filter((entry): entry is { doc: TaxDocument; data: NonNullable<typeof entry.data> } => entry.data !== null)
+
+  const docRows: OverviewRow[] = []
+  for (const doc of reviewedW2Docs) {
+    const parsedData = doc.parsed_data as Record<string, unknown>
+    const employer = (parsedData?.employer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
+    const wages = parsedData?.box1_wages as number | undefined
+    const fedTax = parsedData?.box2_fed_tax as number | undefined
+    docRows.push({
+      item: `${employer} — W-2`,
+      amount: wages,
+      note: fedTax != null ? `Fed WH: ${currency(fedTax).format()}` : undefined,
+    })
+  }
+
+  for (const { doc, data } of structuredK1Docs) {
+    const partnerName = data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1'
+    const net = k1NetIncome(data)
+    const interest = parseK1Field(data, '5')
+    const foreignTax = parseK1Field(data, '21')
+    const noteParts = [
+      net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E',
+      interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
+      foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax).format()}` : null,
+    ].filter(Boolean)
+    docRows.push({ item: `${partnerName} — K-1`, amount: net, note: noteParts.join(' · ') })
+  }
+
+  for (const doc of reviewed1099Docs) {
+    const parsedData = doc.parsed_data as Record<string, unknown>
+    const isBroker = doc.form_type === 'broker_1099'
+    const payer = (parsedData?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
+    const interest = parsedData?.box1_interest as number | undefined
+    const ordDiv = parsedData?.box1a_ordinary as number | undefined
+    const grossDistribution = doc.form_type === '1099_r' ? (parsedData?.box1_gross_distribution as number | undefined) : undefined
+    const taxableDistribution = doc.form_type === '1099_r'
+      ? ((parsedData?.box2a_taxable_amount as number | undefined) ?? (parsedData?.box1_gross_distribution as number | undefined))
+      : undefined
+    const foreignTax = (parsedData?.box7_foreign_tax ?? parsedData?.box6_foreign_tax) as number | undefined
+    const capGainLoss = isBroker ? (parsedData?.total_realized_gain_loss as number | undefined) : undefined
+    const fedTaxWithheld = doc.form_type === '1099_r' ? (parsedData?.box4_fed_tax as number | undefined) : undefined
+    const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
+    const noteParts = [
+      interest != null && interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
+      ordDiv != null && ordDiv !== 0 ? `Ord div: ${currency(ordDiv).format()}` : null,
+      grossDistribution != null && grossDistribution !== 0 ? `Gross dist: ${currency(grossDistribution).format()}` : null,
+      taxableDistribution != null && taxableDistribution !== 0 ? `Taxable dist: ${currency(taxableDistribution).format()}` : null,
+      capGainLoss != null && capGainLoss !== 0 ? `Cap G/L: ${currency(capGainLoss).format()}` : null,
+      foreignTax != null && foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax, { precision: 2 }).format()}` : null,
+      fedTaxWithheld != null && fedTaxWithheld !== 0 ? `Fed WH: ${currency(fedTaxWithheld).format()}` : null,
+    ].filter(Boolean)
+    const primaryAmount = currency(interest ?? 0)
+      .add(ordDiv ?? 0)
+      .add(grossDistribution ?? 0).value
+    docRows.push({
+      item: `${payer} — ${label}`,
+      amount: primaryAmount !== 0 ? primaryAmount : undefined,
+      note: noteParts.join(' · ') || undefined,
+    })
+  }
+
+  const taxPositionRows: OverviewRow[] = []
+  if (taxFacts) {
+    const totalInvestmentIncome = currency(taxFacts.scheduleB.interestTotal)
+      .add(taxFacts.scheduleB.ordinaryDividendTotal).value
+
+    if (taxFacts.form1040.line1z > 0) taxPositionRows.push({ item: 'W-2 Wages', amount: taxFacts.form1040.line1z, note: 'Form 1040 line 1z' })
+    if (totalInvestmentIncome !== 0) taxPositionRows.push({ item: 'Net investment income (interest + divs)', amount: totalInvestmentIncome, note: 'Before deductions; subject to NIIT (3.8%)' })
+    if (taxFacts.scheduleD.line16Combined !== 0) taxPositionRows.push({ item: 'Net capital gain (loss)', amount: taxFacts.scheduleD.line16Combined, note: 'Schedule D line 16' })
+    if (taxFacts.scheduleD.ambiguous11SSources.length > 0) taxPositionRows.push({ item: 'K-1 Box 11S character review needed', amount: taxFacts.scheduleD.ambiguous11SAmount, note: `${taxFacts.scheduleD.ambiguous11SSources.length} non-portfolio capital gain/loss line(s) need S/T or L/T classification before Schedule D routing.` })
+    if (taxFacts.form4952.totalInvestmentInterestExpense !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: taxFacts.form4952.totalInvestmentInterestExpense, note: 'Deductible amount flows to Schedule A line 9' })
+    if (taxFacts.form1116.totalForeignTaxes !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: taxFacts.form1116.totalForeignTaxes, note: 'Dollar-for-dollar vs. income tax' })
+    if (taxFacts.form1040.line25d > 0) taxPositionRows.push({ item: 'Federal withholding', amount: taxFacts.form1040.line25d, note: 'Form 1040 line 25d' })
+  }
+
+  if (form8959.additionalTax > 0) {
+    taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -form8959.additionalTax, note: '0.9% on Medicare wages over the filing-status threshold' })
+  }
+
+  const overviewSections = [
+    ...(docRows.length > 0 ? [{ heading: 'Tax Documents', rows: docRows }] : []),
+    ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
+  ]
+
+  const k1Docs = toTaxReturnYearK1Entries(reviewedK1Docs)
+  const k3Docs = reviewedK1Docs
+    .map((doc) => {
+      const parsed = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
+      if (!parsed) {
+        return null
+      }
+
+      return {
+        entityName:
+          parsed.fields['B']?.value?.split('\n')[0] ??
+          doc.employment_entity?.display_name ??
+          doc.original_filename ??
+          `K3-${doc.id}`,
+        sections: parsed.k3?.sections ?? [],
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  const docs1099 = reviewed1099Docs.map((doc) => {
+    const parsedData = (doc.parsed_data ?? {}) as Record<string, unknown> | Record<string, unknown>[]
+    const firstBrokerEntry = Array.isArray(parsedData)
+      ? parsedData.find((entry) => typeof entry.account_name === 'string')
+      : null
+    const payerName = !Array.isArray(parsedData)
+      ? (parsedData.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+      : (firstBrokerEntry?.account_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
+    const accountLast4 = !Array.isArray(parsedData)
+      ? accountLast4FromValue(parsedData.account_number) ?? accountLast4FromValue(doc.account?.acct_number)
+      : accountLast4FromValue(doc.account?.acct_number)
+
+    return {
+      formType: doc.form_type,
+      payerName,
+      parsedData,
+      accountId: doc.account_id,
+      accountName: doc.account?.acct_name ?? null,
+      accountLast4,
+      accountLinks: (doc.account_links ?? []).map((link) => ({
+        id: link.id,
+        account_id: link.account_id,
+        form_type: link.form_type,
+        reporting_mode: link.reporting_mode ?? null,
+        ai_identifier: link.ai_identifier,
+        ai_account_name: link.ai_account_name,
+        account: link.account,
+      })),
+    }
+  })
+
+  if (!taxFacts) {
+    return {
+      year,
+      ...(overviewSections.length > 0 ? { overviewSections } : {}),
+      scheduleC: scheduleCNetIncomeFromFacts(undefined),
+      form8959,
+      form461,
+      capitalLossCarryover,
+      k1Docs,
+      k3Docs,
+      docs1099,
+      ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+    }
+  }
+
+  return {
+    ...taxPreviewFactsToTaxReturn(taxFacts, {
+      isMarried,
+      form8959,
+      form461,
+      capitalLossCarryover,
+      ...(overviewSections.length > 0 ? { overviewSections } : {}),
+      k1Docs,
+      k3Docs,
+      docs1099,
+      ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+      ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
+    }),
+    year,
+    form1040: form1040FactsToLines(taxFacts.form1040),
+  }
 }
 
 export function scheduleCNetIncomeFromFacts(facts: ScheduleCFacts | undefined): ScheduleCNetIncome {
@@ -100,29 +342,6 @@ export function schedule1FactsToLines(facts: Schedule1Facts): Schedule1Lines {
       line20_iraDeduction: null,
       line21_studentLoanInterest: null,
       line26_totalAdjustments: facts.line15Total,
-    },
-  }
-}
-
-export function schedule3FactsToLines(facts: Schedule3Facts) {
-  return {
-    partI: {
-      line1_foreignTaxCredit: facts.line1ForeignTaxCredit,
-      line2_dependentCareCredit: facts.line2ChildDependentCareCredit,
-      line3_educationCredits: facts.line3EducationCredits,
-      line4_retirementSavingsCredit: facts.line4RetirementSavingsCredit,
-      line5a_residentialCleanEnergy: facts.line5aResidentialCleanEnergyCredit,
-      line5b_energyEfficientHome: facts.line5bEnergyEfficientHomeImprovementCredit,
-      line7_otherCredits: facts.line7OtherNonrefundableCredits,
-      line8_total: facts.line8TotalNonrefundableCredits,
-    },
-    partII: {
-      line9_netPremiumTaxCredit: facts.line9NetPremiumTaxCredit,
-      line10_extensionPayment: facts.line10ExtensionPayment,
-      line11_excessSSWithheld: facts.line11ExcessSocialSecurityWithheld,
-      line12_fuelTaxCredit: facts.line12FuelTaxCredit,
-      line14_otherPayments: facts.line14OtherPaymentsRefundableCredits,
-      line15_total: facts.line15TotalPaymentsRefundableCredits,
     },
   }
 }
@@ -331,21 +550,6 @@ export function form8582FactsToLines(facts: Form8582Facts): Form8582Lines {
   }
 }
 
-export function form8606FactsToLines(facts: Form8606Facts): Form8606Lines {
-  return facts
-}
-
-export function form4797FactsToLines(facts: TaxPreviewFacts['form4797']): Form4797Lines {
-  return {
-    partINet1231: facts.partINet1231,
-    partIIOrdinary: facts.partIIOrdinary,
-    partIIIRecapture: facts.partIIIRecapture,
-    netToSchedule1Line4: facts.netToSchedule1Line4,
-    netToScheduleDLongTerm: facts.netToScheduleDLongTerm,
-    hasActivity: facts.hasActivity,
-  }
-}
-
 export function form8960FactsToLines(facts: Form8960Facts, isMarried: boolean): Form8960Lines {
   return {
     taxableInterest: facts.taxableInterest,
@@ -405,8 +609,8 @@ export function taxPreviewFactsToTaxReturn(facts: TaxPreviewFacts, options: TaxR
     capitalLossCarryover: options.capitalLossCarryover,
     form461: options.form461,
     form8582: form8582FactsToLines(facts.form8582),
-    form8606: form8606FactsToLines(facts.form8606),
-    form4797: form4797FactsToLines(facts.form4797),
+    form8606: facts.form8606,
+    form4797: facts.form4797,
     scheduleF: scheduleFFactsToLines(facts.scheduleF),
     ...(options.estimatedTaxPayments ? { estimatedTaxPayments: options.estimatedTaxPayments } : {}),
     ...(options.k1Docs ? { k1Docs: options.k1Docs } : {}),

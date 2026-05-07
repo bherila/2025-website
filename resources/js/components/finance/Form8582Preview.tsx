@@ -12,9 +12,10 @@ import {
   TAX_LOSS_CARRYFORWARD_ENDPOINT,
 } from '@/finance/8582/form8582'
 import type { Form8582Lines } from '@/types/finance/tax-return'
+import type { Form8582Facts } from '@/types/generated/tax-preview-facts'
 
 interface Form8582PreviewProps {
-  form8582: Form8582Lines
+  form8582: Form8582Lines | Form8582Facts
   year: number
   palCarryforwards: PalCarryforwardEntry[]
   onCarryforwardsChange: (entries: PalCarryforwardEntry[]) => void
@@ -234,7 +235,7 @@ export default function Form8582Preview({
 
 interface PalCarryforwardInputProps {
   year: number
-  form8582: Form8582Lines
+  form8582: Form8582Lines | Form8582Facts
   carryforwards: PalCarryforwardEntry[]
   onChange: (entries: PalCarryforwardEntry[]) => void
 }

@@ -1,25 +1,22 @@
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { TaxReturn1040 } from '@/types/finance/tax-return'
+import type { Form1040Facts, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { summarizeTaxEstimate } from '../TaxEstimateHeader'
 
-function line(lineNumber: string, value: number) {
-  return { line: lineNumber, label: lineNumber, value }
+function facts(form1040: Partial<Form1040Facts>): TaxPreviewFacts {
+  return { form1040 } as TaxPreviewFacts
 }
 
 describe('summarizeTaxEstimate', () => {
   it('uses Form 1040 line 25d withholding when backend facts provide it', () => {
     const summary = summarizeTaxEstimate({
-      taxReturn: {
-        year: 2025,
-        form1040: [
-          line('9', 100_000),
-          line('24', 20_000),
-          line('25d', 5_000),
-          line('33', 5_000),
-        ],
-      },
+      taxFacts: facts({
+        line9: 100_000,
+        line24: 20_000,
+        line25d: 5_000,
+        line33: 5_000,
+      }),
       payslips: [{ ps_fed_tax: 9_000 } as fin_payslip],
     })
 
@@ -29,24 +26,19 @@ describe('summarizeTaxEstimate', () => {
   })
 
   it('falls back to reviewed documents and payslips when Form 1040 withholding is zero', () => {
-    const taxReturn: TaxReturn1040 = {
-      year: 2025,
-      form1040: [
-        line('9', 100_000),
-        line('24', 12_000),
-        line('25d', 0),
-        line('33', 500),
-        line('37', 11_500),
-      ],
-      docs1099: [{
-        formType: '1099_r',
-        payerName: 'IRA Custodian',
-        parsedData: { box4_fed_tax: 1_200 },
-      }],
-    }
-
     const summary = summarizeTaxEstimate({
-      taxReturn,
+      taxFacts: facts({
+        line9: 100_000,
+        line24: 12_000,
+        line25d: 0,
+        line33: 500,
+        line37: 11_500,
+      }),
+      accountDocuments: [{
+        is_reviewed: true,
+        form_type: '1099_r',
+        parsed_data: { box4_fed_tax: 1_200 },
+      } as unknown as TaxDocument],
       payslips: [{
         ps_fed_tax: 800,
         ps_fed_tax_addl: 50,
@@ -61,20 +53,17 @@ describe('summarizeTaxEstimate', () => {
 
   it('uses reviewed W-2 withholding instead of payslip withholding when reviewed W-2s are present', () => {
     const summary = summarizeTaxEstimate({
-      taxReturn: {
-        year: 2025,
-        form1040: [
-          line('9', 100_000),
-          line('24', 12_000),
-          line('25d', 0),
-          line('33', 0),
-        ],
-        docs1099: [{
-          formType: '1099_misc',
-          payerName: 'Payer',
-          parsedData: [{ parsed_data: { federal_tax_withheld: '100' } }],
-        }],
-      },
+      taxFacts: facts({
+        line9: 100_000,
+        line24: 12_000,
+        line25d: 0,
+        line33: 0,
+      }),
+      accountDocuments: [{
+        is_reviewed: true,
+        form_type: '1099_misc',
+        parsed_data: [{ parsed_data: { federal_tax_withheld: '100' } }],
+      } as unknown as TaxDocument],
       w2Documents: [{
         is_reviewed: true,
         parsed_data: { box2_fed_tax: 3_000 },

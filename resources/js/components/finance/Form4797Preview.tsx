@@ -3,6 +3,7 @@
 import currency from 'currency.js'
 
 import { Callout, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import type { Form4797Facts } from '@/types/generated/tax-preview-facts'
 
 export interface Form4797Inputs {
   /** Part I line 7 — net §1231 gain/(loss) on property held > 1 year. */
@@ -51,7 +52,7 @@ export function computeForm4797({
 
 interface Form4797PreviewProps {
   selectedYear: number
-  form4797: Form4797Lines
+  form4797: Form4797Lines | Form4797Facts
   partINet1231Input?: React.ReactNode
   partIIOrdinaryInput?: React.ReactNode
   partIIIRecaptureInput?: React.ReactNode

@@ -4,6 +4,7 @@ import currency from 'currency.js'
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { Form1099RParsedData, TaxDocument } from '@/types/finance/tax-document'
+import type { Form8606Facts } from '@/types/generated/tax-preview-facts'
 
 /** Distribution codes that denote a Roth conversion (Box 7). */
 const ROTH_CONVERSION_CODES = new Set(['2', '7', 'G'])
@@ -145,7 +146,7 @@ export function computeForm8606({
 
 interface Form8606PreviewProps {
   selectedYear: number
-  form8606: Form8606Lines
+  form8606: Form8606Lines | Form8606Facts
   nondeductibleContributionsInput?: React.ReactNode
   priorYearBasisInput?: React.ReactNode
   yearEndFmvInput?: React.ReactNode

@@ -103,6 +103,41 @@ export function computeSchedule1Totals({
   }
 }
 
+export function schedule1FactsToLines(facts: Schedule1Facts): Schedule1Lines {
+  return {
+    partI: {
+      line1a_taxableRefunds: facts.line1aTotal === 0 ? null : facts.line1aTotal,
+      line2a_alimonyReceived: facts.line2aTotal === 0 ? null : facts.line2aTotal,
+      line3_business: facts.line3Total,
+      line4_otherGains: facts.line4Total === 0 ? null : facts.line4Total,
+      line5_rentalPartnerships: facts.line5Total,
+      line6_farmIncome: facts.line6Total === 0 ? null : facts.line6Total,
+      line7_unemploymentCompensation: facts.line7Total === 0 ? null : facts.line7Total,
+      line8b_gambling: facts.line8bTotal === 0 ? null : facts.line8bTotal,
+      line8h_juryDuty: facts.line8hTotal === 0 ? null : facts.line8hTotal,
+      line8i_prizes: facts.line8iTotal === 0 ? null : facts.line8iTotal,
+      line8z_otherIncome: facts.line8zTotal,
+      line9_totalOther: facts.line9TotalOtherIncome,
+      line10_total: currency(facts.line1aTotal)
+        .add(facts.line2aTotal)
+        .add(facts.line3Total)
+        .add(facts.line4Total)
+        .add(facts.line5Total)
+        .add(facts.line6Total)
+        .add(facts.line7Total)
+        .add(facts.line9TotalOtherIncome).value,
+    },
+    partII: {
+      line13_hsaDeduction: null,
+      line15_deductibleSeTax: facts.line15Total === 0 ? null : facts.line15Total,
+      line17_selfEmployedHealthInsurance: null,
+      line20_iraDeduction: null,
+      line21_studentLoanInterest: null,
+      line26_totalAdjustments: facts.line15Total,
+    },
+  }
+}
+
 /**
  * A Part I line is "visible" when its value is a non-zero number. A `null`
  * value means the source form/document doesn't exist yet (structurally empty).
@@ -128,7 +163,7 @@ export default function Schedule1Preview({
     sources: TaxFactSource[]
     total: number
   } | null>(null)
-  const totals = schedule1 ?? computeSchedule1Totals({})
+  const totals = schedule1 ?? (taxFacts ? schedule1FactsToLines(taxFacts) : computeSchedule1Totals({}))
   const partI = totals.partI
   const partII = totals.partII
   const line5Sources = taxFacts?.line5Sources ?? []

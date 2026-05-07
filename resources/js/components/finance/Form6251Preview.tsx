@@ -2,11 +2,12 @@
 
 import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { Form6251Lines } from '@/types/finance/tax-return'
+import type { Form6251Facts } from '@/types/generated/tax-preview-facts'
 
 export type { Form6251Lines } from '@/types/finance/tax-return'
 
 interface Form6251PreviewProps {
-  form6251: Form6251Lines | undefined
+  form6251: Form6251Lines | Form6251Facts | undefined
   selectedYear: number
 }
 

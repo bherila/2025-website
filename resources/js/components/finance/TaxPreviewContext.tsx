@@ -5,7 +5,6 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { form1040FactsToLines } from '@/components/finance/Form1040Preview'
 import { isFK1StructuredData } from '@/components/finance/k1'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
@@ -14,18 +13,17 @@ import { collectForeignTaxSummaries, type ForeignTaxSummary } from '@/finance/11
 import { type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPOINT } from '@/finance/8582/form8582'
 import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
-import { computeEstimatedTaxPayments } from '@/lib/finance/estimatedTaxPayments'
-import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
-import { extractK1Form461Disclosure, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
+import { computeEstimatedTaxPayments, type EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
+import { extractK1Form461Disclosure, getK1PartnerName } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts, taxPreviewFactsToTaxReturn } from '@/lib/finance/taxPreviewFactsAdapters'
+import { buildTaxReturnForWorkbook, emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, OverviewRow, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
@@ -79,6 +77,10 @@ interface TaxPreviewContextValue {
   foreignTaxSummaries: ForeignTaxSummary[]
   scheduleCData: ScheduleCResponse | null
   scheduleCNetIncome: { total: number; byQuarter: { q1: number; q2: number; q3: number; q4: number } }
+  form8959: Form8959Lines
+  form461: Form461Lines
+  capitalLossCarryover: CapitalLossCarryoverLines
+  estimatedTaxPayments?: EstimatedTaxPaymentsData
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
   activeAccountIds: number[]
@@ -97,37 +99,9 @@ interface TaxPreviewContextValue {
   schedule1Line7Unemployment: number
   /** Taxable state/local income tax refunds from 1099-G box 2 (Schedule 1 line 1a). */
   schedule1Line1aTaxableRefunds: number
-  /** User-entered alimony received (pre-2019 decrees) for Schedule 1 line 2a. Persisted to localStorage per year. */
-  schedule1Line2aAlimony: number
-  /** Setter for schedule1Line2aAlimony — persisted to localStorage per tax year. */
-  setSchedule1Line2aAlimony: Dispatch<SetStateAction<number>>
-  /** Form 8606 line 1 — current-year nondeductible traditional IRA contributions (user entered). */
-  form8606NondeductibleContributions: number
-  setForm8606NondeductibleContributions: Dispatch<SetStateAction<number>>
-  /** Form 8606 line 2 — prior-year total basis carried forward. */
-  form8606PriorYearBasis: number
-  setForm8606PriorYearBasis: Dispatch<SetStateAction<number>>
-  /** Form 8606 line 6 — year-end FMV of all traditional/SEP/SIMPLE IRAs. */
-  form8606YearEndFmv: number
-  setForm8606YearEndFmv: Dispatch<SetStateAction<number>>
   /** User-entered SSA-1099 gross benefits for the year (Pub 915 worksheet input). */
   ssaGrossBenefits: number
   setSsaGrossBenefits: Dispatch<SetStateAction<number>>
-  /** Form 4797 Part I — net §1231 gain/(loss). */
-  form4797PartINet1231: number
-  setForm4797PartINet1231: Dispatch<SetStateAction<number>>
-  /** Form 4797 Part II — ordinary gain/(loss). */
-  form4797PartIIOrdinary: number
-  setForm4797PartIIOrdinary: Dispatch<SetStateAction<number>>
-  /** Form 4797 Part III — total depreciation recapture. */
-  form4797PartIIIRecapture: number
-  setForm4797PartIIIRecapture: Dispatch<SetStateAction<number>>
-  /** Schedule F — gross farm income (line 9). */
-  scheduleFGrossIncome: number
-  setScheduleFGrossIncome: Dispatch<SetStateAction<number>>
-  /** Schedule F — total farm expenses (line 33). */
-  scheduleFTotalExpenses: number
-  setScheduleFTotalExpenses: Dispatch<SetStateAction<number>>
   /** Whether the user is married for the selected tax year (from marriage status settings). */
   isMarried: boolean
   /** State codes the user filed in for the selected tax year (e.g. ['CA', 'NY']). */
@@ -156,7 +130,7 @@ interface TaxPreviewContextValue {
   priorYearAgi: number
   /** Setter for priorYearAgi — persisted to localStorage per tax year. */
   setPriorYearAgi: Dispatch<SetStateAction<number>>
-  taxReturn: TaxReturn1040
+  buildTaxReturn: () => TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
   setW2Documents: Dispatch<SetStateAction<TaxDocument[]>>
@@ -198,51 +172,6 @@ function computeMedicareWages(reviewedW2Docs: TaxDocument[], payslips: fin_paysl
   }
 
   return sumPayslipField(payslips, 'taxable_wages_medicare')
-}
-
-function toTaxReturnYearK1Entries(reviewedK1Docs: TaxDocument[]) {
-  return reviewedK1Docs
-    .map((doc) => {
-      if (!isFK1StructuredData(doc.parsed_data)) {
-        return null
-      }
-
-      const entityName =
-        doc.parsed_data.fields['B']?.value?.split('\n')[0] ??
-        doc.employment_entity?.display_name ??
-        doc.original_filename ??
-        `K1-${doc.id}`
-      const ein = doc.parsed_data.fields['A']?.value ?? undefined
-      const fields = Object.fromEntries(
-        Object.entries(doc.parsed_data.fields)
-          .filter(([, field]) => field?.value !== null && field?.value !== undefined && field?.value !== '')
-          .map(([key, field]) => {
-            const n = Number(field.value)
-            return [key, Number.isNaN(n) ? String(field.value) : n]
-          }),
-      )
-      const codes = Object.fromEntries(
-        Object.entries(doc.parsed_data.codes).map(([box, items]) => [
-          box,
-          items.map(item => ({
-            code: item.code,
-            value: item.value,
-            ...(item.notes ? { notes: item.notes } : {}),
-            ...(item.character ? { character: item.character } : {}),
-          })),
-        ]),
-      )
-
-      return {
-        entityName,
-        ...(ein ? { ein } : {}),
-        fields,
-        codes,
-        ...(doc.parsed_data.k3?.sections ? { k3Sections: doc.parsed_data.k3.sections } : {}),
-        ...(doc.parsed_data.passiveActivities?.length ? { passiveActivities: doc.parsed_data.passiveActivities } : {}),
-      }
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
 }
 
 export function TaxPreviewProvider({
@@ -314,190 +243,6 @@ export function TaxPreviewProvider({
     },
     [priorYearAgiKey],
   )
-  const schedule1Line2aAlimonyKey = `tax-preview-schedule1-2a-alimony-${year}`
-  const [schedule1Line2aAlimony, setSchedule1Line2aAlimonyRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(schedule1Line2aAlimonyKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setSchedule1Line2aAlimony: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setSchedule1Line2aAlimonyRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(schedule1Line2aAlimonyKey, String(next))
-        }
-        return next
-      })
-    },
-    [schedule1Line2aAlimonyKey],
-  )
-
-  const form8606NondeductibleKey = `tax-preview-8606-nondeductible-${year}`
-  const [form8606NondeductibleContributions, setForm8606NondeductibleRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form8606NondeductibleKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm8606NondeductibleContributions: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm8606NondeductibleRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form8606NondeductibleKey, String(next))
-        }
-        return next
-      })
-    },
-    [form8606NondeductibleKey],
-  )
-  const form8606PriorBasisKey = `tax-preview-8606-prior-basis-${year}`
-  const [form8606PriorYearBasis, setForm8606PriorBasisRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form8606PriorBasisKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm8606PriorYearBasis: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm8606PriorBasisRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form8606PriorBasisKey, String(next))
-        }
-        return next
-      })
-    },
-    [form8606PriorBasisKey],
-  )
-  const form8606FmvKey = `tax-preview-8606-fmv-${year}`
-  const [form8606YearEndFmv, setForm8606FmvRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form8606FmvKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm8606YearEndFmv: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm8606FmvRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form8606FmvKey, String(next))
-        }
-        return next
-      })
-    },
-    [form8606FmvKey],
-  )
-
-  const form4797PartIKey = `tax-preview-4797-part-i-${year}`
-  const [form4797PartINet1231, setForm4797PartINet1231Raw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form4797PartIKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm4797PartINet1231: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm4797PartINet1231Raw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form4797PartIKey, String(next))
-        }
-        return next
-      })
-    },
-    [form4797PartIKey],
-  )
-  const form4797PartIIKey = `tax-preview-4797-part-ii-${year}`
-  const [form4797PartIIOrdinary, setForm4797PartIIOrdinaryRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form4797PartIIKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm4797PartIIOrdinary: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm4797PartIIOrdinaryRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form4797PartIIKey, String(next))
-        }
-        return next
-      })
-    },
-    [form4797PartIIKey],
-  )
-  const form4797PartIIIKey = `tax-preview-4797-part-iii-${year}`
-  const [form4797PartIIIRecapture, setForm4797PartIIIRecaptureRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(form4797PartIIIKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setForm4797PartIIIRecapture: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setForm4797PartIIIRecaptureRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(form4797PartIIIKey, String(next))
-        }
-        return next
-      })
-    },
-    [form4797PartIIIKey],
-  )
-
-  const scheduleFIncomeKey = `tax-preview-sch-f-income-${year}`
-  const [scheduleFGrossIncome, setScheduleFGrossIncomeRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(scheduleFIncomeKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setScheduleFGrossIncome: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setScheduleFGrossIncomeRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(scheduleFIncomeKey, String(next))
-        }
-        return next
-      })
-    },
-    [scheduleFIncomeKey],
-  )
-  const scheduleFExpensesKey = `tax-preview-sch-f-expenses-${year}`
-  const [scheduleFTotalExpenses, setScheduleFTotalExpensesRaw] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const stored = localStorage.getItem(scheduleFExpensesKey)
-    if (stored === null) return 0
-    const n = parseFloat(stored)
-    return isNaN(n) ? 0 : n
-  })
-  const setScheduleFTotalExpenses: Dispatch<SetStateAction<number>> = useCallback(
-    (value) => {
-      setScheduleFTotalExpensesRaw((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(scheduleFExpensesKey, String(next))
-        }
-        return next
-      })
-    },
-    [scheduleFExpensesKey],
-  )
-
   const ssaGrossBenefitsKey = `tax-preview-ssa-gross-benefits-${year}`
   const [ssaGrossBenefits, setSsaGrossBenefitsRaw] = useState<number>(() => {
     if (typeof window === 'undefined') return 0
@@ -930,94 +675,31 @@ export function TaxPreviewProvider({
 
   const scheduleCNetIncome = useMemo(() => scheduleCNetIncomeFromFacts(taxFacts?.scheduleC), [taxFacts])
 
-  const taxReturn = useMemo<TaxReturn1040>(() => {
-    const k1Parsed = reviewedK1Docs
-      .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
-      .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
+  const structuredK1Docs = useMemo(
+    () => reviewedK1Docs
+      .map((doc) => ({ doc, data: isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null }))
+      .filter((entry): entry is { doc: TaxDocument; data: FK1StructuredData } => entry.data !== null),
+    [reviewedK1Docs],
+  )
 
-    const medicareWages = computeMedicareWages(reviewedW2Docs, payslips)
+  const medicareWages = useMemo(
+    () => computeMedicareWages(reviewedW2Docs, payslips),
+    [reviewedW2Docs, payslips],
+  )
 
-    const docRows: OverviewRow[] = []
-    for (const doc of reviewedW2Docs) {
-      const p = doc.parsed_data as Record<string, unknown>
-      const employer = (p?.employer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
-      const wages = p?.box1_wages as number | undefined
-      const fedTax = p?.box2_fed_tax as number | undefined
-      docRows.push({
-        item: `${employer} — W-2`,
-        amount: wages,
-        note: fedTax != null ? `Fed WH: ${currency(fedTax).format()}` : undefined,
-      })
-    }
+  const form8959 = useMemo(() => {
+    const medicareWageSources = reviewedW2Docs.map((doc) => {
+      const parsed = doc.parsed_data as W2ParsedData | null
+      const wages = parsed?.box5_medicare_wages ?? parsed?.box1_wages ?? 0
+      const label = parsed?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
 
-    for (const { doc, data } of k1Parsed) {
-      const partnerName = data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership K-1'
-      const net = k1NetIncome(data)
-      const interest = parseK1Field(data, '5')
-      const foreignTax = parseK1Field(data, '21')
-      const noteParts = [
-        net < 0 ? 'Net loss — Schedule E' : 'Net income — Schedule E',
-        interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
-        foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax).format()}` : null,
-      ].filter(Boolean)
-      docRows.push({ item: `${partnerName} — K-1`, amount: net, note: noteParts.join(' · ') })
-    }
+      return { label, wages }
+    }).filter(source => source.wages > 0)
 
-    for (const doc of reviewed1099Docs) {
-      const p = doc.parsed_data as Record<string, unknown>
-      const isBroker = doc.form_type === 'broker_1099'
-      const payer = (p?.payer_name as string | undefined) ?? doc.employment_entity?.display_name ?? doc.account?.acct_name ?? '—'
-      const interest = p?.box1_interest as number | undefined
-      const ordDiv = p?.box1a_ordinary as number | undefined
-      const grossDistribution = doc.form_type === '1099_r' ? (p?.box1_gross_distribution as number | undefined) : undefined
-      const taxableDistribution = doc.form_type === '1099_r'
-        ? ((p?.box2a_taxable_amount as number | undefined) ?? (p?.box1_gross_distribution as number | undefined))
-        : undefined
-      const foreignTax = (p?.box7_foreign_tax ?? p?.box6_foreign_tax) as number | undefined
-      const capGainLoss = isBroker ? (p?.total_realized_gain_loss as number | undefined) : undefined
-      const fedTaxWithheld = doc.form_type === '1099_r' ? (p?.box4_fed_tax as number | undefined) : undefined
-      const label = FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type
-      const noteParts = [
-        interest != null && interest !== 0 ? `Interest: ${currency(interest).format()}` : null,
-        ordDiv != null && ordDiv !== 0 ? `Ord div: ${currency(ordDiv).format()}` : null,
-        grossDistribution != null && grossDistribution !== 0 ? `Gross dist: ${currency(grossDistribution).format()}` : null,
-        taxableDistribution != null && taxableDistribution !== 0 ? `Taxable dist: ${currency(taxableDistribution).format()}` : null,
-        capGainLoss != null && capGainLoss !== 0 ? `Cap G/L: ${currency(capGainLoss).format()}` : null,
-        foreignTax != null && foreignTax !== 0 ? `Foreign tax: ${currency(foreignTax, { precision: 2 }).format()}` : null,
-        fedTaxWithheld != null && fedTaxWithheld !== 0 ? `Fed WH: ${currency(fedTaxWithheld).format()}` : null,
-      ].filter(Boolean)
-      const primaryAmount = currency(interest ?? 0)
-        .add(ordDiv ?? 0)
-        .add(grossDistribution ?? 0).value
-      docRows.push({
-        item: `${payer} — ${label}`,
-        amount: primaryAmount !== 0 ? primaryAmount : undefined,
-        note: noteParts.join(' · ') || undefined,
-      })
-    }
+    return computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
+  }, [isMarried, medicareWages, reviewedW2Docs])
 
-    const taxPositionRows: OverviewRow[] = []
-    if (taxFacts) {
-      const totalInvestmentIncome = currency(taxFacts.scheduleB.interestTotal)
-        .add(taxFacts.scheduleB.ordinaryDividendTotal).value
-
-      if (taxFacts.form1040.line1z > 0) taxPositionRows.push({ item: 'W-2 Wages', amount: taxFacts.form1040.line1z, note: 'Form 1040 line 1z' })
-      if (totalInvestmentIncome !== 0) taxPositionRows.push({ item: 'Net investment income (interest + divs)', amount: totalInvestmentIncome, note: 'Before deductions; subject to NIIT (3.8%)' })
-      if (taxFacts.scheduleD.line16Combined !== 0) taxPositionRows.push({ item: 'Net capital gain (loss)', amount: taxFacts.scheduleD.line16Combined, note: 'Schedule D line 16' })
-      if (taxFacts.scheduleD.ambiguous11SSources.length > 0) taxPositionRows.push({ item: 'K-1 Box 11S character review needed', amount: taxFacts.scheduleD.ambiguous11SAmount, note: `${taxFacts.scheduleD.ambiguous11SSources.length} non-portfolio capital gain/loss line(s) need S/T or L/T classification before Schedule D routing.` })
-      if (taxFacts.form4952.totalInvestmentInterestExpense !== 0) taxPositionRows.push({ item: 'Investment interest deduction (Form 4952)', amount: taxFacts.form4952.totalInvestmentInterestExpense, note: 'Deductible amount flows to Schedule A line 9' })
-      if (taxFacts.form1116.totalForeignTaxes !== 0) taxPositionRows.push({ item: 'Foreign tax credit (Form 1116)', amount: taxFacts.form1116.totalForeignTaxes, note: 'Dollar-for-dollar vs. income tax' })
-      if (taxFacts.form1040.line25d > 0) taxPositionRows.push({ item: 'Federal withholding', amount: taxFacts.form1040.line25d, note: 'Form 1040 line 25d' })
-    }
-
-    const medicareThreshold = isMarried ? 250000 : 200000
-    if (medicareWages > medicareThreshold) taxPositionRows.push({ item: 'Additional Medicare Tax (Form 8959)', amount: -currency(Math.max(0, medicareWages - medicareThreshold)).multiply(0.009).value, note: '0.9% on Medicare wages over the filing-status threshold' })
-
-    const overviewSections = [
-      ...(docRows.length > 0 ? [{ heading: 'Tax Documents', rows: docRows }] : []),
-      ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
-    ]
-
+  const form461Lines = useMemo<Form461Lines>(() => {
     const eblData = form461({
       taxYear: year,
       isSingle: !isMarried,
@@ -1026,7 +708,7 @@ export function TaxPreviewProvider({
       scheduleDData: scheduleDDataFromFacts(taxFacts?.scheduleD ?? emptyScheduleDFacts()),
       override_f461_line15: null,
     })
-    const k1Form461Disclosures = k1Parsed.flatMap(({ doc, data }) => {
+    const k1Disclosures = structuredK1Docs.flatMap(({ doc, data }) => {
       const disclosure = extractK1Form461Disclosure(data)
       if (!disclosure) {
         return []
@@ -1038,138 +720,72 @@ export function TaxPreviewProvider({
         ...disclosure,
       }]
     })
-    const form461Lines = {
+
+    return {
       aggregateBusinessIncomeLoss: eblData.f461_line9,
-      eblLimit: eblData.f461_line15, // form461() already computes the limit via ExcessBusinessLossLimitation()
+      eblLimit: eblData.f461_line15,
       excessBusinessLoss: eblData.f461_line16,
       isTriggered: eblData.f461_line16 > 0,
       isMarried,
-      k1Disclosures: k1Form461Disclosures,
+      k1Disclosures,
     }
+  }, [isMarried, structuredK1Docs, taxFacts, year])
 
-    const medicareWageSources = reviewedW2Docs.map((doc) => {
-      const p = doc.parsed_data as W2ParsedData | null
-      const medicareWagesForSource = p?.box5_medicare_wages ?? p?.box1_wages ?? 0
-      const label = p?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
-      return { label, wages: medicareWagesForSource }
-    }).filter(s => s.wages > 0)
-
-    const form8959 = computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
-
-    const estimatedTaxPayments = taxFacts && !isMarried && priorYearTax > 0
-      ? computeEstimatedTaxPayments({
-          selectedYear: year,
-          priorYearTax,
-          priorYearAgi,
-          expectedWithholding: taxFacts.form1040.line25d,
-          isMarriedFilingSeparately: false,
-        })
-      : undefined
-
-    const k1Docs = toTaxReturnYearK1Entries(reviewedK1Docs)
-    const k3Docs = reviewedK1Docs
-      .map((doc) => {
-        const parsed = isFK1StructuredData(doc.parsed_data) ? doc.parsed_data : null
-        if (!parsed) {
-          return null
-        }
-
-        return {
-          entityName:
-            parsed.fields['B']?.value?.split('\n')[0] ??
-            doc.employment_entity?.display_name ??
-            doc.original_filename ??
-            `K3-${doc.id}`,
-          sections: parsed.k3?.sections ?? [],
-        }
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-    const docs1099 = reviewed1099Docs.map((doc) => {
-      const parsedData = (doc.parsed_data ?? {}) as Record<string, unknown> | Record<string, unknown>[]
-      const firstBrokerEntry = Array.isArray(parsedData)
-        ? parsedData.find((entry) => typeof entry.account_name === 'string')
-        : null
-      const payerName = !Array.isArray(parsedData)
-        ? (parsedData.payer_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
-        : (firstBrokerEntry?.account_name as string | undefined) ?? doc.account?.acct_name ?? doc.original_filename ?? `Doc-${doc.id}`
-      const accountLast4 = !Array.isArray(parsedData)
-        ? accountLast4FromValue(parsedData.account_number) ?? accountLast4FromValue(doc.account?.acct_number)
-        : accountLast4FromValue(doc.account?.acct_number)
-
-      return {
-        formType: doc.form_type,
-        payerName,
-        parsedData,
-        accountId: doc.account_id,
-        accountName: doc.account?.acct_name ?? null,
-        accountLast4,
-        accountLinks: (doc.account_links ?? []).map((link) => ({
-          id: link.id,
-          account_id: link.account_id,
-          form_type: link.form_type,
-          reporting_mode: link.reporting_mode ?? null,
-          ai_identifier: link.ai_identifier,
-          ai_account_name: link.ai_account_name,
-          account: link.account,
-        })),
-      }
-    })
-
-    const capitalLossCarryover = taxFacts
-      ? computeCapitalLossCarryover(taxFacts.scheduleD.line7NetShortTerm, taxFacts.scheduleD.line15NetLongTerm)
-      : {
-          netShortTerm: 0,
-          netLongTerm: 0,
-          combined: 0,
-          appliedToOrdinaryIncome: 0,
-          shortTermCarryover: 0,
-          longTermCarryover: 0,
-          totalCarryover: 0,
-          hasCarryover: false,
-        }
-
+  const capitalLossCarryover = useMemo<CapitalLossCarryoverLines>(() => {
     if (!taxFacts) {
       return {
-        year,
-        ...(overviewSections.length > 0 ? { overviewSections } : {}),
-        scheduleC: scheduleCNetIncomeFromFacts(undefined),
-        form8959,
-        form461: form461Lines,
-        capitalLossCarryover,
-        k1Docs,
-        k3Docs,
-        docs1099,
-        ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
+        netShortTerm: 0,
+        netLongTerm: 0,
+        combined: 0,
+        appliedToOrdinaryIncome: 0,
+        shortTermCarryover: 0,
+        longTermCarryover: 0,
+        totalCarryover: 0,
+        hasCarryover: false,
       }
     }
 
-    return {
-      ...taxPreviewFactsToTaxReturn(taxFacts, {
-        isMarried,
-        form8959,
-        form461: form461Lines,
-        capitalLossCarryover,
-        ...(overviewSections.length > 0 ? { overviewSections } : {}),
-        k1Docs,
-        k3Docs,
-        docs1099,
-        ...(shortDividendSummary ? { shortDividends: shortDividendSummary } : {}),
-        ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
-      }),
-      year,
-      form1040: form1040FactsToLines(taxFacts.form1040),
+    return computeCapitalLossCarryover(taxFacts.scheduleD.line7NetShortTerm, taxFacts.scheduleD.line15NetLongTerm)
+  }, [taxFacts])
+
+  const estimatedTaxPayments = useMemo(() => {
+    if (!taxFacts || isMarried || priorYearTax <= 0) {
+      return undefined
     }
-  }, [
+
+    return computeEstimatedTaxPayments({
+      selectedYear: year,
+      priorYearTax,
+      priorYearAgi,
+      expectedWithholding: taxFacts.form1040.line25d,
+      isMarriedFilingSeparately: false,
+    })
+  }, [isMarried, priorYearAgi, priorYearTax, taxFacts, year])
+
+  const buildTaxReturn = useCallback(() => buildTaxReturnForWorkbook({
     year,
-    reviewed1099Docs,
-    reviewedK1Docs,
-    reviewedW2Docs,
-    payslips,
-    shortDividendSummary,
-    isMarried,
-    priorYearAgi,
-    priorYearTax,
     taxFacts,
+    isMarried,
+    reviewedW2Docs,
+    reviewedK1Docs,
+    reviewed1099Docs,
+    form8959,
+    form461: form461Lines,
+    capitalLossCarryover,
+    estimatedTaxPayments,
+    shortDividendSummary,
+  }), [
+    year,
+    taxFacts,
+    isMarried,
+    reviewedW2Docs,
+    reviewedK1Docs,
+    reviewed1099Docs,
+    form8959,
+    form461Lines,
+    capitalLossCarryover,
+    estimatedTaxPayments,
+    shortDividendSummary,
   ])
 
   const value = useMemo<TaxPreviewContextValue>(() => ({
@@ -1189,6 +805,10 @@ export function TaxPreviewProvider({
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
+    form8959,
+    form461: form461Lines,
+    capitalLossCarryover,
+    ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
     employmentEntities,
     accounts,
     activeAccountIds,
@@ -1198,26 +818,8 @@ export function TaxPreviewProvider({
     schedule1Line8Breakdown,
     schedule1Line7Unemployment,
     schedule1Line1aTaxableRefunds,
-    schedule1Line2aAlimony,
-    setSchedule1Line2aAlimony,
-    form8606NondeductibleContributions,
-    setForm8606NondeductibleContributions,
-    form8606PriorYearBasis,
-    setForm8606PriorYearBasis,
-    form8606YearEndFmv,
-    setForm8606YearEndFmv,
     ssaGrossBenefits,
     setSsaGrossBenefits,
-    form4797PartINet1231,
-    setForm4797PartINet1231,
-    form4797PartIIOrdinary,
-    setForm4797PartIIOrdinary,
-    form4797PartIIIRecapture,
-    setForm4797PartIIIRecapture,
-    scheduleFGrossIncome,
-    setScheduleFGrossIncome,
-    scheduleFTotalExpenses,
-    setScheduleFTotalExpenses,
     isMarried,
     activeTaxStates,
     setActiveTaxStates,
@@ -1232,7 +834,7 @@ export function TaxPreviewProvider({
     setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
-    taxReturn,
+    buildTaxReturn,
     setPayslips,
     setPendingReviewCount,
     setW2Documents,
@@ -1260,6 +862,10 @@ export function TaxPreviewProvider({
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
+    form8959,
+    form461Lines,
+    capitalLossCarryover,
+    estimatedTaxPayments,
     employmentEntities,
     accounts,
     activeAccountIds,
@@ -1269,26 +875,8 @@ export function TaxPreviewProvider({
     schedule1Line8Breakdown,
     schedule1Line7Unemployment,
     schedule1Line1aTaxableRefunds,
-    schedule1Line2aAlimony,
-    setSchedule1Line2aAlimony,
-    form8606NondeductibleContributions,
-    setForm8606NondeductibleContributions,
-    form8606PriorYearBasis,
-    setForm8606PriorYearBasis,
-    form8606YearEndFmv,
-    setForm8606YearEndFmv,
     ssaGrossBenefits,
     setSsaGrossBenefits,
-    form4797PartINet1231,
-    setForm4797PartINet1231,
-    form4797PartIIOrdinary,
-    setForm4797PartIIOrdinary,
-    form4797PartIIIRecapture,
-    setForm4797PartIIIRecapture,
-    scheduleFGrossIncome,
-    setScheduleFGrossIncome,
-    scheduleFTotalExpenses,
-    setScheduleFTotalExpenses,
     isMarried,
     activeTaxStates,
     userDeductions,
@@ -1300,7 +888,7 @@ export function TaxPreviewProvider({
     setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
-    taxReturn,
+    buildTaxReturn,
     refreshAll,
   ])
 

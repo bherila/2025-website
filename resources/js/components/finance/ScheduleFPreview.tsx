@@ -41,7 +41,7 @@ export function scheduleFFactsToLines(facts: ScheduleFFacts): ScheduleFLines {
 
 interface ScheduleFPreviewProps {
   selectedYear: number
-  scheduleF: ScheduleFLines
+  scheduleF: ScheduleFLines | ScheduleFFacts
   grossFarmIncomeInput?: React.ReactNode
   totalExpensesInput?: React.ReactNode
 }
@@ -53,7 +53,9 @@ export default function ScheduleFPreview({
   grossFarmIncomeInput,
   totalExpensesInput,
 }: ScheduleFPreviewProps) {
-  const f = scheduleF
+  const f = 'netFarmProfit' in scheduleF
+    ? scheduleFFactsToLines(scheduleF)
+    : scheduleF
 
   return (
     <div className="space-y-5">

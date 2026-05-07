@@ -25,7 +25,7 @@ function TaxPreviewPageContent(): React.ReactElement {
     isLoading,
     error,
     pendingReviewCount,
-    taxReturn,
+    buildTaxReturn,
     refreshAll,
   } = useTaxPreview()
 
@@ -50,7 +50,7 @@ function TaxPreviewPageContent(): React.ReactElement {
   const handleExportXlsx = useCallback(async () => {
     setIsExporting(true)
     try {
-      const workbook = buildTaxWorkbook(taxReturn)
+      const workbook = buildTaxWorkbook(buildTaxReturn())
       const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', workbook)
       if (!response.ok) {
         throw new Error(`Export failed with status ${response.status}`)
@@ -71,7 +71,7 @@ function TaxPreviewPageContent(): React.ReactElement {
     } finally {
       setIsExporting(false)
     }
-  }, [taxReturn])
+  }, [buildTaxReturn])
 
   const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
 

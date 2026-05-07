@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import { cn } from '@/lib/utils'
 import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
-import type { Form1040LineItem, TaxReturn1040 } from '@/types/finance/tax-return'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
 import StateSelectorSection from '../StateSelectorSection'
@@ -29,12 +29,9 @@ interface KpiSummary {
   withholdingRate: number
 }
 
-function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
-  return lines.find((l) => l.line === lineNumber)?.value ?? 0
-}
-
 interface SummarizeInput {
-  taxReturn: TaxReturn1040
+  taxFacts?: TaxPreviewFacts | null
+  accountDocuments?: TaxDocument[]
   w2Documents?: TaxDocument[]
   payslips?: fin_payslip[]
 }
@@ -43,20 +40,20 @@ export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
   return summarize(input)
 }
 
-function summarize({ taxReturn, w2Documents = [], payslips = [] }: SummarizeInput): KpiSummary {
-  const lines = taxReturn.form1040 ?? []
-  const totalIncome = lineValue(lines, '9')
-  const totalTax = lineValue(lines, '24')
-  const form1040Withheld = lineValue(lines, '25d')
+function summarize({ taxFacts, accountDocuments = [], w2Documents = [], payslips = [] }: SummarizeInput): KpiSummary {
+  const form1040 = taxFacts?.form1040
+  const totalIncome = form1040?.line9 ?? 0
+  const totalTax = form1040?.line24 ?? 0
+  const form1040Withheld = form1040?.line25d ?? 0
   const totalWithheld = form1040Withheld !== 0
     ? form1040Withheld
-    : fallbackFederalWithholding(taxReturn, w2Documents, payslips)
-  const form1040Payments = lineValue(lines, '33')
+    : fallbackFederalWithholding(accountDocuments, w2Documents, payslips)
+  const form1040Payments = form1040?.line33 ?? 0
   const totalPayments = form1040Withheld !== 0
     ? form1040Payments
     : currency(form1040Payments).add(totalWithheld).value
-  const overpaid = lineValue(lines, '34')
-  const amountOwed = lineValue(lines, '37')
+  const overpaid = form1040?.line34 ?? 0
+  const amountOwed = form1040?.line37 ?? 0
   const usesWithholdingFallback = form1040Withheld === 0 && totalWithheld !== 0
   const diff = !usesWithholdingFallback && (overpaid > 0 || amountOwed > 0)
     ? currency(overpaid).subtract(amountOwed).value
@@ -73,7 +70,7 @@ function summarize({ taxReturn, w2Documents = [], payslips = [] }: SummarizeInpu
   }
 }
 
-function fallbackFederalWithholding(taxReturn: TaxReturn1040, w2Documents: TaxDocument[], payslips: fin_payslip[]): number {
+function fallbackFederalWithholding(accountDocuments: TaxDocument[], w2Documents: TaxDocument[], payslips: fin_payslip[]): number {
   const reviewedW2Withholding = w2Documents.reduce((acc, doc) => {
     if (!doc.is_reviewed) {
       return acc
@@ -88,24 +85,30 @@ function fallbackFederalWithholding(taxReturn: TaxReturn1040, w2Documents: TaxDo
         .add(row.ps_fed_tax_addl ?? 0)
         .subtract(row.ps_fed_tax_refunded ?? 0), currency(0)).value
     : 0
-  const doc1099Withholding = (taxReturn.docs1099 ?? []).reduce(
-    (acc, doc) => acc.add(federalWithholdingFromParsedData(doc.parsedData)),
+  const doc1099Withholding = accountDocuments.reduce(
+    (acc, doc) => doc.is_reviewed && doc.form_type !== 'k1'
+      ? acc.add(federalWithholdingFromParsedData(doc.parsed_data ?? {}))
+      : acc,
     currency(0),
   ).value
 
   return currency(reviewedW2Withholding).add(payslipWithholding).add(doc1099Withholding).value
 }
 
-function federalWithholdingFromParsedData(parsedData: Record<string, unknown> | Record<string, unknown>[]): number {
+function federalWithholdingFromParsedData(parsedData: unknown): number {
   if (Array.isArray(parsedData)) {
     return parsedData.reduce((acc, entry) => {
-      const childData = entry.parsed_data
+      const childData = isRecord(entry) ? entry.parsed_data : null
       return acc.add(
         isRecord(childData) || Array.isArray(childData)
           ? federalWithholdingFromParsedData(childData)
           : federalWithholdingFromParsedData(entry),
       )
     }, currency(0)).value
+  }
+
+  if (!isRecord(parsedData)) {
+    return 0
   }
 
   return currency(numeric(parsedData.box4_fed_tax))
@@ -150,7 +153,8 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
   const [modalOpen, setModalOpen] = useState(false)
 
   const summary = summarize({
-    taxReturn: state.taxReturn,
+    taxFacts: state.taxFacts,
+    accountDocuments: state.accountDocuments,
     w2Documents: state.w2Documents,
     payslips: state.payslips,
   })
@@ -367,7 +371,7 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
               Q1: 0,
               Q2: 0,
               Q3: 0,
-              [finalSeriesLabel]: state.taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
+              [finalSeriesLabel]: state.taxFacts?.form1040.line23 ?? 0,
             }}
           />
         </Section>
@@ -413,7 +417,7 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           priorYearTax={state.priorYearTax}
           onPriorYearAgiChange={state.setPriorYearAgi}
           onPriorYearTaxChange={state.setPriorYearTax}
-          estimatedTaxPayments={state.taxReturn.estimatedTaxPayments}
+          estimatedTaxPayments={state.estimatedTaxPayments}
           showMfsUnsupportedNotice={state.isMarried}
         />
       </Section>
