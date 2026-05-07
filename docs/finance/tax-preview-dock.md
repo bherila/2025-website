@@ -111,7 +111,7 @@ function Schedule1Adapter({ state, onDrill }: FormRenderProps) {
 
 `Form1040Preview` attaches `navTab: TaxTabId` to each line. Clicking a row calls `onNavigate(navTab)`. The Data Source dialog surfaces a "Go to {Schedule}" button using the same `navTab` / `refSchedule` from the clicked row.
 
-Adding a new line? Set `navTab: TAX_TABS.<key>` in `computeForm1040Lines` and make sure the key has a `TAB_TO_FORM_ID` mapping.
+Adding a new line? Add the backend fact/source keys to `Form1040Facts`, map them in `FORM1040_LINE_DEFINITIONS`, and set `navTab: TAX_TABS.<key>` when the row should drill into another tax preview column.
 
 ### Go-to-source buttons in source dialogs
 

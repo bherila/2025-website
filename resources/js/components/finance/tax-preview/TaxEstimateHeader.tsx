@@ -35,6 +35,10 @@ function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
   return lines.find((l) => l.line === lineNumber)?.value ?? 0
 }
 
+function hasLine(lines: Form1040LineItem[], lineNumber: string): boolean {
+  return lines.some((l) => l.line === lineNumber)
+}
+
 interface SummarizeInput {
   taxReturn: TaxReturn1040
   year: number
@@ -50,8 +54,6 @@ export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
 function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: SummarizeInput): KpiSummary {
   const lines = taxReturn.form1040 ?? []
   const totalIncome = lineValue(lines, '9')
-  // Form 1040 lines for tax + withholding aren't computed yet, so derive them
-  // here from the same primitives the rest of the dock uses.
   const agi = lineValue(lines, '11') || totalIncome
   const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
   const stdDeduction = getStandardDeduction(year, filingStatus)
@@ -63,7 +65,9 @@ function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: 
   const foreignTaxCredit = lineValue(lines, '20')
   const totalTax = Math.max(
     0,
-    currency(bracketTax).add(additionalTaxes).subtract(foreignTaxCredit).value,
+    hasLine(lines, '24')
+      ? lineValue(lines, '24')
+      : currency(bracketTax).add(additionalTaxes).subtract(foreignTaxCredit).value,
   )
 
   const yearStart = `${year}-01-01`
@@ -75,9 +79,12 @@ function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: 
     return acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0)
   }, currency(0)).value
   const retirementWithheld = compute1099RDistributionSummary(reviewed1099RDocs).federalWithholding
-  const totalWithheld = currency(payrollWithheld).add(retirementWithheld).value
+  const totalWithheld = hasLine(lines, '25d')
+    ? lineValue(lines, '25d')
+    : currency(payrollWithheld).add(retirementWithheld).value
+  const totalPayments = hasLine(lines, '33') ? lineValue(lines, '33') : totalWithheld
 
-  const diff = currency(totalWithheld).subtract(totalTax).value
+  const diff = currency(totalPayments).subtract(totalTax).value
   return {
     totalIncome,
     totalTax,

@@ -12,6 +12,7 @@ use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\CapitalGains\Form8949ReportRow;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
 use App\Services\Finance\CapitalGains\WashSaleAdjustment;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form1040FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form1116FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4797FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4952FactsBuilder;
@@ -30,6 +31,7 @@ use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleDFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleEFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleFFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleSEFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Data\Form1040Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8582Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
@@ -50,7 +52,7 @@ use InvalidArgumentException;
 
 class TaxPreviewFactsService
 {
-    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'scheduleF', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582'];
+    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'scheduleF', 'scheduleSE', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040'];
 
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
@@ -72,6 +74,7 @@ class TaxPreviewFactsService
         private readonly Form8995FactsBuilder $form8995FactsBuilder,
         private readonly Form6251FactsBuilder $form6251FactsBuilder,
         private readonly Form8582FactsBuilder $form8582FactsBuilder,
+        private readonly Form1040FactsBuilder $form1040FactsBuilder,
     ) {}
 
     /**
@@ -153,8 +156,10 @@ class TaxPreviewFactsService
         $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year);
         $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried);
         $taxableIncome = $this->estimatedTaxableIncome($deductionMagi ?? 0.0, $scheduleA, $form8995->deduction, $isMarried);
-        $form6251 = $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $taxableIncome, $form1116->totalForeignTaxes, $year, $isMarried);
+        $regularTax = $this->form1040FactsBuilder->regularTax($scheduleB, $scheduleD, $taxableIncome, $year, $isMarried);
+        $form6251 = $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $taxableIncome, $form1116->totalForeignTaxes, $year, $isMarried, $regularTax);
         $form8582 = $this->form8582FactsBuilder->build($k1Docs, $userId !== null ? $this->palCarryforwardsForYear($userId, $year) : [], $deductionMagi ?? 0.0, $isMarried);
+        $form1040 = $this->form1040FactsBuilder->build($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleA, $scheduleD, $schedule3, $scheduleSE, $form8995, $form6251, $form8960, $year, $isMarried);
 
         return new TaxPreviewFacts(
             year: $year,
@@ -176,6 +181,7 @@ class TaxPreviewFactsService
             form8995: $form8995,
             form6251: $form6251,
             form8582: $form8582,
+            form1040: $form1040,
         );
     }
 
@@ -269,6 +275,10 @@ class TaxPreviewFactsService
             'form8582' => [
                 'year' => $year,
                 'form8582' => $this->form8582FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
+            ],
+            'form1040' => [
+                'year' => $year,
+                'form1040' => $this->form1040FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
             ],
             default => $this->factsForYear($userId, $year)->toArray(),
         };
@@ -392,6 +402,10 @@ class TaxPreviewFactsService
             'form8582' => [
                 'year' => $facts['year'],
                 'form8582' => $facts['form8582'],
+            ],
+            'form1040' => [
+                'year' => $facts['year'],
+                'form1040' => $facts['form1040'],
             ],
             default => $facts,
         };
@@ -535,8 +549,10 @@ class TaxPreviewFactsService
         $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi, true);
         $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
+        $taxableIncome = $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried);
+        $regularTax = $this->form1040FactsBuilder->regularTax($scheduleB, $scheduleD, $taxableIncome, $year, $isMarried);
 
-        return $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried), $form1116->totalForeignTaxes, $year, $isMarried);
+        return $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $taxableIncome, $form1116->totalForeignTaxes, $year, $isMarried, $regularTax);
     }
 
     /**
@@ -558,6 +574,23 @@ class TaxPreviewFactsService
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
 
         return $this->form8582FactsBuilder->build($k1Docs, $this->palCarryforwardsForYear($userId, $year), $magi, $isMarried);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
+     * @param  FileForTaxDocument[]  $w2Docs
+     */
+    private function form1040FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form1040Facts
+    {
+        return $this->factsFromDocuments(
+            $year,
+            [...$k1Docs, ...$docs1099, ...$w2Docs],
+            $this->shortDividendItemizedDeduction($userId, $year),
+            $this->marginInterestSources($userId, $year),
+            $userId,
+            $this->userDeductionsForYear($userId, $year),
+        )->form1040;
     }
 
     /**

@@ -5,7 +5,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { compute1099RDistributionSummary, computeForm1040Lines } from '@/components/finance/Form1040Preview'
+import { compute1099RDistributionSummary, form1040FactsToLines } from '@/components/finance/Form1040Preview'
 import { computeForm4797 } from '@/components/finance/Form4797Preview'
 import { computeForm4952Lines } from '@/components/finance/Form4952Preview'
 import { computeForm8606 } from '@/components/finance/Form8606Preview'
@@ -1042,8 +1042,6 @@ export function TaxPreviewProvider({
     .subtract(row.ps_pretax_fsa ?? 0), currency(0)), [payslips])
 
   const taxReturn = useMemo<TaxReturn1040>(() => {
-    const reviewedIntDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_int' || doc.form_type === '1099_int_c')
-    const reviewedDivDocs = reviewed1099Docs.filter((doc) => doc.form_type === '1099_div' || doc.form_type === '1099_div_c')
     const retirementDistributionSummary = compute1099RDistributionSummary(reviewed1099RDocs)
     const scheduleD = computeScheduleD(reviewedK1Docs, reviewed1099Docs, {
       shortTermCapitalLossCarryover: priorYearCapitalLossCarryover?.shortTermCarryover ?? 0,
@@ -1408,20 +1406,7 @@ export function TaxPreviewProvider({
     return {
       year,
       ...(overviewSections.length > 0 ? { overviewSections } : {}),
-      form1040: computeForm1040Lines({
-        w2Income: w2GrossIncome,
-        interestIncome: currency(scheduleB.interestTotal),
-        dividendIncome: currency(scheduleB.dividendTotal),
-        schedule1,
-        capitalGainOrLoss: capitalGainOrLossToReturn,
-        schedule2TotalAdditionalTaxes: schedule2.totalAdditionalTaxes,
-        foreignTaxCredit: form1116.totalForeignTaxes,
-        scheduleB,
-        w2Documents: reviewedW2Docs,
-        interestDocuments: reviewedIntDocs,
-        dividendDocuments: reviewedDivDocs,
-        retirementDocuments: reviewed1099RDocs,
-      }),
+      form1040: form1040FactsToLines(taxFacts?.form1040),
       schedule1,
       scheduleA,
       scheduleB,

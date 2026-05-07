@@ -7,6 +7,7 @@ use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251SourceEntryFact;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
+use App\Support\Finance\FederalIncomeTax;
 
 class Form6251FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -45,21 +46,10 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         2025 => ['single' => 239100.0, 'mfj' => 239100.0],
     ];
 
-    private const array FEDERAL_BRACKETS = [
-        2024 => [
-            'single' => [[11600.0, 0.10], [47150.0, 0.12], [100525.0, 0.22], [191950.0, 0.24], [243725.0, 0.32], [609350.0, 0.35], [INF, 0.37]],
-            'mfj' => [[23200.0, 0.10], [94300.0, 0.12], [201050.0, 0.22], [383900.0, 0.24], [487450.0, 0.32], [731200.0, 0.35], [INF, 0.37]],
-        ],
-        2025 => [
-            'single' => [[11925.0, 0.10], [48475.0, 0.12], [103350.0, 0.22], [197300.0, 0.24], [250525.0, 0.32], [626350.0, 0.35], [INF, 0.37]],
-            'mfj' => [[23850.0, 0.10], [96950.0, 0.12], [206700.0, 0.22], [394600.0, 0.24], [501050.0, 0.32], [751600.0, 0.35], [INF, 0.37]],
-        ],
-    ];
-
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
-    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried): Form6251Facts
+    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried, ?float $regularTax = null): Form6251Facts
     {
         $sourceEntries = [];
         $manualReviewReasons = [];
@@ -148,7 +138,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             : $this->sumMoney([$amtRateSplitThreshold * 0.26, ($amtTaxBase - $amtRateSplitThreshold) * 0.28]);
         $line8AmtForeignTaxCredit = min(max(0.0, $regularForeignTaxCredit), $amtBeforeForeignCredit);
         $tentativeMinTax = max(0.0, $this->subtractMoney($amtBeforeForeignCredit, $line8AmtForeignTaxCredit));
-        $regularTax = $this->federalTax($taxableIncome, $year, $isMarried);
+        $regularTax ??= FederalIncomeTax::ordinaryTax($taxableIncome, $year, $isMarried);
         $regularTaxAfterCredits = max(0.0, $this->subtractMoney($regularTax, max(0.0, $regularForeignTaxCredit)));
         $amt = max(0.0, $this->subtractMoney($tentativeMinTax, $regularTaxAfterCredits));
 
@@ -210,25 +200,5 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         $row = $table[$year] ?? $table[self::DEFAULT_AMT_YEAR];
 
         return $isMarried ? $row['mfj'] : $row['single'];
-    }
-
-    private function federalTax(float $taxableIncome, int $year, bool $isMarried): float
-    {
-        $brackets = self::FEDERAL_BRACKETS[$year] ?? self::FEDERAL_BRACKETS[self::DEFAULT_AMT_YEAR];
-        $rows = $brackets[$isMarried ? 'mfj' : 'single'];
-        $tax = 0.0;
-        $previousTop = 0.0;
-
-        foreach ($rows as [$top, $rate]) {
-            if ($taxableIncome <= $previousTop) {
-                break;
-            }
-
-            $taxableAtRate = min($taxableIncome, $top) - $previousTop;
-            $tax = $this->sumMoney([$tax, $taxableAtRate * $rate]);
-            $previousTop = $top;
-        }
-
-        return $tax;
     }
 }

@@ -51,6 +51,82 @@ function makeResponse(docs: object[] = []) {
   }
 }
 
+function makeForm1040Facts(overrides: Partial<TaxPreviewFacts['form1040']> = {}): TaxPreviewFacts['form1040'] {
+  return {
+    filingStatus: 'single',
+    line1zSources: [],
+    line1z: 0,
+    line2aSources: [],
+    line2a: 0,
+    line2bSources: [],
+    line2b: 0,
+    line3aSources: [],
+    line3a: 0,
+    line3bSources: [],
+    line3b: 0,
+    line4aSources: [],
+    line4a: 0,
+    line4bSources: [],
+    line4b: 0,
+    line5aSources: [],
+    line5a: 0,
+    line5bSources: [],
+    line5b: 0,
+    line6aSources: [],
+    line6a: 0,
+    line6bSources: [],
+    line6b: 0,
+    line7Sources: [],
+    line7: 0,
+    line8Sources: [],
+    line8: 0,
+    line9: 0,
+    line10Sources: [],
+    line10: 0,
+    line11: 0,
+    line12Source: 'standard_deduction',
+    line12Sources: [],
+    line12: 0,
+    line13Sources: [],
+    line13: 0,
+    line14: 0,
+    line15: 0,
+    line16TaxComputation: 'ordinary_brackets',
+    line16Sources: [],
+    line16: 0,
+    line17Sources: [],
+    line17: 0,
+    line18: 0,
+    line19: 0,
+    line20Sources: [],
+    line20: 0,
+    line21: 0,
+    line22: 0,
+    line23Sources: [],
+    line23: 0,
+    line24: 0,
+    line25aSources: [],
+    line25a: 0,
+    line25bSources: [],
+    line25b: 0,
+    line25cSources: [],
+    line25c: 0,
+    line25d: 0,
+    line26Sources: [],
+    line26: 0,
+    line31Sources: [],
+    line31: 0,
+    line32: 0,
+    line33: 0,
+    line34: 0,
+    line35a: 0,
+    line36: 0,
+    line37: 0,
+    line38: 0,
+    ...overrides,
+  }
+}
+
 function makeTaxFacts(): TaxPreviewFacts {
   return {
     year: 2025,
@@ -332,10 +408,11 @@ function makeTaxFacts(): TaxPreviewFacts {
       aboveThreshold: false,
       reviewSources: [],
     },
+    form1040: makeForm1040Facts(),
   } as unknown as TaxPreviewFacts
 }
 
-function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000): TaxPreviewFacts {
+function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000, form1040Overrides: Partial<TaxPreviewFacts['form1040']> = {}): TaxPreviewFacts {
   const facts = makeTaxFacts()
   const seTaxableEarnings = currency(netEarningsFromSE).multiply(0.9235).value
   const socialSecurityTax = currency(seTaxableEarnings).multiply(0.124).value
@@ -367,6 +444,7 @@ function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000): TaxPreviewFacts
     seTax,
     deductibleSeTax: currency(seTax).divide(2).value,
   } as unknown as TaxPreviewFacts['scheduleSE']
+  facts.form1040 = makeForm1040Facts(form1040Overrides)
 
   return facts
 }
@@ -707,7 +785,10 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve([])
       }
 
-      return Promise.resolve(makeResponse([miscDoc]))
+      const facts = makeTaxFacts()
+      facts.form1040 = makeForm1040Facts({ line8: 900, line9: 900 })
+
+      return Promise.resolve({ ...makeResponse([miscDoc]), taxFacts: facts })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
@@ -716,7 +797,7 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.form1040).toEqual(expect.arrayContaining([
       expect.objectContaining({
         line: '8',
-        label: 'Additional income from Schedule 1, line 10',
+        label: 'Additional income from Schedule 1',
         value: 900,
       }),
       expect.objectContaining({
@@ -795,7 +876,21 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve([])
       }
 
-      return Promise.resolve({ ...makeResponse([k1Doc, ira1099R, pension1099R]), taxFacts: makeTaxFactsWithScheduleSE() })
+      return Promise.resolve({
+        ...makeResponse([k1Doc, ira1099R, pension1099R]),
+        taxFacts: makeTaxFactsWithScheduleSE(10_000, {
+          line2b: 200,
+          line3b: 300,
+          line4a: 10_000,
+          line4b: 8_000,
+          line5a: 7_000,
+          line5b: 6_500,
+          line8: 1_000,
+          line9: 16_000,
+          line10: 706.48,
+          line11: 15_293.52,
+        }),
+      })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })

@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import currency from 'currency.js'
 import React from 'react'
 
-// --- Mocks ----------------------------------------------------------------
+import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form1040Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
+
+import Form1040Preview, { compute1099RDistributionSummary, form1040FactsToLines } from '../Form1040Preview'
 
 jest.mock('lucide-react', () => ({
   ChevronRight: () => <svg data-testid="chevron-right" />,
@@ -30,226 +32,191 @@ jest.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-// --- Helpers ---------------------------------------------------------------
-
-import type { Form1040LineItem } from '@/types/finance/tax-return'
-
-import type { computeForm1040Lines as ComputeForm1040LinesFn } from '../Form1040Preview'
-import { computeSchedule1Totals } from '../Schedule1Preview'
-
-let Form1040Preview: React.ComponentType<{
-  lines: Form1040LineItem[]
-  selectedYear: number
-  onNavigate?: (tab: string) => void
-}>
-let computeForm1040Lines: typeof ComputeForm1040LinesFn
-
-beforeAll(async () => {
-  const mod = await import('../Form1040Preview')
-  Form1040Preview = mod.default as typeof Form1040Preview
-  computeForm1040Lines = mod.computeForm1040Lines
-})
-
-beforeEach(() => {
-  jest.clearAllMocks()
-})
-
-const defaultSchedule1 = computeSchedule1Totals({})
-
-const defaultInput = {
-  w2Income: currency(100_000),
-  interestIncome: currency(500),
-  dividendIncome: currency(1_200),
-  schedule1: defaultSchedule1,
+function makeSource(label: string, amount: number, notes?: string): TaxFactSource {
+  return {
+    id: `${label}-${amount}`,
+    label,
+    amount,
+    sourceType: 'test',
+    routing: null,
+    taxDocumentId: null,
+    taxDocumentAccountId: null,
+    accountId: null,
+    formType: null,
+    box: null,
+    code: null,
+    routingReason: null,
+    notes: notes ?? null,
+    isReviewed: true,
+    reviewStatus: 'reviewed',
+    reviewAction: null,
+  }
 }
 
-function renderForm1040(
-  extras: Partial<Parameters<typeof ComputeForm1040LinesFn>[0]> = {},
-  uiProps: { onNavigate?: (tab: string) => void } = {},
-) {
-  const lines = computeForm1040Lines({ ...defaultInput, ...extras })
-  return render(<Form1040Preview lines={lines} selectedYear={2025} {...uiProps} />)
+function makeFacts(overrides: Partial<Form1040Facts> = {}): Form1040Facts {
+  return {
+    filingStatus: 'single',
+    line1zSources: [makeSource('Employer A', 100_000, 'W-2 box 1')],
+    line1z: 100_000,
+    line2aSources: [],
+    line2a: 0,
+    line2bSources: [makeSource('Bank', 500, '1099-INT box 1')],
+    line2b: 500,
+    line3aSources: [makeSource('Broker qualified dividends', 400, '1099-DIV box 1b')],
+    line3a: 400,
+    line3bSources: [makeSource('Broker ordinary dividends', 1_200, '1099-DIV box 1a')],
+    line3b: 1_200,
+    line4aSources: [makeSource('IRA Custodian', 10_000, '1099-R box 1')],
+    line4a: 10_000,
+    line4bSources: [makeSource('IRA Custodian', 8_000, '1099-R box 2a')],
+    line4b: 8_000,
+    line5aSources: [],
+    line5a: 0,
+    line5bSources: [],
+    line5b: 0,
+    line6aSources: [],
+    line6a: 0,
+    line6bSources: [],
+    line6b: 0,
+    line7Sources: [makeSource('Schedule D capital gain', 250)],
+    line7: 250,
+    line8Sources: [makeSource('Schedule C net profit', 5_000)],
+    line8: 5_000,
+    line9: 114_950,
+    line10Sources: [makeSource('Deductible half SE tax', 700)],
+    line10: 700,
+    line11: 114_250,
+    line12Source: 'standard_deduction',
+    line12Sources: [makeSource('Standard deduction', 15_750)],
+    line12: 15_750,
+    line13Sources: [makeSource('Form 8995 deduction', 1_000)],
+    line13: 1_000,
+    line14: 16_750,
+    line15: 97_500,
+    line16TaxComputation: 'qualified_dividends_capital_gain',
+    line16Sources: [makeSource('Federal regular tax', 16_000)],
+    line16: 16_000,
+    line17Sources: [makeSource('AMT', 500)],
+    line17: 500,
+    line18: 16_500,
+    line19: 0,
+    line20Sources: [makeSource('Foreign tax credit', 300)],
+    line20: 300,
+    line21: 300,
+    line22: 16_200,
+    line23Sources: [makeSource('Schedule SE self-employment tax', 1_800)],
+    line23: 1_800,
+    line24: 18_000,
+    line25aSources: [makeSource('Employer A', 15_000, 'W-2 box 2')],
+    line25a: 15_000,
+    line25bSources: [makeSource('IRA Custodian withholding', 1_200, '1099-R box 4')],
+    line25b: 1_200,
+    line25cSources: [],
+    line25c: 0,
+    line25d: 16_200,
+    line26Sources: [],
+    line26: 0,
+    line31Sources: [makeSource('Extension payment', 500)],
+    line31: 500,
+    line32: 500,
+    line33: 16_700,
+    line34: 0,
+    line35a: 0,
+    line36: 0,
+    line37: 1_300,
+    line38: 0,
+    ...overrides,
+  }
 }
 
-// --- Tests -----------------------------------------------------------------
+function renderForm1040(facts: Form1040Facts = makeFacts(), onNavigate?: (tab: string) => void) {
+  return render(<Form1040Preview facts={facts} selectedYear={2025} onNavigate={onNavigate} />)
+}
 
-describe('Form1040Preview navigation', () => {
-  it('calls onNavigate with "schedules" when Line 2b row is clicked', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
-
-    const row = screen.getByText('Taxable interest').closest('tr')!
-    fireEvent.click(row)
-
-    expect(onNavigate).toHaveBeenCalledWith('schedules')
-    expect(onNavigate).toHaveBeenCalledTimes(1)
-  })
-
-  it('calls onNavigate with "schedules" when Line 3b row is clicked', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
-
-    const row = screen.getByText('Ordinary dividends').closest('tr')!
-    fireEvent.click(row)
-
-    expect(onNavigate).toHaveBeenCalledWith('schedules')
-  })
-
-  it('calls onNavigate with "capital-gains" when Line 7 row is clicked', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
-
-    const row = screen.getByText('Capital gain or loss').closest('tr')!
-    fireEvent.click(row)
-
-    expect(onNavigate).toHaveBeenCalledWith('capital-gains')
-  })
-
-  it('calls onNavigate with "schedule-3" when Line 20 row is clicked', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
-
-    const row = screen.getByText('Foreign tax credit').closest('tr')!
-    fireEvent.click(row)
-
-    // Line 20 (foreign tax credit) drills to Schedule 3, which hosts Form 1116.
-    expect(onNavigate).toHaveBeenCalledWith('schedule-3')
-  })
-
-  it('renders one unified Line 8 row and routes clicks to the Schedule 1 tab', () => {
-    const onNavigate = jest.fn()
-    renderForm1040(
-      {
-        schedule1: computeSchedule1Totals({
-          scheduleCNetIncome: 5000,
-          schedule1OtherIncome: 750,
-          scheduleEGrandTotal: 1200,
-        }),
-      },
-      { onNavigate },
-    )
-
-    const row = screen.getByText('Additional income from Schedule 1, line 10').closest('tr')!
-    fireEvent.click(row)
-
-    expect(onNavigate).toHaveBeenCalledWith('schedule-1')
-  })
-
-  it('aggregates Schedule C, Schedule E, and Schedule 1 line 8 into a single Line 8 value', () => {
-    renderForm1040({
-      schedule1: computeSchedule1Totals({
-        scheduleCNetIncome: 5000,
-        schedule1OtherIncome: 750,
-        scheduleEGrandTotal: 1200,
-      }),
-    })
-
-    expect(screen.getByText('Additional income from Schedule 1, line 10')).toBeInTheDocument()
-    expect(screen.getByText('$6,950.00')).toBeInTheDocument()
-    expect(screen.getAllByText('$108,650.00')).toHaveLength(2)
-  })
-
-  it('renders 1099-R lines and computes AGI from schedule totals and adjustments', () => {
-    renderForm1040({
-      scheduleB: {
-        interestTotal: 700,
-        dividendTotal: 1500,
-        qualifiedDivTotal: 0,
-        interestLines: [{ label: 'Blue Harbor — K-1 Box 5', amount: 200 }, { label: 'Bank A — 1099-INT Box 1', amount: 500 }],
-        dividendLines: [{ label: 'Blue Harbor — K-1 Box 6a', amount: 300 }, { label: 'Fund A — 1099-DIV Box 1a', amount: 1200 }],
-        qualifiedDividendLines: [],
-      },
-      schedule1: computeSchedule1Totals({
-        scheduleCNetIncome: 5000,
-        scheduleEGrandTotal: 1000,
-        deductibleSeTaxAdjustment: 706.48,
-      }),
-      capitalGainOrLoss: 250,
-      retirementDocuments: [
-        {
-          id: 1,
-          form_type: '1099_r',
-          is_reviewed: true,
-          parsed_data: {
-            payer_name: 'IRA Custodian',
-            box1_gross_distribution: 10000,
-            box2a_taxable_amount: 8000,
-            box4_fed_tax: 1200,
-            box7_ira_sep_simple: true,
-          },
-        },
-        {
-          id: 2,
-          form_type: '1099_r',
-          is_reviewed: true,
-          parsed_data: {
-            payer_name: 'Pension Plan',
-            box1_gross_distribution: 7000,
-            box2a_taxable_amount: 6500,
-            box4_fed_tax: 700,
-            box7_ira_sep_simple: false,
-          },
-        },
-      // Cast: tests pass minimal mock TaxDocument shapes (no account, no employment_entity, etc.)
-      ] as unknown as NonNullable<Parameters<typeof computeForm1040Lines>[0]['retirementDocuments']>,
-    })
-
-    expect(screen.getByText('IRA distributions')).toBeInTheDocument()
-    expect(screen.getByText('Pensions and annuities')).toBeInTheDocument()
-    expect(screen.getByText('$122,950.00')).toBeInTheDocument()
-    expect(screen.getByText('$122,243.52')).toBeInTheDocument()
-  })
-
-  it('does NOT call onNavigate when onNavigate prop is absent', () => {
+describe('Form1040Preview', () => {
+  it('renders backend Form 1040 facts as line items', () => {
     renderForm1040()
 
-    const row = screen.getByText('Taxable interest').closest('tr')!
-    expect(() => fireEvent.click(row)).not.toThrow()
+    expect(screen.getByText('Wages, salaries, tips')).toBeInTheDocument()
+    expect(screen.getByText('Total tax')).toBeInTheDocument()
+    expect(screen.getByText('$100,000.00')).toBeInTheDocument()
+    expect(screen.getByText('$18,000.00')).toBeInTheDocument()
   })
 
-  it('does NOT call onNavigate when the amount button is clicked (stopPropagation)', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
+  it('maps facts to workbook-compatible line items', () => {
+    const lines = form1040FactsToLines(makeFacts())
 
-    // The interest income button (Line 2b) has the drill-down modal handler.
-    // Clicking it should NOT propagate to the row's onNavigate handler.
-    const amountButton = screen.getAllByTitle('View data sources')[0]!
-    fireEvent.click(amountButton)
+    expect(lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ line: '1z', value: 100_000 }),
+      expect.objectContaining({ line: '24', value: 18_000 }),
+      expect.objectContaining({ line: '37', value: 1_300 }),
+    ]))
+  })
+
+  it('calls onNavigate for Schedule B, Schedule D, Schedule 3, and Schedule 1 rows', () => {
+    const onNavigate = jest.fn()
+    renderForm1040(makeFacts(), onNavigate)
+
+    fireEvent.click(screen.getByText('Taxable interest').closest('tr')!)
+    fireEvent.click(screen.getByText('Capital gain or loss').closest('tr')!)
+    fireEvent.click(screen.getByText('Nonrefundable credits from Schedule 3').closest('tr')!)
+    fireEvent.click(screen.getByText('Additional income from Schedule 1').closest('tr')!)
+
+    expect(onNavigate).toHaveBeenNthCalledWith(1, 'schedules')
+    expect(onNavigate).toHaveBeenNthCalledWith(2, 'capital-gains')
+    expect(onNavigate).toHaveBeenNthCalledWith(3, 'schedule-3')
+    expect(onNavigate).toHaveBeenNthCalledWith(4, 'schedule-1')
+  })
+
+  it('does not navigate when an amount source button is clicked', () => {
+    const onNavigate = jest.fn()
+    renderForm1040(makeFacts(), onNavigate)
+
+    fireEvent.click(screen.getAllByTitle('View data sources')[0]!)
 
     expect(onNavigate).not.toHaveBeenCalled()
   })
 
-  it('shows ChevronRight icon on navigable rows when onNavigate is provided', () => {
-    const onNavigate = jest.fn()
-    renderForm1040({}, { onNavigate })
-
-    // There should be multiple chevrons (Line 2b, 3b, 7, 20 at minimum)
-    const chevrons = screen.getAllByTestId('chevron-right')
-    expect(chevrons.length).toBeGreaterThanOrEqual(4)
-  })
-
-  it('does NOT show ChevronRight icons when onNavigate is absent', () => {
-    renderForm1040()
-
+  it('shows navigation chevrons only when navigation is provided', () => {
+    const { rerender } = render(<Form1040Preview facts={makeFacts()} selectedYear={2025} />)
     expect(screen.queryAllByTestId('chevron-right')).toHaveLength(0)
+
+    rerender(<Form1040Preview facts={makeFacts()} selectedYear={2025} onNavigate={jest.fn()} />)
+    expect(screen.getAllByTestId('chevron-right').length).toBeGreaterThanOrEqual(4)
   })
 
-  it('renders only the lines passed in (purely presentational)', () => {
-    render(
-      <Form1040Preview
-        lines={[
-          { line: '1a', label: 'Wages', value: 100_000 },
-          { line: '11', label: 'Adjusted gross income', value: 95_000, bold: true },
-        ]}
-        selectedYear={2025}
-      />,
-    )
+  it('splits 1099-R IRA and pension distributions for remaining frontend consumers', () => {
+    const summary = compute1099RDistributionSummary([
+      {
+        id: 1,
+        form_type: '1099_r',
+        is_reviewed: true,
+        parsed_data: {
+          payer_name: 'IRA Custodian',
+          box1_gross_distribution: 10_000,
+          box2a_taxable_amount: 8_000,
+          box4_fed_tax: 1_200,
+          box7_ira_sep_simple: true,
+        },
+      },
+      {
+        id: 2,
+        form_type: '1099_r',
+        is_reviewed: true,
+        parsed_data: {
+          payer_name: 'Pension Plan',
+          box1_gross_distribution: 7_000,
+          box2a_taxable_amount: 6_500,
+          box4_fed_tax: 700,
+          box7_ira_sep_simple: false,
+        },
+      },
+    ] as unknown as TaxDocument[])
 
-    expect(screen.getByText('Wages')).toBeInTheDocument()
-    expect(screen.getByText('Adjusted gross income')).toBeInTheDocument()
-    expect(screen.getByText('$100,000.00')).toBeInTheDocument()
-    expect(screen.getByText('$95,000.00')).toBeInTheDocument()
-    // No other rows from default computation should appear
-    expect(screen.queryByText('Taxable interest')).not.toBeInTheDocument()
+    expect(summary.ira.gross).toBe(10_000)
+    expect(summary.ira.taxable).toBe(8_000)
+    expect(summary.pension.gross).toBe(7_000)
+    expect(summary.pension.taxable).toBe(6_500)
+    expect(summary.federalWithholding).toBe(1_900)
   })
 })
