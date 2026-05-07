@@ -59,6 +59,7 @@ enum TaxFactSourceType: string
     case Form1040Schedule3 = 'form_1040_schedule_3';
     case Form1040ScheduleA = 'form_1040_schedule_a';
     case Form1040ScheduleD = 'form_1040_schedule_d';
+    case Form1040StandardDeduction = 'form_1040_standard_deduction';
     case Form4797PartI1231Gain = 'form_4797_part_i_1231_gain';
     case Form4797PartI1231Loss = 'form_4797_part_i_1231_loss';
     case Form4797PartIIOrdinaryGain = 'form_4797_part_ii_ordinary_gain';

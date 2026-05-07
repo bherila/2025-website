@@ -183,6 +183,12 @@ interface Form1040LineDefinition {
   bold?: boolean
   refSchedule?: string
   navTab?: TaxTabId
+  /**
+   * Lines that the backend builder does not yet populate. Rendered only when
+   * the value is non-zero (e.g. populated by a future builder), so a stub line
+   * does not show a definitive "$0" in the UI.
+   */
+  unwired?: boolean
 }
 
 const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
@@ -195,8 +201,8 @@ const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
   { line: '4b', label: 'Taxable IRA distributions', valueKey: 'line4b', sourcesKey: 'line4bSources' },
   { line: '5a', label: 'Pensions and annuities', valueKey: 'line5a', sourcesKey: 'line5aSources' },
   { line: '5b', label: 'Taxable pensions and annuities', valueKey: 'line5b', sourcesKey: 'line5bSources' },
-  { line: '6a', label: 'Social security benefits', valueKey: 'line6a', sourcesKey: 'line6aSources' },
-  { line: '6b', label: 'Taxable social security benefits', valueKey: 'line6b', sourcesKey: 'line6bSources' },
+  { line: '6a', label: 'Social security benefits', valueKey: 'line6a', sourcesKey: 'line6aSources', unwired: true },
+  { line: '6b', label: 'Taxable social security benefits', valueKey: 'line6b', sourcesKey: 'line6bSources', unwired: true },
   { line: '7', label: 'Capital gain or loss', valueKey: 'line7', sourcesKey: 'line7Sources', refSchedule: 'Schedule D', navTab: TAX_TABS.capitalGains },
   { line: '8', label: 'Additional income from Schedule 1', valueKey: 'line8', sourcesKey: 'line8Sources', refSchedule: 'Schedule 1', navTab: TAX_TABS.schedule1 },
   { line: '9', label: 'Total income', valueKey: 'line9', bold: true },
@@ -209,7 +215,7 @@ const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
   { line: '16', label: 'Tax', valueKey: 'line16', sourcesKey: 'line16Sources' },
   { line: '17', label: 'Amount from Schedule 2, line 3', valueKey: 'line17', sourcesKey: 'line17Sources', refSchedule: 'Schedule 2', navTab: TAX_TABS.schedule2 },
   { line: '18', label: 'Total tax before credits', valueKey: 'line18', bold: true },
-  { line: '19', label: 'Child tax credit and credit for other dependents', valueKey: 'line19' },
+  { line: '19', label: 'Child tax credit and credit for other dependents', valueKey: 'line19', unwired: true },
   { line: '20', label: 'Nonrefundable credits from Schedule 3', valueKey: 'line20', sourcesKey: 'line20Sources', refSchedule: 'Schedule 3', navTab: TAX_TABS.schedule3 },
   { line: '21', label: 'Total credits', valueKey: 'line21' },
   { line: '22', label: 'Tax after nonrefundable credits', valueKey: 'line22', bold: true },
@@ -217,17 +223,17 @@ const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
   { line: '24', label: 'Total tax', valueKey: 'line24', bold: true },
   { line: '25a', label: 'Federal income tax withheld from W-2', valueKey: 'line25a', sourcesKey: 'line25aSources' },
   { line: '25b', label: 'Federal income tax withheld from 1099', valueKey: 'line25b', sourcesKey: 'line25bSources' },
-  { line: '25c', label: 'Federal income tax withheld from other forms', valueKey: 'line25c', sourcesKey: 'line25cSources' },
+  { line: '25c', label: 'Federal income tax withheld from other forms', valueKey: 'line25c', sourcesKey: 'line25cSources', unwired: true },
   { line: '25d', label: 'Total federal income tax withheld', valueKey: 'line25d', bold: true },
-  { line: '26', label: 'Estimated tax payments', valueKey: 'line26', sourcesKey: 'line26Sources' },
-  { line: '31', label: 'Refundable credits from Schedule 3', valueKey: 'line31', sourcesKey: 'line31Sources', refSchedule: 'Schedule 3', navTab: TAX_TABS.schedule3 },
+  { line: '26', label: 'Estimated tax payments', valueKey: 'line26', sourcesKey: 'line26Sources', unwired: true },
+  { line: '31', label: 'Other payments and refundable credits from Schedule 3', valueKey: 'line31', sourcesKey: 'line31Sources', refSchedule: 'Schedule 3', navTab: TAX_TABS.schedule3 },
   { line: '32', label: 'Total other payments and refundable credits', valueKey: 'line32', bold: true },
   { line: '33', label: 'Total payments', valueKey: 'line33', bold: true },
   { line: '34', label: 'Overpaid', valueKey: 'line34', bold: true },
   { line: '35a', label: 'Amount refunded', valueKey: 'line35a' },
-  { line: '36', label: 'Amount applied to estimated tax', valueKey: 'line36' },
+  { line: '36', label: 'Amount applied to estimated tax', valueKey: 'line36', unwired: true },
   { line: '37', label: 'Amount you owe', valueKey: 'line37', bold: true },
-  { line: '38', label: 'Estimated tax penalty', valueKey: 'line38' },
+  { line: '38', label: 'Estimated tax penalty', valueKey: 'line38', unwired: true },
 ]
 
 function sourceNote(source: TaxFactSource): string | undefined {
@@ -263,18 +269,23 @@ export function form1040FactsToLines(facts?: Form1040Facts | null): Form1040Line
     return []
   }
 
-  return FORM1040_LINE_DEFINITIONS.map((definition) => {
+  return FORM1040_LINE_DEFINITIONS.flatMap((definition) => {
+    const value = facts[definition.valueKey]
     const sources = definition.sourcesKey ? mapTaxFactSources(facts[definition.sourcesKey]) : undefined
 
-    return {
+    if (definition.unwired && value === 0 && !sources) {
+      return []
+    }
+
+    return [{
       line: definition.line,
       label: definition.label,
-      value: facts[definition.valueKey],
+      value,
       ...(definition.bold ? { bold: definition.bold } : {}),
       ...(definition.refSchedule ? { refSchedule: definition.refSchedule } : {}),
       ...(definition.navTab ? { navTab: definition.navTab } : {}),
       ...(sources ? { sources } : {}),
-    }
+    }]
   })
 }
 

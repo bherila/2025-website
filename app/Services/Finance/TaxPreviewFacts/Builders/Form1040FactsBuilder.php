@@ -41,7 +41,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         int $year,
         bool $isMarried,
     ): Form1040Facts {
-        $line1zSources = $this->w2Sources($w2Docs, 'box1_wages', TaxFactSourceType::W2Wages, TaxFactRouting::Form1040Line1z, 'W-2 Box 1 wages flow to Form 1040 line 1z.');
+        $line1zSources = $this->w2Sources($w2Docs, 'box1_wages', '1', TaxFactSourceType::W2Wages, TaxFactRouting::Form1040Line1z, 'W-2 Box 1 wages flow to Form 1040 line 1z.');
         $line2aSources = $this->taxExemptInterestSources($docs1099);
         $line4Sources = $this->retirementDistributionSources($docs1099, true);
         $line5Sources = $this->retirementDistributionSources($docs1099, false);
@@ -55,14 +55,15 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         ];
         $line10Sources = $schedule1->line15Sources;
         $line12 = $this->line12Deduction($scheduleA, $isMarried);
+        $itemizing = $line12['source'] === 'itemized_deductions';
         $line12Sources = [
             $this->source(
                 'form1040-line12-deduction',
-                $line12['source'] === 'itemized_deductions' ? 'Schedule A itemized deductions' : 'Standard deduction',
+                $itemizing ? 'Schedule A itemized deductions' : 'Standard deduction',
                 $line12['amount'],
-                $line12['source'] === 'itemized_deductions' ? TaxFactSourceType::Form1040ScheduleA : TaxFactSourceType::Form1040ScheduleA,
+                $itemizing ? TaxFactSourceType::Form1040ScheduleA : TaxFactSourceType::Form1040StandardDeduction,
                 TaxFactRouting::Form1040Line12,
-                $line12['source'] === 'itemized_deductions' ? 'Schedule A itemized deductions exceed the filing-status standard deduction.' : 'The filing-status standard deduction is greater than itemized deductions.',
+                $itemizing ? 'Schedule A itemized deductions exceed the filing-status standard deduction.' : 'The filing-status standard deduction is greater than itemized deductions.',
             ),
         ];
         $line13Sources = $form8995->deduction !== 0.0 ? [
@@ -87,7 +88,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line5b = $this->sumSources($line5Sources['taxable']);
         $line6a = 0.0;
         $line6b = 0.0;
-        $line7 = $scheduleD->line21LimitedLossOrGain !== 0.0 ? $scheduleD->line21LimitedLossOrGain : $scheduleD->line16Combined;
+        $line7 = $scheduleD->line21LimitedLossOrGain;
         $line8 = $this->sumMoney([
             $schedule1->line3Total,
             $schedule1->line4Total,
@@ -138,7 +139,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line23Sources = $this->line23Sources($scheduleSE, $form8960, $isMarried);
         $line23 = $this->sumSources($line23Sources);
         $line24 = $this->sumMoney([$line22, $line23]);
-        $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
+        $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', '2', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
         $line25bSources = $this->federal1099WithholdingSources($docs1099);
         $line25cSources = [];
         $line25a = $this->sumSources($line25aSources);
@@ -246,7 +247,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $docs
      * @return TaxFactSource[]
      */
-    private function w2Sources(array $docs, string $field, TaxFactSourceType $sourceType, TaxFactRouting $routing, string $routingReason): array
+    private function w2Sources(array $docs, string $field, string $box, TaxFactSourceType $sourceType, TaxFactRouting $routing, string $routingReason): array
     {
         $sources = [];
 
@@ -267,7 +268,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
                 sourceType: $sourceType,
                 taxDocumentId: $doc->id,
                 formType: $this->formType($doc),
-                box: $field === 'box1_wages' ? '1' : '2',
+                box: $box,
                 routing: $routing,
                 routingReason: $routingReason,
                 isReviewed: $this->sourceIsReviewed($doc),
