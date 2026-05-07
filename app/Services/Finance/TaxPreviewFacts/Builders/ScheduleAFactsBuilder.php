@@ -21,10 +21,14 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
      * The cap is reduced by `rate` of MAGI above `threshold`, but never below `floor`.
      * Keep this table explicit so unpublished years do not silently use placeholder values.
      *
+     * 2026 parameters are published in IRS Publication 505 (2026) and the 2026 Form 1040-ES
+     * correction: $40,400 cap, $505,000 MAGI threshold, and $10,000 floor.
+     *
      * @var array<int, array{base: float, threshold: float, floor: float, rate: float}>
      */
     private const array SALT_CAP_RULES = [
         2025 => ['base' => 40000.0, 'threshold' => 500000.0, 'floor' => 10000.0, 'rate' => 0.30],
+        2026 => ['base' => 40400.0, 'threshold' => 505000.0, 'floor' => 10000.0, 'rate' => 0.30],
     ];
 
     /**
@@ -32,7 +36,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $w2Docs
      * @param  UserDeduction[]  $userDeductions
      */
-    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year, ?float $magi = null): ScheduleAFacts
+    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year, ?float $magi = null, bool $magiIsEstimated = false): ScheduleAFacts
     {
         $stateIncomeTaxSources = [
             ...$this->w2StateTaxSources($w2Docs),
@@ -81,6 +85,9 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             saltPaidBeforeCap: $saltPaidBeforeCap,
             saltCap: $saltCap,
             saltDeduction: $saltDeduction,
+            saltCapMagi: $magi,
+            saltCapUsesEstimatedMagi: $this->hasSaltPhaseDown($year) && $magi !== null && $magiIsEstimated,
+            saltCapNeedsMagi: $this->hasSaltPhaseDown($year) && $magi === null,
             mortgageInterestSources: $mortgageInterestSources,
             mortgageInterestTotal: $mortgageInterestTotal,
             investmentInterestSources: $form4952->investmentInterestSources,
@@ -279,6 +286,11 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $excess = max(0.0, $this->subtractMoney($magi, $rule['threshold']));
 
         return $this->roundMoney(max($rule['floor'], $this->subtractMoney($rule['base'], $excess * $rule['rate'])));
+    }
+
+    private function hasSaltPhaseDown(int $year): bool
+    {
+        return array_key_exists($year, self::SALT_CAP_RULES);
     }
 
     private function standardDeduction(int $year, bool $marriedFilingJointly): float

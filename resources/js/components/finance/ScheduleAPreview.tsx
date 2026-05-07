@@ -13,7 +13,7 @@ import { type FilingStatus, getSaltCap, getStandardDeduction } from '@/lib/tax/s
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form4952Lines, ScheduleALines, UserDeductionEntry } from '@/types/finance/tax-return'
-import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
+import type { Form4952Facts, ScheduleAFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
@@ -181,7 +181,8 @@ interface ScheduleAPreviewProps {
   isMarried?: boolean
   userDeductions?: UserDeductionEntry[]
   form4952?: Form4952Lines | undefined
-  taxFacts?: Form4952Facts | null
+  form4952Facts?: Form4952Facts | null
+  scheduleAFacts?: ScheduleAFacts | null
   onOpenDoc?: (docId: number) => void
 }
 
@@ -194,7 +195,8 @@ export default function ScheduleAPreview({
   isMarried = false,
   userDeductions = [],
   form4952,
-  taxFacts,
+  form4952Facts,
+  scheduleAFacts,
   onOpenDoc,
 }: ScheduleAPreviewProps) {
   const [showInvIntModal, setShowInvIntModal] = useState(false)
@@ -212,19 +214,30 @@ export default function ScheduleAPreview({
   })
 
   const buckets = bucketUserDeductions(userDeductions)
-  const realEstateTax = buckets.real_estate_tax ?? 0
+  const realEstateTax = scheduleAFacts?.realEstateTaxTotal ?? buckets.real_estate_tax ?? 0
   const salesTax = buckets.sales_tax ?? 0
-  const saltCap = getSaltCap(selectedYear)
-  const charitableCash = buckets.charitable_cash ?? 0
-  const charitableNoncash = buckets.charitable_noncash ?? 0
-  const stateIncomeTax = currency(saltPaid).add(buckets.state_est_tax ?? 0).value
-  const line5aLabel = salesTax > stateIncomeTax ? 'State/local general sales taxes' : 'State income tax withheld / estimated tax paid'
-  const line5aAmount = Math.max(stateIncomeTax, salesTax)
-  const totalInterest = currency(mortgageInterest).add(totalInvIntExpense).value
-  const invIntFactSources = taxFacts?.investmentInterestSources ?? []
+  const saltCap = scheduleAFacts?.saltCap ?? getSaltCap(selectedYear)
+  const charitableCash = scheduleAFacts?.charitableCashTotal ?? buckets.charitable_cash ?? 0
+  const charitableNoncash = scheduleAFacts?.charitableNoncashTotal ?? buckets.charitable_noncash ?? 0
+  const stateIncomeTax = scheduleAFacts?.stateIncomeTaxTotal ?? currency(saltPaid).add(buckets.state_est_tax ?? 0).value
+  const line5aLabel = (scheduleAFacts?.selectedLine5aType ?? (salesTax > stateIncomeTax ? 'sales_tax' : 'state_income_tax')) === 'sales_tax'
+    ? 'State/local general sales taxes'
+    : 'State income tax withheld / estimated tax paid'
+  const line5aAmount = scheduleAFacts?.selectedLine5aTotal ?? Math.max(stateIncomeTax, salesTax)
+  const totalInterest = scheduleAFacts?.totalInterest ?? currency(mortgageInterest).add(totalInvIntExpense).value
+  const invIntFactSources = form4952Facts?.investmentInterestSources ?? []
   const invIntModalSources: InvestmentInterestDisplaySource[] = invIntFactSources.length > 0 ? invIntFactSources : invIntSources
   const invIntNeedsReview = invIntFactSources.some((source) => !source.isReviewed)
-  const invIntModalTotal = taxFacts?.deductibleInvestmentInterestExpense ?? totalInvIntExpense
+  const invIntModalTotal = form4952Facts?.deductibleInvestmentInterestExpense ?? totalInvIntExpense
+  const totalSaltPaidBeforeCapDisplay = scheduleAFacts?.saltPaidBeforeCap ?? totalSaltPaidBeforeCap
+  const saltDeductionDisplay = scheduleAFacts?.saltDeduction ?? saltDeduction
+  const totalItemizedDeductionsDisplay = scheduleAFacts?.totalItemizedDeductions ?? totalItemizedDeductions
+  const standardDeductionDisplay = scheduleAFacts
+    ? isMarried ? scheduleAFacts.standardDeductionMarriedFilingJointly : scheduleAFacts.standardDeductionSingle
+    : standardDeduction
+  const shouldItemizeDisplay = scheduleAFacts
+    ? isMarried ? scheduleAFacts.shouldItemizeMarriedFilingJointly : scheduleAFacts.shouldItemizeSingle
+    : shouldItemize
 
   return (
     <div className="space-y-4">
@@ -261,9 +274,15 @@ export default function ScheduleAPreview({
           <FormTotalLine
             boxRef="7"
             label={`Total SALT (capped at $${saltCap.toLocaleString()})`}
-            value={saltDeduction}
+            value={saltDeductionDisplay}
           />
-          {totalSaltPaidBeforeCap >= saltCap && (
+          {scheduleAFacts?.saltCapNeedsMagi && (
+            <FormLine label="MAGI needed" raw="SALT phase-down not applied until MAGI is available" />
+          )}
+          {scheduleAFacts?.saltCapUsesEstimatedMagi && scheduleAFacts.saltCapMagi !== null && (
+            <FormLine label="MAGI estimate" value={scheduleAFacts.saltCapMagi} />
+          )}
+          {totalSaltPaidBeforeCapDisplay >= saltCap && (
             <FormLine label="Note" raw={`SALT cap reached — state taxes above $${saltCap.toLocaleString()} are not deductible`} />
           )}
         </FormBlock>
@@ -339,12 +358,12 @@ export default function ScheduleAPreview({
 
       {/* Standard vs. itemized comparison */}
       <FormBlock title="Standard Deduction vs. Itemized — Which Is Better?">
-        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'Married Filing Jointly' : 'Single'})`} value={standardDeduction} />
-        <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductions} />
+        <FormLine label={`Standard deduction (${selectedYear} ${isMarried ? 'Married Filing Jointly' : 'Single'})`} value={standardDeductionDisplay} />
+        <FormLine label="Itemized deductions (Schedule A total)" value={totalItemizedDeductionsDisplay} />
         <FormLine label="Investment interest (Line 9)" value={totalInvIntExpense} />
         <FormLine
           label="SALT (Line 7)"
-          {...(saltDeduction > 0 ? { value: saltDeduction } : { raw: '—' })}
+          {...(saltDeductionDisplay > 0 ? { value: saltDeductionDisplay } : { raw: '—' })}
         />
         {mortgageInterest > 0 && <FormLine label="Mortgage interest (Line 8)" value={mortgageInterest} />}
         {charitable > 0 && <FormLine label="Charitable contributions (Lines 11–12)" value={charitable} />}
@@ -352,13 +371,13 @@ export default function ScheduleAPreview({
         {totalOtherItemized > 0 && <FormLine label="K-1 Box 13L portfolio deductions (Line 16)" value={totalOtherItemized} />}
         <FormLine label="Medical, casualty, other" raw="Enter below — not yet computed" />
         <FormTotalLine
-          label={shouldItemize
+          label={shouldItemizeDisplay
             ? '✓ Itemizing saves more — use Schedule A'
-            : `Standard deduction is larger by ${currency(standardDeduction - totalItemizedDeductions).format()}`}
-          value={shouldItemize ? totalItemizedDeductions : standardDeduction}
+            : `Standard deduction is larger by ${currency(standardDeductionDisplay - totalItemizedDeductionsDisplay).format()}`}
+          value={shouldItemizeDisplay ? totalItemizedDeductionsDisplay : standardDeductionDisplay}
           double
         />
-        {!shouldItemize && (
+        {!shouldItemizeDisplay && (
           <FormLine
             label="Note"
             raw="Additional deductions may still make itemizing beneficial as entries change throughout the year."

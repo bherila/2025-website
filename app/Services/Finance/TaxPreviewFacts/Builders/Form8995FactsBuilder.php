@@ -3,7 +3,9 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8995AFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
@@ -16,6 +18,13 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class Form8995FactsBuilder extends TaxPreviewFactBuilder
 {
+    public function __construct(
+        K1CodeCharacterResolver $k1CodeCharacterResolver,
+        private readonly Form8995AFactsBuilder $form8995AFactsBuilder,
+    ) {
+        parent::__construct($k1CodeCharacterResolver);
+    }
+
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
@@ -57,10 +66,30 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $taxableIncomeLessNetCapitalGain = max(0.0, $this->subtractMoney($taxableIncomeBeforeQbi, $netCapitalGain));
         $taxableIncomeCap = $this->roundMoney($taxableIncomeLessNetCapitalGain * 0.2);
         $thresholds = Form8995Facts::thresholds($year);
+        $phaseInRanges = Form8995Facts::phaseInRanges($year);
         $threshold = $isMarried ? $thresholds['mfj'] : $thresholds['single'];
+        $phaseInRange = $isMarried ? $phaseInRanges['mfj'] : $phaseInRanges['single'];
         $aboveThreshold = $taxableIncomeBeforeQbi > $threshold;
-        $deductionBeforeCap = $this->sumMoney([$totalQbiComponent, $reitPtpComponent]);
-        $deduction = min($deductionBeforeCap, $taxableIncomeCap);
+        $form8995A = $aboveThreshold ? $this->form8995AFactsBuilder->build(
+            entities: $entities,
+            qualifiedReitDividends: $qualifiedReitDividends,
+            qualifiedPtpIncome: $qualifiedPtpIncome,
+            taxableIncomeBeforeQbi: $taxableIncomeBeforeQbi,
+            netCapitalGain: $netCapitalGain,
+            taxableIncomeLessNetCapitalGain: $taxableIncomeLessNetCapitalGain,
+            incomeLimitation: $taxableIncomeCap,
+            threshold: $threshold,
+            phaseInRange: $phaseInRange,
+        ) : null;
+        $deductionBeforeCap = $form8995A instanceof Form8995AFacts
+            ? $form8995A->deductionBeforeIncomeLimit
+            : $this->sumMoney([$totalQbiComponent, $reitPtpComponent]);
+        $deduction = $form8995A instanceof Form8995AFacts
+            ? $form8995A->deduction
+            : min($deductionBeforeCap, $taxableIncomeCap);
+        $reviewSources = $aboveThreshold
+            ? $this->aboveThresholdReviewSources($entities, $taxableIncomeBeforeQbi, $threshold, $deduction, $qualifiedReitDividends, $qualifiedPtpIncome)
+            : [];
 
         return new Form8995Facts(
             entities: $entities,
@@ -79,7 +108,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             thresholdSingle: $thresholds['single'],
             thresholdMarriedFilingJointly: $thresholds['mfj'],
             aboveThreshold: $aboveThreshold,
-            reviewSources: $aboveThreshold ? [$this->aboveThresholdSource($taxableIncomeBeforeQbi, $threshold, $deduction)] : [],
+            reviewSources: $reviewSources,
+            form8995A: $form8995A,
         );
     }
 
@@ -115,6 +145,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 reitDividends: 0.0,
                 ptpIncome: 0.0,
                 qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
+                needsForm8995AReview: $qbiIncome > 0.0,
+                form8995AReviewReason: $qbiIncome > 0.0 ? 'Schedule C W-2 wages, UBIA, and SSTB status are not yet captured for Form 8995-A.' : null,
             ),
         ];
     }
@@ -151,6 +183,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 reitDividends: 0.0,
                 ptpIncome: 0.0,
                 qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
+                needsForm8995AReview: $qbiIncome > 0.0,
+                form8995AReviewReason: $qbiIncome > 0.0 ? 'Schedule F W-2 wages, UBIA, and SSTB status are not yet captured for Form 8995-A.' : null,
             ),
         ];
     }
@@ -202,6 +236,10 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 TaxFactSourceType::Form8995K1Box20Ad,
                 TaxFactSourceType::Form8995PtpIncome,
             ]);
+            $w2Wages = $this->statementAAmount($statementA, 'w2Wages');
+            $ubia = $this->statementAAmount($statementA, 'ubia');
+            $isSstb = (bool) ($data['statementA']['isSstb'] ?? false);
+            $form8995AReviewReason = $this->form8995AReviewReason($statementA, $qbiIncome);
 
             $entities[] = new Form8995EntityFact(
                 entityKey: "k1-{$doc->id}",
@@ -212,12 +250,71 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 reitDividends: $reitDividends,
                 ptpIncome: $ptpIncome,
                 qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
-                isSstb: (bool) ($data['statementA']['isSstb'] ?? false),
+                w2Wages: $w2Wages,
+                ubia: $ubia,
+                isSstb: $isSstb,
                 sectionNotes: $this->sectionNotes($data),
+                needsForm8995AReview: $form8995AReviewReason !== null,
+                form8995AReviewReason: $form8995AReviewReason,
             );
         }
 
         return $entities;
+    }
+
+    /**
+     * @param  Form8995EntityFact[]  $entities
+     * @return TaxFactSource[]
+     */
+    private function aboveThresholdReviewSources(array $entities, float $taxableIncomeBeforeQbi, float $threshold, float $deduction, float $qualifiedReitDividends, float $qualifiedPtpIncome): array
+    {
+        $sources = [];
+
+        foreach ($entities as $entity) {
+            if (! $entity->needsForm8995AReview) {
+                continue;
+            }
+
+            $sources[] = $this->needsReviewSource(
+                id: "{$entity->entityKey}-form-8995-a-inputs-review",
+                label: "{$entity->label} — Form 8995-A input review",
+                amount: $entity->qbiIncome,
+                routing: TaxFactRouting::Form8995Line13,
+                routingReason: $entity->form8995AReviewReason ?? 'Form 8995-A inputs need review.',
+                notes: "Taxable income before QBI {$taxableIncomeBeforeQbi}; threshold {$threshold}.",
+                reviewAction: $entity->form8995AReviewReason ?? 'Review Form 8995-A W-2 wage, UBIA, and SSTB inputs before filing.',
+            );
+        }
+
+        if ($this->sumMoney([$qualifiedReitDividends, $qualifiedPtpIncome]) !== 0.0) {
+            $sources[] = $this->needsReviewSource(
+                id: 'form-8995-a-reit-ptp-carryover-review',
+                label: 'Form 8995-A REIT/PTP carryover review',
+                amount: $deduction,
+                routing: TaxFactRouting::Form8995Line13,
+                routingReason: 'Qualified REIT/PTP income is present; prior-year REIT/PTP loss carryovers are not yet tracked in tax preview facts.',
+                notes: "Qualified REIT dividends {$qualifiedReitDividends}; qualified PTP income {$qualifiedPtpIncome}.",
+                reviewAction: 'Confirm any prior-year qualified REIT/PTP loss carryovers before filing Form 8995-A.',
+            );
+        }
+
+        return $sources;
+    }
+
+    private function needsReviewSource(string $id, string $label, float $amount, TaxFactRouting $routing, string $routingReason, string $notes, string $reviewAction): TaxFactSource
+    {
+        return new TaxFactSource(
+            id: $id,
+            label: $label,
+            amount: $amount,
+            sourceType: TaxFactSourceType::Form8995NeedsReview,
+            routing: $routing,
+            routingReason: $routingReason,
+            notes: $notes,
+            isReviewed: false,
+            reviewStatus: 'needs_review',
+            reviewAction: $reviewAction,
+        );
     }
 
     /**
@@ -310,22 +407,6 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         return $notes === [] ? null : implode("\n", $notes);
     }
 
-    private function aboveThresholdSource(float $taxableIncomeBeforeQbi, float $threshold, float $deduction): TaxFactSource
-    {
-        return new TaxFactSource(
-            id: 'form-8995-a-needs-review',
-            label: 'Form 8995-A threshold review',
-            amount: $deduction,
-            sourceType: TaxFactSourceType::Form8995NeedsReview,
-            routing: TaxFactRouting::Form8995Line13,
-            routingReason: 'Taxable income before QBI deduction exceeds the simplified Form 8995 threshold; W-2 wage, UBIA, and SSTB limitations may apply on Form 8995-A.',
-            notes: "Taxable income before QBI {$taxableIncomeBeforeQbi}; threshold {$threshold}.",
-            isReviewed: false,
-            reviewStatus: 'needs_review',
-            reviewAction: 'Review Form 8995-A W-2 wage, UBIA, and SSTB limitations before filing.',
-        );
-    }
-
     /**
      * @param  array<string, mixed>  $statementA
      */
@@ -334,6 +415,51 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $amount = $this->parseMoney($statementA[$field] ?? null);
 
         return $amount !== null && $amount !== 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $statementA
+     */
+    private function statementAHasValue(array $statementA, string $field): bool
+    {
+        return $this->parseMoney($statementA[$field] ?? null) !== null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $statementA
+     */
+    private function statementAAmount(array $statementA, string $field): float
+    {
+        return $this->parseMoney($statementA[$field] ?? null) ?? 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $statementA
+     */
+    private function form8995AReviewReason(array $statementA, float $qbiIncome): ?string
+    {
+        if ($qbiIncome <= 0.0) {
+            return null;
+        }
+
+        $missing = [];
+        if (! $this->statementAHasValue($statementA, 'w2Wages')) {
+            $missing[] = 'W-2 wages';
+        }
+
+        if (! $this->statementAHasValue($statementA, 'ubia')) {
+            $missing[] = 'UBIA';
+        }
+
+        if (! array_key_exists('isSstb', $statementA)) {
+            $missing[] = 'SSTB status';
+        }
+
+        if ($missing === []) {
+            return null;
+        }
+
+        return 'K-1 Statement A is missing '.implode(', ', $missing).' needed for above-threshold Form 8995-A.';
     }
 
     /**

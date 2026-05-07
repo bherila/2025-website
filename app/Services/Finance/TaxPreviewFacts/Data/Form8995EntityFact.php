@@ -24,8 +24,12 @@ readonly class Form8995EntityFact
         public float $reitDividends,
         public float $ptpIncome,
         public float $qbiComponent,
+        public float $w2Wages = 0.0,
+        public float $ubia = 0.0,
         public bool $isSstb = false,
         public ?string $sectionNotes = null,
+        public bool $needsForm8995AReview = false,
+        public ?string $form8995AReviewReason = null,
     ) {
         $this->sources = $sources;
     }
@@ -44,8 +48,12 @@ readonly class Form8995EntityFact
             'reitDividends' => $this->reitDividends,
             'ptpIncome' => $this->ptpIncome,
             'qbiComponent' => $this->qbiComponent,
+            'w2Wages' => $this->w2Wages,
+            'ubia' => $this->ubia,
             'isSstb' => $this->isSstb,
             'sectionNotes' => $this->sectionNotes,
+            'needsForm8995AReview' => $this->needsForm8995AReview,
+            'form8995AReviewReason' => $this->form8995AReviewReason,
         ];
     }
 }

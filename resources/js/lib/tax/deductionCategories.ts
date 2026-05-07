@@ -21,6 +21,19 @@ export const DEDUCTION_CATEGORIES = [
   'form8606_nondeductible_contributions',
   'form8606_prior_year_basis',
   'form8606_year_end_fmv',
+  'schedule3_child_dependent_care_credit',
+  'schedule3_education_credits',
+  'schedule3_retirement_savings_credit',
+  'schedule3_residential_clean_energy_credit',
+  'schedule3_energy_efficient_home_improvement_credit',
+  'schedule3_general_business_credit',
+  'schedule3_prior_year_minimum_tax_credit',
+  'schedule3_other_nonrefundable_credits',
+  'schedule3_net_premium_tax_credit',
+  'schedule3_extension_payment',
+  'schedule3_excess_social_security_withheld',
+  'schedule3_fuel_tax_credit',
+  'schedule3_other_refundable_credits',
 ] as const
 
 export type DeductionCategory = (typeof DEDUCTION_CATEGORIES)[number]
@@ -43,6 +56,19 @@ export const DEDUCTION_CATEGORY_LABELS: Record<DeductionCategory, string> = {
   form8606_nondeductible_contributions: 'Form 8606 — nondeductible IRA contributions',
   form8606_prior_year_basis: 'Form 8606 — prior-year IRA basis',
   form8606_year_end_fmv: 'Form 8606 — year-end IRA FMV',
+  schedule3_child_dependent_care_credit: 'Schedule 3 — child and dependent care credit',
+  schedule3_education_credits: 'Schedule 3 — education credits',
+  schedule3_retirement_savings_credit: 'Schedule 3 — retirement savings contributions credit',
+  schedule3_residential_clean_energy_credit: 'Schedule 3 — residential clean energy credit',
+  schedule3_energy_efficient_home_improvement_credit: 'Schedule 3 — energy efficient home improvement credit',
+  schedule3_general_business_credit: 'Schedule 3 — general business credit',
+  schedule3_prior_year_minimum_tax_credit: 'Schedule 3 — prior-year minimum tax credit',
+  schedule3_other_nonrefundable_credits: 'Schedule 3 — other nonrefundable credits',
+  schedule3_net_premium_tax_credit: 'Schedule 3 — net premium tax credit',
+  schedule3_extension_payment: 'Schedule 3 — extension payment',
+  schedule3_excess_social_security_withheld: 'Schedule 3 — excess Social Security withheld',
+  schedule3_fuel_tax_credit: 'Schedule 3 — fuel tax credit',
+  schedule3_other_refundable_credits: 'Schedule 3 — other refundable credits',
 }
 
 /** Categories that contribute to the SALT cap (Schedule A Line 7). */

@@ -13,24 +13,33 @@ interface Form8995PreviewProps {
 }
 
 export function form8995FactsToLines(facts: Form8995Facts): Form8995Lines {
+  const form8995AEntities = new Map((facts.form8995A?.entities ?? []).map((entity) => [entity.entityKey, entity]))
+
   return {
-    entries: facts.entities.map((entity) => ({
-      label: entity.label,
-      qbiIncome: entity.qbiIncome,
-      w2Wages: 0,
-      reitDividends: entity.reitDividends,
-      ptpIncome: entity.ptpIncome,
-      isSstb: entity.isSstb,
-      sectionNotes: entity.sectionNotes ?? '',
-      qbiComponent: entity.qbiComponent,
-    })),
+    entries: facts.entities.map((entity) => {
+      const form8995AEntity = form8995AEntities.get(entity.entityKey)
+
+      return {
+        label: entity.label,
+        qbiIncome: entity.qbiIncome,
+        qbiLossNettingAdjustment: form8995AEntity?.qbiLossNettingAdjustment ?? 0,
+        qbiAfterLossNetting: form8995AEntity?.qbiAfterLossNetting ?? entity.qbiIncome,
+        w2Wages: form8995AEntity?.w2Wages ?? entity.w2Wages,
+        ubia: form8995AEntity?.ubia ?? entity.ubia,
+        reitDividends: entity.reitDividends,
+        ptpIncome: entity.ptpIncome,
+        isSstb: entity.isSstb,
+        sectionNotes: entity.sectionNotes ?? '',
+        qbiComponent: form8995AEntity?.qualifiedBusinessIncomeComponent ?? entity.qbiComponent,
+      }
+    }),
     totalQBI: facts.totalQbi,
-    totalQBIComponent: facts.totalQbiComponent,
+    totalQBIComponent: facts.form8995A?.totalQualifiedBusinessIncomeComponent ?? facts.totalQbiComponent,
     totalIncome: facts.taxableIncomeBeforeQbi,
     estimatedTaxableIncome: facts.taxableIncomeBeforeQbi,
     stdDedApplied: 0,
     taxableIncomeCap: facts.taxableIncomeCap,
-    estimatedDeduction: facts.deduction,
+    estimatedDeduction: facts.form8995A?.deduction ?? facts.deduction,
     aboveThreshold: facts.aboveThreshold,
     thresholdSingle: facts.thresholdSingle,
     thresholdMFJ: facts.thresholdMarriedFilingJointly,
@@ -71,6 +80,7 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
   }
 
   const threshold = isMarried ? thresholdMFJ : thresholdSingle
+  const reviewSources = taxFacts?.reviewSources ?? []
 
   return (
     <div className="space-y-5">
@@ -102,16 +112,35 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
         </Callout>
       )}
 
+      {reviewSources.length > 0 && (
+        <Callout kind="warn" title="Form 8995-A Inputs Need Review">
+          {reviewSources.map((source) => (
+            <p key={source.id}>
+              <strong>{source.label}:</strong> {source.reviewAction ?? source.routingReason}
+            </p>
+          ))}
+        </Callout>
+      )}
+
       {/* Per-partnership breakdown */}
       <FormBlock title="Per-Entity QBI Breakdown">
         {entries.map((entry, i) => (
           <div key={i} className="space-y-0.5 pb-2 border-b last:border-0 last:pb-0">
             <FormLine label={`${entry.label} — QBI income`} value={entry.qbiIncome} />
+            {entry.qbiLossNettingAdjustment !== 0 && (
+              <FormLine label={`${entry.label} — QBI loss netting adjustment`} value={entry.qbiLossNettingAdjustment} />
+            )}
+            {entry.qbiAfterLossNetting !== entry.qbiIncome && (
+              <FormLine label={`${entry.label} — QBI after loss netting`} value={entry.qbiAfterLossNetting} />
+            )}
             {entry.isSstb && (
               <FormLine label={`${entry.label} — SSTB`} raw="Specified Service Trade or Business — deduction phases out above threshold" />
             )}
             {entry.w2Wages !== 0 && (
               <FormLine label={`${entry.label} — W-2 wages (Form 8995-A, Line 4)`} value={entry.w2Wages} />
+            )}
+            {entry.ubia !== 0 && (
+              <FormLine label={`${entry.label} — UBIA of qualified property (Form 8995-A, Line 7)`} value={entry.ubia} />
             )}
             {(entry.reitDividends !== 0) && (
               <FormLine label={`${entry.label} — §199A REIT dividends`} value={entry.reitDividends} />
@@ -119,7 +148,7 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
             {(entry.ptpIncome !== 0) && (
               <FormLine label={`${entry.label} — Qualified PTP income`} value={entry.ptpIncome} />
             )}
-            <FormLine label={`${entry.label} — 20% QBI component`} value={entry.qbiComponent} />
+            <FormLine label={`${entry.label} — QBI component`} value={entry.qbiComponent} />
             {entry.sectionNotes && (
               <FormLine label={`${entry.label} — Section 199A statement notes`} raw={entry.sectionNotes} />
             )}
@@ -147,6 +176,9 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
       {/* Deduction summary */}
       <FormBlock title="Estimated QBI Deduction (Form 1040 Line 13)">
         <FormLine label="QBI component (20% × QBI)" value={totalQBIComponent} />
+        {taxFacts?.form8995A && (
+          <FormLine label="REIT / PTP component" value={taxFacts.form8995A.qualifiedReitPtpComponent} />
+        )}
         <FormLine label="Taxable income cap (20% × taxable income)" value={taxableIncomeCap} />
         <FormTotalLine
           label="Estimated QBI deduction — lesser of above"
