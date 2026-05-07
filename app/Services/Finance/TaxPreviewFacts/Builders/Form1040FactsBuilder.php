@@ -47,10 +47,13 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line5Sources = $this->retirementDistributionSources($docs1099, false);
         $line7Sources = $this->line7Sources($scheduleD);
         $line8Sources = [
+            ...$schedule1->line1aSources,
+            ...$schedule1->line2aSources,
             ...$schedule1->line3Sources,
             ...$schedule1->line4Sources,
             ...$schedule1->line5Sources,
             ...$schedule1->line6Sources,
+            ...$schedule1->line7Sources,
             ...$schedule1->line8Sources,
         ];
         $line10Sources = $schedule1->line15Sources;
@@ -90,10 +93,13 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line6b = 0.0;
         $line7 = $scheduleD->line21LimitedLossOrGain;
         $line8 = $this->sumMoney([
+            $schedule1->line1aTotal,
+            $schedule1->line2aTotal,
             $schedule1->line3Total,
             $schedule1->line4Total,
             $schedule1->line5Total,
             $schedule1->line6Total,
+            $schedule1->line7Total,
             $schedule1->line9TotalOtherIncome,
         ]);
         $line9 = $this->sumMoney([$line1z, $line2b, $line3b, $line4b, $line5b, $line6b, $line7, $line8]);
@@ -500,36 +506,6 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         return ($entity instanceof FinEmploymentEntity ? $entity->display_name : null)
             ?? $doc->original_filename
             ?? 'W-2';
-    }
-
-    /**
-     * @param  string[]  $formTypes
-     * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
-     */
-    private function documentEntriesForFormTypes(FileForTaxDocument $doc, array $formTypes): array
-    {
-        $entries = [];
-
-        if ($doc->accountLinks->isNotEmpty()) {
-            foreach ($doc->accountLinks as $link) {
-                if (! $link instanceof TaxDocumentAccount || ! in_array($link->form_type, $formTypes, true)) {
-                    continue;
-                }
-
-                $parsedData = $this->parsedDataForLink($doc, $link);
-                if ($parsedData !== null) {
-                    $entries[] = ['parsedData' => $parsedData, 'link' => $link];
-                }
-            }
-
-            return $entries;
-        }
-
-        if (in_array($this->formType($doc), $formTypes, true) && is_array($doc->parsed_data)) {
-            $entries[] = ['parsedData' => $doc->parsed_data, 'link' => null];
-        }
-
-        return $entries;
     }
 
     /**

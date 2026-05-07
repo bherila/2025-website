@@ -36,7 +36,7 @@ class FileForTaxDocument extends Model
      * When adding a new form type, update this constant AND ACCOUNT_FORM_TYPES (if account-linked)
      * AND the TypeScript FORM_TYPE_LABELS / ACCOUNT_FORM_TYPES_1099 in tax-document.ts.
      */
-    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
+    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
 
     /** W-2 family form types (linked to employment entities, not accounts). */
     public const W2_FORM_TYPES = ['w2', 'w2c'];
@@ -46,7 +46,7 @@ class FileForTaxDocument extends Model
      * Includes `broker_1099` — consolidated PDFs are account-linked even though
      * their per-form data lives on fin_tax_document_accounts rows.
      */
-    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
+    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
 
     protected $fillable = [
         'user_id',

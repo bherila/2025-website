@@ -72,22 +72,25 @@ export function scheduleCNetIncomeFromFacts(facts: ScheduleCFacts | undefined): 
 export function schedule1FactsToLines(facts: Schedule1Facts): Schedule1Lines {
   return {
     partI: {
-      line1a_taxableRefunds: null,
-      line2a_alimonyReceived: null,
+      line1a_taxableRefunds: facts.line1aTotal === 0 ? null : facts.line1aTotal,
+      line2a_alimonyReceived: facts.line2aTotal === 0 ? null : facts.line2aTotal,
       line3_business: facts.line3Total,
       line4_otherGains: facts.line4Total === 0 ? null : facts.line4Total,
       line5_rentalPartnerships: facts.line5Total,
       line6_farmIncome: facts.line6Total === 0 ? null : facts.line6Total,
-      line7_unemploymentCompensation: null,
+      line7_unemploymentCompensation: facts.line7Total === 0 ? null : facts.line7Total,
       line8b_gambling: facts.line8bTotal === 0 ? null : facts.line8bTotal,
       line8h_juryDuty: facts.line8hTotal === 0 ? null : facts.line8hTotal,
       line8i_prizes: facts.line8iTotal === 0 ? null : facts.line8iTotal,
       line8z_otherIncome: facts.line8zTotal,
       line9_totalOther: facts.line9TotalOtherIncome,
       line10_total: currency(facts.line3Total)
+        .add(facts.line1aTotal)
+        .add(facts.line2aTotal)
         .add(facts.line4Total)
         .add(facts.line5Total)
         .add(facts.line6Total)
+        .add(facts.line7Total)
         .add(facts.line9TotalOtherIncome).value,
     },
     partII: {

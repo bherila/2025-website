@@ -97,6 +97,36 @@ abstract class TaxPreviewFactBuilder
     }
 
     /**
+     * @param  string[]  $formTypes
+     * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
+     */
+    protected function documentEntriesForFormTypes(FileForTaxDocument $doc, array $formTypes): array
+    {
+        $entries = [];
+
+        if ($doc->accountLinks->isNotEmpty()) {
+            foreach ($doc->accountLinks as $link) {
+                if (! $link instanceof TaxDocumentAccount || ! in_array($link->form_type, $formTypes, true)) {
+                    continue;
+                }
+
+                $parsedData = $this->parsedDataForLink($doc, $link);
+                if ($parsedData !== null) {
+                    $entries[] = ['parsedData' => $parsedData, 'link' => $link];
+                }
+            }
+
+            return $entries;
+        }
+
+        if (in_array($this->formType($doc), $formTypes, true) && is_array($doc->parsed_data)) {
+            $entries[] = ['parsedData' => $doc->parsed_data, 'link' => null];
+        }
+
+        return $entries;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     protected function parsedDataForLink(FileForTaxDocument $doc, TaxDocumentAccount $link): ?array

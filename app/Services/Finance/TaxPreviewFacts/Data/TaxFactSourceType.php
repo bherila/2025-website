@@ -39,6 +39,8 @@ enum TaxFactSourceType: string
     case Form1099DivTaxExemptInterest = '1099_div_tax_exempt_interest';
     case Form1099DivOrdinaryDividends = '1099_div_ordinary_dividends';
     case Form1099DivQualifiedDividends = '1099_div_qualified_dividends';
+    case Form1099GTaxableRefund = '1099_g_taxable_refund';
+    case Form1099GUnemployment = '1099_g_unemployment';
     case Form1099IntForeignTax = '1099_int_foreign_tax';
     case Form1099IntInterest = '1099_int_interest';
     case Form1099IntInvestmentExpense = '1099_int_investment_expense';

@@ -103,6 +103,27 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame("doc-{$line8bDoc->id}-schedule1-8b", $facts['schedule1']['line8Sources'][0]['id']);
     }
 
+    public function test_schedule1_wires_1099_g_refunds_and_unemployment_to_part_i(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_g',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'State Agency',
+                'box1_unemployment' => 1500,
+                'box2_state_local_refunds' => 300,
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+
+        $this->assertSame(300.0, $facts['schedule1']['line1aTotal']);
+        $this->assertSame('schedule_1_line_1a', $facts['schedule1']['line1aSources'][0]['routing']);
+        $this->assertSame(1500.0, $facts['schedule1']['line7Total']);
+        $this->assertSame('schedule_1_line_7', $facts['schedule1']['line7Sources'][0]['routing']);
+    }
+
     public function test_reviewed_zero_1099_misc_keeps_audit_source(): void
     {
         $user = $this->createUser();
@@ -1605,6 +1626,37 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(13400.0, $form1040['line33']);
     }
 
+    public function test_form1040_line8_includes_1099_g_schedule1_part_i_amounts(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_g',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'State Agency',
+                'box1_unemployment' => 1500,
+                'box2_state_local_refunds' => 300,
+            ],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Prize Payer', 'box3_other_income' => 200],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1040');
+        $form1040 = $facts['form1040'];
+
+        $this->assertSame(2000.0, $form1040['line8']);
+        $this->assertSame(52000.0, $form1040['line9']);
+        $this->assertSame(3, count($form1040['line8Sources']));
+    }
+
     public function test_form1040_line12_uses_standard_or_itemized_deduction_by_filing_status(): void
     {
         $singleUser = $this->createUser();
@@ -1637,6 +1689,8 @@ class TaxPreviewFactsServiceTest extends TestCase
     public function test_form1040_line16_uses_federal_brackets_for_supported_years_and_filing_statuses(): void
     {
         $cases = [
+            [2023, false, 44725.0, 5147.0],
+            [2023, true, 89450.0, 10294.0],
             [2024, false, 47150.0, 5426.0],
             [2024, true, 94300.0, 10852.0],
             [2025, false, 48475.0, 5578.5],

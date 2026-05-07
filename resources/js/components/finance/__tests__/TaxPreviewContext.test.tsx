@@ -172,12 +172,18 @@ function makeTaxFacts(): TaxPreviewFacts {
       deductibleSeTax: 0,
     },
     schedule1: {
+      line1aSources: [],
+      line1aTotal: 0,
+      line2aSources: [],
+      line2aTotal: 0,
       line3Sources: [],
       line3Total: 0,
       line5Sources: [],
       line5Total: 0,
       line6Sources: [],
       line6Total: 0,
+      line7Sources: [],
+      line7Total: 0,
       line8zSources: [{
         id: 'doc-1-schedule1-8z',
         label: 'Fidelity — 1099-MISC other income',

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
 import { cn } from '@/lib/utils'
+import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import type { Form1040LineItem, TaxReturn1040 } from '@/types/finance/tax-return'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
@@ -34,21 +35,30 @@ function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
 
 interface SummarizeInput {
   taxReturn: TaxReturn1040
+  w2Documents?: TaxDocument[]
+  payslips?: fin_payslip[]
 }
 
 export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
   return summarize(input)
 }
 
-function summarize({ taxReturn }: SummarizeInput): KpiSummary {
+function summarize({ taxReturn, w2Documents = [], payslips = [] }: SummarizeInput): KpiSummary {
   const lines = taxReturn.form1040 ?? []
   const totalIncome = lineValue(lines, '9')
   const totalTax = lineValue(lines, '24')
-  const totalWithheld = lineValue(lines, '25d')
-  const totalPayments = lineValue(lines, '33')
+  const form1040Withheld = lineValue(lines, '25d')
+  const totalWithheld = form1040Withheld !== 0
+    ? form1040Withheld
+    : fallbackFederalWithholding(taxReturn, w2Documents, payslips)
+  const form1040Payments = lineValue(lines, '33')
+  const totalPayments = form1040Withheld !== 0
+    ? form1040Payments
+    : currency(form1040Payments).add(totalWithheld).value
   const overpaid = lineValue(lines, '34')
   const amountOwed = lineValue(lines, '37')
-  const diff = overpaid > 0 || amountOwed > 0
+  const usesWithholdingFallback = form1040Withheld === 0 && totalWithheld !== 0
+  const diff = !usesWithholdingFallback && (overpaid > 0 || amountOwed > 0)
     ? currency(overpaid).subtract(amountOwed).value
     : currency(totalPayments).subtract(totalTax).value
 
@@ -61,6 +71,64 @@ function summarize({ taxReturn }: SummarizeInput): KpiSummary {
     effectiveRate: totalIncome > 0 ? totalTax / totalIncome : 0,
     withholdingRate: totalIncome > 0 ? totalWithheld / totalIncome : 0,
   }
+}
+
+function fallbackFederalWithholding(taxReturn: TaxReturn1040, w2Documents: TaxDocument[], payslips: fin_payslip[]): number {
+  const reviewedW2Withholding = w2Documents.reduce((acc, doc) => {
+    if (!doc.is_reviewed) {
+      return acc
+    }
+
+    const parsed = doc.parsed_data as W2ParsedData | null
+    return acc.add(parsed?.box2_fed_tax ?? 0)
+  }, currency(0)).value
+  const payslipWithholding = reviewedW2Withholding === 0
+    ? payslips.reduce((acc, row) => acc
+        .add(row.ps_fed_tax ?? 0)
+        .add(row.ps_fed_tax_addl ?? 0)
+        .subtract(row.ps_fed_tax_refunded ?? 0), currency(0)).value
+    : 0
+  const doc1099Withholding = (taxReturn.docs1099 ?? []).reduce(
+    (acc, doc) => acc.add(federalWithholdingFromParsedData(doc.parsedData)),
+    currency(0),
+  ).value
+
+  return currency(reviewedW2Withholding).add(payslipWithholding).add(doc1099Withholding).value
+}
+
+function federalWithholdingFromParsedData(parsedData: Record<string, unknown> | Record<string, unknown>[]): number {
+  if (Array.isArray(parsedData)) {
+    return parsedData.reduce((acc, entry) => {
+      const childData = entry.parsed_data
+      return acc.add(
+        isRecord(childData) || Array.isArray(childData)
+          ? federalWithholdingFromParsedData(childData)
+          : federalWithholdingFromParsedData(entry),
+      )
+    }, currency(0)).value
+  }
+
+  return currency(numeric(parsedData.box4_fed_tax))
+    .add(numeric(parsedData.fed_tax_withheld))
+    .add(numeric(parsedData.federal_tax_withheld)).value
+}
+
+function numeric(value: unknown): number {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  return 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function fmtUsd(n: number): string {
@@ -83,6 +151,8 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
 
   const summary = summarize({
     taxReturn: state.taxReturn,
+    w2Documents: state.w2Documents,
+    payslips: state.payslips,
   })
 
   return (
