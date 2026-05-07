@@ -1565,6 +1565,70 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('form_8995_line_13', $facts['form8995']['reviewSources'][0]['routing']);
     }
 
+    public function test_form8995_above_threshold_nets_qbi_losses_before_computing_deduction(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 450000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Gain Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Loss Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '-100000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertTrue($facts['form8995']['aboveThreshold']);
+        $this->assertSame(0.0, $facts['form8995']['totalQbi']);
+        $this->assertSame(0.0, $facts['form8995']['totalQbiComponent']);
+        $this->assertSame(0.0, $facts['form8995']['deduction']);
+        $this->assertSame('needs_review', $facts['form8995']['reviewSources'][0]['reviewStatus']);
+    }
+
+    public function test_form8995_taxable_income_before_qbi_uses_itemized_deductions(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 100000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+        $this->createUserDeduction($user->id, 'mortgage_interest', 50000, 'Mortgage interest');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $sliceFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertTrue($facts['scheduleA']['shouldItemizeSingle']);
+        $this->assertSame(50000.0, $facts['scheduleA']['totalItemizedDeductions']);
+        $this->assertSame(50000.0, $facts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(10000.0, $facts['form8995']['taxableIncomeCap']);
+        $this->assertSame(10000.0, $facts['form8995']['deduction']);
+        $this->assertSame(50000.0, $sliceFacts['form8995']['taxableIncomeBeforeQbi']);
+        $this->assertSame(10000.0, $sliceFacts['form8995']['deduction']);
+    }
+
     public function test_form8995_slice_estimates_taxable_income_when_magi_is_not_provided(): void
     {
         $user = $this->createUser();

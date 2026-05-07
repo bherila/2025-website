@@ -43,7 +43,6 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
-use App\Support\Finance\FederalStandardDeduction;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
@@ -142,8 +141,8 @@ class TaxPreviewFactsService
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $estimatedMagi = $userId !== null ? $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD) : null;
         $deductionMagi = $magi ?? $estimatedMagi;
-        $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $year, $isMarried);
         $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $deductionMagi);
+        $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $scheduleA, $isMarried);
         $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
         $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year);
@@ -468,16 +467,25 @@ class TaxPreviewFactsService
     private function form8995FactsForSlice(array $k1Docs, array $docs1099, array $w2Docs, int $userId, int $year): Form8995Facts
     {
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
-        $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $form4952 = $this->form4952FactsBuilder->build(
+            $k1Docs,
+            $docs1099,
+            $scheduleB,
+            $this->shortDividendItemizedDeduction($userId, $year),
+            $this->marginInterestSources($userId, $year),
+        );
+        $userDeductions = $this->userDeductionsForYear($userId, $year);
+        $form4797 = $this->form4797FactsBuilder->build($userDeductions);
         $scheduleD = $this->scheduleDFactsBuilder->build($k1Docs, $docs1099, $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'], $form4797);
         $scheduleC = $this->scheduleCFactsBuilder->build($userId, $year);
-        $scheduleF = $this->scheduleFFactsBuilder->build($this->userDeductionsForYear($userId, $year));
+        $scheduleF = $this->scheduleFFactsBuilder->build($userDeductions);
         $isMarried = $this->isMarried($userId, $year);
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi);
 
-        return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
+        return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
     }
 
     /**
@@ -499,7 +507,7 @@ class TaxPreviewFactsService
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
         $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi);
-        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $year, $isMarried), $year, $isMarried);
+        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
 
         return $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried), $form1116->totalForeignTaxes, $year, $isMarried);
@@ -554,25 +562,25 @@ class TaxPreviewFactsService
     /**
      * Estimate Form 8995 taxable income before the QBI deduction.
      *
-     * The upstream "MAGI" value is currently an AGI-style estimate without MAGI add-backs, and this simplified cap assumes the standard deduction rather than comparing the user's itemized deduction.
+     * The upstream "MAGI" value is currently an AGI-style estimate without MAGI add-backs.
      */
-    private function taxableIncomeBeforeQbi(float $estimatedMagi, int $year, bool $isMarried): float
+    private function taxableIncomeBeforeQbi(float $estimatedMagi, ScheduleAFacts $scheduleA, bool $isMarried): float
     {
-        $standardDeduction = $isMarried
-            ? FederalStandardDeduction::marriedFilingJointly($year)
-            : FederalStandardDeduction::single($year);
-
-        return max(0.0, MoneyMath::subtract($estimatedMagi, $standardDeduction));
+        return max(0.0, MoneyMath::subtract($estimatedMagi, $this->nonQbiDeduction($scheduleA, $isMarried)));
     }
 
     private function estimatedTaxableIncome(float $estimatedMagi, ScheduleAFacts $scheduleA, float $qbiDeduction, bool $isMarried): float
     {
+        return max(0.0, MoneyMath::subtract(MoneyMath::subtract($estimatedMagi, $this->nonQbiDeduction($scheduleA, $isMarried)), $qbiDeduction));
+    }
+
+    private function nonQbiDeduction(ScheduleAFacts $scheduleA, bool $isMarried): float
+    {
         $shouldItemize = $isMarried ? $scheduleA->shouldItemizeMarriedFilingJointly : $scheduleA->shouldItemizeSingle;
-        $deduction = $shouldItemize
+
+        return $shouldItemize
             ? $scheduleA->totalItemizedDeductions
             : ($isMarried ? $scheduleA->standardDeductionMarriedFilingJointly : $scheduleA->standardDeductionSingle);
-
-        return max(0.0, MoneyMath::subtract(MoneyMath::subtract($estimatedMagi, $deduction), $qbiDeduction));
     }
 
     /**
