@@ -7,13 +7,10 @@ import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
-import { calculateTax } from '@/lib/tax/taxBracket'
 import { cn } from '@/lib/utils'
-import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1040LineItem, TaxReturn1040 } from '@/types/finance/tax-return'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
-import { compute1099RDistributionSummary } from '../Form1040Preview'
 import StateSelectorSection from '../StateSelectorSection'
 import { useTaxPreview } from '../TaxPreviewContext'
 
@@ -35,56 +32,26 @@ function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
   return lines.find((l) => l.line === lineNumber)?.value ?? 0
 }
 
-function hasLine(lines: Form1040LineItem[], lineNumber: string): boolean {
-  return lines.some((l) => l.line === lineNumber)
-}
-
 interface SummarizeInput {
   taxReturn: TaxReturn1040
-  year: number
-  isMarried: boolean
-  payslips: fin_payslip[]
-  reviewed1099RDocs: TaxDocument[]
 }
 
 export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
   return summarize(input)
 }
 
-function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: SummarizeInput): KpiSummary {
+function summarize({ taxReturn }: SummarizeInput): KpiSummary {
   const lines = taxReturn.form1040 ?? []
   const totalIncome = lineValue(lines, '9')
-  const agi = lineValue(lines, '11') || totalIncome
-  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
-  const stdDeduction = getStandardDeduction(year, filingStatus)
-  const taxableIncome = Math.max(0, currency(agi).subtract(stdDeduction).value)
-  const bracketTax = taxableIncome > 0
-    ? calculateTax(String(year), '', currency(taxableIncome), filingStatus).totalTax.value
-    : 0
-  const additionalTaxes = taxReturn.schedule2?.totalAdditionalTaxes ?? 0
-  const foreignTaxCredit = lineValue(lines, '20')
-  const totalTax = Math.max(
-    0,
-    hasLine(lines, '24')
-      ? lineValue(lines, '24')
-      : currency(bracketTax).add(additionalTaxes).subtract(foreignTaxCredit).value,
-  )
+  const totalTax = lineValue(lines, '24')
+  const totalWithheld = lineValue(lines, '25d')
+  const totalPayments = lineValue(lines, '33')
+  const overpaid = lineValue(lines, '34')
+  const amountOwed = lineValue(lines, '37')
+  const diff = overpaid > 0 || amountOwed > 0
+    ? currency(overpaid).subtract(amountOwed).value
+    : currency(totalPayments).subtract(totalTax).value
 
-  const yearStart = `${year}-01-01`
-  const yearEnd = `${year + 1}-01-01`
-  const payrollWithheld = payslips.reduce((acc, r) => {
-    if (!r.pay_date || r.pay_date <= yearStart || r.pay_date >= yearEnd) {
-      return acc
-    }
-    return acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0)
-  }, currency(0)).value
-  const retirementWithheld = compute1099RDistributionSummary(reviewed1099RDocs).federalWithholding
-  const totalWithheld = hasLine(lines, '25d')
-    ? lineValue(lines, '25d')
-    : currency(payrollWithheld).add(retirementWithheld).value
-  const totalPayments = hasLine(lines, '33') ? lineValue(lines, '33') : totalWithheld
-
-  const diff = currency(totalPayments).subtract(totalTax).value
   return {
     totalIncome,
     totalTax,
@@ -116,10 +83,6 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
 
   const summary = summarize({
     taxReturn: state.taxReturn,
-    year: state.year,
-    isMarried: state.isMarried,
-    payslips: state.payslips,
-    reviewed1099RDocs: state.reviewed1099RDocs,
   })
 
   return (

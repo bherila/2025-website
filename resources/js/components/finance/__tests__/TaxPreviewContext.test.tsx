@@ -408,6 +408,86 @@ function makeTaxFacts(): TaxPreviewFacts {
       aboveThreshold: false,
       reviewSources: [],
     },
+    form6251: {
+      sourceEntries: [],
+      manualReviewReasons: [],
+      line1TaxableIncome: 0,
+      line2aTaxesOrStandardDeduction: 0,
+      line2aSource: 'none',
+      line2cInvestmentInterest: 0,
+      line2dDepletion: 0,
+      line2kDispositionOfProperty: 0,
+      line2lPost1986Depreciation: 0,
+      line2mPassiveActivities: 0,
+      line2nLossLimitations: 0,
+      line2tIntangibleDrillingCosts: 0,
+      line3OtherAdjustments: 0,
+      adjustmentTotal: 0,
+      amti: 0,
+      exemption: 0,
+      exemptionBase: 0,
+      exemptionReduction: 0,
+      exemptionPhaseoutThreshold: 0,
+      amtTaxBase: 0,
+      amtRateSplitThreshold: 0,
+      amtBeforeForeignCredit: 0,
+      line8AmtForeignTaxCredit: 0,
+      tentativeMinTax: 0,
+      regularTax: 0,
+      regularForeignTaxCredit: 0,
+      regularTaxAfterCredits: 0,
+      amt: 0,
+      filingStatus: 'single',
+      requiresStatementReview: false,
+    },
+    form8582: {
+      activities: [],
+      totalPassiveIncome: 0,
+      totalPassiveLoss: 0,
+      totalPriorYearUnallowed: 0,
+      netPassiveResult: 0,
+      rentalAllowance: 0,
+      totalAllowedLoss: 0,
+      totalSuspendedLoss: 0,
+      netDeductionToReturn: 0,
+      isLossLimited: false,
+      magi: 0,
+      isMarried: false,
+      realEstateProfessional: false,
+    },
+    form8606: {
+      conversions: [],
+      distributions: [],
+      line1_nondeductibleContributions: 0,
+      line2_priorYearBasis: 0,
+      line3_totalBasis: 0,
+      line6_yearEndFmv: 0,
+      line7_distributionsNotConverted: 0,
+      line8_convertedToRoth: 0,
+      line9_total: 0,
+      line10_proRataRatio: 0,
+      line11_basisInConversion: 0,
+      line12_basisInDistributions: 0,
+      line13_totalBasisUsed: 0,
+      line14_basisCarriedForward: 0,
+      line15c_taxableDistributions: 0,
+      line18_taxableConversions: 0,
+      taxableToForm1040Line4b: 0,
+      hasActivity: false,
+    },
+    form4797: {
+      partISources: [],
+      partIISources: [],
+      partIIISources: [],
+      schedule1Sources: [],
+      scheduleDSources: [],
+      partINet1231: 0,
+      partIIOrdinary: 0,
+      partIIIRecapture: 0,
+      netToSchedule1Line4: 0,
+      netToScheduleDLongTerm: 0,
+      hasActivity: false,
+    },
     form1040: makeForm1040Facts(),
   } as unknown as TaxPreviewFacts
 }
@@ -444,7 +524,7 @@ function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000, form1040Override
     seTax,
     deductibleSeTax: currency(seTax).divide(2).value,
   } as unknown as TaxPreviewFacts['scheduleSE']
-  facts.form1040 = makeForm1040Facts(form1040Overrides)
+  facts.form1040 = makeForm1040Facts({ line23: seTax, ...form1040Overrides })
 
   return facts
 }
@@ -468,7 +548,7 @@ describe('TaxPreviewContext', () => {
     act(() => result.current.setTaxFacts(makeTaxFacts()))
 
     expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
-    expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
+    expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(42)
   })
 
   it('preserves unknown Schedule SE source types from backend facts', async () => {
@@ -876,20 +956,29 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve([])
       }
 
+      const facts = makeTaxFactsWithScheduleSE(10_000, {
+        line2b: 200,
+        line3b: 300,
+        line4a: 10_000,
+        line4b: 8_000,
+        line5a: 7_000,
+        line5b: 6_500,
+        line8: 1_000,
+        line9: 16_000,
+        line10: 706.48,
+        line11: 15_293.52,
+        line25b: 1_900,
+        line25d: 1_900,
+      })
+      facts.form8960 = {
+        ...facts.form8960,
+        taxableInterest: 200,
+        ordinaryDividends: 300,
+      }
+
       return Promise.resolve({
         ...makeResponse([k1Doc, ira1099R, pension1099R]),
-        taxFacts: makeTaxFactsWithScheduleSE(10_000, {
-          line2b: 200,
-          line3b: 300,
-          line4a: 10_000,
-          line4b: 8_000,
-          line5a: 7_000,
-          line5b: 6_500,
-          line8: 1_000,
-          line9: 16_000,
-          line10: 706.48,
-          line11: 15_293.52,
-        }),
+        taxFacts: facts,
       })
     })
 
@@ -914,12 +1003,12 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.overviewSections).toEqual(expect.arrayContaining([
       expect.objectContaining({
         heading: 'Estimated Tax Positions',
-        rows: expect.arrayContaining([
-          expect.objectContaining({
-            item: 'Federal withholding (payroll + 1099-R)',
-            amount: 1_900,
-          }),
-        ]),
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              item: 'Federal withholding',
+              amount: 1_900,
+            }),
+          ]),
       }),
     ]))
   })
@@ -1057,8 +1146,7 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(0)
-    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(0)
+    expect(result.current.taxReturn.scheduleSE).toBeUndefined()
   })
 
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
@@ -1104,7 +1192,29 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve({})
       }
 
-      return Promise.resolve(makeResponse([k1Doc]))
+      const facts = makeTaxFacts()
+      facts.form8582 = {
+        ...facts.form8582,
+        activities: [{
+          activityName: 'Passive LP Fund (ordinary business)',
+          ein: '12-3456789',
+          isRentalRealEstate: false,
+          activeParticipation: false,
+          currentIncome: 0,
+          currentLoss: -12_000,
+          priorYearUnallowed: -4_000,
+          overallGainOrLoss: -16_000,
+          allowedLossThisYear: 0,
+          suspendedLossCarryforward: -16_000,
+        }],
+        totalPassiveLoss: -12_000,
+        totalPriorYearUnallowed: -4_000,
+        netPassiveResult: -16_000,
+        totalSuspendedLoss: -16_000,
+        isLossLimited: true,
+      }
+
+      return Promise.resolve({ ...makeResponse([k1Doc]), taxFacts: facts })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
@@ -1142,6 +1252,27 @@ describe('TaxPreviewContext', () => {
         ...makeResponse([]),
         availableYears: [2025, 2024],
       })
+      if (url === '/api/finance/tax-preview-data?year=2024&include_tax_facts=1') {
+        const facts = makeTaxFacts()
+        facts.year = 2024
+        facts.scheduleD = {
+          ...facts.scheduleD,
+          line7NetShortTerm: -10_000,
+          line15NetLongTerm: -5_000,
+          line16Combined: -15_000,
+          line21LimitedLossOrGain: -3_000,
+          appliedToReturn: -3_000,
+          carryforward: -12_000,
+        }
+
+        return Promise.resolve({
+          ...makeResponse([priorYearBrokerDoc]),
+          year: 2024,
+          availableYears: [2025, 2024],
+          taxFacts: facts,
+        })
+      }
+
       if (url === '/api/finance/tax-preview-data?year=2024') return Promise.resolve({
         ...makeResponse([priorYearBrokerDoc]),
         availableYears: [2025, 2024],
@@ -1156,7 +1287,6 @@ describe('TaxPreviewContext', () => {
       shortTermCarryover: 7000,
       longTermCarryover: 5000,
     }))
-    expect(result.current.taxReturn.scheduleD?.schD_line6).toBe(-7000)
-    expect(result.current.taxReturn.scheduleD?.schD_line14).toBe(-5000)
+    expect(result.current.taxReturn.scheduleD).toBeUndefined()
   })
 })

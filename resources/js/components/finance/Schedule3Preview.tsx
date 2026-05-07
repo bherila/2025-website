@@ -1,8 +1,6 @@
 'use client'
 
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import type { Form1116Lines } from '@/types/finance/tax-return'
-import type { Schedule3Facts } from '@/types/generated/tax-preview-facts'
 
 export interface Schedule3Lines {
   partI: {
@@ -23,58 +21,6 @@ export interface Schedule3Lines {
     line14_otherPayments: number
     line15_total: number
   }
-}
-
-export function computeSchedule3({
-  form1116,
-  taxFacts,
-}: {
-  form1116?: Form1116Lines | undefined
-  taxFacts?: Schedule3Facts | null
-}): Schedule3Lines {
-  if (taxFacts) {
-    return {
-      partI: {
-        line1_foreignTaxCredit: taxFacts.line1ForeignTaxCredit,
-        line2_dependentCareCredit: taxFacts.line2ChildDependentCareCredit,
-        line3_educationCredits: taxFacts.line3EducationCredits,
-        line4_retirementSavingsCredit: taxFacts.line4RetirementSavingsCredit,
-        line5a_residentialCleanEnergy: taxFacts.line5aResidentialCleanEnergyCredit,
-        line5b_energyEfficientHome: taxFacts.line5bEnergyEfficientHomeImprovementCredit,
-        line7_otherCredits: taxFacts.line7OtherNonrefundableCredits,
-        line8_total: taxFacts.line8TotalNonrefundableCredits,
-      },
-      partII: {
-        line9_netPremiumTaxCredit: taxFacts.line9NetPremiumTaxCredit,
-        line10_extensionPayment: taxFacts.line10ExtensionPayment,
-        line11_excessSSWithheld: taxFacts.line11ExcessSocialSecurityWithheld,
-        line12_fuelTaxCredit: taxFacts.line12FuelTaxCredit,
-        line14_otherPayments: taxFacts.line14OtherPaymentsRefundableCredits,
-        line15_total: taxFacts.line15TotalPaymentsRefundableCredits,
-      },
-    }
-  }
-
-  const ftc = form1116?.totalForeignTaxes ?? 0
-  const partI: Schedule3Lines['partI'] = {
-    line1_foreignTaxCredit: ftc,
-    line2_dependentCareCredit: 0,
-    line3_educationCredits: 0,
-    line4_retirementSavingsCredit: 0,
-    line5a_residentialCleanEnergy: 0,
-    line5b_energyEfficientHome: 0,
-    line7_otherCredits: 0,
-    line8_total: ftc,
-  }
-  const partII: Schedule3Lines['partII'] = {
-    line9_netPremiumTaxCredit: 0,
-    line10_extensionPayment: 0,
-    line11_excessSSWithheld: 0,
-    line12_fuelTaxCredit: 0,
-    line14_otherPayments: 0,
-    line15_total: 0,
-  }
-  return { partI, partII }
 }
 
 interface Schedule3PreviewProps {

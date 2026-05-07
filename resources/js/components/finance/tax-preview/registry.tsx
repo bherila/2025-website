@@ -16,7 +16,7 @@ import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
-import Schedule3Preview, { computeSchedule3 } from '@/components/finance/Schedule3Preview'
+import Schedule3Preview from '@/components/finance/Schedule3Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
@@ -50,6 +50,7 @@ import {
   buildScheduleSESheet,
 } from '@/lib/finance/buildTaxWorkbook'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
+import { schedule3FactsToLines } from '@/lib/finance/taxPreviewFactsAdapters'
 
 import { useDockActions } from './DockActions'
 import type { DrillTarget, FormId, FormRegistry, FormRenderProps } from './formRegistry'
@@ -281,8 +282,16 @@ function StubCard({ title, note }: { title: string; note: string }): React.React
 }
 
 function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
-  const schedule3 = computeSchedule3({ form1116: state.taxReturn.form1116, taxFacts: state.taxFacts?.schedule3 ?? null })
-  return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
+  if (!state.taxFacts) {
+    return (
+      <StubCard
+        title="Schedule 3 — Additional Credits & Payments"
+        note="Schedule 3 facts are not loaded yet."
+      />
+    )
+  }
+
+  return <Schedule3Preview schedule3={schedule3FactsToLines(state.taxFacts.schedule3)} selectedYear={state.year} />
 }
 
 function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.ReactElement {
@@ -575,10 +584,6 @@ function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactEle
 function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
   const summary = summarizeTaxEstimate({
     taxReturn: state.taxReturn,
-    year: state.year,
-    isMarried: state.isMarried,
-    payslips: state.payslips,
-    reviewed1099RDocs: state.reviewed1099RDocs,
   })
   return <TaxEstimateFullDetail summary={summary} />
 }
