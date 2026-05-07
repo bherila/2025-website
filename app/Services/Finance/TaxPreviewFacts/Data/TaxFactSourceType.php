@@ -63,6 +63,8 @@ enum TaxFactSourceType: string
     case Form8995ScheduleFQbi = 'form_8995_schedule_f_qbi';
     case Form8960InvestmentInterestDeduction = 'form_8960_investment_interest_deduction';
     case Form8960NetCapitalGain = 'form_8960_net_capital_gain';
+    case Schedule3Form1116ForeignTaxCredit = 'schedule_3_form_1116_foreign_tax_credit';
+    case Schedule3UserEnteredCredit = 'schedule_3_user_entered_credit';
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
     case ScheduleCGrossReceipts = 'schedule_c_gross_receipts';
     case ScheduleCHomeOfficeAllowable = 'schedule_c_home_office_allowable';

@@ -17,6 +17,7 @@ namespace App\Enums\Finance;
  * Additional user-entered tax facts:
  *  - form4797_* → Form 4797 user-entered business-property disposition totals
  *  - form8606_* → Form 8606 IRA basis / FMV inputs
+ *  - schedule3_* → Schedule 3 user-entered credits and payments
  *
  * Kept in sync with TS constants in `resources/js/lib/tax/deductionCategories.ts`.
  */
@@ -39,6 +40,19 @@ enum DeductionCategory: string
     case Form8606NondeductibleContributions = 'form8606_nondeductible_contributions';
     case Form8606PriorYearBasis = 'form8606_prior_year_basis';
     case Form8606YearEndFmv = 'form8606_year_end_fmv';
+    case Schedule3ChildDependentCareCredit = 'schedule3_child_dependent_care_credit';
+    case Schedule3EducationCredits = 'schedule3_education_credits';
+    case Schedule3RetirementSavingsCredit = 'schedule3_retirement_savings_credit';
+    case Schedule3ResidentialCleanEnergyCredit = 'schedule3_residential_clean_energy_credit';
+    case Schedule3EnergyEfficientHomeImprovementCredit = 'schedule3_energy_efficient_home_improvement_credit';
+    case Schedule3GeneralBusinessCredit = 'schedule3_general_business_credit';
+    case Schedule3PriorYearMinimumTaxCredit = 'schedule3_prior_year_minimum_tax_credit';
+    case Schedule3OtherNonrefundableCredits = 'schedule3_other_nonrefundable_credits';
+    case Schedule3NetPremiumTaxCredit = 'schedule3_net_premium_tax_credit';
+    case Schedule3ExtensionPayment = 'schedule3_extension_payment';
+    case Schedule3ExcessSocialSecurityWithheld = 'schedule3_excess_social_security_withheld';
+    case Schedule3FuelTaxCredit = 'schedule3_fuel_tax_credit';
+    case Schedule3OtherRefundableCredits = 'schedule3_other_refundable_credits';
 
     /** @return list<string> */
     public static function scheduleAValues(): array
