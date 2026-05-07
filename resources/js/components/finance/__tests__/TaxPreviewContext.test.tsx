@@ -1129,6 +1129,35 @@ describe('TaxPreviewContext', () => {
     expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
   })
 
+  it('combines wage and self-employment additional Medicare tax on Schedule 2', async () => {
+    const w2Doc = {
+      id: 88,
+      form_type: 'w2',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        employer_name: 'Wage Co',
+        box1_wages: 210_000,
+        box5_medicare_wages: 210_000,
+      },
+      original_filename: 'w2.pdf',
+    }
+    const facts = makeTaxFactsWithScheduleSE(10_000)
+    facts.scheduleSE.additionalMedicareTaxableEarnings = 1333.33
+    facts.scheduleSE.additionalMedicareTax = 12
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce({ ...makeResponse([]), w2Documents: [w2Doc], taxFacts: facts })
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxReturn.form8959?.additionalTax).toBe(90)
+    expect(result.current.taxReturn.schedule2?.additionalMedicareTax).toBe(102)
+  })
+
   it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {
     const wrapper2024 = ({ children }: { children: React.ReactNode }) => (
       <TaxPreviewProvider initialData={{ year: 2024, availableYears: [2024] }}>{children}</TaxPreviewProvider>
@@ -1288,5 +1317,67 @@ describe('TaxPreviewContext', () => {
       longTermCarryover: 5000,
     }))
     expect(result.current.taxReturn.scheduleD).toBeUndefined()
+  })
+
+  it('loads capital loss carryovers from the nearest available prior tax year', async () => {
+    const priorYearBrokerDoc = {
+      id: 102,
+      form_type: '1099_b',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2023,
+      parsed_data: {
+        payer_name: 'Gap Broker',
+        transactions: [
+          { description: 'Older short loss', realized_gain_loss: -10_000, is_short_term: true, form_8949_box: 'A', is_covered: true },
+          { description: 'Older long loss', realized_gain_loss: -5_000, is_short_term: false, form_8949_box: 'D', is_covered: true },
+        ],
+      },
+      original_filename: 'gap-broker.pdf',
+      account_links: [],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-preview-data?year=2025&include_tax_facts=1') return Promise.resolve({
+        ...makeResponse([]),
+        availableYears: [2025, 2023],
+      })
+      if (url === '/api/finance/tax-preview-data?year=2023&include_tax_facts=1') {
+        const facts = makeTaxFacts()
+        facts.year = 2023
+        facts.scheduleD = {
+          ...facts.scheduleD,
+          line7NetShortTerm: -10_000,
+          line15NetLongTerm: -5_000,
+          line16Combined: -15_000,
+          line21LimitedLossOrGain: -3_000,
+          appliedToReturn: -3_000,
+          carryforward: -12_000,
+        }
+
+        return Promise.resolve({
+          ...makeResponse([priorYearBrokerDoc]),
+          year: 2023,
+          availableYears: [2025, 2023],
+          taxFacts: facts,
+        })
+      }
+
+      return Promise.resolve(makeResponse())
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await waitFor(() => expect(result.current.priorYearCapitalLossCarryover).toEqual(expect.objectContaining({
+      shortTermCarryover: 7000,
+      longTermCarryover: 5000,
+    })))
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2023&include_tax_facts=1')
+    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2024&include_tax_facts=1')
   })
 })

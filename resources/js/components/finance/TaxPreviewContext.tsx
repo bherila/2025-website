@@ -592,7 +592,13 @@ export function TaxPreviewProvider({
       return
     }
 
-    const carryover = await getPriorYearCarryover(targetYear)
+    const carryoverYear = normalizedYears.find((availableYear) => availableYear <= targetYear)
+    if (carryoverYear === undefined) {
+      setPriorYearCapitalLossCarryover(null)
+      return
+    }
+
+    const carryover = await getPriorYearCarryover(carryoverYear)
     if (carryoverRequestId.current === requestId) {
       setPriorYearCapitalLossCarryover(carryover)
     }

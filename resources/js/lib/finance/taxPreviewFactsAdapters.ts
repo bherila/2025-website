@@ -369,13 +369,13 @@ export function form8960FactsToLines(facts: Form8960Facts, isMarried: boolean): 
   }
 }
 
-export function schedule2FromFacts(facts: TaxPreviewFacts, isMarried: boolean): Schedule2Lines {
+export function schedule2FromFacts(facts: TaxPreviewFacts, isMarried: boolean, form8959: Form8959Lines): Schedule2Lines {
   const form8960 = form8960FactsToLines(facts.form8960, isMarried)
 
   return {
     altMinimumTax: facts.form6251.amt,
     selfEmploymentTax: facts.scheduleSE.seTax,
-    additionalMedicareTax: facts.scheduleSE.additionalMedicareTax,
+    additionalMedicareTax: currency(facts.scheduleSE.additionalMedicareTax).add(form8959.additionalTax).value,
     niit: form8960.niitTax,
     totalAdditionalTaxes: facts.form1040.line23,
   }
@@ -386,7 +386,7 @@ export function taxPreviewFactsToTaxReturn(facts: TaxPreviewFacts, options: TaxR
     year: facts.year,
     ...(options.overviewSections ? { overviewSections: options.overviewSections } : {}),
     schedule1: schedule1FactsToLines(facts.schedule1),
-    schedule2: schedule2FromFacts(facts, options.isMarried),
+    schedule2: schedule2FromFacts(facts, options.isMarried, options.form8959),
     scheduleA: scheduleAFactsToLines(facts.scheduleA, options.isMarried),
     scheduleB: scheduleBFactsToLines(facts.scheduleB),
     scheduleC: scheduleCNetIncomeFromFacts(facts.scheduleC),
