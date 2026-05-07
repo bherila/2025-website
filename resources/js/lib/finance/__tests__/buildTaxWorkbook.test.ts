@@ -168,7 +168,7 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
         },
       },
       form1040: [
-        { line: '1a', label: 'Wages', value: 100_000 },
+        { line: '1z', label: 'Wages', value: 100_000 },
         { line: '2b', label: 'Taxable interest', value: 0 },
         { line: '3b', label: 'Ordinary dividends', value: 0 },
         { line: '7', label: 'Capital gain or loss', value: 0 },
@@ -201,7 +201,7 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
     const workbook = buildTaxWorkbook(makeForm1040Return({
       // 5000 + 1200 = 6200 — line 8 amount matches schedule C+E, no residual
       form1040: [
-        { line: '1a', label: 'Wages', value: 100_000 },
+        { line: '1z', label: 'Wages', value: 100_000 },
         { line: '8', label: 'Schedule 1', value: 6_200 },
         { line: '9', label: 'Total income', value: 106_200 },
       ],
@@ -218,10 +218,10 @@ describe('buildTaxWorkbook — Form 1040 sheet formulas', () => {
     expect(line9?.amount).toBe(106_950)
     // Self-references within Form 1040 are bare cell refs joined with '+'
     expect(line9?.formula).toMatch(/^=C\d+(\+C\d+)+$/)
-    // Should reference at least 1a, 8 (and any other rows present)
+    // Should reference at least 1z, 8 (and any other rows present)
     const sheet = workbook.sheets.find((s) => s.name === 'Form 1040')!
     const rowOf = (line: string) => sheet.rows.findIndex((r) => r.line === line) + 2
-    expect(line9?.formula).toContain(`C${rowOf('1a')}`)
+    expect(line9?.formula).toContain(`C${rowOf('1z')}`)
     expect(line9?.formula).toContain(`C${rowOf('8')}`)
     // Must NOT include 4a/5a (gross retirement) — only 4b/5b (taxable) belong in line 9
     expect(line9?.formula).not.toContain(`C${rowOf('4a')}`)

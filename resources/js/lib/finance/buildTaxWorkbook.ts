@@ -1345,7 +1345,7 @@ export function buildForm1040Sheet(
 
   const lineMap = new Map((taxReturn.form1040 ?? []).map((line) => [line.line, line.value] as const))
 
-  const line1a = lineMap.get('1a') ?? undefined
+  const line1z = lineMap.get('1z') ?? lineMap.get('1a') ?? undefined
   const line2b = lineMap.get('2b') ?? (scheduleBLine4 ? taxReturn.scheduleB?.interestTotal : undefined)
   const line3b = lineMap.get('3b') ?? (scheduleBLine6 ? taxReturn.scheduleB?.dividendTotal : undefined)
   const line4a = lineMap.get('4a') ?? undefined
@@ -1363,7 +1363,7 @@ export function buildForm1040Sheet(
   const line8 =
     lineMap.get('8') ?? (taxReturn.schedule1 ? taxReturn.schedule1.partI.line10_total : undefined)
 
-  const line9Value = currency(line1a ?? 0)
+  const line9Value = currency(line1z ?? 0)
     .add(line2b ?? 0)
     .add(line3b ?? 0)
     .add(line4b ?? 0)
@@ -1403,7 +1403,7 @@ export function buildForm1040Sheet(
         : undefined
 
   const rows: XlsxRow[] = [
-    { line: '1a', description: 'Wages, salaries, tips (W-2, box 1)', amount: line1a },
+    { line: '1z', description: 'Wages, salaries, tips', amount: line1z },
     {
       line: '2b',
       description: 'Taxable interest',
@@ -1481,7 +1481,7 @@ export function buildForm1040Sheet(
     return idx >= 0 ? idx + 2 : null
   }
 
-  const line9SourceRows = ['1a', '2b', '3b', '4b', '5b', '7', '8']
+  const line9SourceRows = ['1z', '2b', '3b', '4b', '5b', '7', '8']
     .map(excelRowOf)
     .filter((r): r is number => r !== null)
   const line9Row = rows.find((r) => r.line === '9')

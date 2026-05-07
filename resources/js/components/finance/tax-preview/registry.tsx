@@ -72,7 +72,7 @@ function tabToDrill(onDrill: (t: DrillTarget) => void): (tab: TaxTabId) => void 
 function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   return (
     <Form1040Preview
-      lines={state.taxReturn.form1040 ?? []}
+      facts={state.taxFacts?.form1040}
       selectedYear={state.year}
       onNavigate={tabToDrill(onDrill)}
     />

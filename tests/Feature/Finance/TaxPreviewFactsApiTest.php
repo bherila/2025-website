@@ -28,6 +28,7 @@ class TaxPreviewFactsApiTest extends TestCase
                     'schedule1' => ['line5Sources', 'line5Total', 'line8Sources', 'line8bSources', 'line8bTotal', 'line8hSources', 'line8hTotal', 'line8iSources', 'line8iTotal', 'line8zSources', 'line8zTotal', 'line9TotalOtherIncome'],
                     'scheduleB' => ['interestSources', 'interestTotal', 'ordinaryDividendSources', 'ordinaryDividendTotal'],
                     'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses', 'line4cNetInvestmentIncomeAfterQualifiedDividends'],
+                    'form1040' => ['line1zSources', 'line1z', 'line16', 'line24', 'line33', 'line37'],
                 ],
             ]);
     }
@@ -133,6 +134,27 @@ class TaxPreviewFactsApiTest extends TestCase
         ])
             ->assertExitCode(0)
             ->expectsOutputToContain('"line8zTotal": 42');
+    }
+
+    public function test_tax_preview_facts_cli_outputs_form1040_slice(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000],
+        ]);
+
+        $exitCode = Artisan::call('finance:tax-preview-facts', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--slice' => 'form1040',
+            '--format' => 'json',
+        ]);
+        $payload = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame(50000, $payload['form1040']['line1z']);
     }
 
     public function test_tax_preview_facts_cli_rejects_invalid_format(): void

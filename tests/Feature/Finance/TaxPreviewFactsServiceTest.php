@@ -1550,6 +1550,190 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertTrue($facts['form6251']['requiresStatementReview']);
     }
 
+    public function test_form1040_slice_aggregates_income_sources_retirement_splits_and_payments(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Day Job', 'box1_wages' => 100000, 'box2_fed_tax' => 9000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Side Employer', 'box1_wages' => 50000, 'box2_fed_tax' => 2000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_int',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 100, 'box8_tax_exempt' => 25],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker', 'box1a_ordinary' => 200, 'box1b_qualified' => 50],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_r',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'IRA Custodian', 'box1_gross_distribution' => 10000, 'box2a_taxable_amount' => 8000, 'box4_fed_tax' => 1200, 'box7_ira_sep_simple' => true],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_r',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Pension Plan', 'box1_gross_distribution' => 7000, 'box2a_taxable_amount' => 6500, 'box4_fed_tax' => 700, 'box7_ira_sep_simple' => false],
+        ]);
+        $this->createUserDeduction($user->id, 'schedule3_extension_payment', 500, 'Extension payment');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1040');
+        $form1040 = $facts['form1040'];
+
+        $this->assertSame(150000.0, $form1040['line1z']);
+        $this->assertCount(2, $form1040['line1zSources']);
+        $this->assertSame(25.0, $form1040['line2a']);
+        $this->assertSame(100.0, $form1040['line2b']);
+        $this->assertSame(50.0, $form1040['line3a']);
+        $this->assertSame(200.0, $form1040['line3b']);
+        $this->assertSame(10000.0, $form1040['line4a']);
+        $this->assertSame(8000.0, $form1040['line4b']);
+        $this->assertSame(7000.0, $form1040['line5a']);
+        $this->assertSame(6500.0, $form1040['line5b']);
+        $this->assertSame(11000.0, $form1040['line25a']);
+        $this->assertSame(1900.0, $form1040['line25b']);
+        $this->assertSame(12900.0, $form1040['line25d']);
+        $this->assertSame(500.0, $form1040['line31']);
+        $this->assertSame(13400.0, $form1040['line33']);
+    }
+
+    public function test_form1040_line12_uses_standard_or_itemized_deduction_by_filing_status(): void
+    {
+        $singleUser = $this->createUser();
+        $this->createTaxDocument($singleUser->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 100000],
+        ]);
+
+        $singleFacts = app(TaxPreviewFactsService::class)->arrayForYear($singleUser->id, 2025, 'form1040');
+
+        $this->assertSame('standard_deduction', $singleFacts['form1040']['line12Source']);
+        $this->assertSame(15750.0, $singleFacts['form1040']['line12']);
+
+        $itemizedUser = $this->createUser();
+        $itemizedUser->forceFill(['marriage_status_by_year' => ['2025' => true]])->save();
+        $this->createTaxDocument($itemizedUser->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 100000],
+        ]);
+        $this->createUserDeduction($itemizedUser->id, 'mortgage_interest', 50000, 'Mortgage interest');
+
+        $itemizedFacts = app(TaxPreviewFactsService::class)->arrayForYear($itemizedUser->id, 2025, 'form1040');
+
+        $this->assertSame('itemized_deductions', $itemizedFacts['form1040']['line12Source']);
+        $this->assertSame(50000.0, $itemizedFacts['form1040']['line12']);
+    }
+
+    public function test_form1040_line16_uses_federal_brackets_for_supported_years_and_filing_statuses(): void
+    {
+        $cases = [
+            [2024, false, 47150.0, 5426.0],
+            [2024, true, 94300.0, 10852.0],
+            [2025, false, 48475.0, 5578.5],
+            [2025, true, 96950.0, 11157.0],
+            [2026, false, 50400.0, 5800.0],
+            [2026, true, 100800.0, 11600.0],
+        ];
+
+        foreach ($cases as [$year, $isMarried, $taxableIncome, $expectedTax]) {
+            $user = $this->createUser();
+            if ($isMarried) {
+                $user->forceFill(['marriage_status_by_year' => [(string) $year => true]])->save();
+            }
+
+            $standardDeduction = $isMarried
+                ? FederalStandardDeduction::marriedFilingJointly($year)
+                : FederalStandardDeduction::single($year);
+            $this->createTaxDocument($user->id, [
+                'tax_year' => $year,
+                'form_type' => 'w2',
+                'is_reviewed' => true,
+                'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => $taxableIncome + $standardDeduction],
+            ]);
+
+            $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, $year, 'form1040');
+
+            $this->assertSame($taxableIncome, $facts['form1040']['line15']);
+            $this->assertSame($expectedTax, $facts['form1040']['line16']);
+        }
+    }
+
+    public function test_form1040_line16_uses_qualified_dividend_and_capital_gain_stacking(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 85750],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker', 'box1a_ordinary' => 10000, 'box1b_qualified' => 10000, 'box2a_cap_gain' => 20000],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1040');
+
+        $this->assertSame(100000.0, $facts['form1040']['line15']);
+        $this->assertSame('qualified_dividends_capital_gain', $facts['form1040']['line16TaxComputation']);
+        $this->assertSame(14814.0, $facts['form1040']['line16']);
+    }
+
+    public function test_form1040_carries_amt_to_line17_and_computes_refund_or_balance_due(): void
+    {
+        $amtUser = $this->createUser();
+        $this->createTaxDocument($amtUser->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 1000000],
+        ]);
+        $this->createTaxDocument($amtUser->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'AMT Fund'],
+                codes: ['17' => [['code' => 'F', 'value' => '1000000']]],
+            ),
+        ]);
+
+        $amtFacts = app(TaxPreviewFactsService::class)->arrayForYear($amtUser->id, 2025, 'form1040');
+
+        $this->assertGreaterThan(0, $amtFacts['form1040']['line17']);
+
+        $refundUser = $this->createUser();
+        $this->createTaxDocument($refundUser->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000, 'box2_fed_tax' => 10000],
+        ]);
+        $refundFacts = app(TaxPreviewFactsService::class)->arrayForYear($refundUser->id, 2025, 'form1040');
+
+        $this->assertGreaterThan(0, $refundFacts['form1040']['line34']);
+        $this->assertSame($refundFacts['form1040']['line34'], $refundFacts['form1040']['line35a']);
+        $this->assertSame(0.0, $refundFacts['form1040']['line37']);
+
+        $balanceUser = $this->createUser();
+        $this->createTaxDocument($balanceUser->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000, 'box2_fed_tax' => 0],
+        ]);
+        $balanceFacts = app(TaxPreviewFactsService::class)->arrayForYear($balanceUser->id, 2025, 'form1040');
+
+        $this->assertSame(0.0, $balanceFacts['form1040']['line34']);
+        $this->assertGreaterThan(0, $balanceFacts['form1040']['line37']);
+    }
+
     public function test_form8582_backend_facts_limit_passive_loss_with_carryforward(): void
     {
         $user = $this->createUser();

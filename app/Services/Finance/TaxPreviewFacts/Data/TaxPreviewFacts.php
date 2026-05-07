@@ -27,6 +27,7 @@ readonly class TaxPreviewFacts
         public Form8995Facts $form8995,
         public Form6251Facts $form6251,
         public Form8582Facts $form8582,
+        public Form1040Facts $form1040,
     ) {}
 
     /**
@@ -54,6 +55,7 @@ readonly class TaxPreviewFacts
             'form8995' => $this->form8995->toArray(),
             'form6251' => $this->form6251->toArray(),
             'form8582' => $this->form8582->toArray(),
+            'form1040' => $this->form1040->toArray(),
         ];
     }
 }

@@ -4,7 +4,6 @@ import currency from 'currency.js'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
-import type { ScheduleBLines } from '@/components/finance/ScheduleBPreview'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,8 +15,9 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { F1099DivParsedData, F1099IntParsedData, Form1099RParsedData, W2ParsedData } from '@/types/finance/tax-document'
-import type { Form1040LineItem, Schedule1Lines } from '@/types/finance/tax-return'
+import type { Form1099RParsedData } from '@/types/finance/tax-document'
+import type { Form1040LineItem } from '@/types/finance/tax-return'
+import type { Form1040Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 export type { Form1040LineItem } from '@/types/finance/tax-return'
 
@@ -28,15 +28,10 @@ interface DataSource {
 }
 
 interface Form1040PreviewProps {
-  /**
-   * Pre-computed Form 1040 line items (typically `taxReturn.form1040`). The component
-   * is purely presentational — `computeForm1040Lines` is run once in TaxPreviewContext
-   * and the result is shared between the preview and the workbook export.
-   */
-  lines: Form1040LineItem[]
+  facts?: Form1040Facts | null | undefined
   selectedYear: number
   /** Called when the user clicks a 1040 line with a linked schedule tab. */
-  onNavigate?: (tab: TaxTabId) => void
+  onNavigate?: ((tab: TaxTabId) => void) | undefined
 }
 
 interface LineItem {
@@ -118,14 +113,6 @@ function getRetirementPayerLabel(doc: TaxDocument, parsed: Form1099RParsedData):
   return parsed.payer_name ?? doc.account?.acct_name ?? doc.original_filename ?? `1099-R #${doc.id}`
 }
 
-function mapScheduleBSources(lines: Array<{ label: string; amount: number }>): NonNullable<Form1040LineItem['sources']> {
-  return lines.map((line) => ({
-    label: line.label,
-    amount: line.amount,
-    note: 'Schedule B source',
-  }))
-}
-
 /**
  * Aggregate reviewed 1099-R documents for Form 1040 lines 4 and 5.
  *
@@ -180,247 +167,124 @@ export function compute1099RDistributionSummary(retirementDocuments: TaxDocument
   return summary
 }
 
-export function computeForm1040Lines({
-  w2Income,
-  interestIncome,
-  dividendIncome,
-  schedule1,
-  capitalGainOrLoss = null,
-  schedule2TotalAdditionalTaxes = null,
-  foreignTaxCredit = null,
-  scheduleB,
-  w2Documents = [],
-  interestDocuments = [],
-  dividendDocuments = [],
-  retirementDocuments = [],
-}: {
-  w2Income: currency
-  interestIncome: currency
-  dividendIncome: currency
-  schedule1: Schedule1Lines
-  capitalGainOrLoss?: number | null
-  schedule2TotalAdditionalTaxes?: number | null
-  foreignTaxCredit?: number | null
-  scheduleB?: ScheduleBLines
-  w2Documents?: TaxDocument[]
-  interestDocuments?: TaxDocument[]
-  dividendDocuments?: TaxDocument[]
-  retirementDocuments?: TaxDocument[]
-}): Form1040LineItem[] {
-  const reviewedW2Docs = w2Documents.filter(d => d.is_reviewed && d.parsed_data)
-  const w2IncomeFromDocs = reviewedW2Docs.length > 0
-    ? reviewedW2Docs.reduce(
-        (acc, d) => acc.add((d.parsed_data as W2ParsedData)?.box1_wages ?? 0),
-        currency(0),
-      )
-    : null
+type NumericForm1040FactKey = {
+  [Key in keyof Form1040Facts]: Form1040Facts[Key] extends number ? Key : never
+}[keyof Form1040Facts]
 
-  const effectiveW2Income = w2IncomeFromDocs ?? w2Income
+type SourceForm1040FactKey = {
+  [Key in keyof Form1040Facts]: Form1040Facts[Key] extends TaxFactSource[] ? Key : never
+}[keyof Form1040Facts]
 
-  const w2Sources = reviewedW2Docs.length > 0
-    ? reviewedW2Docs.map(d => ({
-        label: (d.parsed_data as W2ParsedData)?.employer_name ?? d.employment_entity?.display_name ?? d.original_filename ?? '',
-        amount: currency((d.parsed_data as W2ParsedData)?.box1_wages ?? 0).value,
-        note: 'W-2 Box 1',
-      }))
-    : [{ label: 'Payslip estimate (no W-2 uploaded)', amount: w2Income.value }]
+interface Form1040LineDefinition {
+  line: string
+  label: string
+  valueKey: NumericForm1040FactKey
+  sourcesKey?: SourceForm1040FactKey
+  bold?: boolean
+  refSchedule?: string
+  navTab?: TaxTabId
+}
 
-  const scheduleBInterestTotal = currency(scheduleB?.interestTotal ?? interestIncome.value)
-  const scheduleBDividendTotal = currency(scheduleB?.dividendTotal ?? dividendIncome.value)
+const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
+  { line: '1z', label: 'Wages, salaries, tips', valueKey: 'line1z', sourcesKey: 'line1zSources' },
+  { line: '2a', label: 'Tax-exempt interest', valueKey: 'line2a', sourcesKey: 'line2aSources' },
+  { line: '2b', label: 'Taxable interest', valueKey: 'line2b', sourcesKey: 'line2bSources', refSchedule: 'Schedule B', navTab: TAX_TABS.schedules },
+  { line: '3a', label: 'Qualified dividends', valueKey: 'line3a', sourcesKey: 'line3aSources', refSchedule: 'Schedule B', navTab: TAX_TABS.schedules },
+  { line: '3b', label: 'Ordinary dividends', valueKey: 'line3b', sourcesKey: 'line3bSources', refSchedule: 'Schedule B', navTab: TAX_TABS.schedules },
+  { line: '4a', label: 'IRA distributions', valueKey: 'line4a', sourcesKey: 'line4aSources' },
+  { line: '4b', label: 'Taxable IRA distributions', valueKey: 'line4b', sourcesKey: 'line4bSources' },
+  { line: '5a', label: 'Pensions and annuities', valueKey: 'line5a', sourcesKey: 'line5aSources' },
+  { line: '5b', label: 'Taxable pensions and annuities', valueKey: 'line5b', sourcesKey: 'line5bSources' },
+  { line: '6a', label: 'Social security benefits', valueKey: 'line6a', sourcesKey: 'line6aSources' },
+  { line: '6b', label: 'Taxable social security benefits', valueKey: 'line6b', sourcesKey: 'line6bSources' },
+  { line: '7', label: 'Capital gain or loss', valueKey: 'line7', sourcesKey: 'line7Sources', refSchedule: 'Schedule D', navTab: TAX_TABS.capitalGains },
+  { line: '8', label: 'Additional income from Schedule 1', valueKey: 'line8', sourcesKey: 'line8Sources', refSchedule: 'Schedule 1', navTab: TAX_TABS.schedule1 },
+  { line: '9', label: 'Total income', valueKey: 'line9', bold: true },
+  { line: '10', label: 'Adjustments to income', valueKey: 'line10', sourcesKey: 'line10Sources', refSchedule: 'Schedule 1', navTab: TAX_TABS.schedule1 },
+  { line: '11', label: 'Adjusted gross income', valueKey: 'line11', bold: true },
+  { line: '12', label: 'Standard deduction or itemized deductions', valueKey: 'line12', sourcesKey: 'line12Sources', refSchedule: 'Schedule A', navTab: TAX_TABS.schedules },
+  { line: '13', label: 'Qualified business income deduction', valueKey: 'line13', sourcesKey: 'line13Sources', refSchedule: 'Form 8995', navTab: TAX_TABS.form8995 },
+  { line: '14', label: 'Total deductions', valueKey: 'line14', bold: true },
+  { line: '15', label: 'Taxable income', valueKey: 'line15', bold: true },
+  { line: '16', label: 'Tax', valueKey: 'line16', sourcesKey: 'line16Sources' },
+  { line: '17', label: 'Amount from Schedule 2, line 3', valueKey: 'line17', sourcesKey: 'line17Sources', refSchedule: 'Schedule 2', navTab: TAX_TABS.schedule2 },
+  { line: '18', label: 'Total tax before credits', valueKey: 'line18', bold: true },
+  { line: '19', label: 'Child tax credit and credit for other dependents', valueKey: 'line19' },
+  { line: '20', label: 'Nonrefundable credits from Schedule 3', valueKey: 'line20', sourcesKey: 'line20Sources', refSchedule: 'Schedule 3', navTab: TAX_TABS.schedule3 },
+  { line: '21', label: 'Total credits', valueKey: 'line21' },
+  { line: '22', label: 'Tax after nonrefundable credits', valueKey: 'line22', bold: true },
+  { line: '23', label: 'Other taxes', valueKey: 'line23', sourcesKey: 'line23Sources', refSchedule: 'Schedule 2', navTab: TAX_TABS.schedule2 },
+  { line: '24', label: 'Total tax', valueKey: 'line24', bold: true },
+  { line: '25a', label: 'Federal income tax withheld from W-2', valueKey: 'line25a', sourcesKey: 'line25aSources' },
+  { line: '25b', label: 'Federal income tax withheld from 1099', valueKey: 'line25b', sourcesKey: 'line25bSources' },
+  { line: '25c', label: 'Federal income tax withheld from other forms', valueKey: 'line25c', sourcesKey: 'line25cSources' },
+  { line: '25d', label: 'Total federal income tax withheld', valueKey: 'line25d', bold: true },
+  { line: '26', label: 'Estimated tax payments', valueKey: 'line26', sourcesKey: 'line26Sources' },
+  { line: '31', label: 'Refundable credits from Schedule 3', valueKey: 'line31', sourcesKey: 'line31Sources', refSchedule: 'Schedule 3', navTab: TAX_TABS.schedule3 },
+  { line: '32', label: 'Total other payments and refundable credits', valueKey: 'line32', bold: true },
+  { line: '33', label: 'Total payments', valueKey: 'line33', bold: true },
+  { line: '34', label: 'Overpaid', valueKey: 'line34', bold: true },
+  { line: '35a', label: 'Amount refunded', valueKey: 'line35a' },
+  { line: '36', label: 'Amount applied to estimated tax', valueKey: 'line36' },
+  { line: '37', label: 'Amount you owe', valueKey: 'line37', bold: true },
+  { line: '38', label: 'Estimated tax penalty', valueKey: 'line38' },
+]
 
-  const reviewedIntDocs = interestDocuments.filter(d => d.is_reviewed && d.parsed_data)
-  const interestSources = scheduleB?.interestLines.length
-    ? mapScheduleBSources(scheduleB.interestLines)
-    : reviewedIntDocs.length > 0
-      ? reviewedIntDocs.map(d => ({
-          label: (d.parsed_data as F1099IntParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-          amount: currency((d.parsed_data as F1099IntParsedData)?.box1_interest ?? 0).value,
-          note: '1099-INT Box 1',
-        }))
-      : [{
-          label: scheduleB ? 'From confirmed Schedule B sources' : 'Interest income estimate (no Schedule B data)',
-          amount: scheduleBInterestTotal.value,
-        }]
+function sourceNote(source: TaxFactSource): string | undefined {
+  if (source.notes) {
+    return source.notes
+  }
 
-  const reviewedDivDocs = dividendDocuments.filter(d => d.is_reviewed && d.parsed_data)
-  const dividendSources = scheduleB?.dividendLines.length
-    ? mapScheduleBSources(scheduleB.dividendLines)
-    : reviewedDivDocs.length > 0
-      ? reviewedDivDocs.map(d => ({
-          label: (d.parsed_data as F1099DivParsedData)?.payer_name ?? d.account?.acct_name ?? d.original_filename ?? '',
-          amount: currency((d.parsed_data as F1099DivParsedData)?.box1a_ordinary ?? 0).value,
-          note: '1099-DIV Box 1a',
-        }))
-      : [{
-          label: scheduleB ? 'From confirmed Schedule B sources' : 'Dividend income estimate (no Schedule B data)',
-          amount: scheduleBDividendTotal.value,
-        }]
+  if (source.formType && source.box) {
+    return `${source.formType} box ${source.box}`
+  }
 
-  const retirementSummary = compute1099RDistributionSummary(retirementDocuments)
+  return source.routingReason ?? undefined
+}
 
-  const { partI, partII } = schedule1
-  const schedule1Total = partI.line10_total
-  const schedule1Adjustment = partII.line26_totalAdjustments
+function mapTaxFactSources(sources: TaxFactSource[] | undefined): Form1040LineItem['sources'] | undefined {
+  if (!sources || sources.length === 0) {
+    return undefined
+  }
 
-  const schedule1Sources: { label: string; amount: number; note?: string }[] = [
-    ...(partI.line3_business !== 0
-      ? [{ label: 'Schedule C — Business income', amount: currency(partI.line3_business).value, note: 'Schedule 1 line 3' }]
-      : []),
-    ...(partI.line5_rentalPartnerships !== 0
-      ? [{ label: 'Schedule E — Rental / royalty / partnership', amount: currency(partI.line5_rentalPartnerships).value, note: 'Schedule 1 line 5' }]
-      : []),
-    ...(partI.line8z_otherIncome !== 0
-      ? [{ label: '1099-MISC other income', amount: currency(partI.line8z_otherIncome).value, note: 'Schedule 1 line 8z' }]
-      : []),
-  ]
+  return sources.map((source) => {
+    const note = sourceNote(source)
 
-  const totalIncome = effectiveW2Income
-    .add(scheduleBInterestTotal)
-    .add(scheduleBDividendTotal)
-    .add(retirementSummary.ira.taxable)
-    .add(retirementSummary.pension.taxable)
-    .add(capitalGainOrLoss ?? 0)
-    .add(schedule1Total)
-  const adjustedGrossIncome = totalIncome.subtract(schedule1Adjustment)
+    return {
+      label: source.label,
+      amount: source.amount,
+      ...(note ? { note } : {}),
+    }
+  })
+}
 
-  return [
-    {
-      line: '1a',
-      label: 'Wages, salaries, tips (W-2, box 1)',
-      value: effectiveW2Income.value,
-      sources: w2Sources,
-    },
-    {
-      line: '2b',
-      label: 'Taxable interest',
-      value: scheduleBInterestTotal.value,
-      refSchedule: 'Schedule B',
-      sources: interestSources,
-      navTab: TAX_TABS.schedules,
-    },
-    {
-      line: '3b',
-      label: 'Ordinary dividends',
-      value: scheduleBDividendTotal.value,
-      refSchedule: 'Schedule B',
-      sources: dividendSources,
-      navTab: TAX_TABS.schedules,
-    },
-    ...(retirementSummary.ira.gross !== 0 || retirementSummary.ira.taxable !== 0
-      ? [
-          {
-            line: '4a',
-            label: 'IRA distributions',
-            value: retirementSummary.ira.gross,
-            ...(retirementSummary.ira.grossSources.length > 0 ? { sources: retirementSummary.ira.grossSources } : {}),
-          },
-          {
-            line: '4b',
-            label: 'Taxable amount',
-            value: retirementSummary.ira.taxable,
-            ...(retirementSummary.ira.taxableSources.length > 0 ? { sources: retirementSummary.ira.taxableSources } : {}),
-          },
-        ]
-      : []),
-    ...(retirementSummary.pension.gross !== 0 || retirementSummary.pension.taxable !== 0
-      ? [
-          {
-            line: '5a',
-            label: 'Pensions and annuities',
-            value: retirementSummary.pension.gross,
-            ...(retirementSummary.pension.grossSources.length > 0 ? { sources: retirementSummary.pension.grossSources } : {}),
-          },
-          {
-            line: '5b',
-            label: 'Taxable amount',
-            value: retirementSummary.pension.taxable,
-            ...(retirementSummary.pension.taxableSources.length > 0 ? { sources: retirementSummary.pension.taxableSources } : {}),
-          },
-        ]
-      : []),
-    {
-      line: '7',
-      label: 'Capital gain or loss',
-      value: capitalGainOrLoss,
-      refSchedule: 'Schedule D',
-      navTab: TAX_TABS.capitalGains,
-    },
-    ...(schedule1Total !== 0
-      ? [{
-          line: '8',
-          label: 'Additional income from Schedule 1, line 10',
-          value: currency(schedule1Total).value,
-          refSchedule: 'Schedule 1',
-          sources: schedule1Sources,
-          navTab: TAX_TABS.schedule1,
-        }]
-      : []),
-    {
-      line: '9',
-      label: 'Total income',
-      value: totalIncome.value,
-      bold: true,
-      sources: [
-        { label: 'W-2 wages (Line 1a)', amount: effectiveW2Income.value },
-        { label: 'Taxable interest (Line 2b)', amount: scheduleBInterestTotal.value },
-        { label: 'Ordinary dividends (Line 3b)', amount: scheduleBDividendTotal.value },
-        ...(retirementSummary.ira.taxable !== 0 ? [{ label: 'IRA taxable distributions (Line 4b)', amount: retirementSummary.ira.taxable }] : []),
-        ...(retirementSummary.pension.taxable !== 0 ? [{ label: 'Pension / annuity taxable distributions (Line 5b)', amount: retirementSummary.pension.taxable }] : []),
-        ...(capitalGainOrLoss !== null ? [{ label: 'Capital gain or loss (Line 7)', amount: capitalGainOrLoss }] : []),
-        ...(schedule1Total !== 0 ? [{ label: 'Additional income (Line 8)', amount: currency(schedule1Total).value }] : []),
-      ],
-    },
-    {
-      line: '10',
-      label: 'Adjustments to income (Schedule 1)',
-      value: schedule1Adjustment,
-      refSchedule: 'Schedule 1',
-      navTab: TAX_TABS.schedule1,
-      ...(schedule1Adjustment !== 0
-        ? {
-            sources: [
-              ...(partII.line15_deductibleSeTax != null && partII.line15_deductibleSeTax !== 0
-                ? [{ label: 'Deductible half of self-employment tax', amount: partII.line15_deductibleSeTax, note: 'Schedule SE → Schedule 1 line 15' }]
-                : []),
-            ],
-          }
-        : {}),
-    },
-    {
-      line: '11',
-      label: 'Adjusted gross income',
-      value: adjustedGrossIncome.value,
-      bold: true,
-      sources: [
-        { label: 'Total income (Line 9)', amount: totalIncome.value },
-        ...(schedule1Adjustment !== 0 ? [{ label: 'Adjustments to income (Line 10)', amount: -schedule1Adjustment }] : []),
-      ],
-    },
-    ...(schedule2TotalAdditionalTaxes !== null && schedule2TotalAdditionalTaxes !== 0
-      ? [{
-          line: '17',
-          label: 'Other taxes (Schedule 2)',
-          value: schedule2TotalAdditionalTaxes,
-          refSchedule: 'Schedule 2',
-          navTab: TAX_TABS.schedule2,
-        }]
-      : []),
-    {
-      line: '20',
-      label: 'Foreign tax credit',
-      value: foreignTaxCredit,
-      refSchedule: 'Schedule 3',
-      navTab: TAX_TABS.schedule3,
-    },
-  ]
+export function form1040FactsToLines(facts?: Form1040Facts | null): Form1040LineItem[] {
+  if (!facts) {
+    return []
+  }
+
+  return FORM1040_LINE_DEFINITIONS.map((definition) => {
+    const sources = definition.sourcesKey ? mapTaxFactSources(facts[definition.sourcesKey]) : undefined
+
+    return {
+      line: definition.line,
+      label: definition.label,
+      value: facts[definition.valueKey],
+      ...(definition.bold ? { bold: definition.bold } : {}),
+      ...(definition.refSchedule ? { refSchedule: definition.refSchedule } : {}),
+      ...(definition.navTab ? { navTab: definition.navTab } : {}),
+      ...(sources ? { sources } : {}),
+    }
+  })
 }
 
 export default function Form1040Preview({
-  lines: rawLines,
+  facts,
   selectedYear,
   onNavigate,
 }: Form1040PreviewProps) {
   const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
+  const rawLines = form1040FactsToLines(facts)
   const lines: LineItem[] = rawLines.map((line) => {
     const mappedLine: LineItem = {
       line: line.line,
