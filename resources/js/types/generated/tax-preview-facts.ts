@@ -185,11 +185,14 @@ niitTaxMarriedFilingJointly: number | null;
 needsMagi: boolean;
 };
 export type Form8995AEntityFact = {
+sources: Array<TaxFactSource>;
 entityKey: string;
 label: string;
 sourceKind: string;
 isSstb: boolean;
 qbiIncome: number;
+qbiLossNettingAdjustment: number;
+qbiAfterLossNetting: number;
 applicablePercentage: number;
 adjustedQbi: number;
 w2Wages: number;
@@ -229,6 +232,8 @@ w2Wages: number;
 ubia: number;
 isSstb: boolean;
 sectionNotes: string | null;
+needsForm8995AReview: boolean;
+form8995AReviewReason: string | null;
 };
 export type Form8995Facts = {
 entities: Array<Form8995EntityFact>;

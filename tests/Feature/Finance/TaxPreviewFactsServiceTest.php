@@ -10,6 +10,8 @@ use App\Models\FinanceTool\PalCarryforward;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\TaxPreviewFacts\Builders\Schedule3FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Support\Finance\FederalStandardDeduction;
@@ -987,6 +989,34 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(5500.0, $facts['schedule3']['line15TotalPaymentsRefundableCredits']);
         $this->assertSame('schedule_3_line_1', $facts['schedule3']['line1Sources'][0]['routing']);
         $this->assertSame('schedule_3_user_entered_credit', $facts['schedule3']['line10Sources'][0]['sourceType']);
+        $this->assertNull($facts['schedule3']['line10Sources'][0]['notes']);
+    }
+
+    public function test_schedule3_line1_requires_form1116_source_review(): void
+    {
+        $facts = app(Schedule3FactsBuilder::class)->build(
+            new Form1116Facts(
+                passiveIncomeSources: [],
+                totalPassiveIncome: 0.0,
+                generalIncomeSources: [],
+                totalGeneralIncome: 0.0,
+                foreignTaxSources: [],
+                totalForeignTaxes: 123.0,
+                line4bSources: [],
+                totalLine4b: 0.0,
+                sourcedByPartnerElectionSources: [],
+                totalSourcedByPartnerIncome: 0.0,
+                creditValue: 123.0,
+                deductionValueAtThirtySevenPercent: 45.51,
+                recommendation: 'credit',
+                totalK1Box5: 0.0,
+                turboTaxAlert: false,
+            ),
+            [],
+        );
+
+        $this->assertFalse($facts->line1Sources[0]->isReviewed);
+        $this->assertSame('needs_review', $facts->line1Sources[0]->reviewStatus);
     }
 
     public function test_schedule_a_exposes_gross_and_disallowed_investment_interest(): void
@@ -1613,6 +1643,75 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(17500.0, $facts['form8995']['form8995A']['entities'][0]['wageUbiaLimit']);
         $this->assertSame(17500.0, $facts['form8995']['form8995A']['totalQualifiedBusinessIncomeComponent']);
         $this->assertSame(17500.0, $facts['form8995']['deduction']);
+    }
+
+    public function test_form8995_above_threshold_flags_missing_form8995a_inputs(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 450000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'QBI Fund'],
+                codes: ['20' => [['code' => 'Z', 'value' => '100000']]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+
+        $this->assertTrue($facts['form8995']['aboveThreshold']);
+        $this->assertNotNull($facts['form8995']['form8995A']);
+        $this->assertCount(1, $facts['form8995']['reviewSources']);
+        $this->assertSame('needs_review', $facts['form8995']['reviewSources'][0]['reviewStatus']);
+        $this->assertStringContainsString('W-2 wages', $facts['form8995']['reviewSources'][0]['reviewAction']);
+    }
+
+    public function test_form8995a_nets_qbi_losses_before_total_component(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 450000],
+        ]);
+        $profitableK1 = $this->k1Data(fields: ['B' => 'Profitable QBI Fund']);
+        $profitableK1['statementA'] = [
+            'qualifiedBusinessIncome' => 100000,
+            'w2Wages' => 100000,
+            'ubia' => 0,
+            'isSstb' => false,
+        ];
+        $lossK1 = $this->k1Data(fields: ['B' => 'Loss QBI Fund']);
+        $lossK1['statementA'] = [
+            'qualifiedBusinessIncome' => -100000,
+            'w2Wages' => 0,
+            'ubia' => 0,
+            'isSstb' => false,
+        ];
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $profitableK1,
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $lossK1,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $profitableEntity = collect($facts['form8995']['form8995A']['entities'])->firstWhere('label', 'Profitable QBI Fund');
+
+        $this->assertSame(0.0, $facts['form8995']['totalQbi']);
+        $this->assertSame(0.0, $facts['form8995']['form8995A']['totalQualifiedBusinessIncomeComponent']);
+        $this->assertSame(0.0, $facts['form8995']['deduction']);
+        $this->assertSame(-100000.0, $profitableEntity['qbiLossNettingAdjustment']);
+        $this->assertSame(0.0, $profitableEntity['qbiAfterLossNetting']);
     }
 
     public function test_form8995a_phase_in_reduces_sstb_qbi(): void

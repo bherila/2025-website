@@ -17,6 +17,7 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
      */
     public function build(Form1116Facts $form1116, array $userDeductions): Schedule3Facts
     {
+        $line1IsReviewed = $form1116->foreignTaxSources !== [] && collect($form1116->foreignTaxSources)->every(static fn (TaxFactSource $source): bool => $source->isReviewed);
         $line1Sources = $form1116->totalForeignTaxes !== 0.0 ? [
             new TaxFactSource(
                 id: 'schedule-3-line-1-form-1116',
@@ -25,7 +26,9 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
                 sourceType: TaxFactSourceType::Schedule3Form1116ForeignTaxCredit,
                 routing: TaxFactRouting::Schedule3Line1,
                 routingReason: 'Form 1116 foreign tax credit flows to Schedule 3 line 1.',
-                isReviewed: $form1116->foreignTaxSources === [] || collect($form1116->foreignTaxSources)->every(static fn (TaxFactSource $source): bool => $source->isReviewed),
+                isReviewed: $line1IsReviewed,
+                reviewStatus: $line1IsReviewed ? 'reviewed' : 'needs_review',
+                reviewAction: $line1IsReviewed ? null : 'Review Form 1116 foreign tax sources before relying on Schedule 3 line 1.',
             ),
         ] : [];
 
@@ -114,7 +117,6 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
                 sourceType: TaxFactSourceType::Schedule3UserEnteredCredit,
                 routing: $routing,
                 routingReason: "{$label} is entered manually until the upstream form-specific computation is available.",
-                notes: $category->value,
             );
         }
 

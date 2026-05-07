@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995AEntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995AFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
@@ -23,8 +24,9 @@ class Form8995AFactsBuilder extends TaxPreviewFactBuilder
         float $phaseInRange,
     ): Form8995AFacts {
         $phaseInPercentage = $this->phaseInPercentage($taxableIncomeBeforeQbi, $threshold, $phaseInRange);
+        $qbiAfterLossNetting = $this->qbiAfterLossNetting($entities);
         $entityFacts = array_map(
-            fn (Form8995EntityFact $entity): Form8995AEntityFact => $this->entityFact($entity, $taxableIncomeBeforeQbi, $threshold, $phaseInRange, $phaseInPercentage),
+            fn (Form8995EntityFact $entity): Form8995AEntityFact => $this->entityFact($entity, $qbiAfterLossNetting[$entity->entityKey] ?? $entity->qbiIncome, $taxableIncomeBeforeQbi, $threshold, $phaseInRange, $phaseInPercentage),
             $entities,
         );
         $totalQbiComponent = $this->sumMoney(array_map(
@@ -51,10 +53,13 @@ class Form8995AFactsBuilder extends TaxPreviewFactBuilder
         );
     }
 
-    private function entityFact(Form8995EntityFact $entity, float $taxableIncomeBeforeQbi, float $threshold, float $phaseInRange, float $phaseInPercentage): Form8995AEntityFact
+    /**
+     * QBI losses are netted before Form 8995-A entity limitations; at full phase-in, the wage/UBIA-limited component becomes the final component.
+     */
+    private function entityFact(Form8995EntityFact $entity, float $qbiAfterLossNetting, float $taxableIncomeBeforeQbi, float $threshold, float $phaseInRange, float $phaseInPercentage): Form8995AEntityFact
     {
         $applicablePercentage = $this->applicablePercentage($entity, $taxableIncomeBeforeQbi, $threshold, $phaseInRange);
-        $adjustedQbi = $this->roundMoney($entity->qbiIncome * $applicablePercentage);
+        $adjustedQbi = $this->roundMoney($qbiAfterLossNetting * $applicablePercentage);
         $w2Wages = $adjustedQbi > 0.0 ? $this->roundMoney($entity->w2Wages * $applicablePercentage) : 0.0;
         $ubia = $adjustedQbi > 0.0 ? $this->roundMoney($entity->ubia * $applicablePercentage) : 0.0;
         $qbiComponentBeforeLimit = $this->roundMoney(max(0.0, $adjustedQbi) * 0.2);
@@ -73,8 +78,11 @@ class Form8995AFactsBuilder extends TaxPreviewFactBuilder
             entityKey: $entity->entityKey,
             label: $entity->label,
             sourceKind: $entity->sourceKind,
+            sources: $entity->sources,
             isSstb: $entity->isSstb,
             qbiIncome: $entity->qbiIncome,
+            qbiLossNettingAdjustment: $this->subtractMoney($qbiAfterLossNetting, $entity->qbiIncome),
+            qbiAfterLossNetting: $qbiAfterLossNetting,
             applicablePercentage: $applicablePercentage,
             adjustedQbi: $adjustedQbi,
             w2Wages: $w2Wages,
@@ -87,6 +95,56 @@ class Form8995AFactsBuilder extends TaxPreviewFactBuilder
             phaseInReduction: $phaseInReduction,
             qualifiedBusinessIncomeComponent: $qualifiedBusinessIncomeComponent,
         );
+    }
+
+    /**
+     * @param  Form8995EntityFact[]  $entities
+     * @return array<string, float>
+     */
+    private function qbiAfterLossNetting(array $entities): array
+    {
+        $positiveCents = 0;
+        $lossCents = 0;
+        foreach ($entities as $entity) {
+            $qbiCents = MoneyMath::toCents($entity->qbiIncome);
+            if ($qbiCents > 0) {
+                $positiveCents += $qbiCents;
+            } elseif ($qbiCents < 0) {
+                $lossCents += abs($qbiCents);
+            }
+        }
+
+        if ($positiveCents === 0 || $lossCents === 0) {
+            $netted = [];
+            foreach ($entities as $entity) {
+                $netted[$entity->entityKey] = max(0.0, $entity->qbiIncome);
+            }
+
+            return $netted;
+        }
+
+        $remainingLossCents = min($lossCents, $positiveCents);
+        $remainingPositiveCents = $positiveCents;
+        $netted = [];
+
+        foreach ($entities as $entity) {
+            $qbiCents = MoneyMath::toCents($entity->qbiIncome);
+            if ($qbiCents <= 0) {
+                $netted[$entity->entityKey] = 0.0;
+
+                continue;
+            }
+
+            $allocatedLossCents = $remainingPositiveCents === $qbiCents
+                ? min($remainingLossCents, $qbiCents)
+                : min($qbiCents, intdiv(($remainingLossCents * $qbiCents) + intdiv($remainingPositiveCents, 2), $remainingPositiveCents));
+
+            $netted[$entity->entityKey] = MoneyMath::fromCents($qbiCents - $allocatedLossCents);
+            $remainingLossCents -= $allocatedLossCents;
+            $remainingPositiveCents -= $qbiCents;
+        }
+
+        return $netted;
     }
 
     private function phaseInPercentage(float $taxableIncomeBeforeQbi, float $threshold, float $phaseInRange): float

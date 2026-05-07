@@ -123,38 +123,6 @@ readonly class Schedule3Facts
         $this->line13Sources = $line13Sources;
     }
 
-    public static function empty(): self
-    {
-        return new self(
-            line1Sources: [],
-            line1ForeignTaxCredit: 0.0,
-            line2Sources: [],
-            line2ChildDependentCareCredit: 0.0,
-            line3Sources: [],
-            line3EducationCredits: 0.0,
-            line4Sources: [],
-            line4RetirementSavingsCredit: 0.0,
-            line5aSources: [],
-            line5aResidentialCleanEnergyCredit: 0.0,
-            line5bSources: [],
-            line5bEnergyEfficientHomeImprovementCredit: 0.0,
-            line6Sources: [],
-            line7OtherNonrefundableCredits: 0.0,
-            line8TotalNonrefundableCredits: 0.0,
-            line9Sources: [],
-            line9NetPremiumTaxCredit: 0.0,
-            line10Sources: [],
-            line10ExtensionPayment: 0.0,
-            line11Sources: [],
-            line11ExcessSocialSecurityWithheld: 0.0,
-            line12Sources: [],
-            line12FuelTaxCredit: 0.0,
-            line13Sources: [],
-            line14OtherPaymentsRefundableCredits: 0.0,
-            line15TotalPaymentsRefundableCredits: 0.0,
-        );
-    }
-
     /**
      * @return array<string, mixed>
      */
