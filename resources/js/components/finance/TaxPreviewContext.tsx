@@ -19,7 +19,7 @@ import { accountLast4FromValue } from '@/lib/finance/form8949Extraction'
 import { extractK1Form461Disclosure, getK1PartnerName, k1NetIncome, parseK1Field } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { scheduleCNetIncomeFromFacts, scheduleDDataFromFacts, taxPreviewFactsToTaxReturn } from '@/lib/finance/taxPreviewFactsAdapters'
+import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts, taxPreviewFactsToTaxReturn } from '@/lib/finance/taxPreviewFactsAdapters'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -1012,47 +1012,12 @@ export function TaxPreviewProvider({
       ...(taxPositionRows.length > 0 ? [{ heading: 'Estimated Tax Positions', rows: taxPositionRows }] : []),
     ]
 
-    const scheduleDData = taxFacts ? scheduleDDataFromFacts(taxFacts.scheduleD) : null
     const eblData = form461({
       taxYear: year,
       isSingle: !isMarried,
       schedule1_line3: taxFacts?.scheduleC.netProfit ?? 0,
       schedule1_line5: taxFacts?.scheduleE.grandTotal ?? 0,
-      scheduleDData: scheduleDData ?? scheduleDDataFromFacts({
-        form8949Rollups: [],
-        line5Sources: [],
-        line3Sources: [],
-        line10Sources: [],
-        line12Sources: [],
-        line13Sources: [],
-        ambiguous11SSources: [],
-        line1aGainLoss: 0,
-        line1bGainLoss: 0,
-        line2GainLoss: 0,
-        line3GainLoss: 0,
-        line4GainLoss: 0,
-        line5GainLoss: 0,
-        line6Carryover: 0,
-        line7NetShortTerm: 0,
-        line8aGainLoss: 0,
-        line8bGainLoss: 0,
-        line9GainLoss: 0,
-        line10GainLoss: 0,
-        line11GainLoss: 0,
-        line12GainLoss: 0,
-        line13CapitalGainDistributions: 0,
-        line14Carryover: 0,
-        line15NetLongTerm: 0,
-        line16Combined: 0,
-        line21LimitedLossOrGain: 0,
-        appliedToReturn: 0,
-        carryforward: 0,
-        totalBusinessCapGains: 0,
-        totalPersonalCapGains: 0,
-        limitedBusinessCapGains: 0,
-        limitedPersonalCapGains: 0,
-        ambiguous11SAmount: 0,
-      }),
+      scheduleDData: scheduleDDataFromFacts(taxFacts?.scheduleD ?? emptyScheduleDFacts()),
       override_f461_line15: null,
     })
     const k1Form461Disclosures = k1Parsed.flatMap(({ doc, data }) => {

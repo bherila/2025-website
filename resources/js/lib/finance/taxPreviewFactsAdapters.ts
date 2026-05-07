@@ -1,5 +1,7 @@
 import currency from 'currency.js'
 
+import { form8995FactsToLines } from '@/components/finance/Form8995Preview'
+import { scheduleFFactsToLines } from '@/components/finance/ScheduleFPreview'
 import type { ScheduleDData } from '@/lib/tax/scheduleD'
 import type {
   CapitalLossCarryoverLines,
@@ -12,14 +14,12 @@ import type {
   Form8606Lines,
   Form8959Lines,
   Form8960Lines,
-  Form8995Lines,
   Schedule1Lines,
   Schedule2Lines,
   ScheduleALines,
   ScheduleBLines,
   ScheduleCNetIncome,
   ScheduleELines,
-  ScheduleFLines,
   ScheduleSEEntrySourceType,
   ScheduleSELines,
   TaxReturn1040,
@@ -31,7 +31,6 @@ import type {
   Form8582Facts,
   Form8606Facts,
   Form8960Facts,
-  Form8995Facts,
   Schedule1Facts,
   Schedule3Facts,
   ScheduleAFacts,
@@ -39,7 +38,6 @@ import type {
   ScheduleCFacts,
   ScheduleDFacts,
   ScheduleEFacts,
-  ScheduleFFacts,
   ScheduleSEFacts,
   TaxFactSource,
   TaxPreviewFacts,
@@ -152,6 +150,44 @@ export function scheduleBFactsToLines(facts: ScheduleBFacts): ScheduleBLines {
     interestLines: sourceLines(facts.interestSources),
     dividendLines: sourceLines(facts.ordinaryDividendSources),
     qualifiedDividendLines: sourceLines(facts.qualifiedDividendSources),
+  }
+}
+
+export function emptyScheduleDFacts(): ScheduleDFacts {
+  return {
+    form8949Rollups: [],
+    line5Sources: [],
+    line3Sources: [],
+    line10Sources: [],
+    line12Sources: [],
+    line13Sources: [],
+    ambiguous11SSources: [],
+    line1aGainLoss: 0,
+    line1bGainLoss: 0,
+    line2GainLoss: 0,
+    line3GainLoss: 0,
+    line4GainLoss: 0,
+    line5GainLoss: 0,
+    line6Carryover: 0,
+    line7NetShortTerm: 0,
+    line8aGainLoss: 0,
+    line8bGainLoss: 0,
+    line9GainLoss: 0,
+    line10GainLoss: 0,
+    line11GainLoss: 0,
+    line12GainLoss: 0,
+    line13CapitalGainDistributions: 0,
+    line14Carryover: 0,
+    line15NetLongTerm: 0,
+    line16Combined: 0,
+    line21LimitedLossOrGain: 0,
+    appliedToReturn: 0,
+    carryforward: 0,
+    totalBusinessCapGains: 0,
+    totalPersonalCapGains: 0,
+    limitedBusinessCapGains: 0,
+    limitedPersonalCapGains: 0,
+    ambiguous11SAmount: 0,
   }
 }
 
@@ -307,15 +343,6 @@ export function form4797FactsToLines(facts: TaxPreviewFacts['form4797']): Form47
   }
 }
 
-export function scheduleFFactsToLines(facts: ScheduleFFacts): ScheduleFLines {
-  return {
-    grossFarmIncome: facts.grossFarmIncome,
-    totalExpenses: facts.totalFarmExpenses,
-    netProfitOrLoss: facts.netFarmProfit,
-    hasActivity: facts.hasActivity,
-  }
-}
-
 export function form8960FactsToLines(facts: Form8960Facts, isMarried: boolean): Form8960Lines {
   return {
     taxableInterest: facts.taxableInterest,
@@ -339,40 +366,6 @@ export function form8960FactsToLines(facts: Form8960Facts, isMarried: boolean): 
     interestSources: sourceLines(facts.componentSources.filter(source => source.routing === 'form_8960_line_1')),
     dividendSources: sourceLines(facts.componentSources.filter(source => source.routing === 'form_8960_line_2')),
     passiveSources: sourceLines(facts.componentSources.filter(source => source.routing === 'form_8960_line_4a')),
-  }
-}
-
-export function form8995FactsToLines(facts: Form8995Facts): Form8995Lines {
-  const form8995AEntities = new Map((facts.form8995A?.entities ?? []).map(entity => [entity.entityKey, entity]))
-
-  return {
-    entries: facts.entities.map((entity) => {
-      const form8995AEntity = form8995AEntities.get(entity.entityKey)
-
-      return {
-        label: entity.label,
-        qbiIncome: entity.qbiIncome,
-        qbiLossNettingAdjustment: form8995AEntity?.qbiLossNettingAdjustment ?? 0,
-        qbiAfterLossNetting: form8995AEntity?.qbiAfterLossNetting ?? entity.qbiIncome,
-        w2Wages: form8995AEntity?.w2Wages ?? entity.w2Wages,
-        ubia: form8995AEntity?.ubia ?? entity.ubia,
-        reitDividends: entity.reitDividends,
-        ptpIncome: entity.ptpIncome,
-        isSstb: entity.isSstb,
-        sectionNotes: entity.sectionNotes ?? '',
-        qbiComponent: form8995AEntity?.qualifiedBusinessIncomeComponent ?? entity.qbiComponent,
-      }
-    }),
-    totalQBI: facts.totalQbi,
-    totalQBIComponent: facts.form8995A?.totalQualifiedBusinessIncomeComponent ?? facts.totalQbiComponent,
-    totalIncome: facts.taxableIncomeBeforeQbi,
-    estimatedTaxableIncome: facts.taxableIncomeBeforeQbi,
-    stdDedApplied: 0,
-    taxableIncomeCap: facts.taxableIncomeCap,
-    estimatedDeduction: facts.form8995A?.deduction ?? facts.deduction,
-    aboveThreshold: facts.aboveThreshold,
-    thresholdSingle: facts.thresholdSingle,
-    thresholdMFJ: facts.thresholdMarriedFilingJointly,
   }
 }
 
