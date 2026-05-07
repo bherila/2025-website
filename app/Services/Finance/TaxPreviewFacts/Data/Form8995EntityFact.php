@@ -24,6 +24,8 @@ readonly class Form8995EntityFact
         public float $reitDividends,
         public float $ptpIncome,
         public float $qbiComponent,
+        public float $w2Wages = 0.0,
+        public float $ubia = 0.0,
         public bool $isSstb = false,
         public ?string $sectionNotes = null,
     ) {
@@ -44,6 +46,8 @@ readonly class Form8995EntityFact
             'reitDividends' => $this->reitDividends,
             'ptpIncome' => $this->ptpIncome,
             'qbiComponent' => $this->qbiComponent,
+            'w2Wages' => $this->w2Wages,
+            'ubia' => $this->ubia,
             'isSstb' => $this->isSstb,
             'sectionNotes' => $this->sectionNotes,
         ];

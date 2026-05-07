@@ -51,6 +51,7 @@ readonly class Form8995Facts
         public float $thresholdMarriedFilingJointly,
         public bool $aboveThreshold,
         array $reviewSources,
+        public ?Form8995AFacts $form8995A = null,
     ) {
         $this->entities = $entities;
         $this->line1Sources = $line1Sources;
@@ -80,6 +81,7 @@ readonly class Form8995Facts
             thresholdMarriedFilingJointly: $thresholds['mfj'],
             aboveThreshold: false,
             reviewSources: [],
+            form8995A: null,
         );
     }
 
@@ -112,6 +114,34 @@ readonly class Form8995Facts
     }
 
     /**
+     * Returns the Form 8995-A phase-in range width for the year.
+     *
+     * @return array{single: float, mfj: float}
+     */
+    public static function phaseInRanges(int $year): array
+    {
+        $ranges = [
+            2018 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2019 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2020 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2021 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2022 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2023 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2024 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2025 => ['single' => 50000.0, 'mfj' => 100000.0],
+            2026 => ['single' => 75000.0, 'mfj' => 150000.0],
+        ];
+
+        if (array_key_exists($year, $ranges)) {
+            return $ranges[$year];
+        }
+
+        $latestYear = max(array_keys($ranges));
+
+        return $year > $latestYear ? $ranges[$latestYear] : ['single' => 0.0, 'mfj' => 0.0];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array
@@ -134,6 +164,7 @@ readonly class Form8995Facts
             'thresholdMarriedFilingJointly' => $this->thresholdMarriedFilingJointly,
             'aboveThreshold' => $this->aboveThreshold,
             'reviewSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->reviewSources),
+            'form8995A' => $this->form8995A?->toArray(),
         ];
     }
 }

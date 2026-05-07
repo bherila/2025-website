@@ -2,6 +2,7 @@
 
 import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import type { Form1116Lines } from '@/types/finance/tax-return'
+import type { Schedule3Facts } from '@/types/generated/tax-preview-facts'
 
 export interface Schedule3Lines {
   partI: {
@@ -11,34 +12,67 @@ export interface Schedule3Lines {
     line4_retirementSavingsCredit: number | null
     line5a_residentialCleanEnergy: number | null
     line5b_energyEfficientHome: number | null
-    line6_otherCredits: number | null
-    line7_total: number
+    line7_otherCredits: number
+    line8_total: number
   }
   partII: {
-    line9_extensionPayment: number | null
-    line10_excessSSWithheld: number | null
-    line11_fuelTaxCredit: number | null
-    line13_total: number
+    line9_netPremiumTaxCredit: number
+    line10_extensionPayment: number
+    line11_excessSSWithheld: number
+    line12_fuelTaxCredit: number
+    line14_otherPayments: number
+    line15_total: number
   }
 }
 
-export function computeSchedule3({ form1116 }: { form1116?: Form1116Lines | undefined }): Schedule3Lines {
+export function computeSchedule3({
+  form1116,
+  taxFacts,
+}: {
+  form1116?: Form1116Lines | undefined
+  taxFacts?: Schedule3Facts | null
+}): Schedule3Lines {
+  if (taxFacts) {
+    return {
+      partI: {
+        line1_foreignTaxCredit: taxFacts.line1ForeignTaxCredit,
+        line2_dependentCareCredit: taxFacts.line2ChildDependentCareCredit,
+        line3_educationCredits: taxFacts.line3EducationCredits,
+        line4_retirementSavingsCredit: taxFacts.line4RetirementSavingsCredit,
+        line5a_residentialCleanEnergy: taxFacts.line5aResidentialCleanEnergyCredit,
+        line5b_energyEfficientHome: taxFacts.line5bEnergyEfficientHomeImprovementCredit,
+        line7_otherCredits: taxFacts.line7OtherNonrefundableCredits,
+        line8_total: taxFacts.line8TotalNonrefundableCredits,
+      },
+      partII: {
+        line9_netPremiumTaxCredit: taxFacts.line9NetPremiumTaxCredit,
+        line10_extensionPayment: taxFacts.line10ExtensionPayment,
+        line11_excessSSWithheld: taxFacts.line11ExcessSocialSecurityWithheld,
+        line12_fuelTaxCredit: taxFacts.line12FuelTaxCredit,
+        line14_otherPayments: taxFacts.line14OtherPaymentsRefundableCredits,
+        line15_total: taxFacts.line15TotalPaymentsRefundableCredits,
+      },
+    }
+  }
+
   const ftc = form1116?.totalForeignTaxes ?? 0
   const partI: Schedule3Lines['partI'] = {
     line1_foreignTaxCredit: ftc,
-    line2_dependentCareCredit: null,
-    line3_educationCredits: null,
-    line4_retirementSavingsCredit: null,
-    line5a_residentialCleanEnergy: null,
-    line5b_energyEfficientHome: null,
-    line6_otherCredits: null,
-    line7_total: ftc,
+    line2_dependentCareCredit: 0,
+    line3_educationCredits: 0,
+    line4_retirementSavingsCredit: 0,
+    line5a_residentialCleanEnergy: 0,
+    line5b_energyEfficientHome: 0,
+    line7_otherCredits: 0,
+    line8_total: ftc,
   }
   const partII: Schedule3Lines['partII'] = {
-    line9_extensionPayment: null,
-    line10_excessSSWithheld: null,
-    line11_fuelTaxCredit: null,
-    line13_total: 0,
+    line9_netPremiumTaxCredit: 0,
+    line10_extensionPayment: 0,
+    line11_excessSSWithheld: 0,
+    line12_fuelTaxCredit: 0,
+    line14_otherPayments: 0,
+    line15_total: 0,
   }
   return { partI, partII }
 }
@@ -54,8 +88,7 @@ export default function Schedule3Preview({ schedule3, selectedYear }: Schedule3P
     <div className="space-y-6">
       <FormBlock title={`Schedule 3 — Additional Credits & Payments (${selectedYear})`}>
         <p className="text-xs text-muted-foreground">
-          Most Schedule 3 lines (dependent-care credit, education credits, retirement savings credit, energy
-          credits) aren&apos;t implemented yet. Currently only line 1 (Foreign Tax Credit from Form 1116) is wired.
+          Backend facts combine Form 1116 and user-entered Schedule 3 credit/payment inputs.
         </p>
       </FormBlock>
 
@@ -66,15 +99,17 @@ export default function Schedule3Preview({ schedule3, selectedYear }: Schedule3P
         <FormLine boxRef="4" label="Retirement savings contributions credit (Form 8880)" value={partI.line4_retirementSavingsCredit} />
         <FormLine boxRef="5a" label="Residential clean energy credit (Form 5695)" value={partI.line5a_residentialCleanEnergy} />
         <FormLine boxRef="5b" label="Energy efficient home improvement credit (Form 5695)" value={partI.line5b_energyEfficientHome} />
-        <FormLine boxRef="6" label="Other credits" value={partI.line6_otherCredits} />
-        <FormTotalLine boxRef="7" label="Total nonrefundable credits → Form 1040 line 20" value={partI.line7_total} />
+        <FormLine boxRef="7" label="Total other nonrefundable credits" value={partI.line7_otherCredits} />
+        <FormTotalLine boxRef="8" label="Total nonrefundable credits → Form 1040 line 20" value={partI.line8_total} />
       </FormBlock>
 
       <FormBlock title="Part II — Other Payments & Refundable Credits">
-        <FormLine boxRef="9" label="Amount paid with extension request" value={partII.line9_extensionPayment} />
-        <FormLine boxRef="10" label="Excess Social Security tax withheld" value={partII.line10_excessSSWithheld} />
-        <FormLine boxRef="11" label="Credit for federal tax on fuels (Form 4136)" value={partII.line11_fuelTaxCredit} />
-        <FormTotalLine boxRef="13" label="Total → Form 1040 line 31" value={partII.line13_total} />
+        <FormLine boxRef="9" label="Net premium tax credit (Form 8962)" value={partII.line9_netPremiumTaxCredit} />
+        <FormLine boxRef="10" label="Amount paid with extension request" value={partII.line10_extensionPayment} />
+        <FormLine boxRef="11" label="Excess Social Security tax withheld" value={partII.line11_excessSSWithheld} />
+        <FormLine boxRef="12" label="Credit for federal tax on fuels (Form 4136)" value={partII.line12_fuelTaxCredit} />
+        <FormLine boxRef="14" label="Total other payments or refundable credits" value={partII.line14_otherPayments} />
+        <FormTotalLine boxRef="15" label="Total → Form 1040 line 31" value={partII.line15_total} />
       </FormBlock>
     </div>
   )

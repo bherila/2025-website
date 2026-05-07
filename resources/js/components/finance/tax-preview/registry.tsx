@@ -151,7 +151,8 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
       isMarried={state.isMarried}
       userDeductions={state.userDeductions}
       form4952={state.taxReturn.form4952}
-      taxFacts={state.taxFacts?.form4952 ?? null}
+      form4952Facts={state.taxFacts?.form4952 ?? null}
+      scheduleAFacts={state.taxFacts?.scheduleA ?? null}
       onOpenDoc={openTaxDocumentDetail}
       {...(state.shortDividendSummary ? { shortDividendSummary: state.shortDividendSummary } : {})}
     />
@@ -280,7 +281,7 @@ function StubCard({ title, note }: { title: string; note: string }): React.React
 }
 
 function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
-  const schedule3 = computeSchedule3({ form1116: state.taxReturn.form1116 })
+  const schedule3 = computeSchedule3({ form1116: state.taxReturn.form1116, taxFacts: state.taxFacts?.schedule3 ?? null })
   return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
 }
 

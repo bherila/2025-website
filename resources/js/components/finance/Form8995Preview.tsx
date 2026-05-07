@@ -17,7 +17,8 @@ export function form8995FactsToLines(facts: Form8995Facts): Form8995Lines {
     entries: facts.entities.map((entity) => ({
       label: entity.label,
       qbiIncome: entity.qbiIncome,
-      w2Wages: 0,
+      w2Wages: entity.w2Wages,
+      ubia: entity.ubia,
       reitDividends: entity.reitDividends,
       ptpIncome: entity.ptpIncome,
       isSstb: entity.isSstb,
@@ -25,12 +26,12 @@ export function form8995FactsToLines(facts: Form8995Facts): Form8995Lines {
       qbiComponent: entity.qbiComponent,
     })),
     totalQBI: facts.totalQbi,
-    totalQBIComponent: facts.totalQbiComponent,
+    totalQBIComponent: facts.form8995A?.totalQualifiedBusinessIncomeComponent ?? facts.totalQbiComponent,
     totalIncome: facts.taxableIncomeBeforeQbi,
     estimatedTaxableIncome: facts.taxableIncomeBeforeQbi,
     stdDedApplied: 0,
     taxableIncomeCap: facts.taxableIncomeCap,
-    estimatedDeduction: facts.deduction,
+    estimatedDeduction: facts.form8995A?.deduction ?? facts.deduction,
     aboveThreshold: facts.aboveThreshold,
     thresholdSingle: facts.thresholdSingle,
     thresholdMFJ: facts.thresholdMarriedFilingJointly,
@@ -113,6 +114,9 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
             {entry.w2Wages !== 0 && (
               <FormLine label={`${entry.label} — W-2 wages (Form 8995-A, Line 4)`} value={entry.w2Wages} />
             )}
+            {entry.ubia !== 0 && (
+              <FormLine label={`${entry.label} — UBIA of qualified property (Form 8995-A, Line 7)`} value={entry.ubia} />
+            )}
             {(entry.reitDividends !== 0) && (
               <FormLine label={`${entry.label} — §199A REIT dividends`} value={entry.reitDividends} />
             )}
@@ -147,6 +151,9 @@ export default function Form8995Preview({ taxFacts, selectedYear, isMarried = fa
       {/* Deduction summary */}
       <FormBlock title="Estimated QBI Deduction (Form 1040 Line 13)">
         <FormLine label="QBI component (20% × QBI)" value={totalQBIComponent} />
+        {taxFacts?.form8995A && (
+          <FormLine label="REIT / PTP component" value={taxFacts.form8995A.qualifiedReitPtpComponent} />
+        )}
         <FormLine label="Taxable income cap (20% × taxable income)" value={taxableIncomeCap} />
         <FormTotalLine
           label="Estimated QBI deduction — lesser of above"

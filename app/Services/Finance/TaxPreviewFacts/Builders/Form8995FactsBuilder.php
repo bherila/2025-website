@@ -3,7 +3,9 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8995AFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
@@ -16,6 +18,13 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class Form8995FactsBuilder extends TaxPreviewFactBuilder
 {
+    public function __construct(
+        K1CodeCharacterResolver $k1CodeCharacterResolver,
+        private readonly Form8995AFactsBuilder $form8995AFactsBuilder,
+    ) {
+        parent::__construct($k1CodeCharacterResolver);
+    }
+
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
@@ -57,10 +66,27 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $taxableIncomeLessNetCapitalGain = max(0.0, $this->subtractMoney($taxableIncomeBeforeQbi, $netCapitalGain));
         $taxableIncomeCap = $this->roundMoney($taxableIncomeLessNetCapitalGain * 0.2);
         $thresholds = Form8995Facts::thresholds($year);
+        $phaseInRanges = Form8995Facts::phaseInRanges($year);
         $threshold = $isMarried ? $thresholds['mfj'] : $thresholds['single'];
+        $phaseInRange = $isMarried ? $phaseInRanges['mfj'] : $phaseInRanges['single'];
         $aboveThreshold = $taxableIncomeBeforeQbi > $threshold;
-        $deductionBeforeCap = $this->sumMoney([$totalQbiComponent, $reitPtpComponent]);
-        $deduction = min($deductionBeforeCap, $taxableIncomeCap);
+        $form8995A = $aboveThreshold ? $this->form8995AFactsBuilder->build(
+            entities: $entities,
+            qualifiedReitDividends: $qualifiedReitDividends,
+            qualifiedPtpIncome: $qualifiedPtpIncome,
+            taxableIncomeBeforeQbi: $taxableIncomeBeforeQbi,
+            netCapitalGain: $netCapitalGain,
+            taxableIncomeLessNetCapitalGain: $taxableIncomeLessNetCapitalGain,
+            incomeLimitation: $taxableIncomeCap,
+            threshold: $threshold,
+            phaseInRange: $phaseInRange,
+        ) : null;
+        $deductionBeforeCap = $form8995A instanceof Form8995AFacts
+            ? $form8995A->deductionBeforeIncomeLimit
+            : $this->sumMoney([$totalQbiComponent, $reitPtpComponent]);
+        $deduction = $form8995A instanceof Form8995AFacts
+            ? $form8995A->deduction
+            : min($deductionBeforeCap, $taxableIncomeCap);
 
         return new Form8995Facts(
             entities: $entities,
@@ -79,7 +105,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             thresholdSingle: $thresholds['single'],
             thresholdMarriedFilingJointly: $thresholds['mfj'],
             aboveThreshold: $aboveThreshold,
-            reviewSources: $aboveThreshold ? [$this->aboveThresholdSource($taxableIncomeBeforeQbi, $threshold, $deduction)] : [],
+            reviewSources: [],
+            form8995A: $form8995A,
         );
     }
 
@@ -212,6 +239,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
                 reitDividends: $reitDividends,
                 ptpIncome: $ptpIncome,
                 qbiComponent: $this->roundMoney(max(0.0, $qbiIncome) * 0.2),
+                w2Wages: $this->statementAAmount($statementA, 'w2Wages'),
+                ubia: $this->statementAAmount($statementA, 'ubia'),
                 isSstb: (bool) ($data['statementA']['isSstb'] ?? false),
                 sectionNotes: $this->sectionNotes($data),
             );
@@ -310,22 +339,6 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         return $notes === [] ? null : implode("\n", $notes);
     }
 
-    private function aboveThresholdSource(float $taxableIncomeBeforeQbi, float $threshold, float $deduction): TaxFactSource
-    {
-        return new TaxFactSource(
-            id: 'form-8995-a-needs-review',
-            label: 'Form 8995-A threshold review',
-            amount: $deduction,
-            sourceType: TaxFactSourceType::Form8995NeedsReview,
-            routing: TaxFactRouting::Form8995Line13,
-            routingReason: 'Taxable income before QBI deduction exceeds the simplified Form 8995 threshold; W-2 wage, UBIA, and SSTB limitations may apply on Form 8995-A.',
-            notes: "Taxable income before QBI {$taxableIncomeBeforeQbi}; threshold {$threshold}.",
-            isReviewed: false,
-            reviewStatus: 'needs_review',
-            reviewAction: 'Review Form 8995-A W-2 wage, UBIA, and SSTB limitations before filing.',
-        );
-    }
-
     /**
      * @param  array<string, mixed>  $statementA
      */
@@ -334,6 +347,14 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $amount = $this->parseMoney($statementA[$field] ?? null);
 
         return $amount !== null && $amount !== 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $statementA
+     */
+    private function statementAAmount(array $statementA, string $field): float
+    {
+        return $this->parseMoney($statementA[$field] ?? null) ?? 0.0;
     }
 
     /**
