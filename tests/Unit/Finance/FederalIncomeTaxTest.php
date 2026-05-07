@@ -3,7 +3,6 @@
 namespace Tests\Unit\Finance;
 
 use App\Support\Finance\FederalIncomeTax;
-use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 class FederalIncomeTaxTest extends TestCase
@@ -38,11 +37,15 @@ class FederalIncomeTaxTest extends TestCase
         );
     }
 
-    public function test_unsupported_year_throws(): void
+    public function test_unsupported_year_uses_nearest_configured_table(): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/year 2030/');
-
-        FederalIncomeTax::regularTax(50000.0, 2030, false);
+        $this->assertSame(
+            FederalIncomeTax::ordinaryTax(50000.0, 2023, false),
+            FederalIncomeTax::ordinaryTax(50000.0, 2022, false),
+        );
+        $this->assertSame(
+            FederalIncomeTax::regularTax(50000.0, 2026, false, 10000.0),
+            FederalIncomeTax::regularTax(50000.0, 2030, false, 10000.0),
+        );
     }
 }

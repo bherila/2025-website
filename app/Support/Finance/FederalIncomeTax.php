@@ -3,7 +3,6 @@
 namespace App\Support\Finance;
 
 use App\Services\Finance\MoneyMath;
-use InvalidArgumentException;
 
 final class FederalIncomeTax
 {
@@ -120,11 +119,10 @@ final class FederalIncomeTax
         $years = array_keys($table);
         sort($years);
 
-        throw new InvalidArgumentException(sprintf(
-            'Federal income tax tables are not configured for year %d (supported: %d–%d).',
-            $year,
-            $years[0],
-            $years[array_key_last($years)],
-        ));
+        if ($year < $years[0]) {
+            return $years[0];
+        }
+
+        return $years[array_key_last($years)];
     }
 }
