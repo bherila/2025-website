@@ -1,6 +1,3 @@
-import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import type { ScheduleDData } from '@/lib/tax/scheduleD'
-import type { K3Section } from '@/types/finance/k1-data'
 import type { Broker1099BReportingMode } from '@/types/finance/tax-document'
 
 export type { EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
@@ -213,21 +210,6 @@ export interface Form6251Lines {
   manualReviewReasons: string[]
 }
 
-export interface K1ExportEntry {
-  entityName: string
-  ein?: string
-  fields: Record<string, string | number>
-  codes: Record<string, { code: string; value: string; notes?: string; character?: 'short' | 'long' }[]>
-  k3Sections?: K3Section[]
-  /** Box 11 S — per-activity passive income/loss from supplemental statement (Form 8582). */
-  passiveActivities?: import('@/types/finance/k1-data').K1PassiveActivity[]
-}
-
-export interface K3ExportEntry {
-  entityName: string
-  sections: K3Section[]
-}
-
 export interface Doc1099ExportEntry {
   formType: string
   payerName: string
@@ -244,17 +226,6 @@ export interface Doc1099ExportEntry {
     ai_account_name: string | null
     account: { acct_id: number; acct_name: string; acct_number?: string | null } | null
   }[]
-}
-
-export interface OverviewSection {
-  heading: string
-  rows: OverviewRow[]
-}
-
-export interface OverviewRow {
-  item: string
-  amount?: number | undefined
-  note?: string | undefined
 }
 
 export interface Form8995Lines {
@@ -312,19 +283,6 @@ export interface CapitalLossCarryoverLines {
   longTermCarryover: number
   totalCarryover: number
   hasCarryover: boolean
-}
-
-export interface Schedule2Lines {
-  /** Line 2 — Alternative Minimum Tax (Form 6251). 0 if not applicable. */
-  altMinimumTax: number
-  /** Line 4 — Self-employment tax (Schedule SE). */
-  selfEmploymentTax: number
-  /** Line 11 — Additional Medicare Tax (Form 8959). */
-  additionalMedicareTax: number
-  /** Line 12 — Net Investment Income Tax (Form 8960). */
-  niit: number
-  /** Line 21 total → Form 1040 Line 17. */
-  totalAdditionalTaxes: number
 }
 
 export interface Form461Lines {
@@ -449,35 +407,4 @@ export interface Form8582Lines {
   isMarried: boolean
   /** True when taxpayer qualifies as a real estate professional (§469(c)(7)). */
   realEstateProfessional: boolean
-}
-
-export interface TaxReturn1040 {
-  year: number
-  overviewSections?: OverviewSection[] | undefined
-  form1040?: Form1040LineItem[]
-  schedule1?: Schedule1Lines
-  schedule2?: Schedule2Lines
-  scheduleA?: ScheduleALines
-  scheduleB?: ScheduleBLines
-  scheduleC?: ScheduleCNetIncome
-  scheduleD?: ScheduleDData
-  scheduleE?: ScheduleELines
-  scheduleSE?: ScheduleSELines
-  form4952?: Form4952Lines
-  form1116?: Form1116Lines
-  form6251?: Form6251Lines
-  form8959?: Form8959Lines
-  form8960?: Form8960Lines
-  form8995?: Form8995Lines
-  capitalLossCarryover?: CapitalLossCarryoverLines
-  form461?: Form461Lines
-  form8582?: Form8582Lines
-  form8606?: Form8606Lines
-  form4797?: Form4797Lines
-  scheduleF?: ScheduleFLines
-  estimatedTaxPayments?: import('@/lib/finance/estimatedTaxPayments').EstimatedTaxPaymentsData
-  k1Docs?: K1ExportEntry[]
-  k3Docs?: K3ExportEntry[]
-  docs1099?: Doc1099ExportEntry[]
-  shortDividends?: ShortDividendSummary
 }

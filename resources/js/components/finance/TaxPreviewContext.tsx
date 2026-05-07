@@ -17,13 +17,13 @@ import { computeEstimatedTaxPayments, type EstimatedTaxPaymentsData } from '@/li
 import { extractK1Form461Disclosure, getK1PartnerName } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { buildTaxReturnForWorkbook, emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
+import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, TaxReturn1040, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
@@ -130,7 +130,6 @@ interface TaxPreviewContextValue {
   priorYearAgi: number
   /** Setter for priorYearAgi — persisted to localStorage per tax year. */
   setPriorYearAgi: Dispatch<SetStateAction<number>>
-  buildTaxReturn: () => TaxReturn1040
   setPayslips: Dispatch<SetStateAction<fin_payslip[]>>
   setPendingReviewCount: Dispatch<SetStateAction<number>>
   setW2Documents: Dispatch<SetStateAction<TaxDocument[]>>
@@ -762,32 +761,6 @@ export function TaxPreviewProvider({
     })
   }, [isMarried, priorYearAgi, priorYearTax, taxFacts, year])
 
-  const buildTaxReturn = useCallback(() => buildTaxReturnForWorkbook({
-    year,
-    taxFacts,
-    isMarried,
-    reviewedW2Docs,
-    reviewedK1Docs,
-    reviewed1099Docs,
-    form8959,
-    form461: form461Lines,
-    capitalLossCarryover,
-    estimatedTaxPayments,
-    shortDividendSummary,
-  }), [
-    year,
-    taxFacts,
-    isMarried,
-    reviewedW2Docs,
-    reviewedK1Docs,
-    reviewed1099Docs,
-    form8959,
-    form461Lines,
-    capitalLossCarryover,
-    estimatedTaxPayments,
-    shortDividendSummary,
-  ])
-
   const value = useMemo<TaxPreviewContextValue>(() => ({
     year,
     availableYears,
@@ -834,7 +807,6 @@ export function TaxPreviewProvider({
     setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
-    buildTaxReturn,
     setPayslips,
     setPendingReviewCount,
     setW2Documents,
@@ -888,7 +860,6 @@ export function TaxPreviewProvider({
     setPriorYearAgi,
     priorYearTax,
     setPriorYearTax,
-    buildTaxReturn,
     refreshAll,
   ])
 

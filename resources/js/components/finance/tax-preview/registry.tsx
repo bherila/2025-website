@@ -34,21 +34,6 @@ import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxable
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
-import {
-  buildEstimatedTaxSheet,
-  buildForm1116Sheet,
-  buildForm4952Sheet,
-  buildForm6251Sheet,
-  buildForm8582Sheet,
-  buildForm8949Sheet,
-  buildForm8995Sheet,
-  buildOverviewSheet,
-  buildScheduleBSheet,
-  buildScheduleCSheet,
-  buildScheduleDSheet,
-  buildScheduleESheet,
-  buildScheduleSESheet,
-} from '@/lib/finance/buildTaxWorkbook'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 
 import { useDockActions } from './DockActions'
@@ -639,11 +624,6 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: HomePlaceholder,
-    xlsx: {
-      sheetName: () => 'Overview',
-      order: 10,
-      build: buildOverviewSheet,
-    },
   },
   'form-1040': {
     id: 'form-1040',
@@ -738,11 +718,6 @@ export const formRegistry: FormRegistry = {
         { label: 'Div', value: sB.ordinaryDividendTotal },
       ]
     },
-    xlsx: {
-      sheetName: () => 'Schedule B',
-      order: 25,
-      build: buildScheduleBSheet,
-    },
   },
   'sch-d': {
     id: 'sch-d',
@@ -760,11 +735,6 @@ export const formRegistry: FormRegistry = {
       }
       return [{ label: 'Net G/L', value: sD.line16Combined }]
     },
-    xlsx: {
-      sheetName: () => 'Schedule D',
-      order: 40,
-      build: buildScheduleDSheet,
-    },
   },
   'sch-e': {
     id: 'sch-e',
@@ -781,11 +751,6 @@ export const formRegistry: FormRegistry = {
         return null
       }
       return [{ label: 'Total', value: sE.grandTotal }]
-    },
-    xlsx: {
-      sheetName: () => 'Schedule E',
-      order: 50,
-      build: buildScheduleESheet,
     },
   },
   'sch-f': {
@@ -816,11 +781,6 @@ export const formRegistry: FormRegistry = {
       }
       return [{ label: 'SE Tax', value: sse.seTax }]
     },
-    xlsx: {
-      sheetName: () => 'Schedule SE',
-      order: 60,
-      build: buildScheduleSESheet,
-    },
   },
   'form-4952': {
     id: 'form-4952',
@@ -831,11 +791,6 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4952Adapter,
-    xlsx: {
-      sheetName: () => 'Form 4952',
-      order: 80,
-      build: buildForm4952Sheet,
-    },
   },
   'form-6251': {
     id: 'form-6251',
@@ -853,11 +808,6 @@ export const formRegistry: FormRegistry = {
       }
       return [{ label: 'AMT', value: f6251.amt }]
     },
-    xlsx: {
-      sheetName: () => 'Form 6251',
-      order: 90,
-      build: buildForm6251Sheet,
-    },
   },
   'form-8995': {
     id: 'form-8995',
@@ -874,11 +824,6 @@ export const formRegistry: FormRegistry = {
         return null
       }
       return [{ label: 'QBI Ded.', value: f8995.deduction }]
-    },
-    xlsx: {
-      sheetName: () => 'Form 8995',
-      order: 110,
-      build: buildForm8995Sheet,
     },
   },
   // Stub adapters — pending full migration. Render placeholder cards so
@@ -910,11 +855,6 @@ export const formRegistry: FormRegistry = {
       (state.scheduleCData?.years ?? []).some(
         (y) => y.year === state.year && y.entities.length > 0,
       ),
-    xlsx: {
-      sheetName: () => 'Schedule C',
-      order: 30,
-      build: buildScheduleCSheet,
-    },
   },
   'form-1116': {
     id: 'form-1116',
@@ -952,11 +892,6 @@ export const formRegistry: FormRegistry = {
       create: () => ({ key: 'passive', label: 'Passive' }),
       allowCreate: false,
     },
-    xlsx: {
-      sheetName: () => 'Form 1116',
-      order: 85,
-      build: buildForm1116Sheet,
-    },
   },
   'form-8582': {
     id: 'form-8582',
@@ -973,11 +908,6 @@ export const formRegistry: FormRegistry = {
         return null
       }
       return [{ label: 'Net', value: f8582.netPassiveResult }]
-    },
-    xlsx: {
-      sheetName: () => 'Form 8582',
-      order: 100,
-      build: buildForm8582Sheet,
     },
   },
   'form-4797': {
@@ -1016,11 +946,6 @@ export const formRegistry: FormRegistry = {
       create: () => ({ key: 'all', label: 'All' }),
       allowCreate: false,
     },
-    xlsx: {
-      sheetName: () => 'Form 8949',
-      order: 39,
-      build: buildForm8949Sheet,
-    },
     hasData: (state) => buildCapitalGainsReportFromTaxDocuments(state.reviewed1099Docs).form8949Lots.length > 0,
   },
   'action-items': {
@@ -1041,11 +966,6 @@ export const formRegistry: FormRegistry = {
     presentation: 'app',
     component: EstimateAdapter,
     wide: true,
-    xlsx: {
-      sheetName: () => 'Est. Tax Payments',
-      order: 200,
-      build: buildEstimatedTaxSheet,
-    },
   },
   'w2-summary': {
     id: 'w2-summary',

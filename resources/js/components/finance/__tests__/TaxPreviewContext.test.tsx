@@ -554,7 +554,6 @@ describe('TaxPreviewContext', () => {
     act(() => result.current.setTaxFacts(makeTaxFacts()))
 
     expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
-    expect(result.current.buildTaxReturn().schedule1?.partI.line8z_otherIncome).toBe(42)
   })
 
   it('preserves unknown Schedule SE source types from backend facts', async () => {
@@ -572,7 +571,7 @@ describe('TaxPreviewContext', () => {
 
     act(() => result.current.setTaxFacts(facts))
 
-    expect(result.current.buildTaxReturn().scheduleSE?.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
+    expect(result.current.taxFacts?.scheduleSE.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
   })
 
   it('does not show loading spinner on background polls', async () => {
@@ -767,7 +766,7 @@ describe('TaxPreviewContext', () => {
       result.current.setPriorYearAgi(200_000)
     })
 
-    expect(result.current.buildTaxReturn().estimatedTaxPayments).toBeUndefined()
+    expect(result.current.estimatedTaxPayments).toBeUndefined()
   })
 
   it('includes flat-dict broker_1099 income in income1099', async () => {
@@ -880,18 +879,9 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.buildTaxReturn().form1040).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        line: '8',
-        label: 'Additional income from Schedule 1',
-        value: 900,
-      }),
-      expect.objectContaining({
-        line: '9',
-        value: 900,
-      }),
-    ]))
-    expect(result.current.buildTaxReturn().scheduleE?.grandTotal).toBe(0)
+    expect(result.current.taxFacts?.form1040.line8).toBe(900)
+    expect(result.current.taxFacts?.form1040.line9).toBe(900)
+    expect(result.current.taxFacts?.scheduleE.grandTotal).toBe(0)
   })
 
   it('routes K-1 Schedule B and Schedule E amounts plus 1099-R distributions into Form 1040 and withholding summaries', async () => {
@@ -991,32 +981,22 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.buildTaxReturn().form1040).toEqual(expect.arrayContaining([
-      expect.objectContaining({ line: '2b', value: 200 }),
-      expect.objectContaining({ line: '3b', value: 300 }),
-      expect.objectContaining({ line: '4a', value: 10_000 }),
-      expect.objectContaining({ line: '4b', value: 8_000 }),
-      expect.objectContaining({ line: '5a', value: 7_000 }),
-      expect.objectContaining({ line: '5b', value: 6_500 }),
-      expect.objectContaining({ line: '8', value: 1_000 }),
-      expect.objectContaining({ line: '9', value: 16_000 }),
-      expect.objectContaining({ line: '10', value: 706.48 }),
-      expect.objectContaining({ line: '11', value: 15_293.52 }),
-    ]))
+    expect(result.current.taxFacts?.form1040).toEqual(expect.objectContaining({
+      line2b: 200,
+      line3b: 300,
+      line4a: 10_000,
+      line4b: 8_000,
+      line5a: 7_000,
+      line5b: 6_500,
+      line8: 1_000,
+      line9: 16_000,
+      line10: 706.48,
+      line11: 15_293.52,
+      line25d: 1_900,
+    }))
 
-    expect(result.current.buildTaxReturn().form8960?.taxableInterest).toBe(200)
-    expect(result.current.buildTaxReturn().form8960?.ordinaryDividends).toBe(300)
-    expect(result.current.buildTaxReturn().overviewSections).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        heading: 'Estimated Tax Positions',
-          rows: expect.arrayContaining([
-            expect.objectContaining({
-              item: 'Federal withholding',
-              amount: 1_900,
-            }),
-          ]),
-      }),
-    ]))
+    expect(result.current.taxFacts?.form8960.taxableInterest).toBe(200)
+    expect(result.current.taxFacts?.form8960.ordinaryDividends).toBe(300)
   })
 
   it('aggregates Schedule 1 other income from broker_1099 1099-MISC child links by default', async () => {
@@ -1130,9 +1110,9 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.buildTaxReturn().scheduleSE?.netEarningsFromSE).toBe(10_000)
-    expect(result.current.buildTaxReturn().schedule2?.selfEmploymentTax).toBeCloseTo(1_412.96, 2)
-    expect(result.current.buildTaxReturn().schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
+    expect(result.current.taxFacts?.scheduleSE.netEarningsFromSE).toBe(10_000)
+    expect(result.current.taxFacts?.scheduleSE.seTax).toBeCloseTo(1_412.96, 2)
+    expect(result.current.taxFacts?.form1040.line23).toBeCloseTo(1_412.96, 2)
   })
 
   it('combines wage and self-employment additional Medicare tax on Schedule 2', async () => {
@@ -1160,8 +1140,8 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.buildTaxReturn().form8959?.additionalTax).toBe(90)
-    expect(result.current.buildTaxReturn().schedule2?.additionalMedicareTax).toBe(102)
+    expect(result.current.form8959.additionalTax).toBe(90)
+    expect(result.current.taxFacts?.scheduleSE.additionalMedicareTax).toBe(12)
   })
 
   it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {
@@ -1181,7 +1161,7 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.buildTaxReturn().scheduleSE).toBeUndefined()
+    expect(result.current.taxFacts?.scheduleSE).toBeUndefined()
   })
 
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
@@ -1256,8 +1236,8 @@ describe('TaxPreviewContext', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     await waitFor(() => expect(result.current.palCarryforwards).toHaveLength(1))
 
-    expect(result.current.buildTaxReturn().form8582?.activities[0]?.priorYearUnallowed).toBe(-4000)
-    expect(result.current.buildTaxReturn().form8582?.totalPriorYearUnallowed).toBe(-4000)
+    expect(result.current.taxFacts?.form8582.activities[0]?.priorYearUnallowed).toBe(-4000)
+    expect(result.current.taxFacts?.form8582.totalPriorYearUnallowed).toBe(-4000)
   })
 
   it('feeds prior-year capital loss carryovers into current-year Schedule D', async () => {
@@ -1322,7 +1302,7 @@ describe('TaxPreviewContext', () => {
       shortTermCarryover: 7000,
       longTermCarryover: 5000,
     }))
-    expect(result.current.buildTaxReturn().scheduleD).toBeUndefined()
+    expect(result.current.taxFacts).toBeNull()
   })
 
   it('loads capital loss carryovers from the nearest available prior tax year', async () => {

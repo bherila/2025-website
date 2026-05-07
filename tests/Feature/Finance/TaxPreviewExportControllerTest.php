@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -15,8 +16,7 @@ class TaxPreviewExportControllerTest extends TestCase
     public function test_endpoint_requires_authentication(): void
     {
         $response = $this->postJson('/api/finance/tax-preview/export-xlsx', [
-            'filename' => 'test.xlsx',
-            'sheets' => [['name' => 'Sheet1', 'rows' => [['description' => 'Test']]]],
+            'year' => 2025,
         ]);
 
         $response->assertUnauthorized();
@@ -24,21 +24,33 @@ class TaxPreviewExportControllerTest extends TestCase
 
     public function test_authenticated_endpoint_returns_valid_xlsx(): void
     {
-        $payload = [
-            'filename' => 'tax-preview-2025.xlsx',
-            'sheets' => [
-                [
-                    'name' => 'Form 1040',
-                    'rows' => [
-                        ['description' => 'Part I — Income', 'isHeader' => true],
-                        ['line' => '1a', 'description' => 'Wages', 'amount' => 100000],
-                        ['line' => '9', 'description' => 'Total income', 'amount' => 100000, 'isTotal' => true],
-                    ],
-                ],
+        $user = User::factory()->create();
+        FileForTaxDocument::create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'form_type' => 'w2',
+            'original_filename' => 'w2.pdf',
+            'stored_filename' => 'w2.pdf',
+            's3_path' => '',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 0,
+            'file_hash' => str_repeat('c', 64),
+            'uploaded_by_user_id' => $user->id,
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'employer_name' => 'Wage Co',
+                'box1_wages' => 100000,
+                'box2_fed_tax' => 15000,
+                'box3_social_security_wages' => 100000,
+                'box5_medicare_wages' => 100000,
             ],
+        ]);
+
+        $payload = [
+            'year' => 2025,
+            'filename' => 'tax-preview-2025.xlsx',
         ];
 
-        $user = User::factory()->create();
         $response = $this->actingAs($user)->postJson('/api/finance/tax-preview/export-xlsx', $payload);
 
         $response->assertOk();
@@ -51,13 +63,15 @@ class TaxPreviewExportControllerTest extends TestCase
         @unlink($tempPath);
 
         $sheet = $spreadsheet->getSheet(0);
+        $this->assertSame('Overview', $sheet->getTitle());
         $this->assertNull($sheet->getCell('A2')->getValue());
-        $this->assertSame('Part I — Income', $sheet->getCell('B2')->getValue());
+        $this->assertSame('Backend tax facts summary', $sheet->getCell('B2')->getValue());
         $this->assertNull($sheet->getCell('C2')->getValue());
-        $this->assertSame('Wages', $sheet->getCell('B3')->getValue());
+        $this->assertSame('Form 1040 line 9 - total income', $sheet->getCell('B3')->getValue());
         $this->assertSame(100000.0, (float) $sheet->getCell('C3')->getCalculatedValue());
         $this->assertTrue($sheet->getStyle('B2')->getFont()->getBold());
-        $this->assertTrue($sheet->getStyle('B4')->getFont()->getBold());
-        $this->assertSame(Border::BORDER_THIN, $sheet->getStyle('B4')->getBorders()->getTop()->getBorderStyle());
+        $this->assertTrue($sheet->getStyle('B7')->getFont()->getBold());
+        $this->assertSame(Border::BORDER_THIN, $sheet->getStyle('B7')->getBorders()->getTop()->getBorderStyle());
+        $this->assertNotNull($spreadsheet->getSheetByName('Form 1040'));
     }
 }

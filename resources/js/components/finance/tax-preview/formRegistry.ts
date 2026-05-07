@@ -1,8 +1,5 @@
 import type { ComponentType } from 'react'
 
-import type { TaxReturn1040 } from '@/types/finance/tax-return'
-import type { XlsxSheet } from '@/types/finance/xlsx-export'
-
 import type { useTaxPreview } from '../TaxPreviewContext'
 
 export type TaxPreviewState = ReturnType<typeof useTaxPreview>
@@ -94,16 +91,6 @@ export interface FormRegistryEntry {
    * When both are absent, always considered active.
    */
   hasData?: (state: TaxPreviewState) => boolean
-  /**
-   * XLSX export contribution. When present, `buildTaxWorkbook` invokes
-   * `build` once per instance (or once total for singletons) and includes
-   * non-empty sheets in the exported workbook, ordered by `order`.
-   */
-  xlsx?: {
-    sheetName: (instance?: InstanceRef) => string
-    order?: number
-    build: (taxReturn: TaxReturn1040, instance?: InstanceRef) => XlsxSheet | null
-  }
 }
 
 export type FormRegistry = Record<FormId, FormRegistryEntry>
