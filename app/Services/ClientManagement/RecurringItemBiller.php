@@ -152,6 +152,7 @@ class RecurringItemBiller
 
         // Find the first incidence year (may be before $start — we'll filter)
         $year = (int) $start->year - 1;
+        $hasEmitted = false;
 
         while (true) {
             $date = Carbon::create($year, $month, min($anchorDay, 28))->startOfDay();
@@ -162,6 +163,13 @@ class RecurringItemBiller
 
             if ($date->gte($start)) {
                 $incidences[] = $date->copy();
+                $hasEmitted = true;
+            } elseif (! $hasEmitted && $start->eq($itemStart) && $date->year === $itemStart->year) {
+                $nextDate = $date->copy()->addMonths($periodMonths);
+                if ($nextDate->gt($start)) {
+                    $incidences[] = $start->copy();
+                    $hasEmitted = true;
+                }
             }
 
             // Advance by the period

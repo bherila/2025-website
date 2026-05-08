@@ -102,6 +102,19 @@ class BillingCycleResolverTest extends TestCase
         $this->assertEquals('2024-10-01', $starts[3]->toDateString());
     }
 
+    public function test_cycle_starts_between_excludes_containing_cycle_before_lower_bound(): void
+    {
+        $starts = iterator_to_array(BillingCadence::Quarterly->cycleStartsBetween(
+            Carbon::parse('2024-02-15'),
+            Carbon::parse('2024-12-31')
+        ), false);
+
+        $this->assertCount(3, $starts);
+        $this->assertEquals('2024-04-01', $starts[0]->toDateString());
+        $this->assertEquals('2024-07-01', $starts[1]->toDateString());
+        $this->assertEquals('2024-10-01', $starts[2]->toDateString());
+    }
+
     // =========================================================================
     // Monthly cadence cycles
     // =========================================================================
@@ -116,8 +129,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-03-31'))
-        , false);
+            Carbon::parse('2024-03-31')), false);
 
         $this->assertCount(3, $cycles);
         $this->assertEquals('2024-01-15', $cycles[0]->start->toDateString());
@@ -142,8 +154,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-06-30'))
-        , false);
+            Carbon::parse('2024-06-30')), false);
 
         $this->assertCount(2, $cycles);
         $this->assertEquals('2024-01-01', $cycles[0]->start->toDateString());
@@ -164,8 +175,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-06-30'))
-        , false);
+            Carbon::parse('2024-06-30')), false);
 
         // First cycle: Feb 15 – Mar 31 (prorated)
         $this->assertEquals('2024-02-15', $cycles[0]->start->toDateString());
@@ -179,6 +189,24 @@ class BillingCycleResolverTest extends TestCase
         $this->assertFalse($cycles[1]->isProrated);
     }
 
+    public function test_quarterly_full_period_mid_cycle_start_is_not_prorated(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-02-15',
+            BillingCadence::Quarterly,
+            FirstCycleProration::FullPeriod
+        );
+
+        $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
+            $agreement,
+            Carbon::parse('2024-03-31')), false);
+
+        $this->assertCount(1, $cycles);
+        $this->assertEquals('2024-02-15', $cycles[0]->start->toDateString());
+        $this->assertEquals('2024-03-31', $cycles[0]->end->toDateString());
+        $this->assertFalse($cycles[0]->isProrated);
+    }
+
     public function test_quarterly_align_next_cycle_emits_stub_then_full_cycles(): void
     {
         $agreement = $this->makeAgreement(
@@ -189,8 +217,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-09-30'))
-        , false);
+            Carbon::parse('2024-09-30')), false);
 
         // Stub: Feb 15 – Mar 31
         $this->assertEquals('2024-02-15', $cycles[0]->start->toDateString());
@@ -217,8 +244,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-12-31'))
-        , false);
+            Carbon::parse('2024-12-31')), false);
 
         $this->assertCount(2, $cycles);
 
@@ -247,8 +273,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2025-12-31'))
-        , false);
+            Carbon::parse('2025-12-31')), false);
 
         $this->assertCount(2, $cycles);
         $this->assertEquals('2024-01-01', $cycles[0]->start->toDateString());
@@ -270,8 +295,7 @@ class BillingCycleResolverTest extends TestCase
 
         $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
             $agreement,
-            Carbon::parse('2024-12-31'))
-        , false);
+            Carbon::parse('2024-12-31')), false);
 
         $this->assertCount(1, $cycles);
         $this->assertEquals('2024-07-01', $cycles[0]->start->toDateString());

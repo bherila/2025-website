@@ -128,12 +128,17 @@ class BillingCycleResolver
     ): iterable {
         switch ($proration) {
             case FirstCycleProration::ProrateHours:
-            case FirstCycleProration::FullPeriod:
                 // Bill from activeDate to the end of the first standard cycle
                 $clippedEnd = $standardEnd->gt($ceiling) ? $ceiling->copy() : $standardEnd->copy();
                 $isProrated = $activeDate->gt($standardStart) || $clippedEnd->lt($standardEnd);
 
                 yield $this->makeCycle($activeDate->copy(), $clippedEnd, $isProrated);
+                break;
+
+            case FirstCycleProration::FullPeriod:
+                $clippedEnd = $standardEnd->gt($ceiling) ? $ceiling->copy() : $standardEnd->copy();
+
+                yield $this->makeCycle($activeDate->copy(), $clippedEnd, false);
                 break;
 
             case FirstCycleProration::AlignNextCycle:

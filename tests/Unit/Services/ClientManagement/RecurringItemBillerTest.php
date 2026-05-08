@@ -161,6 +161,29 @@ class RecurringItemBillerTest extends TestCase
         $this->assertCount(1, $lines);
     }
 
+    public function test_semi_annual_item_on_annual_cycle_produces_two_incidences(): void
+    {
+        $item = $this->makeItem(ChargeCadence::SemiAnnual, '2024-01-01', null, anchorDay: 1, anchorMonth: 2);
+        $agreement = $this->makeAgreement([$item]);
+
+        $lines = $this->biller->linesForCycle($agreement, Carbon::parse('2024-01-01'), Carbon::parse('2024-12-31'));
+
+        $this->assertCount(2, $lines);
+        $this->assertEquals('2024-02-01', $lines[0]['line_date']->toDateString());
+        $this->assertEquals('2024-08-01', $lines[1]['line_date']->toDateString());
+    }
+
+    public function test_periodic_item_bills_first_incidence_at_item_start_when_anchor_precedes_start(): void
+    {
+        $item = $this->makeItem(ChargeCadence::Annual, '2024-02-15', null, anchorDay: 1, anchorMonth: 1);
+        $agreement = $this->makeAgreement([$item]);
+
+        $lines = $this->biller->linesForCycle($agreement, Carbon::parse('2024-01-01'), Carbon::parse('2024-12-31'));
+
+        $this->assertCount(1, $lines);
+        $this->assertEquals('2024-02-15', $lines[0]['line_date']->toDateString());
+    }
+
     // =========================================================================
     // One-time charge cadence
     // =========================================================================

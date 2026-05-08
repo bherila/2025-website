@@ -71,7 +71,12 @@ enum BillingCadence: string
      */
     public function cycleStartsBetween(CarbonInterface $from, CarbonInterface $to): iterable
     {
-        $cursor = $this->cycleStart($from);
+        $fromDate = Carbon::instance($from)->startOfDay();
+        $cursor = $this->cycleStart($fromDate);
+
+        if ($cursor->lt($fromDate)) {
+            $cursor->addMonths($this->monthsInCycle());
+        }
 
         while ($cursor->lte($to)) {
             yield $cursor->copy();

@@ -75,11 +75,25 @@ return new class extends Migration
                 ->nullOnDelete();
         });
 
-        // Backfill existing invoices with invoice_kind = 'cadence_period'
+        // Backfill existing invoices with cadence-period metadata.
         DB::table('client_invoices')
             ->whereNull('invoice_kind')
             ->orWhere('invoice_kind', '')
             ->update(['invoice_kind' => 'cadence_period']);
+
+        DB::table('client_invoices')
+            ->whereNull('cycle_start')
+            ->whereNotNull('period_start')
+            ->update([
+                'cycle_start' => DB::raw('period_start'),
+            ]);
+
+        DB::table('client_invoices')
+            ->whereNull('cycle_end')
+            ->whereNotNull('period_end')
+            ->update([
+                'cycle_end' => DB::raw('period_end'),
+            ]);
     }
 
     /**
