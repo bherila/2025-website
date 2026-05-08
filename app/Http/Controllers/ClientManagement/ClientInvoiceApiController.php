@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClientManagement\StoreClientInvoiceRequest;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -86,20 +86,15 @@ class ClientInvoiceApiController extends Controller
     /**
      * Generate a new invoice.
      */
-    public function store(Request $request, ClientCompany $company): JsonResponse
+    public function store(StoreClientInvoiceRequest $request, ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
-
-        $request->validate([
-            'period_start' => 'required|date',
-            'period_end' => 'required|date|after:period_start',
-        ]);
 
         try {
             $invoice = $this->invoicingService->generateInvoice(
                 $company,
-                Carbon::parse($request->period_start),
-                Carbon::parse($request->period_end)
+                $request->periodStart(),
+                $request->periodEnd(),
             );
 
             return response()->json([

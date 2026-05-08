@@ -6,6 +6,7 @@ use App\Http\Controllers\AdminTaxNormalizationController;
 use App\Http\Controllers\Api\UserAiConfigurationController;
 use App\Http\Controllers\Api\UserAiModelsController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
+use App\Http\Controllers\ClientManagement\ClientAgreementRecurringItemApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
 use App\Http\Controllers\ClientManagement\ClientExpenseApiController;
@@ -247,6 +248,10 @@ Route::middleware(['web', 'auth'])->get('/client/mgmt/agreements/{id}', [ClientA
 Route::middleware(['web', 'auth'])->put('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'update']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/agreements/{id}/terminate', [ClientAgreementApiController::class, 'terminate']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'destroy']);
 
 // Client Invoice API routes (Admin)
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices', [ClientInvoiceApiController::class, 'index']);

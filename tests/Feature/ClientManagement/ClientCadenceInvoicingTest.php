@@ -4,6 +4,7 @@ namespace Tests\Feature\ClientManagement;
 
 use App\Enums\ClientManagement\BillingCadence;
 use App\Enums\ClientManagement\ChargeCadence;
+use App\Enums\ClientManagement\FirstCycleProration;
 use App\Enums\ClientManagement\InvoiceKind;
 use App\Enums\ClientManagement\InvoiceLineType;
 use App\Models\ClientManagement\ClientAgreement;
@@ -129,6 +130,103 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_prorated_first_cycle_scales_retainer_hours_and_fee_by_covered_days(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'first_cycle_proration' => FirstCycleProration::ProrateHours->value,
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'active_date' => Carbon::parse('2026-02-15'),
+            ]);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals(15.0, (float) $invoice->retainer_hours_included);
+
+            $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
+            $this->assertNotNull($retainerLine);
+            $this->assertEquals(1500.0, (float) $retainerLine->line_total);
+            $this->assertEquals(15.0, (float) $retainerLine->hours);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_align_next_cycle_stub_scales_retainer_hours_and_fee_by_covered_days(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'first_cycle_proration' => FirstCycleProration::AlignNextCycle->value,
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'active_date' => Carbon::parse('2026-02-15'),
+            ]);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals(15.0, (float) $invoice->retainer_hours_included);
+
+            $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
+            $this->assertNotNull($retainerLine);
+            $this->assertEquals(1500.0, (float) $retainerLine->line_total);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_full_period_first_cycle_keeps_full_touched_month_retainer(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'first_cycle_proration' => FirstCycleProration::FullPeriod->value,
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'active_date' => Carbon::parse('2026-02-15'),
+            ]);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals(20.0, (float) $invoice->retainer_hours_included);
+
+            $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
+            $this->assertNotNull($retainerLine);
+            $this->assertEquals(2000.0, (float) $retainerLine->line_total);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_recurring_items_are_added_to_cadence_invoice_idempotently(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));
@@ -187,6 +285,120 @@ class ClientCadenceInvoicingTest extends TestCase
             $this->company,
             Carbon::parse('2026-01-01'),
             Carbon::parse('2026-01-31'),
+            $agreement,
+        );
+    }
+
+    public function test_manual_exact_cycle_invoice_for_quarterly_agreement_is_allowed(): void
+    {
+        $agreement = $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2026-01-01'),
+            Carbon::parse('2026-03-31'),
+            $agreement,
+        );
+
+        $this->assertSame(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
+        $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
+        $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+    }
+
+    public function test_invoice_store_accepts_exact_cycle_shorthand(): void
+    {
+        $agreement = $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        $this->actingAs($this->admin)->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices", [
+            'cycle_start' => '2026-01-01',
+            'cycle_end' => '2026-03-31',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('message', 'Invoice generated successfully');
+
+        $invoice = ClientInvoice::query()
+            ->where('client_agreement_id', $agreement->id)
+            ->firstOrFail();
+
+        $this->assertSame(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
+        $this->assertEquals('2026-01-01', $invoice->cycle_start->toDateString());
+        $this->assertEquals('2026-03-31', $invoice->cycle_end->toDateString());
+    }
+
+    public function test_invoice_store_rejects_cycle_shorthand_that_does_not_match_cadence(): void
+    {
+        $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        $this->actingAs($this->admin)->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices", [
+            'cycle_start' => '2026-01-01',
+            'cycle_end' => '2026-01-31',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cycle_start']);
+    }
+
+    public function test_issued_cadence_invoice_rejects_regeneration(): void
+    {
+        $agreement = $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2026-01-01'),
+            Carbon::parse('2026-03-31'),
+            $agreement,
+        );
+        $invoice->issue();
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('already exists for this cadence cycle and cannot be modified');
+
+        $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2026-01-01'),
+            Carbon::parse('2026-03-31'),
+            $agreement,
+        );
+    }
+
+    public function test_overlapping_cadence_invoice_rejects_generation(): void
+    {
+        $agreement = $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        ClientInvoice::create([
+            'client_company_id' => $this->company->id,
+            'client_agreement_id' => $agreement->id,
+            'period_start' => Carbon::parse('2026-02-01'),
+            'period_end' => Carbon::parse('2026-02-28'),
+            'cycle_start' => Carbon::parse('2026-02-01'),
+            'cycle_end' => Carbon::parse('2026-02-28'),
+            'invoice_number' => 'INV-OVERLAP',
+            'invoice_total' => 0,
+            'status' => 'draft',
+            'invoice_kind' => InvoiceKind::CadencePeriod->value,
+        ]);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('already exists for an overlapping period');
+
+        $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2026-01-01'),
+            Carbon::parse('2026-03-31'),
             $agreement,
         );
     }

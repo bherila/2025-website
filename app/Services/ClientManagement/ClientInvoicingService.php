@@ -3,6 +3,7 @@
 namespace App\Services\ClientManagement;
 
 use App\Enums\ClientManagement\BillingCadence;
+use App\Enums\ClientManagement\FirstCycleProration;
 use App\Enums\ClientManagement\InvoiceKind;
 use App\Enums\ClientManagement\InvoiceLineType;
 use App\Models\ClientManagement\ClientAgreement;
@@ -82,9 +83,6 @@ class ClientInvoicingService
     /**
      * Generate invoices through the current cadence cycle.
      *
-     * Kept as the cadence-aware public entry point while
-     * generateAllMonthlyInvoices() remains for backwards compatibility.
-     *
      * @return array{
      *     generated: list<array<string, mixed>>,
      *     updated: list<array<string, mixed>>,
@@ -100,6 +98,12 @@ class ClientInvoicingService
      */
     public function generateAllInvoices(ClientCompany $company): array
     {
+        $agreement = $this->agreementForInvoiceGeneration($company);
+
+        if ($agreement->effectiveBillingCadence() !== BillingCadence::Monthly) {
+            return $this->generateAllCadenceInvoices($company, $agreement);
+        }
+
         return $this->generateAllMonthlyInvoices($company);
     }
 
@@ -115,13 +119,10 @@ class ClientInvoicingService
     {
         // Use active agreement if available; otherwise fall back to the most recently
         // terminated agreement so we can still issue post-termination invoices.
-        $agreement = $company->activeAgreement() ?? $company->mostRecentAgreement();
-        if (! $agreement) {
-            throw new \Exception('No agreement found for this client company.');
-        }
+        $agreement = $this->agreementForInvoiceGeneration($company);
 
         if ($agreement->effectiveBillingCadence() !== BillingCadence::Monthly) {
-            return $this->generateAllCadenceInvoices($company, $agreement);
+            throw new \Exception('generateAllMonthlyInvoices only supports monthly agreements. Use generateAllInvoices for cadence-aware generation.');
         }
 
         $generated = [];
@@ -882,40 +883,47 @@ class ClientInvoicingService
         $periodStart = $cycle->start->copy()->startOfDay();
         $periodEnd = $cycle->end->copy()->startOfDay();
 
-        $invoice = ClientInvoice::query()
-            ->where('client_company_id', $company->id)
-            ->where('client_agreement_id', $agreement->id)
-            ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-            ->whereDate('period_start', $periodStart->toDateString())
-            ->whereDate('period_end', $periodEnd->toDateString())
-            ->whereNotIn('status', ['void'])
-            ->first();
+        return DB::transaction(function () use ($company, $agreement, $cycle, $periodStart, $periodEnd): ClientInvoice {
+            ClientAgreement::query()
+                ->whereKey($agreement->getKey())
+                ->lockForUpdate()
+                ->first();
 
-        if ($invoice && $invoice->isIssued()) {
-            throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
-        }
+            $invoice = ClientInvoice::query()
+                ->where('client_company_id', $company->id)
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('period_start', $periodStart->toDateString())
+                ->whereDate('period_end', $periodEnd->toDateString())
+                ->whereNotIn('status', ['void'])
+                ->lockForUpdate()
+                ->first();
 
-        $overlappingInvoice = ClientInvoice::query()
-            ->where('client_company_id', $company->id)
-            ->whereNotIn('status', ['void'])
-            ->where(function ($query) use ($periodStart, $periodEnd): void {
-                $query->where('period_start', '<', $periodEnd)
-                    ->where('period_end', '>', $periodStart);
-            })
-            ->when($invoice, function ($query) use ($invoice): void {
-                $query->where('client_invoice_id', '!=', $invoice->client_invoice_id);
-            })
-            ->first();
+            if ($invoice && $invoice->isIssued()) {
+                throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
+            }
 
-        if ($overlappingInvoice) {
-            throw new \Exception(
-                "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period ".
-                "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). ".
-                'Please void the existing invoice before generating the cadence cycle.'
-            );
-        }
+            $overlappingInvoice = ClientInvoice::query()
+                ->where('client_company_id', $company->id)
+                ->whereNotIn('status', ['void'])
+                ->where(function ($query) use ($periodStart, $periodEnd): void {
+                    $query->where('period_start', '<', $periodEnd)
+                        ->where('period_end', '>', $periodStart);
+                })
+                ->when($invoice, function ($query) use ($invoice): void {
+                    $query->where('client_invoice_id', '!=', $invoice->client_invoice_id);
+                })
+                ->lockForUpdate()
+                ->first();
 
-        return DB::transaction(function () use ($company, $agreement, $cycle, $periodStart, $periodEnd, $invoice): ClientInvoice {
+            if ($overlappingInvoice) {
+                throw new \Exception(
+                    "An invoice (#{$overlappingInvoice->invoice_number}) already exists for an overlapping period ".
+                    "({$overlappingInvoice->period_start->format('M d, Y')} - {$overlappingInvoice->period_end->format('M d, Y')}). ".
+                    'Please void the existing invoice before generating the cadence cycle.'
+                );
+            }
+
             $agreement->loadMissing('recurringItems');
 
             if ($invoice) {
@@ -929,6 +937,9 @@ class ClientInvoicingService
                 ]);
                 $this->resetSystemGeneratedLines($invoice);
             } else {
+                // For cadence-period invoices the invoice period and cadence cycle match.
+                // Interim-overage invoices will use the same cycle columns while keeping
+                // their own narrower monthly period.
                 $invoice = ClientInvoice::create([
                     'client_company_id' => $company->id,
                     'client_agreement_id' => $agreement->id,
@@ -957,8 +968,9 @@ class ClientInvoicingService
                 ->orderBy('id')
                 ->get();
 
-            $retainerHours = round((float) $agreement->monthly_retainer_hours * $cycle->monthCount, 4);
-            $retainerFee = round((float) $agreement->monthly_retainer_fee * $cycle->monthCount, 2);
+            $retainerMultiplier = $this->cycleRetainerMultiplier($agreement, $cycle);
+            $retainerHours = round((float) $agreement->monthly_retainer_hours * $retainerMultiplier, 4);
+            $retainerFee = round((float) $agreement->monthly_retainer_fee * $retainerMultiplier, 2);
 
             $splitter = new TimeEntrySplitter;
             $plan = $splitter->allocateTimeEntries(
@@ -1022,9 +1034,9 @@ class ClientInvoicingService
                 'sort_order' => $sortOrder++,
             ]);
 
-            $this->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
             $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
             $this->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
+            $this->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
 
             $remainingCapacity = max(0.0, $retainerHours - $plan->totalPriorMonthRetainerHours);
             $deferredResult = (new DeferredBillingAllocator)->allocate($company, $periodEnd, $remainingCapacity);
@@ -1051,6 +1063,47 @@ class ClientInvoicingService
 
             return $invoice->fresh(['lineItems']);
         });
+    }
+
+    /**
+     * Use active agreement if available; otherwise fall back to the most
+     * recently terminated agreement so invoice generation can handle trailing
+     * post-termination work.
+     */
+    protected function agreementForInvoiceGeneration(ClientCompany $company): ClientAgreement
+    {
+        $agreement = $company->activeAgreement() ?? $company->mostRecentAgreement();
+        if (! $agreement) {
+            throw new \Exception('No agreement found for this client company.');
+        }
+
+        return $agreement;
+    }
+
+    protected function cycleRetainerMultiplier(ClientAgreement $agreement, BillingCycle $cycle): float
+    {
+        if (! $cycle->isProrated || $agreement->effectiveFirstCycleProration() === FirstCycleProration::FullPeriod) {
+            return (float) $cycle->monthCount;
+        }
+
+        $multiplier = 0.0;
+        $cursor = $cycle->start->copy()->startOfMonth();
+
+        while ($cursor->lte($cycle->end)) {
+            $monthStart = $cursor->copy()->startOfMonth();
+            $monthEnd = $cursor->copy()->endOfMonth()->startOfDay();
+            $coveredStart = $cycle->start->gt($monthStart) ? $cycle->start->copy() : $monthStart;
+            $coveredEnd = $cycle->end->lt($monthEnd) ? $cycle->end->copy() : $monthEnd;
+
+            if ($coveredStart->lte($coveredEnd)) {
+                $coveredDays = $coveredStart->diffInDays($coveredEnd) + 1;
+                $multiplier += $coveredDays / $monthStart->daysInMonth;
+            }
+
+            $cursor->addMonth()->startOfMonth();
+        }
+
+        return round($multiplier, 4);
     }
 
     /**
@@ -1098,6 +1151,16 @@ class ClientInvoicingService
     {
         if ($periodStart->isSameMonth($periodEnd)) {
             return $periodStart->format('Y-m');
+        }
+
+        if ($periodStart->isSameDay($periodStart->copy()->startOfQuarter())
+            && $periodEnd->isSameDay($periodStart->copy()->endOfQuarter()->startOfDay())) {
+            return $periodStart->format('Y').'-Q'.$periodStart->quarter;
+        }
+
+        if ($periodStart->isSameDay($periodStart->copy()->startOfYear())
+            && $periodEnd->isSameDay($periodStart->copy()->endOfYear()->startOfDay())) {
+            return $periodStart->format('Y');
         }
 
         return $periodStart->format('Y-m').'..'.$periodEnd->format('Y-m');
