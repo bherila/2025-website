@@ -262,6 +262,8 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
       scheduleCData={state.scheduleCData?.years ?? []}
       reviewed1099Docs={state.reviewed1099Docs}
       taxFacts={state.taxFacts?.scheduleC ?? null}
+      form8829Facts={state.taxFacts?.form8829 ?? null}
+      onRefresh={() => state.refreshAll({ includeTaxFacts: true })}
     />
   )
 }

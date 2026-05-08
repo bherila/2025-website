@@ -64,6 +64,9 @@ enum TaxFactSourceType: string
     case Form1040ScheduleD = 'form_1040_schedule_d';
     case Form1040StandardDeduction = 'form_1040_standard_deduction';
     case Form8959AdditionalMedicareWithholding = 'form_8959_additional_medicare_withholding';
+    case Form8829HomeOfficeExpense = 'form_8829_home_office_expense';
+    case Form8829PriorYearCarryforward = 'form_8829_prior_year_carryforward';
+    case Form8829SimplifiedMethod = 'form_8829_simplified_method';
     case Form4797PartI1231Gain = 'form_4797_part_i_1231_gain';
     case Form4797PartI1231Loss = 'form_4797_part_i_1231_loss';
     case Form4797PartIIOrdinaryGain = 'form_4797_part_ii_ordinary_gain';
@@ -87,6 +90,7 @@ enum TaxFactSourceType: string
     case Schedule3UserEnteredCredit = 'schedule_3_user_entered_credit';
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
     case ScheduleCGrossReceipts = 'schedule_c_gross_receipts';
+    case ScheduleCReturnsAndAllowances = 'schedule_c_returns_and_allowances';
     case ScheduleCHomeOfficeAllowable = 'schedule_c_home_office_allowable';
     case ScheduleCHomeOfficeClaimed = 'schedule_c_home_office_claimed';
     case ScheduleCHomeOfficeDisallowed = 'schedule_c_home_office_disallowed';
@@ -111,6 +115,10 @@ enum TaxFactSourceType: string
     case UserDeductionRealEstateTax = 'user_deduction_real_estate_tax';
     case UserDeductionSalesTax = 'user_deduction_sales_tax';
     case UserDeductionStateTax = 'user_deduction_state_tax';
+    case UserAdjustment = 'user_adjustment';
+    case UserFollowUpFlag = 'user_follow_up_flag';
+    case UserOverride = 'user_override';
+    case UserSupportingDetail = 'user_supporting_detail';
     case W2StateTaxWithheld = 'w2_state_tax_withheld';
     case W2Wages = 'w2_wages';
     case W2FederalWithholding = 'w2_federal_withholding';

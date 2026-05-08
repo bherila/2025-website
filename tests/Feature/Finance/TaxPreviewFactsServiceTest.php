@@ -1409,6 +1409,9 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->tagTransaction($account->acct_id, $incomeTag, '2025-02-01', 2000);
         $this->tagTransaction($account->acct_id, $expenseTag, '2025-02-15', -1000);
         $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-03-01', -100);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'prior_year_op_carryover' => 200,
+        ]);
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
         $priorYearFacts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024, 'scheduleC');
@@ -1418,9 +1421,84 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleC']['homeOfficeDisallowed']);
         $this->assertSame(700.0, $facts['scheduleC']['netProfit']);
         $priorYearHomeOfficeSources = collect($priorYearFacts['scheduleC']['entities'][0]['homeOfficeSources']);
-        $this->assertSame(500.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_claimed')['amount']);
+        $this->assertSame(500.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'form_8829_home_office_expense')['amount']);
         $this->assertSame(-200.0, $priorYearHomeOfficeSources->firstWhere('sourceType', 'schedule_c_home_office_disallowed')['amount']);
         $this->assertSame(300.0, $priorYearHomeOfficeSources->sum('amount'));
+    }
+
+    public function test_form_8829_regular_method_applies_inputs_and_feeds_schedule_c_line_30(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Home Office LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 10000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -12000);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'office_sqft' => 150,
+            'home_sqft' => 1200,
+            'prior_year_op_carryover' => 12738,
+            'prior_year_op_carryover_ca' => 200,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $form8829Entity = $facts['form8829']['entities'][0];
+
+        $this->assertSame(12.5, $form8829Entity['businessUsePercentage']);
+        $this->assertSame(1500.0, $form8829Entity['line25AllowableIndirectExpenses']);
+        $this->assertSame(10000.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
+        $this->assertSame(4238.0, $form8829Entity['line43CarryoverToNextYear']);
+        $this->assertSame(10000.0, $facts['scheduleC']['homeOfficeAllowable']);
+        $this->assertSame(0.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_schedule_c_positive_expense_rows_are_flagged_and_excluded(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Rent Review LLC');
+        $expenseTag = $this->createScheduleCTag($user->id, $entityId, 'sce_rent_property', 'Rent');
+
+        $this->tagTransaction($account->acct_id, $expenseTag, '2025-01-01', -43200);
+        $this->tagTransaction($account->acct_id, $expenseTag, '2025-02-01', 3600);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+        $entity = $facts['scheduleC']['entities'][0];
+
+        $this->assertSame(43200.0, $entity['expenses']);
+        $this->assertSame(43200.0, $facts['scheduleC']['expensesTotal']);
+        $this->assertCount(1, $entity['flaggedExpenseRows']);
+        $this->assertSame(3600.0, $entity['flaggedExpenseRows'][0]['amount']);
+    }
+
+    public function test_schedule_c_line_override_replaces_computed_value_and_adds_source(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Override LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 10000);
+        DB::table('fin_tax_line_adjustments')->insert([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'form' => 'schedule_c',
+            'entity_id' => $entityId,
+            'line_ref' => 'line_31',
+            'kind' => 'override',
+            'amount' => 9000,
+            'description' => 'Filed return override.',
+            'status' => 'applied',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(9000.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame(9000.0, $facts['schedule1']['line3Total']);
     }
 
     public function test_schedule_se_uses_schedule_c_k1_and_w2_inputs_and_feeds_schedule1_line15(): void
@@ -2491,6 +2569,29 @@ class TaxPreviewFactsServiceTest extends TestCase
             't_id' => $transactionId,
             'tag_id' => $tagId,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createForm8829Input(int $userId, int $entityId, int $year, array $overrides = []): void
+    {
+        DB::table('fin_form_8829_inputs')->insert(array_merge([
+            'user_id' => $userId,
+            'employment_entity_id' => $entityId,
+            'tax_year' => $year,
+            'method' => 'regular',
+            'office_sqft' => null,
+            'home_sqft' => null,
+            'months_used' => 12,
+            'prior_year_op_carryover' => 0,
+            'prior_year_op_carryover_ca' => 0,
+            'prior_year_depreciation_carryover' => 0,
+            'prior_year_depreciation_carryover_ca' => 0,
+            'notes' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $overrides));
     }
 
     /**

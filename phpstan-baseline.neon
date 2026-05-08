@@ -1267,18 +1267,6 @@ parameters:
 			path: app/Models/FinanceTool/FinAccounts.php
 
 		-
-			message: '#^Method App\\Models\\FinanceTool\\FinEmploymentEntity\:\:payslips\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinEmploymentEntity.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinEmploymentEntity\:\:tags\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinEmploymentEntity.php
-
-		-
 			message: '#^Method App\\Models\\FinanceTool\\FinPayslipDeposit\:\:payslip\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
 			identifier: missingType.generics
 			count: 1

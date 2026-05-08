@@ -106,7 +106,7 @@ class ScheduleCSummaryService
 
             $amount = in_array($meta['category'], ['sch_c_income', 'other', 'w2_income'], true)
                 ? (float) $row->t_amt
-                : abs((float) $row->t_amt);
+                : ((float) $row->t_amt < 0.0 ? abs((float) $row->t_amt) : 0.0);
 
             $entityId = $tagEntityMap[$row->tag_id] ?? null;
             $entityKey = $entityId ?? 'unassigned';
@@ -126,8 +126,23 @@ class ScheduleCSummaryService
                     'schedule_c_income' => [],
                     'schedule_c_expense' => [],
                     'schedule_c_home_office' => [],
+                    'flagged_expense_rows' => [],
                     'ordinary_income' => [],
                     'w2_income' => [],
+                ];
+            }
+
+            if (in_array($meta['category'], ['sch_c_expense', 'sch_c_home_office'], true) && (float) $row->t_amt > 0.0) {
+                $byYear[$year][$entityKey]['flagged_expense_rows'][] = [
+                    't_id' => $row->t_id,
+                    't_date' => substr($row->t_date, 0, 10),
+                    't_description' => $row->t_description,
+                    't_amt' => (float) $row->t_amt,
+                    't_account' => $row->t_account,
+                    'tax_characteristic' => $taxChar,
+                    'label' => $meta['label'],
+                    'category' => $meta['category'],
+                    'reason' => 'Positive amount tagged as a Schedule C expense; excluded from computed expenses until reviewed.',
                 ];
             }
 

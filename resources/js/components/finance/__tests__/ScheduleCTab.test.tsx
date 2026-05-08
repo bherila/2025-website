@@ -1,10 +1,37 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
+
+import { fetchWrapper } from '@/fetchWrapper'
 
 import ScheduleCTab from '../ScheduleCTab'
 
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+  },
+}))
+
+const mockedFetchWrapper = fetchWrapper as jest.Mocked<typeof fetchWrapper>
+
 describe('ScheduleCTab', () => {
-  it('renders Schedule C income routed from reviewed 1099 documents', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockedFetchWrapper.get.mockResolvedValue({
+      method: 'regular',
+      office_sqft: 120,
+      home_sqft: 1200,
+      months_used: 12,
+      prior_year_op_carryover: 0,
+      prior_year_op_carryover_ca: 0,
+      prior_year_depreciation_carryover: 0,
+      prior_year_depreciation_carryover_ca: 0,
+      notes: null,
+    })
+  })
+
+  it('renders Schedule C income routed from reviewed 1099 documents', async () => {
     render(
       <ScheduleCTab
         selectedYear={2024}
@@ -91,5 +118,9 @@ describe('ScheduleCTab', () => {
     expect(screen.getByText('Total 1099 income routed to Schedule C')).toBeInTheDocument()
     expect(screen.getAllByText('$2,300')).not.toHaveLength(0)
     expect(screen.getByText('1099 gross receipts ($2,300.00) should reconcile with transaction-based gross receipts below.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockedFetchWrapper.get).toHaveBeenCalledWith('/api/finance/form-8829?entity_id=1&year=2024')
+    })
+    expect(await screen.findByDisplayValue('120')).toBeInTheDocument()
   })
 })
