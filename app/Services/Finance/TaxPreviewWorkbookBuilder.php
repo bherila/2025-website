@@ -318,7 +318,7 @@ class TaxPreviewWorkbookBuilder
     private function lineFromPath(string $path): string
     {
         $parts = explode('.', $path);
-        $last = end($parts);
+        $last = $parts[count($parts) - 1];
 
         if (preg_match('/^line([0-9]+[a-z]?)$/i', $last, $matches) === 1) {
             return $matches[1];
@@ -333,12 +333,35 @@ class TaxPreviewWorkbookBuilder
 
     private function isTotalPath(string $path): bool
     {
-        $lower = strtolower($path);
+        $last = $this->lastPathSegment($path);
+        $lastLower = strtolower($last);
 
-        return str_contains($lower, 'total')
-            || str_contains($lower, 'tax')
-            || str_contains($lower, 'deduction')
-            || str_contains($lower, 'income');
+        if (str_contains($lastLower, 'total')) {
+            return true;
+        }
+
+        return in_array($last, [
+            'grandTotal',
+            'line9',
+            'line15',
+            'line16',
+            'line21',
+            'line24',
+            'line25d',
+            'line33',
+            'line34',
+            'line37',
+            'seTax',
+            'amt',
+            'deduction',
+        ], true);
+    }
+
+    private function lastPathSegment(string $path): string
+    {
+        $parts = explode('.', $path);
+
+        return $parts[count($parts) - 1];
     }
 
     private function stringValue(mixed $value): string

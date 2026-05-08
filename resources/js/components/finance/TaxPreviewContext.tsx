@@ -17,7 +17,7 @@ import { computeEstimatedTaxPayments, type EstimatedTaxPaymentsData } from '@/li
 import { extractK1Form461Disclosure, getK1PartnerName } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDDataFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
+import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDAggregatesForForm461FromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -699,12 +699,16 @@ export function TaxPreviewProvider({
   }, [isMarried, medicareWages, reviewedW2Docs])
 
   const form461Lines = useMemo<Form461Lines>(() => {
+    const scheduleCFacts = taxFacts?.scheduleC
+    const scheduleEFacts = taxFacts?.scheduleE
+    const scheduleDFacts = taxFacts?.scheduleD ?? emptyScheduleDFacts()
+
     const eblData = form461({
       taxYear: year,
       isSingle: !isMarried,
-      schedule1_line3: taxFacts?.scheduleC.netProfit ?? 0,
-      schedule1_line5: taxFacts?.scheduleE.grandTotal ?? 0,
-      scheduleDData: scheduleDDataFromFacts(taxFacts?.scheduleD ?? emptyScheduleDFacts()),
+      schedule1_line3: scheduleCFacts?.netProfit ?? 0,
+      schedule1_line5: scheduleEFacts?.grandTotal ?? 0,
+      scheduleDData: scheduleDAggregatesForForm461FromFacts(scheduleDFacts),
       override_f461_line15: null,
     })
     const k1Disclosures = structuredK1Docs.flatMap(({ doc, data }) => {

@@ -1657,6 +1657,62 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(3, count($form1040['line8Sources']));
     }
 
+    public function test_form1040_line8_equals_schedule1_part_i_total(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $scheduleCEntityId = $this->createEmploymentEntity($user->id, 'Line 8 Schedule C LLC');
+        $scheduleCIncomeTag = $this->createScheduleCTag($user->id, $scheduleCEntityId, 'business_income', 'Consulting income');
+        $scheduleCExpenseTag = $this->createScheduleCTag($user->id, $scheduleCEntityId, 'sce_office_expenses', 'Office expense');
+
+        $this->tagTransaction($account->acct_id, $scheduleCIncomeTag, '2025-02-01', 1000);
+        $this->tagTransaction($account->acct_id, $scheduleCExpenseTag, '2025-03-01', -100);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 50000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_g',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'State Agency',
+                'box1_unemployment' => 1500,
+                'box2_state_local_refunds' => 300,
+            ],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_misc',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Prize Payer', 'box3_other_income' => 200],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'Partnership', '1' => '600']),
+        ]);
+        $this->createUserDeduction($user->id, 'form4797_part_ii_ordinary_gain', 400, 'Ordinary gain');
+        $this->createUserDeduction($user->id, 'schedule_f_gross_income', 1200, 'Farm gross income');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $form1040 = $facts['form1040'];
+        $schedule1 = $facts['schedule1'];
+
+        $expectedLine8 = array_sum([
+            $schedule1['line1aTotal'],
+            $schedule1['line2aTotal'],
+            $schedule1['line3Total'],
+            $schedule1['line4Total'],
+            $schedule1['line5Total'],
+            $schedule1['line6Total'],
+            $schedule1['line7Total'],
+            $schedule1['line9TotalOtherIncome'],
+        ]);
+
+        $this->assertSame(5100.0, $expectedLine8);
+        $this->assertSame($expectedLine8, $form1040['line8']);
+    }
+
     public function test_form1040_line12_uses_standard_or_itemized_deduction_by_filing_status(): void
     {
         $singleUser = $this->createUser();

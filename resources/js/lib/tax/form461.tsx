@@ -5,7 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell,TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatFriendlyAmount } from '@/lib/formatCurrency'
 import { ExcessBusinessLossLimitation } from '@/lib/tax/ExcessBusinessLossLimitation'
-import type { ScheduleDData } from '@/lib/tax/scheduleD'
+
+export interface ScheduleDAggregatesForForm461 {
+  schD_line21: number
+  limitedPersonalCapGains: number
+}
 
 export interface Form461Data {
   // Part I
@@ -46,7 +50,7 @@ export function form461({
   taxYear: number
   isSingle: boolean
   schedule1_line3?: number
-  scheduleDData?: ScheduleDData // Preferred: Schedule D data with business/personal breakdown
+  scheduleDData?: ScheduleDAggregatesForForm461 // Preferred: Schedule D aggregate data with business/personal breakdown
   schedule1_line4?: number
   schedule1_line5?: number
   schedule1_line6?: number
