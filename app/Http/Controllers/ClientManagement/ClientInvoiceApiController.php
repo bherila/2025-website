@@ -124,7 +124,7 @@ class ClientInvoiceApiController extends Controller
         Gate::authorize('Admin');
 
         try {
-            $results = $this->invoicingService->generateAllMonthlyInvoices($company);
+            $results = $this->invoicingService->generateAllInvoices($company);
 
             return response()->json([
                 'message' => 'Invoice generation completed',
