@@ -160,7 +160,7 @@ interface UploadModalState {
   accountId: number
 }
 
-const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', 'k1'] as const
+const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', '1099_r', 'k1'] as const
 // Form types shown as individual upload options in the per-account Add dropdown.
 // 'broker_1099' is intentionally omitted here — it is handled by the "Consolidated 1099" entry
 // which routes through the MultiAccountImportModal with a preselected account.
@@ -210,7 +210,7 @@ export default function TaxDocuments1099Section({
   const fetchDocuments = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_nec,1099_b,broker_1099,k1',
+        form_type: '1099_int,1099_int_c,1099_div,1099_div_c,1099_misc,1099_nec,1099_r,1099_b,broker_1099,k1',
         year: String(selectedYear),
       })
       const data = await fetchWrapper.get(`/api/finance/tax-documents?${params.toString()}`)

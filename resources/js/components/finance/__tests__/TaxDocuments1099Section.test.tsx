@@ -152,6 +152,31 @@ describe('TaxDocuments1099Section', () => {
     mockedFetchWrapper.patch.mockResolvedValue({})
   })
 
+  it('fetches and offers 1099-R documents in the tax preview account documents pane', async () => {
+    mockedFetchWrapper.get.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/finance/tax-documents?')) {
+        return []
+      }
+      if (url.startsWith('/api/finance/accounts?')) {
+        return {
+          assetAccounts: [],
+          liabilityAccounts: [],
+          retirementAccounts: [{ acct_id: 9, acct_name: 'IRA' }],
+          active_account_ids: [9],
+        }
+      }
+      return []
+    })
+
+    render(<TaxDocuments1099Section selectedYear={2025} />)
+
+    await waitFor(() => {
+      expect(mockedFetchWrapper.get).toHaveBeenCalledWith(expect.stringContaining('1099_r'))
+    })
+    expect(await screen.findByText('IRA')).toBeTruthy()
+    expect(screen.getByText('Form 1099-R')).toBeTruthy()
+  })
+
   it('shows a pending account document in the account row', () => {
     render(
       <TaxDocuments1099Section

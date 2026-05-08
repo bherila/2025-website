@@ -1130,6 +1130,87 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertTrue((bool) $targetLink->fresh()->parsed_data_needs_review);
     }
 
+    public function test_show_canonicalizes_noncanonical_1099_r_parsed_data_and_flags_review(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Rollover IRA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_r',
+            'account_id' => $account->acct_id,
+            'parsed_data' => [
+                'payer_name' => 'IRA Custodian',
+                'boxes' => [
+                    '1_gross_distribution' => 50000,
+                    '2a_taxable_amount' => 0,
+                    '4_federal_income_tax_withheld' => 0,
+                    'distribution_codes' => '1B',
+                    'total_employee_contributions_or_designated_roth_contributions_or_insurance_premiums' => 1200,
+                    'your_percentage_of_total_distribution' => 25,
+                    'state_payer_state_no' => 'CA / 123456789',
+                ],
+                'ira_sep_simple' => false,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_r', 2024);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.payer_name', 'IRA Custodian')
+            ->assertJsonPath('parsed_data.box1_gross_distribution', 50000)
+            ->assertJsonPath('parsed_data.box2a_taxable_amount', 0)
+            ->assertJsonPath('parsed_data.box4_fed_tax', 0)
+            ->assertJsonPath('parsed_data.box5_employee_contributions', 1200)
+            ->assertJsonPath('parsed_data.box7_distribution_code', '1B')
+            ->assertJsonPath('parsed_data.box7_ira_sep_simple', false)
+            ->assertJsonPath('parsed_data.box9a_percentage', 25)
+            ->assertJsonPath('parsed_data.box15_state', 'CA / 123456789')
+            ->assertJsonPath('has_original_parsed_data', true)
+            ->assertJsonPath('parsed_data_needs_review', true)
+            ->assertJsonPath('parsed_data_warnings.0.code', 'canonicalized_alias');
+    }
+
+    public function test_show_canonicalizes_1099_r_code_g_rollover_with_zero_taxable_amount(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Rollover IRA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_r',
+            'account_id' => $account->acct_id,
+            'parsed_data' => [
+                'payer_name' => 'IRA Custodian',
+                'gross_distribution' => 50000,
+                'taxable_amount' => 0,
+                'distribution_code' => 'G',
+                'ira_sep_simple' => true,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_r', 2024);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.box1_gross_distribution', 50000)
+            ->assertJsonPath('parsed_data.box2a_taxable_amount', 0)
+            ->assertJsonPath('parsed_data.box7_distribution_code', 'G')
+            ->assertJsonPath('parsed_data.box7_ira_sep_simple', true)
+            ->assertJsonPath('parsed_data_needs_review', true);
+    }
+
+    public function test_can_get_1099_r_prompt_info(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-documents/prompt?form_type=1099_r&tax_year=2025');
+
+        $response->assertOk()
+            ->assertJsonPath('form_label', '1099-R')
+            ->assertJsonPath('json_schema.box1_gross_distribution.type', 'number')
+            ->assertJsonPath('json_schema.box7_distribution_code.type', 'string');
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public function test_can_store_1099_nec_document(): void

@@ -335,6 +335,30 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099DIV_TOOL_NAME, $prompt);
     }
 
+    public function test_build_prompt_and_tool_config_for_1099_r(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_r', 'tax_year' => 2024]);
+        $payload = $service->buildGenerateContentPayload('tax_document', 'files/abc123', 'application/pdf', $prompt);
+
+        $this->assertStringContainsString('1099-R', $prompt);
+        $this->assertStringContainsString('return both characters concatenated with no separator', $prompt);
+        $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099R_TOOL_NAME, $prompt);
+        $this->assertSame(
+            GenAiJobDispatcherService::TAX_DOCUMENT_1099R_TOOL_NAME,
+            $payload['tools'][0]['function_declarations'][0]['name']
+        );
+        $this->assertArrayHasKey(
+            'box1_gross_distribution',
+            $payload['tools'][0]['function_declarations'][0]['parameters']['properties']
+        );
+        $this->assertArrayHasKey(
+            'box7_distribution_code',
+            $payload['tools'][0]['function_declarations'][0]['parameters']['properties']
+        );
+    }
+
     public function test_build_generate_content_payload_uses_tool_calling_for_w2(): void
     {
         $service = new GenAiJobDispatcherService;
@@ -405,6 +429,36 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertIsArray($data);
         $this->assertSame('First National Bank', $data['payer_name']);
         $this->assertSame(523.45, $data['box1_interest']);
+    }
+
+    public function test_extract_1099_r_tax_document_data_from_tool_call_response(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $response = [
+            'content' => [[
+                'type' => 'tool_use',
+                'name' => GenAiJobDispatcherService::TAX_DOCUMENT_1099R_TOOL_NAME,
+                'input' => [
+                    'payer_name' => 'IRA Custodian',
+                    'box1_gross_distribution' => '50000',
+                    'box2a_taxable_amount' => '0',
+                    'box2b_total_distribution' => 'true',
+                    'box7_distribution_code' => '1B',
+                    'box7_ira_sep_simple' => 'false',
+                ],
+            ]],
+        ];
+
+        $data = $service->extractGenerateContentData('tax_document', $response);
+
+        $this->assertIsArray($data);
+        $this->assertSame('IRA Custodian', $data['payer_name']);
+        $this->assertSame(50000.0, $data['box1_gross_distribution']);
+        $this->assertSame(0.0, $data['box2a_taxable_amount']);
+        $this->assertTrue($data['box2b_total_distribution']);
+        $this->assertSame('1B', $data['box7_distribution_code']);
+        $this->assertFalse($data['box7_ira_sep_simple']);
     }
 
     public function test_extract_multi_account_tax_import_from_anthropic_fenced_text_response(): void

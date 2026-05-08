@@ -246,6 +246,38 @@ const F1099_MISC_FIELDS: ReviewLineDef[] = [
   { key: 'box16_state_tax', label: 'State tax withheld', box: '16' },
 ]
 
+const F1099_R_FIELDS: ReviewLineDef[] = [
+  { key: 'box1_gross_distribution', label: 'Gross distribution', box: '1' },
+  { key: 'box2a_taxable_amount', label: 'Taxable amount', box: '2a' },
+  { key: 'box2b_taxable_not_determined', label: 'Taxable amount not determined', box: '2b', kind: 'raw' },
+  { key: 'box2b_total_distribution', label: 'Total distribution', box: '2b', kind: 'raw' },
+  { key: 'box3_capital_gain', label: 'Capital gain', box: '3' },
+  { key: 'box4_fed_tax', label: 'Federal income tax withheld', box: '4' },
+  { key: 'box5_employee_contributions', label: 'Employee contributions / designated Roth contributions or insurance premiums', box: '5' },
+  { key: 'box6_net_unrealized_appreciation', label: 'Net unrealized appreciation', box: '6' },
+  { key: 'box7_distribution_code', label: 'Distribution code(s)', box: '7', kind: 'raw' },
+  { key: 'box7_ira_sep_simple', label: 'IRA/SEP/SIMPLE', box: '7', kind: 'raw' },
+  { key: 'box8_other', label: 'Other', box: '8' },
+  { key: 'box9a_percentage', label: 'Your percentage of total distribution', box: '9a' },
+  { key: 'box9b_employee_contributions', label: 'Total employee contributions', box: '9b' },
+  { key: 'box10_amount_allocable_irr', label: 'Amount allocable to IRR within 5 years', box: '10' },
+  { key: 'box11_first_year_roth', label: '1st year of designated Roth contribution', box: '11', kind: 'raw' },
+  { key: 'box12_fatca', label: 'FATCA filing requirement', box: '12', kind: 'raw' },
+  { key: 'box13_date_payment', label: 'Date of payment', box: '13', kind: 'raw' },
+  { key: 'box14_state_tax', label: 'State tax withheld', box: '14' },
+  { key: 'box15_state', label: 'State / payer state no.', box: '15', kind: 'raw' },
+  { key: 'box16_state_distribution', label: 'State distribution', box: '16' },
+]
+
+const STANDARD_1099_REVIEW_TITLE_BY_FORM_TYPE: Record<string, string> = {
+  '1099_int': 'Schedule B Interest',
+  '1099_int_c': 'Schedule B Interest',
+  '1099_div': 'Schedule B Dividends',
+  '1099_div_c': 'Schedule B Dividends',
+  '1099_misc': '1099-MISC Routing',
+  '1099_r': '1099-R Review',
+}
+
 function reviewDefsForForm(formType: string | undefined): ReviewLineDef[] {
   if (formType === '1099_int' || formType === '1099_int_c') {
     return F1099_INT_FIELDS.map((field) => ({ key: field.key, label: field.label, box: field.box }))
@@ -259,6 +291,10 @@ function reviewDefsForForm(formType: string | undefined): ReviewLineDef[] {
     return F1099_MISC_FIELDS
   }
 
+  if (formType === '1099_r') {
+    return F1099_R_FIELDS
+  }
+
   return []
 }
 
@@ -268,6 +304,7 @@ function isReviewable1099(formType: string | undefined): boolean {
     || formType === '1099_div'
     || formType === '1099_div_c'
     || formType === '1099_misc'
+    || formType === '1099_r'
     || formType === '1099_b'
     || formType === '1099_b_c'
 }
@@ -305,6 +342,10 @@ function renderReviewLine(data: Record<string, unknown>, field: ReviewLineDef): 
   }
 
   return <FormLine key={field.key} {...(boxRef ? { boxRef } : {})} label={field.label} value={(value ?? null) as string | number | null} />
+}
+
+function standard1099ReviewTitle(formType: string | undefined, payer: string): string {
+  return `${payer} — ${STANDARD_1099_REVIEW_TITLE_BY_FORM_TYPE[formType ?? ''] ?? '1099 Review'}`
 }
 
 function objectReviewBlock(title: string, value: unknown): ReactNode {
@@ -427,11 +468,7 @@ function Standard1099ReviewPanel({
 
   const fields = reviewDefsForForm(formType)
   const visibleFields = fields.filter((field) => hasDisplayValue(normalized, field.key))
-  const title = formType === '1099_int' || formType === '1099_int_c'
-    ? `${payer} — Schedule B Interest`
-    : formType === '1099_div' || formType === '1099_div_c'
-      ? `${payer} — Schedule B Dividends`
-      : `${payer} — 1099-MISC Routing`
+  const title = standard1099ReviewTitle(formType, payer)
   const supplementalBlocks = [
     { key: 'detail-totals', node: objectReviewBlock('Detail Totals', normalized.detail_totals) },
     { key: 'foreign-income-and-taxes', node: objectReviewBlock('Foreign Income and Taxes', normalized.foreign_income_and_taxes_summary) },
