@@ -26,6 +26,7 @@ class ClientInvoiceLine extends Model
         'hours',
         'line_date',
         'sort_order',
+        'client_agreement_recurring_item_id',
     ];
 
     protected $casts = [
@@ -34,6 +35,7 @@ class ClientInvoiceLine extends Model
         'hours' => 'decimal:4',
         'line_date' => 'date',
         'sort_order' => 'integer',
+        'client_agreement_recurring_item_id' => 'integer',
     ];
 
     /**
@@ -91,6 +93,16 @@ class ClientInvoiceLine extends Model
     public function tasks()
     {
         return $this->hasMany(ClientTask::class, 'client_invoice_line_id', 'client_invoice_line_id');
+    }
+
+    /**
+     * Get the recurring item this line was generated from, if any.
+     *
+     * @return BelongsTo<ClientAgreementRecurringItem, $this>
+     */
+    public function recurringItem(): BelongsTo
+    {
+        return $this->belongsTo(ClientAgreementRecurringItem::class, 'client_agreement_recurring_item_id');
     }
 
     /**

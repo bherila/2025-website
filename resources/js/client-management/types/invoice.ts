@@ -40,6 +40,7 @@ export const InvoiceLineSchema = z.object({
   hours: coerceNumberLike('0').nullable(),
   line_date: z.string().nullable(),
   time_entries: z.array(InvoiceLineTimeEntrySchema).optional(),
+  client_agreement_recurring_item_id: z.number().nullable().optional(),
 })
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>
 
@@ -55,6 +56,9 @@ export const InvoiceSchema = z.object({
   status: z.enum(['draft', 'issued', 'paid', 'void', 'canceled']),
   period_start: z.string().nullable(),
   period_end: z.string().nullable(),
+  invoice_kind: z.enum(['cadence_period', 'interim_overage', 'terminal']).optional(),
+  cycle_start: z.string().nullable().optional(),
+  cycle_end: z.string().nullable().optional(),
   retainer_hours_included: z.string(),
   hours_worked: z.string(),
   carried_in_hours: z.number().optional(),
@@ -92,6 +96,9 @@ export const InvoiceHydrationSchema = z.object({
   status: z.string().optional(),
   period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(),
+  invoice_kind: z.string().optional(),
+  cycle_start: z.string().nullable().optional(),
+  cycle_end: z.string().nullable().optional(),
   retainer_hours_included: coerceNumberLike('0').optional(),
   hours_worked: coerceNumberLike('0').optional(),
   carried_in_hours: z.number().optional(),
@@ -154,6 +161,9 @@ export const InvoiceListItemSchema = z.object({
   status: z.string(),
   period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(),
+  invoice_kind: z.string().optional(),
+  cycle_start: z.string().nullable().optional(),
+  cycle_end: z.string().nullable().optional(),
   remaining_balance: coerceMoney('0.00').optional(),
   payments_total: coerceMoney('0.00').optional(),
 })

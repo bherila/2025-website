@@ -96,6 +96,9 @@ CREATE TABLE `client_agreements`(
   `hourly_rate` REAL NOT NULL DEFAULT 0.00,
   `monthly_retainer_fee` REAL NOT NULL DEFAULT 0.00,
   `is_visible_to_client` INTEGER NOT NULL DEFAULT 0,
+  `billing_cadence` TEXT NOT NULL DEFAULT 'monthly',
+  `bill_overage_interim` INTEGER NOT NULL DEFAULT 0,
+  `first_cycle_proration` TEXT NOT NULL DEFAULT 'prorate_hours',
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
@@ -140,6 +143,9 @@ CREATE TABLE `client_invoices`(
   `hours_billed_at_rate` REAL NOT NULL DEFAULT 0.0000,
   `status` TEXT NOT NULL DEFAULT 'draft',
   `notes` TEXT,
+  `invoice_kind` TEXT NOT NULL DEFAULT 'cadence_period',
+  `cycle_start` TEXT,
+  `cycle_end` TEXT,
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
@@ -158,6 +164,26 @@ CREATE INDEX `client_invoices_issue_date_index` ON `client_invoices`(
   `issue_date`
 );
 CREATE INDEX `client_invoices_status_index` ON `client_invoices`(`status`);
+CREATE INDEX `client_invoices_cycle_index` ON `client_invoices`(`client_company_id`, `cycle_start`, `cycle_end`, `invoice_kind`);
+CREATE TABLE `client_agreement_recurring_items`(
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `client_agreement_id` INTEGER NOT NULL,
+  `description` TEXT NOT NULL,
+  `amount` REAL NOT NULL DEFAULT 0.00,
+  `charge_cadence` TEXT NOT NULL,
+  `anchor_month` INTEGER,
+  `anchor_day` INTEGER DEFAULT 1,
+  `start_date` TEXT NOT NULL,
+  `end_date` TEXT,
+  `is_taxable` INTEGER NOT NULL DEFAULT 0,
+  `is_summarized` INTEGER NOT NULL DEFAULT 0,
+  `notes` TEXT,
+  `created_at` TEXT,
+  `updated_at` TEXT,
+  `deleted_at` TEXT,
+  FOREIGN KEY(`client_agreement_id`) REFERENCES `client_agreements`(`id`) ON DELETE CASCADE
+);
+CREATE INDEX `client_agreement_recurring_items_agreement_dates` ON `client_agreement_recurring_items`(`client_agreement_id`, `start_date`, `end_date`);
 CREATE TABLE `client_invoice_lines`(
   `client_invoice_line_id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `client_invoice_id` INTEGER NOT NULL,
@@ -170,11 +196,13 @@ CREATE TABLE `client_invoice_lines`(
   `hours` REAL,
   `line_date` TEXT,
   `sort_order` INTEGER NOT NULL DEFAULT 0,
+  `client_agreement_recurring_item_id` INTEGER,
   `created_at` TEXT,
   `updated_at` TEXT,
   `deleted_at` TEXT,
   FOREIGN KEY(`client_invoice_id`) REFERENCES `client_invoices`(`client_invoice_id`) ON DELETE CASCADE,
-  FOREIGN KEY(`client_agreement_id`) REFERENCES `client_agreements`(`id`)
+  FOREIGN KEY(`client_agreement_id`) REFERENCES `client_agreements`(`id`),
+  FOREIGN KEY(`client_agreement_recurring_item_id`) REFERENCES `client_agreement_recurring_items`(`id`) ON DELETE SET NULL
 );
 CREATE INDEX `client_invoice_lines_client_invoice_id_index` ON `client_invoice_lines`(
   `client_invoice_id`
@@ -1461,3 +1489,4 @@ INSERT INTO migrations VALUES(62,'2026_04_25_062100_add_misc_routing_to_fin_tax_
 INSERT INTO migrations VALUES(63,'2026_04_27_065237_create_user_ai_configurations_table',9);
 INSERT INTO migrations VALUES(64,'2026_04_27_091813_add_expires_at_to_user_ai_configurations_table',9);
 INSERT INTO migrations VALUES(65,'2026_04_27_091813_add_token_usage_to_genai_import_jobs_table',9);
+INSERT INTO migrations VALUES(66,'2026_05_08_074313_add_billing_cadence_to_client_management_tables',10);

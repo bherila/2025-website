@@ -2,6 +2,7 @@
 
 namespace App\Models\ClientManagement;
 
+use App\Enums\ClientManagement\InvoiceKind;
 use App\Services\ClientManagement\DataTransferObjects\InvoiceHoursBreakdown;
 use App\Services\ClientManagement\DeferredBillingAllocator;
 use App\Services\ClientManagement\OverpaymentCreditService;
@@ -42,6 +43,9 @@ class ClientInvoice extends Model
         'hours_billed_at_rate',
         'status',
         'notes',
+        'invoice_kind',
+        'cycle_start',
+        'cycle_end',
     ];
 
     protected $casts = [
@@ -59,6 +63,9 @@ class ClientInvoice extends Model
         'starting_unused_hours' => 'decimal:4',
         'starting_negative_hours' => 'decimal:4',
         'hours_billed_at_rate' => 'decimal:4',
+        'invoice_kind' => InvoiceKind::class,
+        'cycle_start' => 'date',
+        'cycle_end' => 'date',
     ];
 
     /**

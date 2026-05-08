@@ -2,6 +2,8 @@
 
 namespace App\Models\ClientManagement;
 
+use App\Enums\ClientManagement\BillingCadence;
+use App\Enums\ClientManagement\FirstCycleProration;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,6 +34,9 @@ class ClientAgreement extends Model
         'hourly_rate',
         'monthly_retainer_fee',
         'is_visible_to_client',
+        'billing_cadence',
+        'bill_overage_interim',
+        'first_cycle_proration',
     ];
 
     protected $casts = [
@@ -44,6 +49,9 @@ class ClientAgreement extends Model
         'monthly_retainer_fee' => 'decimal:2',
         'rollover_months' => 'integer',
         'is_visible_to_client' => 'boolean',
+        'billing_cadence' => BillingCadence::class,
+        'bill_overage_interim' => 'boolean',
+        'first_cycle_proration' => FirstCycleProration::class,
     ];
 
     /**
@@ -74,6 +82,32 @@ class ClientAgreement extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(ClientInvoice::class, 'client_agreement_id');
+    }
+
+    /**
+     * Get the recurring items attached to this agreement.
+     *
+     * @return HasMany<ClientAgreementRecurringItem, $this>
+     */
+    public function recurringItems(): HasMany
+    {
+        return $this->hasMany(ClientAgreementRecurringItem::class, 'client_agreement_id');
+    }
+
+    /**
+     * Resolve the effective billing cadence (defaults to monthly when not set).
+     */
+    public function effectiveBillingCadence(): BillingCadence
+    {
+        return $this->billing_cadence ?? BillingCadence::Monthly;
+    }
+
+    /**
+     * Resolve the effective first-cycle proration policy.
+     */
+    public function effectiveFirstCycleProration(): FirstCycleProration
+    {
+        return $this->first_cycle_proration ?? FirstCycleProration::ProrateHours;
     }
 
     /**
