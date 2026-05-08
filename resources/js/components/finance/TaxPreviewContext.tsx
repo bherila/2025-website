@@ -11,7 +11,6 @@ import { AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { collectForeignTaxSummaries, type ForeignTaxSummary } from '@/finance/1116'
 import { type PalCarryforwardEntry, TAX_LOSS_CARRYFORWARD_ENDPOINT } from '@/finance/8582/form8582'
-import { computeForm8959Lines } from '@/finance/8959/form8959'
 import { computeCapitalLossCarryover } from '@/finance/capitalLoss/capitalLossCarryover'
 import { computeEstimatedTaxPayments, type EstimatedTaxPaymentsData } from '@/lib/finance/estimatedTaxPayments'
 import { extractK1Form461Disclosure, getK1PartnerName } from '@/lib/finance/k1Utils'
@@ -21,9 +20,9 @@ import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDAggregatesFo
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
+import type { EmploymentEntity, F1099DivParsedData, F1099GParsedData, F1099IntParsedData, TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS, isLine8MiscRouting } from '@/types/finance/tax-document'
-import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, UserDeductionEntry } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines, UserDeductionEntry } from '@/types/finance/tax-return'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import type { Schedule1Line8Breakdown } from './Schedule1Preview'
@@ -77,7 +76,6 @@ interface TaxPreviewContextValue {
   foreignTaxSummaries: ForeignTaxSummary[]
   scheduleCData: ScheduleCResponse | null
   scheduleCNetIncome: { total: number; byQuarter: { q1: number; q2: number; q3: number; q4: number } }
-  form8959: Form8959Lines
   form461: Form461Lines
   capitalLossCarryover: CapitalLossCarryoverLines
   estimatedTaxPayments?: EstimatedTaxPaymentsData
@@ -145,33 +143,6 @@ const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
 const POLLING_INTERVAL_MS = 5_000
-
-function sumW2Field(reviewedW2Docs: TaxDocument[], field: keyof W2ParsedData, fallbackField?: keyof W2ParsedData): number {
-  return reviewedW2Docs.reduce((acc, doc) => {
-    const parsed = doc.parsed_data as W2ParsedData | null
-    const primary = parsed?.[field]
-    const fallback = fallbackField ? parsed?.[fallbackField] : null
-    const numericValue = typeof primary === 'number'
-      ? primary
-      : typeof fallback === 'number'
-        ? fallback
-        : 0
-
-    return acc.add(numericValue)
-  }, currency(0)).value
-}
-
-function sumPayslipField(payslips: fin_payslip[], field: keyof fin_payslip): number {
-  return payslips.reduce((acc, row) => acc.add(Number(row[field] ?? 0)), currency(0)).value
-}
-
-function computeMedicareWages(reviewedW2Docs: TaxDocument[], payslips: fin_payslip[] = []): number {
-  if (reviewedW2Docs.length > 0) {
-    return sumW2Field(reviewedW2Docs, 'box5_medicare_wages', 'box1_wages')
-  }
-
-  return sumPayslipField(payslips, 'taxable_wages_medicare')
-}
 
 export function TaxPreviewProvider({
   initialData,
@@ -681,23 +652,6 @@ export function TaxPreviewProvider({
     [reviewedK1Docs],
   )
 
-  const medicareWages = useMemo(
-    () => computeMedicareWages(reviewedW2Docs, payslips),
-    [reviewedW2Docs, payslips],
-  )
-
-  const form8959 = useMemo(() => {
-    const medicareWageSources = reviewedW2Docs.map((doc) => {
-      const parsed = doc.parsed_data as W2ParsedData | null
-      const wages = parsed?.box5_medicare_wages ?? parsed?.box1_wages ?? 0
-      const label = parsed?.employer_name ?? doc.employment_entity?.display_name ?? doc.original_filename ?? 'W-2'
-
-      return { label, wages }
-    }).filter(source => source.wages > 0)
-
-    return computeForm8959Lines(medicareWages, isMarried, medicareWageSources)
-  }, [isMarried, medicareWages, reviewedW2Docs])
-
   const form461Lines = useMemo<Form461Lines>(() => {
     const scheduleCFacts = taxFacts?.scheduleC
     const scheduleEFacts = taxFacts?.scheduleE
@@ -708,6 +662,7 @@ export function TaxPreviewProvider({
       isSingle: !isMarried,
       schedule1_line3: scheduleCFacts?.netProfit ?? 0,
       schedule1_line5: scheduleEFacts?.grandTotal ?? 0,
+      f461_line11: Math.abs(Math.min(0, scheduleEFacts?.totalPassive ?? 0)),
       scheduleDData: scheduleDAggregatesForForm461FromFacts(scheduleDFacts),
       override_f461_line15: null,
     })
@@ -725,7 +680,7 @@ export function TaxPreviewProvider({
     })
 
     return {
-      aggregateBusinessIncomeLoss: eblData.f461_line9,
+      aggregateBusinessIncomeLoss: eblData.f461_line14,
       eblLimit: eblData.f461_line15,
       excessBusinessLoss: eblData.f461_line16,
       isTriggered: eblData.f461_line16 > 0,
@@ -782,7 +737,6 @@ export function TaxPreviewProvider({
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
-    form8959,
     form461: form461Lines,
     capitalLossCarryover,
     ...(estimatedTaxPayments ? { estimatedTaxPayments } : {}),
@@ -838,7 +792,6 @@ export function TaxPreviewProvider({
     foreignTaxSummaries,
     scheduleCData,
     scheduleCNetIncome,
-    form8959,
     form461Lines,
     capitalLossCarryover,
     estimatedTaxPayments,

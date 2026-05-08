@@ -169,6 +169,18 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             }
         }
 
+        foreach (['wages', 'threshold', 'excessWages', 'additionalTax'] as $key) {
+            if (isset($facts['form8959'][$key])) {
+                $rows[] = ['form8959', $key, $key, $facts['form8959'][$key], ''];
+            }
+        }
+
+        foreach (($facts['form8959']['wageSources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['form8959', $source['routing'] ?? 'line1', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
         foreach (($facts['form4952']['investmentInterestSources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['form4952', 'line1', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];

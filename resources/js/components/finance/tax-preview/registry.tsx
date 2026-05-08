@@ -81,7 +81,6 @@ function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
     <AdditionalTaxesPreview
       taxFacts={state.taxFacts}
       isMarried={state.isMarried}
-      form8959={state.form8959}
       capitalLossCarryover={state.capitalLossCarryover}
       form461={state.form461}
       onTabChange={tabToDrill(onDrill)}

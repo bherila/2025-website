@@ -171,6 +171,13 @@ function makeTaxFacts(): TaxPreviewFacts {
       seTax: 0,
       deductibleSeTax: 0,
     },
+    form8959: {
+      wageSources: [],
+      wages: 0,
+      threshold: 200000,
+      excessWages: 0,
+      additionalTax: 0,
+    },
     schedule1: {
       line1aSources: [],
       line1aTotal: 0,
@@ -1132,6 +1139,31 @@ describe('TaxPreviewContext', () => {
     const facts = makeTaxFactsWithScheduleSE(10_000)
     facts.scheduleSE.additionalMedicareTaxableEarnings = 1333.33
     facts.scheduleSE.additionalMedicareTax = 12
+    facts.form8959 = {
+      wages: 210_000,
+      threshold: 200_000,
+      excessWages: 10_000,
+      additionalTax: 90,
+      wageSources: [{
+        id: 'w2-88-schedule-se-box5_medicare_wages-form8959-line1',
+        label: 'Wage Co — W-2 Medicare wages',
+        amount: 210_000,
+        sourceType: 'schedule_se_w2_medicare_wages',
+        taxDocumentId: 88,
+        taxDocumentAccountId: null,
+        accountId: null,
+        formType: 'w2',
+        box: null,
+        code: null,
+        routing: 'form_8959_line_1',
+        routingReason: 'Medicare wages flow to Form 8959 line 1 for wage-side Additional Medicare Tax.',
+        notes: null,
+        isReviewed: true,
+        reviewStatus: 'reviewed',
+        reviewAction: null,
+      }],
+    }
+    facts.form1040 = makeForm1040Facts({ line23: 102, line24: 102 })
 
     ;(fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce({ ...makeResponse([]), w2Documents: [w2Doc], taxFacts: facts })
@@ -1140,8 +1172,31 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.form8959.additionalTax).toBe(90)
+    expect(result.current.taxFacts?.form8959.additionalTax).toBe(90)
     expect(result.current.taxFacts?.scheduleSE.additionalMedicareTax).toBe(12)
+    expect(result.current.taxFacts?.form1040.line23).toBe(102)
+  })
+
+  it('excludes passive Schedule E losses from the Form 461 excess business loss input', async () => {
+    const facts = makeTaxFacts()
+    facts.scheduleE = {
+      ...facts.scheduleE,
+      totalPassive: -100_000,
+      totalNonpassive: -400_000,
+      grandTotal: -500_000,
+    }
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce({ ...makeResponse([]), taxFacts: facts })
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.form461.aggregateBusinessIncomeLoss).toBe(-400_000)
+    expect(result.current.form461.eblLimit).toBe(317_000)
+    expect(result.current.form461.excessBusinessLoss).toBe(83_000)
+    expect(result.current.form461.isTriggered).toBe(true)
   })
 
   it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {

@@ -18,6 +18,7 @@ class TaxPreviewWorkbookBuilder
         'form1116' => 'Form 1116',
         'form4797' => 'Form 4797',
         'form4952' => 'Form 4952',
+        'form8959' => 'Form 8959',
         'form6251' => 'Form 6251',
         'form8582' => 'Form 8582',
         'form8606' => 'Form 8606',
@@ -40,8 +41,22 @@ class TaxPreviewWorkbookBuilder
         'scheduleB.ordinaryDividendTotal' => 'Schedule B ordinary dividends',
         'scheduleD.line16Combined' => 'Schedule D net capital gain or loss',
         'scheduleSE.seTax' => 'Schedule SE tax',
+        'form8959.additionalTax' => 'Form 8959 Additional Medicare Tax',
         'form6251.amt' => 'Form 6251 alternative minimum tax',
         'form8995.deduction' => 'Form 8995 QBI deduction',
+    ];
+
+    private const array TOTAL_FACT_PATHS = [
+        'form1040.line9',
+        'form1040.line11',
+        'form1040.line15',
+        'form1040.line16',
+        'form1040.line21',
+        'form1040.line24',
+        'form1040.line25d',
+        'form1040.line33',
+        'form1040.line34',
+        'form1040.line37',
     ];
 
     public function __construct(
@@ -333,28 +348,14 @@ class TaxPreviewWorkbookBuilder
 
     private function isTotalPath(string $path): bool
     {
-        $last = $this->lastPathSegment($path);
-        $lastLower = strtolower($last);
-
-        if (str_contains($lastLower, 'total')) {
+        if (in_array($path, self::TOTAL_FACT_PATHS, true)) {
             return true;
         }
 
-        return in_array($last, [
-            'grandTotal',
-            'line9',
-            'line15',
-            'line16',
-            'line21',
-            'line24',
-            'line25d',
-            'line33',
-            'line34',
-            'line37',
-            'seTax',
-            'amt',
-            'deduction',
-        ], true);
+        $last = $this->lastPathSegment($path);
+
+        return preg_match('/(Total|Tax)$/', $last) === 1
+            || in_array($last, ['grandTotal', 'amt', 'deduction'], true);
     }
 
     private function lastPathSegment(string $path): string

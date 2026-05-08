@@ -9,7 +9,7 @@ import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines } from '@/types/finance/tax-return'
+import type { CapitalLossCarryoverLines, Form461Lines } from '@/types/finance/tax-return'
 import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 /** Reusable data-source drilldown modal. */
@@ -82,7 +82,6 @@ function SourceModal({
 interface AdditionalTaxesPreviewProps {
   taxFacts?: TaxPreviewFacts | null
   isMarried?: boolean
-  form8959?: Form8959Lines | undefined
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
   form461?: Form461Lines | undefined
   /** When provided, the source dialogs surface a Go-to-source affordance. */
@@ -97,7 +96,7 @@ function sourceLines(sources: TaxFactSource[]): { label: string; amount: number;
   }))
 }
 
-export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, form8959, capitalLossCarryover, form461, onTabChange }: AdditionalTaxesPreviewProps) {
+export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, capitalLossCarryover, form461, onTabChange }: AdditionalTaxesPreviewProps) {
   const [wagesModal, setWagesModal] = useState(false)
   const [interestModal, setInterestModal] = useState(false)
   const [dividendModal, setDividendModal] = useState(false)
@@ -127,6 +126,7 @@ export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, fo
         passiveSources: sourceLines(taxFacts.form8960.componentSources.filter(source => source.routing === 'form_8960_line_4a')),
       }
     : undefined
+  const form8959 = taxFacts?.form8959
   const schedule2 = taxFacts
     ? {
         altMinimumTax: taxFacts.form6251.amt,
@@ -195,7 +195,7 @@ export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, fo
             boxRef="1"
             label="Medicare wages"
             value={form8959.wages}
-            {...(form8959.sources.length > 0 ? { onDetails: () => setWagesModal(true) } : {})}
+            {...(form8959.wageSources.length > 0 ? { onDetails: () => setWagesModal(true) } : {})}
           />
           <FormLine
             label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
@@ -321,7 +321,7 @@ export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, fo
     {form8959 && (
       <SourceModal
         title="Medicare Wage Sources — Form 8959 Line 1"
-        rows={form8959.sources.map(s => ({ label: s.label, amount: s.wages }))}
+        rows={sourceLines(form8959.wageSources)}
         totalLabel="Total Medicare wages"
         total={form8959.wages}
         open={wagesModal}

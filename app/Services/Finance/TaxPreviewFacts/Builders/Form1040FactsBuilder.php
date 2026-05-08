@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form1040Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8959Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
@@ -35,6 +36,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         ScheduleDFacts $scheduleD,
         Schedule3Facts $schedule3,
         ScheduleSEFacts $scheduleSE,
+        Form8959Facts $form8959,
         Form8995Facts $form8995,
         Form6251Facts $form6251,
         Form8960Facts $form8960,
@@ -142,7 +144,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line20 = $schedule3->line8TotalNonrefundableCredits;
         $line21 = $this->sumMoney([$line19, $line20]);
         $line22 = max(0.0, $this->subtractMoney($line18, $line21));
-        $line23Sources = $this->line23Sources($scheduleSE, $form8960, $isMarried);
+        $line23Sources = $this->line23Sources($scheduleSE, $form8959, $form8960, $isMarried);
         $line23 = $this->sumSources($line23Sources);
         $line24 = $this->sumMoney([$line22, $line23]);
         $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', '2', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
@@ -429,7 +431,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @return TaxFactSource[]
      */
-    private function line23Sources(ScheduleSEFacts $scheduleSE, Form8960Facts $form8960, bool $isMarried): array
+    private function line23Sources(ScheduleSEFacts $scheduleSE, Form8959Facts $form8959, Form8960Facts $form8960, bool $isMarried): array
     {
         $sources = [];
 
@@ -439,6 +441,10 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
 
         if ($scheduleSE->additionalMedicareTax !== 0.0) {
             $sources[] = $this->source('schedule-se-additional-medicare-form1040-line23', 'Additional Medicare tax on self-employment earnings', $scheduleSE->additionalMedicareTax, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line23, 'Additional Medicare tax flows through Schedule 2 Part II to Form 1040 line 23.');
+        }
+
+        if ($form8959->additionalTax !== 0.0) {
+            $sources[] = $this->source('form8959-wages-form1040-line23', 'Form 8959 additional Medicare tax on wages', $form8959->additionalTax, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line23, 'Form 8959 wage-side Additional Medicare Tax flows through Schedule 2 Part II to Form 1040 line 23.');
         }
 
         $niit = $isMarried ? $form8960->niitTaxMarriedFilingJointly : $form8960->niitTaxSingle;

@@ -145,15 +145,6 @@ export interface Form8995Lines {
   thresholdMFJ: number
 }
 
-export interface Form8959Lines {
-  wages: number
-  threshold: number
-  excessWages: number
-  additionalTax: number
-  /** Per-W-2 document breakdown for the data source modal. */
-  sources: { label: string; wages: number }[]
-}
-
 export interface Form8960Lines {
   taxableInterest: number
   ordinaryDividends: number
@@ -189,7 +180,7 @@ export interface CapitalLossCarryoverLines {
 }
 
 export interface Form461Lines {
-  /** Aggregate trade/business income (loss) — Form 461 Line 9. */
+  /** Aggregate trade/business income (loss) after nonbusiness adjustments — Form 461 Line 14. */
   aggregateBusinessIncomeLoss: number
   /** EBL threshold for the year and filing status — Form 461 Line 15. */
   eblLimit: number

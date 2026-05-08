@@ -2363,6 +2363,27 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertGreaterThan(0, $mfjFacts['scheduleSE']['additionalMedicareTax']);
     }
 
+    public function test_form8959_wage_additional_medicare_flows_to_form1040_line23(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Wage Co', 'box1_wages' => 210000, 'box3_ss_wages' => 168600, 'box5_medicare_wages' => 210000],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(210000.0, $facts['form8959']['wages']);
+        $this->assertSame(200000.0, $facts['form8959']['threshold']);
+        $this->assertSame(10000.0, $facts['form8959']['excessWages']);
+        $this->assertSame(90.0, $facts['form8959']['additionalTax']);
+        $this->assertSame('form_8959_line_1', $facts['form8959']['wageSources'][0]['routing']);
+        $this->assertSame(90.0, $facts['form1040']['line23']);
+        $this->assertSame($facts['form1040']['line22'] + 90.0, $facts['form1040']['line24']);
+        $this->assertContains('Form 8959 additional Medicare tax on wages', array_column($facts['form1040']['line23Sources'], 'label'));
+    }
+
     private function createAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([

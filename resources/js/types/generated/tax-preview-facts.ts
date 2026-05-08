@@ -236,6 +236,13 @@ accountName: string | null;
 taxDocumentId: number | null;
 sourceTransactionId: string | null;
 };
+export type Form8959Facts = {
+wageSources: Array<TaxFactSource>;
+wages: number;
+threshold: number;
+excessWages: number;
+additionalTax: number;
+};
 export type Form8960Facts = {
 componentSources: Array<TaxFactSource>;
 taxableInterest: number;
@@ -584,6 +591,7 @@ year: number;
 scheduleC: ScheduleCFacts;
 scheduleF: ScheduleFFacts;
 scheduleSE: ScheduleSEFacts;
+form8959: Form8959Facts;
 schedule1: Schedule1Facts;
 schedule3: Schedule3Facts;
 scheduleB: ScheduleBFacts;
