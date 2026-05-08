@@ -9,6 +9,7 @@ import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { schedule2Line11AdditionalMedicareTaxFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
 import type { CapitalLossCarryoverLines, Form461Lines } from '@/types/finance/tax-return'
 import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
@@ -131,7 +132,7 @@ export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, ca
     ? {
         altMinimumTax: taxFacts.form6251.amt,
         selfEmploymentTax: taxFacts.scheduleSE.seTax,
-        additionalMedicareTax: currency(taxFacts.scheduleSE.additionalMedicareTax).add(form8959?.additionalTax ?? 0).value,
+        additionalMedicareTax: schedule2Line11AdditionalMedicareTaxFromFacts(taxFacts),
         niit: form8960?.niitTax ?? 0,
         totalAdditionalTaxes: taxFacts.form1040.line23,
       }

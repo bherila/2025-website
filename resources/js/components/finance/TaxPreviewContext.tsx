@@ -16,7 +16,7 @@ import { computeEstimatedTaxPayments, type EstimatedTaxPaymentsData } from '@/li
 import { extractK1Form461Disclosure, getK1PartnerName } from '@/lib/finance/k1Utils'
 import { analyzeShortDividends, type ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { extractLinkParsedData, getDocAmounts } from '@/lib/finance/taxDocumentUtils'
-import { emptyScheduleDFacts, scheduleCNetIncomeFromFacts, scheduleDAggregatesForForm461FromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
+import { scheduleCNetIncomeFromFacts, scheduleDAggregatesForForm461FromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
 import { form461 } from '@/lib/tax/form461'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -655,7 +655,7 @@ export function TaxPreviewProvider({
   const form461Lines = useMemo<Form461Lines>(() => {
     const scheduleCFacts = taxFacts?.scheduleC
     const scheduleEFacts = taxFacts?.scheduleE
-    const scheduleDFacts = taxFacts?.scheduleD ?? emptyScheduleDFacts()
+    const scheduleDFacts = taxFacts?.scheduleD
 
     const eblData = form461({
       taxYear: year,

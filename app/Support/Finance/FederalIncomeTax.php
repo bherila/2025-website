@@ -3,6 +3,7 @@
 namespace App\Support\Finance;
 
 use App\Services\Finance\MoneyMath;
+use Illuminate\Support\Facades\Log;
 
 final class FederalIncomeTax
 {
@@ -118,11 +119,18 @@ final class FederalIncomeTax
 
         $years = array_keys($table);
         sort($years);
+        $firstYear = $years[0];
+        $lastYear = $years[array_key_last($years)];
 
-        if ($year < $years[0]) {
-            return $years[0];
+        if ($year < $firstYear) {
+            return $firstYear;
         }
 
-        return $years[array_key_last($years)];
+        Log::warning("Federal income tax brackets unavailable for {$year}; falling back to {$lastYear}", [
+            'requested_year' => $year,
+            'table_year' => $lastYear,
+        ]);
+
+        return $lastYear;
     }
 }
