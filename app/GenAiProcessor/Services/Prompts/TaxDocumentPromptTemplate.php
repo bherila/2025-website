@@ -22,6 +22,7 @@ class TaxDocumentPromptTemplate extends PromptTemplate
             in_array($formType, ['1099_div', '1099_div_c']) => $this->build1099DivPrompt($formType, $taxYear),
             $formType === '1099_misc' => $this->build1099MiscPrompt($taxYear),
             $formType === '1099_nec' => $this->build1099NecPrompt($taxYear),
+            $formType === '1099_r' => $this->build1099RPrompt($taxYear),
             $formType === 'k1' => $this->buildK1Prompt($taxYear),
             default => throw new \InvalidArgumentException("Unknown tax form type: {$formType}"),
         };
@@ -88,6 +89,20 @@ PROMPT;
 Analyze the provided 1099-NEC PDF for tax year {$taxYear}.
 Use the `{$toolName}` tool to return ALL extracted box values from the Nonemployee Compensation form.
 All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+PROMPT;
+    }
+
+    private function build1099RPrompt(int $taxYear): string
+    {
+        $toolName = GenAiJobDispatcherService::TAX_DOCUMENT_1099R_TOOL_NAME;
+
+        return <<<PROMPT
+<!-- tool:{$toolName} -->
+Analyze the provided 1099-R PDF for tax year {$taxYear}.
+Use the `{$toolName}` tool to return ALL extracted box values from the Distributions From Pensions, Annuities, Retirement or Profit-Sharing Plans, IRAs, Insurance Contracts, etc. form.
+All monetary values must be numbers (not strings). If a field is not present on the form, set it to null.
+For rollovers, preserve Box 1 gross distribution and Box 7 distribution code(s) exactly, and use the form's Box 2a value for taxable amount.
+Preserve Box 7 exactly as printed; if two codes are present, return both characters concatenated with no separator (for example, `1B`).
 PROMPT;
     }
 

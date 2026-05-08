@@ -175,6 +175,41 @@ const UNREVIEWED_MISC = {
   updated_at: '2026-01-01T00:00:00Z',
 } as const
 
+const UNREVIEWED_1099_R = {
+  id: 5,
+  user_id: 1,
+  tax_year: 2024,
+  form_type: '1099_r',
+  employment_entity_id: null,
+  account_id: 10,
+  original_filename: '1099-r.pdf',
+  stored_filename: null,
+  s3_path: null,
+  mime_type: 'application/pdf',
+  file_size_bytes: 1000,
+  file_hash: '1099r',
+  is_reviewed: false,
+  notes: null,
+  human_file_size: '1 KB',
+  download_count: 0,
+  genai_job_id: null,
+  genai_status: 'parsed',
+  parsed_data: {
+    payer_name: 'IRA Custodian',
+    box1_gross_distribution: 50000,
+    box2a_taxable_amount: 0,
+    box4_fed_tax: 0,
+    box7_distribution_code: 'G',
+    box7_ira_sep_simple: true,
+  },
+  uploader: null,
+  employment_entity: null,
+  account: { acct_id: 10, acct_name: 'Rollover IRA' },
+  account_links: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+} as const
+
 const BROKER_1099 = {
   id: 3,
   user_id: 1,
@@ -359,6 +394,19 @@ describe('TaxDocumentReviewModal — 1099-MISC routing', () => {
     const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
     expect(url).toBe('/api/finance/tax-documents/2?include_tax_facts=1')
     expect(payload.misc_routing).toBe('sch_c')
+  })
+})
+
+describe('TaxDocumentReviewModal — 1099-R review data', () => {
+  it('renders 1099-R distribution boxes in the review panel', async () => {
+    render(<TaxDocumentReviewModal {...(baseProps({ document: UNREVIEWED_1099_R }) as any)} />)
+
+    expect(await screen.findByText('IRA Custodian — 1099-R Review')).toBeInTheDocument()
+    expect(screen.getByText('Gross distribution')).toBeInTheDocument()
+    expect(screen.getByText('$50,000')).toBeInTheDocument()
+    expect(screen.getByText('Taxable amount')).toBeInTheDocument()
+    expect(screen.getByText('Distribution code(s)')).toBeInTheDocument()
+    expect(screen.getByText('G')).toBeInTheDocument()
   })
 })
 

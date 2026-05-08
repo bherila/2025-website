@@ -72,6 +72,17 @@ function validateParsedData(data: unknown, formType: string): string[] {
         errors.push('Missing required field: box1_nonemployeeComp')
       }
       break
+    case '1099_r':
+      if (obj['payer_name'] === undefined) {
+        errors.push('Missing required field: payer_name')
+      }
+      if (obj['box1_gross_distribution'] === undefined) {
+        errors.push('Missing required field: box1_gross_distribution')
+      }
+      if (obj['box7_distribution_code'] === undefined) {
+        errors.push('Missing required field: box7_distribution_code')
+      }
+      break
     case 'k1': {
       // "2026.1" = AI-generated via coerceK1Args; "1.0" = migrated legacy record.
       // Both use the same fields/codes structure and are treated as canonical.
@@ -109,6 +120,8 @@ function getJsonPlaceholder(formType: string): string {
       return '{\n  "payer_name": "Payer LLC",\n  "box3_other_income": 5000.00,\n  "box4_fed_tax": null\n}'
     case '1099_nec':
       return '{\n  "payer_name": "Client LLC",\n  "box1_nonemployeeComp": 12000.00,\n  "box4_fed_tax": null\n}'
+    case '1099_r':
+      return '{\n  "payer_name": "IRA Custodian",\n  "box1_gross_distribution": 50000,\n  "box2a_taxable_amount": 0,\n  "box4_fed_tax": null,\n  "box7_distribution_code": "G",\n  "box7_ira_sep_simple": true\n}'
     case 'k1':
       return (
         '{\n  "schemaVersion": "2026.1",\n  "formType": "K-1-1065",\n' +

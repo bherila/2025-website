@@ -40,6 +40,8 @@ class GenAiJobDispatcherService
 
     public const TAX_DOCUMENT_1099NEC_TOOL_NAME = 'extract1099NecData';
 
+    public const TAX_DOCUMENT_1099R_TOOL_NAME = 'extract1099RData';
+
     /**
      * Tool name for extracting Schedule K-1 data (Form 1065 Partnership or Form 1120-S S-Corporation).
      *
@@ -163,6 +165,7 @@ PROMPT;
             '1099_div' => '1099-DIV',
             '1099_misc' => '1099-MISC',
             '1099_nec' => '1099-NEC',
+            '1099_r' => '1099-R',
             'k1' => 'K-1 / K-3',
         ];
 
@@ -1256,6 +1259,9 @@ PROMPT;
         if (str_contains($prompt, self::TAX_DOCUMENT_1099NEC_TOOL_NAME)) {
             return $this->build1099NecToolDefinition();
         }
+        if (str_contains($prompt, self::TAX_DOCUMENT_1099R_TOOL_NAME)) {
+            return $this->build1099RToolDefinition();
+        }
         if (str_contains($prompt, self::TAX_DOCUMENT_K1_TOOL_NAME)) {
             return $this->buildK1ToolDefinition();
         }
@@ -1278,6 +1284,7 @@ PROMPT;
             self::TAX_DOCUMENT_1099DIV_TOOL_NAME,
             self::TAX_DOCUMENT_1099MISC_TOOL_NAME,
             self::TAX_DOCUMENT_1099NEC_TOOL_NAME,
+            self::TAX_DOCUMENT_1099R_TOOL_NAME,
             self::TAX_DOCUMENT_K1_TOOL_NAME,
         ];
 
@@ -1334,6 +1341,13 @@ PROMPT;
             self::TAX_DOCUMENT_1099NEC_TOOL_NAME => [
                 'box1_nonemployeeComp', 'box4_fed_tax', 'box5_state_tax', 'box7_state_income',
             ],
+            self::TAX_DOCUMENT_1099R_TOOL_NAME => [
+                'box1_gross_distribution', 'box2a_taxable_amount', 'box3_capital_gain',
+                'box4_fed_tax', 'box5_employee_contributions',
+                'box6_net_unrealized_appreciation', 'box8_other', 'box9a_percentage',
+                'box9b_employee_contributions', 'box10_amount_allocable_irr',
+                'box11_first_year_roth', 'box14_state_tax', 'box16_state_distribution',
+            ],
             default => [],
         };
 
@@ -1357,6 +1371,11 @@ PROMPT;
             self::TAX_DOCUMENT_1099NEC_TOOL_NAME => [
                 'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
                 'box6_state', 'account_number',
+            ],
+            self::TAX_DOCUMENT_1099R_TOOL_NAME => [
+                'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin_last4',
+                'account_number', 'box7_distribution_code', 'box13_date_payment',
+                'box15_state',
             ],
             default => [],
         };
@@ -1435,6 +1454,17 @@ PROMPT;
                 ? (bool) $args['box2_directSalesIndicator']
                 : null;
             $coerced['box1_nonemployee_compensation'] = $coerced['box1_nonemployeeComp'];
+        }
+
+        if ($toolName === self::TAX_DOCUMENT_1099R_TOOL_NAME) {
+            foreach ([
+                'box2b_taxable_not_determined',
+                'box2b_total_distribution',
+                'box7_ira_sep_simple',
+                'box12_fatca',
+            ] as $boolField) {
+                $coerced[$boolField] = isset($args[$boolField]) ? $this->parseBoolArg($args[$boolField]) : null;
+            }
         }
 
         // Handle K-1: transform flat tool output into FK1StructuredData shape
@@ -1822,6 +1852,41 @@ PROMPT;
                 'box5_state_tax' => Schema::number(),
                 'box6_state' => Schema::string(),
                 'box7_state_income' => Schema::number(),
+            ]),
+        );
+    }
+
+    private function build1099RToolDefinition(): ToolDefinition
+    {
+        return new ToolDefinition(
+            self::TAX_DOCUMENT_1099R_TOOL_NAME,
+            'Extract all box values from a 1099-R retirement distribution form.',
+            Schema::object([
+                'payer_name' => Schema::string(),
+                'payer_tin' => Schema::string(),
+                'recipient_name' => Schema::string(),
+                'recipient_tin_last4' => Schema::string(),
+                'account_number' => Schema::string(),
+                'box1_gross_distribution' => Schema::number(),
+                'box2a_taxable_amount' => Schema::number(),
+                'box2b_taxable_not_determined' => Schema::boolean(),
+                'box2b_total_distribution' => Schema::boolean(),
+                'box3_capital_gain' => Schema::number(),
+                'box4_fed_tax' => Schema::number(),
+                'box5_employee_contributions' => Schema::number(),
+                'box6_net_unrealized_appreciation' => Schema::number(),
+                'box7_distribution_code' => Schema::string('Distribution code(s) exactly as printed in Box 7. If two codes are present, return both characters concatenated with no separator, e.g. "1B".'),
+                'box7_ira_sep_simple' => Schema::boolean(),
+                'box8_other' => Schema::number(),
+                'box9a_percentage' => Schema::number(),
+                'box9b_employee_contributions' => Schema::number(),
+                'box10_amount_allocable_irr' => Schema::number(),
+                'box11_first_year_roth' => Schema::number(),
+                'box12_fatca' => Schema::boolean(),
+                'box13_date_payment' => Schema::string(),
+                'box14_state_tax' => Schema::number(),
+                'box15_state' => Schema::string(),
+                'box16_state_distribution' => Schema::number(),
             ]),
         );
     }
