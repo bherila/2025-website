@@ -1,163 +1,113 @@
 import { render, screen } from '@testing-library/react'
 import React from 'react'
 
-import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleEFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
-import ScheduleEPreview, { computeScheduleELines } from '../ScheduleEPreview'
+import ScheduleEPreview from '../ScheduleEPreview'
 
-function makeMiscDoc(overrides: Partial<TaxDocument> = {}): TaxDocument {
+function makeSource(overrides: Partial<TaxFactSource> = {}): TaxFactSource {
   return {
-    id: 1,
-    user_id: 1,
-    tax_year: 2025,
-    form_type: '1099_misc',
-    employment_entity_id: null,
-    account_id: null,
-    original_filename: 'misc.pdf',
-    stored_filename: null,
-    s3_path: null,
-    mime_type: 'application/pdf',
-    file_size_bytes: 1,
-    file_hash: 'misc',
-    is_reviewed: true,
-    misc_routing: null,
+    sourceType: 'test',
+    routing: null,
+    id: 'source-1',
+    label: 'Test source',
+    amount: 0,
+    taxDocumentId: null,
+    taxDocumentAccountId: null,
+    accountId: null,
+    formType: null,
+    box: null,
+    code: null,
+    routingReason: null,
     notes: null,
-    human_file_size: '1 B',
-    download_count: 0,
-    genai_job_id: null,
-    genai_status: 'parsed',
-    parsed_data: { payer_name: 'Tenant Co', box1_rents: 1500 },
-    uploader: null,
-    employment_entity: null,
-    account: null,
-    account_links: [],
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
+    isReviewed: true,
+    reviewStatus: 'reviewed',
+    reviewAction: null,
+    ...overrides,
+  }
+}
+
+function makeFacts(overrides: Partial<ScheduleEFacts> = {}): ScheduleEFacts {
+  return {
+    miscIncomeSources: [],
+    box1Sources: [],
+    box2Sources: [],
+    box3Sources: [],
+    box4Sources: [],
+    box11ZZSources: [],
+    box13ZZSources: [],
+    traderNiiSources: [],
+    miscIncomeTotal: 0,
+    totalBox1: 0,
+    totalBox2: 0,
+    totalBox3: 0,
+    totalBox4: 0,
+    totalBox5: 0,
+    totalBox11ZZ: 0,
+    totalBox13ZZ: 0,
+    totalTraderNii: 0,
+    totalPassive: 0,
+    totalNonpassive: 0,
+    grandTotal: 0,
     ...overrides,
   }
 }
 
 describe('ScheduleEPreview', () => {
-  it('renders 1099-MISC rental income before any K-1 rows', () => {
-    render(<ScheduleEPreview reviewedK1Docs={[]} reviewed1099Docs={[makeMiscDoc({ misc_routing: 'sch_e' })]} selectedYear={2025} />)
+  it('renders the facts loading placeholder before backend facts arrive', () => {
+    render(<ScheduleEPreview taxFacts={null} selectedYear={2025} />)
+    expect(screen.getByText(/schedule e facts are not loaded yet/i)).toBeInTheDocument()
+  })
+
+  it('renders 1099-MISC rental income from backend fact sources', () => {
+    render(
+      <ScheduleEPreview
+        taxFacts={makeFacts({
+          miscIncomeSources: [makeSource({
+            id: 'misc-1',
+            label: 'Tenant Co — 1099-MISC Schedule E income',
+            amount: 1500,
+          })],
+          miscIncomeTotal: 1500,
+          grandTotal: 1500,
+        })}
+        selectedYear={2025}
+      />,
+    )
 
     expect(screen.getByText('Part I — 1099-MISC Rental & Royalty Income')).toBeInTheDocument()
-    expect(screen.getByText('Tenant Co — 1099-MISC')).toBeInTheDocument()
+    expect(screen.getByText('Tenant Co — 1099-MISC Schedule E income')).toBeInTheDocument()
     expect(screen.getByText('1099-MISC rental & royalty income subtotal')).toBeInTheDocument()
     expect(screen.getAllByText('$1,500')).not.toHaveLength(0)
   })
 
-  it('adds 1099-MISC rental income into the Schedule E grand total', () => {
-    const lines = computeScheduleELines([], [makeMiscDoc({ misc_routing: 'sch_e', parsed_data: { payer_name: 'Tenant Co', box2_royalties: 900 } })])
-
-    expect(lines.miscIncomeTotal).toBe(900)
-    expect(lines.grandTotal).toBe(900)
-  })
-
-  it('does not route unassigned 1099-MISC rental or royalty boxes to Schedule E by default', () => {
-    const lines = computeScheduleELines([], [makeMiscDoc({ parsed_data: { payer_name: 'Tenant Co', box2_royalties: 900 } })])
-
-    expect(lines.miscIncomeTotal).toBe(0)
-    expect(lines.grandTotal).toBe(0)
-  })
-
   it('routes Box 11ZZ ordinary income/loss and Box 13ZZ deductions to Part II nonpassive', () => {
-    const k1Doc: TaxDocument = {
-      id: 99,
-      user_id: 1,
-      tax_year: 2025,
-      form_type: 'k1',
-      employment_entity_id: null,
-      account_id: null,
-      original_filename: 'aqr-delphi.pdf',
-      stored_filename: null,
-      s3_path: null,
-      mime_type: 'application/pdf',
-      file_size_bytes: 1,
-      file_hash: 'aqr',
-      is_reviewed: true,
-      misc_routing: null,
-      notes: null,
-      human_file_size: '1 B',
-      download_count: 0,
-      genai_job_id: null,
-      genai_status: 'parsed',
-      parsed_data: {
-        schemaVersion: '2026.1',
-        formType: '1065',
-        fields: { B: { value: 'AQR TA DELPHI PLUS FUND, LLC' } },
-        codes: {
-          '11': [
-            { code: ' zz ', value: '(23,167)', notes: 'Section 988 FX loss' },
-            { code: 'ZZ', value: '-54,237', notes: 'Swap loss' },
-            { code: 'ZZ', value: '3,198', notes: 'PFIC MTM income' },
-          ],
-          '13': [
-            { code: 'zz', value: '8,893', notes: 'Trader deductions' },
-            { code: 'ZZ', value: '(258)', notes: 'Administrative expenses' },
-          ],
-        },
-      },
-      uploader: null,
-      employment_entity: null,
-      account: null,
-      account_links: [],
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }
+    render(
+      <ScheduleEPreview
+        taxFacts={makeFacts({
+          box11ZZSources: [makeSource({
+            id: 'box11zz',
+            label: 'AQR TA DELPHI PLUS FUND, LLC — K-1 Box 11ZZ',
+            amount: -74_206,
+          })],
+          box13ZZSources: [makeSource({
+            id: 'box13zz',
+            label: 'AQR TA DELPHI PLUS FUND, LLC — K-1 Box 13ZZ',
+            amount: -9151,
+          })],
+          totalBox11ZZ: -74_206,
+          totalBox13ZZ: 9151,
+          totalNonpassive: -83_357,
+          grandTotal: -83_357,
+          totalTraderNii: -83_357,
+        })}
+        selectedYear={2025}
+      />,
+    )
 
-    const lines = computeScheduleELines([k1Doc], [])
-
-    expect(lines.totalBox11ZZ).toBeCloseTo(-74206)
-    expect(lines.totalBox13ZZ).toBeCloseTo(9151)
-    expect(lines.totalNonpassive).toBeCloseTo(-83357)
-    expect(lines.grandTotal).toBeCloseTo(-83357)
-    expect(lines.totalTraderNii).toBeCloseTo(-83357)
-  })
-
-  it('does not subtract Form 4952-allowed Box 13H from Schedule E line 5 totals', () => {
-    const k1Doc: TaxDocument = {
-      id: 101,
-      user_id: 1,
-      tax_year: 2025,
-      form_type: 'k1',
-      employment_entity_id: null,
-      account_id: null,
-      original_filename: 'aqr-delphi.pdf',
-      stored_filename: null,
-      s3_path: null,
-      mime_type: 'application/pdf',
-      file_size_bytes: 1,
-      file_hash: 'aqr-13h',
-      is_reviewed: true,
-      misc_routing: null,
-      notes: null,
-      human_file_size: '1 B',
-      download_count: 0,
-      genai_job_id: null,
-      genai_status: 'parsed',
-      parsed_data: {
-        schemaVersion: '2026.1',
-        formType: '1065',
-        fields: { B: { value: 'AQR TA DELPHI PLUS FUND, LLC' } },
-        codes: {
-          '13': [
-            { code: 'H', value: '10000', notes: 'Investment interest from trading activities. Deductible portion flows to Schedule E Part II as nonpassive.' },
-          ],
-        },
-      },
-      uploader: null,
-      employment_entity: null,
-      account: null,
-      account_links: [],
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }
-
-    const lines = computeScheduleELines([k1Doc], [])
-
-    expect(lines.totalNonpassive).toBe(0)
-    expect(lines.grandTotal).toBe(0)
-    expect(lines.totalTraderNii).toBe(0)
+    expect(screen.getByText(/AQR TA DELPHI PLUS FUND, LLC — K-1 Box 11ZZ/)).toBeInTheDocument()
+    expect(screen.getByText(/AQR TA DELPHI PLUS FUND, LLC — K-1 Box 13ZZ/)).toBeInTheDocument()
+    expect(screen.getByText('Schedule E combined total')).toBeInTheDocument()
+    expect(screen.getAllByText('($83,357)').length).toBeGreaterThanOrEqual(1)
   })
 })

@@ -1,22 +1,16 @@
 'use client'
 
-import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
-import type { Form6251Lines } from '@/types/finance/tax-return'
-
-export type { Form6251Lines } from '@/types/finance/tax-return'
+import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import type { Form6251Facts } from '@/types/generated/tax-preview-facts'
 
 interface Form6251PreviewProps {
-  form6251: Form6251Lines | undefined
+  form6251?: Form6251Facts | null
   selectedYear: number
 }
 
 export default function Form6251Preview({ form6251, selectedYear }: Form6251PreviewProps) {
   if (!form6251) {
-    return (
-      <div className="py-12 text-center text-muted-foreground text-sm">
-        Form 6251 data is not available.
-      </div>
-    )
+    return <FactsLoadingPlaceholder label="Form 6251" />
   }
 
   const line2aLabel = form6251.line2aSource === 'salt_deduction'

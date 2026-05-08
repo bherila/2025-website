@@ -28,6 +28,7 @@ class TaxPreviewFactsApiTest extends TestCase
                     'schedule1' => ['line5Sources', 'line5Total', 'line8Sources', 'line8bSources', 'line8bTotal', 'line8hSources', 'line8hTotal', 'line8iSources', 'line8iTotal', 'line8zSources', 'line8zTotal', 'line9TotalOtherIncome'],
                     'scheduleB' => ['interestSources', 'interestTotal', 'ordinaryDividendSources', 'ordinaryDividendTotal'],
                     'form4952' => ['investmentInterestSources', 'totalInvestmentInterestExpense', 'investmentExpenseSources', 'totalInvestmentExpenses', 'line4cNetInvestmentIncomeAfterQualifiedDividends'],
+                    'form8959' => ['wages', 'threshold', 'excessWages', 'additionalTax', 'wageSources'],
                     'form1040' => ['line1zSources', 'line1z', 'line16', 'line24', 'line33', 'line37'],
                 ],
             ]);

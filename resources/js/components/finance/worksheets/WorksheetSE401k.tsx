@@ -12,7 +12,7 @@ export type { Se401kInputs, Se401kLines } from '@/lib/planning/solo401k'
 export { computeSe401k, SE_401K_LIMITS } from '@/lib/planning/solo401k'
 
 export default function WorksheetSE401k({ state }: FormRenderProps): React.ReactElement {
-  const scheduleSE = state.taxReturn.scheduleSE
+  const scheduleSE = state.taxFacts?.scheduleSE
   const netEarningsFromSE = scheduleSE?.netEarningsFromSE ?? 0
   const deductibleSeTax = scheduleSE?.deductibleSeTax ?? 0
 

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
-import type { Form8582Lines } from '@/types/finance/tax-return'
+import type { Form8582Facts } from '@/types/generated/tax-preview-facts'
 
 import Form8582Preview from '../Form8582Preview'
 
@@ -15,7 +15,7 @@ jest.mock('@/fetchWrapper', () => ({
   },
 }))
 
-function makeForm8582(overrides: Partial<Form8582Lines> = {}): Form8582Lines {
+function makeForm8582(overrides: Partial<Form8582Facts> = {}): Form8582Facts {
   return {
     activities: [],
     totalPassiveIncome: 0,
@@ -152,6 +152,7 @@ describe('Form8582Preview', () => {
             },
             {
               activityName: 'Zero Carryforward Activity',
+              ein: null,
               isRentalRealEstate: false,
               activeParticipation: true,
               currentIncome: 5000,
@@ -220,6 +221,7 @@ describe('Form8582Preview', () => {
             },
             {
               activityName: 'Zero Carryforward Activity',
+              ein: null,
               isRentalRealEstate: false,
               activeParticipation: true,
               currentIncome: 5000,

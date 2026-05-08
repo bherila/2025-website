@@ -451,7 +451,7 @@ export const FORM_TYPE_LABELS: Record<string, string> = {
 }
 
 export const W2_FORM_TYPES = ['w2', 'w2c'] as const
-export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1'] as const
+export const ACCOUNT_FORM_TYPES_1099 = ['1099_int', '1099_div', '1099_g', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1'] as const
 
 export type {
   BrokerConsolidated1099Statement,

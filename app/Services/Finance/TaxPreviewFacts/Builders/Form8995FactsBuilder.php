@@ -3,11 +3,13 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995AFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995EntityFact;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
@@ -27,9 +29,12 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
 
     /**
      * @param  FileForTaxDocument[]  $k1Docs
+     * @param  FileForTaxDocument[]  $docs1099
      */
     public function build(
         array $k1Docs,
+        array $docs1099,
+        ScheduleBFacts $scheduleB,
         ScheduleCFacts $scheduleC,
         ScheduleFFacts $scheduleF,
         ScheduleSEFacts $scheduleSE,
@@ -41,7 +46,8 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $entities = [
             ...$this->scheduleCEntities($scheduleC, $scheduleSE),
             ...$this->scheduleFEntities($scheduleF, $scheduleSE),
-            ...$this->k1Entities($k1Docs),
+            ...$this->k1Entities($k1Docs, $year),
+            ...$this->form1099DivSection199AEntities($docs1099),
         ];
 
         $line1Sources = [];
@@ -62,7 +68,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         $qualifiedReitDividends = $this->sumMoney(array_map(static fn (Form8995EntityFact $entity): float => $entity->reitDividends, $entities));
         $qualifiedPtpIncome = $this->sumMoney(array_map(static fn (Form8995EntityFact $entity): float => $entity->ptpIncome, $entities));
         $reitPtpComponent = $this->roundMoney(max(0.0, $this->sumMoney([$qualifiedReitDividends, $qualifiedPtpIncome])) * 0.2);
-        $netCapitalGain = max(0.0, $scheduleD->line16Combined);
+        $netCapitalGain = $this->netCapitalGainForQbi($scheduleB, $scheduleD);
         $taxableIncomeLessNetCapitalGain = max(0.0, $this->subtractMoney($taxableIncomeBeforeQbi, $netCapitalGain));
         $taxableIncomeCap = $this->roundMoney($taxableIncomeLessNetCapitalGain * 0.2);
         $thresholds = Form8995Facts::thresholds($year);
@@ -193,7 +199,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @return Form8995EntityFact[]
      */
-    private function k1Entities(array $k1Docs): array
+    private function k1Entities(array $k1Docs, int $year): array
     {
         $entities = [];
 
@@ -208,10 +214,7 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
             $sources = [
                 ...$this->k1CodeSources($doc, $partnerName, $data, '17', 'V', TaxFactSourceType::Form8995K1Box17, TaxFactRouting::Form8995Line1, 'S corporation Section 199A QBI'),
                 ...($this->statementAHasAmount($statementA, 'qualifiedBusinessIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'Z', TaxFactSourceType::Form8995K1Box20Z, TaxFactRouting::Form8995Line1, 'partnership Section 199A QBI')),
-                ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AA', TaxFactSourceType::Form8995K1Box20Aa, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
-                ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AB', TaxFactSourceType::Form8995K1Box20Ab, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
-                ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AC', TaxFactSourceType::Form8995K1Box20Ac, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
-                ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AD', TaxFactSourceType::Form8995K1Box20Ad, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
+                ...$this->legacyK1Section199ASources($doc, $partnerName, $data, $statementA, $year),
             ];
 
             if ($statementA !== []) {
@@ -260,6 +263,91 @@ class Form8995FactsBuilder extends TaxPreviewFactBuilder
         }
 
         return $entities;
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $docs1099
+     * @return Form8995EntityFact[]
+     */
+    private function form1099DivSection199AEntities(array $docs1099): array
+    {
+        $sources = [];
+
+        foreach ($docs1099 as $doc) {
+            foreach ($this->document1099DivEntries($doc) as $entry) {
+                $amount = $this->firstNumericOrNestedValue(
+                    $entry['parsedData'],
+                    ['box5_section_199a', 'box5_section_199a_dividends', 'div_5_section199a', 'div_5_section_199a_dividends'],
+                    ['5_section_199a_dividends', '5_section_199a'],
+                );
+                if ($amount === null || $amount === 0.0) {
+                    continue;
+                }
+
+                $link = $entry['link'];
+                $sources[] = new TaxFactSource(
+                    id: $link instanceof TaxDocumentAccount ? "link-{$link->id}-form-8995-1099-div-box5" : "doc-{$doc->id}-form-8995-1099-div-box5",
+                    label: $this->payerName($doc, $link, $entry['parsedData']).' — 1099-DIV Box 5 Section 199A dividends',
+                    amount: $this->roundMoney($amount),
+                    sourceType: TaxFactSourceType::Form1099DivSection199ADividends,
+                    taxDocumentId: $doc->id,
+                    taxDocumentAccountId: $link?->id,
+                    accountId: $link?->account_id,
+                    formType: '1099_div',
+                    box: '5',
+                    routing: TaxFactRouting::Form8995Line6,
+                    routingReason: '1099-DIV Box 5 Section 199A dividends are qualified REIT dividends for the QBI deduction.',
+                    isReviewed: $this->sourceIsReviewed($doc, $link),
+                    reviewStatus: $this->reviewStatus($doc, $link),
+                    reviewAction: $this->reviewAction($doc, $link),
+                );
+            }
+        }
+
+        if ($sources === []) {
+            return [];
+        }
+
+        return [
+            new Form8995EntityFact(
+                entityKey: '1099-div-section-199a',
+                label: '1099-DIV Section 199A dividends',
+                sourceKind: '1099_div',
+                sources: $sources,
+                qbiIncome: 0.0,
+                reitDividends: $this->sumSources($sources),
+                ptpIncome: 0.0,
+                qbiComponent: 0.0,
+            ),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $statementA
+     * @return TaxFactSource[]
+     */
+    private function legacyK1Section199ASources(FileForTaxDocument $doc, string $partnerName, array $data, array $statementA, int $year): array
+    {
+        if ($year >= 2023) {
+            return [];
+        }
+
+        return [
+            ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AA', TaxFactSourceType::Form8995K1Box20Aa, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
+            ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AB', TaxFactSourceType::Form8995K1Box20Ab, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
+            ...($this->statementAHasAmount($statementA, 'reitDividends') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AC', TaxFactSourceType::Form8995K1Box20Ac, TaxFactRouting::Form8995Line6, 'qualified REIT dividends')),
+            ...($this->statementAHasAmount($statementA, 'ptpIncome') ? [] : $this->k1CodeSources($doc, $partnerName, $data, '20', 'AD', TaxFactSourceType::Form8995K1Box20Ad, TaxFactRouting::Form8995Line9, 'qualified PTP income')),
+        ];
+    }
+
+    private function netCapitalGainForQbi(ScheduleBFacts $scheduleB, ScheduleDFacts $scheduleD): float
+    {
+        $scheduleDNetCapitalGain = $scheduleD->line15NetLongTerm > 0.0 && $scheduleD->line16Combined > 0.0
+            ? min($scheduleD->line15NetLongTerm, $scheduleD->line16Combined)
+            : 0.0;
+
+        return $this->sumMoney([max(0.0, $scheduleB->qualifiedDividendTotal), $scheduleDNetCapitalGain]);
     }
 
     /**

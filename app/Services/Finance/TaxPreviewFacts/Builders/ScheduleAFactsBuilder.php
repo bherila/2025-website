@@ -47,10 +47,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $mortgageInterestSources = $this->userDeductionSources($userDeductions, DeductionCategory::MortgageInterest->value);
         $charitableCashSources = $this->userDeductionSources($userDeductions, DeductionCategory::CharitableCash->value);
         $charitableNoncashSources = $this->userDeductionSources($userDeductions, DeductionCategory::CharitableNoncash->value);
-        $otherItemizedSources = [
-            ...$this->userDeductionSources($userDeductions, DeductionCategory::Other->value),
-            ...$this->k1PortfolioDeductionSources($k1Docs),
-        ];
+        $otherItemizedSources = $this->userDeductionSources($userDeductions, DeductionCategory::Other->value);
 
         $stateIncomeTaxTotal = $this->sumSources($stateIncomeTaxSources);
         $salesTaxTotal = $this->sumSources($salesTaxSources);
@@ -173,49 +170,6 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
                 routing: $this->deductionRouting($category),
                 routingReason: 'User-entered itemized deduction category maps to a Schedule A source line.',
             );
-        }
-
-        return $sources;
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $k1Docs
-     * @return TaxFactSource[]
-     */
-    private function k1PortfolioDeductionSources(array $k1Docs): array
-    {
-        $sources = [];
-
-        foreach ($k1Docs as $doc) {
-            $data = $this->k1Data($doc);
-            if ($data === null) {
-                continue;
-            }
-
-            $partnerName = $this->k1PartnerName($doc, $data);
-            foreach ($this->k1CodeItems($data, '13', 'L') as $index => $item) {
-                $amount = $this->parseMoney($item['value'] ?? null);
-                if ($amount === null || $amount === 0.0) {
-                    continue;
-                }
-
-                $sources[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-schedule-a-13L-{$index}",
-                    label: "{$partnerName} — K-1 Box 13L portfolio deduction",
-                    amount: abs($this->roundMoney($amount)),
-                    sourceType: TaxFactSourceType::K1PortfolioDeduction,
-                    taxDocumentId: $doc->id,
-                    formType: $this->formType($doc),
-                    box: '13',
-                    code: 'L',
-                    routing: TaxFactRouting::ScheduleALine16,
-                    routingReason: 'K-1 Box 13L portfolio deductions support Schedule A line 16.',
-                    notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
-                    isReviewed: $this->sourceIsReviewed($doc),
-                    reviewStatus: $this->reviewStatus($doc),
-                    reviewAction: $this->reviewAction($doc),
-                );
-            }
         }
 
         return $sources;

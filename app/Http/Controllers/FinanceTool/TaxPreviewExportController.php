@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
+use App\Services\Finance\TaxPreviewWorkbookBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -12,26 +14,26 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TaxPreviewExportController extends Controller
 {
+    public function __construct(
+        private readonly TaxPreviewWorkbookBuilder $workbookBuilder,
+    ) {}
+
     public function export(Request $request): Response
     {
         $validated = $request->validate([
-            'filename' => ['required', 'string', 'max:255'],
-            'sheets' => ['required', 'array', 'min:1'],
-            'sheets.*.name' => ['required', 'string', 'max:31'],
-            'sheets.*.rows' => ['required', 'array'],
-            'sheets.*.rows.*.line' => ['nullable', 'string'],
-            'sheets.*.rows.*.description' => ['required', 'string'],
-            'sheets.*.rows.*.amount' => ['nullable', 'numeric'],
-            'sheets.*.rows.*.formula' => ['nullable', 'string'],
-            'sheets.*.rows.*.note' => ['nullable', 'string'],
-            'sheets.*.rows.*.isHeader' => ['nullable', 'boolean'],
-            'sheets.*.rows.*.isTotal' => ['nullable', 'boolean'],
+            'year' => ['required', 'integer', 'min:1900', 'max:2100'],
+            'filename' => ['nullable', 'string', 'max:255'],
         ]);
+        $workbook = $this->workbookBuilder->buildForUserYear(
+            (int) Auth::id(),
+            (int) $validated['year'],
+            $validated['filename'] ?? null,
+        );
 
         $spreadsheet = new Spreadsheet;
         $spreadsheet->removeSheetByIndex(0);
 
-        foreach ($validated['sheets'] as $index => $sheetData) {
+        foreach ($workbook['sheets'] as $index => $sheetData) {
             // Sanitize: strip Excel-invalid characters and enforce the 31-char limit.
             $tabName = preg_replace('/[\\\\\/\*\?\:\[\]]/', '', (string) $sheetData['name']);
             $tabName = trim(mb_substr($tabName, 0, 31)) ?: 'Sheet';
@@ -81,7 +83,7 @@ class TaxPreviewExportController extends Controller
         $writer->save('php://output');
         $content = ob_get_clean();
 
-        $filename = preg_replace('/[^A-Za-z0-9._-]/', '-', (string) $validated['filename']) ?: 'tax-preview.xlsx';
+        $filename = preg_replace('/[^A-Za-z0-9._-]/', '-', (string) $workbook['filename']) ?: 'tax-preview.xlsx';
         if (! str_ends_with(strtolower($filename), '.xlsx')) {
             $filename .= '.xlsx';
         }

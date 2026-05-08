@@ -39,6 +39,9 @@ enum TaxFactSourceType: string
     case Form1099DivTaxExemptInterest = '1099_div_tax_exempt_interest';
     case Form1099DivOrdinaryDividends = '1099_div_ordinary_dividends';
     case Form1099DivQualifiedDividends = '1099_div_qualified_dividends';
+    case Form1099DivSection199ADividends = '1099_div_section_199a_dividends';
+    case Form1099GTaxableRefund = '1099_g_taxable_refund';
+    case Form1099GUnemployment = '1099_g_unemployment';
     case Form1099IntForeignTax = '1099_int_foreign_tax';
     case Form1099IntInterest = '1099_int_interest';
     case Form1099IntInvestmentExpense = '1099_int_investment_expense';
@@ -60,6 +63,7 @@ enum TaxFactSourceType: string
     case Form1040ScheduleA = 'form_1040_schedule_a';
     case Form1040ScheduleD = 'form_1040_schedule_d';
     case Form1040StandardDeduction = 'form_1040_standard_deduction';
+    case Form8959AdditionalMedicareWithholding = 'form_8959_additional_medicare_withholding';
     case Form4797PartI1231Gain = 'form_4797_part_i_1231_gain';
     case Form4797PartI1231Loss = 'form_4797_part_i_1231_loss';
     case Form4797PartIIOrdinaryGain = 'form_4797_part_ii_ordinary_gain';
@@ -95,6 +99,7 @@ enum TaxFactSourceType: string
     case ScheduleSEScheduleF = 'schedule_se_schedule_f';
     case ScheduleSEW2SocialSecurityWages = 'schedule_se_w2_social_security_wages';
     case ScheduleSEW2MedicareWages = 'schedule_se_w2_medicare_wages';
+    case ScheduleSEW2MedicareTaxWithheld = 'schedule_se_w2_medicare_tax_withheld';
     case ScheduleSEPayslipSocialSecurityWages = 'schedule_se_payslip_social_security_wages';
     case ScheduleSEPayslipMedicareWages = 'schedule_se_payslip_medicare_wages';
     case ScheduleFExpenses = 'schedule_f_expenses';

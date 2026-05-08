@@ -1,6 +1,6 @@
 /**
  * K-1 routing notes — single source of truth consumed by:
- *   - buildTaxWorkbook.ts  (XLSX export destination summary)
+ *   - K-1 review surfaces (destination summary)
  *   - k1Utils.ts           (review panel helpers: unrouted codes, destination badges)
  */
 

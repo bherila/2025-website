@@ -118,9 +118,7 @@ export default function WorksheetTaxableSS({ state }: FormRenderProps): React.Re
   // Approximation of modified AGI excluding SS: sum interest + dividends + Schedule 1 line 10
   // net of Schedule 1 line 26. This mirrors how Form 1040 line 11 is computed in the
   // context memo (TaxPreviewContext — no SS line exists yet, so we rebuild it).
-  const schedule1 = state.taxReturn.schedule1
-  const scheduleB = state.taxReturn.scheduleB
-  const modifiedAgiExcludingSs = currency(state.taxReturn.form1040?.find((l) => l.line === '11')?.value ?? 0)
+  const modifiedAgiExcludingSs = currency(state.taxFacts?.form1040.line11 ?? 0)
     .subtract(0).value // Form 1040 line 11 today excludes SS already (line 6b has no source wired).
 
   const taxExemptInterest = 0 // Not currently tracked; reserved for future Schedule B tax-exempt line.
@@ -185,11 +183,6 @@ export default function WorksheetTaxableSS({ state }: FormRenderProps): React.Re
           <p>The full 85% of gross SS benefits is taxable — the maximum under Pub 915.</p>
         </Callout>
       )}
-
-      {/* scheduleB / schedule1 intentionally referenced so ESLint doesn't flag them in
-          the no-op tax-exempt-interest path; they will be wired in once Schedule B
-          surfaces tax-exempt interest. */}
-      {scheduleB === undefined && schedule1 === undefined ? null : null}
     </div>
   )
 }

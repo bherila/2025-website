@@ -9,7 +9,9 @@ import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { CapitalLossCarryoverLines, Form461Lines, Form8959Lines, Form8960Lines, Schedule2Lines, ScheduleSELines } from '@/types/finance/tax-return'
+import { schedule2Line11AdditionalMedicareTaxFromFacts } from '@/lib/finance/taxPreviewFactsAdapters'
+import type { CapitalLossCarryoverLines, Form461Lines } from '@/types/finance/tax-return'
+import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 /** Reusable data-source drilldown modal. */
 function SourceModal({
@@ -79,21 +81,63 @@ function SourceModal({
 }
 
 interface AdditionalTaxesPreviewProps {
-  schedule2?: Schedule2Lines | undefined
-  scheduleSE?: ScheduleSELines | undefined
-  form8959?: Form8959Lines | undefined
-  form8960?: Form8960Lines | undefined
+  taxFacts?: TaxPreviewFacts | null
+  isMarried?: boolean
   capitalLossCarryover?: CapitalLossCarryoverLines | undefined
   form461?: Form461Lines | undefined
   /** When provided, the source dialogs surface a Go-to-source affordance. */
   onTabChange?: (tab: TaxTabId) => void
 }
 
-export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959, form8960, capitalLossCarryover, form461, onTabChange }: AdditionalTaxesPreviewProps) {
+function sourceLines(sources: TaxFactSource[]): { label: string; amount: number; docId?: number }[] {
+  return sources.map((source) => ({
+    label: source.label,
+    amount: source.amount,
+    ...(source.taxDocumentId !== null ? { docId: source.taxDocumentId } : {}),
+  }))
+}
+
+export default function AdditionalTaxesPreview({ taxFacts, isMarried = false, capitalLossCarryover, form461, onTabChange }: AdditionalTaxesPreviewProps) {
   const [wagesModal, setWagesModal] = useState(false)
   const [interestModal, setInterestModal] = useState(false)
   const [dividendModal, setDividendModal] = useState(false)
   const [passiveModal, setPassiveModal] = useState(false)
+  const form8960 = taxFacts
+    ? {
+        taxableInterest: taxFacts.form8960.taxableInterest,
+        ordinaryDividends: taxFacts.form8960.ordinaryDividends,
+        netCapGains: taxFacts.form8960.netCapGains,
+        passiveIncome: taxFacts.form8960.passiveIncome,
+        nonpassiveTradingIncome: taxFacts.form8960.nonpassiveTradingIncome,
+        investmentInterestExpense: taxFacts.form8960.investmentInterestExpense,
+        grossNII: taxFacts.form8960.grossNII,
+        totalDeductions: taxFacts.form8960.totalDeductions,
+        netInvestmentIncome: taxFacts.form8960.netInvestmentIncome,
+        magi: taxFacts.form8960.magi ?? 0,
+        threshold: isMarried ? taxFacts.form8960.thresholdMarriedFilingJointly ?? 250_000 : taxFacts.form8960.thresholdSingle ?? 200_000,
+        magiExcess: isMarried ? taxFacts.form8960.magiExcessMarriedFilingJointly ?? 0 : taxFacts.form8960.magiExcessSingle ?? 0,
+        niitTax: isMarried ? taxFacts.form8960.niitTaxMarriedFilingJointly ?? 0 : taxFacts.form8960.niitTaxSingle ?? 0,
+        components: taxFacts.form8960.componentSources.map(source => ({
+          label: source.label,
+          amount: source.amount,
+          ...(source.box ? { boxRef: source.box } : {}),
+        })),
+        interestSources: sourceLines(taxFacts.form8960.componentSources.filter(source => source.routing === 'form_8960_line_1')),
+        dividendSources: sourceLines(taxFacts.form8960.componentSources.filter(source => source.routing === 'form_8960_line_2')),
+        passiveSources: sourceLines(taxFacts.form8960.componentSources.filter(source => source.routing === 'form_8960_line_4a')),
+      }
+    : undefined
+  const form8959 = taxFacts?.form8959
+  const schedule2 = taxFacts
+    ? {
+        altMinimumTax: taxFacts.form6251.amt,
+        selfEmploymentTax: taxFacts.scheduleSE.seTax,
+        additionalMedicareTax: schedule2Line11AdditionalMedicareTaxFromFacts(taxFacts),
+        niit: form8960?.niitTax ?? 0,
+        totalAdditionalTaxes: taxFacts.form1040.line23,
+      }
+    : undefined
+  const scheduleSE = taxFacts?.scheduleSE
 
   const hasContent =
     (schedule2?.totalAdditionalTaxes ?? 0) > 0 ||
@@ -152,7 +196,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
             boxRef="1"
             label="Medicare wages"
             value={form8959.wages}
-            {...(form8959.sources.length > 0 ? { onDetails: () => setWagesModal(true) } : {})}
+            {...(form8959.wageSources.length > 0 ? { onDetails: () => setWagesModal(true) } : {})}
           />
           <FormLine
             label={`Less: threshold (${fmtAmt(form8959.threshold, 0)} — ${form8959.threshold === 200_000 ? 'Single/HOH' : 'MFJ'})`}
@@ -278,7 +322,7 @@ export default function AdditionalTaxesPreview({ schedule2, scheduleSE, form8959
     {form8959 && (
       <SourceModal
         title="Medicare Wage Sources — Form 8959 Line 1"
-        rows={form8959.sources.map(s => ({ label: s.label, amount: s.wages }))}
+        rows={sourceLines(form8959.wageSources)}
         totalLabel="Total Medicare wages"
         total={form8959.wages}
         open={wagesModal}

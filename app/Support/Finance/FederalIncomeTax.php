@@ -3,7 +3,7 @@
 namespace App\Support\Finance;
 
 use App\Services\Finance\MoneyMath;
-use InvalidArgumentException;
+use Illuminate\Support\Facades\Log;
 
 final class FederalIncomeTax
 {
@@ -11,6 +11,10 @@ final class FederalIncomeTax
      * @var array<int, array{single: list<array{0: float, 1: float}>, mfj: list<array{0: float, 1: float}>}>
      */
     private const array ORDINARY_BRACKETS = [
+        2023 => [
+            'single' => [[11000.0, 0.10], [44725.0, 0.12], [95375.0, 0.22], [182100.0, 0.24], [231250.0, 0.32], [578125.0, 0.35], [PHP_FLOAT_MAX, 0.37]],
+            'mfj' => [[22000.0, 0.10], [89450.0, 0.12], [190750.0, 0.22], [364200.0, 0.24], [462500.0, 0.32], [693750.0, 0.35], [PHP_FLOAT_MAX, 0.37]],
+        ],
         2024 => [
             'single' => [[11600.0, 0.10], [47150.0, 0.12], [100525.0, 0.22], [191950.0, 0.24], [243725.0, 0.32], [609350.0, 0.35], [PHP_FLOAT_MAX, 0.37]],
             'mfj' => [[23200.0, 0.10], [94300.0, 0.12], [201050.0, 0.22], [383900.0, 0.24], [487450.0, 0.32], [731200.0, 0.35], [PHP_FLOAT_MAX, 0.37]],
@@ -29,6 +33,10 @@ final class FederalIncomeTax
      * @var array<int, array{single: array{zero: float, fifteen: float}, mfj: array{zero: float, fifteen: float}}>
      */
     private const array CAPITAL_GAIN_THRESHOLDS = [
+        2023 => [
+            'single' => ['zero' => 44625.0, 'fifteen' => 492300.0],
+            'mfj' => ['zero' => 89250.0, 'fifteen' => 553850.0],
+        ],
         2024 => [
             'single' => ['zero' => 47025.0, 'fifteen' => 518900.0],
             'mfj' => ['zero' => 94050.0, 'fifteen' => 583750.0],
@@ -111,12 +119,18 @@ final class FederalIncomeTax
 
         $years = array_keys($table);
         sort($years);
+        $firstYear = $years[0];
+        $lastYear = $years[array_key_last($years)];
 
-        throw new InvalidArgumentException(sprintf(
-            'Federal income tax tables are not configured for year %d (supported: %d–%d).',
-            $year,
-            $years[0],
-            $years[array_key_last($years)],
-        ));
+        if ($year < $firstYear) {
+            return $firstYear;
+        }
+
+        Log::warning("Federal income tax brackets unavailable for {$year}; falling back to {$lastYear}", [
+            'requested_year' => $year,
+            'table_year' => $lastYear,
+        ]);
+
+        return $lastYear;
     }
 }

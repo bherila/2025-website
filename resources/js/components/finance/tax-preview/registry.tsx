@@ -16,7 +16,7 @@ import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
-import Schedule3Preview, { computeSchedule3 } from '@/components/finance/Schedule3Preview'
+import Schedule3Preview from '@/components/finance/Schedule3Preview'
 import ScheduleAPreview from '@/components/finance/ScheduleAPreview'
 import ScheduleBPreview from '@/components/finance/ScheduleBPreview'
 import ScheduleCTab from '@/components/finance/ScheduleCTab'
@@ -34,21 +34,6 @@ import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxable
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
-import {
-  buildEstimatedTaxSheet,
-  buildForm1116Sheet,
-  buildForm4952Sheet,
-  buildForm6251Sheet,
-  buildForm8582Sheet,
-  buildForm8949Sheet,
-  buildForm8995Sheet,
-  buildOverviewSheet,
-  buildScheduleBSheet,
-  buildScheduleCSheet,
-  buildScheduleDSheet,
-  buildScheduleESheet,
-  buildScheduleSESheet,
-} from '@/lib/finance/buildTaxWorkbook'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 
 import { useDockActions } from './DockActions'
@@ -81,17 +66,9 @@ function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
 
 function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
-  const alimonyInput = (
-    <Schedule1AlimonyInput
-      value={state.schedule1Line2aAlimony}
-      onChange={state.setSchedule1Line2aAlimony}
-    />
-  )
   return (
     <Schedule1Preview
       selectedYear={state.year}
-      schedule1={state.taxReturn.schedule1}
-      line2aAlimonyInput={alimonyInput}
       onTabChange={tabToDrill(onDrill)}
       taxFacts={state.taxFacts?.schedule1 ?? null}
       onOpenDoc={openTaxDocumentDetail}
@@ -99,43 +76,13 @@ function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   )
 }
 
-function Schedule1AlimonyInput({
-  value,
-  onChange,
-}: {
-  value: number
-  onChange: (next: number) => void
-}): React.ReactElement {
-  return (
-    <input
-      type="number"
-      aria-label="Alimony received (pre-2019 decrees)"
-      className="w-28 rounded border px-2 py-0.5 text-right text-[11px]"
-      value={value === 0 ? '' : value}
-      placeholder="0"
-      step="0.01"
-      onChange={(e) => {
-        const raw = e.target.value.trim()
-        if (raw === '') {
-          onChange(0)
-          return
-        }
-        const n = parseFloat(raw)
-        onChange(isNaN(n) ? 0 : n)
-      }}
-    />
-  )
-}
-
 function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   return (
     <AdditionalTaxesPreview
-      schedule2={state.taxReturn.schedule2}
-      scheduleSE={state.taxReturn.scheduleSE}
-      form8959={state.taxReturn.form8959}
-      form8960={state.taxReturn.form8960}
-      capitalLossCarryover={state.taxReturn.capitalLossCarryover}
-      form461={state.taxReturn.form461}
+      taxFacts={state.taxFacts}
+      isMarried={state.isMarried}
+      capitalLossCarryover={state.capitalLossCarryover}
+      form461={state.form461}
       onTabChange={tabToDrill(onDrill)}
     />
   )
@@ -146,15 +93,9 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <ScheduleAPreview
       selectedYear={state.year}
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
       isMarried={state.isMarried}
-      userDeductions={state.userDeductions}
-      form4952={state.taxReturn.form4952}
-      form4952Facts={state.taxFacts?.form4952 ?? null}
       scheduleAFacts={state.taxFacts?.scheduleA ?? null}
       onOpenDoc={openTaxDocumentDetail}
-      {...(state.shortDividendSummary ? { shortDividendSummary: state.shortDividendSummary } : {})}
     />
   )
 }
@@ -163,12 +104,8 @@ function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleBPreview
-      interestIncome={state.income1099.interestIncome}
-      dividendIncome={state.income1099.dividendIncome}
-      qualifiedDividends={state.income1099.qualifiedDividends}
+      taxFacts={state.taxFacts?.scheduleB ?? null}
       selectedYear={state.year}
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
       onOpenDoc={reviewK1Doc}
     />
   )
@@ -178,10 +115,8 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleDPreview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
+      taxFacts={state.taxFacts?.scheduleD ?? null}
       selectedYear={state.year}
-      priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
       onOpenDoc={openTaxDocumentDetail}
       onGoToForm1040={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}
     />
@@ -189,11 +124,12 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 }
 
 function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleEPreview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
+      taxFacts={state.taxFacts?.scheduleE ?? null}
       selectedYear={state.year}
+      onOpenDoc={openTaxDocumentDetail}
     />
   )
 }
@@ -215,18 +151,13 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
 function Form4952Adapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <Form4952Preview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
-      income1099={state.income1099}
-      {...(state.shortDividendSummary
-        ? { shortDividendDeduction: state.shortDividendSummary.totalItemizedDeduction }
-        : {})}
+      form4952Facts={state.taxFacts?.form4952 ?? null}
     />
   )
 }
 
 function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
-  return <Form6251Preview form6251={state.taxReturn.form6251} selectedYear={state.year} />
+  return <Form6251Preview form6251={state.taxFacts?.form6251 ?? null} selectedYear={state.year} />
 }
 
 function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -240,17 +171,9 @@ function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8582Adapter({ state }: FormRenderProps): React.ReactElement {
-  if (!state.taxReturn.form8582) {
-    return (
-      <StubCard
-        title="Form 8582 — Passive Activity Loss Limitations"
-        note="No passive activity data available. Add a Schedule E rental property or a K-1 with passive losses to populate this form."
-      />
-    )
-  }
   return (
     <Form8582Preview
-      form8582={state.taxReturn.form8582}
+      form8582={state.taxFacts?.form8582 ?? null}
       year={state.year}
       palCarryforwards={state.palCarryforwards}
       onCarryforwardsChange={state.setPalCarryforwards}
@@ -281,13 +204,23 @@ function StubCard({ title, note }: { title: string; note: string }): React.React
 }
 
 function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
-  const schedule3 = computeSchedule3({ form1116: state.taxReturn.form1116, taxFacts: state.taxFacts?.schedule3 ?? null })
-  return <Schedule3Preview schedule3={schedule3} selectedYear={state.year} />
+  const facts = state.taxFacts?.schedule3
+  if (!facts) {
+    return (
+      <StubCard
+        title="Schedule 3 — Additional Credits & Payments"
+        note="Schedule 3 facts are not loaded yet."
+      />
+    )
+  }
+
+  return <Schedule3Preview facts={facts} selectedYear={state.year} />
 }
 
 function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc, bulkSetSbpElection } = useDockActions()
-  if (!state.taxReturn.form1116) {
+  const facts = state.taxFacts?.form1116
+  if (!facts) {
     return (
       <StubCard
         title="Form 1116 — Foreign Tax Credit"
@@ -299,7 +232,7 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
   const category = instance?.key === 'general' || instance?.key === 'passive' ? instance.key : undefined
   return (
     <Form1116Preview
-      form1116={state.taxReturn.form1116}
+      form1116={facts}
       foreignTaxSummaries={state.foreignTaxSummaries}
       allK1Docs={allK1Docs}
       selectedYear={state.year}
@@ -334,168 +267,28 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form4797Adapter({ state }: FormRenderProps): React.ReactElement {
-  if (!state.taxReturn.form4797) {
-    return (
-      <StubCard
-        title="Form 4797 — Sales of Business Property"
-        note="Form 4797 is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <Form4797Preview
       selectedYear={state.year}
-      form4797={state.taxReturn.form4797}
-      partINet1231Input={
-        <NumericInput
-          value={state.form4797PartINet1231}
-          onChange={state.setForm4797PartINet1231}
-          ariaLabel="Form 4797 Part I net §1231 gain or loss"
-        />
-      }
-      partIIOrdinaryInput={
-        <NumericInput
-          value={state.form4797PartIIOrdinary}
-          onChange={state.setForm4797PartIIOrdinary}
-          ariaLabel="Form 4797 Part II ordinary gain or loss"
-        />
-      }
-      partIIIRecaptureInput={
-        <NumericInput
-          value={state.form4797PartIIIRecapture}
-          onChange={state.setForm4797PartIIIRecapture}
-          ariaLabel="Form 4797 Part III depreciation recapture"
-        />
-      }
+      form4797={state.taxFacts?.form4797 ?? null}
     />
   )
 }
 
 function ScheduleFAdapter({ state }: FormRenderProps): React.ReactElement {
-  if (!state.taxReturn.scheduleF) {
-    return (
-      <StubCard
-        title="Schedule F — Profit or Loss From Farming"
-        note="Schedule F is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <ScheduleFPreview
       selectedYear={state.year}
-      scheduleF={state.taxReturn.scheduleF}
-      grossFarmIncomeInput={
-        <NumericInput
-          value={state.scheduleFGrossIncome}
-          onChange={state.setScheduleFGrossIncome}
-          ariaLabel="Schedule F gross farm income"
-        />
-      }
-      totalExpensesInput={
-        <NumericInput
-          value={state.scheduleFTotalExpenses}
-          onChange={state.setScheduleFTotalExpenses}
-          ariaLabel="Schedule F total farm expenses"
-        />
-      }
-    />
-  )
-}
-
-function NumericInput({
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  value: number
-  onChange: (next: number) => void
-  ariaLabel: string
-}): React.ReactElement {
-  return (
-    <input
-      type="number"
-      aria-label={ariaLabel}
-      className="w-32 rounded border px-2 py-0.5 text-right text-[11px]"
-      value={value === 0 ? '' : value}
-      placeholder="0"
-      step="0.01"
-      onChange={(e) => {
-        const raw = e.target.value.trim()
-        if (raw === '') {
-          onChange(0)
-          return
-        }
-        const n = parseFloat(raw)
-        onChange(isNaN(n) ? 0 : n)
-      }}
+      scheduleF={state.taxFacts?.scheduleF ?? null}
     />
   )
 }
 
 function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
-  if (!state.taxReturn.form8606) {
-    return (
-      <StubCard
-        title="Form 8606 — Nondeductible IRAs"
-        note="Form 8606 data is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <Form8606Preview
       selectedYear={state.year}
-      form8606={state.taxReturn.form8606}
-      nondeductibleContributionsInput={
-        <Form8606NumericInput
-          value={state.form8606NondeductibleContributions}
-          onChange={state.setForm8606NondeductibleContributions}
-          ariaLabel="Nondeductible contributions to traditional IRA"
-        />
-      }
-      priorYearBasisInput={
-        <Form8606NumericInput
-          value={state.form8606PriorYearBasis}
-          onChange={state.setForm8606PriorYearBasis}
-          ariaLabel="Prior-year Form 8606 basis carryforward"
-        />
-      }
-      yearEndFmvInput={
-        <Form8606NumericInput
-          value={state.form8606YearEndFmv}
-          onChange={state.setForm8606YearEndFmv}
-          ariaLabel="Year-end FMV of traditional/SEP/SIMPLE IRAs"
-        />
-      }
-    />
-  )
-}
-
-function Form8606NumericInput({
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  value: number
-  onChange: (next: number) => void
-  ariaLabel: string
-}): React.ReactElement {
-  return (
-    <input
-      type="number"
-      aria-label={ariaLabel}
-      className="w-28 rounded border px-2 py-0.5 text-right text-[11px]"
-      value={value === 0 ? '' : value}
-      placeholder="0"
-      step="0.01"
-      onChange={(e) => {
-        const raw = e.target.value.trim()
-        if (raw === '') {
-          onChange(0)
-          return
-        }
-        const n = parseFloat(raw)
-        onChange(isNaN(n) ? 0 : n)
-      }}
+      form8606={state.taxFacts?.form8606 ?? null}
     />
   )
 }
@@ -574,11 +367,10 @@ function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactEle
 
 function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
   const summary = summarizeTaxEstimate({
-    taxReturn: state.taxReturn,
-    year: state.year,
-    isMarried: state.isMarried,
+    taxFacts: state.taxFacts,
+    accountDocuments: state.accountDocuments,
+    w2Documents: state.w2Documents,
     payslips: state.payslips,
-    reviewed1099RDocs: state.reviewed1099RDocs,
   })
   return <TaxEstimateFullDetail summary={summary} />
 }
@@ -783,11 +575,6 @@ export const formRegistry: FormRegistry = {
     category: 'App',
     presentation: 'app',
     component: HomePlaceholder,
-    xlsx: {
-      sheetName: () => 'Overview',
-      order: 10,
-      build: buildOverviewSheet,
-    },
   },
   'form-1040': {
     id: 'form-1040',
@@ -809,13 +596,23 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Schedule1Adapter,
     keyAmounts: (state) => {
-      const s1 = state.taxReturn.schedule1
+      const s1 = state.taxFacts?.schedule1
       if (!s1) {
         return null
       }
       return [
-        { label: 'Line 10', value: s1.partI.line10_total },
-        { label: 'Line 26', value: s1.partII.line26_totalAdjustments },
+        {
+          label: 'Line 10',
+          value: currency(s1.line1aTotal)
+            .add(s1.line2aTotal)
+            .add(s1.line3Total)
+            .add(s1.line4Total)
+            .add(s1.line5Total)
+            .add(s1.line6Total)
+            .add(s1.line7Total)
+            .add(s1.line9TotalOtherIncome).value,
+        },
+        { label: 'Line 26', value: s1.line15Total },
       ]
     },
   },
@@ -829,11 +626,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Schedule2Adapter,
     keyAmounts: (state) => {
-      const s2 = state.taxReturn.schedule2
-      if (!s2) {
+      const facts = state.taxFacts
+      if (!facts) {
         return null
       }
-      return [{ label: 'Total', value: s2.totalAdditionalTaxes }]
+      return [{ label: 'Total', value: facts.form1040.line23 }]
     },
   },
   'sch-a': {
@@ -846,7 +643,7 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleAAdapter,
     keyAmounts: (state) => {
-      const sA = state.taxReturn.scheduleA
+      const sA = state.taxFacts?.scheduleA
       if (!sA) {
         return null
       }
@@ -863,19 +660,14 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleBAdapter,
     keyAmounts: (state) => {
-      const sB = state.taxReturn.scheduleB
+      const sB = state.taxFacts?.scheduleB
       if (!sB) {
         return null
       }
       return [
         { label: 'Int', value: sB.interestTotal },
-        { label: 'Div', value: sB.dividendTotal },
+        { label: 'Div', value: sB.ordinaryDividendTotal },
       ]
-    },
-    xlsx: {
-      sheetName: () => 'Schedule B',
-      order: 25,
-      build: buildScheduleBSheet,
     },
   },
   'sch-d': {
@@ -888,16 +680,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleDAdapter,
     keyAmounts: (state) => {
-      const sD = state.taxReturn.scheduleD
+      const sD = state.taxFacts?.scheduleD
       if (!sD) {
         return null
       }
-      return [{ label: 'Net G/L', value: sD.schD_line16 }]
-    },
-    xlsx: {
-      sheetName: () => 'Schedule D',
-      order: 40,
-      build: buildScheduleDSheet,
+      return [{ label: 'Net G/L', value: sD.line16Combined }]
     },
   },
   'sch-e': {
@@ -910,16 +697,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: ScheduleEAdapter,
     keyAmounts: (state) => {
-      const sE = state.taxReturn.scheduleE
+      const sE = state.taxFacts?.scheduleE
       if (!sE) {
         return null
       }
       return [{ label: 'Total', value: sE.grandTotal }]
-    },
-    xlsx: {
-      sheetName: () => 'Schedule E',
-      order: 50,
-      build: buildScheduleESheet,
     },
   },
   'sch-f': {
@@ -931,7 +713,7 @@ export const formRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleFAdapter,
-    hasData: (state) => state.taxReturn.scheduleF?.hasActivity ?? false,
+    hasData: (state) => state.taxFacts?.scheduleF.hasActivity ?? false,
   },
   'sch-se': {
     id: 'sch-se',
@@ -944,16 +726,11 @@ export const formRegistry: FormRegistry = {
     component: ScheduleSEAdapter,
     relatedForms: ['sch-c', 'sch-1', 'sch-2'],
     keyAmounts: (state) => {
-      const sse = state.taxReturn.scheduleSE
+      const sse = state.taxFacts?.scheduleSE
       if (!sse) {
         return null
       }
       return [{ label: 'SE Tax', value: sse.seTax }]
-    },
-    xlsx: {
-      sheetName: () => 'Schedule SE',
-      order: 60,
-      build: buildScheduleSESheet,
     },
   },
   'form-4952': {
@@ -965,11 +742,6 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4952Adapter,
-    xlsx: {
-      sheetName: () => 'Form 4952',
-      order: 80,
-      build: buildForm4952Sheet,
-    },
   },
   'form-6251': {
     id: 'form-6251',
@@ -981,16 +753,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Form6251Adapter,
     keyAmounts: (state) => {
-      const f6251 = state.taxReturn.form6251
+      const f6251 = state.taxFacts?.form6251
       if (!f6251) {
         return null
       }
       return [{ label: 'AMT', value: f6251.amt }]
-    },
-    xlsx: {
-      sheetName: () => 'Form 6251',
-      order: 90,
-      build: buildForm6251Sheet,
     },
   },
   'form-8995': {
@@ -1003,16 +770,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Form8995Adapter,
     keyAmounts: (state) => {
-      const f8995 = state.taxReturn.form8995
+      const f8995 = state.taxFacts?.form8995
       if (!f8995) {
         return null
       }
-      return [{ label: 'QBI Ded.', value: f8995.estimatedDeduction }]
-    },
-    xlsx: {
-      sheetName: () => 'Form 8995',
-      order: 110,
-      build: buildForm8995Sheet,
+      return [{ label: 'QBI Ded.', value: f8995.deduction }]
     },
   },
   // Stub adapters — pending full migration. Render placeholder cards so
@@ -1027,8 +789,8 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Schedule3Adapter,
     hasData: (state) => {
-      const f1116 = state.taxReturn.form1116
-      return f1116 != null && (f1116.totalForeignTaxes > 0 || f1116.totalPassiveIncome > 0)
+      const s3 = state.taxFacts?.schedule3
+      return s3 != null && (s3.line8TotalNonrefundableCredits > 0 || s3.line15TotalPaymentsRefundableCredits > 0)
     },
   },
   'sch-c': {
@@ -1044,11 +806,6 @@ export const formRegistry: FormRegistry = {
       (state.scheduleCData?.years ?? []).some(
         (y) => y.year === state.year && y.entities.length > 0,
       ),
-    xlsx: {
-      sheetName: () => 'Schedule C',
-      order: 30,
-      build: buildScheduleCSheet,
-    },
   },
   'form-1116': {
     id: 'form-1116',
@@ -1060,7 +817,7 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Form1116Adapter,
     keyAmounts: (state) => {
-      const f1116 = state.taxReturn.form1116
+      const f1116 = state.taxFacts?.form1116
       if (!f1116) {
         return null
       }
@@ -1068,7 +825,7 @@ export const formRegistry: FormRegistry = {
     },
     instances: {
       list: (state) => {
-        const f1116 = state.taxReturn.form1116
+        const f1116 = state.taxFacts?.form1116
         if (!f1116) {
           return []
         }
@@ -1086,11 +843,6 @@ export const formRegistry: FormRegistry = {
       create: () => ({ key: 'passive', label: 'Passive' }),
       allowCreate: false,
     },
-    xlsx: {
-      sheetName: () => 'Form 1116',
-      order: 85,
-      build: buildForm1116Sheet,
-    },
   },
   'form-8582': {
     id: 'form-8582',
@@ -1102,16 +854,11 @@ export const formRegistry: FormRegistry = {
     presentation: 'column',
     component: Form8582Adapter,
     keyAmounts: (state) => {
-      const f8582 = state.taxReturn.form8582
+      const f8582 = state.taxFacts?.form8582
       if (!f8582 || f8582.activities.length === 0) {
         return null
       }
       return [{ label: 'Net', value: f8582.netPassiveResult }]
-    },
-    xlsx: {
-      sheetName: () => 'Form 8582',
-      order: 100,
-      build: buildForm8582Sheet,
     },
   },
   'form-4797': {
@@ -1123,7 +870,7 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4797Adapter,
-    hasData: (state) => state.taxReturn.form4797?.hasActivity ?? false,
+    hasData: (state) => state.taxFacts?.form4797.hasActivity ?? false,
   },
   'form-8606': {
     id: 'form-8606',
@@ -1134,7 +881,7 @@ export const formRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form8606Adapter,
-    hasData: (state) => state.taxReturn.form8606?.hasActivity ?? false,
+    hasData: (state) => state.taxFacts?.form8606.hasActivity ?? false,
   },
   'form-8949': {
     id: 'form-8949',
@@ -1149,11 +896,6 @@ export const formRegistry: FormRegistry = {
       list: form8949Instances,
       create: () => ({ key: 'all', label: 'All' }),
       allowCreate: false,
-    },
-    xlsx: {
-      sheetName: () => 'Form 8949',
-      order: 39,
-      build: buildForm8949Sheet,
     },
     hasData: (state) => buildCapitalGainsReportFromTaxDocuments(state.reviewed1099Docs).form8949Lots.length > 0,
   },
@@ -1175,11 +917,6 @@ export const formRegistry: FormRegistry = {
     presentation: 'app',
     component: EstimateAdapter,
     wide: true,
-    xlsx: {
-      sheetName: () => 'Est. Tax Payments',
-      order: 200,
-      build: buildEstimatedTaxSheet,
-    },
   },
   'w2-summary': {
     id: 'w2-summary',

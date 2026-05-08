@@ -4,7 +4,6 @@ import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
-import { buildTaxWorkbook } from '@/lib/finance/buildTaxWorkbook'
 import type { YearSelection } from '@/lib/financeRouteBuilder'
 
 import { DockActionsProvider } from './tax-preview/DockActions'
@@ -25,7 +24,6 @@ function TaxPreviewPageContent(): React.ReactElement {
     isLoading,
     error,
     pendingReviewCount,
-    taxReturn,
     refreshAll,
   } = useTaxPreview()
 
@@ -50,14 +48,14 @@ function TaxPreviewPageContent(): React.ReactElement {
   const handleExportXlsx = useCallback(async () => {
     setIsExporting(true)
     try {
-      const workbook = buildTaxWorkbook(taxReturn)
-      const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', workbook)
+      const fallbackFilename = `tax-preview-${selectedYear}.xlsx`
+      const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', { year: selectedYear, filename: fallbackFilename })
       if (!response.ok) {
         throw new Error(`Export failed with status ${response.status}`)
       }
       const blob = await response.blob()
       const contentDisposition = response.headers.get('content-disposition')
-      const filename = contentDisposition?.match(/filename="([^"]+)"/)?.[1] ?? workbook.filename
+      const filename = contentDisposition?.match(/filename="([^"]+)"/)?.[1] ?? fallbackFilename
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -71,7 +69,7 @@ function TaxPreviewPageContent(): React.ReactElement {
     } finally {
       setIsExporting(false)
     }
-  }, [taxReturn])
+  }, [selectedYear])
 
   const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
 

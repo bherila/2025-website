@@ -163,6 +163,8 @@ function makeTaxFacts(): TaxPreviewFacts {
       socialSecurityTaxableEarnings: 0,
       socialSecurityTax: 0,
       medicareWages: 0,
+      medicareTaxWithheldSources: [],
+      medicareTaxWithheld: 0,
       medicareTaxableEarnings: 0,
       medicareTax: 0,
       additionalMedicareThreshold: 200000,
@@ -171,13 +173,30 @@ function makeTaxFacts(): TaxPreviewFacts {
       seTax: 0,
       deductibleSeTax: 0,
     },
+    form8959: {
+      wageSources: [],
+      withholdingSources: [],
+      wages: 0,
+      threshold: 200000,
+      excessWages: 0,
+      additionalTax: 0,
+      medicareTaxWithheld: 0,
+      regularMedicareTaxWithholding: 0,
+      additionalMedicareWithholding: 0,
+    },
     schedule1: {
+      line1aSources: [],
+      line1aTotal: 0,
+      line2aSources: [],
+      line2aTotal: 0,
       line3Sources: [],
       line3Total: 0,
       line5Sources: [],
       line5Total: 0,
       line6Sources: [],
       line6Total: 0,
+      line7Sources: [],
+      line7Total: 0,
       line8zSources: [{
         id: 'doc-1-schedule1-8z',
         label: 'Fidelity — 1099-MISC other income',
@@ -408,6 +427,86 @@ function makeTaxFacts(): TaxPreviewFacts {
       aboveThreshold: false,
       reviewSources: [],
     },
+    form6251: {
+      sourceEntries: [],
+      manualReviewReasons: [],
+      line1TaxableIncome: 0,
+      line2aTaxesOrStandardDeduction: 0,
+      line2aSource: 'none',
+      line2cInvestmentInterest: 0,
+      line2dDepletion: 0,
+      line2kDispositionOfProperty: 0,
+      line2lPost1986Depreciation: 0,
+      line2mPassiveActivities: 0,
+      line2nLossLimitations: 0,
+      line2tIntangibleDrillingCosts: 0,
+      line3OtherAdjustments: 0,
+      adjustmentTotal: 0,
+      amti: 0,
+      exemption: 0,
+      exemptionBase: 0,
+      exemptionReduction: 0,
+      exemptionPhaseoutThreshold: 0,
+      amtTaxBase: 0,
+      amtRateSplitThreshold: 0,
+      amtBeforeForeignCredit: 0,
+      line8AmtForeignTaxCredit: 0,
+      tentativeMinTax: 0,
+      regularTax: 0,
+      regularForeignTaxCredit: 0,
+      regularTaxAfterCredits: 0,
+      amt: 0,
+      filingStatus: 'single',
+      requiresStatementReview: false,
+    },
+    form8582: {
+      activities: [],
+      totalPassiveIncome: 0,
+      totalPassiveLoss: 0,
+      totalPriorYearUnallowed: 0,
+      netPassiveResult: 0,
+      rentalAllowance: 0,
+      totalAllowedLoss: 0,
+      totalSuspendedLoss: 0,
+      netDeductionToReturn: 0,
+      isLossLimited: false,
+      magi: 0,
+      isMarried: false,
+      realEstateProfessional: false,
+    },
+    form8606: {
+      conversions: [],
+      distributions: [],
+      line1_nondeductibleContributions: 0,
+      line2_priorYearBasis: 0,
+      line3_totalBasis: 0,
+      line6_yearEndFmv: 0,
+      line7_distributionsNotConverted: 0,
+      line8_convertedToRoth: 0,
+      line9_total: 0,
+      line10_proRataRatio: 0,
+      line11_basisInConversion: 0,
+      line12_basisInDistributions: 0,
+      line13_totalBasisUsed: 0,
+      line14_basisCarriedForward: 0,
+      line15c_taxableDistributions: 0,
+      line18_taxableConversions: 0,
+      taxableToForm1040Line4b: 0,
+      hasActivity: false,
+    },
+    form4797: {
+      partISources: [],
+      partIISources: [],
+      partIIISources: [],
+      schedule1Sources: [],
+      scheduleDSources: [],
+      partINet1231: 0,
+      partIIOrdinary: 0,
+      partIIIRecapture: 0,
+      netToSchedule1Line4: 0,
+      netToScheduleDLongTerm: 0,
+      hasActivity: false,
+    },
     form1040: makeForm1040Facts(),
   } as unknown as TaxPreviewFacts
 }
@@ -436,6 +535,8 @@ function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000, form1040Override
     socialSecurityTaxableEarnings: seTaxableEarnings,
     socialSecurityTax,
     medicareWages: 0,
+    medicareTaxWithheldSources: [],
+    medicareTaxWithheld: 0,
     medicareTaxableEarnings: seTaxableEarnings,
     medicareTax,
     additionalMedicareThreshold: 200000,
@@ -444,7 +545,7 @@ function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000, form1040Override
     seTax,
     deductibleSeTax: currency(seTax).divide(2).value,
   } as unknown as TaxPreviewFacts['scheduleSE']
-  facts.form1040 = makeForm1040Facts(form1040Overrides)
+  facts.form1040 = makeForm1040Facts({ line23: seTax, ...form1040Overrides })
 
   return facts
 }
@@ -468,7 +569,6 @@ describe('TaxPreviewContext', () => {
     act(() => result.current.setTaxFacts(makeTaxFacts()))
 
     expect(result.current.taxFacts?.schedule1.line8zTotal).toBe(42)
-    expect(result.current.taxReturn.schedule1?.partI.line8z_otherIncome).toBe(0)
   })
 
   it('preserves unknown Schedule SE source types from backend facts', async () => {
@@ -486,7 +586,7 @@ describe('TaxPreviewContext', () => {
 
     act(() => result.current.setTaxFacts(facts))
 
-    expect(result.current.taxReturn.scheduleSE?.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
+    expect(result.current.taxFacts?.scheduleSE.entries[0]?.sourceType).toBe('schedule_se_schedule_f')
   })
 
   it('does not show loading spinner on background polls', async () => {
@@ -681,7 +781,7 @@ describe('TaxPreviewContext', () => {
       result.current.setPriorYearAgi(200_000)
     })
 
-    expect(result.current.taxReturn.estimatedTaxPayments).toBeUndefined()
+    expect(result.current.estimatedTaxPayments).toBeUndefined()
   })
 
   it('includes flat-dict broker_1099 income in income1099', async () => {
@@ -794,18 +894,9 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.form1040).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        line: '8',
-        label: 'Additional income from Schedule 1',
-        value: 900,
-      }),
-      expect.objectContaining({
-        line: '9',
-        value: 900,
-      }),
-    ]))
-    expect(result.current.taxReturn.scheduleE?.grandTotal).toBe(0)
+    expect(result.current.taxFacts?.form1040.line8).toBe(900)
+    expect(result.current.taxFacts?.form1040.line9).toBe(900)
+    expect(result.current.taxFacts?.scheduleE.grandTotal).toBe(0)
   })
 
   it('routes K-1 Schedule B and Schedule E amounts plus 1099-R distributions into Form 1040 and withholding summaries', async () => {
@@ -876,52 +967,51 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve([])
       }
 
+      const facts = makeTaxFactsWithScheduleSE(10_000, {
+        line2b: 200,
+        line3b: 300,
+        line4a: 10_000,
+        line4b: 8_000,
+        line5a: 7_000,
+        line5b: 6_500,
+        line8: 1_000,
+        line9: 16_000,
+        line10: 706.48,
+        line11: 15_293.52,
+        line25b: 1_900,
+        line25d: 1_900,
+      })
+      facts.form8960 = {
+        ...facts.form8960,
+        taxableInterest: 200,
+        ordinaryDividends: 300,
+      }
+
       return Promise.resolve({
         ...makeResponse([k1Doc, ira1099R, pension1099R]),
-        taxFacts: makeTaxFactsWithScheduleSE(10_000, {
-          line2b: 200,
-          line3b: 300,
-          line4a: 10_000,
-          line4b: 8_000,
-          line5a: 7_000,
-          line5b: 6_500,
-          line8: 1_000,
-          line9: 16_000,
-          line10: 706.48,
-          line11: 15_293.52,
-        }),
+        taxFacts: facts,
       })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.form1040).toEqual(expect.arrayContaining([
-      expect.objectContaining({ line: '2b', value: 200 }),
-      expect.objectContaining({ line: '3b', value: 300 }),
-      expect.objectContaining({ line: '4a', value: 10_000 }),
-      expect.objectContaining({ line: '4b', value: 8_000 }),
-      expect.objectContaining({ line: '5a', value: 7_000 }),
-      expect.objectContaining({ line: '5b', value: 6_500 }),
-      expect.objectContaining({ line: '8', value: 1_000 }),
-      expect.objectContaining({ line: '9', value: 16_000 }),
-      expect.objectContaining({ line: '10', value: 706.48 }),
-      expect.objectContaining({ line: '11', value: 15_293.52 }),
-    ]))
+    expect(result.current.taxFacts?.form1040).toEqual(expect.objectContaining({
+      line2b: 200,
+      line3b: 300,
+      line4a: 10_000,
+      line4b: 8_000,
+      line5a: 7_000,
+      line5b: 6_500,
+      line8: 1_000,
+      line9: 16_000,
+      line10: 706.48,
+      line11: 15_293.52,
+      line25d: 1_900,
+    }))
 
-    expect(result.current.taxReturn.form8960?.taxableInterest).toBe(200)
-    expect(result.current.taxReturn.form8960?.ordinaryDividends).toBe(300)
-    expect(result.current.taxReturn.overviewSections).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        heading: 'Estimated Tax Positions',
-        rows: expect.arrayContaining([
-          expect.objectContaining({
-            item: 'Federal withholding (payroll + 1099-R)',
-            amount: 1_900,
-          }),
-        ]),
-      }),
-    ]))
+    expect(result.current.taxFacts?.form8960.taxableInterest).toBe(200)
+    expect(result.current.taxFacts?.form8960.ordinaryDividends).toBe(300)
   })
 
   it('aggregates Schedule 1 other income from broker_1099 1099-MISC child links by default', async () => {
@@ -1035,9 +1125,90 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.scheduleSE?.netEarningsFromSE).toBe(10_000)
-    expect(result.current.taxReturn.schedule2?.selfEmploymentTax).toBeCloseTo(1_412.96, 2)
-    expect(result.current.taxReturn.schedule2?.totalAdditionalTaxes).toBeCloseTo(1_412.96, 2)
+    expect(result.current.taxFacts?.scheduleSE.netEarningsFromSE).toBe(10_000)
+    expect(result.current.taxFacts?.scheduleSE.seTax).toBeCloseTo(1_412.96, 2)
+    expect(result.current.taxFacts?.form1040.line23).toBeCloseTo(1_412.96, 2)
+  })
+
+  it('combines wage and self-employment additional Medicare tax on Schedule 2', async () => {
+    const w2Doc = {
+      id: 88,
+      form_type: 'w2',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2025,
+      parsed_data: {
+        employer_name: 'Wage Co',
+        box1_wages: 210_000,
+        box5_medicare_wages: 210_000,
+      },
+      original_filename: 'w2.pdf',
+    }
+    const facts = makeTaxFactsWithScheduleSE(10_000)
+    facts.scheduleSE.additionalMedicareTaxableEarnings = 1333.33
+    facts.scheduleSE.additionalMedicareTax = 12
+    facts.form8959 = {
+      wages: 210_000,
+      threshold: 200_000,
+      excessWages: 10_000,
+      additionalTax: 90,
+      medicareTaxWithheld: 0,
+      regularMedicareTaxWithholding: 0,
+      additionalMedicareWithholding: 0,
+      wageSources: [{
+        id: 'w2-88-schedule-se-box5_medicare_wages-form8959-line1',
+        label: 'Wage Co — W-2 Medicare wages',
+        amount: 210_000,
+        sourceType: 'schedule_se_w2_medicare_wages',
+        taxDocumentId: 88,
+        taxDocumentAccountId: null,
+        accountId: null,
+        formType: 'w2',
+        box: null,
+        code: null,
+        routing: 'form_8959_line_1',
+        routingReason: 'Medicare wages flow to Form 8959 line 1 for wage-side Additional Medicare Tax.',
+        notes: null,
+        isReviewed: true,
+        reviewStatus: 'reviewed',
+        reviewAction: null,
+      }],
+      withholdingSources: [],
+    }
+    facts.form1040 = makeForm1040Facts({ line23: 102, line24: 102 })
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce({ ...makeResponse([]), w2Documents: [w2Doc], taxFacts: facts })
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.taxFacts?.form8959.additionalTax).toBe(90)
+    expect(result.current.taxFacts?.scheduleSE.additionalMedicareTax).toBe(12)
+    expect(result.current.taxFacts?.form1040.line23).toBe(102)
+  })
+
+  it('excludes passive Schedule E losses from the Form 461 excess business loss input', async () => {
+    const facts = makeTaxFacts()
+    facts.scheduleE = {
+      ...facts.scheduleE,
+      totalPassive: -100_000,
+      totalNonpassive: -400_000,
+      grandTotal: -500_000,
+    }
+
+    ;(fetchWrapper.get as jest.Mock)
+      .mockResolvedValueOnce({ ...makeResponse([]), taxFacts: facts })
+      .mockResolvedValue([])
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.form461.aggregateBusinessIncomeLoss).toBe(-400_000)
+    expect(result.current.form461.eblLimit).toBe(317_000)
+    expect(result.current.form461.excessBusinessLoss).toBe(83_000)
+    expect(result.current.form461.isTriggered).toBe(true)
   })
 
   it('leaves wage-base values blank while backend Schedule SE facts are empty', async () => {
@@ -1057,8 +1228,7 @@ describe('TaxPreviewContext', () => {
     const { result } = renderHook(() => useTaxPreview(), { wrapper: wrapper2024 })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    expect(result.current.taxReturn.scheduleSE?.socialSecurityWageBase).toBe(0)
-    expect(result.current.taxReturn.scheduleSE?.remainingSocialSecurityWageBase).toBe(0)
+    expect(result.current.taxFacts?.scheduleSE).toBeUndefined()
   })
 
   it('feeds saved carryforwards into Form 8582 as prior-year unallowed loss balances', async () => {
@@ -1104,15 +1274,37 @@ describe('TaxPreviewContext', () => {
         return Promise.resolve({})
       }
 
-      return Promise.resolve(makeResponse([k1Doc]))
+      const facts = makeTaxFacts()
+      facts.form8582 = {
+        ...facts.form8582,
+        activities: [{
+          activityName: 'Passive LP Fund (ordinary business)',
+          ein: '12-3456789',
+          isRentalRealEstate: false,
+          activeParticipation: false,
+          currentIncome: 0,
+          currentLoss: -12_000,
+          priorYearUnallowed: -4_000,
+          overallGainOrLoss: -16_000,
+          allowedLossThisYear: 0,
+          suspendedLossCarryforward: -16_000,
+        }],
+        totalPassiveLoss: -12_000,
+        totalPriorYearUnallowed: -4_000,
+        netPassiveResult: -16_000,
+        totalSuspendedLoss: -16_000,
+        isLossLimited: true,
+      }
+
+      return Promise.resolve({ ...makeResponse([k1Doc]), taxFacts: facts })
     })
 
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     await waitFor(() => expect(result.current.palCarryforwards).toHaveLength(1))
 
-    expect(result.current.taxReturn.form8582?.activities[0]?.priorYearUnallowed).toBe(-4000)
-    expect(result.current.taxReturn.form8582?.totalPriorYearUnallowed).toBe(-4000)
+    expect(result.current.taxFacts?.form8582.activities[0]?.priorYearUnallowed).toBe(-4000)
+    expect(result.current.taxFacts?.form8582.totalPriorYearUnallowed).toBe(-4000)
   })
 
   it('feeds prior-year capital loss carryovers into current-year Schedule D', async () => {
@@ -1142,6 +1334,27 @@ describe('TaxPreviewContext', () => {
         ...makeResponse([]),
         availableYears: [2025, 2024],
       })
+      if (url === '/api/finance/tax-preview-data?year=2024&include_tax_facts=1') {
+        const facts = makeTaxFacts()
+        facts.year = 2024
+        facts.scheduleD = {
+          ...facts.scheduleD,
+          line7NetShortTerm: -10_000,
+          line15NetLongTerm: -5_000,
+          line16Combined: -15_000,
+          line21LimitedLossOrGain: -3_000,
+          appliedToReturn: -3_000,
+          carryforward: -12_000,
+        }
+
+        return Promise.resolve({
+          ...makeResponse([priorYearBrokerDoc]),
+          year: 2024,
+          availableYears: [2025, 2024],
+          taxFacts: facts,
+        })
+      }
+
       if (url === '/api/finance/tax-preview-data?year=2024') return Promise.resolve({
         ...makeResponse([priorYearBrokerDoc]),
         availableYears: [2025, 2024],
@@ -1156,7 +1369,68 @@ describe('TaxPreviewContext', () => {
       shortTermCarryover: 7000,
       longTermCarryover: 5000,
     }))
-    expect(result.current.taxReturn.scheduleD?.schD_line6).toBe(-7000)
-    expect(result.current.taxReturn.scheduleD?.schD_line14).toBe(-5000)
+    expect(result.current.taxFacts).toBeNull()
+  })
+
+  it('loads capital loss carryovers from the nearest available prior tax year', async () => {
+    const priorYearBrokerDoc = {
+      id: 102,
+      form_type: '1099_b',
+      genai_status: 'parsed',
+      is_reviewed: true,
+      tax_year: 2023,
+      parsed_data: {
+        payer_name: 'Gap Broker',
+        transactions: [
+          { description: 'Older short loss', realized_gain_loss: -10_000, is_short_term: true, form_8949_box: 'A', is_covered: true },
+          { description: 'Older long loss', realized_gain_loss: -5_000, is_short_term: false, form_8949_box: 'D', is_covered: true },
+        ],
+      },
+      original_filename: 'gap-broker.pdf',
+      account_links: [],
+    }
+
+    ;(fetchWrapper.get as jest.Mock).mockImplementation((url: string) => {
+      if (url === '/api/finance/marriage-status') return Promise.resolve({})
+      if (url === '/api/finance/user-tax-states?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/user-deductions?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-loss-carryforwards?year=2025') return Promise.resolve([])
+      if (url === '/api/finance/tax-preview-data?year=2025&include_tax_facts=1') return Promise.resolve({
+        ...makeResponse([]),
+        availableYears: [2025, 2023],
+      })
+      if (url === '/api/finance/tax-preview-data?year=2023&include_tax_facts=1') {
+        const facts = makeTaxFacts()
+        facts.year = 2023
+        facts.scheduleD = {
+          ...facts.scheduleD,
+          line7NetShortTerm: -10_000,
+          line15NetLongTerm: -5_000,
+          line16Combined: -15_000,
+          line21LimitedLossOrGain: -3_000,
+          appliedToReturn: -3_000,
+          carryforward: -12_000,
+        }
+
+        return Promise.resolve({
+          ...makeResponse([priorYearBrokerDoc]),
+          year: 2023,
+          availableYears: [2025, 2023],
+          taxFacts: facts,
+        })
+      }
+
+      return Promise.resolve(makeResponse())
+    })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await waitFor(() => expect(result.current.priorYearCapitalLossCarryover).toEqual(expect.objectContaining({
+      shortTermCarryover: 7000,
+      longTermCarryover: 5000,
+    })))
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2023&include_tax_facts=1')
+    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2024&include_tax_facts=1')
   })
 })

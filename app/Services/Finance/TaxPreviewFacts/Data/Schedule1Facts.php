@@ -10,6 +10,16 @@ readonly class Schedule1Facts
     /**
      * @var TaxFactSource[]
      */
+    public array $line1aSources;
+
+    /**
+     * @var TaxFactSource[]
+     */
+    public array $line2aSources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $line3Sources;
 
     /**
@@ -26,6 +36,11 @@ readonly class Schedule1Facts
      * @var TaxFactSource[]
      */
     public array $line6Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
+    public array $line7Sources;
 
     /**
      * @var TaxFactSource[]
@@ -58,10 +73,13 @@ readonly class Schedule1Facts
     public array $line15Sources;
 
     /**
+     * @param  TaxFactSource[]  $line1aSources
+     * @param  TaxFactSource[]  $line2aSources
      * @param  TaxFactSource[]  $line3Sources
      * @param  TaxFactSource[]  $line4Sources
      * @param  TaxFactSource[]  $line5Sources
      * @param  TaxFactSource[]  $line6Sources
+     * @param  TaxFactSource[]  $line7Sources
      * @param  TaxFactSource[]  $line8Sources
      * @param  TaxFactSource[]  $line8bSources
      * @param  TaxFactSource[]  $line8hSources
@@ -70,6 +88,10 @@ readonly class Schedule1Facts
      * @param  TaxFactSource[]  $line15Sources
      */
     public function __construct(
+        array $line1aSources,
+        public float $line1aTotal,
+        array $line2aSources,
+        public float $line2aTotal,
         array $line3Sources,
         public float $line3Total,
         array $line4Sources,
@@ -78,6 +100,8 @@ readonly class Schedule1Facts
         public float $line5Total,
         array $line6Sources,
         public float $line6Total,
+        array $line7Sources,
+        public float $line7Total,
         array $line8Sources,
         array $line8bSources,
         public float $line8bTotal,
@@ -91,10 +115,13 @@ readonly class Schedule1Facts
         array $line15Sources,
         public float $line15Total,
     ) {
+        $this->line1aSources = $line1aSources;
+        $this->line2aSources = $line2aSources;
         $this->line3Sources = $line3Sources;
         $this->line4Sources = $line4Sources;
         $this->line5Sources = $line5Sources;
         $this->line6Sources = $line6Sources;
+        $this->line7Sources = $line7Sources;
         $this->line8Sources = $line8Sources;
         $this->line8bSources = $line8bSources;
         $this->line8hSources = $line8hSources;
@@ -109,6 +136,10 @@ readonly class Schedule1Facts
     public function toArray(): array
     {
         return [
+            'line1aSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line1aSources),
+            'line1aTotal' => $this->line1aTotal,
+            'line2aSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line2aSources),
+            'line2aTotal' => $this->line2aTotal,
             'line3Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line3Sources),
             'line3Total' => $this->line3Total,
             'line4Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line4Sources),
@@ -117,6 +148,8 @@ readonly class Schedule1Facts
             'line5Total' => $this->line5Total,
             'line6Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line6Sources),
             'line6Total' => $this->line6Total,
+            'line7Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line7Sources),
+            'line7Total' => $this->line7Total,
             'line8Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line8Sources),
             'line8bSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line8bSources),
             'line8bTotal' => $this->line8bTotal,

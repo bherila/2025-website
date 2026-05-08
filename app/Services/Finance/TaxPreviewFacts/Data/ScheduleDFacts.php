@@ -25,7 +25,17 @@ readonly class ScheduleDFacts
     /**
      * @var TaxFactSource[]
      */
+    public array $line4Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $line10Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
+    public array $line11Sources;
 
     /**
      * @var TaxFactSource[]
@@ -45,8 +55,10 @@ readonly class ScheduleDFacts
     /**
      * @param  ScheduleDRollupFact[]  $form8949Rollups
      * @param  TaxFactSource[]  $line3Sources
+     * @param  TaxFactSource[]  $line4Sources
      * @param  TaxFactSource[]  $line5Sources
      * @param  TaxFactSource[]  $line10Sources
+     * @param  TaxFactSource[]  $line11Sources
      * @param  TaxFactSource[]  $line12Sources
      * @param  TaxFactSource[]  $line13Sources
      * @param  TaxFactSource[]  $ambiguous11SSources
@@ -58,6 +70,7 @@ readonly class ScheduleDFacts
         public float $line2GainLoss,
         array $line3Sources,
         public float $line3GainLoss,
+        array $line4Sources,
         public float $line4GainLoss,
         array $line5Sources,
         public float $line5GainLoss,
@@ -68,6 +81,7 @@ readonly class ScheduleDFacts
         public float $line9GainLoss,
         array $line10Sources,
         public float $line10GainLoss,
+        array $line11Sources,
         public float $line11GainLoss,
         array $line12Sources,
         public float $line12GainLoss,
@@ -88,8 +102,10 @@ readonly class ScheduleDFacts
     ) {
         $this->form8949Rollups = $form8949Rollups;
         $this->line3Sources = $line3Sources;
+        $this->line4Sources = $line4Sources;
         $this->line5Sources = $line5Sources;
         $this->line10Sources = $line10Sources;
+        $this->line11Sources = $line11Sources;
         $this->line12Sources = $line12Sources;
         $this->line13Sources = $line13Sources;
         $this->ambiguous11SSources = $ambiguous11SSources;
@@ -107,6 +123,7 @@ readonly class ScheduleDFacts
             'line2GainLoss' => $this->line2GainLoss,
             'line3Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line3Sources),
             'line3GainLoss' => $this->line3GainLoss,
+            'line4Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line4Sources),
             'line4GainLoss' => $this->line4GainLoss,
             'line5Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line5Sources),
             'line5GainLoss' => $this->line5GainLoss,
@@ -117,6 +134,7 @@ readonly class ScheduleDFacts
             'line9GainLoss' => $this->line9GainLoss,
             'line10Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line10Sources),
             'line10GainLoss' => $this->line10GainLoss,
+            'line11Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line11Sources),
             'line11GainLoss' => $this->line11GainLoss,
             'line12Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line12Sources),
             'line12GainLoss' => $this->line12GainLoss,

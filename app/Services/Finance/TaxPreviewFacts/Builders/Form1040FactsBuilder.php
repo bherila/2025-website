@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form1040Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8959Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
@@ -35,6 +36,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         ScheduleDFacts $scheduleD,
         Schedule3Facts $schedule3,
         ScheduleSEFacts $scheduleSE,
+        Form8959Facts $form8959,
         Form8995Facts $form8995,
         Form6251Facts $form6251,
         Form8960Facts $form8960,
@@ -47,10 +49,13 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line5Sources = $this->retirementDistributionSources($docs1099, false);
         $line7Sources = $this->line7Sources($scheduleD);
         $line8Sources = [
+            ...$schedule1->line1aSources,
+            ...$schedule1->line2aSources,
             ...$schedule1->line3Sources,
             ...$schedule1->line4Sources,
             ...$schedule1->line5Sources,
             ...$schedule1->line6Sources,
+            ...$schedule1->line7Sources,
             ...$schedule1->line8Sources,
         ];
         $line10Sources = $schedule1->line15Sources;
@@ -90,10 +95,13 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line6b = 0.0;
         $line7 = $scheduleD->line21LimitedLossOrGain;
         $line8 = $this->sumMoney([
+            $schedule1->line1aTotal,
+            $schedule1->line2aTotal,
             $schedule1->line3Total,
             $schedule1->line4Total,
             $schedule1->line5Total,
             $schedule1->line6Total,
+            $schedule1->line7Total,
             $schedule1->line9TotalOtherIncome,
         ]);
         $line9 = $this->sumMoney([$line1z, $line2b, $line3b, $line4b, $line5b, $line6b, $line7, $line8]);
@@ -136,15 +144,15 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line20 = $schedule3->line8TotalNonrefundableCredits;
         $line21 = $this->sumMoney([$line19, $line20]);
         $line22 = max(0.0, $this->subtractMoney($line18, $line21));
-        $line23Sources = $this->line23Sources($scheduleSE, $form8960, $isMarried);
+        $line23Sources = $this->line23Sources($scheduleSE, $form8959, $form8960, $isMarried);
         $line23 = $this->sumSources($line23Sources);
         $line24 = $this->sumMoney([$line22, $line23]);
         $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', '2', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
         $line25bSources = $this->federal1099WithholdingSources($docs1099);
-        $line25cSources = [];
+        $line25cSources = $this->line25cSources($form8959);
         $line25a = $this->sumSources($line25aSources);
         $line25b = $this->sumSources($line25bSources);
-        $line25c = 0.0;
+        $line25c = $this->sumSources($line25cSources);
         $line25d = $this->sumMoney([$line25a, $line25b, $line25c]);
         $line26Sources = [];
         $line26 = 0.0;
@@ -401,6 +409,28 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @return TaxFactSource[]
      */
+    private function line25cSources(Form8959Facts $form8959): array
+    {
+        if ($form8959->additionalMedicareWithholding === 0.0) {
+            return [];
+        }
+
+        return [
+            $this->source(
+                'form1040-line25c-form8959',
+                'Form 8959 additional Medicare tax withholding',
+                $form8959->additionalMedicareWithholding,
+                TaxFactSourceType::Form8959AdditionalMedicareWithholding,
+                TaxFactRouting::Form1040Line25c,
+                'Form 8959 line 24 is included with federal income tax withholding on Form 1040 line 25c.',
+                "Medicare tax withheld {$form8959->medicareTaxWithheld}; regular Medicare withholding {$form8959->regularMedicareTaxWithholding}.",
+            ),
+        ];
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
     private function line7Sources(ScheduleDFacts $scheduleD): array
     {
         if ($scheduleD->line16Combined === 0.0 && $scheduleD->line21LimitedLossOrGain === 0.0) {
@@ -423,7 +453,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @return TaxFactSource[]
      */
-    private function line23Sources(ScheduleSEFacts $scheduleSE, Form8960Facts $form8960, bool $isMarried): array
+    private function line23Sources(ScheduleSEFacts $scheduleSE, Form8959Facts $form8959, Form8960Facts $form8960, bool $isMarried): array
     {
         $sources = [];
 
@@ -433,6 +463,10 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
 
         if ($scheduleSE->additionalMedicareTax !== 0.0) {
             $sources[] = $this->source('schedule-se-additional-medicare-form1040-line23', 'Additional Medicare tax on self-employment earnings', $scheduleSE->additionalMedicareTax, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line23, 'Additional Medicare tax flows through Schedule 2 Part II to Form 1040 line 23.');
+        }
+
+        if ($form8959->additionalTax !== 0.0) {
+            $sources[] = $this->source('form8959-wages-form1040-line23', 'Form 8959 additional Medicare tax on wages', $form8959->additionalTax, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line23, 'Form 8959 wage-side Additional Medicare Tax flows through Schedule 2 Part II to Form 1040 line 23.');
         }
 
         $niit = $isMarried ? $form8960->niitTaxMarriedFilingJointly : $form8960->niitTaxSingle;
@@ -500,36 +534,6 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         return ($entity instanceof FinEmploymentEntity ? $entity->display_name : null)
             ?? $doc->original_filename
             ?? 'W-2';
-    }
-
-    /**
-     * @param  string[]  $formTypes
-     * @return array<int, array{parsedData: array<string, mixed>, link: ?TaxDocumentAccount}>
-     */
-    private function documentEntriesForFormTypes(FileForTaxDocument $doc, array $formTypes): array
-    {
-        $entries = [];
-
-        if ($doc->accountLinks->isNotEmpty()) {
-            foreach ($doc->accountLinks as $link) {
-                if (! $link instanceof TaxDocumentAccount || ! in_array($link->form_type, $formTypes, true)) {
-                    continue;
-                }
-
-                $parsedData = $this->parsedDataForLink($doc, $link);
-                if ($parsedData !== null) {
-                    $entries[] = ['parsedData' => $parsedData, 'link' => $link];
-                }
-            }
-
-            return $entries;
-        }
-
-        if (in_array($this->formType($doc), $formTypes, true) && is_array($doc->parsed_data)) {
-            $entries[] = ['parsedData' => $doc->parsed_data, 'link' => null];
-        }
-
-        return $entries;
     }
 
     /**

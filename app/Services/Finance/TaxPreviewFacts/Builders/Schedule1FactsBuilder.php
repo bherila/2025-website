@@ -22,10 +22,29 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
      */
     public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null, ?Form4797Facts $form4797 = null): Schedule1Facts
     {
+        $line1aSources = $this->form1099GSources(
+            $docs1099,
+            'box2_state_local_refunds',
+            TaxFactSourceType::Form1099GTaxableRefund,
+            TaxFactRouting::Schedule1Line1a,
+            '1099-G taxable state/local refund',
+            '2',
+            '1099-G Box 2 state or local income tax refunds flow to Schedule 1 line 1a.',
+        );
+        $line2aSources = [];
         $line3Sources = $scheduleC instanceof ScheduleCFacts ? $this->scheduleCLine3Sources($scheduleC) : [];
         $line4Sources = $form4797 instanceof Form4797Facts ? $form4797->schedule1Sources : [];
         $line5Sources = [];
         $line6Sources = $scheduleF instanceof ScheduleFFacts ? $this->scheduleFLine6Sources($scheduleF) : [];
+        $line7Sources = $this->form1099GSources(
+            $docs1099,
+            'box1_unemployment',
+            TaxFactSourceType::Form1099GUnemployment,
+            TaxFactRouting::Schedule1Line7,
+            '1099-G unemployment compensation',
+            '1',
+            '1099-G Box 1 unemployment compensation flows to Schedule 1 line 7.',
+        );
 
         foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
@@ -73,6 +92,10 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
         $line8zTotal = $this->sumSources($line8zSources);
 
         return new Schedule1Facts(
+            line1aSources: $line1aSources,
+            line1aTotal: $this->sumSources($line1aSources),
+            line2aSources: $line2aSources,
+            line2aTotal: $this->sumSources($line2aSources),
             line3Sources: $line3Sources,
             line3Total: $this->sumSources($line3Sources),
             line4Sources: $line4Sources,
@@ -81,6 +104,8 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             line5Total: $this->sumSources($line5Sources),
             line6Sources: $line6Sources,
             line6Total: $this->sumSources($line6Sources),
+            line7Sources: $line7Sources,
+            line7Total: $this->sumSources($line7Sources),
             line8Sources: $line8Sources,
             line8bSources: $line8bSources,
             line8bTotal: $line8bTotal,
@@ -94,6 +119,50 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             line15Sources: $scheduleSE instanceof ScheduleSEFacts ? $this->scheduleSELine15Sources($scheduleSE) : [],
             line15Total: $scheduleSE instanceof ScheduleSEFacts ? $scheduleSE->deductibleSeTax : 0.0,
         );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $docs1099
+     * @return TaxFactSource[]
+     */
+    private function form1099GSources(
+        array $docs1099,
+        string $field,
+        TaxFactSourceType $sourceType,
+        TaxFactRouting $routing,
+        string $labelSuffix,
+        string $box,
+        string $routingReason,
+    ): array {
+        $sources = [];
+
+        foreach ($docs1099 as $doc) {
+            foreach ($this->documentEntriesForFormTypes($doc, ['1099_g']) as $entry) {
+                $amount = $this->numericValue($entry['parsedData'], $field);
+                if ($amount === null || $amount === 0.0) {
+                    continue;
+                }
+
+                $sources[] = new TaxFactSource(
+                    id: $entry['link'] instanceof TaxDocumentAccount ? "link-{$entry['link']->id}-{$routing->value}" : "doc-{$doc->id}-{$routing->value}",
+                    label: "{$this->payerName($doc, $entry['link'], $entry['parsedData'])} — {$labelSuffix}",
+                    amount: $amount,
+                    sourceType: $sourceType,
+                    taxDocumentId: $doc->id,
+                    taxDocumentAccountId: $entry['link']?->id,
+                    accountId: $entry['link']?->account_id,
+                    formType: '1099_g',
+                    box: $box,
+                    routing: $routing,
+                    routingReason: $routingReason,
+                    isReviewed: $this->sourceIsReviewed($doc, $entry['link']),
+                    reviewStatus: $this->reviewStatus($doc, $entry['link']),
+                    reviewAction: $this->reviewAction($doc, $entry['link']),
+                );
+            }
+        }
+
+        return $sources;
     }
 
     /**

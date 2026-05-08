@@ -51,6 +51,7 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
         ];
         $socialSecurityW2Sources = $this->w2WageSources($w2Docs, 'box3_ss_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2SocialSecurityWages, 'Social Security wages');
         $medicareW2Sources = $this->w2WageSources($w2Docs, 'box5_medicare_wages', 'box1_wages', TaxFactSourceType::ScheduleSEW2MedicareWages, 'Medicare wages');
+        $medicareTaxWithheldSources = $this->w2MedicareTaxWithheldSources($w2Docs);
         $socialSecurityWageSources = $socialSecurityW2Sources !== []
             ? $socialSecurityW2Sources
             : $this->payslipWageSources($userId, $year, 'taxable_wages_oasdi', TaxFactSourceType::ScheduleSEPayslipSocialSecurityWages, 'Social Security wages');
@@ -66,6 +67,7 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
         $socialSecurityTaxableEarnings = min($seTaxableEarnings, $remainingSocialSecurityWageBase);
         $socialSecurityTax = $this->roundMoney($socialSecurityTaxableEarnings * self::SOCIAL_SECURITY_RATE);
         $medicareWages = $this->sumSources($medicareWageSources);
+        $medicareTaxWithheld = $this->sumSources($medicareTaxWithheldSources);
         $medicareTaxableEarnings = $seTaxableEarnings;
         $medicareTax = $this->roundMoney($medicareTaxableEarnings * self::MEDICARE_RATE);
         $additionalMedicareThreshold = $isMarried ? self::ADDITIONAL_MEDICARE_MFJ_THRESHOLD : self::ADDITIONAL_MEDICARE_SINGLE_THRESHOLD;
@@ -85,6 +87,8 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
             socialSecurityTaxableEarnings: $socialSecurityTaxableEarnings,
             socialSecurityTax: $socialSecurityTax,
             medicareWages: $medicareWages,
+            medicareTaxWithheldSources: $medicareTaxWithheldSources,
+            medicareTaxWithheld: $medicareTaxWithheld,
             medicareTaxableEarnings: $medicareTaxableEarnings,
             medicareTax: $medicareTax,
             additionalMedicareThreshold: $additionalMedicareThreshold,
@@ -208,6 +212,44 @@ class ScheduleSEFactsBuilder extends TaxPreviewFactBuilder
                 formType: $this->formType($doc),
                 routing: TaxFactRouting::ScheduleSELine7,
                 routingReason: 'W-2 wages reduce Schedule SE wage-base capacity and Additional Medicare threshold capacity.',
+                isReviewed: $this->sourceIsReviewed($doc),
+                reviewStatus: $this->reviewStatus($doc),
+                reviewAction: $this->reviewAction($doc),
+            );
+        }
+
+        return $sources;
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $w2Docs
+     * @return TaxFactSource[]
+     */
+    private function w2MedicareTaxWithheldSources(array $w2Docs): array
+    {
+        $sources = [];
+
+        foreach ($w2Docs as $doc) {
+            if (! $this->sourceIsReviewed($doc) || ! is_array($doc->parsed_data)) {
+                continue;
+            }
+
+            $amount = $this->parseMoney($doc->parsed_data['box6_medicare_tax'] ?? null) ?? 0.0;
+            if ($amount === 0.0) {
+                continue;
+            }
+
+            $employer = $this->w2EmployerName($doc);
+            $sources[] = new TaxFactSource(
+                id: "w2-{$doc->id}-schedule-se-box6_medicare_tax",
+                label: "{$employer} — W-2 Medicare tax withheld",
+                amount: $amount,
+                sourceType: TaxFactSourceType::ScheduleSEW2MedicareTaxWithheld,
+                taxDocumentId: $doc->id,
+                formType: $this->formType($doc),
+                box: '6',
+                routing: TaxFactRouting::Form8959Line19,
+                routingReason: 'W-2 Box 6 Medicare tax withheld supports Form 8959 Part V withholding reconciliation.',
                 isReviewed: $this->sourceIsReviewed($doc),
                 reviewStatus: $this->reviewStatus($doc),
                 reviewAction: $this->reviewAction($doc),

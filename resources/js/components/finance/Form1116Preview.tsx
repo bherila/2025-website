@@ -14,6 +14,7 @@ import {
 import { getRelevantUnreviewedK1Docs } from '@/finance/1116/unreviewed-k1'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1116Lines } from '@/types/finance/tax-return'
+import type { Form1116Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 export { computeForm1116Lines } from '@/finance/1116'
 export type { Form1116Lines } from '@/types/finance/tax-return'
@@ -21,7 +22,7 @@ export type { Form1116Lines } from '@/types/finance/tax-return'
 export type Form1116Category = 'passive' | 'general'
 
 interface Form1116PreviewProps {
-  form1116: Form1116Lines
+  form1116: Form1116Lines | Form1116Facts
   foreignTaxSummaries: ForeignTaxSummary[]
   allK1Docs?: TaxDocument[]
   selectedYear?: number
@@ -42,6 +43,48 @@ interface Form1116PreviewProps {
   category?: Form1116Category
 }
 
+function sourceLines(sources: TaxFactSource[]): { label: string; amount: number }[] {
+  return sources.map((source) => ({
+    label: source.label,
+    amount: source.amount,
+  }))
+}
+
+function form1116FactsToLines(facts: Form1116Facts): Form1116Lines {
+  return {
+    incomeSources: sourceLines(facts.passiveIncomeSources),
+    taxSources: sourceLines(facts.foreignTaxSources),
+    totalPassiveIncome: facts.totalPassiveIncome,
+    totalForeignTaxes: facts.totalForeignTaxes,
+    generalIncomeSources: sourceLines(facts.generalIncomeSources),
+    totalGeneralIncome: facts.totalGeneralIncome,
+    line4bApportionment: sourceLines(facts.line4bSources).map(source => ({
+      label: source.label,
+      interestExpense: source.amount,
+      ratio: 0,
+      line4b: source.amount,
+    })),
+    totalLine4b: facts.totalLine4b,
+    creditVsDeduction: facts.recommendation === 'credit'
+      ? {
+          creditValue: facts.creditValue,
+          deductionValue: facts.deductionValueAtThirtySevenPercent,
+          recommendation: 'credit',
+        }
+      : null,
+    turboTaxAlert: facts.turboTaxAlert,
+    totalK1Box5: facts.totalK1Box5,
+    sbpElections: facts.sourcedByPartnerElectionSources
+      .filter(source => source.taxDocumentId !== null)
+      .map(source => ({
+        docId: source.taxDocumentId!,
+        partnerName: source.label,
+        active: true,
+        sourcedByPartner: source.amount,
+      })),
+  }
+}
+
 export default function Form1116Preview({
   form1116,
   foreignTaxSummaries,
@@ -52,6 +95,7 @@ export default function Form1116Preview({
   onOpenWorksheet,
   category,
 }: Form1116PreviewProps) {
+  const lines = 'passiveIncomeSources' in form1116 ? form1116FactsToLines(form1116) : form1116
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [bulkFailures, setBulkFailures] = useState<string[]>([])
   const [worksheetOpen, setWorksheetOpen] = useState(false)
@@ -68,7 +112,7 @@ export default function Form1116Preview({
     turboTaxAlert,
     totalK1Box5 = 0,
     sbpElections = [],
-  } = form1116
+  } = lines
   const relevantUnreviewed = useMemo(() => getRelevantUnreviewedK1Docs(allK1Docs), [allK1Docs])
 
   const runBulkToggle = async (nextValue: boolean) => {

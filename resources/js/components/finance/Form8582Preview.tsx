@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { fetchWrapper } from '@/fetchWrapper'
 import {
   type PalCarryforwardEntry,
@@ -11,10 +11,10 @@ import {
   RENTAL_SPECIAL_ALLOWANCE,
   TAX_LOSS_CARRYFORWARD_ENDPOINT,
 } from '@/finance/8582/form8582'
-import type { Form8582Lines } from '@/types/finance/tax-return'
+import type { Form8582Facts } from '@/types/generated/tax-preview-facts'
 
 interface Form8582PreviewProps {
-  form8582: Form8582Lines
+  form8582?: Form8582Facts | null
   year: number
   palCarryforwards: PalCarryforwardEntry[]
   onCarryforwardsChange: (entries: PalCarryforwardEntry[]) => void
@@ -30,6 +30,10 @@ export default function Form8582Preview({
   realEstateProfessional,
   onRealEstateProfessionalChange,
 }: Form8582PreviewProps) {
+  if (!form8582) {
+    return <FactsLoadingPlaceholder label="Form 8582" />
+  }
+
   const {
     activities,
     totalPassiveIncome,
@@ -234,7 +238,7 @@ export default function Form8582Preview({
 
 interface PalCarryforwardInputProps {
   year: number
-  form8582: Form8582Lines
+  form8582: Form8582Facts
   carryforwards: PalCarryforwardEntry[]
   onChange: (entries: PalCarryforwardEntry[]) => void
 }

@@ -13,7 +13,7 @@ import { Callout, FormBlock, FormLine, FormTotalLine } from '@/components/financ
  * on `Form6251Lines` — this worksheet just surfaces the math.
  */
 export default function WorksheetAmtExemption({ state }: FormRenderProps): React.ReactElement {
-  const f = state.taxReturn.form6251
+  const f = state.taxFacts?.form6251
 
   if (!f) {
     return (

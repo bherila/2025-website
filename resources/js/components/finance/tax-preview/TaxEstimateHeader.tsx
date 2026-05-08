@@ -7,13 +7,11 @@ import TotalsTable from '@/components/payslip/TotalsTable.client'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { type FilingStatus, getStandardDeduction } from '@/lib/tax/standardDeductions'
-import { calculateTax } from '@/lib/tax/taxBracket'
 import { cn } from '@/lib/utils'
-import type { TaxDocument } from '@/types/finance/tax-document'
-import type { Form1040LineItem, TaxReturn1040 } from '@/types/finance/tax-return'
+import type { TaxDocument, W2ParsedData } from '@/types/finance/tax-document'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import EstimatedTaxPaymentsSection from '../EstimatedTaxPaymentsSection'
-import { compute1099RDistributionSummary } from '../Form1040Preview'
 import StateSelectorSection from '../StateSelectorSection'
 import { useTaxPreview } from '../TaxPreviewContext'
 
@@ -31,60 +29,36 @@ interface KpiSummary {
   withholdingRate: number
 }
 
-function lineValue(lines: Form1040LineItem[], lineNumber: string): number {
-  return lines.find((l) => l.line === lineNumber)?.value ?? 0
-}
-
-function hasLine(lines: Form1040LineItem[], lineNumber: string): boolean {
-  return lines.some((l) => l.line === lineNumber)
-}
-
 interface SummarizeInput {
-  taxReturn: TaxReturn1040
-  year: number
-  isMarried: boolean
-  payslips: fin_payslip[]
-  reviewed1099RDocs: TaxDocument[]
+  taxFacts?: TaxPreviewFacts | null
+  accountDocuments?: TaxDocument[]
+  w2Documents?: TaxDocument[]
+  payslips?: fin_payslip[]
 }
 
 export function summarizeTaxEstimate(input: SummarizeInput): KpiSummary {
   return summarize(input)
 }
 
-function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: SummarizeInput): KpiSummary {
-  const lines = taxReturn.form1040 ?? []
-  const totalIncome = lineValue(lines, '9')
-  const agi = lineValue(lines, '11') || totalIncome
-  const filingStatus: FilingStatus = isMarried ? 'Married Filing Jointly' : 'Single'
-  const stdDeduction = getStandardDeduction(year, filingStatus)
-  const taxableIncome = Math.max(0, currency(agi).subtract(stdDeduction).value)
-  const bracketTax = taxableIncome > 0
-    ? calculateTax(String(year), '', currency(taxableIncome), filingStatus).totalTax.value
-    : 0
-  const additionalTaxes = taxReturn.schedule2?.totalAdditionalTaxes ?? 0
-  const foreignTaxCredit = lineValue(lines, '20')
-  const totalTax = Math.max(
-    0,
-    hasLine(lines, '24')
-      ? lineValue(lines, '24')
-      : currency(bracketTax).add(additionalTaxes).subtract(foreignTaxCredit).value,
-  )
+function summarize({ taxFacts, accountDocuments = [], w2Documents = [], payslips = [] }: SummarizeInput): KpiSummary {
+  const form1040 = taxFacts?.form1040
+  const totalIncome = form1040?.line9 ?? 0
+  const totalTax = form1040?.line24 ?? 0
+  const form1040Withheld = form1040?.line25d ?? 0
+  const totalWithheld = form1040Withheld !== 0
+    ? form1040Withheld
+    : fallbackFederalWithholding(accountDocuments, w2Documents, payslips)
+  const form1040Payments = form1040?.line33 ?? 0
+  const totalPayments = form1040Withheld !== 0
+    ? form1040Payments
+    : currency(form1040Payments).add(totalWithheld).value
+  const overpaid = form1040?.line34 ?? 0
+  const amountOwed = form1040?.line37 ?? 0
+  const usesWithholdingFallback = form1040Withheld === 0 && totalWithheld !== 0
+  const diff = !usesWithholdingFallback && (overpaid > 0 || amountOwed > 0)
+    ? currency(overpaid).subtract(amountOwed).value
+    : currency(totalPayments).subtract(totalTax).value
 
-  const yearStart = `${year}-01-01`
-  const yearEnd = `${year + 1}-01-01`
-  const payrollWithheld = payslips.reduce((acc, r) => {
-    if (!r.pay_date || r.pay_date <= yearStart || r.pay_date >= yearEnd) {
-      return acc
-    }
-    return acc.add(r.ps_fed_tax ?? 0).add(r.ps_fed_tax_addl ?? 0).subtract(r.ps_fed_tax_refunded ?? 0)
-  }, currency(0)).value
-  const retirementWithheld = compute1099RDistributionSummary(reviewed1099RDocs).federalWithholding
-  const totalWithheld = hasLine(lines, '25d')
-    ? lineValue(lines, '25d')
-    : currency(payrollWithheld).add(retirementWithheld).value
-  const totalPayments = hasLine(lines, '33') ? lineValue(lines, '33') : totalWithheld
-
-  const diff = currency(totalPayments).subtract(totalTax).value
   return {
     totalIncome,
     totalTax,
@@ -94,6 +68,70 @@ function summarize({ taxReturn, year, isMarried, payslips, reviewed1099RDocs }: 
     effectiveRate: totalIncome > 0 ? totalTax / totalIncome : 0,
     withholdingRate: totalIncome > 0 ? totalWithheld / totalIncome : 0,
   }
+}
+
+function fallbackFederalWithholding(accountDocuments: TaxDocument[], w2Documents: TaxDocument[], payslips: fin_payslip[]): number {
+  const reviewedW2Withholding = w2Documents.reduce((acc, doc) => {
+    if (!doc.is_reviewed) {
+      return acc
+    }
+
+    const parsed = doc.parsed_data as W2ParsedData | null
+    return acc.add(parsed?.box2_fed_tax ?? 0)
+  }, currency(0)).value
+  const payslipWithholding = reviewedW2Withholding === 0
+    ? payslips.reduce((acc, row) => acc
+        .add(row.ps_fed_tax ?? 0)
+        .add(row.ps_fed_tax_addl ?? 0)
+        .subtract(row.ps_fed_tax_refunded ?? 0), currency(0)).value
+    : 0
+  const doc1099Withholding = accountDocuments.reduce(
+    (acc, doc) => doc.is_reviewed && doc.form_type !== 'k1'
+      ? acc.add(federalWithholdingFromParsedData(doc.parsed_data ?? {}))
+      : acc,
+    currency(0),
+  ).value
+
+  return currency(reviewedW2Withholding).add(payslipWithholding).add(doc1099Withholding).value
+}
+
+function federalWithholdingFromParsedData(parsedData: unknown): number {
+  if (Array.isArray(parsedData)) {
+    return parsedData.reduce((acc, entry) => {
+      const childData = isRecord(entry) ? entry.parsed_data : null
+      return acc.add(
+        isRecord(childData) || Array.isArray(childData)
+          ? federalWithholdingFromParsedData(childData)
+          : federalWithholdingFromParsedData(entry),
+      )
+    }, currency(0)).value
+  }
+
+  if (!isRecord(parsedData)) {
+    return 0
+  }
+
+  return currency(numeric(parsedData.box4_fed_tax))
+    .add(numeric(parsedData.fed_tax_withheld))
+    .add(numeric(parsedData.federal_tax_withheld)).value
+}
+
+function numeric(value: unknown): number {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  return 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function fmtUsd(n: number): string {
@@ -115,11 +153,10 @@ export function TaxEstimateHeader({ defaultTier = 'slim' }: TaxEstimateHeaderPro
   const [modalOpen, setModalOpen] = useState(false)
 
   const summary = summarize({
-    taxReturn: state.taxReturn,
-    year: state.year,
-    isMarried: state.isMarried,
+    taxFacts: state.taxFacts,
+    accountDocuments: state.accountDocuments,
+    w2Documents: state.w2Documents,
     payslips: state.payslips,
-    reviewed1099RDocs: state.reviewed1099RDocs,
   })
 
   return (
@@ -334,7 +371,7 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
               Q1: 0,
               Q2: 0,
               Q3: 0,
-              [finalSeriesLabel]: state.taxReturn.schedule2?.totalAdditionalTaxes ?? 0,
+              [finalSeriesLabel]: state.taxFacts?.form1040.line23 ?? 0,
             }}
           />
         </Section>
@@ -380,7 +417,7 @@ function FullDetail({ summary }: { summary: KpiSummary }): React.ReactElement {
           priorYearTax={state.priorYearTax}
           onPriorYearAgiChange={state.setPriorYearAgi}
           onPriorYearTaxChange={state.setPriorYearTax}
-          estimatedTaxPayments={state.taxReturn.estimatedTaxPayments}
+          estimatedTaxPayments={state.estimatedTaxPayments}
           showMfsUnsupportedNotice={state.isMarried}
         />
       </Section>
