@@ -21,14 +21,14 @@ function detailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => void)
 
 function SourceLines({
   sources,
-  fallbackLabel,
-  fallbackValue,
+  totalLabel,
+  totalValue,
   emptyLabel,
   onOpenDoc,
 }: {
   sources: TaxFactSource[]
-  fallbackLabel: string
-  fallbackValue: number
+  totalLabel: string
+  totalValue: number
   emptyLabel: string
   onOpenDoc?: (docId: number) => void
 }): React.ReactElement {
@@ -47,8 +47,8 @@ function SourceLines({
     )
   }
 
-  if (fallbackValue !== 0) {
-    return <FormLine label={fallbackLabel} value={fallbackValue} />
+  if (totalValue !== 0) {
+    return <FormLine label={totalLabel} value={totalValue} />
   }
 
   return <FormLine label={emptyLabel} raw="-" />
@@ -78,8 +78,8 @@ export default function ScheduleBPreview({
         <FormBlock title="Part I — Interest Income">
           <SourceLines
             sources={taxFacts.interestSources}
-            fallbackLabel="Total interest income"
-            fallbackValue={taxFacts.interestTotal}
+            totalLabel="Total interest income"
+            totalValue={taxFacts.interestTotal}
             emptyLabel="No interest income reported"
             {...(onOpenDoc ? { onOpenDoc } : {})}
           />
@@ -89,8 +89,8 @@ export default function ScheduleBPreview({
         <FormBlock title="Part II — Ordinary Dividends">
           <SourceLines
             sources={taxFacts.ordinaryDividendSources}
-            fallbackLabel="Total ordinary dividends"
-            fallbackValue={taxFacts.ordinaryDividendTotal}
+            totalLabel="Total ordinary dividends"
+            totalValue={taxFacts.ordinaryDividendTotal}
             emptyLabel="No dividend income reported"
             {...(onOpenDoc ? { onOpenDoc } : {})}
           />
@@ -99,8 +99,8 @@ export default function ScheduleBPreview({
             <>
               <SourceLines
                 sources={taxFacts.qualifiedDividendSources}
-                fallbackLabel="Qualified dividends"
-                fallbackValue={taxFacts.qualifiedDividendTotal}
+                totalLabel="Qualified dividends"
+                totalValue={taxFacts.qualifiedDividendTotal}
                 emptyLabel="No qualified dividends reported"
                 {...(onOpenDoc ? { onOpenDoc } : {})}
               />

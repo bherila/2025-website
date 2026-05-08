@@ -3,20 +3,16 @@
 import currency from 'currency.js'
 import { useState } from 'react'
 
-import { type EmptyLine,EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
-import { FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { type EmptyLine, EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
+import { FactsLoadingPlaceholder, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
-import type { Schedule1Lines } from '@/types/finance/tax-return'
 import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface Schedule1PreviewProps {
   selectedYear: number
-  schedule1?: Schedule1Lines | undefined
   /** Navigate to a source tab when the user clicks Go-to-source from the disclosure. */
   onTabChange?: (tab: TaxTabId) => void
-  /** Inline manual-entry control for line 2a alimony (pre-2019 decrees). */
-  line2aAlimonyInput?: React.ReactNode
   /** Backend audit facts, including unreviewed parsed sources. */
   taxFacts?: Schedule1Facts | null
   onOpenDoc?: (docId: number) => void
@@ -29,132 +25,28 @@ export interface Schedule1Line8Breakdown {
   line8z: number
 }
 
-export function computeSchedule1Totals({
-  scheduleCNetIncome = 0,
-  scheduleEGrandTotal = 0,
-  schedule1OtherIncome = 0,
-  schedule1Line8Breakdown,
-  schedule1Line7Unemployment = 0,
-  schedule1Line1aTaxableRefunds = 0,
-  schedule1Line2aAlimony = 0,
-  schedule1Line4OtherGains = null,
-  schedule1Line6FarmIncome = null,
-  deductibleSeTaxAdjustment = 0,
-}: {
-  scheduleCNetIncome?: number
-  scheduleEGrandTotal?: number
-  /** @deprecated Pass schedule1Line8Breakdown for sub-line accuracy; falls back to line 8z. */
-  schedule1OtherIncome?: number
-  schedule1Line8Breakdown?: Schedule1Line8Breakdown
-  schedule1Line7Unemployment?: number
-  schedule1Line1aTaxableRefunds?: number
-  /** Alimony received from pre-2019 divorce decrees (user-entered). */
-  schedule1Line2aAlimony?: number
-  /** Net ordinary amount from Form 4797 flowing to Schedule 1 line 4 (includes Part II/III and Part I only when Part I is a net loss). Pass null when Form 4797 has no activity. */
-  schedule1Line4OtherGains?: number | null
-  /** Net result from Schedule F (farm income/loss). Pass null when Schedule F has no activity. */
-  schedule1Line6FarmIncome?: number | null
-  deductibleSeTaxAdjustment?: number
-}): Schedule1Lines {
-  const line8b = schedule1Line8Breakdown?.line8b ?? 0
-  const line8h = schedule1Line8Breakdown?.line8h ?? 0
-  const line8i = schedule1Line8Breakdown?.line8i ?? 0
-  const line8z = schedule1Line8Breakdown
-    ? (schedule1Line8Breakdown.line8z ?? 0)
-    : schedule1OtherIncome
-
-  const line9_totalOther = currency(line8b).add(line8h).add(line8i).add(line8z).value
-  const line10_total = currency(scheduleCNetIncome)
-    .add(scheduleEGrandTotal)
-    .add(schedule1Line1aTaxableRefunds)
-    .add(schedule1Line2aAlimony)
-    .add(schedule1Line4OtherGains ?? 0)
-    .add(schedule1Line6FarmIncome ?? 0)
-    .add(schedule1Line7Unemployment)
-    .add(line9_totalOther).value
-  const line15_deductibleSeTax = deductibleSeTaxAdjustment === 0
-    ? null
-    : currency(deductibleSeTaxAdjustment).value
-
-  return {
-    partI: {
-      line1a_taxableRefunds: schedule1Line1aTaxableRefunds === 0 ? null : schedule1Line1aTaxableRefunds,
-      line2a_alimonyReceived: schedule1Line2aAlimony === 0 ? null : schedule1Line2aAlimony,
-      line3_business: scheduleCNetIncome,
-      line4_otherGains: schedule1Line4OtherGains,
-      line5_rentalPartnerships: scheduleEGrandTotal,
-      line6_farmIncome: schedule1Line6FarmIncome,
-      line7_unemploymentCompensation: schedule1Line7Unemployment === 0 ? null : schedule1Line7Unemployment,
-      line8b_gambling: line8b === 0 ? null : line8b,
-      line8h_juryDuty: line8h === 0 ? null : line8h,
-      line8i_prizes: line8i === 0 ? null : line8i,
-      line8z_otherIncome: line8z,
-      line9_totalOther,
-      line10_total,
-    },
-    partII: {
-      line13_hsaDeduction: null,
-      line15_deductibleSeTax,
-      line17_selfEmployedHealthInsurance: null,
-      line20_iraDeduction: null,
-      line21_studentLoanInterest: null,
-      line26_totalAdjustments: currency(line15_deductibleSeTax ?? 0).value,
-    },
-  }
-}
-
-export function schedule1FactsToLines(facts: Schedule1Facts): Schedule1Lines {
-  return {
-    partI: {
-      line1a_taxableRefunds: facts.line1aTotal === 0 ? null : facts.line1aTotal,
-      line2a_alimonyReceived: facts.line2aTotal === 0 ? null : facts.line2aTotal,
-      line3_business: facts.line3Total,
-      line4_otherGains: facts.line4Total === 0 ? null : facts.line4Total,
-      line5_rentalPartnerships: facts.line5Total,
-      line6_farmIncome: facts.line6Total === 0 ? null : facts.line6Total,
-      line7_unemploymentCompensation: facts.line7Total === 0 ? null : facts.line7Total,
-      line8b_gambling: facts.line8bTotal === 0 ? null : facts.line8bTotal,
-      line8h_juryDuty: facts.line8hTotal === 0 ? null : facts.line8hTotal,
-      line8i_prizes: facts.line8iTotal === 0 ? null : facts.line8iTotal,
-      line8z_otherIncome: facts.line8zTotal,
-      line9_totalOther: facts.line9TotalOtherIncome,
-      line10_total: currency(facts.line1aTotal)
-        .add(facts.line2aTotal)
-        .add(facts.line3Total)
-        .add(facts.line4Total)
-        .add(facts.line5Total)
-        .add(facts.line6Total)
-        .add(facts.line7Total)
-        .add(facts.line9TotalOtherIncome).value,
-    },
-    partII: {
-      line13_hsaDeduction: null,
-      line15_deductibleSeTax: facts.line15Total === 0 ? null : facts.line15Total,
-      line17_selfEmployedHealthInsurance: null,
-      line20_iraDeduction: null,
-      line21_studentLoanInterest: null,
-      line26_totalAdjustments: facts.line15Total,
-    },
-  }
-}
-
 /**
- * A Part I line is "visible" when its value is a non-zero number. A `null`
- * value means the source form/document doesn't exist yet (structurally empty).
- * A `0` value means source data exists but nets to zero.
+ * A Part I line is "visible" when its value is a non-zero number. Backend
+ * facts always provide numeric totals, so zero means loaded-but-empty.
  */
-function classifyPartIValue(value: number | null): 'visible' | 'null' | 'zero' {
-  if (value === null) {
-    return 'null'
-  }
+function classifyPartIValue(value: number): 'visible' | 'zero' {
   return value === 0 ? 'zero' : 'visible'
+}
+
+function schedule1Line10Total(facts: Schedule1Facts): number {
+  return currency(facts.line1aTotal)
+    .add(facts.line2aTotal)
+    .add(facts.line3Total)
+    .add(facts.line4Total)
+    .add(facts.line5Total)
+    .add(facts.line6Total)
+    .add(facts.line7Total)
+    .add(facts.line9TotalOtherIncome).value
 }
 
 export default function Schedule1Preview({
   selectedYear,
-  schedule1,
   onTabChange,
-  line2aAlimonyInput,
   taxFacts,
   onOpenDoc,
 }: Schedule1PreviewProps) {
@@ -163,36 +55,59 @@ export default function Schedule1Preview({
     sources: TaxFactSource[]
     total: number
   } | null>(null)
-  const totals = schedule1 ?? (taxFacts ? schedule1FactsToLines(taxFacts) : computeSchedule1Totals({}))
-  const partI = totals.partI
-  const partII = totals.partII
-  const line5Sources = taxFacts?.line5Sources ?? []
-  const line6Sources = taxFacts?.line6Sources ?? []
-  const line8Sources = taxFacts?.line8Sources ?? []
-  const line8bSources = taxFacts?.line8bSources ?? []
-  const line8hSources = taxFacts?.line8hSources ?? []
-  const line8iSources = taxFacts?.line8iSources ?? []
-  const line8zSources = taxFacts?.line8zSources ?? []
+
+  if (!taxFacts) {
+    return <FactsLoadingPlaceholder label="Schedule 1" />
+  }
+
+  const line1aSources = taxFacts.line1aSources
+  const line2aSources = taxFacts.line2aSources
+  const line3Sources = taxFacts.line3Sources
+  const line4Sources = taxFacts.line4Sources
+  const line5Sources = taxFacts.line5Sources
+  const line6Sources = taxFacts.line6Sources
+  const line7Sources = taxFacts.line7Sources
+  const line8Sources = taxFacts.line8Sources
+  const line8bSources = taxFacts.line8bSources
+  const line8hSources = taxFacts.line8hSources
+  const line8iSources = taxFacts.line8iSources
+  const line8zSources = taxFacts.line8zSources
+  const line15Sources = taxFacts.line15Sources
+
+  const line1aNeedsReview = taxFactSourcesNeedReview(line1aSources)
+  const line2aNeedsReview = taxFactSourcesNeedReview(line2aSources)
+  const line3NeedsReview = taxFactSourcesNeedReview(line3Sources)
+  const line4NeedsReview = taxFactSourcesNeedReview(line4Sources)
   const line5NeedsReview = taxFactSourcesNeedReview(line5Sources)
   const line6NeedsReview = taxFactSourcesNeedReview(line6Sources)
+  const line7NeedsReview = taxFactSourcesNeedReview(line7Sources)
   const line8bNeedsReview = taxFactSourcesNeedReview(line8bSources)
   const line8hNeedsReview = taxFactSourcesNeedReview(line8hSources)
   const line8iNeedsReview = taxFactSourcesNeedReview(line8iSources)
   const line8zNeedsReview = taxFactSourcesNeedReview(line8zSources)
   const lineOtherIncomeNeedsReview = taxFactSourcesNeedReview(line8Sources)
-  const line10NeedsReview = line5NeedsReview || line6NeedsReview || lineOtherIncomeNeedsReview
+  const line15NeedsReview = taxFactSourcesNeedReview(line15Sources)
+  const line10NeedsReview = line1aNeedsReview
+    || line2aNeedsReview
+    || line3NeedsReview
+    || line4NeedsReview
+    || line5NeedsReview
+    || line6NeedsReview
+    || line7NeedsReview
+    || lineOtherIncomeNeedsReview
+  const line10Total = schedule1Line10Total(taxFacts)
 
-  const line1a = classifyPartIValue(partI.line1a_taxableRefunds)
-  const line2a = classifyPartIValue(partI.line2a_alimonyReceived)
-  const line3 = classifyPartIValue(partI.line3_business)
-  const line4 = classifyPartIValue(partI.line4_otherGains)
-  const line5 = classifyPartIValue(partI.line5_rentalPartnerships)
-  const line6 = classifyPartIValue(partI.line6_farmIncome)
-  const line7 = classifyPartIValue(partI.line7_unemploymentCompensation)
-  const line8b = classifyPartIValue(partI.line8b_gambling)
-  const line8h = classifyPartIValue(partI.line8h_juryDuty)
-  const line8i = classifyPartIValue(partI.line8i_prizes)
-  const line8z = classifyPartIValue(partI.line8z_otherIncome)
+  const line1a = classifyPartIValue(taxFacts.line1aTotal)
+  const line2a = classifyPartIValue(taxFacts.line2aTotal)
+  const line3 = classifyPartIValue(taxFacts.line3Total)
+  const line4 = classifyPartIValue(taxFacts.line4Total)
+  const line5 = classifyPartIValue(taxFacts.line5Total)
+  const line6 = classifyPartIValue(taxFacts.line6Total)
+  const line7 = classifyPartIValue(taxFacts.line7Total)
+  const line8b = classifyPartIValue(taxFacts.line8bTotal)
+  const line8h = classifyPartIValue(taxFacts.line8hTotal)
+  const line8i = classifyPartIValue(taxFacts.line8iTotal)
+  const line8z = classifyPartIValue(taxFacts.line8zTotal)
 
   const partIEmpty: EmptyLine[] = []
   if (line1a !== 'visible') {
@@ -200,7 +115,7 @@ export default function Schedule1Preview({
       lineNumber: '1a',
       label: 'Taxable refunds, credits, or offsets of state/local income taxes',
       state: line1a,
-      tooltip: line1a === 'zero' ? 'No taxable refunds reported on any 1099-G box 2.' : undefined,
+      tooltip: 'No taxable refunds reported on any 1099-G box 2.',
     } as EmptyLine)
   }
   if (line2a !== 'visible') {
@@ -208,7 +123,6 @@ export default function Schedule1Preview({
       lineNumber: '2a',
       label: 'Alimony received (pre-2019 decrees only)',
       state: line2a,
-      ...(line2aAlimonyInput ? { manualEntry: line2aAlimonyInput } : {}),
     } as EmptyLine)
   }
   if (line3 !== 'visible') {
@@ -259,35 +173,19 @@ export default function Schedule1Preview({
     partIEmpty.push({ lineNumber: '8z', label: 'Other income (1099-MISC routed to line 8z)', state: line8z } as EmptyLine)
   }
 
-  const partIIEmpty: EmptyLine[] = []
-  if (partII.line13_hsaDeduction === null || partII.line13_hsaDeduction === 0) {
-    partIIEmpty.push({
-      lineNumber: '13',
-      label: 'Health savings account (HSA) deduction',
-      state: partII.line13_hsaDeduction === 0 ? 'zero' : 'null',
-    })
-  }
-  if (partII.line17_selfEmployedHealthInsurance === null || partII.line17_selfEmployedHealthInsurance === 0) {
-    partIIEmpty.push({
-      lineNumber: '17',
-      label: 'Self-employed health insurance deduction',
-      state: partII.line17_selfEmployedHealthInsurance === 0 ? 'zero' : 'null',
-    })
-  }
-  if (partII.line20_iraDeduction === null || partII.line20_iraDeduction === 0) {
-    partIIEmpty.push({
-      lineNumber: '20',
-      label: 'IRA deduction',
-      state: partII.line20_iraDeduction === 0 ? 'zero' : 'null',
-    })
-  }
-  if (partII.line21_studentLoanInterest === null || partII.line21_studentLoanInterest === 0) {
-    partIIEmpty.push({
-      lineNumber: '21',
-      label: 'Student loan interest deduction',
-      state: partII.line21_studentLoanInterest === 0 ? 'zero' : 'null',
-    })
-  }
+  const partIIEmpty: EmptyLine[] = [
+    { lineNumber: '13', label: 'Health savings account (HSA) deduction', state: 'zero' },
+    { lineNumber: '17', label: 'Self-employed health insurance deduction', state: 'zero' },
+    { lineNumber: '20', label: 'IRA deduction', state: 'zero' },
+    { lineNumber: '21', label: 'Student loan interest deduction', state: 'zero' },
+  ]
+
+  const sourceClickProps = (title: string, sources: TaxFactSource[], total: number) =>
+    sources.length > 0
+      ? {
+          onClick: () => setActiveSources({ title, sources, total }),
+        }
+      : {}
 
   return (
     <div className="space-y-4">
@@ -301,25 +199,49 @@ export default function Schedule1Preview({
       <FormBlock title="Part I — Additional Income">
         {line1a === 'visible' && (
           <>
-            <FormLine boxRef="1a" label="Taxable refunds, credits, or offsets of state and local income taxes" value={partI.line1a_taxableRefunds} />
+            <FormLine
+              boxRef="1a"
+              label="Taxable refunds, credits, or offsets of state and local income taxes"
+              value={taxFacts.line1aTotal}
+              isReviewed={line1aNeedsReview ? false : undefined}
+              {...sourceClickProps('Schedule 1 Line 1a Supporting Details', line1aSources, taxFacts.line1aTotal)}
+            />
             <FormSubLine text="From 1099-G box 2" />
           </>
         )}
         {line2a === 'visible' && (
           <>
-            <FormLine boxRef="2a" label="Alimony received" value={partI.line2a_alimonyReceived} />
-            <FormSubLine text="Pre-2019 divorce decrees only (manual entry)" />
+            <FormLine
+              boxRef="2a"
+              label="Alimony received"
+              value={taxFacts.line2aTotal}
+              isReviewed={line2aNeedsReview ? false : undefined}
+              {...sourceClickProps('Schedule 1 Line 2a Supporting Details', line2aSources, taxFacts.line2aTotal)}
+            />
+            <FormSubLine text="Pre-2019 divorce decrees only" />
           </>
         )}
         {line3 === 'visible' && (
           <>
-            <FormLine boxRef="3" label="Business income or (loss)" value={partI.line3_business} />
+            <FormLine
+              boxRef="3"
+              label="Business income or (loss)"
+              value={taxFacts.line3Total}
+              isReviewed={line3NeedsReview ? false : undefined}
+              {...sourceClickProps('Schedule 1 Line 3 Supporting Details', line3Sources, taxFacts.line3Total)}
+            />
             <FormSubLine text="From Schedule C net income" />
           </>
         )}
         {line4 === 'visible' && (
           <>
-            <FormLine boxRef="4" label="Other gains or (losses)" value={partI.line4_otherGains} />
+            <FormLine
+              boxRef="4"
+              label="Other gains or (losses)"
+              value={taxFacts.line4Total}
+              isReviewed={line4NeedsReview ? false : undefined}
+              {...sourceClickProps('Schedule 1 Line 4 Supporting Details', line4Sources, taxFacts.line4Total)}
+            />
             <FormSubLine text="From Form 4797 ordinary gain/loss total" />
           </>
         )}
@@ -328,17 +250,9 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="5"
               label="Rental real estate, royalties, partnerships, S corporations, trusts"
-              value={partI.line5_rentalPartnerships}
+              value={taxFacts.line5Total}
               isReviewed={line5NeedsReview ? false : undefined}
-              {...(line5Sources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 5 Supporting Details',
-                      sources: line5Sources,
-                      total: taxFacts?.line5Total ?? partI.line5_rentalPartnerships ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 5 Supporting Details', line5Sources, taxFacts.line5Total)}
             />
             <FormSubLine text="From Schedule E combined total" />
           </>
@@ -348,24 +262,22 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="6"
               label="Farm income or (loss)"
-              value={partI.line6_farmIncome}
+              value={taxFacts.line6Total}
               isReviewed={line6NeedsReview ? false : undefined}
-              {...(line6Sources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 6 Supporting Details',
-                      sources: line6Sources,
-                      total: taxFacts?.line6Total ?? partI.line6_farmIncome ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 6 Supporting Details', line6Sources, taxFacts.line6Total)}
             />
             <FormSubLine text="From Schedule F net profit/loss" />
           </>
         )}
         {line7 === 'visible' && (
           <>
-            <FormLine boxRef="7" label="Unemployment compensation" value={partI.line7_unemploymentCompensation} />
+            <FormLine
+              boxRef="7"
+              label="Unemployment compensation"
+              value={taxFacts.line7Total}
+              isReviewed={line7NeedsReview ? false : undefined}
+              {...sourceClickProps('Schedule 1 Line 7 Supporting Details', line7Sources, taxFacts.line7Total)}
+            />
             <FormSubLine text="From 1099-G box 1" />
           </>
         )}
@@ -374,17 +286,9 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="8b"
               label="Gambling winnings"
-              value={partI.line8b_gambling}
+              value={taxFacts.line8bTotal}
               isReviewed={line8bNeedsReview ? false : undefined}
-              {...(line8bSources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 8b Supporting Details',
-                      sources: line8bSources,
-                      total: taxFacts?.line8bTotal ?? partI.line8b_gambling ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 8b Supporting Details', line8bSources, taxFacts.line8bTotal)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
           </>
@@ -394,17 +298,9 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="8h"
               label="Jury duty pay"
-              value={partI.line8h_juryDuty}
+              value={taxFacts.line8hTotal}
               isReviewed={line8hNeedsReview ? false : undefined}
-              {...(line8hSources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 8h Supporting Details',
-                      sources: line8hSources,
-                      total: taxFacts?.line8hTotal ?? partI.line8h_juryDuty ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 8h Supporting Details', line8hSources, taxFacts.line8hTotal)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
           </>
@@ -414,17 +310,9 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="8i"
               label="Prizes and awards"
-              value={partI.line8i_prizes}
+              value={taxFacts.line8iTotal}
               isReviewed={line8iNeedsReview ? false : undefined}
-              {...(line8iSources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 8i Supporting Details',
-                      sources: line8iSources,
-                      total: taxFacts?.line8iTotal ?? partI.line8i_prizes ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 8i Supporting Details', line8iSources, taxFacts.line8iTotal)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
           </>
@@ -434,42 +322,26 @@ export default function Schedule1Preview({
             <FormLine
               boxRef="8z"
               label="Other income"
-              value={partI.line8z_otherIncome}
+              value={taxFacts.line8zTotal}
               isReviewed={line8zNeedsReview ? false : undefined}
-              {...(line8zSources.length > 0
-                ? {
-                    onClick: () => setActiveSources({
-                      title: 'Schedule 1 Line 8z Supporting Details',
-                      sources: line8zSources,
-                      total: taxFacts?.line8zTotal ?? partI.line8z_otherIncome ?? 0,
-                    }),
-                  }
-                : {})}
+              {...sourceClickProps('Schedule 1 Line 8z Supporting Details', line8zSources, taxFacts.line8zTotal)}
             />
             <FormSubLine text="From 1099-MISC documents routed or defaulted to Schedule 1 line 8z" />
           </>
         )}
-        {partI.line9_totalOther !== 0 && (
+        {taxFacts.line9TotalOtherIncome !== 0 && (
           <FormTotalLine
             boxRef="9"
             label="Total other income (sum of lines 8a-8z)"
-            value={partI.line9_totalOther}
+            value={taxFacts.line9TotalOtherIncome}
             isReviewed={lineOtherIncomeNeedsReview ? false : undefined}
-            {...(line8Sources.length > 0
-              ? {
-                  onClick: () => setActiveSources({
-                    title: 'Schedule 1 Line 9 Supporting Details',
-                    sources: line8Sources,
-                    total: taxFacts?.line9TotalOtherIncome ?? partI.line9_totalOther,
-                  }),
-                }
-              : {})}
+            {...sourceClickProps('Schedule 1 Line 9 Supporting Details', line8Sources, taxFacts.line9TotalOtherIncome)}
           />
         )}
         <FormTotalLine
           boxRef="10"
           label="Total additional income (to Form 1040 line 8)"
-          value={partI.line10_total}
+          value={line10Total}
           isReviewed={line10NeedsReview ? false : undefined}
           double
         />
@@ -484,13 +356,16 @@ export default function Schedule1Preview({
         <FormLine
           boxRef="15"
           label="Deductible part of self-employment tax"
-          value={partII.line15_deductibleSeTax}
+          value={taxFacts.line15Total === 0 ? null : taxFacts.line15Total}
+          isReviewed={line15NeedsReview ? false : undefined}
+          {...sourceClickProps('Schedule 1 Line 15 Supporting Details', line15Sources, taxFacts.line15Total)}
         />
         <FormSubLine text="Computed from Schedule SE and included in Form 1040 line 10." />
         <FormTotalLine
           boxRef="26"
           label="Total adjustments to income (to Form 1040 line 10)"
-          value={partII.line26_totalAdjustments}
+          value={taxFacts.line15Total}
+          isReviewed={line15NeedsReview ? false : undefined}
           double
         />
         <EmptyLinesDisclosure

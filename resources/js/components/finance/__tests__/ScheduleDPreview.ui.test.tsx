@@ -1,104 +1,128 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import React from 'react'
 
-import type { TaxDocument } from '@/types/finance/tax-document'
+import type { ScheduleDFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import ScheduleDPreview from '../ScheduleDPreview'
 
-function makeTaxDocument(overrides: Partial<TaxDocument> = {}): TaxDocument {
+function makeSource(overrides: Partial<TaxFactSource> = {}): TaxFactSource {
   return {
-    id: 1,
-    user_id: 1,
-    tax_year: 2025,
-    form_type: '1099_b',
-    employment_entity_id: null,
-    account_id: null,
-    original_filename: 'doc.pdf',
-    stored_filename: null,
-    s3_path: null,
-    mime_type: 'application/pdf',
-    file_size_bytes: 1,
-    file_hash: 'doc',
-    is_reviewed: true,
-    misc_routing: null,
+    sourceType: 'test',
+    routing: null,
+    id: 'source-1',
+    label: 'Test source',
+    amount: 0,
+    taxDocumentId: null,
+    taxDocumentAccountId: null,
+    accountId: null,
+    formType: null,
+    box: null,
+    code: null,
+    routingReason: null,
     notes: null,
-    human_file_size: '1 B',
-    download_count: 0,
-    genai_job_id: null,
-    genai_status: 'parsed',
-    parsed_data: null,
-    uploader: null,
-    employment_entity: null,
-    account: null,
-    account_links: [],
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
+    isReviewed: true,
+    reviewStatus: 'reviewed',
+    reviewAction: null,
+    ...overrides,
+  }
+}
+
+function makeFacts(overrides: Partial<ScheduleDFacts> = {}): ScheduleDFacts {
+  return {
+    form8949Rollups: [],
+    line5Sources: [],
+    line3Sources: [],
+    line10Sources: [],
+    line12Sources: [],
+    line13Sources: [],
+    ambiguous11SSources: [],
+    line1aGainLoss: 0,
+    line1bGainLoss: 0,
+    line2GainLoss: 0,
+    line3GainLoss: 0,
+    line4GainLoss: 0,
+    line5GainLoss: 0,
+    line6Carryover: 0,
+    line7NetShortTerm: 0,
+    line8aGainLoss: 0,
+    line8bGainLoss: 0,
+    line9GainLoss: 0,
+    line10GainLoss: 0,
+    line11GainLoss: 0,
+    line12GainLoss: 0,
+    line13CapitalGainDistributions: 0,
+    line14Carryover: 0,
+    line15NetLongTerm: 0,
+    line16Combined: 0,
+    line21LimitedLossOrGain: 0,
+    appliedToReturn: 0,
+    carryforward: 0,
+    totalBusinessCapGains: 0,
+    totalPersonalCapGains: 0,
+    limitedBusinessCapGains: 0,
+    limitedPersonalCapGains: 0,
+    ambiguous11SAmount: 0,
     ...overrides,
   }
 }
 
 describe('ScheduleDPreview detail navigation', () => {
-  it('renders detail buttons for Schedule D source rows and opens the associated tax document', () => {
+  it('renders detail buttons for Schedule D fact source rows and opens the associated tax document', () => {
     const onOpenDoc = jest.fn()
-    const k1Doc = makeTaxDocument({
-      id: 10,
-      form_type: 'k1',
-      original_filename: 'k1.pdf',
-      parsed_data: {
-        schemaVersion: '2026.1',
-        formType: '1065',
-        fields: {
-          B: { value: 'Source Partnership' },
-          '8': { value: '1200' },
-        },
-        codes: {
-          '11': [{ code: 'S', value: '2500', notes: 'Net long-term capital gain' }],
-        },
-      },
-    })
-    const divDoc = makeTaxDocument({
-      id: 11,
-      form_type: '1099_div',
-      original_filename: 'div.pdf',
-      parsed_data: {
-        payer_name: 'Dividend Broker',
-        box2a_cap_gain: 400,
-      },
+    const facts = makeFacts({
+      line5Sources: [makeSource({
+        id: 'k1-box8',
+        label: 'Source Partnership — K-1 Box 8',
+        amount: 1200,
+        taxDocumentId: 10,
+        formType: 'k1',
+      })],
+      line5GainLoss: 1200,
+      line7NetShortTerm: 1200,
+      line13Sources: [makeSource({
+        id: 'div-cap-gain',
+        label: 'Dividend Broker — capital gain distributions',
+        amount: 400,
+        taxDocumentId: 11,
+        formType: '1099_div',
+      })],
+      line13CapitalGainDistributions: 400,
+      line15NetLongTerm: 400,
+      line16Combined: 1600,
+      line21LimitedLossOrGain: 1600,
     })
 
     render(
       <ScheduleDPreview
-        reviewedK1Docs={[k1Doc]}
-        reviewed1099Docs={[divDoc]}
+        taxFacts={facts}
         selectedYear={2025}
         onOpenDoc={onOpenDoc}
       />,
     )
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Open K-1 detail' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Open K1 detail' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open 1099-DIV detail' }))
 
     expect(onOpenDoc).toHaveBeenNthCalledWith(1, 10)
     expect(onOpenDoc).toHaveBeenNthCalledWith(2, 11)
   })
 
-  it('shows pulled prior-year capital loss carryovers and links line 21 back to Form 1040 line 7', () => {
+  it('shows backend capital loss carryovers and links line 21 back to Form 1040 line 7', () => {
     const onGoToForm1040 = jest.fn()
-    const brokerDoc = makeTaxDocument({
-      id: 12,
-      form_type: '1099_b',
-      original_filename: 'broker.pdf',
-      parsed_data: {
-        payer_name: 'Current Broker',
-      },
-    })
 
     render(
       <ScheduleDPreview
-        reviewedK1Docs={[]}
-        reviewed1099Docs={[brokerDoc]}
+        taxFacts={makeFacts({
+          line6Carryover: -7000,
+          line14Carryover: -2000,
+          line7NetShortTerm: -7000,
+          line15NetLongTerm: -2000,
+          line16Combined: -9000,
+          line21LimitedLossOrGain: -3000,
+          appliedToReturn: -3000,
+          carryforward: -6000,
+        })}
         selectedYear={2025}
-        priorYearCapitalLossCarryover={{ shortTermCarryover: 7000, longTermCarryover: 2000 }}
         onGoToForm1040={onGoToForm1040}
       />,
     )
@@ -113,27 +137,32 @@ describe('ScheduleDPreview detail navigation', () => {
 
   it('opens Schedule D line 5 supporting details with per-source navigation', () => {
     const onOpenDoc = jest.fn()
-    const k1Doc = makeTaxDocument({
-      id: 20,
-      form_type: 'k1',
-      original_filename: 'k1.pdf',
-      parsed_data: {
-        schemaVersion: '2026.1',
-        formType: '1065',
-        fields: {
-          B: { value: 'TAX AWARE HEDGE FUND FUND, LLC' },
-          '8': { value: '1200' },
-        },
-        codes: {
-          '11': [{ code: 'S', value: '-500', notes: 'Net short-term capital loss' }],
-        },
-      },
+    const facts = makeFacts({
+      line5Sources: [
+        makeSource({
+          id: 'line5-box8',
+          label: 'TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8',
+          amount: 1200,
+          taxDocumentId: 20,
+          formType: 'k1',
+        }),
+        makeSource({
+          id: 'line5-box11s',
+          label: 'TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S',
+          amount: -500,
+          taxDocumentId: 20,
+          formType: 'k1',
+        }),
+      ],
+      line5GainLoss: 700,
+      line7NetShortTerm: 700,
+      line16Combined: 700,
+      line21LimitedLossOrGain: 700,
     })
 
     render(
       <ScheduleDPreview
-        reviewedK1Docs={[k1Doc]}
-        reviewed1099Docs={[]}
+        taxFacts={facts}
         selectedYear={2025}
         onOpenDoc={onOpenDoc}
       />,
@@ -144,9 +173,9 @@ describe('ScheduleDPreview detail navigation', () => {
     expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
     const modal = screen.getByRole('dialog', { name: 'Schedule D Line 5 Supporting Details' })
     expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8')).toBeInTheDocument()
-    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S (S/T non-portfolio)')).toBeInTheDocument()
+    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S')).toBeInTheDocument()
 
-    fireEvent.click(within(modal).getAllByRole('button', { name: 'Go to K-1' })[0]!)
+    fireEvent.click(within(modal).getAllByRole('button', { name: 'Go to K1' })[0]!)
 
     expect(onOpenDoc).toHaveBeenCalledWith(20)
   })

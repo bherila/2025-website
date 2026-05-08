@@ -2,225 +2,75 @@
 
 import currency from 'currency.js'
 
-import { isFK1StructuredData } from '@/components/finance/k1'
-import { FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
-import { isTraderFundK1, sumAbsK1CodeItems, sumK1CodeItems } from '@/lib/finance/k1Utils'
-import { parseMoneyOrZero } from '@/lib/finance/money'
-import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
-import type { FK1StructuredData } from '@/types/finance/k1-data'
-import type { TaxDocument } from '@/types/finance/tax-document'
-import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
+import type { ScheduleEFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
-// ── K-1 field helpers ─────────────────────────────────────────────────────────
-
-function parseK1Field(data: FK1StructuredData, box: string): number {
-  return parseMoneyOrZero(data.fields[box]?.value)
+interface ScheduleEPreviewProps {
+  taxFacts?: ScheduleEFacts | null
+  selectedYear: number
+  onOpenDoc?: (docId: number) => void
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+function sourceDetailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => void) {
+  if (source.taxDocumentId === null || !onOpenDoc) {
+    return {}
+  }
 
-interface PartnerRow {
-  docId: number
-  partnerName: string
-  ein: string | null
-  box1OrdinaryIncome: number
-  box2NetRentalRealEstate: number
-  box3OtherNetRental: number
-  box4GuaranteedPayments: number
-  box5Interest: number
-  /** Box 11ZZ — partnership-statement "other ordinary income/loss" (signed). For trader funds: §988 FX, swap, PFIC MTM. Reports as nonpassive ordinary on Schedule E Part II. */
-  box11ZZOtherIncome: number
-  /** Box 13ZZ — partnership-statement "other deductions" (positive magnitude). For trader funds: trader/management fees, admin expenses. Subtracted from Schedule E Part II nonpassive. */
-  box13ZZOtherDeductions: number
-  /** Trader-fund ordinary items that are also NII for Form 8960. */
-  traderNii: number
-  netPassive: number
-  netNonpassive: number
-}
-
-interface MiscIncomeRow {
-  key: string
-  payerName: string
-  formLabel: string
-  amount: number
-}
-
-export interface ScheduleELines {
-  miscIncomeRows: MiscIncomeRow[]
-  miscIncomeTotal: number
-  partnerRows: PartnerRow[]
-  totalBox1: number
-  totalBox2: number
-  totalBox3: number
-  totalBox4: number
-  totalBox5: number
-  totalBox11ZZ: number
-  totalBox13ZZ: number
-  totalTraderNii: number
-  totalPassive: number
-  totalNonpassive: number
-  grandTotal: number
-}
-
-export function computeScheduleELines(
-  reviewedK1Docs: TaxDocument[],
-  reviewed1099Docs: TaxDocument[] = [],
-): ScheduleELines {
-  const k1Parsed = reviewedK1Docs
-    .map((d) => ({ doc: d, data: isFK1StructuredData(d.parsed_data) ? d.parsed_data : null }))
-    .filter((x): x is { doc: TaxDocument; data: FK1StructuredData } => x.data !== null)
-
-  const miscIncomeRows = reviewed1099Docs.flatMap((doc) => {
-    const links = doc.account_links ?? []
-
-    if (links.length > 0) {
-      return links.flatMap((link) => {
-        if (link.form_type !== '1099_misc') {
-          return []
-        }
-
-        const amount = getDocAmounts(doc, link).other
-        const effectiveRouting = link.misc_routing ?? doc.misc_routing
-        const shouldInclude = amount !== null && effectiveRouting === 'sch_e'
-
-        if (!shouldInclude) {
-          return []
-        }
-
-        const payerName = getPayerName(doc, link) ?? link.account?.acct_name ?? doc.original_filename ?? '1099-MISC'
-        return [{
-          key: `link-${link.id}`,
-          payerName,
-          formLabel: FORM_TYPE_LABELS[link.form_type] ?? link.form_type,
-          amount,
-        }]
-      })
-    }
-
-    if (doc.form_type !== '1099_misc') {
-      return []
-    }
-
-    const amount = getDocAmounts(doc).other
-    const shouldInclude = amount !== null && doc.misc_routing === 'sch_e'
-
-    if (!shouldInclude) {
-      return []
-    }
-
-    const payerName = getPayerName(doc) ?? doc.account?.acct_name ?? doc.original_filename ?? '1099-MISC'
-    return [{
-      key: `doc-${doc.id}`,
-      payerName,
-      formLabel: FORM_TYPE_LABELS[doc.form_type] ?? doc.form_type,
-      amount,
-    }]
-  })
-
-  const partnerRows: PartnerRow[] = k1Parsed.map(({ doc, data }) => {
-    const partnerName =
-      data.fields['B']?.value?.split('\n')[0] ?? doc.employment_entity?.display_name ?? 'Partnership'
-    const ein = data.fields['A']?.value ?? null
-
-    const box1OrdinaryIncome = parseK1Field(data, '1')
-    const box2NetRentalRealEstate = parseK1Field(data, '2')
-    const box3OtherNetRental = parseK1Field(data, '3')
-    const box4GuaranteedPayments = parseK1Field(data, '4')
-    const box5Interest = parseK1Field(data, '5')
-    // Box 11ZZ items are signed (gains positive, losses negative).
-    const box11ZZOtherIncome = sumK1CodeItems(data, '11', 'ZZ')
-    // Box 13ZZ items are reported as positive magnitudes representing deductions.
-    const box13ZZOtherDeductions = sumAbsK1CodeItems(data, '13', 'ZZ')
-    const netPassive = currency(box2NetRentalRealEstate).add(box3OtherNetRental).value
-    const netNonpassive = currency(box1OrdinaryIncome)
-      .add(box4GuaranteedPayments)
-      .add(box11ZZOtherIncome)
-      .subtract(box13ZZOtherDeductions).value
-    const traderNii = isTraderFundK1(data)
-      ? currency(box11ZZOtherIncome).subtract(box13ZZOtherDeductions).value
-      : 0
-
-    return {
-      docId: doc.id,
-      partnerName,
-      ein,
-      box1OrdinaryIncome,
-      box2NetRentalRealEstate,
-      box3OtherNetRental,
-      box4GuaranteedPayments,
-      box5Interest,
-      box11ZZOtherIncome,
-      box13ZZOtherDeductions,
-      traderNii,
-      netPassive,
-      netNonpassive,
-    }
-  })
-
-  const totalBox1 = partnerRows.reduce((acc, r) => acc.add(r.box1OrdinaryIncome), currency(0)).value
-  const totalBox2 = partnerRows.reduce((acc, r) => acc.add(r.box2NetRentalRealEstate), currency(0)).value
-  const totalBox3 = partnerRows.reduce((acc, r) => acc.add(r.box3OtherNetRental), currency(0)).value
-  const totalBox4 = partnerRows.reduce((acc, r) => acc.add(r.box4GuaranteedPayments), currency(0)).value
-  const totalBox5 = partnerRows.reduce((acc, r) => acc.add(r.box5Interest), currency(0)).value
-  const totalBox11ZZ = partnerRows.reduce((acc, r) => acc.add(r.box11ZZOtherIncome), currency(0)).value
-  const totalBox13ZZ = partnerRows.reduce((acc, r) => acc.add(r.box13ZZOtherDeductions), currency(0)).value
-  const totalTraderNii = partnerRows.reduce((acc, r) => acc.add(r.traderNii), currency(0)).value
-  const miscIncomeTotal = miscIncomeRows.reduce((acc, row) => acc.add(row.amount), currency(0)).value
-  const totalPassive = partnerRows.reduce((acc, r) => acc.add(r.netPassive), currency(0)).value
-  const totalNonpassive = partnerRows.reduce((acc, r) => acc.add(r.netNonpassive), currency(0)).value
-  const grandTotal = currency(miscIncomeTotal).add(totalPassive).add(totalNonpassive).value
+  const formLabel = source.formType?.replaceAll('_', '-').toUpperCase() ?? 'source'
 
   return {
-    miscIncomeRows,
-    miscIncomeTotal,
-    partnerRows,
-    totalBox1,
-    totalBox2,
-    totalBox3,
-    totalBox4,
-    totalBox5,
-    totalBox11ZZ,
-    totalBox13ZZ,
-    totalTraderNii,
-    totalPassive,
-    totalNonpassive,
-    grandTotal,
+    onDetails: () => onOpenDoc(source.taxDocumentId!),
+    detailsLabel: 'Detail',
+    detailsTooltip: `Open ${formLabel} detail`,
   }
 }
 
-interface ScheduleEPreviewProps {
-  reviewedK1Docs: TaxDocument[]
-  reviewed1099Docs?: TaxDocument[]
-  selectedYear: number
+function SourceLines({
+  sources,
+  onOpenDoc,
+}: {
+  sources: TaxFactSource[]
+  onOpenDoc?: (docId: number) => void
+}) {
+  return (
+    <>
+      {sources.map((source) => (
+        <div key={source.id}>
+          <FormLine
+            label={source.label}
+            value={source.amount}
+            isReviewed={source.isReviewed === false ? false : undefined}
+            {...sourceDetailProps(source, onOpenDoc)}
+          />
+          {source.notes && <FormLine label="Note" raw={source.notes} note />}
+        </div>
+      ))}
+    </>
+  )
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc }: ScheduleEPreviewProps) {
+  if (!taxFacts) {
+    return <FactsLoadingPlaceholder label="Schedule E" />
+  }
 
-export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = [], selectedYear }: ScheduleEPreviewProps) {
-  const {
-    miscIncomeRows,
-    miscIncomeTotal,
-    partnerRows,
-    totalBox1,
-    totalBox2,
-    totalBox3,
-    totalBox4,
-    totalBox5,
-    totalBox11ZZ,
-    totalBox13ZZ,
-    totalPassive,
-    totalNonpassive,
-    grandTotal,
-  } = computeScheduleELines(reviewedK1Docs, reviewed1099Docs)
+  const hasFacts = taxFacts.miscIncomeSources.length > 0
+    || taxFacts.box1Sources.length > 0
+    || taxFacts.box2Sources.length > 0
+    || taxFacts.box3Sources.length > 0
+    || taxFacts.box4Sources.length > 0
+    || taxFacts.box11ZZSources.length > 0
+    || taxFacts.box13ZZSources.length > 0
+    || taxFacts.grandTotal !== 0
 
-  if (partnerRows.length === 0 && miscIncomeRows.length === 0) {
+  if (!hasFacts) {
     return (
       <div className="space-y-4">
         <div>
           <h3 className="text-base font-semibold mb-0.5">Schedule E — {selectedYear}</h3>
           <p className="text-xs text-muted-foreground">Supplemental Income and Loss</p>
         </div>
-        <p className="text-sm text-muted-foreground">No Schedule E tax documents reviewed for this year.</p>
+        <p className="text-sm text-muted-foreground">No Schedule E tax facts found for this year.</p>
       </div>
     )
   }
@@ -234,130 +84,116 @@ export default function ScheduleEPreview({ reviewedK1Docs, reviewed1099Docs = []
         </p>
       </div>
 
-      {miscIncomeRows.length > 0 && (
+      {taxFacts.miscIncomeSources.length > 0 && (
         <FormBlock title="Part I — 1099-MISC Rental & Royalty Income">
-          {miscIncomeRows.map((row) => (
-            <FormLine key={row.key} label={`${row.payerName} — ${row.formLabel}`} value={row.amount} />
-          ))}
-          <FormTotalLine label="1099-MISC rental & royalty income subtotal" value={miscIncomeTotal} />
+          <SourceLines sources={taxFacts.miscIncomeSources} {...(onOpenDoc ? { onOpenDoc } : {})} />
+          <FormTotalLine label="1099-MISC rental & royalty income subtotal" value={taxFacts.miscIncomeTotal} />
         </FormBlock>
       )}
 
-      {/* Part I — Rental Real Estate (if any Box 2 activity) */}
-      {totalBox2 !== 0 && (
+      {taxFacts.totalBox2 !== 0 && (
         <FormBlock title="Part I — Rental Real Estate Income / (Loss)">
-          {partnerRows
-            .filter((r) => r.box2NetRentalRealEstate !== 0)
-            .map((r) => (
-              <FormLine
-                key={r.docId}
-                label={`${r.partnerName} — K-1 Box 2 net rental real estate`}
-                value={r.box2NetRentalRealEstate}
-              />
-            ))}
-          <FormTotalLine label="Part I total net rental real estate income / (loss)" value={totalBox2} />
+          <SourceLines sources={taxFacts.box2Sources} {...(onOpenDoc ? { onOpenDoc } : {})} />
+          <FormTotalLine label="Part I total net rental real estate income / (loss)" value={taxFacts.totalBox2} />
         </FormBlock>
       )}
 
-      {/* Part II — Partnerships & S Corporations */}
       <FormBlock title="Part II — Partnership / S-Corp Income / (Loss)">
-        {partnerRows.map((r) => (
-          <div key={r.docId}>
-            {r.box1OrdinaryIncome !== 0 && (
-              <FormLine
-                label={`${r.partnerName}${r.ein ? ` (EIN ${r.ein})` : ''} — Box 1 ordinary income`}
-                value={r.box1OrdinaryIncome}
-              />
-            )}
-            {r.box3OtherNetRental !== 0 && (
-              <FormLine
-                label={`${r.partnerName} — Box 3 other net rental income`}
-                value={r.box3OtherNetRental}
-              />
-            )}
-            {r.box4GuaranteedPayments !== 0 && (
-              <FormLine
-                label={`${r.partnerName} — Box 4 guaranteed payments`}
-                value={r.box4GuaranteedPayments}
-              />
-            )}
-            {r.box5Interest !== 0 && (
-              <FormLine
-                label={`${r.partnerName} — Box 5 interest income (see Sch B)`}
-                value={r.box5Interest}
-              />
-            )}
-            {r.box11ZZOtherIncome !== 0 && (
-              <FormLine
-                label={(
-                  <span className="inline-flex items-center gap-1">
-                    {r.partnerName} — Box 11ZZ other ordinary income/(loss)
-                    <InfoTooltip>
-                      Trader-fund statement items such as Section 988 FX, swaps, and PFIC mark-to-market are ordinary
-                      income or loss on Schedule E Part II, not Schedule D capital gain or loss.
-                    </InfoTooltip>
-                  </span>
-                )}
-                value={r.box11ZZOtherIncome}
-              />
-            )}
-            {r.box13ZZOtherDeductions !== 0 && (
-              <FormLine
-                label={(
-                  <span className="inline-flex items-center gap-1">
-                    {r.partnerName} — Box 13ZZ other deductions
-                    <InfoTooltip>
-                      Trader-fund management, admin, and similar statement deductions reduce Schedule E Part II
-                      nonpassive income in this preview.
-                    </InfoTooltip>
-                  </span>
-                )}
-                value={currency(0).subtract(r.box13ZZOtherDeductions).value}
-              />
-            )}
+        <SourceLines sources={taxFacts.box1Sources} {...(onOpenDoc ? { onOpenDoc } : {})} />
+        <SourceLines sources={taxFacts.box3Sources} {...(onOpenDoc ? { onOpenDoc } : {})} />
+        <SourceLines sources={taxFacts.box4Sources} {...(onOpenDoc ? { onOpenDoc } : {})} />
+        {taxFacts.totalBox5 !== 0 && (
+          <FormLine
+            label="Interest income (Box 5, see Sch B)"
+            value={taxFacts.totalBox5}
+          />
+        )}
+        {taxFacts.box11ZZSources.map((source) => (
+          <div key={source.id}>
+            <FormLine
+              label={(
+                <span className="inline-flex items-center gap-1">
+                  {source.label}
+                  <InfoTooltip>
+                    Trader-fund statement items such as Section 988 FX, swaps, and PFIC mark-to-market are ordinary
+                    income or loss on Schedule E Part II, not Schedule D capital gain or loss.
+                  </InfoTooltip>
+                </span>
+              )}
+              value={source.amount}
+              isReviewed={source.isReviewed === false ? false : undefined}
+              {...sourceDetailProps(source, onOpenDoc)}
+            />
+            {source.notes && <FormLine label="Note" raw={source.notes} note />}
           </div>
         ))}
-        <FormTotalLine label="Total nonpassive income / (loss) — Part II" value={totalNonpassive} />
+        {taxFacts.box13ZZSources.map((source) => (
+          <div key={source.id}>
+            <FormLine
+              label={(
+                <span className="inline-flex items-center gap-1">
+                  {source.label}
+                  <InfoTooltip>
+                    Trader-fund management, admin, and similar statement deductions reduce Schedule E Part II
+                    nonpassive income in this preview.
+                  </InfoTooltip>
+                </span>
+              )}
+              value={source.amount}
+              isReviewed={source.isReviewed === false ? false : undefined}
+              {...sourceDetailProps(source, onOpenDoc)}
+            />
+            {source.notes && <FormLine label="Note" raw={source.notes} note />}
+          </div>
+        ))}
+        {taxFacts.totalNonpassive === 0
+          && taxFacts.box1Sources.length === 0
+          && taxFacts.box3Sources.length === 0
+          && taxFacts.box4Sources.length === 0
+          && taxFacts.box11ZZSources.length === 0
+          && taxFacts.box13ZZSources.length === 0 && (
+          <FormLine label="No nonpassive K-1 activity" raw="—" />
+        )}
+        <FormTotalLine label="Total nonpassive income / (loss) — Part II" value={taxFacts.totalNonpassive} />
       </FormBlock>
 
-      {/* Summary grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FormBlock title="Passive Income / (Loss)">
-          {totalBox2 !== 0 && <FormLine label="Rental real estate (Box 2)" value={totalBox2} />}
-          {totalBox3 !== 0 && <FormLine label="Other net rental income (Box 3)" value={totalBox3} />}
-          {totalPassive === 0 && totalBox2 === 0 && totalBox3 === 0 && (
+          {taxFacts.totalBox2 !== 0 && <FormLine label="Rental real estate (Box 2)" value={taxFacts.totalBox2} />}
+          {taxFacts.totalBox3 !== 0 && <FormLine label="Other net rental income (Box 3)" value={taxFacts.totalBox3} />}
+          {taxFacts.totalPassive === 0 && taxFacts.totalBox2 === 0 && taxFacts.totalBox3 === 0 && (
             <FormLine label="No passive K-1 activity" raw="—" />
           )}
-          <FormTotalLine label="Total passive income / (loss)" value={totalPassive} />
+          <FormTotalLine label="Total passive income / (loss)" value={taxFacts.totalPassive} />
         </FormBlock>
 
         <FormBlock title="Nonpassive Income / (Loss)">
-          {totalBox1 !== 0 && <FormLine label="Ordinary business income (Box 1)" value={totalBox1} />}
-          {totalBox4 !== 0 && <FormLine label="Guaranteed payments (Box 4)" value={totalBox4} />}
-          {totalBox5 !== 0 && (
+          {taxFacts.totalBox1 !== 0 && <FormLine label="Ordinary business income (Box 1)" value={taxFacts.totalBox1} />}
+          {taxFacts.totalBox4 !== 0 && <FormLine label="Guaranteed payments (Box 4)" value={taxFacts.totalBox4} />}
+          {taxFacts.totalBox5 !== 0 && (
             <FormLine
               label="Interest income (Box 5)"
-              value={totalBox5}
+              value={taxFacts.totalBox5}
             />
           )}
-          {totalBox11ZZ !== 0 && (
-            <FormLine label="Other ordinary income / (loss) (Box 11ZZ)" value={totalBox11ZZ} />
+          {taxFacts.totalBox11ZZ !== 0 && (
+            <FormLine label="Other ordinary income / (loss) (Box 11ZZ)" value={taxFacts.totalBox11ZZ} />
           )}
-          {totalBox13ZZ !== 0 && (
-            <FormLine label="Other deductions (Box 13ZZ)" value={currency(0).subtract(totalBox13ZZ).value} />
+          {taxFacts.totalBox13ZZ !== 0 && (
+            <FormLine label="Other deductions (Box 13ZZ)" value={currency(0).subtract(taxFacts.totalBox13ZZ).value} />
           )}
-          {totalNonpassive === 0 && totalBox1 === 0 && totalBox4 === 0 && totalBox11ZZ === 0 && totalBox13ZZ === 0 && (
+          {taxFacts.totalNonpassive === 0 && taxFacts.totalBox1 === 0 && taxFacts.totalBox4 === 0 && taxFacts.totalBox11ZZ === 0 && taxFacts.totalBox13ZZ === 0 && (
             <FormLine label="No nonpassive K-1 activity" raw="—" />
           )}
-          <FormTotalLine label="Total nonpassive income / (loss)" value={totalNonpassive} />
+          <FormTotalLine label="Total nonpassive income / (loss)" value={taxFacts.totalNonpassive} />
         </FormBlock>
       </div>
 
       <FormBlock title="Schedule E — Combined Net Income / (Loss)">
-        {miscIncomeTotal !== 0 && <FormLine label="1099-MISC rental & royalty income" value={miscIncomeTotal} />}
-        <FormLine label="Passive (rental / other rental)" value={totalPassive} />
-        <FormLine label="Nonpassive (ordinary + guaranteed payments + trader fund statement items)" value={totalNonpassive} />
-        <FormTotalLine label="Schedule E combined total" value={grandTotal} double />
+        {taxFacts.miscIncomeTotal !== 0 && <FormLine label="1099-MISC rental & royalty income" value={taxFacts.miscIncomeTotal} />}
+        <FormLine label="Passive (rental / other rental)" value={taxFacts.totalPassive} />
+        <FormLine label="Nonpassive (ordinary + guaranteed payments + trader fund statement items)" value={taxFacts.totalNonpassive} />
+        <FormTotalLine label="Schedule E combined total" value={taxFacts.grandTotal} double />
       </FormBlock>
     </div>
   )

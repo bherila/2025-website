@@ -1,4 +1,3 @@
-import { computeScheduleELines } from '@/components/finance/ScheduleEPreview'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -81,7 +80,7 @@ describe('extractForm8582Activities', () => {
     expect(result.activities[0]!.suspendedLossCarryforward).toBe(12_000)
   })
 
-  it('skips nonpassive GP Box 1 loss from Form 8582 while keeping it in Schedule E nonpassive totals', () => {
+  it('skips nonpassive GP Box 1 loss from Form 8582', () => {
     const reviewedK1Docs = [
       makeK1Doc(makeK1Data({
         fields: {
@@ -97,10 +96,6 @@ describe('extractForm8582Activities', () => {
     const form8582 = computeForm8582({ reviewedK1Docs, magi: 150_000, isMarried: false })
     expect(form8582.activities).toEqual([])
     expect(form8582.totalPassiveLoss).toBe(0)
-
-    const scheduleE = computeScheduleELines(reviewedK1Docs)
-    expect(scheduleE.totalBox1).toBe(-5_000)
-    expect(scheduleE.totalNonpassive).toBe(-5_000)
   })
 
   it('treats unknown-classification Box 1 as passive by default', () => {
@@ -257,7 +252,6 @@ describe('extractForm8582Activities', () => {
 
     expect(result.activities).toEqual([])
     expect(result.totalPassiveLoss).toBe(0)
-    expect(computeScheduleELines(reviewedK1Docs).totalNonpassive).toBe(-4_500)
   })
 })
 

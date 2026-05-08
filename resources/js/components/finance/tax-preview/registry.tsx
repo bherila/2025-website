@@ -94,14 +94,9 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <ScheduleAPreview
       selectedYear={state.year}
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
       isMarried={state.isMarried}
-      userDeductions={state.userDeductions}
-      form4952Facts={state.taxFacts?.form4952 ?? null}
       scheduleAFacts={state.taxFacts?.scheduleA ?? null}
       onOpenDoc={openTaxDocumentDetail}
-      {...(state.shortDividendSummary ? { shortDividendSummary: state.shortDividendSummary } : {})}
     />
   )
 }
@@ -121,10 +116,8 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleDPreview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
+      taxFacts={state.taxFacts?.scheduleD ?? null}
       selectedYear={state.year}
-      priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
       onOpenDoc={openTaxDocumentDetail}
       onGoToForm1040={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}
     />
@@ -132,11 +125,12 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 }
 
 function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleEPreview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
+      taxFacts={state.taxFacts?.scheduleE ?? null}
       selectedYear={state.year}
+      onOpenDoc={openTaxDocumentDetail}
     />
   )
 }
@@ -158,19 +152,13 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
 function Form4952Adapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <Form4952Preview
-      reviewedK1Docs={state.reviewedK1Docs}
-      reviewed1099Docs={state.reviewed1099Docs}
-      income1099={state.income1099}
       form4952Facts={state.taxFacts?.form4952 ?? null}
-      {...(state.shortDividendSummary
-        ? { shortDividendDeduction: state.shortDividendSummary.totalItemizedDeduction }
-        : {})}
     />
   )
 }
 
 function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
-  return <Form6251Preview form6251={state.taxFacts?.form6251} selectedYear={state.year} />
+  return <Form6251Preview form6251={state.taxFacts?.form6251 ?? null} selectedYear={state.year} />
 }
 
 function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -184,18 +172,9 @@ function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8582Adapter({ state }: FormRenderProps): React.ReactElement {
-  const facts = state.taxFacts?.form8582
-  if (!facts) {
-    return (
-      <StubCard
-        title="Form 8582 — Passive Activity Loss Limitations"
-        note="No passive activity data available. Add a Schedule E rental property or a K-1 with passive losses to populate this form."
-      />
-    )
-  }
   return (
     <Form8582Preview
-      form8582={facts}
+      form8582={state.taxFacts?.form8582 ?? null}
       year={state.year}
       palCarryforwards={state.palCarryforwards}
       onCarryforwardsChange={state.setPalCarryforwards}
@@ -289,55 +268,28 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form4797Adapter({ state }: FormRenderProps): React.ReactElement {
-  const facts = state.taxFacts?.form4797
-  if (!facts) {
-    return (
-      <StubCard
-        title="Form 4797 — Sales of Business Property"
-        note="Form 4797 is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <Form4797Preview
       selectedYear={state.year}
-      form4797={facts}
+      form4797={state.taxFacts?.form4797 ?? null}
     />
   )
 }
 
 function ScheduleFAdapter({ state }: FormRenderProps): React.ReactElement {
-  const facts = state.taxFacts?.scheduleF
-  if (!facts) {
-    return (
-      <StubCard
-        title="Schedule F — Profit or Loss From Farming"
-        note="Schedule F is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <ScheduleFPreview
       selectedYear={state.year}
-      scheduleF={facts}
+      scheduleF={state.taxFacts?.scheduleF ?? null}
     />
   )
 }
 
 function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
-  const facts = state.taxFacts?.form8606
-  if (!facts) {
-    return (
-      <StubCard
-        title="Form 8606 — Nondeductible IRAs"
-        note="Form 8606 data is not yet populated. Check the tax preview context wiring."
-      />
-    )
-  }
   return (
     <Form8606Preview
       selectedYear={state.year}
-      form8606={facts}
+      form8606={state.taxFacts?.form8606 ?? null}
     />
   )
 }

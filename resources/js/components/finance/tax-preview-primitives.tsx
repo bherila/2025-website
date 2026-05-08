@@ -183,6 +183,14 @@ export function FormSubLine({ text }: { text: string }) {
   )
 }
 
+export function FactsLoadingPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="py-12 text-center text-sm text-muted-foreground">
+      {label} facts are not loaded yet.
+    </div>
+  )
+}
+
 export function FormTotalLine({
   label,
   value,
