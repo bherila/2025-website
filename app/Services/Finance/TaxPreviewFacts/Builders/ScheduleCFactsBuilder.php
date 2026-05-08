@@ -107,7 +107,9 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             $quarterSums = $this->addTransactionsByQuarter($quarterSums, $entityData['schedule_c_expense'] ?? [], 'expense');
 
             $form8829Entity = $form8829->entityFor($entity->entityId);
-            $homeOfficeAllowable = $form8829Entity->line36AllowableHomeOfficeDeduction ?? $entity->homeOfficeAllowable;
+            $homeOfficeAllowable = $form8829Entity instanceof Form8829EntityFact
+                ? $form8829Entity->line36AllowableHomeOfficeDeduction
+                : $entity->homeOfficeAllowable;
             $preHomeOfficeNet = 0.0;
             foreach ($quarterSums as $quarter) {
                 $preHomeOfficeNet = $this->sumMoney([$preHomeOfficeNet, $this->subtractMoney($quarter['income'], $quarter['expense'])]);
@@ -194,23 +196,29 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             true,
         );
         $expenseSources = $this->categorySources($entityData, 'schedule_c_expense', TaxFactSourceType::ScheduleCExpenseCategory, TaxFactRouting::ScheduleCLine28);
-        $homeOfficeSources = $form8829Entity->line36Sources ?? $this->categorySources($entityData, 'schedule_c_home_office', TaxFactSourceType::ScheduleCHomeOfficeClaimed, TaxFactRouting::ScheduleCLine30);
+        $hasForm8829Entity = $form8829Entity instanceof Form8829EntityFact;
+        $homeOfficeSources = $hasForm8829Entity
+            ? $form8829Entity->line36Sources
+            : $this->categorySources($entityData, 'schedule_c_home_office', TaxFactSourceType::ScheduleCHomeOfficeClaimed, TaxFactRouting::ScheduleCLine30);
 
         $grossReceipts = $this->applyLineAdjustments($this->sumSources($grossReceiptSources), $adjustmentsByLine['line_1'] ?? []);
         $returnsAndAllowances = $this->applyLineAdjustments($this->sumSources($returnsAndAllowancesSources), $adjustmentsByLine['line_2'] ?? []);
         $grossIncomeAfterReturns = $this->applyLineAdjustments($this->subtractMoney($grossReceipts, $returnsAndAllowances), $adjustmentsByLine['line_3'] ?? []);
         $expenses = $this->applyLineAdjustments($this->sumSources($expenseSources), $adjustmentsByLine['line_28'] ?? []);
         $tentativeProfitBeforeHomeOffice = $this->applyLineAdjustments($this->subtractMoney($grossIncomeAfterReturns, $expenses), $adjustmentsByLine['line_29'] ?? []);
-        $homeOfficeClaimed = $form8829Entity instanceof Form8829EntityFact
+        $homeOfficeClaimed = $hasForm8829Entity
             ? ($form8829Entity->method === 'simplified' ? $form8829Entity->simplifiedDeduction : $form8829Entity->regularDeduction)
             : $this->sumSources($homeOfficeSources);
-        $homeOfficeAllowable = $this->applyLineAdjustments($form8829Entity->line36AllowableHomeOfficeDeduction ?? 0.0, $adjustmentsByLine['line_30'] ?? []);
-        $homeOfficeDisallowed = $form8829Entity->carryoverToNextYear ?? 0.0;
+        $computedHomeOfficeAllowable = $hasForm8829Entity
+            ? $form8829Entity->line36AllowableHomeOfficeDeduction
+            : $this->sumSources($homeOfficeSources);
+        $homeOfficeAllowable = $this->applyLineAdjustments($computedHomeOfficeAllowable, $adjustmentsByLine['line_30'] ?? []);
+        $homeOfficeDisallowed = $hasForm8829Entity ? $form8829Entity->carryoverToNextYear : 0.0;
         $homeOfficePriorCarryforward = $this->sumMoney([
-            $form8829Entity->priorYearOpCarryover ?? 0.0,
-            $form8829Entity->priorYearDepreciationCarryover ?? 0.0,
+            $hasForm8829Entity ? $form8829Entity->priorYearOpCarryover : 0.0,
+            $hasForm8829Entity ? $form8829Entity->priorYearDepreciationCarryover : 0.0,
         ]);
-        $homeOfficeCarryoverToNextYear = $form8829Entity->carryoverToNextYear ?? 0.0;
+        $homeOfficeCarryoverToNextYear = $hasForm8829Entity ? $form8829Entity->carryoverToNextYear : 0.0;
         $netProfitBeforeHomeOffice = $tentativeProfitBeforeHomeOffice;
         $netProfit = $this->applyLineAdjustments($this->subtractMoney($netProfitBeforeHomeOffice, $homeOfficeAllowable), $adjustmentsByLine['line_31'] ?? []);
 
@@ -242,7 +250,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             homeOfficeDisallowed: $homeOfficeDisallowed,
             homeOfficePriorCarryforward: $homeOfficePriorCarryforward,
             homeOfficeCarryoverToNextYear: $homeOfficeCarryoverToNextYear,
-            homeOfficeLimitationReason: $form8829Entity->limitationReason ?? 'No home-office deduction claimed for this entity.',
+            homeOfficeLimitationReason: $hasForm8829Entity ? $form8829Entity->limitationReason : 'No home-office deduction claimed for this entity.',
             tentativeProfitBeforeHomeOffice: $tentativeProfitBeforeHomeOffice,
             netProfitBeforeHomeOffice: $netProfitBeforeHomeOffice,
             netProfit: $netProfit,

@@ -38,6 +38,18 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         'scho_depreciation' => ['line' => '42', 'label' => 'Depreciation allowable'],
     ];
 
+    private const array HOME_OFFICE_LINE_LABELS = [
+        '9' => 'Casualty losses',
+        '10' => 'Deductible mortgage interest',
+        '11' => 'Real estate taxes',
+        '18' => 'Insurance',
+        '19' => 'Rent',
+        '20' => 'Repairs and maintenance',
+        '21' => 'Utilities',
+        '22' => 'Other expenses',
+        '42' => 'Depreciation allowable',
+    ];
+
     public function __construct(
         K1CodeCharacterResolver $k1CodeCharacterResolver,
         private readonly ScheduleCSummaryService $scheduleCSummaryService,
@@ -304,6 +316,10 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
      */
     private function homeOfficeLines(array $entityData, float $businessUseRate, array $adjustmentsByLine): array
     {
+        /**
+         * @var array<string, array{label:string,directExpense:float,indirectExpense:float,allowable:float,sources:TaxFactSource[]}> $linesByRef
+         */
+        $linesByRef = [];
         $lines = [];
 
         foreach (($entityData['schedule_c_home_office'] ?? []) as $category => $categoryData) {
@@ -312,32 +328,47 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             }
 
             $mapping = self::HOME_OFFICE_LINE_MAP[(string) $category] ?? ['line' => '22', 'label' => (string) ($categoryData['label'] ?? $category)];
-            $lineRef = 'line_'.$mapping['line'];
+            $line = (string) $mapping['line'];
             $indirectExpense = $this->parseMoney($categoryData['total'] ?? null) ?? 0.0;
             $baseAllowable = $this->roundMoney($indirectExpense * $businessUseRate);
-            $allowable = $this->applyLineAdjustments($baseAllowable, $adjustmentsByLine[$lineRef] ?? []);
-            $sources = [
-                new TaxFactSource(
-                    id: 'form-8829-'.$this->entityKey($entityData).'-'.$category,
-                    label: $this->entityName($entityData).' — '.$mapping['label'],
-                    amount: $baseAllowable,
-                    sourceType: TaxFactSourceType::Form8829HomeOfficeExpense,
-                    routing: $this->routingForLine($mapping['line']),
-                    routingReason: 'Tagged home-office transactions are multiplied by the business-use percentage for Form 8829.',
-                    notes: 'Transactions: '.$this->transactionCount($categoryData['transactions'] ?? []),
-                ),
-            ];
+
+            if (! isset($linesByRef[$line])) {
+                $linesByRef[$line] = [
+                    'label' => self::HOME_OFFICE_LINE_LABELS[$line],
+                    'directExpense' => 0.0,
+                    'indirectExpense' => 0.0,
+                    'allowable' => 0.0,
+                    'sources' => [],
+                ];
+            }
+
+            $linesByRef[$line]['indirectExpense'] = $this->sumMoney([$linesByRef[$line]['indirectExpense'], $indirectExpense]);
+            $linesByRef[$line]['allowable'] = $this->sumMoney([$linesByRef[$line]['allowable'], $baseAllowable]);
+            $linesByRef[$line]['sources'][] = new TaxFactSource(
+                id: 'form-8829-'.$this->entityKey($entityData).'-'.$category,
+                label: $this->entityName($entityData).' — '.$mapping['label'],
+                amount: $baseAllowable,
+                sourceType: TaxFactSourceType::Form8829HomeOfficeExpense,
+                routing: $this->routingForLine($line),
+                routingReason: 'Tagged home-office transactions are multiplied by the business-use percentage for Form 8829.',
+                notes: 'Transactions: '.$this->transactionCount($categoryData['transactions'] ?? []),
+            );
+        }
+
+        foreach ($linesByRef as $line => $lineData) {
+            $lineRef = 'line_'.$line;
+            $sources = $lineData['sources'];
 
             foreach ($adjustmentsByLine[$lineRef] ?? [] as $adjustment) {
-                $sources[] = $this->adjustmentSource($adjustment, $this->routingForLine($mapping['line']));
+                $sources[] = $this->adjustmentSource($adjustment, $this->routingForLine($line));
             }
 
             $lines[] = new Form8829LineFact(
-                lineRef: $mapping['line'],
-                label: $mapping['label'],
-                directExpense: 0.0,
-                indirectExpense: $this->roundMoney($indirectExpense),
-                allowable: $allowable,
+                lineRef: $line,
+                label: $lineData['label'],
+                directExpense: $this->roundMoney($lineData['directExpense']),
+                indirectExpense: $this->roundMoney($lineData['indirectExpense']),
+                allowable: $this->applyLineAdjustments($lineData['allowable'], $adjustmentsByLine[$lineRef] ?? []),
                 sources: $sources,
             );
         }

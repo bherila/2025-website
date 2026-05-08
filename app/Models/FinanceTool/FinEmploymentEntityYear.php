@@ -49,7 +49,6 @@ class FinEmploymentEntityYear extends Model
             'tax_year' => 'integer',
             'materially_participated' => 'boolean',
             'made_payments_requiring_1099' => 'boolean',
-            'filed_required_1099s' => 'boolean',
             'started_or_acquired_this_year' => 'boolean',
         ];
     }

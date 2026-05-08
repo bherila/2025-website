@@ -22,8 +22,8 @@ class EmploymentEntityYearController extends Controller
             ->orderByDesc('tax_year');
 
         if ($request->filled('year')) {
-            if ($year < TaxYearRange::MIN || $year > TaxYearRange::MAX) {
-                return response()->json(['message' => 'Invalid tax year.'], 422);
+            if (! $this->isValidTaxYear($year)) {
+                return $this->invalidTaxYearResponse();
             }
 
             $query->where('tax_year', $year);
@@ -52,6 +52,10 @@ class EmploymentEntityYearController extends Controller
 
     public function update(UpsertEmploymentEntityYearRequest $request, int $id, int $year): JsonResponse
     {
+        if (! $this->isValidTaxYear($year)) {
+            return $this->invalidTaxYearResponse();
+        }
+
         $entity = $this->scheduleCEntity($id);
         $data = $request->validated();
 
@@ -68,6 +72,10 @@ class EmploymentEntityYearController extends Controller
 
     public function destroy(int $id, int $year): JsonResponse
     {
+        if (! $this->isValidTaxYear($year)) {
+            return $this->invalidTaxYearResponse();
+        }
+
         $entity = $this->scheduleCEntity($id);
 
         FinEmploymentEntityYear::query()
@@ -105,6 +113,16 @@ class EmploymentEntityYearController extends Controller
         ];
     }
 
+    private function isValidTaxYear(int $year): bool
+    {
+        return $year >= TaxYearRange::MIN && $year <= TaxYearRange::MAX;
+    }
+
+    private function invalidTaxYearResponse(): JsonResponse
+    {
+        return response()->json(['message' => 'Invalid tax year.'], 422);
+    }
+
     /**
      * @return array{id:int,employment_entity_id:int,tax_year:int,accounting_method:string,materially_participated:bool,made_payments_requiring_1099:bool,filed_required_1099s:?bool,started_or_acquired_this_year:bool,principal_product_service:?string,business_code:?string,notes:?string}
      */
@@ -117,7 +135,7 @@ class EmploymentEntityYearController extends Controller
             'accounting_method' => $entityYear->accounting_method,
             'materially_participated' => $entityYear->materially_participated,
             'made_payments_requiring_1099' => $entityYear->made_payments_requiring_1099,
-            'filed_required_1099s' => $entityYear->filed_required_1099s,
+            'filed_required_1099s' => $entityYear->filed_required_1099s === null ? null : (bool) $entityYear->filed_required_1099s,
             'started_or_acquired_this_year' => $entityYear->started_or_acquired_this_year,
             'principal_product_service' => $entityYear->principal_product_service,
             'business_code' => $entityYear->business_code,

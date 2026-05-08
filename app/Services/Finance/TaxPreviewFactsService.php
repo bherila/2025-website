@@ -206,6 +206,10 @@ class TaxPreviewFactsService
 
         $documents = $this->documentsForYear($userId, $year);
         [$k1Docs, $docs1099, $w2Docs] = $this->partitionDocuments($documents);
+        $form8829Facts = null;
+        $form8829FactsForSlice = function () use (&$form8829Facts, $userId, $year): Form8829Facts {
+            return $form8829Facts ??= $this->form8829FactsBuilder->build($userId, $year);
+        };
 
         return match ($slice) {
             'schedule1' => [
@@ -222,11 +226,11 @@ class TaxPreviewFactsService
             ],
             'scheduleC' => [
                 'year' => $year,
-                'scheduleC' => $this->scheduleCFactsBuilder->build($userId, $year, $this->form8829FactsBuilder->build($userId, $year))->toArray(),
+                'scheduleC' => $this->scheduleCFactsBuilder->build($userId, $year, $form8829FactsForSlice())->toArray(),
             ],
             'form8829' => [
                 'year' => $year,
-                'form8829' => $this->form8829FactsBuilder->build($userId, $year)->toArray(),
+                'form8829' => $form8829FactsForSlice()->toArray(),
             ],
             'scheduleF' => [
                 'year' => $year,

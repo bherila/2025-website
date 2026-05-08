@@ -82,6 +82,70 @@ class EmploymentEntityYearControllerTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_rejects_invalid_route_year_on_update(): void
+    {
+        $user = $this->createUser();
+        $entityId = $this->createScheduleCEntity($user->id);
+
+        $this->actingAs($user)
+            ->putJson("/api/finance/employment-entities/{$entityId}/years/1900", [
+                'accounting_method' => 'cash',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseMissing('fin_employment_entity_year', [
+            'employment_entity_id' => $entityId,
+            'tax_year' => 1900,
+        ]);
+    }
+
+    public function test_rejects_invalid_route_year_on_destroy(): void
+    {
+        $user = $this->createUser();
+        $entityId = $this->createScheduleCEntity($user->id);
+
+        DB::table('fin_employment_entity_year')->insert([
+            'employment_entity_id' => $entityId,
+            'tax_year' => 2025,
+            'accounting_method' => 'cash',
+            'materially_participated' => true,
+            'made_payments_requiring_1099' => false,
+            'filed_required_1099s' => null,
+            'started_or_acquired_this_year' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->deleteJson("/api/finance/employment-entities/{$entityId}/years/1900")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('fin_employment_entity_year', [
+            'employment_entity_id' => $entityId,
+            'tax_year' => 2025,
+        ]);
+    }
+
+    public function test_filed_required_1099s_can_remain_unknown(): void
+    {
+        $user = $this->createUser();
+        $entityId = $this->createScheduleCEntity($user->id);
+
+        $this->actingAs($user)
+            ->putJson("/api/finance/employment-entities/{$entityId}/years/2025", [
+                'accounting_method' => 'cash',
+                'made_payments_requiring_1099' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('filed_required_1099s', null);
+
+        $this->assertDatabaseHas('fin_employment_entity_year', [
+            'employment_entity_id' => $entityId,
+            'tax_year' => 2025,
+            'filed_required_1099s' => null,
+        ]);
+    }
+
     private function createScheduleCEntity(int $userId): int
     {
         return (int) DB::table('fin_employment_entity')->insertGetId([

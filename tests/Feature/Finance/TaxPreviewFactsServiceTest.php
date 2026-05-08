@@ -1459,6 +1459,42 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleC']['netProfit']);
     }
 
+    public function test_form_8829_line_adjustments_apply_once_after_line_aggregation(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Aggregated Expenses LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $securityTag = $this->createScheduleCTag($user->id, $entityId, 'scho_security', 'Security');
+        $cleaningTag = $this->createScheduleCTag($user->id, $entityId, 'scho_cleaning', 'Cleaning');
+        $hoaTag = $this->createScheduleCTag($user->id, $entityId, 'scho_hoa', 'HOA fees');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $securityTag, '2025-02-01', -100);
+        $this->tagTransaction($account->acct_id, $cleaningTag, '2025-03-01', -100);
+        $this->tagTransaction($account->acct_id, $hoaTag, '2025-04-01', -100);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'office_sqft' => 100,
+            'home_sqft' => 1000,
+        ]);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'form' => 'form_8829',
+            'line_ref' => 'line_22',
+            'kind' => 'adjustment',
+            'amount' => 5,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8829');
+        $form8829Entity = $facts['form8829']['entities'][0];
+        $line22 = collect($form8829Entity['homeOfficeLines'])->firstWhere('lineRef', '22');
+
+        $this->assertCount(1, $form8829Entity['homeOfficeLines']);
+        $this->assertSame(300.0, $line22['indirectExpense']);
+        $this->assertSame(35.0, $line22['allowable']);
+        $this->assertSame(35.0, $form8829Entity['line24AllowableOperatingIndirectExpenses']);
+        $this->assertSame(35.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
+    }
+
     public function test_form_8829_simplified_method_uses_square_foot_cap_and_month_proration(): void
     {
         $user = $this->createUser();

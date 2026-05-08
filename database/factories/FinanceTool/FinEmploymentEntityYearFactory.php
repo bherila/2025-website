@@ -5,20 +5,21 @@ namespace Database\Factories\FinanceTool;
 use App\Models\FinanceTool\FinEmploymentEntityYear;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Facades\DB;
 
 /**
  * @extends Factory<FinEmploymentEntityYear>
  */
 class FinEmploymentEntityYearFactory extends Factory
 {
+    use CreatesScheduleCEmploymentEntities;
+
     protected $model = FinEmploymentEntityYear::class;
 
     /** @return array<string, mixed> */
     public function definition(): array
     {
         return [
-            'employment_entity_id' => $this->scheduleCEntityId(),
+            'employment_entity_id' => fn (): int => $this->scheduleCEntityIdForUser((int) User::factory()->create()->getKey()),
             'tax_year' => fake()->numberBetween(2023, 2026),
             'accounting_method' => 'cash',
             'materially_participated' => true,
@@ -31,20 +32,12 @@ class FinEmploymentEntityYearFactory extends Factory
         ];
     }
 
-    private function scheduleCEntityId(): int
+    public function forUser(User|int $user): static
     {
-        $user = User::factory()->create();
+        $userId = $user instanceof User ? (int) $user->id : $user;
 
-        return (int) DB::table('fin_employment_entity')->insertGetId([
-            'user_id' => $user->id,
-            'display_name' => fake()->company(),
-            'start_date' => '2024-01-01',
-            'is_current' => true,
-            'type' => 'sch_c',
-            'is_spouse' => false,
-            'is_hidden' => false,
-            'created_at' => now(),
-            'updated_at' => now(),
+        return $this->state(fn (): array => [
+            'employment_entity_id' => $this->scheduleCEntityIdForUser($userId),
         ]);
     }
 }
