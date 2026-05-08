@@ -274,6 +274,7 @@ const STANDARD_1099_REVIEW_TITLE_BY_FORM_TYPE: Record<string, string> = {
   '1099_int_c': 'Schedule B Interest',
   '1099_div': 'Schedule B Dividends',
   '1099_div_c': 'Schedule B Dividends',
+  '1099_misc': '1099-MISC Routing',
   '1099_r': '1099-R Review',
 }
 
@@ -344,7 +345,7 @@ function renderReviewLine(data: Record<string, unknown>, field: ReviewLineDef): 
 }
 
 function standard1099ReviewTitle(formType: string | undefined, payer: string): string {
-  return `${payer} — ${STANDARD_1099_REVIEW_TITLE_BY_FORM_TYPE[formType ?? ''] ?? '1099-MISC Routing'}`
+  return `${payer} — ${STANDARD_1099_REVIEW_TITLE_BY_FORM_TYPE[formType ?? ''] ?? '1099 Review'}`
 }
 
 function objectReviewBlock(title: string, value: unknown): ReactNode {
