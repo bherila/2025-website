@@ -4,6 +4,7 @@ namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
+use App\Models\ClientManagement\ClientAgreementRecurringItem;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
@@ -264,6 +265,7 @@ class ClientCompanyApiController extends Controller
                         ->orderByDesc('active_date')
                         ->orderByDesc('id');
                 },
+                'agreements.recurringItems',
             ])
             ->findOrFail($id);
     }
@@ -317,6 +319,23 @@ class ClientCompanyApiController extends Controller
                 'hourly_rate' => $agreement->hourly_rate,
                 'monthly_retainer_fee' => $agreement->monthly_retainer_fee,
                 'is_visible_to_client' => (bool) $agreement->is_visible_to_client,
+                'billing_cadence' => $agreement->effectiveBillingCadence()->value,
+                'bill_overage_interim' => (bool) $agreement->bill_overage_interim,
+                'first_cycle_proration' => $agreement->effectiveFirstCycleProration()->value,
+                'recurring_items' => $agreement->recurringItems->map(fn (ClientAgreementRecurringItem $item): array => [
+                    'id' => $item->id,
+                    'client_agreement_id' => $item->client_agreement_id,
+                    'description' => $item->description,
+                    'amount' => $item->amount,
+                    'charge_cadence' => $item->charge_cadence->value,
+                    'anchor_month' => $item->anchor_month,
+                    'anchor_day' => $item->anchor_day,
+                    'start_date' => $item->start_date->toDateString(),
+                    'end_date' => $item->end_date?->toDateString(),
+                    'is_taxable' => (bool) $item->is_taxable,
+                    'is_summarized' => (bool) $item->is_summarized,
+                    'notes' => $item->notes,
+                ])->values()->toArray(),
             ])
             ->values()
             ->all();
