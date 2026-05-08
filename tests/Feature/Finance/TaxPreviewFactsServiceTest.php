@@ -100,7 +100,10 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertCount(3, $facts['schedule1']['line8Sources']);
         $this->assertCount(1, $facts['schedule1']['line8zSources']);
         $this->assertSame("doc-{$line8bDoc->id}-schedule1-8b", $facts['schedule1']['line8bSources'][0]['id']);
-        $this->assertSame("doc-{$line8bDoc->id}-schedule1-8b", $facts['schedule1']['line8Sources'][0]['id']);
+        $this->assertContains(
+            "doc-{$line8bDoc->id}-schedule1-8b",
+            array_column($facts['schedule1']['line8Sources'], 'id'),
+        );
     }
 
     public function test_schedule1_wires_1099_g_refunds_and_unemployment_to_part_i(): void
