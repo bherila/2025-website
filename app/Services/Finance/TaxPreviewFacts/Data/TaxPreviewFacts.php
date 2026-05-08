@@ -10,6 +10,7 @@ readonly class TaxPreviewFacts
     public function __construct(
         public int $year,
         public ScheduleCFacts $scheduleC,
+        public Form8829Facts $form8829,
         public ScheduleFFacts $scheduleF,
         public ScheduleSEFacts $scheduleSE,
         public Form8959Facts $form8959,
@@ -39,6 +40,7 @@ readonly class TaxPreviewFacts
         return [
             'year' => $this->year,
             'scheduleC' => $this->scheduleC->toArray(),
+            'form8829' => $this->form8829->toArray(),
             'scheduleF' => $this->scheduleF->toArray(),
             'scheduleSE' => $this->scheduleSE->toArray(),
             'form8959' => $this->form8959->toArray(),
