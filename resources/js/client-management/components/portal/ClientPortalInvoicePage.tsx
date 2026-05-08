@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
+import { InvoiceKindBadge } from "@/client-management/components/admin/ClientBadges";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/client-management/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,10 +183,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
         }
     }
 
-    const isEditable = invoice?.status === 'draft';
-    const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
-    const canVoid = !!(invoice && invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments);
-
     if (isLoading || !invoice) {
         return (
             <>
@@ -217,6 +214,11 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
             </>
         )
     }
+
+    const isEditable = invoice.status === 'draft';
+    const hasPayments = invoice.payments.length > 0;
+    const canVoid = invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments;
+    const alreadyBilledLine = invoice.line_items.find((item) => item.description === 'Already billed in this cycle via interim overage invoices');
 
     return (
         <>
@@ -250,6 +252,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                             For {companyName} <br />
                             <div className="flex items-center gap-2">
                                 <span>Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}</span>
+                                <InvoiceKindBadge value={invoice.invoice_kind} />
                                 {(invoice.previous_invoice_id || invoice.next_invoice_id) && (
                                     <span className="inline-flex items-center gap-1 ml-1 print:hidden">
                                         {invoice.previous_invoice_id && (
@@ -394,6 +397,13 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                 ))}
                             </TableBody>
                         </Table>
+
+                        {alreadyBilledLine && (
+                            <div className="mt-4 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+                                <span className="font-medium">Already billed this cycle:</span>{' '}
+                                {formatHours(Number(alreadyBilledLine.hours ?? 0))} was billed on interim overage invoices and is shown here as a zero-dollar reconciliation line.
+                            </div>
+                        )}
 
                         {invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
                             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">

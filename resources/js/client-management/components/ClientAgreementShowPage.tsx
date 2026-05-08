@@ -1,16 +1,32 @@
-import { AlertCircle, ArrowLeft, Check, FileText, X } from 'lucide-react'
-import { useCallback,useEffect,useState } from 'react'
+import { AlertCircle, ArrowLeft, Check, FileText, Repeat, Shuffle } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
+import CadenceTransitionModal from '@/client-management/components/admin/CadenceTransitionModal'
+import { AgreementStatusBadges, CadenceBadge } from '@/client-management/components/admin/ClientBadges'
+import CurrencyInput from '@/client-management/components/admin/CurrencyInput'
+import DateInput from '@/client-management/components/admin/DateInput'
+import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
 import type { ClientAgreement } from '@/client-management/types/client-agreement'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter,CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchWrapper } from '@/fetchWrapper'
 
 interface ClientAgreementShowPageProps {
   agreementId: number
@@ -26,6 +42,8 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
   const [success, setSuccess] = useState<string | null>(null)
   const [terminationDate, setTerminationDate] = useState('')
   const [showTerminateForm, setShowTerminateForm] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [transitionOpen, setTransitionOpen] = useState(false)
 
   const [formData, setFormData] = useState({
     active_date: '',
@@ -37,13 +55,14 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     hourly_rate: '',
     monthly_retainer_fee: '',
     is_visible_to_client: false,
+    billing_cadence: 'monthly',
+    bill_overage_interim: false,
+    first_cycle_proration: 'prorate_hours',
   })
 
   const fetchAgreement = useCallback(async () => {
     try {
-      const response = await fetch(`/api/client/mgmt/agreements/${agreementId}`)
-      if (response.ok) {
-        const data = await response.json()
+        const data = await fetchWrapper.get(`/api/client/mgmt/agreements/${agreementId}`)
         setAgreement(data)
         setFormData({
           active_date: data.active_date?.split(/[ T]/)[0] || '',
@@ -55,8 +74,10 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
           hourly_rate: data.hourly_rate || '',
           monthly_retainer_fee: data.monthly_retainer_fee || '',
           is_visible_to_client: data.is_visible_to_client || false,
+          billing_cadence: data.billing_cadence || 'monthly',
+          bill_overage_interim: Boolean(data.bill_overage_interim),
+          first_cycle_proration: data.first_cycle_proration || 'prorate_hours',
         })
-      }
     } catch (error) {
       console.error('Error fetching agreement:', error)
       setError('Failed to load agreement')
@@ -69,85 +90,59 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
     fetchAgreement()
   }, [fetchAgreement])
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     setSaving(true)
     setError(null)
     setSuccess(null)
 
     try {
-      const response = await fetch(`/api/client/mgmt/agreements/${agreementId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify(formData)
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setSuccess('Agreement saved successfully')
-        setAgreement(data.agreement)
-      } else {
-        setError(data.error || 'Failed to save agreement')
-      }
+      const data = await fetchWrapper.put(`/api/client/mgmt/agreements/${agreementId}`, formData)
+      setSuccess('Agreement saved successfully')
+      setAgreement(data.agreement)
     } catch (error) {
-      setError('An error occurred while saving')
+      setError(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
     }
-  }
+  }, [agreementId, formData])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void handleSave()
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleSave])
 
   const handleTerminate = async () => {
     setSaving(true)
     setError(null)
 
     try {
-      const response = await fetch(`/api/client/mgmt/agreements/${agreementId}/terminate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify({ termination_date: terminationDate || null })
+      const data = await fetchWrapper.post(`/api/client/mgmt/agreements/${agreementId}/terminate`, {
+        termination_date: terminationDate || null,
       })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setSuccess('Agreement terminated')
-        setAgreement(data.agreement)
-        setShowTerminateForm(false)
-      } else {
-        setError(data.error || 'Failed to terminate agreement')
-      }
+      setSuccess('Agreement terminated')
+      setAgreement(data.agreement)
+      setShowTerminateForm(false)
     } catch (error) {
-      setError('An error occurred')
+      setError(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this agreement?')) return
-
     try {
-      const response = await fetch(`/api/client/mgmt/agreements/${agreementId}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      })
-
-      if (response.ok) {
-        window.location.href = `/client/mgmt/${companyId}`
-      } else {
-        const data = await response.json()
-        setError(data.error || 'Failed to delete agreement')
-      }
+      await fetchWrapper.delete(`/api/client/mgmt/agreements/${agreementId}`, {})
+      window.location.href = `/client/mgmt/${companyId}`
     } catch (error) {
-      setError('An error occurred')
+      setError(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -190,10 +185,13 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
           <h1 className="text-3xl font-bold">Agreement</h1>
           <p className="text-muted-foreground">{companyName}</p>
         </div>
-        <div className="ml-auto flex gap-2">
-          {isSigned && <Badge variant="default"><Check className="mr-1 h-3 w-3" /> Signed</Badge>}
-          {isTerminated && <Badge variant="destructive"><X className="mr-1 h-3 w-3" /> Terminated</Badge>}
-          {!isSigned && !isTerminated && <Badge variant="secondary">Draft</Badge>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          <CadenceBadge value={agreement.billing_cadence} />
+          <AgreementStatusBadges
+            signedAt={agreement.client_company_signed_date}
+            terminatedAt={agreement.termination_date}
+            visible={agreement.is_visible_to_client}
+          />
         </div>
       </div>
 
@@ -229,6 +227,32 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
 
       <Card className="mb-6">
         <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Cycle Preview</CardTitle>
+            <Button variant="outline" onClick={() => setTransitionOpen(true)}>
+              <Shuffle className="mr-2 h-4 w-4" />
+              Change cadence
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-md border p-3">
+            <div className="text-sm text-muted-foreground">Cadence</div>
+            <div className="mt-2"><CadenceBadge value={agreement.billing_cadence} /></div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-sm text-muted-foreground">Retainer</div>
+            <div className="mt-1 text-xl font-semibold">{agreement.monthly_retainer_hours} hrs/mo</div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-sm text-muted-foreground">Hourly rate</div>
+            <div className="mt-1 text-xl font-semibold">${agreement.hourly_rate}/hr</div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
           <CardTitle>Agreement Terms</CardTitle>
           <CardDescription>
             {isEditable 
@@ -240,22 +264,40 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="active_date">Effective Date</Label>
-              <Input
+              <DateInput
                 id="active_date"
-                type="date"
                 value={formData.active_date}
-                onChange={(e) => setFormData({ ...formData, active_date: e.target.value })}
+                onValueChange={(value) => setFormData({ ...formData, active_date: value })}
                 disabled={!isEditable}
               />
             </div>
             <div className="space-y-2">
+              <Label>Billing Cadence</Label>
+              <Select
+                value={formData.billing_cadence}
+                onValueChange={(value) => setFormData({
+                  ...formData,
+                  billing_cadence: value,
+                  bill_overage_interim: value === 'monthly' ? false : formData.bill_overage_interim,
+                })}
+                disabled={!isEditable}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="monthly_retainer_fee">Monthly Retainer Fee ($)</Label>
-              <Input
+              <CurrencyInput
                 id="monthly_retainer_fee"
-                type="number"
-                step="0.01"
                 value={formData.monthly_retainer_fee}
-                onChange={(e) => setFormData({ ...formData, monthly_retainer_fee: e.target.value })}
+                onValueChange={(value) => setFormData({ ...formData, monthly_retainer_fee: String(value) })}
                 disabled={!isEditable}
               />
             </div>
@@ -272,12 +314,10 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
             </div>
             <div className="space-y-2">
               <Label htmlFor="hourly_rate">Hourly Rate ($)</Label>
-              <Input
+              <CurrencyInput
                 id="hourly_rate"
-                type="number"
-                step="0.01"
                 value={formData.hourly_rate}
-                onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+                onValueChange={(value) => setFormData({ ...formData, hourly_rate: String(value) })}
                 disabled={!isEditable}
               />
             </div>
@@ -319,6 +359,23 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
                 disabled={!isEditable}
               />
             </div>
+            <div className="space-y-2">
+              <Label>First Cycle</Label>
+              <Select
+                value={formData.first_cycle_proration}
+                onValueChange={(value) => setFormData({ ...formData, first_cycle_proration: value })}
+                disabled={!isEditable}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="prorate_hours">Prorate hours</SelectItem>
+                  <SelectItem value="full_period">Full period</SelectItem>
+                  <SelectItem value="align_next_cycle">Align next cycle</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -344,12 +401,24 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
               Visible to client (client can view and sign when visible)
             </Label>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="bill_overage_interim"
+              checked={formData.bill_overage_interim}
+              onCheckedChange={(checked) => setFormData({ ...formData, bill_overage_interim: Boolean(checked) })}
+              disabled={!isEditable || formData.billing_cadence === 'monthly'}
+            />
+            <Label htmlFor="bill_overage_interim">
+              Bill overage interim
+            </Label>
+          </div>
         </CardContent>
         {isEditable && (
           <CardFooter className="flex justify-between">
             <Button 
               variant="destructive" 
-              onClick={handleDelete}
+              onClick={() => setDeleteDialogOpen(true)}
               disabled={isSigned}
             >
               Delete Agreement
@@ -359,6 +428,18 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
             </Button>
           </CardFooter>
         )}
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Repeat className="h-5 w-5" />
+            Recurring Items
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RecurringItemsEditor companyId={companyId} agreement={agreement} onChanged={fetchAgreement} />
+        </CardContent>
       </Card>
 
       {isSigned && !isTerminated && (
@@ -398,6 +479,33 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
           </CardContent>
         </Card>
       )}
+
+      <CadenceTransitionModal
+        companyId={companyId}
+        agreement={agreement}
+        open={transitionOpen}
+        onOpenChange={setTransitionOpen}
+        onSuccess={(successorAgreementId) => {
+          window.location.href = `/client/mgmt/agreement/${successorAgreementId}`
+        }}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete agreement</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes the draft agreement.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleDelete()}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

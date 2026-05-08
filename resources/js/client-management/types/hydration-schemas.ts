@@ -23,6 +23,22 @@ export const ProjectSchema = z.object({
 })
 export type Project = z.infer<typeof ProjectSchema>
 
+export const AgreementRecurringItemSchema = z.object({
+  id: z.coerce.number(),
+  client_agreement_id: z.coerce.number(),
+  description: z.string(),
+  amount: coerceMoney('0.00'),
+  charge_cadence: z.enum(['monthly', 'quarterly', 'semi_annual', 'annual', 'one_time']),
+  anchor_month: z.coerce.number().nullable().optional(),
+  anchor_day: z.coerce.number().nullable().optional(),
+  start_date: z.string(),
+  end_date: z.string().nullable().optional(),
+  is_taxable: z.coerce.boolean(),
+  is_summarized: z.coerce.boolean(),
+  notes: z.string().nullable().optional(),
+})
+export type AgreementRecurringItem = z.infer<typeof AgreementRecurringItemSchema>
+
 export const AgreementSchema = z.object({
   id: z.coerce.number(),
   active_date: z.string(),
@@ -34,6 +50,11 @@ export const AgreementSchema = z.object({
   catch_up_threshold_hours: coerceNumberLike('0').optional(),
   rollover_months: z.coerce.number().optional(),
   hourly_rate: coerceMoney('0.00').optional(),
+  billing_cadence: z.enum(['monthly', 'quarterly', 'annual']).optional(),
+  bill_overage_interim: z.coerce.boolean().optional(),
+  first_cycle_proration: z.enum(['prorate_hours', 'full_period', 'align_next_cycle']).optional(),
+  initial_rollover_hours: coerceNumberLike('0').optional(),
+  recurring_items: z.array(AgreementRecurringItemSchema).optional(),
 })
 export type Agreement = z.infer<typeof AgreementSchema>
 

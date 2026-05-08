@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientAgreementRecurringItem;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
 use DateTimeInterface;
@@ -28,6 +29,19 @@ class ClientCompanyApiController extends Controller
 
         $companies = ClientCompany::query()
             ->with([
+                'agreements' => function ($query): void {
+                    $query
+                        ->select(
+                            'id',
+                            'client_company_id',
+                            'active_date',
+                            'termination_date',
+                            'monthly_retainer_hours',
+                            'billing_cadence'
+                        )
+                        ->orderByDesc('active_date')
+                        ->orderByDesc('id');
+                },
                 'users' => function ($query): void {
                     $query
                         ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
@@ -105,10 +119,20 @@ class ClientCompanyApiController extends Controller
     {
         /** @var Collection<int, ClientInvoice> $invoices */
         $invoices = $company->getRelation('invoices');
+        /** @var Collection<int, ClientAgreement> $agreements */
+        $agreements = $company->getRelation('agreements');
 
         $unpaidInvoices = $invoices
             ->filter(fn (ClientInvoice $invoice): bool => $invoice->remaining_balance > 0)
             ->values();
+        $currentAgreement = $agreements
+            ->first(fn (ClientAgreement $agreement): bool => $agreement->isActive())
+            ?? $agreements->first();
+        $uninvoicedHours = round($this->numericCompanyAttribute($company, 'uninvoiced_minutes') / 60, 2);
+        $retainerHours = $currentAgreement ? (float) $currentAgreement->monthly_retainer_hours : null;
+        $cycleProgress = $retainerHours && $retainerHours > 0
+            ? min(100.0, round(($uninvoicedHours / $retainerHours) * 100, 1))
+            : null;
 
         return [
             'id' => $company->id,
@@ -124,10 +148,14 @@ class ClientCompanyApiController extends Controller
             'created_at' => $this->serializeDateForJson($company->created_at),
             'users' => $this->serializeUsersForIndex($company),
             'agreements' => [],
+            'current_billing_cadence' => $currentAgreement?->effectiveBillingCadence()->value,
+            'current_retainer_hours' => $retainerHours,
+            'current_cycle_progress' => $cycleProgress,
+            'needs_attention' => $unpaidInvoices->isNotEmpty() || $uninvoicedHours > ($retainerHours ?? 0),
             'total_balance_due' => round((float) $unpaidInvoices->sum(
                 fn (ClientInvoice $invoice): float => $invoice->remaining_balance
             ), 2),
-            'uninvoiced_hours' => round($this->numericCompanyAttribute($company, 'uninvoiced_minutes') / 60, 2),
+            'uninvoiced_hours' => $uninvoicedHours,
             'uninvoiced_task_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_total'), 2),
             'uninvoiced_task_complete_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_complete_total'), 2),
             'uninvoiced_task_incomplete_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_incomplete_total'), 2),
@@ -266,6 +294,12 @@ class ClientCompanyApiController extends Controller
                         ->orderByDesc('id');
                 },
                 'agreements.recurringItems',
+                'activities' => function ($query): void {
+                    $query
+                        ->with('actor:id,name,email')
+                        ->latest()
+                        ->limit(100);
+                },
             ])
             ->findOrFail($id);
     }
@@ -290,6 +324,7 @@ class ClientCompanyApiController extends Controller
             'updated_at' => $this->serializeDateForJson($company->updated_at),
             'users' => $this->serializeUsersForIndex($company),
             'agreements' => $this->serializeAgreementsForDetail($company),
+            'activities' => $this->serializeActivitiesForDetail($company),
         ];
     }
 
@@ -322,6 +357,7 @@ class ClientCompanyApiController extends Controller
                 'billing_cadence' => $agreement->effectiveBillingCadence()->value,
                 'bill_overage_interim' => (bool) $agreement->bill_overage_interim,
                 'first_cycle_proration' => $agreement->effectiveFirstCycleProration()->value,
+                'initial_rollover_hours' => $agreement->initial_rollover_hours,
                 'recurring_items' => $agreement->recurringItems->map(fn (ClientAgreementRecurringItem $item): array => [
                     'id' => $item->id,
                     'client_agreement_id' => $item->client_agreement_id,
@@ -336,6 +372,30 @@ class ClientCompanyApiController extends Controller
                     'is_summarized' => (bool) $item->is_summarized,
                     'notes' => $item->notes,
                 ])->values()->toArray(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function serializeActivitiesForDetail(ClientCompany $company): array
+    {
+        /** @var Collection<int, ClientCompanyActivity> $activities */
+        $activities = $company->getRelation('activities');
+
+        return $activities
+            ->map(fn (ClientCompanyActivity $activity): array => [
+                'id' => $activity->id,
+                'client_company_id' => $activity->client_company_id,
+                'actor_user_id' => $activity->actor_user_id,
+                'actor_name' => $activity->actor?->name,
+                'action' => $activity->action,
+                'subject_type' => $activity->subject_type,
+                'subject_id' => $activity->subject_id,
+                'payload' => $activity->payload ?? [],
+                'created_at' => $this->serializeDateForJson($activity->created_at),
             ])
             ->values()
             ->all();
