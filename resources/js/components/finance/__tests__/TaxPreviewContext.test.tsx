@@ -163,6 +163,8 @@ function makeTaxFacts(): TaxPreviewFacts {
       socialSecurityTaxableEarnings: 0,
       socialSecurityTax: 0,
       medicareWages: 0,
+      medicareTaxWithheldSources: [],
+      medicareTaxWithheld: 0,
       medicareTaxableEarnings: 0,
       medicareTax: 0,
       additionalMedicareThreshold: 200000,
@@ -173,10 +175,14 @@ function makeTaxFacts(): TaxPreviewFacts {
     },
     form8959: {
       wageSources: [],
+      withholdingSources: [],
       wages: 0,
       threshold: 200000,
       excessWages: 0,
       additionalTax: 0,
+      medicareTaxWithheld: 0,
+      regularMedicareTaxWithholding: 0,
+      additionalMedicareWithholding: 0,
     },
     schedule1: {
       line1aSources: [],
@@ -529,6 +535,8 @@ function makeTaxFactsWithScheduleSE(netEarningsFromSE = 10_000, form1040Override
     socialSecurityTaxableEarnings: seTaxableEarnings,
     socialSecurityTax,
     medicareWages: 0,
+    medicareTaxWithheldSources: [],
+    medicareTaxWithheld: 0,
     medicareTaxableEarnings: seTaxableEarnings,
     medicareTax,
     additionalMedicareThreshold: 200000,
@@ -1144,6 +1152,9 @@ describe('TaxPreviewContext', () => {
       threshold: 200_000,
       excessWages: 10_000,
       additionalTax: 90,
+      medicareTaxWithheld: 0,
+      regularMedicareTaxWithholding: 0,
+      additionalMedicareWithholding: 0,
       wageSources: [{
         id: 'w2-88-schedule-se-box5_medicare_wages-form8959-line1',
         label: 'Wage Co — W-2 Medicare wages',
@@ -1162,6 +1173,7 @@ describe('TaxPreviewContext', () => {
         reviewStatus: 'reviewed',
         reviewAction: null,
       }],
+      withholdingSources: [],
     }
     facts.form1040 = makeForm1040Facts({ line23: 102, line24: 102 })
 

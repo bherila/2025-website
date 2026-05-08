@@ -158,7 +158,7 @@ class TaxPreviewFactsService
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
         $schedule3 = $this->schedule3FactsBuilder->build($form1116, $userDeductions);
         $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $magi, $userId, $year);
-        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried);
+        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $taxableIncomeBeforeQbi, $year, $isMarried);
         $taxableIncome = $this->estimatedTaxableIncome($deductionMagi ?? 0.0, $scheduleA, $form8995->deduction, $isMarried);
         $regularTax = $this->form1040FactsBuilder->regularTax($scheduleB, $scheduleD, $taxableIncome, $year, $isMarried);
         $form6251 = $this->form6251FactsBuilder->build($k1Docs, $scheduleA, $taxableIncome, $form1116->totalForeignTaxes, $year, $isMarried, $regularTax);
@@ -552,7 +552,7 @@ class TaxPreviewFactsService
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
         $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi, true);
 
-        return $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
+        return $this->form8995FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
     }
 
     /**
@@ -574,7 +574,7 @@ class TaxPreviewFactsService
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
         $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi, true);
-        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
+        $form8995 = $this->form8995FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099);
         $taxableIncome = $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried);
         $regularTax = $this->form1040FactsBuilder->regularTax($scheduleB, $scheduleD, $taxableIncome, $year, $isMarried);

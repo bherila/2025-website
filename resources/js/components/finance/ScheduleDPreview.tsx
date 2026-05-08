@@ -84,8 +84,8 @@ export default function ScheduleDPreview({
   const longTermRollups = taxFacts.form8949Rollups.filter((rollup) => !rollup.isShortTerm)
   const hasBrokerData = taxFacts.form8949Rollups.length > 0
   const has11sAmbiguous = taxFacts.ambiguous11SSources.length > 0
-  const section1256ShortTermTotal = taxFacts.line3Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
-  const section1256LongTermTotal = taxFacts.line10Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
+  const section1256ShortTermTotal = taxFacts.line4Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
+  const section1256LongTermTotal = taxFacts.line11Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
 
   return (
     <div className="space-y-5">
@@ -96,14 +96,14 @@ export default function ScheduleDPreview({
         </p>
       </div>
 
-      {(taxFacts.line3Sources.length > 0 || taxFacts.line10Sources.length > 0) && (
+      {(taxFacts.line4Sources.length > 0 || taxFacts.line11Sources.length > 0) && (
         <>
           <FormBlock title="Form 6781 — Section 1256 Contracts &amp; Straddles">
-            {taxFacts.line3Sources.map((source) => (
-              <SourceLine key={source.id} source={source} boxRef="3" {...(onOpenDoc ? { onOpenDoc } : {})} />
+            {taxFacts.line4Sources.map((source) => (
+              <SourceLine key={source.id} source={source} boxRef="4" {...(onOpenDoc ? { onOpenDoc } : {})} />
             ))}
-            {taxFacts.line10Sources.map((source) => (
-              <SourceLine key={source.id} source={source} boxRef="10" {...(onOpenDoc ? { onOpenDoc } : {})} />
+            {taxFacts.line11Sources.map((source) => (
+              <SourceLine key={source.id} source={source} boxRef="11" {...(onOpenDoc ? { onOpenDoc } : {})} />
             ))}
             <FormTotalLine label="Total Sec. 1256 short-term allocation" value={section1256ShortTermTotal} />
             <FormTotalLine label="Total Sec. 1256 long-term allocation" value={section1256LongTermTotal} />
@@ -111,7 +111,7 @@ export default function ScheduleDPreview({
           <Callout kind="info" title="ℹ Section 1256 Contracts">
             <p>
               Section 1256 contracts are marked to market at year-end. 60% of the gain/loss is treated as long-term
-              regardless of holding period. The backend facts route the 40%/60% split to Schedule D lines 3 and 10.
+              regardless of holding period. The backend facts route the 40%/60% split to Schedule D lines 4 and 11.
             </p>
           </Callout>
         </>
@@ -162,13 +162,20 @@ export default function ScheduleDPreview({
           {taxFacts.line3Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="3" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
+          {taxFacts.line4Sources.map((source) => (
+            <SourceLine key={source.id} source={source} boxRef="4" {...(onOpenDoc ? { onOpenDoc } : {})} />
+          ))}
           {taxFacts.line5Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="5" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
           {taxFacts.line6Carryover !== 0 && (
             <FormLine boxRef="6" label={`${taxYear - 1} short-term capital loss carryover`} value={taxFacts.line6Carryover} />
           )}
-          {shortTermRollups.length === 0 && taxFacts.line3Sources.length === 0 && taxFacts.line5Sources.length === 0 && taxFacts.line6Carryover === 0 && (
+          {shortTermRollups.length === 0
+            && taxFacts.line3Sources.length === 0
+            && taxFacts.line4Sources.length === 0
+            && taxFacts.line5Sources.length === 0
+            && taxFacts.line6Carryover === 0 && (
             <FormLine label="No short-term items" raw="—" />
           )}
           {taxFacts.line5Sources.length > 0 && (
@@ -189,6 +196,9 @@ export default function ScheduleDPreview({
           {taxFacts.line10Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="10" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
+          {taxFacts.line11Sources.map((source) => (
+            <SourceLine key={source.id} source={source} boxRef="11" {...(onOpenDoc ? { onOpenDoc } : {})} />
+          ))}
           {taxFacts.line12Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="12" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
@@ -200,6 +210,7 @@ export default function ScheduleDPreview({
           )}
           {longTermRollups.length === 0
             && taxFacts.line10Sources.length === 0
+            && taxFacts.line11Sources.length === 0
             && taxFacts.line12Sources.length === 0
             && taxFacts.line13Sources.length === 0
             && taxFacts.line14Carryover === 0 && (

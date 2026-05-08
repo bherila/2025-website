@@ -32,7 +32,9 @@ function makeFacts(overrides: Partial<ScheduleDFacts> = {}): ScheduleDFacts {
     form8949Rollups: [],
     line5Sources: [],
     line3Sources: [],
+    line4Sources: [],
     line10Sources: [],
+    line11Sources: [],
     line12Sources: [],
     line13Sources: [],
     ambiguous11SSources: [],
@@ -133,6 +135,38 @@ describe('ScheduleDPreview detail navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Form 1040 line 7' }))
 
     expect(onGoToForm1040).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders Section 1256 Form 6781 allocations on Schedule D lines 4 and 11', () => {
+    render(
+      <ScheduleDPreview
+        taxFacts={makeFacts({
+          line4Sources: [makeSource({
+            id: 'section-1256-short',
+            label: 'AQR — K-1 Box 11C Form 6781 40% S/T allocation',
+            amount: 13018,
+            formType: 'k1',
+          })],
+          line11Sources: [makeSource({
+            id: 'section-1256-long',
+            label: 'AQR — K-1 Box 11C Form 6781 60% L/T allocation',
+            amount: 19527,
+            formType: 'k1',
+          })],
+          line4GainLoss: 13018,
+          line7NetShortTerm: 13018,
+          line11GainLoss: 19527,
+          line15NetLongTerm: 19527,
+          line16Combined: 32545,
+          line21LimitedLossOrGain: 32545,
+        })}
+        selectedYear={2025}
+      />,
+    )
+
+    expect(screen.getAllByText('AQR — K-1 Box 11C Form 6781 40% S/T allocation')).toHaveLength(2)
+    expect(screen.getAllByText('AQR — K-1 Box 11C Form 6781 60% L/T allocation')).toHaveLength(2)
+    expect(screen.getByText(/Schedule D lines 4 and 11/)).toBeInTheDocument()
   })
 
   it('opens Schedule D line 5 supporting details with per-source navigation', () => {

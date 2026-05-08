@@ -149,10 +149,10 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         $line24 = $this->sumMoney([$line22, $line23]);
         $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', '2', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
         $line25bSources = $this->federal1099WithholdingSources($docs1099);
-        $line25cSources = [];
+        $line25cSources = $this->line25cSources($form8959);
         $line25a = $this->sumSources($line25aSources);
         $line25b = $this->sumSources($line25bSources);
-        $line25c = 0.0;
+        $line25c = $this->sumSources($line25cSources);
         $line25d = $this->sumMoney([$line25a, $line25b, $line25c]);
         $line26Sources = [];
         $line26 = 0.0;
@@ -404,6 +404,28 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         }
 
         return $sources;
+    }
+
+    /**
+     * @return TaxFactSource[]
+     */
+    private function line25cSources(Form8959Facts $form8959): array
+    {
+        if ($form8959->additionalMedicareWithholding === 0.0) {
+            return [];
+        }
+
+        return [
+            $this->source(
+                'form1040-line25c-form8959',
+                'Form 8959 additional Medicare tax withholding',
+                $form8959->additionalMedicareWithholding,
+                TaxFactSourceType::Form8959AdditionalMedicareWithholding,
+                TaxFactRouting::Form1040Line25c,
+                'Form 8959 line 24 is included with federal income tax withholding on Form 1040 line 25c.',
+                "Medicare tax withheld {$form8959->medicareTaxWithheld}; regular Medicare withholding {$form8959->regularMedicareTaxWithholding}.",
+            ),
+        ];
     }
 
     /**

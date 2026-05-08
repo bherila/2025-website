@@ -20,11 +20,17 @@ readonly class ScheduleSEFacts
     /**
      * @var TaxFactSource[]
      */
+    public array $medicareTaxWithheldSources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $scheduleFSources;
 
     /**
      * @param  TaxFactSource[]  $entries
      * @param  TaxFactSource[]  $wageSources
+     * @param  TaxFactSource[]  $medicareTaxWithheldSources
      * @param  TaxFactSource[]  $scheduleFSources
      */
     public function __construct(
@@ -37,6 +43,8 @@ readonly class ScheduleSEFacts
         public float $socialSecurityTaxableEarnings,
         public float $socialSecurityTax,
         public float $medicareWages,
+        array $medicareTaxWithheldSources,
+        public float $medicareTaxWithheld,
         public float $medicareTaxableEarnings,
         public float $medicareTax,
         public float $additionalMedicareThreshold,
@@ -49,6 +57,7 @@ readonly class ScheduleSEFacts
     ) {
         $this->entries = $entries;
         $this->wageSources = $wageSources;
+        $this->medicareTaxWithheldSources = $medicareTaxWithheldSources;
         $this->scheduleFSources = $scheduleFSources;
     }
 
@@ -67,6 +76,8 @@ readonly class ScheduleSEFacts
             'socialSecurityTaxableEarnings' => $this->socialSecurityTaxableEarnings,
             'socialSecurityTax' => $this->socialSecurityTax,
             'medicareWages' => $this->medicareWages,
+            'medicareTaxWithheldSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->medicareTaxWithheldSources),
+            'medicareTaxWithheld' => $this->medicareTaxWithheld,
             'medicareTaxableEarnings' => $this->medicareTaxableEarnings,
             'medicareTax' => $this->medicareTax,
             'additionalMedicareThreshold' => $this->additionalMedicareThreshold,

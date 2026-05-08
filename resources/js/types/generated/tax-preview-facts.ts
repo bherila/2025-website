@@ -238,10 +238,14 @@ sourceTransactionId: string | null;
 };
 export type Form8959Facts = {
 wageSources: Array<TaxFactSource>;
+withholdingSources: Array<TaxFactSource>;
 wages: number;
 threshold: number;
 excessWages: number;
 additionalTax: number;
+medicareTaxWithheld: number;
+regularMedicareTaxWithholding: number;
+additionalMedicareWithholding: number;
 };
 export type Form8960Facts = {
 componentSources: Array<TaxFactSource>;
@@ -476,7 +480,9 @@ export type ScheduleDFacts = {
 form8949Rollups: Array<ScheduleDRollupFact>;
 line5Sources: Array<TaxFactSource>;
 line3Sources: Array<TaxFactSource>;
+line4Sources: Array<TaxFactSource>;
 line10Sources: Array<TaxFactSource>;
+line11Sources: Array<TaxFactSource>;
 line12Sources: Array<TaxFactSource>;
 line13Sources: Array<TaxFactSource>;
 ambiguous11SSources: Array<TaxFactSource>;
@@ -551,6 +557,7 @@ hasActivity: boolean;
 export type ScheduleSEFacts = {
 entries: Array<TaxFactSource>;
 wageSources: Array<TaxFactSource>;
+medicareTaxWithheldSources: Array<TaxFactSource>;
 scheduleFSources: Array<TaxFactSource>;
 netEarningsFromSE: number;
 seTaxableEarnings: number;
@@ -560,6 +567,7 @@ remainingSocialSecurityWageBase: number;
 socialSecurityTaxableEarnings: number;
 socialSecurityTax: number;
 medicareWages: number;
+medicareTaxWithheld: number;
 medicareTaxableEarnings: number;
 medicareTax: number;
 additionalMedicareThreshold: number;

@@ -734,9 +734,11 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame("account_lot:{$lossLot->lot_id}", $facts['form8949']['washSaleAdjustments'][0]['lossSaleId']);
         $this->assertSame(0.0, $facts['scheduleD']['line1bGainLoss']);
         $this->assertSame(500.0, $facts['scheduleD']['line8bGainLoss']);
-        $this->assertSame(400.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(400.0, $facts['scheduleD']['line4GainLoss']);
         $this->assertSame(75.0, $facts['scheduleD']['line5GainLoss']);
-        $this->assertSame(600.0, $facts['scheduleD']['line10GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
+        $this->assertSame(600.0, $facts['scheduleD']['line11GainLoss']);
         $this->assertSame(250.0, $facts['scheduleD']['line12GainLoss']);
         $this->assertSame(30.0, $facts['scheduleD']['line13CapitalGainDistributions']);
         $this->assertSame(475.0, $facts['scheduleD']['line7NetShortTerm']);
@@ -902,12 +904,11 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleA']['disallowedInvestmentInterest']);
         $this->assertSame(7200.0, $facts['scheduleA']['totalInterest']);
         $this->assertSame(750.0, $facts['scheduleA']['charitableTotal']);
-        $this->assertSame(175.0, $facts['scheduleA']['otherItemizedTotal']);
-        $this->assertSame(21125.0, $facts['scheduleA']['totalItemizedDeductions']);
+        $this->assertSame(100.0, $facts['scheduleA']['otherItemizedTotal']);
+        $this->assertSame(21050.0, $facts['scheduleA']['totalItemizedDeductions']);
         $this->assertTrue($facts['scheduleA']['shouldItemizeSingle']);
         $k1PortfolioSource = collect($facts['scheduleA']['otherItemizedSources'])->firstWhere('sourceType', 'k1_portfolio_deduction');
-        $this->assertNotNull($k1PortfolioSource);
-        $this->assertSame('schedule_a_line_16', $k1PortfolioSource['routing']);
+        $this->assertNull($k1PortfolioSource);
         $this->assertSame('schedule_a_line_5b', $facts['scheduleA']['realEstateTaxSources'][0]['routing']);
         $this->assertSame('schedule_a_line_5a', $facts['scheduleA']['salesTaxSources'][0]['routing']);
     }
@@ -1968,6 +1969,54 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertStringContainsString('W-2 wages', $facts['form8995']['reviewSources'][0]['reviewAction']);
     }
 
+    public function test_form8995_uses_1099_div_section199a_and_ignores_current_year_k1_code_aa_704c(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'w2',
+            'is_reviewed' => true,
+            'parsed_data' => ['employer_name' => 'Employer', 'box1_wages' => 450000],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'Dividend Broker',
+                'box1a_ordinary' => 1000,
+                'box1b_qualified' => 1000,
+                'box5_section_199a' => 1000,
+            ],
+        ]);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Current Year Partnership'],
+                codes: ['20' => [[
+                    'code' => 'AA',
+                    'value' => '-84149',
+                    'notes' => 'Section 704(c) information. Already included within the applicable K-1 boxes; do not double-count. Informational only.',
+                ]]],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $sourceTypes = collect($facts['form8995']['entities'])
+            ->flatMap(fn (array $entity): array => $entity['sources'])
+            ->pluck('sourceType')
+            ->all();
+
+        $this->assertTrue($facts['form8995']['aboveThreshold']);
+        $this->assertSame(1000.0, $facts['form8995']['qualifiedReitDividends']);
+        $this->assertSame(0.0, $facts['form8995']['qualifiedPtpIncome']);
+        $this->assertSame(200.0, $facts['form8995']['reitPtpComponent']);
+        $this->assertSame(1000.0, $facts['form8995']['netCapitalGain']);
+        $this->assertSame(200.0, $facts['form8995']['form8995A']['qualifiedReitPtpComponent']);
+        $this->assertSame(200.0, $facts['form8995']['deduction']);
+        $this->assertContains('1099_div_section_199a_dividends', $sourceTypes);
+        $this->assertNotContains('form_8995_k1_box_20aa', $sourceTypes);
+    }
+
     public function test_form8995a_nets_qbi_losses_before_total_component(): void
     {
         $user = $this->createUser();
@@ -2250,15 +2299,17 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(6850.0, $facts['form8995']['deduction']);
     }
 
-    public function test_form8995_collects_k1_box20_qbi_reit_and_ptp_codes(): void
+    public function test_form8995_collects_legacy_k1_box20_qbi_reit_and_ptp_codes(): void
     {
         $user = $this->createUser();
         $this->createTaxDocument($user->id, [
+            'tax_year' => 2022,
             'form_type' => '1099_int',
             'is_reviewed' => true,
             'parsed_data' => ['payer_name' => 'Bank', 'box1_interest' => 100000],
         ]);
         $this->createTaxDocument($user->id, [
+            'tax_year' => 2022,
             'form_type' => 'k1',
             'is_reviewed' => true,
             'parsed_data' => $this->k1Data(
@@ -2273,7 +2324,7 @@ class TaxPreviewFactsServiceTest extends TestCase
             ),
         ]);
 
-        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form8995');
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2022, 'form8995');
         $sourceTypes = collect($facts['form8995']['entities'][0]['sources'])->pluck('sourceType')->all();
 
         $this->assertSame(100.0, $facts['form8995']['totalQbi']);
@@ -2369,7 +2420,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->createTaxDocument($user->id, [
             'form_type' => 'w2',
             'is_reviewed' => true,
-            'parsed_data' => ['employer_name' => 'Wage Co', 'box1_wages' => 210000, 'box3_ss_wages' => 168600, 'box5_medicare_wages' => 210000],
+            'parsed_data' => ['employer_name' => 'Wage Co', 'box1_wages' => 210000, 'box3_ss_wages' => 168600, 'box5_medicare_wages' => 210000, 'box6_medicare_tax' => 3135],
         ]);
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
@@ -2378,10 +2429,16 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(200000.0, $facts['form8959']['threshold']);
         $this->assertSame(10000.0, $facts['form8959']['excessWages']);
         $this->assertSame(90.0, $facts['form8959']['additionalTax']);
+        $this->assertSame(3135.0, $facts['form8959']['medicareTaxWithheld']);
+        $this->assertSame(3045.0, $facts['form8959']['regularMedicareTaxWithholding']);
+        $this->assertSame(90.0, $facts['form8959']['additionalMedicareWithholding']);
         $this->assertSame('form_8959_line_1', $facts['form8959']['wageSources'][0]['routing']);
+        $this->assertSame('form_8959_line_19', $facts['form8959']['withholdingSources'][0]['routing']);
         $this->assertSame(90.0, $facts['form1040']['line23']);
+        $this->assertSame(90.0, $facts['form1040']['line25c']);
         $this->assertSame($facts['form1040']['line22'] + 90.0, $facts['form1040']['line24']);
         $this->assertContains('Form 8959 additional Medicare tax on wages', array_column($facts['form1040']['line23Sources'], 'label'));
+        $this->assertContains('Form 8959 additional Medicare tax withholding', array_column($facts['form1040']['line25cSources'], 'label'));
     }
 
     private function createAccount(int $userId): FinAccounts

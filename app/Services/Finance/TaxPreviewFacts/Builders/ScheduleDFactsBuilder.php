@@ -35,8 +35,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         }
 
         $section1256Sources = $this->scheduleDSection1256Sources($k1Docs);
-        $line3Sources = $section1256Sources['shortTerm'];
-        $line10Sources = $section1256Sources['longTerm'];
+        $line3Sources = [];
+        $line4Sources = $section1256Sources['shortTerm'];
+        $line10Sources = [];
+        $line11Sources = $section1256Sources['longTerm'];
         $line5Sources = $this->scheduleDLine5Sources($k1Docs);
         $line12Sources = [
             ...$this->scheduleDLine12Sources($k1Docs),
@@ -48,8 +50,8 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line1a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1a'));
         $line1b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1b'));
         $line2 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '2'));
-        $line3 = $this->sumMoney([$this->scheduleDLineGainLoss($lineBuckets, '3'), $this->sumSources($line3Sources)]);
-        $line4 = 0.0;
+        $line3 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3'));
+        $line4 = $this->sumSources($line4Sources);
         $line5 = $this->sumSources($line5Sources);
         $line6 = 0.0;
         $line7 = $this->sumMoney([$line1a, $line1b, $line2, $line3, $line4, $line5, $line6]);
@@ -57,8 +59,8 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line8a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8a'));
         $line8b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8b'));
         $line9 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '9'));
-        $line10 = $this->sumMoney([$this->scheduleDLineGainLoss($lineBuckets, '10'), $this->sumSources($line10Sources)]);
-        $line11 = 0.0;
+        $line10 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '10'));
+        $line11 = $this->sumSources($line11Sources);
         $line12 = $this->sumSources($line12Sources);
         $line13 = $this->sumSources($line13Sources);
         $line14 = 0.0;
@@ -78,6 +80,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             line2GainLoss: $line2,
             line3Sources: $line3Sources,
             line3GainLoss: $line3,
+            line4Sources: $line4Sources,
             line4GainLoss: $line4,
             line5Sources: $line5Sources,
             line5GainLoss: $line5,
@@ -88,6 +91,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             line9GainLoss: $line9,
             line10Sources: $line10Sources,
             line10GainLoss: $line10,
+            line11Sources: $line11Sources,
             line11GainLoss: $line11,
             line12Sources: $line12Sources,
             line12GainLoss: $line12,
@@ -134,7 +138,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                 $shortTermAmount = $allocation['allocated'];
                 $longTermAmount = $allocation['remainder'];
                 $shortTerm[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line3",
+                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line4",
                     label: "{$partnerName} — K-1 Box 11C Form 6781 40% S/T allocation",
                     amount: $shortTermAmount,
                     sourceType: TaxFactSourceType::K1Section1256ShortTerm,
@@ -142,15 +146,15 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     formType: 'k1',
                     box: '11',
                     code: 'C',
-                    routing: TaxFactRouting::ScheduleDLine3,
-                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
+                    routing: TaxFactRouting::ScheduleDLine4,
+                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781; the short-term portion flows to Schedule D line 4.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
                     reviewAction: $this->reviewAction($doc),
                 );
                 $longTerm[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line10",
+                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line11",
                     label: "{$partnerName} — K-1 Box 11C Form 6781 60% L/T allocation",
                     amount: $longTermAmount,
                     sourceType: TaxFactSourceType::K1Section1256LongTerm,
@@ -158,8 +162,8 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                     formType: 'k1',
                     box: '11',
                     code: 'C',
-                    routing: TaxFactRouting::ScheduleDLine10,
-                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781.',
+                    routing: TaxFactRouting::ScheduleDLine11,
+                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781; the long-term portion flows to Schedule D line 11.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
