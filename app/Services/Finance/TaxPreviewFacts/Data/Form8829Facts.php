@@ -18,8 +18,12 @@ readonly class Form8829Facts
     public function __construct(
         array $entities,
         public float $line36AllowableHomeOfficeDeductionTotal,
-        public float $line43CarryoverToNextYearTotal,
-        public float $line43CarryoverToNextYearCaTotal,
+        public float $line43OperatingCarryoverToNextYearTotal,
+        public float $line43OperatingCarryoverToNextYearCaTotal,
+        public float $line44ExcessCasualtyAndDepreciationCarryoverToNextYearTotal,
+        public float $line44ExcessCasualtyAndDepreciationCarryoverToNextYearCaTotal,
+        public float $carryoverToNextYearTotal,
+        public float $carryoverToNextYearCaTotal,
     ) {
         $this->entities = $entities;
     }
@@ -29,8 +33,12 @@ readonly class Form8829Facts
         return new self(
             entities: [],
             line36AllowableHomeOfficeDeductionTotal: 0.0,
-            line43CarryoverToNextYearTotal: 0.0,
-            line43CarryoverToNextYearCaTotal: 0.0,
+            line43OperatingCarryoverToNextYearTotal: 0.0,
+            line43OperatingCarryoverToNextYearCaTotal: 0.0,
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYearTotal: 0.0,
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYearCaTotal: 0.0,
+            carryoverToNextYearTotal: 0.0,
+            carryoverToNextYearCaTotal: 0.0,
         );
     }
 
@@ -53,8 +61,12 @@ readonly class Form8829Facts
         return [
             'entities' => array_map(static fn (Form8829EntityFact $entity): array => $entity->toArray(), $this->entities),
             'line36AllowableHomeOfficeDeductionTotal' => $this->line36AllowableHomeOfficeDeductionTotal,
-            'line43CarryoverToNextYearTotal' => $this->line43CarryoverToNextYearTotal,
-            'line43CarryoverToNextYearCaTotal' => $this->line43CarryoverToNextYearCaTotal,
+            'line43OperatingCarryoverToNextYearTotal' => $this->line43OperatingCarryoverToNextYearTotal,
+            'line43OperatingCarryoverToNextYearCaTotal' => $this->line43OperatingCarryoverToNextYearCaTotal,
+            'line44ExcessCasualtyAndDepreciationCarryoverToNextYearTotal' => $this->line44ExcessCasualtyAndDepreciationCarryoverToNextYearTotal,
+            'line44ExcessCasualtyAndDepreciationCarryoverToNextYearCaTotal' => $this->line44ExcessCasualtyAndDepreciationCarryoverToNextYearCaTotal,
+            'carryoverToNextYearTotal' => $this->carryoverToNextYearTotal,
+            'carryoverToNextYearCaTotal' => $this->carryoverToNextYearCaTotal,
         ];
     }
 }

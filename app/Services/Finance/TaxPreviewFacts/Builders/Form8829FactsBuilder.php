@@ -16,18 +16,26 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class Form8829FactsBuilder extends TaxPreviewFactBuilder
 {
+    private const int UNASSIGNED_ENTITY_KEY = 0;
+
+    private const array LINE_14_REFS = ['9', '10', '11'];
+
+    private const array LINE_24_REFS = ['16', '17', '18', '19', '20', '21', '22'];
+
+    private const array LINE_30_REFS = ['42'];
+
     private const array HOME_OFFICE_LINE_MAP = [
         'scho_mortgage_interest' => ['line' => '10', 'label' => 'Mortgage interest'],
         'scho_real_estate_taxes' => ['line' => '11', 'label' => 'Real estate taxes'],
-        'scho_insurance' => ['line' => '19', 'label' => 'Insurance'],
-        'scho_rent' => ['line' => '20', 'label' => 'Rent'],
+        'scho_insurance' => ['line' => '18', 'label' => 'Insurance'],
+        'scho_rent' => ['line' => '19', 'label' => 'Rent'],
+        'scho_repairs_maintenance' => ['line' => '20', 'label' => 'Repairs and maintenance'],
         'scho_utilities' => ['line' => '21', 'label' => 'Utilities'],
-        'scho_repairs_maintenance' => ['line' => '22', 'label' => 'Repairs and maintenance'],
-        'scho_security' => ['line' => '23', 'label' => 'Security system costs'],
-        'scho_cleaning' => ['line' => '23', 'label' => 'Cleaning services'],
-        'scho_hoa' => ['line' => '23', 'label' => 'HOA fees'],
+        'scho_security' => ['line' => '22', 'label' => 'Security system costs'],
+        'scho_cleaning' => ['line' => '22', 'label' => 'Cleaning services'],
+        'scho_hoa' => ['line' => '22', 'label' => 'HOA fees'],
         'scho_casualty_losses' => ['line' => '9', 'label' => 'Casualty losses'],
-        'scho_depreciation' => ['line' => '41', 'label' => 'Depreciation'],
+        'scho_depreciation' => ['line' => '42', 'label' => 'Depreciation allowable'],
     ];
 
     public function __construct(
@@ -69,8 +77,8 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             $entities[] = $this->entityFact(
                 $year,
                 $entityData,
-                $inputsByEntity[$entityId ?? 0] ?? null,
-                $adjustmentsByEntity[$entityId ?? 0] ?? [],
+                $inputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
+                $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? [],
             );
         }
 
@@ -101,8 +109,12 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         return new Form8829Facts(
             entities: $entities,
             line36AllowableHomeOfficeDeductionTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line36AllowableHomeOfficeDeduction, $entities)),
-            line43CarryoverToNextYearTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line43CarryoverToNextYear, $entities)),
-            line43CarryoverToNextYearCaTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line43CarryoverToNextYearCa, $entities)),
+            line43OperatingCarryoverToNextYearTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line43OperatingCarryoverToNextYear, $entities)),
+            line43OperatingCarryoverToNextYearCaTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line43OperatingCarryoverToNextYearCa, $entities)),
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYearTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line44ExcessCasualtyAndDepreciationCarryoverToNextYear, $entities)),
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYearCaTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa, $entities)),
+            carryoverToNextYearTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->carryoverToNextYear, $entities)),
+            carryoverToNextYearCaTotal: $this->sumMoney(array_map(static fn (Form8829EntityFact $entity): float => $entity->carryoverToNextYearCa, $entities)),
         );
     }
 
@@ -124,36 +136,52 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         [$grossReceipts, $returnsAndAllowances] = $this->incomeTotals($entityData);
         $expensesBeforeHomeOffice = $this->sumCategoryTotals($entityData['schedule_c_expense'] ?? []);
         $line8TentativeProfit = max(0.0, $this->subtractMoney($this->subtractMoney($grossReceipts, $returnsAndAllowances), $expensesBeforeHomeOffice));
-        $homeOfficeLines = $this->homeOfficeLines($entityData, $businessUseRate, $adjustmentsByLine);
-        $line24 = $this->sumMoney(array_map(static fn (Form8829LineFact $line): float => $line->indirectExpense, $homeOfficeLines));
-        $line25 = $this->sumMoney(array_map(static fn (Form8829LineFact $line): float => $line->allowable, $homeOfficeLines));
-        $line26 = $this->roundMoney((float) ($input->prior_year_op_carryover ?? 0.0));
+        $computedHomeOfficeLines = $this->homeOfficeLines($entityData, $businessUseRate, $adjustmentsByLine);
+        $homeOfficeLines = $method === 'simplified' ? [] : $computedHomeOfficeLines;
+        $line14 = $method === 'regular' ? $this->sumAllowableLines($homeOfficeLines, self::LINE_14_REFS) : 0.0;
+        $line15 = max(0.0, $this->subtractMoney($line8TentativeProfit, $line14));
+        $line23 = $method === 'regular' ? $this->sumIndirectLines($homeOfficeLines, self::LINE_24_REFS) : 0.0;
+        $line24 = $method === 'regular' ? $this->sumAllowableLines($homeOfficeLines, self::LINE_24_REFS) : 0.0;
+        $priorYearOpCarryover = $this->roundMoney((float) ($input->prior_year_op_carryover ?? 0.0));
+        $line25 = $method === 'regular' ? $priorYearOpCarryover : 0.0;
         $priorYearOpCarryoverCa = $this->roundMoney((float) ($input->prior_year_op_carryover_ca ?? 0.0));
         $priorYearDepreciationCarryover = $this->roundMoney((float) ($input->prior_year_depreciation_carryover ?? 0.0));
         $priorYearDepreciationCarryoverCa = $this->roundMoney((float) ($input->prior_year_depreciation_carryover_ca ?? 0.0));
-        $regularClaim = $this->sumMoney([$line25, $line26, $priorYearDepreciationCarryover]);
+        $line26 = $method === 'regular' ? $this->sumMoney([$line24, $line25]) : 0.0;
+        $line27 = $method === 'regular' ? min($line15, $line26) : 0.0;
+        $line28 = $method === 'regular' ? max(0.0, $this->subtractMoney($line15, $line27)) : 0.0;
+        $line30 = $method === 'regular' ? $this->sumAllowableLines($homeOfficeLines, self::LINE_30_REFS) : 0.0;
+        $line31 = $method === 'regular' ? $priorYearDepreciationCarryover : 0.0;
+        $line32 = $method === 'regular' ? $this->sumMoney([$line30, $line31]) : 0.0;
+        $line33 = $method === 'regular' ? min($line28, $line32) : 0.0;
+        $regularClaim = $method === 'regular' ? $this->sumMoney([$line14, $line27, $line33]) : 0.0;
         $simplifiedDeduction = $this->simplifiedDeduction($officeSqft, $monthsUsed);
-        $selectedClaim = $method === 'simplified' ? $simplifiedDeduction : $regularClaim;
-        $line36 = $this->roundMoney(min($selectedClaim, $line8TentativeProfit));
+        $selectedClaim = $method === 'simplified' ? min($simplifiedDeduction, $line8TentativeProfit) : $regularClaim;
+        $line36 = $this->roundMoney($selectedClaim);
         $line36 = $this->applyLineAdjustments($line36, $adjustmentsByLine['line_36'] ?? []);
-        $line27 = $method === 'simplified' ? 0.0 : min($this->sumMoney([$line25, $line26]), $line36);
-        $line43 = $method === 'simplified'
-            ? $this->sumMoney([$line26, $priorYearDepreciationCarryover])
-            : max(0.0, $this->subtractMoney($regularClaim, $line36));
+        $line43 = $method === 'simplified' ? $priorYearOpCarryover : max(0.0, $this->subtractMoney($line26, $line27));
         $line43 = $this->applyLineAdjustments($line43, $adjustmentsByLine['line_43'] ?? []);
-        $caClaim = $method === 'simplified'
-            ? $this->sumMoney([$priorYearOpCarryoverCa, $priorYearDepreciationCarryoverCa])
-            : $this->sumMoney([$line25, $priorYearOpCarryoverCa, $priorYearDepreciationCarryoverCa]);
-        $line43Ca = $method === 'simplified' ? $caClaim : max(0.0, $this->subtractMoney($caClaim, min($caClaim, $line8TentativeProfit)));
+        $line44 = $method === 'simplified' ? $priorYearDepreciationCarryover : max(0.0, $this->subtractMoney($line32, $line33));
+        $line44 = $this->applyLineAdjustments($line44, $adjustmentsByLine['line_44'] ?? []);
+        $line26Ca = $method === 'regular' ? $this->sumMoney([$line24, $priorYearOpCarryoverCa]) : $priorYearOpCarryoverCa;
+        $line27Ca = min($line15, $line26Ca);
+        $line28Ca = max(0.0, $this->subtractMoney($line15, $line27Ca));
+        $line32Ca = $method === 'regular' ? $this->sumMoney([$line30, $priorYearDepreciationCarryoverCa]) : $priorYearDepreciationCarryoverCa;
+        $line33Ca = min($line28Ca, $line32Ca);
+        $line43Ca = max(0.0, $this->subtractMoney($line26Ca, $line27Ca));
+        $line44Ca = max(0.0, $this->subtractMoney($line32Ca, $line33Ca));
+        $carryoverToNextYear = $this->sumMoney([$line43, $line44]);
+        $carryoverToNextYearCa = $this->sumMoney([$line43Ca, $line44Ca]);
         $line36Sources = $this->lineSources($homeOfficeLines);
         $line43Sources = [];
+        $line44Sources = [];
 
-        if ($line26 !== 0.0) {
-            $line36Sources[] = $this->priorCarryforwardSource($entityId, $entityName, 'operating', $line26);
+        if ($line25 !== 0.0) {
+            $line36Sources[] = $this->priorCarryforwardSource($entityId, $entityName, 'operating', $line25, TaxFactRouting::Form8829Line25);
         }
 
-        if ($priorYearDepreciationCarryover !== 0.0) {
-            $line36Sources[] = $this->priorCarryforwardSource($entityId, $entityName, 'depreciation', $priorYearDepreciationCarryover);
+        if ($line31 !== 0.0) {
+            $line36Sources[] = $this->priorCarryforwardSource($entityId, $entityName, 'depreciation', $line31, TaxFactRouting::Form8829Line31);
         }
 
         if ($method === 'simplified' && $simplifiedDeduction !== 0.0) {
@@ -167,23 +195,47 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             );
         }
 
-        if ($method === 'regular' && $line43 !== 0.0) {
+        if ($line43 !== 0.0) {
             $disallowedSource = new TaxFactSource(
                 id: 'form-8829-'.$this->entityKey($entityData).'-line43-carryover',
-                label: "{$entityName} — home-office carryover to next year",
+                label: "{$entityName} — operating expense carryover to next year",
                 amount: -$line43,
                 sourceType: TaxFactSourceType::ScheduleCHomeOfficeDisallowed,
                 routing: TaxFactRouting::Form8829Line43,
-                routingReason: 'Home-office expenses exceeding the Schedule C tentative-profit limit carry forward to the next year.',
+                routingReason: 'Operating expenses exceeding the Form 8829 limit carry forward to the next year.',
             );
-            $line36Sources[] = $disallowedSource;
+            if ($method === 'regular') {
+                $line36Sources[] = $disallowedSource;
+            }
             $line43Sources[] = new TaxFactSource(
                 id: 'form-8829-'.$this->entityKey($entityData).'-line43-carryover-positive',
-                label: "{$entityName} — home-office carryover to next year",
+                label: "{$entityName} — operating expense carryover to next year",
                 amount: $line43,
                 sourceType: TaxFactSourceType::ScheduleCHomeOfficeDisallowed,
                 routing: TaxFactRouting::Form8829Line43,
-                routingReason: 'Home-office expenses exceeding the Schedule C tentative-profit limit carry forward to the next year.',
+                routingReason: 'Operating expenses exceeding the Form 8829 limit carry forward to the next year.',
+            );
+        }
+
+        if ($line44 !== 0.0) {
+            $disallowedSource = new TaxFactSource(
+                id: 'form-8829-'.$this->entityKey($entityData).'-line44-carryover',
+                label: "{$entityName} — casualty/depreciation carryover to next year",
+                amount: -$line44,
+                sourceType: TaxFactSourceType::ScheduleCHomeOfficeDisallowed,
+                routing: TaxFactRouting::Form8829Line44,
+                routingReason: 'Excess casualty losses and depreciation exceeding the Form 8829 limit carry forward to the next year.',
+            );
+            if ($method === 'regular') {
+                $line36Sources[] = $disallowedSource;
+            }
+            $line44Sources[] = new TaxFactSource(
+                id: 'form-8829-'.$this->entityKey($entityData).'-line44-carryover-positive',
+                label: "{$entityName} — casualty/depreciation carryover to next year",
+                amount: $line44,
+                sourceType: TaxFactSourceType::ScheduleCHomeOfficeDisallowed,
+                routing: TaxFactRouting::Form8829Line44,
+                routingReason: 'Excess casualty losses and depreciation exceeding the Form 8829 limit carry forward to the next year.',
             );
         }
 
@@ -195,6 +247,10 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             $line43Sources[] = $this->adjustmentSource($adjustment, TaxFactRouting::Form8829Line43);
         }
 
+        foreach ($adjustmentsByLine['line_44'] ?? [] as $adjustment) {
+            $line44Sources[] = $this->adjustmentSource($adjustment, TaxFactRouting::Form8829Line44);
+        }
+
         return new Form8829EntityFact(
             entityId: $entityId,
             entityName: $entityName,
@@ -203,7 +259,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             homeSqft: $homeSqft,
             monthsUsed: $monthsUsed,
             businessUsePercentage: $businessUsePercentage,
-            priorYearOpCarryover: $line26,
+            priorYearOpCarryover: $priorYearOpCarryover,
             priorYearOpCarryoverCa: $priorYearOpCarryoverCa,
             priorYearDepreciationCarryover: $priorYearDepreciationCarryover,
             priorYearDepreciationCarryoverCa: $priorYearDepreciationCarryoverCa,
@@ -213,20 +269,31 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             line7BusinessUsePercentage: $businessUsePercentage,
             line8TentativeProfit: $line8TentativeProfit,
             homeOfficeLines: $homeOfficeLines,
-            line24IndirectExpensesTotal: $line24,
-            line25AllowableIndirectExpenses: $line25,
-            line26PriorYearOpCarryover: $line26,
+            line14DeductibleMortgageInterestAndTaxes: $line14,
+            line15OperatingExpenseLimit: $line15,
+            line23OperatingExpensesTotal: $line23,
+            line24AllowableOperatingIndirectExpenses: $line24,
+            line25PriorYearOpCarryover: $line25,
+            line26TotalOperatingExpenseClaim: $line26,
             line27AllowableOperatingExpenses: $this->roundMoney($line27),
+            line28ExcessCasualtyAndDepreciationLimit: $line28,
+            line30Depreciation: $line30,
+            line31PriorYearExcessCasualtyAndDepreciationCarryover: $line31,
+            line32TotalExcessCasualtyAndDepreciation: $line32,
+            line33AllowableExcessCasualtyAndDepreciation: $line33,
             line36AllowableHomeOfficeDeduction: $line36,
-            line41ExcessCasualtyAndDepreciation: max(0.0, $this->subtractMoney($regularClaim, $this->sumMoney([$line25, $line26]))),
-            line42DepreciationCarryover: min($priorYearDepreciationCarryover, $line43),
-            line43CarryoverToNextYear: $line43,
-            line43CarryoverToNextYearCa: $this->roundMoney($line43Ca),
+            line43OperatingCarryoverToNextYear: $line43,
+            line43OperatingCarryoverToNextYearCa: $this->roundMoney($line43Ca),
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYear: $line44,
+            line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa: $this->roundMoney($line44Ca),
+            carryoverToNextYear: $carryoverToNextYear,
+            carryoverToNextYearCa: $this->roundMoney($carryoverToNextYearCa),
             regularDeduction: $regularClaim,
             simplifiedDeduction: $simplifiedDeduction,
             limitationReason: $this->limitationReason($selectedClaim, $line8TentativeProfit, $line36, $method),
             line36Sources: $line36Sources,
             line43Sources: $line43Sources,
+            line44Sources: $line44Sources,
         );
     }
 
@@ -244,16 +311,16 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
                 continue;
             }
 
-            $mapping = self::HOME_OFFICE_LINE_MAP[(string) $category] ?? ['line' => '23', 'label' => (string) ($categoryData['label'] ?? $category)];
+            $mapping = self::HOME_OFFICE_LINE_MAP[(string) $category] ?? ['line' => '22', 'label' => (string) ($categoryData['label'] ?? $category)];
             $lineRef = 'line_'.$mapping['line'];
             $indirectExpense = $this->parseMoney($categoryData['total'] ?? null) ?? 0.0;
-            $allowable = $this->roundMoney($indirectExpense * $businessUseRate);
-            $allowable = $this->applyLineAdjustments($allowable, $adjustmentsByLine[$lineRef] ?? []);
+            $baseAllowable = $this->roundMoney($indirectExpense * $businessUseRate);
+            $allowable = $this->applyLineAdjustments($baseAllowable, $adjustmentsByLine[$lineRef] ?? []);
             $sources = [
                 new TaxFactSource(
                     id: 'form-8829-'.$this->entityKey($entityData).'-'.$category,
                     label: $this->entityName($entityData).' — '.$mapping['label'],
-                    amount: $this->roundMoney($indirectExpense),
+                    amount: $baseAllowable,
                     sourceType: TaxFactSourceType::Form8829HomeOfficeExpense,
                     routing: $this->routingForLine($mapping['line']),
                     routingReason: 'Tagged home-office transactions are multiplied by the business-use percentage for Form 8829.',
@@ -276,6 +343,30 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         }
 
         return $lines;
+    }
+
+    /**
+     * @param  Form8829LineFact[]  $lines
+     * @param  string[]  $lineRefs
+     */
+    private function sumAllowableLines(array $lines, array $lineRefs): float
+    {
+        return $this->sumMoney(array_map(
+            static fn (Form8829LineFact $line): float => in_array($line->lineRef, $lineRefs, true) ? $line->allowable : 0.0,
+            $lines,
+        ));
+    }
+
+    /**
+     * @param  Form8829LineFact[]  $lines
+     * @param  string[]  $lineRefs
+     */
+    private function sumIndirectLines(array $lines, array $lineRefs): float
+    {
+        return $this->sumMoney(array_map(
+            static fn (Form8829LineFact $line): float => in_array($line->lineRef, $lineRefs, true) ? $line->indirectExpense : 0.0,
+            $lines,
+        ));
     }
 
     /**
@@ -307,7 +398,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             ->get();
 
         foreach ($adjustments as $adjustment) {
-            $entityKey = (int) ($adjustment->entity_id ?? 0);
+            $entityKey = (int) ($adjustment->entity_id ?? self::UNASSIGNED_ENTITY_KEY);
             $lineKey = $this->normalizeLineRef($adjustment->line_ref);
             $result[$entityKey][$lineKey][] = $adjustment;
         }
@@ -383,6 +474,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             return 0.0;
         }
 
+        // The simplified method uses the user's average monthly office square footage, capped at 300 sq ft.
         return $this->roundMoney(min((float) $officeSqft, 300.0) * 5.0 * ($monthsUsed / 12));
     }
 
@@ -420,14 +512,14 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         );
     }
 
-    private function priorCarryforwardSource(?int $entityId, string $entityName, string $kind, float $amount): TaxFactSource
+    private function priorCarryforwardSource(?int $entityId, string $entityName, string $kind, float $amount, TaxFactRouting $routing): TaxFactSource
     {
         return new TaxFactSource(
             id: "form-8829-{$entityId}-prior-{$kind}",
             label: "{$entityName} — prior-year {$kind} carryforward",
             amount: $amount,
             sourceType: TaxFactSourceType::Form8829PriorYearCarryforward,
-            routing: TaxFactRouting::Form8829Line36,
+            routing: $routing,
             routingReason: 'User-entered prior-year home-office carryforward is included in the regular-method Form 8829 limitation.',
         );
     }
@@ -460,11 +552,17 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
     private function routingForLine(string $line): ?TaxFactRouting
     {
         return match ($line) {
+            '18' => TaxFactRouting::Form8829Line18,
             '19' => TaxFactRouting::Form8829Line19,
+            '20' => TaxFactRouting::Form8829Line20,
             '21' => TaxFactRouting::Form8829Line21,
+            '22' => TaxFactRouting::Form8829Line22,
             '25' => TaxFactRouting::Form8829Line25,
+            '31' => TaxFactRouting::Form8829Line31,
             '36' => TaxFactRouting::Form8829Line36,
+            '42' => TaxFactRouting::Form8829Line42,
             '43' => TaxFactRouting::Form8829Line43,
+            '44' => TaxFactRouting::Form8829Line44,
             default => null,
         };
     }

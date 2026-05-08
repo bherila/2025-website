@@ -38,6 +38,8 @@ readonly class ScheduleCEntityFact
      * @param  TaxFactSource[]  $expenseSources
      * @param  TaxFactSource[]  $homeOfficeSources
      * @param  ScheduleCFlaggedExpenseRowFact[]  $flaggedExpenseRows
+     *
+     * expensesBeforeHomeOffice intentionally mirrors expenses because Schedule C line 30 is separate from line 28.
      */
     public function __construct(
         public ?int $entityId,

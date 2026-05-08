@@ -23,9 +23,15 @@ readonly class Form8829EntityFact
     public array $line43Sources;
 
     /**
+     * @var TaxFactSource[]
+     */
+    public array $line44Sources;
+
+    /**
      * @param  Form8829LineFact[]  $homeOfficeLines
      * @param  TaxFactSource[]  $line36Sources
      * @param  TaxFactSource[]  $line43Sources
+     * @param  TaxFactSource[]  $line44Sources
      */
     public function __construct(
         public ?int $entityId,
@@ -45,24 +51,36 @@ readonly class Form8829EntityFact
         public float $line7BusinessUsePercentage,
         public float $line8TentativeProfit,
         array $homeOfficeLines,
-        public float $line24IndirectExpensesTotal,
-        public float $line25AllowableIndirectExpenses,
-        public float $line26PriorYearOpCarryover,
+        public float $line14DeductibleMortgageInterestAndTaxes,
+        public float $line15OperatingExpenseLimit,
+        public float $line23OperatingExpensesTotal,
+        public float $line24AllowableOperatingIndirectExpenses,
+        public float $line25PriorYearOpCarryover,
+        public float $line26TotalOperatingExpenseClaim,
         public float $line27AllowableOperatingExpenses,
+        public float $line28ExcessCasualtyAndDepreciationLimit,
+        public float $line30Depreciation,
+        public float $line31PriorYearExcessCasualtyAndDepreciationCarryover,
+        public float $line32TotalExcessCasualtyAndDepreciation,
+        public float $line33AllowableExcessCasualtyAndDepreciation,
         public float $line36AllowableHomeOfficeDeduction,
-        public float $line41ExcessCasualtyAndDepreciation,
-        public float $line42DepreciationCarryover,
-        public float $line43CarryoverToNextYear,
-        public float $line43CarryoverToNextYearCa,
+        public float $line43OperatingCarryoverToNextYear,
+        public float $line43OperatingCarryoverToNextYearCa,
+        public float $line44ExcessCasualtyAndDepreciationCarryoverToNextYear,
+        public float $line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa,
+        public float $carryoverToNextYear,
+        public float $carryoverToNextYearCa,
         public float $regularDeduction,
         public float $simplifiedDeduction,
         public string $limitationReason,
         array $line36Sources,
         array $line43Sources,
+        array $line44Sources,
     ) {
         $this->homeOfficeLines = $homeOfficeLines;
         $this->line36Sources = $line36Sources;
         $this->line43Sources = $line43Sources;
+        $this->line44Sources = $line44Sources;
     }
 
     /**
@@ -88,20 +106,31 @@ readonly class Form8829EntityFact
             'line7BusinessUsePercentage' => $this->line7BusinessUsePercentage,
             'line8TentativeProfit' => $this->line8TentativeProfit,
             'homeOfficeLines' => array_map(static fn (Form8829LineFact $line): array => $line->toArray(), $this->homeOfficeLines),
-            'line24IndirectExpensesTotal' => $this->line24IndirectExpensesTotal,
-            'line25AllowableIndirectExpenses' => $this->line25AllowableIndirectExpenses,
-            'line26PriorYearOpCarryover' => $this->line26PriorYearOpCarryover,
+            'line14DeductibleMortgageInterestAndTaxes' => $this->line14DeductibleMortgageInterestAndTaxes,
+            'line15OperatingExpenseLimit' => $this->line15OperatingExpenseLimit,
+            'line23OperatingExpensesTotal' => $this->line23OperatingExpensesTotal,
+            'line24AllowableOperatingIndirectExpenses' => $this->line24AllowableOperatingIndirectExpenses,
+            'line25PriorYearOpCarryover' => $this->line25PriorYearOpCarryover,
+            'line26TotalOperatingExpenseClaim' => $this->line26TotalOperatingExpenseClaim,
             'line27AllowableOperatingExpenses' => $this->line27AllowableOperatingExpenses,
+            'line28ExcessCasualtyAndDepreciationLimit' => $this->line28ExcessCasualtyAndDepreciationLimit,
+            'line30Depreciation' => $this->line30Depreciation,
+            'line31PriorYearExcessCasualtyAndDepreciationCarryover' => $this->line31PriorYearExcessCasualtyAndDepreciationCarryover,
+            'line32TotalExcessCasualtyAndDepreciation' => $this->line32TotalExcessCasualtyAndDepreciation,
+            'line33AllowableExcessCasualtyAndDepreciation' => $this->line33AllowableExcessCasualtyAndDepreciation,
             'line36AllowableHomeOfficeDeduction' => $this->line36AllowableHomeOfficeDeduction,
-            'line41ExcessCasualtyAndDepreciation' => $this->line41ExcessCasualtyAndDepreciation,
-            'line42DepreciationCarryover' => $this->line42DepreciationCarryover,
-            'line43CarryoverToNextYear' => $this->line43CarryoverToNextYear,
-            'line43CarryoverToNextYearCa' => $this->line43CarryoverToNextYearCa,
+            'line43OperatingCarryoverToNextYear' => $this->line43OperatingCarryoverToNextYear,
+            'line43OperatingCarryoverToNextYearCa' => $this->line43OperatingCarryoverToNextYearCa,
+            'line44ExcessCasualtyAndDepreciationCarryoverToNextYear' => $this->line44ExcessCasualtyAndDepreciationCarryoverToNextYear,
+            'line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa' => $this->line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa,
+            'carryoverToNextYear' => $this->carryoverToNextYear,
+            'carryoverToNextYearCa' => $this->carryoverToNextYearCa,
             'regularDeduction' => $this->regularDeduction,
             'simplifiedDeduction' => $this->simplifiedDeduction,
             'limitationReason' => $this->limitationReason,
             'line36Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line36Sources),
             'line43Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line43Sources),
+            'line44Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->line44Sources),
         ];
     }
 }

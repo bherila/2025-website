@@ -17,6 +17,8 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 
 class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
 {
+    private const int UNASSIGNED_ENTITY_KEY = 0;
+
     public function __construct(
         K1CodeCharacterResolver $k1CodeCharacterResolver,
         private readonly ScheduleCSummaryService $scheduleCSummaryService,
@@ -45,7 +47,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $entityId = isset($entityData['entity_id']) ? (int) $entityData['entity_id'] : null;
-            $entity = $this->entityFact($entityData, $form8829->entityFor($entityId), $adjustmentsByEntity[$entityId ?? 0] ?? []);
+            $entity = $this->entityFact($entityData, $form8829->entityFor($entityId), $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? []);
             $entities[] = $entity;
             $entitiesByKey[$this->entityKey($entityData)] = $entity;
             $line31Sources[] = new TaxFactSource(
@@ -200,14 +202,16 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         $grossIncomeAfterReturns = $this->applyLineAdjustments($this->subtractMoney($grossReceipts, $returnsAndAllowances), $adjustmentsByLine['line_3'] ?? []);
         $expenses = $this->applyLineAdjustments($this->sumSources($expenseSources), $adjustmentsByLine['line_28'] ?? []);
         $tentativeProfitBeforeHomeOffice = $this->applyLineAdjustments($this->subtractMoney($grossIncomeAfterReturns, $expenses), $adjustmentsByLine['line_29'] ?? []);
-        $homeOfficeClaimed = $form8829Entity->regularDeduction ?? $this->sumSources($homeOfficeSources);
+        $homeOfficeClaimed = $form8829Entity instanceof Form8829EntityFact
+            ? ($form8829Entity->method === 'simplified' ? $form8829Entity->simplifiedDeduction : $form8829Entity->regularDeduction)
+            : $this->sumSources($homeOfficeSources);
         $homeOfficeAllowable = $this->applyLineAdjustments($form8829Entity->line36AllowableHomeOfficeDeduction ?? 0.0, $adjustmentsByLine['line_30'] ?? []);
-        $homeOfficeDisallowed = $form8829Entity->line43CarryoverToNextYear ?? 0.0;
+        $homeOfficeDisallowed = $form8829Entity->carryoverToNextYear ?? 0.0;
         $homeOfficePriorCarryforward = $this->sumMoney([
             $form8829Entity->priorYearOpCarryover ?? 0.0,
             $form8829Entity->priorYearDepreciationCarryover ?? 0.0,
         ]);
-        $homeOfficeCarryoverToNextYear = $form8829Entity->line43CarryoverToNextYear ?? 0.0;
+        $homeOfficeCarryoverToNextYear = $form8829Entity->carryoverToNextYear ?? 0.0;
         $netProfitBeforeHomeOffice = $tentativeProfitBeforeHomeOffice;
         $netProfit = $this->applyLineAdjustments($this->subtractMoney($netProfitBeforeHomeOffice, $homeOfficeAllowable), $adjustmentsByLine['line_31'] ?? []);
 
@@ -329,7 +333,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             ->get();
 
         foreach ($adjustments as $adjustment) {
-            $entityKey = (int) ($adjustment->entity_id ?? 0);
+            $entityKey = (int) ($adjustment->entity_id ?? self::UNASSIGNED_ENTITY_KEY);
             $lineKey = $this->normalizeLineRef($adjustment->line_ref);
             $result[$entityKey][$lineKey][] = $adjustment;
         }

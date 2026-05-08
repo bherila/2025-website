@@ -1447,11 +1447,170 @@ class TaxPreviewFactsServiceTest extends TestCase
         $form8829Entity = $facts['form8829']['entities'][0];
 
         $this->assertSame(12.5, $form8829Entity['businessUsePercentage']);
-        $this->assertSame(1500.0, $form8829Entity['line25AllowableIndirectExpenses']);
+        $this->assertSame('19', $form8829Entity['homeOfficeLines'][0]['lineRef']);
+        $this->assertSame(1500.0, $form8829Entity['line24AllowableOperatingIndirectExpenses']);
+        $this->assertSame(12738.0, $form8829Entity['line25PriorYearOpCarryover']);
+        $this->assertSame(14238.0, $form8829Entity['line26TotalOperatingExpenseClaim']);
+        $this->assertSame(10000.0, $form8829Entity['line27AllowableOperatingExpenses']);
         $this->assertSame(10000.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
-        $this->assertSame(4238.0, $form8829Entity['line43CarryoverToNextYear']);
+        $this->assertSame(4238.0, $form8829Entity['line43OperatingCarryoverToNextYear']);
+        $this->assertSame(4238.0, $form8829Entity['carryoverToNextYear']);
         $this->assertSame(10000.0, $facts['scheduleC']['homeOfficeAllowable']);
         $this->assertSame(0.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_form_8829_simplified_method_uses_square_foot_cap_and_month_proration(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Simplified LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 10000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -12000);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'method' => 'simplified',
+            'office_sqft' => 400,
+            'home_sqft' => 1000,
+            'months_used' => 6,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $form8829Entity = $facts['form8829']['entities'][0];
+
+        $this->assertSame([], $form8829Entity['homeOfficeLines']);
+        $this->assertSame(0.0, $form8829Entity['line24AllowableOperatingIndirectExpenses']);
+        $this->assertSame(750.0, $form8829Entity['simplifiedDeduction']);
+        $this->assertSame(750.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
+        $this->assertSame(750.0, $facts['scheduleC']['homeOfficeAllowable']);
+        $this->assertSame(9250.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_form_8829_regular_method_prorates_business_use_by_months(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Partial Year LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 10000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -12000);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'office_sqft' => 120,
+            'home_sqft' => 1200,
+            'months_used' => 6,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $form8829Entity = $facts['form8829']['entities'][0];
+
+        $this->assertSame(5.0, $form8829Entity['businessUsePercentage']);
+        $this->assertSame(600.0, $form8829Entity['line24AllowableOperatingIndirectExpenses']);
+        $this->assertSame(600.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
+        $this->assertSame(9400.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_form_8829_tracks_federal_and_ca_carryovers_by_line(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Carryover LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -12000);
+        $this->createForm8829Input($user->id, $entityId, 2025, [
+            'office_sqft' => 100,
+            'home_sqft' => 1000,
+            'prior_year_op_carryover' => 100,
+            'prior_year_op_carryover_ca' => 300,
+            'prior_year_depreciation_carryover' => 500,
+            'prior_year_depreciation_carryover_ca' => 700,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $form8829Entity = $facts['form8829']['entities'][0];
+
+        $this->assertSame(300.0, $form8829Entity['line43OperatingCarryoverToNextYear']);
+        $this->assertSame(500.0, $form8829Entity['line44ExcessCasualtyAndDepreciationCarryoverToNextYear']);
+        $this->assertSame(800.0, $form8829Entity['carryoverToNextYear']);
+        $this->assertSame(500.0, $form8829Entity['line43OperatingCarryoverToNextYearCa']);
+        $this->assertSame(700.0, $form8829Entity['line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa']);
+        $this->assertSame(1200.0, $form8829Entity['carryoverToNextYearCa']);
+        $this->assertSame(800.0, $facts['scheduleC']['homeOfficeCarryoverToNextYear']);
+    }
+
+    public function test_schedule_c_business_returns_split_to_lines_1_2_and_3(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Returns LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $returnsTag = $this->createScheduleCTag($user->id, $entityId, 'business_returns', 'Returns and allowances');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 5000);
+        $this->tagTransaction($account->acct_id, $returnsTag, '2025-01-02', -300);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+
+        $this->assertSame(5000.0, $facts['scheduleC']['grossReceiptsTotal']);
+        $this->assertSame(300.0, $facts['scheduleC']['returnsAndAllowancesTotal']);
+        $this->assertSame(4700.0, $facts['scheduleC']['grossIncomeAfterReturns']);
+        $this->assertSame(4700.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_schedule_c_adjustment_kind_adds_to_computed_line(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Adjustment LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $expenseTag = $this->createScheduleCTag($user->id, $entityId, 'sce_supplies', 'Supplies');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $expenseTag, '2025-02-01', -100);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'line_ref' => 'line_28',
+            'kind' => 'adjustment',
+            'amount' => 25,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+
+        $this->assertSame(125.0, $facts['scheduleC']['expensesTotal']);
+        $this->assertSame(875.0, $facts['scheduleC']['netProfit']);
+    }
+
+    public function test_schedule_c_supporting_detail_and_follow_up_do_not_change_computed_amount(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Review LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $expenseTag = $this->createScheduleCTag($user->id, $entityId, 'sce_supplies', 'Supplies');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $expenseTag, '2025-02-01', -100);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'line_ref' => 'line_28',
+            'kind' => 'supporting_detail',
+            'description' => 'Attach receipts.',
+        ]);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'line_ref' => 'line_28',
+            'kind' => 'follow_up_flag',
+            'description' => 'Review vendor classification.',
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleC');
+        $expenseSources = collect($facts['scheduleC']['entities'][0]['expenseSources']);
+
+        $this->assertSame(100.0, $facts['scheduleC']['expensesTotal']);
+        $this->assertSame(900.0, $facts['scheduleC']['netProfit']);
+        $this->assertSame(2, $expenseSources->whereIn('sourceType', ['user_supporting_detail', 'user_follow_up_flag'])->count());
     }
 
     public function test_schedule_c_positive_expense_rows_are_flagged_and_excluded(): void
@@ -2589,6 +2748,26 @@ class TaxPreviewFactsServiceTest extends TestCase
             'prior_year_depreciation_carryover' => 0,
             'prior_year_depreciation_carryover_ca' => 0,
             'notes' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $overrides));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createTaxLineAdjustment(int $userId, int $entityId, array $overrides = []): void
+    {
+        DB::table('fin_tax_line_adjustments')->insert(array_merge([
+            'user_id' => $userId,
+            'tax_year' => 2025,
+            'form' => 'schedule_c',
+            'entity_id' => $entityId,
+            'line_ref' => 'line_31',
+            'kind' => 'supporting_detail',
+            'amount' => null,
+            'description' => null,
+            'status' => 'applied',
             'created_at' => now(),
             'updated_at' => now(),
         ], $overrides));

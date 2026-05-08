@@ -164,7 +164,7 @@ export default function Form8829InputsForm({
     }
   }
 
-  const followUps = followUpSources(facts?.line36Sources).length + followUpSources(facts?.line43Sources).length
+  const followUps = followUpSources(facts?.line36Sources).length + followUpSources(facts?.line43Sources).length + followUpSources(facts?.line44Sources).length
 
   return (
     <div className="space-y-4">
@@ -258,14 +258,21 @@ export default function Form8829InputsForm({
               value={line.allowable}
             />
           ))}
-          <FormLine boxRef="24" label="Total indirect expenses" value={facts.line24IndirectExpensesTotal} />
+          <FormLine boxRef="14" label="Mortgage interest, taxes, and casualty portion" value={facts.line14DeductibleMortgageInterestAndTaxes} />
+          <FormLine boxRef="15" label="Operating expense limit" value={facts.line15OperatingExpenseLimit} />
+          <FormLine boxRef="23" label="Operating expenses before business-use percentage" value={facts.line23OperatingExpensesTotal} />
+          <FormLine boxRef="24" label="Allowable operating indirect expenses" value={facts.line24AllowableOperatingIndirectExpenses} />
           <FormLine
             boxRef="25"
-            label={<span className="inline-flex items-center gap-1">Allowable indirect expenses {lineControl(taxYear, entityId, 'line_25', onSaved)}</span>}
-            value={facts.line25AllowableIndirectExpenses}
+            label={<span className="inline-flex items-center gap-1">Prior-year operating carryover {lineControl(taxYear, entityId, 'line_25', onSaved)}</span>}
+            value={facts.line25PriorYearOpCarryover}
           />
-          <FormLine boxRef="26" label="Prior-year operating carryover" value={facts.line26PriorYearOpCarryover} />
+          <FormLine boxRef="26" label="Total operating expense claim" value={facts.line26TotalOperatingExpenseClaim} />
           <FormLine boxRef="27" label="Allowable operating expenses" value={facts.line27AllowableOperatingExpenses} />
+          <FormLine boxRef="28" label="Casualty/depreciation limit" value={facts.line28ExcessCasualtyAndDepreciationLimit} />
+          <FormLine boxRef="30" label="Depreciation" value={facts.line30Depreciation} />
+          <FormLine boxRef="31" label="Prior-year casualty/depreciation carryover" value={facts.line31PriorYearExcessCasualtyAndDepreciationCarryover} />
+          <FormLine boxRef="33" label="Allowable casualty/depreciation" value={facts.line33AllowableExcessCasualtyAndDepreciation} />
           <FormTotalLine
             boxRef="36"
             label="Allowable home office deduction"
@@ -274,12 +281,16 @@ export default function Form8829InputsForm({
           <div className="flex items-center justify-end px-3 py-1">
             {lineControl(taxYear, entityId, 'line_36', onSaved)}
           </div>
-          <FormLine boxRef="42" label="Depreciation carryover" value={facts.line42DepreciationCarryover} />
-          <FormTotalLine boxRef="43" label="Carryover to next year" value={facts.line43CarryoverToNextYear} />
+          <FormTotalLine boxRef="43" label="Operating carryover to next year" value={facts.line43OperatingCarryoverToNextYear} />
           <div className="flex items-center justify-end px-3 py-1">
             {lineControl(taxYear, entityId, 'line_43', onSaved)}
           </div>
-          <FormLine boxRef="CA" label="CA carryover to next year" value={facts.line43CarryoverToNextYearCa} />
+          <FormTotalLine boxRef="44" label="Casualty/depreciation carryover to next year" value={facts.line44ExcessCasualtyAndDepreciationCarryoverToNextYear} />
+          <div className="flex items-center justify-end px-3 py-1">
+            {lineControl(taxYear, entityId, 'line_44', onSaved)}
+          </div>
+          <FormLine boxRef="CA 43" label="CA operating carryover to next year" value={facts.line43OperatingCarryoverToNextYearCa} />
+          <FormLine boxRef="CA 44" label="CA casualty/depreciation carryover to next year" value={facts.line44ExcessCasualtyAndDepreciationCarryoverToNextYearCa} />
         </FormBlock>
       )}
     </div>

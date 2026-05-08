@@ -237,7 +237,7 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
               const expensesBeforeHomeOffice = backendEntity?.expensesBeforeHomeOffice ?? expenseTotal
               const tentativeProfitBeforeHomeOffice = backendEntity?.tentativeProfitBeforeHomeOffice ?? currency(grossIncomeAfterReturns).subtract(expensesBeforeHomeOffice).value
               const homeOfficeAllowable = backendEntity?.homeOfficeAllowable ?? form8829Entity?.line36AllowableHomeOfficeDeduction ?? 0
-              const homeOfficeCarryoverToNextYear = backendEntity?.homeOfficeCarryoverToNextYear ?? form8829Entity?.line43CarryoverToNextYear ?? 0
+              const homeOfficeCarryoverToNextYear = backendEntity?.homeOfficeCarryoverToNextYear ?? form8829Entity?.carryoverToNextYear ?? 0
               const netProfit = backendEntity?.netProfit ?? currency(tentativeProfitBeforeHomeOffice).subtract(homeOfficeAllowable).value
 
               return (

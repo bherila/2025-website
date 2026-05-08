@@ -71,6 +71,44 @@ class TaxLineAdjustmentControllerTest extends TestCase
             ->assertJsonValidationErrors(['amount']);
     }
 
+    public function test_update_rejects_numeric_adjustment_without_amount(): void
+    {
+        $user = $this->createUser();
+        $entityId = $this->createScheduleCEntity($user->id);
+
+        $create = $this->actingAs($user)->postJson('/api/finance/tax-line-adjustments', [
+            'tax_year' => 2025,
+            'form' => 'schedule_c',
+            'entity_id' => $entityId,
+            'line_ref' => 'line_30',
+            'kind' => 'supporting_detail',
+            'description' => 'Review only.',
+        ]);
+
+        $id = $create->json('id');
+
+        $this->actingAs($user)
+            ->patchJson("/api/finance/tax-line-adjustments/{$id}", [
+                'kind' => 'override',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['amount']);
+
+        $this->actingAs($user)
+            ->patchJson("/api/finance/tax-line-adjustments/{$id}", [
+                'kind' => 'override',
+                'amount' => 10,
+            ])
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->patchJson("/api/finance/tax-line-adjustments/{$id}", [
+                'amount' => null,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['amount']);
+    }
+
     public function test_rejects_other_users_entity(): void
     {
         $user = $this->createUser();

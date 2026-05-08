@@ -10,6 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * Tax line adjustments can either affect computed facts or serve as review metadata.
+ *
+ * Status semantics:
+ * - open: active and still needs review; numeric overrides/adjustments are applied optimistically.
+ * - applied: active and reviewed; numeric overrides/adjustments remain applied.
+ * - resolved: inactive historical note; builders ignore it.
+ *
  * @property int $id
  * @property int $user_id
  * @property int $tax_year
