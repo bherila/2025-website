@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { fetchWrapper } from '@/fetchWrapper'
 
 interface InvitePeopleModalProps {
   open: boolean
@@ -17,6 +18,18 @@ interface InvitePeopleModalProps {
 }
 
 const NEW_USER_VALUE = '__new_user__'
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  return 'An unexpected error occurred'
+}
 
 export default function InvitePeopleModal({ open, onOpenChange, companies, onSuccess, preselectedCompanyId }: InvitePeopleModalProps) {
   const [users, setUsers] = useState<User[]>([])
@@ -32,11 +45,16 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/client/mgmt/users')
-      const data = await response.json()
-      setUsers(data)
+      const data = await fetchWrapper.get('/api/client/mgmt/users')
+
+      if (!Array.isArray(data)) {
+        throw new Error('Unexpected response from the user list API.')
+      }
+
+      setUsers(data as User[])
     } catch (error) {
       console.error('Error fetching users:', error)
+      setUsers([])
     }
   }
 
@@ -78,57 +96,24 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
     setError(null)
 
     try {
-      let response: Response
-
       if (isNewUser) {
-        // Create new user and assign
-        response = await fetch('/api/client/mgmt/create-user-and-assign', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-          },
-          body: JSON.stringify({
-            name: newUserName.trim(),
-            email: newUserEmail.trim(),
-            client_company_id: parseInt(selectedCompanyId)
-          })
+        await fetchWrapper.post('/api/client/mgmt/create-user-and-assign', {
+          name: newUserName.trim(),
+          email: newUserEmail.trim(),
+          client_company_id: parseInt(selectedCompanyId)
         })
       } else {
-        // Assign existing user
-        response = await fetch('/api/client/mgmt/assign-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-          },
-          body: JSON.stringify({
-            user_id: parseInt(selectedUserId),
-            client_company_id: parseInt(selectedCompanyId)
-          })
+        await fetchWrapper.post('/api/client/mgmt/assign-user', {
+          user_id: parseInt(selectedUserId),
+          client_company_id: parseInt(selectedCompanyId)
         })
       }
 
-      if (response.ok) {
-        onSuccess()
-        handleClose()
-      } else {
-        const data = await response.json()
-        if (data.errors) {
-          // Validation errors
-          const messages = Object.values(data.errors).flat().join(', ')
-          setError(messages)
-        } else if (data.error) {
-          setError(data.error)
-        } else if (data.message) {
-          setError(data.message)
-        } else {
-          setError('Failed to complete operation')
-        }
-      }
+      onSuccess()
+      handleClose()
     } catch (error) {
       console.error('Error:', error)
-      setError('An unexpected error occurred')
+      setError(getErrorMessage(error))
     } finally {
       setLoading(false)
     }

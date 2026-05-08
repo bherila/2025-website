@@ -1,13 +1,27 @@
 import currency from 'currency.js'
-import { ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
-import { useEffect,useState } from 'react'
+import { AlertCircle, ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
+import { useCallback,useEffect,useState } from 'react'
 
 import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
 import type { ClientCompany } from '@/client-management/types/common'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { fetchWrapper } from '@/fetchWrapper'
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  return 'Failed to load client companies.'
+}
 
 function formatLastLogin(lastLogin: string | null | undefined): string {
   if (!lastLogin) return 'never logged in'
@@ -18,25 +32,34 @@ function formatLastLogin(lastLogin: string | null | undefined): string {
 export default function ClientManagementIndexPage() {
   const [companies, setCompanies] = useState<ClientCompany[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async (): Promise<void> => {
+    setError(null)
+
     try {
-      const response = await fetch('/api/client/mgmt/companies')
-      const data = await response.json()
-      setCompanies(data)
+      const data = await fetchWrapper.get('/api/client/mgmt/companies')
+
+      if (!Array.isArray(data)) {
+        throw new Error('Unexpected response from the company list API.')
+      }
+
+      setCompanies(data as ClientCompany[])
     } catch (error) {
       console.error('Error fetching companies:', error)
+      setCompanies([])
+      setError(getErrorMessage(error))
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchCompanies()
-  }, [])
+    void fetchCompanies()
+  }, [fetchCompanies])
 
   const openInviteModal = (companyId?: number) => {
     setSelectedCompanyId(companyId || null)
@@ -80,6 +103,19 @@ export default function ClientManagementIndexPage() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Unable to load companies</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button variant="outline" size="sm" onClick={() => void fetchCompanies()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="space-y-4">
         {activeCompanies.map(company => (

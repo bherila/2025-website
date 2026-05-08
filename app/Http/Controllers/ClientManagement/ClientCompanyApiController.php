@@ -4,9 +4,12 @@ namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
@@ -19,45 +22,172 @@ class ClientCompanyApiController extends Controller
      */
     public function index(): JsonResponse
     {
-        (['users', 'invoices.payments', 'tasks'])->get()->map(function ($company) {
-            $unpaidInvoices = $company->invoices
-                ->whereNotIn('status', ['paid', 'void'])
-                ->filter(function ($invoice) {
-                    return $invoice->remaining_balance > 0;
-                })
-                ->values();
+        Gate::authorize('Admin');
 
-            $company->unpaid_invoices = $unpaidInvoices;
-            $company->total_balance_due = $unpaidInvoices->sum('remaining_balance');
-
-            $company->uninvoiced_hours = $company->timeEntries()
-                ->where('is_billable', true)
-                ->whereNull('client_invoice_line_id')
-                ->sum('minutes_worked') / 60;
-
-            // Calculate task totals
-            $unbilledTasks = $company->tasks()
-                ->where('milestone_price', '>', 0)
-                ->whereNull('client_invoice_line_id')
-                ->get();
-
-            $company->uninvoiced_task_total = $unbilledTasks->sum('milestone_price');
-            $company->uninvoiced_task_complete_total = $unbilledTasks
-                ->whereNotNull('completed_at')
-                ->sum('milestone_price');
-            $company->uninvoiced_task_incomplete_total = $unbilledTasks
-                ->whereNull('completed_at')
-                ->sum('milestone_price');
-
-            // Calculate lifetime value (sum of all paid invoices)
-            $company->lifetime_value = $company->invoices
-                ->where('status', 'paid')
-                ->sum('invoice_total');
-
-            return $company;
-        });
+        $companies = ClientCompany::query()
+            ->with([
+                'users' => function ($query): void {
+                    $query
+                        ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
+                        ->orderBy('users.name');
+                },
+                'invoices' => function ($query): void {
+                    $query
+                        ->select(
+                            'client_invoice_id',
+                            'client_company_id',
+                            'invoice_number',
+                            'invoice_total',
+                            'issue_date',
+                            'due_date',
+                            'status'
+                        )
+                        ->whereNotIn('status', ['paid', 'void'])
+                        ->with([
+                            'payments' => function ($query): void {
+                                $query->select('client_invoice_payment_id', 'client_invoice_id', 'amount');
+                            },
+                        ])
+                        ->orderBy('due_date')
+                        ->orderBy('client_invoice_id');
+                },
+            ])
+            ->withSum([
+                'timeEntries as uninvoiced_minutes' => function ($query): void {
+                    $query
+                        ->where('is_billable', true)
+                        ->whereNull('client_invoice_line_id');
+                },
+            ], 'minutes_worked')
+            ->withSum([
+                'tasks as uninvoiced_task_total' => function ($query): void {
+                    $query
+                        ->where('milestone_price', '>', 0)
+                        ->whereNull('client_invoice_line_id');
+                },
+            ], 'milestone_price')
+            ->withSum([
+                'tasks as uninvoiced_task_complete_total' => function ($query): void {
+                    $query
+                        ->where('milestone_price', '>', 0)
+                        ->whereNull('client_invoice_line_id')
+                        ->whereNotNull('completed_at');
+                },
+            ], 'milestone_price')
+            ->withSum([
+                'tasks as uninvoiced_task_incomplete_total' => function ($query): void {
+                    $query
+                        ->where('milestone_price', '>', 0)
+                        ->whereNull('client_invoice_line_id')
+                        ->whereNull('completed_at');
+                },
+            ], 'milestone_price')
+            ->withSum([
+                'invoices as lifetime_value' => function ($query): void {
+                    $query->where('status', 'paid');
+                },
+            ], 'invoice_total')
+            ->orderByDesc('is_active')
+            ->orderBy('company_name')
+            ->get()
+            ->map(fn (ClientCompany $company): array => $this->serializeCompanyForIndex($company))
+            ->values();
 
         return response()->json($companies);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeCompanyForIndex(ClientCompany $company): array
+    {
+        /** @var Collection<int, ClientInvoice> $invoices */
+        $invoices = $company->getRelation('invoices');
+
+        $unpaidInvoices = $invoices
+            ->filter(fn (ClientInvoice $invoice): bool => $invoice->remaining_balance > 0)
+            ->values();
+
+        return [
+            'id' => $company->id,
+            'company_name' => $company->company_name,
+            'slug' => $company->slug,
+            'address' => $company->address,
+            'website' => $company->website,
+            'phone_number' => $company->phone_number,
+            'default_hourly_rate' => $company->default_hourly_rate,
+            'additional_notes' => $company->additional_notes,
+            'is_active' => (bool) $company->is_active,
+            'last_activity' => $this->serializeDateForJson($company->last_activity),
+            'created_at' => $this->serializeDateForJson($company->created_at),
+            'users' => $this->serializeUsersForIndex($company),
+            'agreements' => [],
+            'total_balance_due' => round((float) $unpaidInvoices->sum(
+                fn (ClientInvoice $invoice): float => $invoice->remaining_balance
+            ), 2),
+            'uninvoiced_hours' => round($this->numericCompanyAttribute($company, 'uninvoiced_minutes') / 60, 2),
+            'uninvoiced_task_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_total'), 2),
+            'uninvoiced_task_complete_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_complete_total'), 2),
+            'uninvoiced_task_incomplete_total' => round($this->numericCompanyAttribute($company, 'uninvoiced_task_incomplete_total'), 2),
+            'lifetime_value' => round($this->numericCompanyAttribute($company, 'lifetime_value'), 2),
+            'unpaid_invoices' => $unpaidInvoices
+                ->map(fn (ClientInvoice $invoice): array => $this->serializeUnpaidInvoiceForIndex($invoice))
+                ->all(),
+        ];
+    }
+
+    /**
+     * @return array<int, array{id: int, name: string, email: string, user_role: string, last_login_date: string|null}>
+     */
+    private function serializeUsersForIndex(ClientCompany $company): array
+    {
+        /** @var Collection<int, User> $users */
+        $users = $company->getRelation('users');
+
+        return $users
+            ->map(fn (User $user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'user_role' => $user->user_role,
+                'last_login_date' => $this->serializeDateForJson($user->last_login_date),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeUnpaidInvoiceForIndex(ClientInvoice $invoice): array
+    {
+        return [
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_total' => round((float) $invoice->invoice_total, 2),
+            'issue_date' => $this->serializeDateForJson($invoice->issue_date),
+            'due_date' => $this->serializeDateForJson($invoice->due_date),
+            'status' => $invoice->status,
+            'remaining_balance' => round($invoice->remaining_balance, 2),
+        ];
+    }
+
+    private function numericCompanyAttribute(ClientCompany $company, string $attribute): float
+    {
+        return (float) ($company->getAttribute($attribute) ?? 0);
+    }
+
+    private function serializeDateForJson(mixed $value): ?string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        return null;
     }
 
     /**
