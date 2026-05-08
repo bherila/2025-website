@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
@@ -197,9 +198,9 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        $company = ClientCompany::with(['users', 'agreements'])->findOrFail($id);
+        $company = $this->findCompanyForDetail($id);
 
-        return response()->json($company);
+        return response()->json($this->serializeCompanyForDetail($company));
     }
 
     /**
@@ -222,9 +223,13 @@ class ClientCompanyApiController extends Controller
 
         $company = ClientCompany::findOrFail($id);
 
-        // Validate slug uniqueness if provided and different
-        if (isset($validatedData['slug']) && $validatedData['slug'] !== $company->slug) {
-            $slug = ClientCompany::generateSlug($validatedData['slug']);
+        if (array_key_exists('slug', $validatedData)) {
+            $slugSource = $validatedData['slug'] ?: $validatedData['company_name'];
+            $slug = ClientCompany::generateSlug($slugSource);
+            if ($slug === '') {
+                $slug = 'company-'.$company->id;
+            }
+
             if (ClientCompany::where('slug', $slug)->where('id', '!=', $id)->exists()) {
                 return response()->json([
                     'errors' => ['slug' => ['This slug is already in use by another company.']],
@@ -236,11 +241,85 @@ class ClientCompanyApiController extends Controller
         $company->update($validatedData);
         $company->touchLastActivity();
 
+        $company = $this->findCompanyForDetail($company->id);
+
         return response()->json([
             'success' => true,
             'message' => 'Company updated successfully',
-            'company' => $company->fresh('users'),
+            'company' => $this->serializeCompanyForDetail($company),
         ]);
+    }
+
+    private function findCompanyForDetail(int $id): ClientCompany
+    {
+        return ClientCompany::query()
+            ->with([
+                'users' => function ($query): void {
+                    $query
+                        ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
+                        ->orderBy('users.name');
+                },
+                'agreements' => function ($query): void {
+                    $query
+                        ->orderByDesc('active_date')
+                        ->orderByDesc('id');
+                },
+            ])
+            ->findOrFail($id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeCompanyForDetail(ClientCompany $company): array
+    {
+        return [
+            'id' => $company->id,
+            'company_name' => $company->company_name,
+            'slug' => $company->slug,
+            'address' => $company->address,
+            'website' => $company->website,
+            'phone_number' => $company->phone_number,
+            'default_hourly_rate' => $company->default_hourly_rate,
+            'additional_notes' => $company->additional_notes,
+            'is_active' => (bool) $company->is_active,
+            'last_activity' => $this->serializeDateForJson($company->last_activity),
+            'created_at' => $this->serializeDateForJson($company->created_at),
+            'updated_at' => $this->serializeDateForJson($company->updated_at),
+            'users' => $this->serializeUsersForIndex($company),
+            'agreements' => $this->serializeAgreementsForDetail($company),
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function serializeAgreementsForDetail(ClientCompany $company): array
+    {
+        /** @var Collection<int, ClientAgreement> $agreements */
+        $agreements = $company->getRelation('agreements');
+
+        return $agreements
+            ->map(fn (ClientAgreement $agreement): array => [
+                'id' => $agreement->id,
+                'client_company_id' => $agreement->client_company_id,
+                'active_date' => $this->serializeDateForJson($agreement->active_date),
+                'termination_date' => $this->serializeDateForJson($agreement->termination_date),
+                'agreement_text' => $agreement->agreement_text,
+                'agreement_link' => $agreement->agreement_link,
+                'client_company_signed_date' => $this->serializeDateForJson($agreement->client_company_signed_date),
+                'client_company_signed_user_id' => $agreement->client_company_signed_user_id,
+                'client_company_signed_name' => $agreement->client_company_signed_name,
+                'client_company_signed_title' => $agreement->client_company_signed_title,
+                'monthly_retainer_hours' => $agreement->monthly_retainer_hours,
+                'catch_up_threshold_hours' => $agreement->catch_up_threshold_hours,
+                'rollover_months' => $agreement->rollover_months,
+                'hourly_rate' => $agreement->hourly_rate,
+                'monthly_retainer_fee' => $agreement->monthly_retainer_fee,
+                'is_visible_to_client' => (bool) $agreement->is_visible_to_client,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

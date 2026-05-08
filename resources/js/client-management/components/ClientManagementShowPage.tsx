@@ -3,7 +3,7 @@ import { useCallback,useEffect,useState } from 'react'
 
 import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
 import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
-import type {ClientCompany } from '@/client-management/types/common'
+import type { ClientCompany } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,9 +12,64 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchWrapper } from '@/fetchWrapper'
 
 interface ClientManagementShowPageProps {
   companyId: number
+}
+
+interface CompanyFormData {
+  company_name: string
+  slug: string
+  address: string
+  website: string
+  phone_number: string
+  default_hourly_rate: string
+  additional_notes: string
+  is_active: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  return fallback
+}
+
+function normalizeCompanyResponse(value: unknown): ClientCompany {
+  if (!isRecord(value)) {
+    throw new Error('Unexpected response from the company detail API.')
+  }
+
+  const company = value as unknown as ClientCompany
+
+  return {
+    ...company,
+    users: Array.isArray(company.users) ? company.users : [],
+    agreements: Array.isArray(company.agreements) ? company.agreements : [],
+  }
+}
+
+function companyToFormData(company: ClientCompany): CompanyFormData {
+  return {
+    company_name: company.company_name,
+    slug: company.slug || '',
+    address: company.address || '',
+    website: company.website || '',
+    phone_number: company.phone_number || '',
+    default_hourly_rate: company.default_hourly_rate || '',
+    additional_notes: company.additional_notes || '',
+    is_active: company.is_active ?? true,
+  }
 }
 
 export default function ClientManagementShowPage({ companyId }: ClientManagementShowPageProps) {
@@ -28,7 +83,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     variant: 'default' | 'destructive'
   } | null>(null)
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CompanyFormData>({
     company_name: '',
     slug: '',
     address: '',
@@ -51,27 +106,17 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   const fetchCompany = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}`);
-      if (!response.ok) throw new Error('Failed to fetch company data');
-      
-      const found = await response.json();
-      
-      if (found) {
-        setCompany(found)
-        setFormData({
-          company_name: found.company_name,
-          slug: found.slug || '',
-          address: found.address || '',
-          website: found.website || '',
-          phone_number: found.phone_number || '',
-          default_hourly_rate: found.default_hourly_rate || '',
-          additional_notes: found.additional_notes || '',
-          is_active: found.is_active
-        })
-      }
+      const found = normalizeCompanyResponse(await fetchWrapper.get(`/api/client/mgmt/companies/${companyId}`))
+
+      setCompany(found)
+      setFormData(companyToFormData(found))
     } catch (error) {
       console.error('Error fetching company:', error)
-      setAlertInfo({ show: true, message: 'Failed to load company details.', variant: 'destructive' })
+      setAlertInfo({
+        show: true,
+        message: getErrorMessage(error, 'Failed to load company details.'),
+        variant: 'destructive'
+      })
     } finally {
       setLoading(false)
     }
@@ -86,33 +131,24 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/client/mgmt/companies/${companyId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        },
-        body: JSON.stringify(formData)
-      })
+      const data = await fetchWrapper.put(`/api/client/mgmt/companies/${companyId}`, formData)
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.errors) {
-            console.error('Validation errors:', data.errors);
-            const errorMessages = Object.values(data.errors).flat().join('; ');
-            setAlertInfo({ show: true, message: `Failed to update company: ${errorMessages}`, variant: 'destructive' })
-        } else {
-            throw new Error(data.message || 'Failed to update company');
-        }
-      } else {
-        setCompany(data.company);
-        setAlertInfo({ show: true, message: 'Company updated successfully', variant: 'default' })
+      if (!isRecord(data) || !('company' in data)) {
+        throw new Error('Unexpected response from the company update API.')
       }
+
+      const updatedCompany = normalizeCompanyResponse(data.company)
+
+      setCompany(updatedCompany)
+      setFormData(companyToFormData(updatedCompany))
+      setAlertInfo({ show: true, message: 'Company updated successfully', variant: 'default' })
     } catch (error) {
       console.error('Error updating company:', error)
-      setAlertInfo({ show: true, message: 'Failed to update company', variant: 'destructive' })
+      setAlertInfo({
+        show: true,
+        message: getErrorMessage(error, 'Failed to update company'),
+        variant: 'destructive'
+      })
     } finally {
       setSaving(false)
     }
@@ -122,21 +158,15 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     if (!confirm('Remove this user from the company?')) return
 
     try {
-      const response = await fetch(`/api/client/mgmt/${companyId}/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-        }
-      })
-
-      if (response.ok) {
-        fetchCompany()
-      } else {
-        throw new Error('Failed to remove user');
-      }
+      await fetchWrapper.delete(`/api/client/mgmt/${companyId}/users/${userId}`, {})
+      await fetchCompany()
     } catch (error) {
       console.error('Error removing user:', error)
-      setAlertInfo({ show: true, message: 'Failed to remove user', variant: 'destructive' })
+      setAlertInfo({
+        show: true,
+        message: getErrorMessage(error, 'Failed to remove user'),
+        variant: 'destructive'
+      })
     }
   }
 
@@ -146,22 +176,12 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       const formData = new FormData()
       formData.append('client_company_id', companyId.toString())
       
-      const response = await fetch('/client/mgmt/agreement', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-          'Accept': 'application/json' // We want to handle the redirect ourselves if possible or just let it redirect
-        },
-        body: formData
-      })
+      const response = await fetchWrapper.postRaw('/client/mgmt/agreement', formData)
 
       if (response.redirected) {
         window.location.href = response.url
       } else if (response.ok) {
-        // If it didn't redirect but was successful, we might need to find the new agreement ID
-        // But the controller always redirects.
-        const text = await response.text()
-        // If we got HTML back, it might be the page it redirected to but fetch followed it.
+        await response.text()
         if (response.url) {
             window.location.href = response.url
         }
@@ -170,7 +190,11 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       }
     } catch (error) {
       console.error('Error creating agreement:', error)
-      setAlertInfo({ show: true, message: 'Failed to create agreement', variant: 'destructive' })
+      setAlertInfo({
+        show: true,
+        message: getErrorMessage(error, 'Failed to create agreement'),
+        variant: 'destructive'
+      })
     } finally {
       setSaving(false)
     }

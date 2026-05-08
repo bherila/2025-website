@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\ClientManagement;
 
+use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
@@ -179,6 +180,127 @@ class ClientCompanyApiControllerTest extends TestCase
             ->actingAs($this->createUser())
             ->getJson('/api/client/mgmt/companies')
             ->assertForbidden();
+    }
+
+    public function test_admin_can_fetch_company_detail_with_agreements(): void
+    {
+        $admin = $this->createAdminUser();
+        $clientUser = $this->createUser([
+            'name' => 'Client User',
+            'email' => 'client@example.com',
+        ]);
+        $company = ClientCompany::factory()->create([
+            'company_name' => 'Acme Consulting',
+            'slug' => 'acme-consulting',
+        ]);
+        $company->users()->attach($clientUser->id);
+
+        ClientAgreement::factory()->for($company)->create([
+            'active_date' => Carbon::create(2026, 5, 1),
+            'monthly_retainer_hours' => 10,
+            'monthly_retainer_fee' => 1000,
+        ]);
+
+        $response = $this
+            ->actingAs($admin)
+            ->getJson("/api/client/mgmt/companies/{$company->id}");
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('company_name', 'Acme Consulting')
+            ->assertJsonPath('users.0.email', 'client@example.com')
+            ->assertJsonCount(1, 'agreements')
+            ->assertJsonPath('agreements.0.monthly_retainer_hours', '10.00')
+            ->assertJsonPath('agreements.0.monthly_retainer_fee', '1000.00');
+
+        $payload = $response->json();
+
+        $this->assertArrayNotHasKey('password', $payload['users'][0]);
+    }
+
+    public function test_admin_can_update_company_and_receive_detail_payload(): void
+    {
+        $admin = $this->createAdminUser();
+        $clientUser = $this->createUser([
+            'name' => 'Client User',
+            'email' => 'client@example.com',
+        ]);
+        $company = ClientCompany::factory()->create([
+            'company_name' => 'Acme Consulting',
+            'slug' => 'acme-consulting',
+            'is_active' => true,
+        ]);
+        $company->users()->attach($clientUser->id);
+
+        ClientAgreement::factory()->for($company)->create([
+            'active_date' => Carbon::create(2026, 5, 1),
+            'monthly_retainer_hours' => 10,
+            'monthly_retainer_fee' => 1000,
+        ]);
+
+        $response = $this
+            ->actingAs($admin)
+            ->putJson("/api/client/mgmt/companies/{$company->id}", [
+                'company_name' => 'Renamed Consulting',
+                'slug' => 'renamed-consulting',
+                'address' => '123 Main St',
+                'website' => 'https://example.com',
+                'phone_number' => '555-0100',
+                'default_hourly_rate' => 150,
+                'additional_notes' => 'Updated notes',
+                'is_active' => true,
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('company.company_name', 'Renamed Consulting')
+            ->assertJsonPath('company.slug', 'renamed-consulting')
+            ->assertJsonPath('company.users.0.email', 'client@example.com')
+            ->assertJsonCount(1, 'company.agreements')
+            ->assertJsonPath('company.agreements.0.monthly_retainer_hours', '10.00')
+            ->assertJsonPath('company.agreements.0.monthly_retainer_fee', '1000.00');
+
+        $payload = $response->json();
+
+        $this->assertArrayNotHasKey('password', $payload['company']['users'][0]);
+        $this->assertDatabaseHas('client_companies', [
+            'id' => $company->id,
+            'company_name' => 'Renamed Consulting',
+            'slug' => 'renamed-consulting',
+        ]);
+        $this->assertNotNull($company->fresh()->last_activity);
+    }
+
+    public function test_admin_update_generates_slug_when_slug_is_blank(): void
+    {
+        $admin = $this->createAdminUser();
+        $company = ClientCompany::factory()->create([
+            'company_name' => 'Acme Consulting',
+            'slug' => 'acme-consulting',
+        ]);
+
+        $response = $this
+            ->actingAs($admin)
+            ->putJson("/api/client/mgmt/companies/{$company->id}", [
+                'company_name' => 'Renamed Consulting',
+                'slug' => '',
+                'address' => null,
+                'website' => null,
+                'phone_number' => null,
+                'default_hourly_rate' => null,
+                'additional_notes' => null,
+                'is_active' => true,
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('company.slug', 'renamed-consulting');
+
+        $this->assertDatabaseHas('client_companies', [
+            'id' => $company->id,
+            'slug' => 'renamed-consulting',
+        ]);
     }
 
     /**
