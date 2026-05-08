@@ -38,8 +38,6 @@ readonly class ScheduleCEntityFact
      * @param  TaxFactSource[]  $expenseSources
      * @param  TaxFactSource[]  $homeOfficeSources
      * @param  ScheduleCFlaggedExpenseRowFact[]  $flaggedExpenseRows
-     *
-     * expensesBeforeHomeOffice intentionally mirrors expenses because Schedule C line 30 is separate from line 28.
      */
     public function __construct(
         public ?int $entityId,
@@ -51,7 +49,6 @@ readonly class ScheduleCEntityFact
         public float $grossIncomeAfterReturns,
         array $expenseSources,
         public float $expenses,
-        public float $expensesBeforeHomeOffice,
         array $homeOfficeSources,
         public float $homeOfficeClaimed,
         public float $homeOfficeAllowable,
@@ -86,7 +83,6 @@ readonly class ScheduleCEntityFact
             'grossIncomeAfterReturns' => $this->grossIncomeAfterReturns,
             'expenseSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->expenseSources),
             'expenses' => $this->expenses,
-            'expensesBeforeHomeOffice' => $this->expensesBeforeHomeOffice,
             'homeOfficeSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->homeOfficeSources),
             'homeOfficeClaimed' => $this->homeOfficeClaimed,
             'homeOfficeAllowable' => $this->homeOfficeAllowable,

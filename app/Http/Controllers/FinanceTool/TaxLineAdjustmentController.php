@@ -10,7 +10,6 @@ use App\Models\FinanceTool\FinTaxLineAdjustment;
 use App\Support\Finance\TaxYearRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class TaxLineAdjustmentController extends Controller
 {
@@ -67,17 +66,7 @@ class TaxLineAdjustmentController extends Controller
             ->where('user_id', auth()->id())
             ->findOrFail($id);
 
-        $data = $request->validated();
-        $nextKind = (string) ($data['kind'] ?? $adjustment->kind);
-        $nextAmount = array_key_exists('amount', $data) ? $data['amount'] : $adjustment->amount;
-
-        if (in_array($nextKind, ['override', 'adjustment'], true) && $nextAmount === null) {
-            throw ValidationException::withMessages([
-                'amount' => 'An amount is required for overrides and adjustments.',
-            ]);
-        }
-
-        $adjustment->update($data);
+        $adjustment->update($request->validated());
 
         return response()->json($this->toResponseArray($adjustment));
     }

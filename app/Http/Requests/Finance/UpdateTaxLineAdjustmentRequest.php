@@ -29,9 +29,25 @@ class UpdateTaxLineAdjustmentRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if (in_array($this->input('kind'), ['override', 'adjustment'], true) && $this->input('amount') === null) {
+            $existing = $this->existingAdjustment();
+            $nextKind = (string) $this->input('kind', $existing?->kind);
+            $nextAmount = $this->has('amount') ? $this->input('amount') : $existing?->amount;
+
+            if (in_array($nextKind, ['override', 'adjustment'], true) && $nextAmount === null) {
                 $validator->errors()->add('amount', 'An amount is required for overrides and adjustments.');
             }
         });
+    }
+
+    private function existingAdjustment(): ?FinTaxLineAdjustment
+    {
+        $id = $this->route('id');
+        if ($id === null) {
+            return null;
+        }
+
+        return FinTaxLineAdjustment::query()
+            ->where('user_id', auth()->id())
+            ->find((int) $id);
     }
 }

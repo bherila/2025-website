@@ -234,7 +234,7 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
               const grossReceipts = backendEntity?.grossReceipts ?? incomeTotal
               const returnsAndAllowances = backendEntity?.returnsAndAllowances ?? Math.abs(entity.schedule_c_income?.business_returns?.total ?? 0)
               const grossIncomeAfterReturns = backendEntity?.grossIncomeAfterReturns ?? currency(grossReceipts).subtract(returnsAndAllowances).value
-              const expensesBeforeHomeOffice = backendEntity?.expensesBeforeHomeOffice ?? expenseTotal
+              const expensesBeforeHomeOffice = backendEntity?.expenses ?? expenseTotal
               const tentativeProfitBeforeHomeOffice = backendEntity?.tentativeProfitBeforeHomeOffice ?? currency(grossIncomeAfterReturns).subtract(expensesBeforeHomeOffice).value
               const homeOfficeAllowable = backendEntity?.homeOfficeAllowable ?? form8829Entity?.line36AllowableHomeOfficeDeduction ?? 0
               const homeOfficeCarryoverToNextYear = backendEntity?.homeOfficeCarryoverToNextYear ?? form8829Entity?.carryoverToNextYear ?? 0
