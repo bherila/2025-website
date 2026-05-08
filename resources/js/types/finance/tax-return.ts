@@ -50,106 +50,9 @@ export interface ScheduleALines {
   shouldItemize: boolean
 }
 
-export interface ScheduleBSourceLine {
-  label: string
-  amount: number
-  docId?: number
-}
-
-export interface ScheduleBLines {
-  interestTotal: number
-  dividendTotal: number
-  qualifiedDivTotal: number
-  interestLines: ScheduleBSourceLine[]
-  dividendLines: ScheduleBSourceLine[]
-  qualifiedDividendLines: ScheduleBSourceLine[]
-}
-
 export interface ScheduleCNetIncome {
   total: number
   byQuarter: { q1: number; q2: number; q3: number; q4: number }
-}
-
-export interface ScheduleELines {
-  grandTotal: number
-  totalPassive: number
-  totalNonpassive: number
-  totalTraderNii: number
-}
-
-export interface Form4952Lines {
-  invIntSources: {
-    label: string
-    amount: number
-    docId?: number
-    box?: string
-    code?: string
-    allowedAmount?: number
-  }[]
-  totalInvIntExpense: number
-  scheduleEDeductibleInvestmentInterestExpense: number
-  /** Box 20B investment expenses (Form 4952 Part II Line 5) — reduce NII. Separate from Part I interest. */
-  invExpSources: { label: string; amount: number }[]
-  totalInvExp: number
-  niiBefore: number
-  totalQualDiv: number
-  deductibleInvestmentInterestExpense: number
-  disallowedCarryforward: number
-}
-
-export type ScheduleSEEntrySourceType =
-  | 'schedule_se_k1_box_14a'
-  | 'schedule_se_k1_box_14c'
-  | 'schedule_se_schedule_c'
-  | (string & {})
-
-export interface ScheduleSELines {
-  entries: { label: string; amount: number; sourceType: ScheduleSEEntrySourceType }[]
-  netEarningsFromSE: number
-  seTaxableEarnings: number
-  socialSecurityWageBase: number
-  socialSecurityWages: number
-  remainingSocialSecurityWageBase: number
-  socialSecurityTaxableEarnings: number
-  socialSecurityTax: number
-  medicareWages: number
-  medicareTaxableEarnings: number
-  medicareTax: number
-  additionalMedicareThreshold: number
-  additionalMedicareTaxableEarnings: number
-  additionalMedicareTax: number
-  seTax: number
-  deductibleSeTax: number
-}
-
-export interface Schedule1PartILines {
-  line1a_taxableRefunds: number | null
-  line2a_alimonyReceived: number | null
-  line3_business: number
-  line4_otherGains: number | null
-  line5_rentalPartnerships: number
-  line6_farmIncome: number | null
-  line7_unemploymentCompensation: number | null
-  line8b_gambling: number | null
-  line8h_juryDuty: number | null
-  line8i_prizes: number | null
-  line8z_otherIncome: number
-  line9_totalOther: number
-  line10_total: number
-}
-
-export interface Schedule1PartIILines {
-  line13_hsaDeduction: number | null
-  line15_deductibleSeTax: number | null
-  line17_selfEmployedHealthInsurance: number | null
-  line20_iraDeduction: number | null
-  line21_studentLoanInterest: number | null
-  line26_totalAdjustments: number
-}
-
-export interface Schedule1Lines {
-  partI: Schedule1PartILines
-  partII: Schedule1PartIILines
 }
 
 export interface Form1116Lines {
@@ -168,7 +71,7 @@ export interface Form1116Lines {
   sbpElections?: { docId: number; partnerName: string; active: boolean; sourcedByPartner: number }[]
 }
 
-export interface Form6251SourceEntry {
+interface Form6251SourceEntry {
   label: string
   code: string
   line: string
@@ -327,49 +230,6 @@ export interface Form8582ActivityLine {
   allowedLossThisYear: number
   /** Portion of suspended loss allocated to this activity (Worksheet 5 col d). */
   suspendedLossCarryforward: number
-}
-
-export interface Form4797Lines {
-  partINet1231: number
-  partIIOrdinary: number
-  partIIIRecapture: number
-  /** Net amount flowing to Schedule 1 line 4 (ordinary only). */
-  netToSchedule1Line4: number
-  /** Net §1231 gain flowing to Schedule D as long-term. */
-  netToScheduleDLongTerm: number
-  hasActivity: boolean
-}
-
-export interface ScheduleFLines {
-  grossFarmIncome: number
-  totalExpenses: number
-  /** Line 34 — net farm profit or (loss) → Schedule 1 line 6. */
-  netProfitOrLoss: number
-  hasActivity: boolean
-}
-
-export interface Form8606Lines {
-  line1_nondeductibleContributions: number
-  line2_priorYearBasis: number
-  line3_totalBasis: number
-  line6_yearEndFmv: number
-  line7_distributionsNotConverted: number
-  line8_convertedToRoth: number
-  line9_total: number
-  line10_proRataRatio: number
-  line11_basisInConversion: number
-  line12_basisInDistributions: number
-  line13_totalBasisUsed: number
-  line14_basisCarriedForward: number
-  line15c_taxableDistributions: number
-  line18_taxableConversions: number
-  /** Taxable amount flowing to Form 1040 line 4b (sum of line 15c + line 18). */
-  taxableToForm1040Line4b: number
-  /** Per-1099-R conversion rows. */
-  conversions: { payerName: string; grossDistribution: number; taxableAmount: number; distributionCode: string; isIra: boolean }[]
-  /** Per-1099-R non-conversion distribution rows. */
-  distributions: { payerName: string; grossDistribution: number; taxableAmount: number; distributionCode: string; isIra: boolean }[]
-  hasActivity: boolean
 }
 
 export interface Form8582Lines {
