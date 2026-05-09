@@ -517,6 +517,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'Already billed in this cycle via interim overage invoices',
             );
             $this->assertNotNull($summaryLine);
+            $this->assertEquals(InvoiceLineType::Reconciliation->value, $summaryLine->line_type);
             $this->assertEquals(15.0, (float) $summaryLine->hours);
             $this->assertEquals(0.0, (float) $summaryLine->line_total);
 

@@ -218,7 +218,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
     const isEditable = invoice.status === 'draft';
     const hasPayments = invoice.payments.length > 0;
     const canVoid = invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments;
-    const alreadyBilledLine = invoice.line_items.find((item) => item.description === 'Already billed in this cycle via interim overage invoices');
+    const alreadyBilledLine = invoice.line_items.find((item) => item.line_type === 'reconciliation');
 
     return (
         <>
@@ -332,69 +332,78 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {invoice.line_items.map(item => (
-                                    <React.Fragment key={item.client_invoice_line_id}>
-                                        <TableRow
-                                            className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
-                                            onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
-                                        >
-                                            <TableCell>{item.description}</TableCell>
-                                            <TableCell className="text-right">{renderQuantity(item.quantity)}</TableCell>
-                                            <TableCell className="text-right">
-                                                {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {parseFloat(item.line_total) === 0 ? '-' : `$${parseFloat(item.line_total).toFixed(2)}`}
-                                            </TableCell>
-                                            {isAdmin && (
-                                                <TableCell className="py-1 align-top text-right">
-                                                    {isEditable && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedLineItem(item);
-                                                                setLineItemModalOpen(true);
-                                                            }}
-                                                            disabled={isRefreshing}
-                                                        >
-                                                            <Pencil className="h-4 w-4 text-muted-foreground" />
-                                                        </Button>
+                                {invoice.line_items.map((item) => {
+                                    const isReconciliationLine = item.line_type === 'reconciliation';
+
+                                    return (
+                                        <React.Fragment key={item.client_invoice_line_id}>
+                                            <TableRow
+                                                className={`group ${isReconciliationLine ? 'bg-muted/30 text-muted-foreground' : ''} ${isAdmin && isEditable && !isReconciliationLine ? 'cursor-pointer' : ''}`}
+                                                onClick={() => isAdmin && isEditable && !isRefreshing && !isReconciliationLine && (setSelectedLineItem(item), setLineItemModalOpen(true))}
+                                            >
+                                                <TableCell>
+                                                    <span>{item.description}</span>
+                                                    {isReconciliationLine && (
+                                                        <Badge variant="outline" className="ml-2 align-middle">Reconciliation</Badge>
                                                     )}
                                                 </TableCell>
-                                            )}
-                                        </TableRow>
-                                        {showDetail && item.time_entries && item.time_entries.length > 0 && (
-                                            <TableRow key={`${item.client_invoice_line_id}-details`}>
-                                                <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
-                                                    <table className="w-full text-sm text-muted-foreground">
-                                                        <tbody>
-                                                            {[...item.time_entries].sort((a, b) => (a.date_worked ?? '').localeCompare(b.date_worked ?? '')).map((entry, idx) => (
-                                                                <tr key={idx} className="align-top">
-                                                                    <td className="py-0.5 pr-4 w-full">
-                                                                        <span className="text-muted-foreground/70 mr-2">•</span>
-                                                                        {entry.name || '—'}
-                                                                        {entry.is_deferred_billing && isAdmin && (
-                                                                            <DeferredBadge className="ml-2" />
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
-                                                                        {formatHours(entry.minutes_worked / 60)}
-                                                                    </td>
-                                                                    <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
-                                                                        {entry.date_worked ? format(new Date(entry.date_worked), 'MMM d, yyyy') : '—'}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                <TableCell className="text-right">{renderQuantity(item.quantity)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
                                                 </TableCell>
+                                                <TableCell className="text-right">
+                                                    {parseFloat(item.line_total) === 0 ? '-' : `$${parseFloat(item.line_total).toFixed(2)}`}
+                                                </TableCell>
+                                                {isAdmin && (
+                                                    <TableCell className="py-1 align-top text-right">
+                                                        {isEditable && !isReconciliationLine && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedLineItem(item);
+                                                                    setLineItemModalOpen(true);
+                                                                }}
+                                                                disabled={isRefreshing}
+                                                            >
+                                                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                )}
                                             </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
+                                            {showDetail && item.time_entries && item.time_entries.length > 0 && (
+                                                <TableRow key={`${item.client_invoice_line_id}-details`}>
+                                                    <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
+                                                        <table className="w-full text-sm text-muted-foreground">
+                                                            <tbody>
+                                                                {[...item.time_entries].sort((a, b) => (a.date_worked ?? '').localeCompare(b.date_worked ?? '')).map((entry, idx) => (
+                                                                    <tr key={idx} className="align-top">
+                                                                        <td className="py-0.5 pr-4 w-full">
+                                                                            <span className="text-muted-foreground/70 mr-2">•</span>
+                                                                            {entry.name || '—'}
+                                                                            {entry.is_deferred_billing && isAdmin && (
+                                                                                <DeferredBadge className="ml-2" />
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
+                                                                            {formatHours(entry.minutes_worked / 60)}
+                                                                        </td>
+                                                                        <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
+                                                                            {entry.date_worked ? format(new Date(entry.date_worked), 'MMM d, yyyy') : '—'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
+                                    )
+                                })}
                             </TableBody>
                         </Table>
 

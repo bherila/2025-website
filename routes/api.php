@@ -260,7 +260,6 @@ Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoic
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'show']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-all', [ClientInvoiceApiController::class, 'generateAll']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-interim/{yyyymm}', [ClientInvoiceApiController::class, 'generateInterim'])->where('yyyymm', '[0-9]{6}');
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-interim', [ClientInvoiceApiController::class, 'generateInterim']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices', [ClientInvoiceApiController::class, 'store']);
 Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'update']);
 Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/issue', [ClientInvoiceApiController::class, 'issue']);

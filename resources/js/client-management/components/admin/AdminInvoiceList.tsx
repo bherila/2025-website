@@ -42,8 +42,12 @@ function countByKind(results: Record<string, unknown>): string {
   const summary = results.summary as Record<string, unknown> | undefined
   const cadence = Number(summary?.cadence_period_invoices_created ?? 0)
   const interim = Number(summary?.interim_invoices_created ?? 0)
+  const parts = [
+    cadence > 0 ? `${cadence} cadence-period draft${cadence === 1 ? '' : 's'}` : null,
+    interim > 0 ? `${interim} interim-overage draft${interim === 1 ? '' : 's'}` : null,
+  ].filter(Boolean)
 
-  return `Created ${cadence} cadence-period draft${cadence === 1 ? '' : 's'}, ${interim} interim-overage draft${interim === 1 ? '' : 's'}.`
+  return parts.length > 0 ? `Created ${parts.join(', ')}.` : 'No new invoices to generate.'
 }
 
 export default function AdminInvoiceList({ companyId, agreements = [] }: AdminInvoiceListProps) {

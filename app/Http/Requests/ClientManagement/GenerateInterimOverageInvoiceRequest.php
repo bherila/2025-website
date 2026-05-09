@@ -24,9 +24,7 @@ class GenerateInterimOverageInvoiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'yyyymm' => ['nullable', 'date_format:Ym'],
-            'month' => ['required_without_all:period_start,yyyymm', 'date_format:Y-m'],
-            'period_start' => ['required_without_all:month,yyyymm', 'date'],
+            'yyyymm' => ['required', 'date_format:Ym'],
         ];
     }
 
@@ -34,8 +32,7 @@ class GenerateInterimOverageInvoiceRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'month.required_without_all' => 'Provide a month or period start for the interim invoice.',
-            'period_start.required_without_all' => 'Provide a period start or month for the interim invoice.',
+            'yyyymm.required' => 'Provide the YYYYMM month in the interim invoice route.',
         ];
     }
 
@@ -51,14 +48,6 @@ class GenerateInterimOverageInvoiceRequest extends FormRequest
 
     public function periodStart(): Carbon
     {
-        if ($this->route('yyyymm')) {
-            return Carbon::createFromFormat('Ymd', (string) $this->route('yyyymm').'01')->startOfMonth();
-        }
-
-        if ($this->filled('month')) {
-            return Carbon::createFromFormat('Y-m-d', $this->input('month').'-01')->startOfMonth();
-        }
-
-        return Carbon::parse($this->input('period_start'))->startOfMonth();
+        return Carbon::createFromFormat('Ymd', (string) $this->route('yyyymm').'01')->startOfMonth();
     }
 }

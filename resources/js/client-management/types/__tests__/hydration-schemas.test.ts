@@ -1,4 +1,12 @@
-import { AgreementSchema, AppInitialDataSchema,FileRecordSchema, ProjectSchema, TimeEntrySchema, UserSchema } from '../hydration-schemas'
+import {
+  AgreementRecurringItemSchema,
+  AgreementSchema,
+  AppInitialDataSchema,
+  FileRecordSchema,
+  ProjectSchema,
+  TimeEntrySchema,
+  UserSchema,
+} from '../hydration-schemas'
 
 describe('hydration zod schemas', () => {
   it('UserSchema parses valid user', () => {
@@ -71,6 +79,30 @@ describe('hydration zod schemas', () => {
       first_cycle_proration: 'prorate_hours',
     })
     expect(parsed.recurring_items?.[0]).toMatchObject({ charge_cadence: 'annual', amount: '50.00' })
+  })
+
+  it('AgreementRecurringItemSchema defends the recurring item load shape', () => {
+    const parsed = AgreementRecurringItemSchema.parse({
+      id: '2',
+      client_agreement_id: '1',
+      description: 'Hosting',
+      amount: 50,
+      charge_cadence: 'monthly',
+      anchor_month: null,
+      anchor_day: 1,
+      start_date: '2026-01-01',
+      end_date: null,
+      is_taxable: false,
+      is_summarized: false,
+      notes: null,
+    })
+
+    expect(parsed).toMatchObject({
+      id: 2,
+      client_agreement_id: 1,
+      amount: '50.00',
+      charge_cadence: 'monthly',
+    })
   })
 
   it('AppInitialDataSchema parses app-level payload', () => {

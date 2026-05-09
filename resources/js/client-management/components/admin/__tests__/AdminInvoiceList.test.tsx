@@ -77,4 +77,25 @@ describe('AdminInvoiceList', () => {
       expect(screen.getByText('Created 1 cadence-period draft, 2 interim-overage drafts.')).toBeInTheDocument()
     })
   })
+
+  it('shows a quiet no-op generation message', async () => {
+    mockGet.mockResolvedValue([])
+    mockPost.mockResolvedValue({
+      results: {
+        summary: {
+          cadence_period_invoices_created: 0,
+          interim_invoices_created: 0,
+        },
+      },
+    })
+
+    render(<AdminInvoiceList companyId={1} />)
+
+    await screen.findByText('No invoices match these filters.')
+    fireEvent.click(await screen.findByRole('button', { name: /generate drafts/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('No new invoices to generate.')).toBeInTheDocument()
+    })
+  })
 })

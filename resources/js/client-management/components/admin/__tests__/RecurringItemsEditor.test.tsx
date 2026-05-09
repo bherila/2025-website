@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
@@ -63,5 +63,34 @@ describe('RecurringItemsEditor', () => {
 
     expect(await screen.findByText('Anchor month is required for this cadence.')).toBeInTheDocument()
     expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('posts the validated recurring item save shape', async () => {
+    mockPost.mockResolvedValue({})
+    const onChanged = jest.fn()
+
+    render(<RecurringItemsEditor companyId={1} agreement={agreement} onChanged={onChanged} />)
+
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Monthly hosting' } })
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: /add item/i }))
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/client/mgmt/companies/1/agreements/10/recurring-items',
+        expect.objectContaining({
+          description: 'Monthly hosting',
+          amount: 50,
+          charge_cadence: 'monthly',
+          anchor_month: null,
+          anchor_day: 1,
+          start_date: '2026-01-01',
+          end_date: null,
+          is_taxable: false,
+          is_summarized: false,
+          notes: null,
+        }),
+      )
+    })
   })
 })
