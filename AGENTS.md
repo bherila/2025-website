@@ -144,6 +144,7 @@ try {
 5. **Types**: PHP methods must have return types; TypeScript must have no `any` (where possible).
 6. **Monetary Math**: Use `currency.js` (`import currency from 'currency.js'`) for ALL arithmetic on monetary values. Never use plain `+/-/*//` operators on money — floating-point errors accumulate. Use `currency(value).add(x).subtract(y).multiply(z)` for math and `.format()` for display. Return `.value` (plain `number`) at the boundary of any exported function — `currency` objects are not JSON-serialisable.
 7. **Zod Schemas**: Use `zod` for client-side validation. Always derive the TypeScript type from the schema with `z.infer<typeof schema>` — never duplicate a schema with a separate TypeScript interface.
+8. **Database Identifiers**: MySQL identifiers are limited to 64 characters. In migrations, always provide explicit short names for indexes, unique constraints, and foreign keys when table/column names are long; never rely on Laravel's generated names if they might exceed 64 characters.
 
 ---
 

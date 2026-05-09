@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Check that all auto-generated and explicit MySQL identifiers in migration files
+Check that auto-generated and explicit MySQL identifiers in migration files
 stay within MySQL's 64-character limit (we enforce 63 to leave a safety margin).
 
 Auto-generated names follow Laravel's convention:
-  {table}_{column}_{type}  e.g. fin_account_line_items_t_account_index
+  {table}_{columns}_{type}  e.g. client_agreement_recurring_items_client_agreement_id_start_date_end_date_index
 
-Explicit names are set via ->name('...') on index/foreign/unique blueprints.
+Explicit names are set via the index/unique/foreign name argument, named
+arguments such as indexName:, or ->name('...') on foreign blueprints.
 
 Exit code 0 = all clean, 1 = one or more violations found.
 """
@@ -19,6 +20,74 @@ MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), '..', 'database', 'migr
 MAX_LEN = 63
 
 
+def matching_brace_offset(content: str, opening_offset: int) -> int:
+    depth = 0
+
+    for index in range(opening_offset, len(content)):
+        char = content[index]
+
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return index
+
+    return len(content)
+
+
+def schema_blocks(content: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    pattern = re.compile(
+        r"Schema::(?:create|table)\(['\"]([^'\"]+)['\"]\s*,\s*function\s*\([^)]*\)\s*\{",
+        re.DOTALL,
+    )
+
+    for match in pattern.finditer(content):
+        opening_offset = match.end() - 1
+        closing_offset = matching_brace_offset(content, opening_offset)
+        blocks.append((match.group(1), content[opening_offset + 1:closing_offset]))
+
+    return blocks
+
+
+def string_literals(value: str) -> list[str]:
+    return [match.group(1) or match.group(2) for match in re.finditer(r"'([^']+)'|\"([^\"]+)\"", value)]
+
+
+def normalize_columns(columns: str) -> str | None:
+    columns = columns.strip()
+
+    if columns.startswith('['):
+        values = string_literals(columns)
+        if not values:
+            return None
+
+        return '_'.join(values)
+
+    values = string_literals(columns)
+    return values[0] if values else None
+
+
+def add_issue(issues: list[str], kind: str, name: str, fname: str, fix: str) -> None:
+    if len(name) > MAX_LEN:
+        issues.append(
+            f"{kind} ({len(name)} chars > {MAX_LEN}): '{name}'\n"
+            f"  in {fname}\n"
+            f"  Fix: {fix}"
+        )
+
+
+def check_explicit_name(issues: list[str], name: str, fname: str) -> None:
+    add_issue(
+        issues,
+        'EXPLICIT',
+        name,
+        fname,
+        'choose a shorter explicit identifier name.',
+    )
+
+
 def check_migrations(migrations_dir: str) -> list[str]:
     issues: list[str] = []
 
@@ -27,53 +96,83 @@ def check_migrations(migrations_dir: str) -> list[str]:
             continue
 
         path = os.path.join(migrations_dir, fname)
-        content = open(path).read()
+        with open(path) as migration_file:
+            content = migration_file.read()
 
-        # 1. Explicit ->name('identifier') or ->name("identifier")
+        # Explicit ->name('identifier'), indexName: 'identifier', etc.
         for m in re.finditer(r"->name\(['\"]([^'\"]+)['\"]\)", content):
-            name = m.group(1)
-            if len(name) > MAX_LEN:
-                issues.append(
-                    f"EXPLICIT ({len(name)} chars > {MAX_LEN}): '{name}'\n"
-                    f"  in {fname}"
+            check_explicit_name(issues, m.group(1), fname)
+
+        for m in re.finditer(r"\b(?:indexName|name)\s*:\s*['\"]([^'\"]+)['\"]", content):
+            check_explicit_name(issues, m.group(1), fname)
+
+        for table, body in schema_blocks(content):
+            for m in re.finditer(
+                r"\$table->(?P<method>index|unique|foreign)\(\s*"
+                r"(?P<columns>\[[^\]]+\]|['\"][^'\"]+['\"])\s*"
+                r"(?P<rest>[^)]*)\)",
+                body,
+                re.DOTALL,
+            ):
+                method = m.group('method')
+                explicit_names = string_literals(m.group('rest'))
+                suffix = f"_{method if method != 'foreign' else 'foreign'}"
+
+                if explicit_names:
+                    check_explicit_name(issues, explicit_names[0], fname)
+                    continue
+
+                columns = normalize_columns(m.group('columns'))
+                if not columns:
+                    continue
+
+                auto = f"{table}_{columns}{suffix}"
+                add_issue(
+                    issues,
+                    'AUTO-GEN',
+                    auto,
+                    fname,
+                    f"add an explicit shorter name to the {method}() call.",
                 )
 
-        # 2. Auto-generated names: {table}_{column}_{suffix}
-        # Collect all table names referenced in this migration file
-        tables = re.findall(
-            r"Schema::(?:create|table)\(['\"]([^'\"]+)['\"]", content
-        )
+            for m in re.finditer(
+                r"\$table->(?P<type>\w+)\(\s*['\"](?P<column>[^'\"]+)['\"][^;]*?->(?P<method>index|unique)\((?P<args>[^)]*)\)",
+                body,
+                re.DOTALL,
+            ):
+                method = m.group('method')
+                explicit_names = string_literals(m.group('args'))
+                if explicit_names:
+                    check_explicit_name(issues, explicit_names[0], fname)
+                    continue
 
-        # Columns used with index / unique (may be array or single)
-        # ->index(['col1', 'col2']) or ->index('col')
-        # For single-column cases we can form the auto name; skip multi-column arrays
-        # (Laravel joins them with underscores for arrays, but those are rare enough
-        # that an explicit ->name() should be used there anyway)
-        cols_index = re.findall(
-            r"\$table->(?:index|unique)\(['\"]([^'\"]+)['\"]", content
-        )
-        cols_foreign = re.findall(
-            r"\$table->foreign\(['\"]([^'\"]+)['\"]", content
-        )
+                auto = f"{table}_{m.group('column')}_{method}"
+                add_issue(
+                    issues,
+                    'AUTO-GEN',
+                    auto,
+                    fname,
+                    f"pass an explicit shorter name to ->{method}().",
+                )
 
-        for table in tables:
-            for col in cols_index:
-                for suffix in ('_index', '_unique'):
-                    auto = f"{table}_{col}{suffix}"
-                    if len(auto) > MAX_LEN:
-                        issues.append(
-                            f"AUTO-GEN ({len(auto)} chars > {MAX_LEN}): '{auto}'\n"
-                            f"  table='{table}' col='{col}' in {fname}\n"
-                            f"  Fix: add ->name('<shorter_name>') to the index call."
-                        )
-            for col in cols_foreign:
-                auto = f"{table}_{col}_foreign"
-                if len(auto) > MAX_LEN:
-                    issues.append(
-                        f"AUTO-GEN ({len(auto)} chars > {MAX_LEN}): '{auto}'\n"
-                        f"  table='{table}' col='{col}' in {fname}\n"
-                        f"  Fix: add ->name('<shorter_name>') to the foreign() call."
-                    )
+            for m in re.finditer(
+                r"\$table->foreignId\(\s*['\"](?P<column>[^'\"]+)['\"][^;]*?->constrained\((?P<args>[^)]*)\)",
+                body,
+                re.DOTALL,
+            ):
+                explicit_names = re.findall(r"indexName\s*:\s*['\"]([^'\"]+)['\"]", m.group('args'))
+                if explicit_names:
+                    check_explicit_name(issues, explicit_names[0], fname)
+                    continue
+
+                auto = f"{table}_{m.group('column')}_foreign"
+                add_issue(
+                    issues,
+                    'AUTO-GEN',
+                    auto,
+                    fname,
+                    "pass indexName: '<shorter_name>' to constrained().",
+                )
 
     return issues
 
@@ -84,11 +183,11 @@ def main() -> int:
     if issues:
         print(f"MySQL identifier length violations (limit: {MAX_LEN} chars):\n")
         for issue in issues:
-            print(f"  ✗ {issue}\n")
+            print(f"  x {issue}\n")
         print(f"{len(issues)} violation(s) found.")
         return 1
 
-    print(f"✓ All migration identifiers are within {MAX_LEN} characters.")
+    print(f"OK: All migration identifiers are within {MAX_LEN} characters.")
     return 0
 
 
