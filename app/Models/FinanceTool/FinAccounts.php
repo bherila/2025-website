@@ -69,12 +69,4 @@ class FinAccounts extends Model
     {
         $query->withoutGlobalScopes()->where('acct_owner', $userId);
     }
-
-    /**
-     * @param  Builder<FinAccounts>  $query
-     */
-    public function scopeTaxDocumentEligible(Builder $query): void
-    {
-        $query->where('acct_is_debt', false);
-    }
 }

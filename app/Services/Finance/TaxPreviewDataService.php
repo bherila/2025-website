@@ -154,7 +154,6 @@ class TaxPreviewDataService
     private function accounts(int $userId): array
     {
         return FinAccounts::forOwner($userId)
-            ->taxDocumentEligible()
             ->orderBy('when_closed', 'asc')
             ->orderBy('acct_sort_order', 'asc')
             ->orderBy('acct_name', 'asc')

@@ -194,7 +194,7 @@ describe('TaxDocuments1099Section', () => {
     expect(screen.getByText('fidelity taxable').closest('table')?.parentElement).toHaveClass('border-muted')
   })
 
-  it('hides debt accounts from the tax document account list', () => {
+  it('hides debt accounts from the current 1099 account list', () => {
     render(
       <TaxDocuments1099Section
         selectedYear={2025}

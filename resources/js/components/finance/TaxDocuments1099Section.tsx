@@ -167,7 +167,10 @@ const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', '10
 // which routes through the MultiAccountImportModal with a preselected account.
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
-function isTaxDocumentEligibleAccount(account: FinAccount): boolean {
+function is1099SectionAccount(account: FinAccount): boolean {
+  // This pane currently covers 1099/K-1 documents. Mortgage-interest support
+  // should get a separate 1098 flow or a finer account subtype instead of
+  // treating every liability account as ineligible for tax documents.
   return account.acct_is_debt !== true
 }
 
@@ -185,7 +188,7 @@ export default function TaxDocuments1099Section({
   foreignTaxSummaries = [],
 }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
-  const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts?.filter(isTaxDocumentEligibleAccount) ?? [])
+  const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts?.filter(is1099SectionAccount) ?? [])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>(controlledActiveAccountIds ?? [])
   const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
@@ -248,7 +251,7 @@ export default function TaxDocuments1099Section({
       const all: FinAccount[] = [
         ...(data.assetAccounts ?? []),
         ...(data.retirementAccounts ?? []),
-      ].filter(isTaxDocumentEligibleAccount)
+      ].filter(is1099SectionAccount)
       setAccounts(all)
       setActiveAccountIds(data.active_account_ids ?? [])
     } catch {
@@ -261,7 +264,7 @@ export default function TaxDocuments1099Section({
   }, [controlledDocuments])
 
   useEffect(() => {
-    if (controlledAccounts) setAccounts(controlledAccounts.filter(isTaxDocumentEligibleAccount))
+    if (controlledAccounts) setAccounts(controlledAccounts.filter(is1099SectionAccount))
   }, [controlledAccounts])
 
   useEffect(() => {

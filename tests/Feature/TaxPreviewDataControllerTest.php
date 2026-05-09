@@ -39,7 +39,7 @@ class TaxPreviewDataControllerTest extends TestCase
             ]);
     }
 
-    public function test_tax_preview_data_endpoint_excludes_debt_accounts_from_account_documents(): void
+    public function test_tax_preview_data_endpoint_includes_debt_accounts_for_future_tax_document_categories(): void
     {
         $user = $this->createUser();
 
@@ -70,7 +70,7 @@ class TaxPreviewDataControllerTest extends TestCase
         $accountNames = collect($response->json('accounts'))->pluck('acct_name')->all();
         $this->assertContains('fidelity taxable', $accountNames);
         $this->assertContains('traditional ira', $accountNames);
-        $this->assertNotContains('green', $accountNames);
+        $this->assertContains('green', $accountNames);
     }
 
     public function test_tax_preview_data_endpoint_ignores_non_numeric_year_query_values(): void
