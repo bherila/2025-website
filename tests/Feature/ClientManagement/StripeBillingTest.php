@@ -176,6 +176,50 @@ class StripeBillingTest extends TestCase
         $this->assertSame(1, ClientInvoiceStripeEvent::where('stripe_event_id', 'evt_pi_succeeded')->count());
     }
 
+    public function test_failed_webhook_event_is_retried_until_processed(): void
+    {
+        $invoice = $this->createInvoice(['invoice_total' => 500.00]);
+        ClientInvoiceStripePayment::create([
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'stripe_payment_intent_id' => 'pi_retry_succeeded',
+            'stripe_customer_id' => 'cus_acme',
+            'stripe_payment_method_id' => 'pm_card',
+            'amount' => 50000,
+            'status' => 'processing',
+        ]);
+
+        $event = $this->paymentIntentEvent('evt_pi_retry_succeeded', 'payment_intent.succeeded', [
+            'id' => 'pi_retry_succeeded',
+            'amount' => 50000,
+            'customer' => 'cus_acme',
+            'payment_method' => [
+                'id' => 'pm_card',
+                'type' => 'card',
+            ],
+            'payment_method_types' => ['card'],
+            'status' => 'succeeded',
+            'metadata' => [
+                'client_invoice_id' => (string) $invoice->client_invoice_id,
+                'client_company_id' => (string) $this->company->id,
+            ],
+        ]);
+        ClientInvoiceStripeEvent::create([
+            'stripe_event_id' => 'evt_pi_retry_succeeded',
+            'type' => 'payment_intent.succeeded',
+            'payload' => $event,
+            'error' => 'Temporary database error',
+        ]);
+
+        $this->postSignedStripeWebhook($event)->assertOk();
+
+        $invoice->refresh();
+        $record = ClientInvoiceStripeEvent::where('stripe_event_id', 'evt_pi_retry_succeeded')->sole();
+        $this->assertSame('paid', $invoice->status);
+        $this->assertNotNull($record->processed_at);
+        $this->assertNull($record->error);
+        $this->assertSame(1, ClientInvoiceStripeEvent::where('stripe_event_id', 'evt_pi_retry_succeeded')->count());
+    }
+
     public function test_ach_processing_then_succeeded_keeps_invoice_issued_until_success(): void
     {
         $invoice = $this->createInvoice(['invoice_total' => 500.00]);
@@ -249,7 +293,7 @@ class StripeBillingTest extends TestCase
         ]);
     }
 
-    public function test_partial_refund_records_negative_payment_and_leaves_invoice_paid(): void
+    public function test_partial_refund_records_negative_payment_and_reopens_invoice(): void
     {
         [$invoice, $stripePayment] = $this->createPaidStripeInvoice('pi_partial_refund', 500.00);
 
@@ -259,8 +303,9 @@ class StripeBillingTest extends TestCase
 
         $invoice = $invoice->fresh(['payments']);
         $this->assertNotNull($invoice);
-        $this->assertSame('paid', $invoice->status);
+        $this->assertSame('issued', $invoice->status);
         $this->assertEquals(400.00, $invoice->payments_total);
+        $this->assertEquals(100.00, $invoice->remaining_balance);
         $this->assertDatabaseHas('client_invoice_payments', [
             'client_invoice_id' => $invoice->client_invoice_id,
             'client_invoice_stripe_payment_id' => $stripePayment->id,

@@ -278,17 +278,19 @@ class StripeBillingService
     public function processWebhookEvent(StripeEvent $event): ClientInvoiceStripeEvent
     {
         $record = ClientInvoiceStripeEvent::where('stripe_event_id', $event->id)->first();
-        if ($record) {
+        if ($record?->processed_at !== null) {
             return $record;
         }
 
         $context = $this->prepareWebhookContext($event);
 
-        $record = ClientInvoiceStripeEvent::create([
-            'stripe_event_id' => $event->id,
-            'type' => $event->type,
-            'payload' => $event->toArray(),
-        ]);
+        if (! $record) {
+            $record = ClientInvoiceStripeEvent::create([
+                'stripe_event_id' => $event->id,
+                'type' => $event->type,
+                'payload' => $event->toArray(),
+            ]);
+        }
 
         try {
             DB::transaction(function () use ($event, $record, $context): void {
@@ -499,6 +501,7 @@ class StripeBillingService
                 'client_invoice_stripe_payment_id' => $stripePayment->id,
             ]);
             $stripePayment->update(['status' => 'refunded', 'last_event_id' => $eventId]);
+            $this->refreshInvoicePaymentStatus($invoice);
         }
 
         if ($invoice->clientCompany) {

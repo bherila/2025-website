@@ -63,7 +63,7 @@ Subscribe the Stripe webhook endpoint to these event types:
 - `payment_intent.processing`: records pending ACH/card state without marking the invoice paid.
 - `payment_intent.payment_failed`: records `failure_reason` and logs `invoice.payment_failed`.
 - `payment_intent.canceled`: records canceled state and logs `invoice.payment_failed`.
-- `charge.refunded`: soft-deletes the original payment for full refunds; inserts a negative `stripe_refund` ledger row for partial refunds.
+- `charge.refunded`: soft-deletes the original payment for full refunds; inserts a negative `stripe_refund` ledger row for partial refunds, then refreshes invoice paid/issued status from the ledger balance.
 - `charge.dispute.created`: soft-deletes the Stripe payment row and reopens the invoice.
 - `charge.dispute.closed`: restores the payment when the dispute is won; keeps it disputed when lost.
 - `payment_method.attached`: syncs saved method metadata for the Stripe customer.
