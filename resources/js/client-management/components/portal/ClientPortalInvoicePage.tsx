@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
+import { InvoiceKindBadge } from "@/client-management/components/admin/ClientBadges";
 import type { ClientInvoicePayment, Invoice, InvoiceLine } from "@/client-management/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,10 +183,6 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
         }
     }
 
-    const isEditable = invoice?.status === 'draft';
-    const hasPayments = invoice?.payments && (invoice.payments as any[]).length > 0;
-    const canVoid = !!(invoice && invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments);
-
     if (isLoading || !invoice) {
         return (
             <>
@@ -217,6 +214,11 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
             </>
         )
     }
+
+    const isEditable = invoice.status === 'draft';
+    const hasPayments = invoice.payments.length > 0;
+    const canVoid = invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments;
+    const alreadyBilledLine = invoice.line_items.find((item) => item.line_type === 'reconciliation');
 
     return (
         <>
@@ -250,6 +252,7 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                             For {companyName} <br />
                             <div className="flex items-center gap-2">
                                 <span>Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}</span>
+                                <InvoiceKindBadge value={invoice.invoice_kind} />
                                 {(invoice.previous_invoice_id || invoice.next_invoice_id) && (
                                     <span className="inline-flex items-center gap-1 ml-1 print:hidden">
                                         {invoice.previous_invoice_id && (
@@ -329,71 +332,87 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {invoice.line_items.map(item => (
-                                    <React.Fragment key={item.client_invoice_line_id}>
-                                        <TableRow
-                                            className={`group ${isAdmin && isEditable ? 'cursor-pointer' : ''}`}
-                                            onClick={() => isAdmin && isEditable && !isRefreshing && (setSelectedLineItem(item), setLineItemModalOpen(true))}
-                                        >
-                                            <TableCell>{item.description}</TableCell>
-                                            <TableCell className="text-right">{renderQuantity(item.quantity)}</TableCell>
-                                            <TableCell className="text-right">
-                                                {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {parseFloat(item.line_total) === 0 ? '-' : `$${parseFloat(item.line_total).toFixed(2)}`}
-                                            </TableCell>
-                                            {isAdmin && (
-                                                <TableCell className="py-1 align-top text-right">
-                                                    {isEditable && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedLineItem(item);
-                                                                setLineItemModalOpen(true);
-                                                            }}
-                                                            disabled={isRefreshing}
-                                                        >
-                                                            <Pencil className="h-4 w-4 text-muted-foreground" />
-                                                        </Button>
+                                {invoice.line_items.map((item) => {
+                                    const isReconciliationLine = item.line_type === 'reconciliation';
+
+                                    return (
+                                        <React.Fragment key={item.client_invoice_line_id}>
+                                            <TableRow
+                                                className={`group ${isReconciliationLine ? 'bg-muted/30 text-muted-foreground' : ''} ${isAdmin && isEditable && !isReconciliationLine ? 'cursor-pointer' : ''}`}
+                                                onClick={() => isAdmin && isEditable && !isRefreshing && !isReconciliationLine && (setSelectedLineItem(item), setLineItemModalOpen(true))}
+                                            >
+                                                <TableCell>
+                                                    <span>{item.description}</span>
+                                                    {isReconciliationLine && (
+                                                        <Badge variant="outline" className="ml-2 align-middle">Reconciliation</Badge>
                                                     )}
                                                 </TableCell>
-                                            )}
-                                        </TableRow>
-                                        {showDetail && item.time_entries && item.time_entries.length > 0 && (
-                                            <TableRow key={`${item.client_invoice_line_id}-details`}>
-                                                <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
-                                                    <table className="w-full text-sm text-muted-foreground">
-                                                        <tbody>
-                                                            {[...item.time_entries].sort((a, b) => (a.date_worked ?? '').localeCompare(b.date_worked ?? '')).map((entry, idx) => (
-                                                                <tr key={idx} className="align-top">
-                                                                    <td className="py-0.5 pr-4 w-full">
-                                                                        <span className="text-muted-foreground/70 mr-2">•</span>
-                                                                        {entry.name || '—'}
-                                                                        {entry.is_deferred_billing && isAdmin && (
-                                                                            <DeferredBadge className="ml-2" />
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
-                                                                        {formatHours(entry.minutes_worked / 60)}
-                                                                    </td>
-                                                                    <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
-                                                                        {entry.date_worked ? format(new Date(entry.date_worked), 'MMM d, yyyy') : '—'}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                <TableCell className="text-right">{renderQuantity(item.quantity)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {parseFloat(item.unit_price) === 0 ? '-' : `$${parseFloat(item.unit_price).toFixed(2)}`}
                                                 </TableCell>
+                                                <TableCell className="text-right">
+                                                    {parseFloat(item.line_total) === 0 ? '-' : `$${parseFloat(item.line_total).toFixed(2)}`}
+                                                </TableCell>
+                                                {isAdmin && (
+                                                    <TableCell className="py-1 align-top text-right">
+                                                        {isEditable && !isReconciliationLine && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedLineItem(item);
+                                                                    setLineItemModalOpen(true);
+                                                                }}
+                                                                disabled={isRefreshing}
+                                                            >
+                                                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                )}
                                             </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
+                                            {showDetail && item.time_entries && item.time_entries.length > 0 && (
+                                                <TableRow key={`${item.client_invoice_line_id}-details`}>
+                                                    <TableCell colSpan={isAdmin ? 5 : 4} className="bg-muted/30 py-2 px-4">
+                                                        <table className="w-full text-sm text-muted-foreground">
+                                                            <tbody>
+                                                                {[...item.time_entries].sort((a, b) => (a.date_worked ?? '').localeCompare(b.date_worked ?? '')).map((entry, idx) => (
+                                                                    <tr key={idx} className="align-top">
+                                                                        <td className="py-0.5 pr-4 w-full">
+                                                                            <span className="text-muted-foreground/70 mr-2">•</span>
+                                                                            {entry.name || '—'}
+                                                                            {entry.is_deferred_billing && isAdmin && (
+                                                                                <DeferredBadge className="ml-2" />
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="py-0.5 pr-4 text-right tabular-nums whitespace-nowrap">
+                                                                            {formatHours(entry.minutes_worked / 60)}
+                                                                        </td>
+                                                                        <td className="py-0.5 text-right whitespace-nowrap text-muted-foreground/70">
+                                                                            {entry.date_worked ? format(new Date(entry.date_worked), 'MMM d, yyyy') : '—'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
+                                    )
+                                })}
                             </TableBody>
                         </Table>
+
+                        {alreadyBilledLine && (
+                            <div className="mt-4 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+                                <span className="font-medium">Already billed this cycle:</span>{' '}
+                                {formatHours(Number(alreadyBilledLine.hours ?? 0))} was billed on interim overage invoices and is shown here as a zero-dollar reconciliation line.
+                            </div>
+                        )}
 
                         {invoice.deferred_pending && invoice.deferred_pending.length > 0 && (
                             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950">

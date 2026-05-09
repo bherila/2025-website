@@ -37,6 +37,7 @@ class ClientAgreement extends Model
         'billing_cadence',
         'bill_overage_interim',
         'first_cycle_proration',
+        'initial_rollover_hours',
     ];
 
     protected $casts = [
@@ -52,6 +53,7 @@ class ClientAgreement extends Model
         'billing_cadence' => BillingCadence::class,
         'bill_overage_interim' => 'boolean',
         'first_cycle_proration' => FirstCycleProration::class,
+        'initial_rollover_hours' => 'decimal:4',
     ];
 
     /**

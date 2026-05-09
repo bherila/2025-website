@@ -196,7 +196,8 @@ class RolloverCalculator
      *                         rather than carried forward. The negative balance (unbilled overage)
      *                         is intentionally preserved across a reset.
      * @param  int  $rollover_months  Number of months hours can roll over
-     * @param  bool  $billExcessImmediately  Whether to bill excess hours immediately or carry them forward as negative balance
+     * @param  bool  $billExcessImmediately  Whether to bill excess hours immediately or carry them forward as negative balance.
+     *                                       MonthSummary::closing->excessHours is populated only when this is true.
      * @return array<MonthSummary> Array of month summaries
      */
     public function calculateMultipleMonths(array $months, int $rolloverMonths, bool $billExcessImmediately = false): array

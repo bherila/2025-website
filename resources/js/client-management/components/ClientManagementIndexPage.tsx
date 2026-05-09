@@ -2,12 +2,15 @@ import currency from 'currency.js'
 import { AlertCircle, ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
+import { CadenceBadge } from '@/client-management/components/admin/ClientBadges'
 import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
 import type { ClientCompany } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchWrapper } from '@/fetchWrapper'
 
@@ -34,6 +37,8 @@ export default function ClientManagementIndexPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
+  const [search, setSearch] = useState('')
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
 
@@ -66,8 +71,17 @@ export default function ClientManagementIndexPage() {
     setInviteModalOpen(true)
   }
 
-  const activeCompanies = companies.filter(c => c.is_active)
-  const inactiveCompanies = companies.filter(c => !c.is_active)
+  const filteredCompanies = companies.filter((company) => {
+    const matchesSearch = [company.company_name, company.slug ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(search.toLowerCase())
+    const matchesAttention = !needsAttentionOnly || Boolean(company.needs_attention)
+
+    return matchesSearch && matchesAttention
+  })
+  const activeCompanies = filteredCompanies.filter(c => c.is_active)
+  const inactiveCompanies = filteredCompanies.filter(c => !c.is_active)
 
   if (loading) {
     return (
@@ -117,6 +131,21 @@ export default function ClientManagementIndexPage() {
         </Alert>
       )}
 
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Input
+          className="max-w-sm"
+          placeholder="Search clients"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <Button
+          variant={needsAttentionOnly ? 'default' : 'outline'}
+          onClick={() => setNeedsAttentionOnly(!needsAttentionOnly)}
+        >
+          Needs attention
+        </Button>
+      </div>
+
       <div className="space-y-4">
         {activeCompanies.map(company => (
           <Card key={company.id}>
@@ -125,6 +154,7 @@ export default function ClientManagementIndexPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
                     <CardTitle className="text-xl">{company.company_name}</CardTitle>
+                    <CadenceBadge value={company.current_billing_cadence} />
                   </div>
                   <div className="mt-2 space-y-1">
                     <div className="text-sm text-muted-foreground">
@@ -192,6 +222,16 @@ export default function ClientManagementIndexPage() {
               </div>
             </CardHeader>
             <CardContent className="pt-0 space-y-4">
+              {company.current_cycle_progress !== null && company.current_cycle_progress !== undefined && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Cycle progress</span>
+                    <span>{company.current_cycle_progress.toFixed(1)}%</span>
+                  </div>
+                  <Progress value={company.current_cycle_progress} />
+                </div>
+              )}
+
               {company.unpaid_invoices && company.unpaid_invoices.length > 0 && (
                 <div className="border-t pt-3">
                   <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">

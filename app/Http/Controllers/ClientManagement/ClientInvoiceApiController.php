@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClientManagement\GenerateInterimOverageInvoiceRequest;
+use App\Http\Requests\ClientManagement\StoreClientInvoiceRequest;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -41,6 +43,11 @@ class ClientInvoiceApiController extends Controller
                     'period_end' => $invoice->period_end->toDateString(),
                     'invoice_total' => $invoice->invoice_total,
                     'status' => $invoice->status,
+                    'invoice_kind' => $invoice->invoiceKindValue(),
+                    'cycle_start' => $invoice->cycle_start?->toDateString(),
+                    'cycle_end' => $invoice->cycle_end?->toDateString(),
+                    'agreement_id' => $invoice->client_agreement_id,
+                    'client_agreement_id' => $invoice->client_agreement_id,
                     'issue_date' => $invoice->issue_date?->toDateString(),
                     'due_date' => $invoice->due_date?->toDateString(),
                     'paid_date' => $invoice->paid_date?->toDateString(),
@@ -86,20 +93,15 @@ class ClientInvoiceApiController extends Controller
     /**
      * Generate a new invoice.
      */
-    public function store(Request $request, ClientCompany $company): JsonResponse
+    public function store(StoreClientInvoiceRequest $request, ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
-
-        $request->validate([
-            'period_start' => 'required|date',
-            'period_end' => 'required|date|after:period_start',
-        ]);
 
         try {
             $invoice = $this->invoicingService->generateInvoice(
                 $company,
-                Carbon::parse($request->period_start),
-                Carbon::parse($request->period_end)
+                $request->periodStart(),
+                $request->periodEnd(),
             );
 
             return response()->json([
@@ -117,19 +119,51 @@ class ClientInvoiceApiController extends Controller
     }
 
     /**
-     * Generate invoices for all calendar months.
+     * Generate draft invoices through the company's current billing cadence windows.
      */
     public function generateAll(ClientCompany $company): JsonResponse
     {
         Gate::authorize('Admin');
 
         try {
-            $results = $this->invoicingService->generateAllMonthlyInvoices($company);
+            $results = $this->invoicingService->generateAllInvoices($company);
 
             return response()->json([
                 'message' => 'Invoice generation completed',
                 'results' => $results,
             ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Generate one interim overage invoice for a completed month in a non-monthly cycle.
+     */
+    public function generateInterim(GenerateInterimOverageInvoiceRequest $request, ClientCompany $company): JsonResponse
+    {
+        Gate::authorize('Admin');
+
+        try {
+            $invoice = $this->invoicingService->generateInterimOverageInvoice($company, $request->periodStart());
+
+            if (! $invoice) {
+                return response()->json([
+                    'message' => 'No interim overage invoice was needed for this period',
+                    'invoice' => null,
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'Interim overage invoice generated successfully',
+                'invoice' => [
+                    'id' => $invoice->client_invoice_id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'invoice_total' => $invoice->invoice_total,
+                    'invoice_kind' => $invoice->invoiceKindValue(),
+                    'status' => $invoice->status,
+                ],
+            ], 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
@@ -194,6 +228,11 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->issue();
+        ClientCompanyActivity::record($company, 'invoice.issued', $invoice, [
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_kind' => $invoice->invoiceKindValue(),
+            'invoice_total' => (float) $invoice->invoice_total,
+        ]);
 
         return response()->json(['message' => 'Invoice issued successfully']);
     }
@@ -214,6 +253,11 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->markPaid();
+        ClientCompanyActivity::record($company, 'invoice.marked_paid', $invoice, [
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_kind' => $invoice->invoiceKindValue(),
+            'invoice_total' => (float) $invoice->invoice_total,
+        ]);
 
         return response()->json(['message' => 'Invoice marked as paid']);
     }
@@ -241,6 +285,11 @@ class ClientInvoiceApiController extends Controller
         }
 
         $invoice->void();
+        ClientCompanyActivity::record($company, 'invoice.voided', $invoice, [
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_kind' => $invoice->invoiceKindValue(),
+            'invoice_total' => (float) $invoice->invoice_total,
+        ]);
 
         return response()->json(['message' => 'Invoice voided successfully']);
     }

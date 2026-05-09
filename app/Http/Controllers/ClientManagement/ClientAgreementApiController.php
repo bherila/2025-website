@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers\ClientManagement;
 
+use App\Enums\ClientManagement\BillingCadence;
+use App\Enums\ClientManagement\FirstCycleProration;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClientManagement\PreviewAgreementTransitionRequest;
+use App\Http\Requests\ClientManagement\StoreAgreementTransitionRequest;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use App\Services\ClientManagement\AgreementTransitionService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 
 class ClientAgreementApiController extends Controller
 {
@@ -31,7 +37,7 @@ class ClientAgreementApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        return ClientAgreement::with('clientCompany', 'signedByUser')->findOrFail($id);
+        return ClientAgreement::with('clientCompany', 'signedByUser', 'recurringItems')->findOrFail($id);
     }
 
     /**
@@ -73,6 +79,9 @@ class ClientAgreementApiController extends Controller
             'hourly_rate' => 'nullable|numeric|min:0',
             'monthly_retainer_fee' => 'nullable|numeric|min:0',
             'is_visible_to_client' => 'nullable|boolean',
+            'billing_cadence' => ['nullable', Rule::enum(BillingCadence::class)],
+            'bill_overage_interim' => 'nullable|boolean',
+            'first_cycle_proration' => ['nullable', Rule::enum(FirstCycleProration::class)],
         ]);
 
         $agreement->update($validated);
@@ -103,6 +112,59 @@ class ClientAgreementApiController extends Controller
             'success' => true,
             'agreement' => $agreement->fresh(),
         ]);
+    }
+
+    /**
+     * Preview an agreement transition without writing changes.
+     */
+    public function transitionPreview(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        PreviewAgreementTransitionRequest $request,
+        AgreementTransitionService $transitionService,
+    ): JsonResponse {
+        Gate::authorize('Admin');
+
+        if ((int) $agreement->client_company_id !== (int) $company->id) {
+            return response()->json(['error' => 'Agreement does not belong to this company'], 404);
+        }
+
+        try {
+            return response()->json([
+                'preview' => $transitionService->preview($company, $agreement, $request->payload()),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Terminate the outgoing agreement and create its successor.
+     */
+    public function transition(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        StoreAgreementTransitionRequest $request,
+        AgreementTransitionService $transitionService,
+    ): JsonResponse {
+        Gate::authorize('Admin');
+
+        if ((int) $agreement->client_company_id !== (int) $company->id) {
+            return response()->json(['error' => 'Agreement does not belong to this company'], 404);
+        }
+
+        try {
+            $result = $transitionService->transition($company, $agreement, $request->payload());
+
+            return response()->json([
+                'message' => 'Agreement transitioned successfully',
+                'outgoing_agreement' => $result['outgoing_agreement'],
+                'successor_agreement' => $result['successor_agreement'],
+                'preview' => $result['preview'],
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
     }
 
     /**

@@ -111,6 +111,11 @@ class ClientInvoice extends Model
         return $this->hasMany(ClientInvoiceLine::class, 'client_invoice_id', 'client_invoice_id');
     }
 
+    public function invoiceKindValue(): string
+    {
+        return ($this->invoice_kind ?? InvoiceKind::CadencePeriod)->value;
+    }
+
     /**
      * Get the payments for this invoice.
      *
@@ -293,8 +298,11 @@ class ClientInvoice extends Model
             'due_date' => $this->due_date?->toDateString(),
             'paid_date' => $this->paid_date?->toDateString(),
             'status' => $this->status,
+            'invoice_kind' => $this->invoiceKindValue(),
             'period_start' => $this->period_start?->toDateString(),
             'period_end' => $this->period_end?->toDateString(),
+            'cycle_start' => $this->cycle_start?->toDateString(),
+            'cycle_end' => $this->cycle_end?->toDateString(),
             'retainer_hours_included' => $this->retainer_hours_included,
             'hours_worked' => $this->hours_worked,
             'carried_in_hours' => $hoursBreakdown->carriedInHours,

@@ -120,6 +120,16 @@ class ClientCompany extends Model
     }
 
     /**
+     * Get activity log rows for this client company.
+     *
+     * @return HasMany<ClientCompanyActivity, $this>
+     */
+    public function activities(): HasMany
+    {
+        return $this->hasMany(ClientCompanyActivity::class, 'client_company_id');
+    }
+
+    /**
      * Get time entries for this client company.
      *
      * @return HasMany<ClientTimeEntry, self>

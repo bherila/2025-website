@@ -1,16 +1,31 @@
-import { ArrowLeft, ExternalLink, FileText, Plus, X } from 'lucide-react'
+import { Activity, ArrowLeft, ExternalLink, FileText, Plus, Receipt, Repeat, Users, X } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
+import AdminInvoiceList from '@/client-management/components/admin/AdminInvoiceList'
+import { AgreementStatusBadges, CadenceBadge } from '@/client-management/components/admin/ClientBadges'
+import CyclePreviewPanel from '@/client-management/components/admin/CyclePreviewPanel'
+import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
 import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
 import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
 import type { ClientCompany } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
 
@@ -77,6 +92,8 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [userToRemove, setUserToRemove] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState(() => window.location.hash.replace('#', '') || 'overview')
   const [alertInfo, setAlertInfo] = useState<{
     show: boolean
     message: string
@@ -126,6 +143,13 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     fetchCompany()
   }, [fetchCompany])
 
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(window.location.hash.replace('#', '') || 'overview')
+    window.addEventListener('hashchange', onHashChange)
+
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -155,10 +179,9 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   }
 
   const handleRemoveUser = async (userId: number) => {
-    if (!confirm('Remove this user from the company?')) return
-
     try {
       await fetchWrapper.delete(`/api/client/mgmt/${companyId}/users/${userId}`, {})
+      setUserToRemove(null)
       await fetchCompany()
     } catch (error) {
       console.error('Error removing user:', error)
@@ -221,6 +244,13 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     )
   }
 
+  const activeAgreement = company.agreements.find((agreement) => !agreement.termination_date) ?? company.agreements[0] ?? null
+
+  const changeTab = (value: string) => {
+    setActiveTab(value)
+    window.history.replaceState(null, '', `#${value}`)
+  }
+
   return (
     <>
       <ClientPortalNav
@@ -229,7 +259,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
         companyId={company.id}
         currentPage="manage"
       />
-      <div className="container mx-auto p-8 max-w-4xl">
+      <div className="container mx-auto p-8 max-w-7xl">
         {alertInfo?.show && (
           <Alert variant={alertInfo.variant} className="mb-4 relative">
             <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
@@ -270,7 +300,19 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </div>
         </div>
 
+      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-4">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="agreements">Agreements</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="time">Time & Expenses</TabsTrigger>
+          <TabsTrigger value="recurring">Recurring items</TabsTrigger>
+          <TabsTrigger value="activity">Notes / Activity</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
       <div className="space-y-6">
+        <CyclePreviewPanel company={company} agreement={activeAgreement} />
         <Card>
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
@@ -417,7 +459,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                   <Badge key={user.id} variant="secondary" className="flex items-center gap-1 pr-1">
                     <span>{user.name}</span>
                     <button
-                      onClick={() => handleRemoveUser(user.id)}
+                      onClick={() => setUserToRemove(user.id)}
                       className="ml-1 hover:bg-destructive/20 rounded-sm p-0.5"
                       title="Remove user"
                     >
@@ -496,6 +538,153 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="agreements">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle>Agreement Timeline</CardTitle>
+              <Button size="sm" onClick={handleCreateAgreement} disabled={saving}>
+                Create New Agreement
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {company.agreements.length === 0 ? (
+                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                  No agreements found for this company.
+                </div>
+              ) : (
+                company.agreements.map((agreement) => (
+                  <div
+                    key={agreement.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4 hover:bg-muted/40"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</span>
+                        <CadenceBadge value={agreement.billing_cadence ?? 'monthly'} />
+                        <AgreementStatusBadges
+                          signedAt={agreement.client_company_signed_date}
+                          terminatedAt={agreement.termination_date}
+                          visible={agreement.is_visible_to_client}
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {agreement.monthly_retainer_hours} hrs/mo at ${agreement.monthly_retainer_fee}/mo
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => window.location.href = `/client/mgmt/agreement/${agreement.id}`}>
+                      Open
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invoices">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Admin Invoices
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AdminInvoiceList companyId={company.id} agreements={company.agreements} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="time">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Time & Expenses
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border p-3">
+                <div className="text-sm text-muted-foreground">Uninvoiced hours</div>
+                <div className="mt-1 text-2xl font-semibold">{(company.uninvoiced_hours ?? 0).toFixed(2)}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-sm text-muted-foreground">Complete task value</div>
+                <div className="mt-1 text-2xl font-semibold">${(company.uninvoiced_task_complete_total ?? 0).toFixed(2)}</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-sm text-muted-foreground">Incomplete task value</div>
+                <div className="mt-1 text-2xl font-semibold">${(company.uninvoiced_task_incomplete_total ?? 0).toFixed(2)}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="recurring">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Repeat className="h-5 w-5" />
+                Recurring Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RecurringItemsEditor companyId={company.id} agreement={activeAgreement} onChanged={fetchCompany} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="activity">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Notes / Activity log
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(company.activities ?? []).length === 0 ? (
+                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                  No activity has been logged for this company yet.
+                </div>
+              ) : (
+                (company.activities ?? []).map((activity) => (
+                  <div key={activity.id} className="rounded-md border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium">{activity.action.replaceAll('.', ' ')}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {activity.created_at ? new Date(activity.created_at).toLocaleString() : ''}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {activity.actor_name ? `By ${activity.actor_name}` : 'System'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <AlertDialog open={userToRemove !== null} onOpenChange={(open) => !open && setUserToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove user</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the selected user from this company.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => userToRemove !== null && void handleRemoveUser(userToRemove)}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <InvitePeopleModal
         open={inviteModalOpen}

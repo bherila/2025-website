@@ -6,12 +6,12 @@
 - **[Overpayment credits](overpayment-credits.md)** — any overpaid amount carries forward as a credit applied automatically to the next draft invoice(s); credits never expire.
 
 ## Overview
-The billing and invoicing system handles automatic invoice generation with prior-month billing, retainer-based pricing, rollover hours, and reimbursable expense tracking. Invoices are generated at the start of month M and include work from the prior month (M-1) plus the retainer fee for the current month (M).
+The billing and invoicing system handles automatic invoice generation with prior-period billing, retainer-based pricing, rollover hours, recurring fixed-fee items, reimbursable expense tracking, and agreement billing cadences. Agreements can bill on monthly, quarterly, or annual cadence cycles. Monthly agreements preserve the original prior-month behavior; non-monthly agreements generate one cadence-period invoice per cycle and may optionally generate interim overage invoices at completed month boundaries inside the cycle.
 
 ## Core Concepts
 
-### Prior-Month Billing Model
-When an invoice is generated for month M (e.g., February 2024):
+### Prior-Period Billing Model
+When a monthly invoice is generated for month M (e.g., February 2024):
 - **Work Period (M-1)**: The invoice `period_start` and `period_end` represent the month work was performed (e.g., Jan 1 - Jan 31).
 - **Time entries from month M-1** are included and generally dated as the last day of M-1. These are covered by the available pool (retainer + rollover).
 - **Retainer fee for month M** is included and dated as the first day of M.
@@ -19,12 +19,33 @@ When an invoice is generated for month M (e.g., February 2024):
 
 This model ensures work is billed after completion, while the retainer fee provides availability for the upcoming month.
 
+For quarterly and annual agreements, the same monthly ledger remains the source of truth for rollover, catch-up, and overage calculations. The cadence-period invoice spans the full cycle (`cycle_start` through `cycle_end`), with the retainer fee and included hours scaled by the number of covered months, including any first-cycle proration.
+
+### Billing Cadence and Cycle Fields
+Agreement cadence is stored on `client_agreements.billing_cadence`:
+- **`monthly`**: One invoice per calendar month.
+- **`quarterly`**: One invoice per calendar quarter, aligned to Jan 1 / Apr 1 / Jul 1 / Oct 1.
+- **`annual`**: One invoice per calendar year, aligned to Jan 1.
+
+Invoices include cadence metadata:
+- **`invoice_kind = cadence_period`**: The primary monthly, quarterly, or annual cycle invoice.
+- **`invoice_kind = interim_overage`**: A non-monthly overage invoice emitted before the full cycle invoice.
+- **`invoice_kind = terminal`**: Reserved for terminal/final invoice handling.
+- **`cycle_start` / `cycle_end`**: The full cadence cycle the invoice belongs to. For cadence-period invoices these match `period_start` / `period_end`; interim overage invoices keep a narrower monthly `period_start` / `period_end` while pointing at the full cycle.
+
+First-cycle behavior is controlled by `first_cycle_proration`:
+- **`prorate_hours`**: Retainer hours and fee are prorated to the covered fraction of the cycle.
+- **`full_period`**: The first cycle bills the full retainer even if it starts mid-cycle.
+- **`align_next_cycle`**: The initial partial period is treated as an alignment stub, then full cadence cycles begin at the next boundary.
+
 ### Rollover Hours
 Unused retainer hours can roll over to future months (configurable via `rollover_months` in agreements). The calculation uses a chronological balance pool:
 - **rollover_months = 0**: No rollover; unused hours are lost
 - **rollover_months = 1**: Hours can only be used in the month they're earned  
 - **rollover_months = 2+**: Hours roll over for N-1 additional months
 - **Negative Balance**: If hours worked exceed available pool, the difference is carried forward as a negative balance rather than billed immediately, UNLESS the Minimum Availability Rule is triggered.
+
+For non-monthly agreements, rollover is still calculated month-by-month. The cadence-period invoice summarizes the cycle, but it does not replace the monthly ledger used by `RolloverCalculator`.
 
 ### Minimum Availability Rule (Catch-up Billing)
 To ensure the client always has capacity for new work, the system enforces a minimum availability of **1 hour** at the start of a billing period.
@@ -56,7 +77,7 @@ Generated invoices contain the following line item types (in order):
 1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours in the description and links to time entries with their original dates. Quantity is blank/empty (hours are documented in the description).
    - Split Logic: If prior month work exceeds what was covered by M-1 retainer and M retainer, it is split into multiple line items (Covered by M-1, Covered by M, Carried Forward).
 
-2. **Retainer Fee** (`retainer`): Monthly retainer fee for month M. Description includes the date (e.g., "Monthly Retainer (10 hours) - Feb 1, 2024"). Dated first day of M. Quantity is "1".
+2. **Retainer Fee** (`retainer`): Retainer fee for the invoice cycle. Monthly agreements bill one monthly fee; quarterly and annual agreements scale the monthly fee by the covered months/proration. Quantity is "1".
 
 3. **Catch-up / Additional Hours** (`additional_hours`): Used for "Catch-up Billing" (Minimum Availability Rule) or manual overage. Billed at hourly rate.
 
@@ -66,12 +87,16 @@ Generated invoices contain the following line item types (in order):
 
 6. **Milestone Tasks** (`milestone`): Completed billable tasks with a non-zero `milestone_price`. Each task generates a separate line item dated with its completion date. See [Milestone Billing](#milestone-billing) below.
 
+7. **Recurring Items** (`recurring_item`): Fixed-fee agreement charges generated from `client_agreement_recurring_items`. Each incidence links back to the recurring item that produced it.
+
 ## Invoice Period
-The invoice `period_start` and `period_end` specifically represent the **work period** being billed (usually M-1):
+For monthly invoices, `period_start` and `period_end` represent the **work period** being billed (usually M-1):
 - **period_start**: The first day of the work month (e.g., 2024-01-01).
 - **period_end**: The last day of the work month (e.g., 2024-01-31).
 
 Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
+
+For cadence-period invoices, `period_start` / `period_end` and `cycle_start` / `cycle_end` all describe the full cadence window. For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent quarterly or annual cadence window.
 
 ## Invoice Balance Fields
 The invoice tracks several balance fields that reflect the state at different points in time:
@@ -117,10 +142,54 @@ This ensures draft/upcoming invoices always reflect the current state of time en
 
 ## Draft Invoice Regeneration
 When regenerating a draft invoice (e.g., when new time entries are added):
-- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense, milestone)
+- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense, milestone, recurring_item)
 - All linked time entries, expenses, and milestone tasks are unlinked (their `client_invoice_line_id` set to null)
 - New line items are generated with updated calculations
 - Manual adjustments (line_type = 'adjustment') are preserved
+
+## Recurring Items
+
+Recurring items are fixed-fee charges attached to an agreement. Admins manage them through the agreement workspace and the API at:
+
+```
+GET    /api/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items
+POST   /api/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items
+PUT    /api/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}
+DELETE /api/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}
+```
+
+Each item stores a description, amount, charge cadence, start/end dates, optional anchor month/day, taxable flag, summarized flag, and notes. Supported charge cadences are `monthly`, `quarterly`, `semi_annual`, `annual`, and `one_time`.
+
+`RecurringItemBiller` computes incidences that fall inside the invoice cycle. For example, a monthly item on a quarterly invoice produces three invoice lines, one per month in the cycle. Quarterly, semi-annual, and annual items use their anchor month/day; one-time items bill once on `start_date`.
+
+## Interim Overage Invoices
+
+Non-monthly agreements can set `bill_overage_interim = true`. When enabled, the invoicing service can emit `interim_overage` draft invoices at completed month boundaries inside the current quarterly or annual cycle.
+
+Interim invoices:
+- Apply only to non-monthly agreements.
+- Use the parent cadence cycle in `cycle_start` / `cycle_end`.
+- Use a monthly slice in `period_start` / `period_end`.
+- Bill only immediate overage hours that have not already been billed by earlier interim invoices in the same cycle.
+- Are not generated after the cadence-period invoice for that cycle has been issued or paid.
+
+The full cadence-period invoice subtracts any interim-billed overage hours for the same cycle so the client is not double-billed.
+
+## Agreement Transitions
+
+Agreement cadence changes use `AgreementTransitionService` instead of mutating the existing agreement in place. A transition:
+- Sets the outgoing agreement's `termination_date` to the day before the effective date.
+- Creates a successor agreement with the new terms.
+- Optionally carries forward positive rollover hours into `initial_rollover_hours`.
+- Handles active recurring items by cloning, migrating, dropping, or skipping them.
+- Records an `agreement.transitioned` row in `client_company_activity`.
+
+Transition endpoints:
+
+```
+POST /api/client/mgmt/companies/{company}/agreements/{agreement}/transition/preview
+POST /api/client/mgmt/companies/{company}/agreements/{agreement}/transition
+```
 
 ## Milestone Billing
 
@@ -138,13 +207,13 @@ Tasks can be designated as billable milestones by setting a non-zero `milestone_
 
 When running "Generate Invoices" via the admin interface:
 
-1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period from the agreement start date through the **first day of the next calendar month** (inclusive). This means the current month's work period is always included as an "upcoming" draft invoice for preview.
+1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period from the agreement start date through the current cadence window. Monthly agreements use monthly windows; quarterly and annual agreements use cadence windows.
 2. **Task Collection**: For each invoice period, the system identifies all completed, unbilled tasks (`milestone_price > 0`, `client_invoice_line_id IS NULL`, `completed_at <= period_end`).
 3. **Draft Invoice Updates**: If a draft invoice already exists for the period, it is regenerated to include any newly completed tasks.
 4. **Carry-Forward Logic**: If a task's completion date falls within a period that already has an **Issued** or **Paid** invoice, the task is automatically added to the next available **Draft** invoice instead.
 5. **Immutability**: Non-draft invoices (Issued, Paid, Void) are **NEVER** modified. Their milestone line items remain locked and unchanged.
 
-The **upcoming period preview** feature ensures that the current month's work (time entries, expenses, milestone tasks) appears in a draft invoice before the month closes, giving admins visibility into what will be billed at month end.
+The **upcoming period preview** feature ensures that current-period work (time entries, expenses, recurring items, and milestone tasks) appears in a draft invoice before the period closes, giving admins visibility into what will be billed at period end.
 
 ### Visual Indicator
 Tasks with a non-zero `milestone_price` display a **green badge** showing the price (e.g., `$500.00`). Completed tasks that have been invoiced show a `✓` in the badge.
