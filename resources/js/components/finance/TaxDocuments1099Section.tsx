@@ -48,6 +48,7 @@ import { TAX_TABS } from './tax-tab-ids'
 export interface FinAccount {
   acct_id: number
   acct_name: string
+  acct_is_debt?: boolean | null
 }
 
 type MoneyKey = keyof DocAmounts
@@ -166,6 +167,10 @@ const DISPLAY_FORM_TYPES = ['1099_int', '1099_div', '1099_misc', '1099_nec', '10
 // which routes through the MultiAccountImportModal with a preselected account.
 type DisplayFormType = (typeof DISPLAY_FORM_TYPES)[number]
 
+function isTaxDocumentEligibleAccount(account: FinAccount): boolean {
+  return account.acct_is_debt !== true
+}
+
 export default function TaxDocuments1099Section({
   selectedYear,
   documents: controlledDocuments,
@@ -180,7 +185,7 @@ export default function TaxDocuments1099Section({
   foreignTaxSummaries = [],
 }: TaxDocuments1099SectionProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>(controlledDocuments ?? [])
-  const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts ?? [])
+  const [accounts, setAccounts] = useState<FinAccount[]>(controlledAccounts?.filter(isTaxDocumentEligibleAccount) ?? [])
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>(controlledActiveAccountIds ?? [])
   const [loading, setLoading] = useState(controlledLoading ?? true)
   const [error, setError] = useState<string | null>(null)
@@ -242,9 +247,8 @@ export default function TaxDocuments1099Section({
       }
       const all: FinAccount[] = [
         ...(data.assetAccounts ?? []),
-        ...(data.liabilityAccounts ?? []),
         ...(data.retirementAccounts ?? []),
-      ]
+      ].filter(isTaxDocumentEligibleAccount)
       setAccounts(all)
       setActiveAccountIds(data.active_account_ids ?? [])
     } catch {
@@ -257,7 +261,7 @@ export default function TaxDocuments1099Section({
   }, [controlledDocuments])
 
   useEffect(() => {
-    if (controlledAccounts) setAccounts(controlledAccounts)
+    if (controlledAccounts) setAccounts(controlledAccounts.filter(isTaxDocumentEligibleAccount))
   }, [controlledAccounts])
 
   useEffect(() => {

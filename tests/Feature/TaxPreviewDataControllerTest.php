@@ -39,6 +39,40 @@ class TaxPreviewDataControllerTest extends TestCase
             ]);
     }
 
+    public function test_tax_preview_data_endpoint_excludes_debt_accounts_from_account_documents(): void
+    {
+        $user = $this->createUser();
+
+        FinAccounts::withoutEvents(function () use ($user): void {
+            FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $user->id,
+                'acct_name' => 'fidelity taxable',
+                'acct_is_debt' => false,
+                'acct_is_retirement' => false,
+            ]);
+            FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $user->id,
+                'acct_name' => 'traditional ira',
+                'acct_is_debt' => false,
+                'acct_is_retirement' => true,
+            ]);
+            FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $user->id,
+                'acct_name' => 'green',
+                'acct_is_debt' => true,
+                'acct_is_retirement' => false,
+            ]);
+        });
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
+
+        $response->assertOk();
+        $accountNames = collect($response->json('accounts'))->pluck('acct_name')->all();
+        $this->assertContains('fidelity taxable', $accountNames);
+        $this->assertContains('traditional ira', $accountNames);
+        $this->assertNotContains('green', $accountNames);
+    }
+
     public function test_tax_preview_data_endpoint_ignores_non_numeric_year_query_values(): void
     {
         $user = $this->createUser();
