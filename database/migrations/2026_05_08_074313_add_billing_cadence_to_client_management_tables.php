@@ -63,7 +63,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(['client_agreement_id', 'start_date', 'end_date']);
+            $table->index(['client_agreement_id', 'start_date', 'end_date'], 'car_items_agreement_dates_idx');
         });
 
         // Add recurring item FK to client_invoice_lines

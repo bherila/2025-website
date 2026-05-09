@@ -46,6 +46,13 @@ jobs:
               - 'phpstan-baseline.neon'
               - 'database/**'
               - 'scripts/**'
+            migrations:
+              - 'database/migrations/**/*.php'
+              - 'scripts/check-migration-identifiers.py'
+
+      - name: Check MySQL identifier lengths in migrations
+        if: steps.changes.outputs.migrations == 'true' || github.event_name == 'push'
+        run: python3 scripts/check-migration-identifiers.py
 
       - name: Set up pnpm
         if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
@@ -89,10 +96,6 @@ jobs:
       - name: Install Composer dependencies (with dev)
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: composer install --no-interaction --prefer-dist
-
-      - name: Check MySQL identifier lengths in migrations
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: python3 scripts/check-migration-identifiers.py
 
       - name: Create .env for PHPStan
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
