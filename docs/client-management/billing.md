@@ -142,7 +142,7 @@ This ensures draft/upcoming invoices always reflect the current state of time en
 
 ## Draft Invoice Regeneration
 When regenerating a draft invoice (e.g., when new time entries are added):
-- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense, milestone, recurring_item)
+- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense, milestone, recurring_item, reconciliation)
 - All linked time entries, expenses, and milestone tasks are unlinked (their `client_invoice_line_id` set to null)
 - New line items are generated with updated calculations
 - Manual adjustments (line_type = 'adjustment') are preserved
@@ -175,6 +175,12 @@ Interim invoices:
 
 The full cadence-period invoice subtracts any interim-billed overage hours for the same cycle so the client is not double-billed.
 
+Admins can explicitly generate a completed month slice through the idempotent interim endpoint:
+
+```
+POST /api/client/mgmt/companies/{company}/invoices/generate-interim/{yyyymm}
+```
+
 ## Agreement Transitions
 
 Agreement cadence changes use `AgreementTransitionService` instead of mutating the existing agreement in place. A transition:
@@ -190,6 +196,10 @@ Transition endpoints:
 POST /api/client/mgmt/companies/{company}/agreements/{agreement}/transition/preview
 POST /api/client/mgmt/companies/{company}/agreements/{agreement}/transition
 ```
+
+### Outgoing Agreement Catch-up After Transition
+
+When an agreement has been terminated and a successor agreement exists for the same company, monthly catch-up generation for the outgoing agreement is bounded to the month immediately before the successor's `active_date`. Gap-month work between the termination date and the successor's first work period is still billed by the outgoing agreement; work on or after the successor's first work period is billed by the successor. A lone terminated agreement with no successor preserves the legacy unbounded post-termination catch-up.
 
 ## Milestone Billing
 
