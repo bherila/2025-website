@@ -28,7 +28,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['client_company_id', 'type']);
-            $table->index(['client_company_id', 'is_default']);
+            $table->index(['client_company_id', 'is_default'], 'ccpm_company_default_idx');
         });
     }
 

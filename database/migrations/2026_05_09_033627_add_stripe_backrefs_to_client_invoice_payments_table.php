@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('client_invoice_stripe_payment_id')
                 ->nullable()
                 ->after('notes')
-                ->constrained('client_invoice_stripe_payments')
+                ->constrained('client_invoice_stripe_payments', indexName: 'cip_stripe_payment_fk')
                 ->nullOnDelete();
             $table->string('stripe_payment_intent_id')
                 ->nullable()
@@ -30,8 +30,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('client_invoice_payments', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('client_invoice_stripe_payment_id');
+            $table->dropForeign('cip_stripe_payment_fk');
             $table->dropIndex('client_invoice_payments_stripe_payment_intent_id_index');
+            $table->dropColumn('client_invoice_stripe_payment_id');
             $table->dropColumn('stripe_payment_intent_id');
         });
     }
