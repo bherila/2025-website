@@ -907,12 +907,6 @@ parameters:
 			path: app/Models/ClientManagement/ClientInvoiceLine.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientInvoicePayment\:\:invoice\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientInvoicePayment.php
-
-		-
 			message: '#^Class App\\Models\\ClientManagement\\ClientProject uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1

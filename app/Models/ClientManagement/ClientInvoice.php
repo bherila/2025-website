@@ -71,7 +71,7 @@ class ClientInvoice extends Model
     /**
      * The "booted" method of the model.
      */
-    protected static function booted()
+    protected static function booted(): void
     {
         static::deleting(function ($invoice) {
             // Delete associated line items (this will trigger ClientInvoiceLine's deleting event)
@@ -124,6 +124,14 @@ class ClientInvoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(ClientInvoicePayment::class, 'client_invoice_id', 'client_invoice_id');
+    }
+
+    /**
+     * @return HasMany<ClientInvoiceStripePayment, $this>
+     */
+    public function stripePayments(): HasMany
+    {
+        return $this->hasMany(ClientInvoiceStripePayment::class, 'client_invoice_id', 'client_invoice_id');
     }
 
     /**
@@ -263,7 +271,7 @@ class ClientInvoice extends Model
      */
     public function toDetailedArray(): array
     {
-        $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments', 'clientCompany']);
+        $this->loadMissing(['agreement', 'lineItems.timeEntries', 'payments', 'clientCompany', 'stripePayments']);
 
         $hoursBreakdown = $this->calculateHoursBreakdown();
         $negativeOffset = min((float) $this->negative_hours_balance, (float) $this->retainer_hours_included);
@@ -316,6 +324,11 @@ class ClientInvoice extends Model
             'hours_billed_at_rate' => $this->hours_billed_at_rate,
             'notes' => $this->notes,
             'payments' => $this->payments->toArray(),
+            'stripe_payments' => $this->stripePayments
+                ->sortByDesc('created_at')
+                ->values()
+                ->map(fn (ClientInvoiceStripePayment $payment) => $payment->toActivityArray())
+                ->all(),
             'payments_total' => $this->payments_total,
             'remaining_balance' => $this->remaining_balance,
             'credit_applied' => $creditApplied,

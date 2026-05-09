@@ -1,3 +1,4 @@
+import currency from 'currency.js'
 import { format } from 'date-fns'
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
@@ -17,6 +18,7 @@ import { formatHours } from "@/lib/formatHours";
 import AddPaymentModal from "./AddPaymentModal";
 import ClientPortalInvoiceActionButtonRow from "./ClientPortalInvoiceActionButtonRow";
 import ClientPortalNav from "./ClientPortalNav";
+import InvoicePayPanel from './InvoicePayPanel'
 import LineItemEditModal from "./LineItemEditModal";
 import { DeferredBadge } from './PortalBadges'
 import TimeTrackingMonthSummaryRow from "./TimeTrackingMonthSummaryRow";
@@ -42,9 +44,19 @@ interface ClientPortalInvoicePageProps {
     companyId: number;
     invoiceId: number;
     initialInvoice?: Invoice | null;
+    stripePublishableKey?: string | null;
+    stripeMaxAmountCents?: number;
 }
 
-export default function ClientPortalInvoicePage({ slug, companyName, companyId, invoiceId, initialInvoice = null }: ClientPortalInvoicePageProps) {
+export default function ClientPortalInvoicePage({
+    slug,
+    companyName,
+    companyId,
+    invoiceId,
+    initialInvoice = null,
+    stripePublishableKey = null,
+    stripeMaxAmountCents = 100000,
+}: ClientPortalInvoicePageProps) {
     const isAdmin = useIsUserAdmin()
     const [invoice, setInvoice] = useState<Invoice | null>(initialInvoice)
     const [isLoading, setIsLoading] = useState(initialInvoice ? false : true)
@@ -304,6 +316,14 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                 </div>
 
                 <div className="space-y-8">
+                    <InvoicePayPanel
+                        invoice={invoice}
+                        companyId={companyId}
+                        stripePublishableKey={stripePublishableKey}
+                        stripeMaxAmountCents={stripeMaxAmountCents}
+                        onPaymentUpdated={() => fetchInvoice(true)}
+                    />
+
                     <section>
                         <div className="flex justify-end items-center mb-4">
                             <div className="flex items-center space-x-2">
@@ -529,6 +549,32 @@ export default function ClientPortalInvoicePage({ slug, companyName, companyId, 
                                                     </Button>
                                                 </TableCell>
                                             )}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </section>
+                    )}
+
+                    {isAdmin && invoice.stripe_payments && invoice.stripe_payments.length > 0 && (
+                        <section>
+                            <h3 className="text-xl font-semibold mb-4">Stripe Activity</h3>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Payment Intent</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Amount</TableHead>
+                                        <TableHead>Last Event</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {invoice.stripe_payments.map((stripePayment) => (
+                                        <TableRow key={stripePayment.id}>
+                                            <TableCell className="font-mono text-xs">{stripePayment.stripe_payment_intent_id}</TableCell>
+                                            <TableCell>{stripePayment.status}</TableCell>
+                                            <TableCell className="text-right">{currency(stripePayment.amount, { fromCents: true }).format()}</TableCell>
+                                            <TableCell className="font-mono text-xs text-muted-foreground">{stripePayment.last_event_id ?? '—'}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

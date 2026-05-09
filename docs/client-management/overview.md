@@ -39,6 +39,8 @@ The Client Management system is an admin-only feature for managing client compan
 - `updated_at`: Last modification timestamp
 - `deleted_at`: Soft delete timestamp (nullable)
 
+Stripe billing adds separate customer/payment-method tables so the client company row remains the business entity record. See [Stripe billing](stripe-billing.md).
+
 **Features:**
 - Soft deletes enabled via Eloquent `SoftDeletes` trait
 - Automatically maintains `last_activity` via `touchLastActivity()` method

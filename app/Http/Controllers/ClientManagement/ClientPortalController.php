@@ -146,6 +146,22 @@ class ClientPortalController extends Controller
     }
 
     /**
+     * Display billing settings for a company.
+     */
+    public function billing(string $slug): View
+    {
+        $company = ClientCompany::where('slug', $slug)->firstOrFail();
+
+        Gate::authorize('ClientCompanyMember', $company->id);
+
+        return view('client-management.portal.billing', [
+            'company' => $company,
+            'slug' => $slug,
+            'stripePublishableKey' => config('services.stripe.publishable_key'),
+        ]);
+    }
+
+    /**
      * Display a specific invoice.
      */
     public function invoice(string $slug, int $invoiceId): View
@@ -205,6 +221,8 @@ class ClientPortalController extends Controller
             'invoice' => $invoicePayload,
             'slug' => $slug,
             'invoiceId' => $invoice->client_invoice_id,
+            'stripePublishableKey' => config('services.stripe.publishable_key'),
+            'stripeMaxAmountCents' => config('client-management.stripe.max_amount_cents', 100000),
         ]);
     }
 

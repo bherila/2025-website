@@ -505,7 +505,7 @@ class ClientInvoiceApiController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
+            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other,stripe_card,stripe_ach,stripe_refund',
             'notes' => 'nullable|string',
         ]);
 
@@ -539,7 +539,7 @@ class ClientInvoiceApiController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other',
+            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other,stripe_card,stripe_ach,stripe_refund',
             'notes' => 'nullable|string',
         ]);
 
