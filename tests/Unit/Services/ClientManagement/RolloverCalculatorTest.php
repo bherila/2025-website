@@ -238,6 +238,22 @@ class RolloverCalculatorTest extends TestCase
         $this->assertEquals(2.0, $result->closing->unusedHours);
     }
 
+    public function test_month_summary_records_immediate_excess_mode(): void
+    {
+        $result = $this->calculator->calculateMonthSummary(
+            retainerHours: 10.0,
+            hoursWorked: 15.0,
+            previousMonthsUnused: [],
+            rolloverMonths: 0,
+            previousNegativeBalance: 0.0,
+            billExcessImmediately: true,
+            yearMonth: '2026-04'
+        );
+
+        $this->assertTrue($result->billExcessImmediately);
+        $this->assertEquals(5.0, $result->closing->excessHours);
+    }
+
     public function test_month_summary_with_rollover_used(): void
     {
         $result = $this->calculator->calculateMonthSummary(

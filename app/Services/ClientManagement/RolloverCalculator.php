@@ -179,7 +179,8 @@ class RolloverCalculator
             closing: $closing,
             hoursWorked: round($hoursWorked, 4),
             yearMonth: $yearMonth,
-            retainerHours: $retainerHours
+            retainerHours: $retainerHours,
+            billExcessImmediately: $billExcessImmediately,
         );
     }
 

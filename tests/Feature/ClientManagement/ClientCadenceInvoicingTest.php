@@ -17,6 +17,7 @@ use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
 use App\Services\ClientManagement\ClientInvoicingService;
+use App\Services\ClientManagement\RolloverCalculator;
 use Carbon\Carbon;
 use Tests\TestCase;
 
@@ -559,6 +560,44 @@ class ClientCadenceInvoicingTest extends TestCase
             $this->assertEquals('2026-12-31', $invoice->cycle_end->toDateString());
             $this->assertEquals(10.0, (float) $invoice->hours_billed_at_rate);
             $this->assertEquals(1000.0, (float) $invoice->invoice_total);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_generate_interim_overage_rejects_non_immediate_excess_ledger(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-10'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Annual->value,
+                'bill_overage_interim' => true,
+                'monthly_retainer_hours' => 10,
+                'hourly_rate' => 100,
+                'rollover_months' => 0,
+                'active_date' => Carbon::parse('2026-01-01'),
+            ]);
+
+            $this->createTimeEntry('2026-04-10', 20);
+
+            $deferredExcessLedger = (new RolloverCalculator)->calculateMultipleMonths([
+                [
+                    'year_month' => '2026-04',
+                    'retainer_hours' => 10.0,
+                    'hours_worked' => 20.0,
+                ],
+            ], 0, false);
+
+            $this->expectException(\LogicException::class);
+            $this->expectExceptionMessage('Interim overage invoices require a ledger built with billExcessImmediately=true.');
+
+            $this->invoicingService->generateInterimOverageInvoice(
+                $this->company,
+                Carbon::parse('2026-04-01'),
+                $agreement,
+                $deferredExcessLedger,
+            );
         } finally {
             Carbon::setTestNow();
         }

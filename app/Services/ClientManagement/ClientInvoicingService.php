@@ -1279,6 +1279,7 @@ class ClientInvoicingService
 
             // Interim invoices read MonthSummary::closing->excessHours, which is populated only with immediate-excess ledgers.
             $immediateLedger ??= $this->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
+            $this->assertImmediateLedgerSupportsInterimOverage($immediateLedger, $cycle, $periodEnd);
             $cumulativeExcessHours = $this->cumulativeInterimExcessHoursThrough($immediateLedger, $cycle, $periodEnd);
             $alreadyBilledHours = ClientInvoice::query()
                 ->where('client_company_id', $company->id)
@@ -1606,6 +1607,10 @@ class ClientInvoicingService
             ? Carbon::parse($agreement->termination_date)->startOfDay()
             : null;
 
+        if ($activeDate->lte($monthStart) && (! $terminationDate || $terminationDate->gte($monthEnd))) {
+            return 1.0;
+        }
+
         $coveredStart = $activeDate->gt($monthStart) ? $activeDate->copy() : $monthStart->copy();
         $coveredEnd = $monthEnd->copy();
         if ($terminationDate && $terminationDate->lt($coveredEnd)) {
@@ -1625,6 +1630,26 @@ class ClientInvoicingService
         }
 
         return round(($coveredStart->diffInDays($coveredEnd) + 1) / $monthStart->daysInMonth, 4);
+    }
+
+    /**
+     * @param  array<int, MonthSummary>  $immediateLedger  Ledger built with billExcessImmediately=true so closing excessHours contains billable interim overage.
+     */
+    protected function assertImmediateLedgerSupportsInterimOverage(array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): void
+    {
+        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
+        $periodMonthEnd = $periodEnd->copy()->startOfMonth();
+
+        foreach ($immediateLedger as $summary) {
+            $monthStart = Carbon::parse($summary->yearMonth.'-01')->startOfDay();
+            if (! $monthStart->betweenIncluded($cycleMonthStart, $periodMonthEnd)) {
+                continue;
+            }
+
+            if (! $summary->billExcessImmediately) {
+                throw new \LogicException('Interim overage invoices require a ledger built with billExcessImmediately=true.');
+            }
+        }
     }
 
     /**

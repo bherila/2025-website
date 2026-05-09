@@ -633,7 +633,7 @@ Stores audit/activity log entries for a company.
 - `id`: Primary key
 - `client_company_id`: Foreign key to `client_companies`
 - `actor_user_id`: Nullable foreign key to `users`
-- `action`: Action key such as `agreement.transitioned` or `invoice.generated`
+- `action`: Action key (`agreement.transitioned`, `invoice.generated`, `invoice.issued`, `invoice.marked_paid`, `invoice.voided`)
 - `subject_type`, `subject_id`: Nullable morph reference to the affected model
 - `payload`: JSON metadata for the event
 - `created_at`, `updated_at`: Timestamps
@@ -656,7 +656,7 @@ Individual line items on invoices.
 - `quantity`: Quantity as string (varchar 20) - formatted as "h:mm" for time-based lines or "1" for flat items
 - `unit_price`: Price per unit (decimal 10,2)
 - `line_total`: Calculated total (decimal 10,2)
-- `line_type`: retainer, additional_hours, prior_month_retainer, prior_month_billable, recurring_item, expense, adjustment, credit (string)
+- `line_type`: retainer, additional_hours, prior_month_retainer, prior_month_billable, recurring_item, expense, adjustment, credit, reconciliation (string)
 - `line_date`: Date associated with the line item (date, nullable) - e.g., the work/charge date for time, recurring items, expenses, or retainer lines
 - `hours`: Hours if applicable (decimal 8,2, nullable)
 - `sort_order`: Display order (integer)
@@ -725,6 +725,7 @@ Splits into 4 fragments:
 | `additional_hours` | Catch-up or billable overage | Hourly rate | When work exceeds retainer capacity or threshold enforcement |
 | `retainer` | Cadence retainer fee | Fixed fee | Every cadence-period invoice; scaled for quarterly/annual cycles |
 | `recurring_item` | Recurring agreement charge | Fixed fee | When a recurring item incidence falls in the invoice cycle |
+| `reconciliation` | Cadence-period summary of interim-billed hours | Zero-priced | Cadence-period invoice for a cycle that has sibling `interim_overage` invoices |
 | `expense` | Reimbursable expenses | Actual cost | Client expenses needing reimbursement |
 | `adjustment` | Manual adjustments | Variable | Admin-added corrections or special charges |
 | `credit` | Informational credits | $0 | Balance adjustments or credits |
