@@ -55,6 +55,26 @@ def string_literals(value: str) -> list[str]:
     return [match.group(1) or match.group(2) for match in re.finditer(r"'([^']+)'|\"([^\"]+)\"", value)]
 
 
+def identifier_constants(content: str) -> dict[str, str]:
+    return {
+        match.group(1): match.group(2) or match.group(3)
+        for match in re.finditer(
+            r"\bconst\s+([A-Z][A-Z0-9_]*)\s*=\s*(?:'([^']+)'|\"([^\"]+)\")",
+            content,
+        )
+    }
+
+
+def explicit_identifier_names(value: str, constants: dict[str, str]) -> list[str]:
+    names = string_literals(value)
+
+    for match in re.finditer(r"\b(?:self|static)::([A-Z][A-Z0-9_]*)", value):
+        if match.group(1) in constants:
+            names.append(constants[match.group(1)])
+
+    return names
+
+
 def normalize_columns(columns: str) -> str | None:
     columns = columns.strip()
 
@@ -99,12 +119,18 @@ def check_migrations(migrations_dir: str) -> list[str]:
         with open(path) as migration_file:
             content = migration_file.read()
 
+        constants = identifier_constants(content)
+
         # Explicit ->name('identifier'), indexName: 'identifier', etc.
         for m in re.finditer(r"->name\(['\"]([^'\"]+)['\"]\)", content):
             check_explicit_name(issues, m.group(1), fname)
 
         for m in re.finditer(r"\b(?:indexName|name)\s*:\s*['\"]([^'\"]+)['\"]", content):
             check_explicit_name(issues, m.group(1), fname)
+
+        for m in re.finditer(r"\b(?:indexName|name)\s*:\s*(?:self|static)::([A-Z][A-Z0-9_]*)", content):
+            if m.group(1) in constants:
+                check_explicit_name(issues, constants[m.group(1)], fname)
 
         for table, body in schema_blocks(content):
             for m in re.finditer(
@@ -115,7 +141,7 @@ def check_migrations(migrations_dir: str) -> list[str]:
                 re.DOTALL,
             ):
                 method = m.group('method')
-                explicit_names = string_literals(m.group('rest'))
+                explicit_names = explicit_identifier_names(m.group('rest'), constants)
                 suffix = f"_{method if method != 'foreign' else 'foreign'}"
 
                 if explicit_names:
@@ -141,7 +167,7 @@ def check_migrations(migrations_dir: str) -> list[str]:
                 re.DOTALL,
             ):
                 method = m.group('method')
-                explicit_names = string_literals(m.group('args'))
+                explicit_names = explicit_identifier_names(m.group('args'), constants)
                 if explicit_names:
                     check_explicit_name(issues, explicit_names[0], fname)
                     continue
@@ -160,7 +186,13 @@ def check_migrations(migrations_dir: str) -> list[str]:
                 body,
                 re.DOTALL,
             ):
-                explicit_names = re.findall(r"indexName\s*:\s*['\"]([^'\"]+)['\"]", m.group('args'))
+                explicit_names = []
+                for argument in re.findall(
+                    r"indexName\s*:\s*(?:['\"][^'\"]+['\"]|(?:self|static)::[A-Z][A-Z0-9_]*)",
+                    m.group('args'),
+                ):
+                    explicit_names.extend(explicit_identifier_names(argument, constants))
+
                 if explicit_names:
                     check_explicit_name(issues, explicit_names[0], fname)
                     continue
