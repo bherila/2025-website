@@ -277,6 +277,7 @@ Location: `resources/js/client-management/components/`
 - Shows inactive companies in collapsible section
 - "Invite People" button opens modal
 - "New Company" button navigates to create page
+- Search, cadence badges, cycle-progress mini bar, and "needs attention" filtering help prioritize companies
 - Uses shadcn/ui Card, Badge, Button components
 
 **ClientManagementCreatePage.tsx**
@@ -286,13 +287,25 @@ Location: `resources/js/client-management/components/`
 - Uses shadcn/ui Card, Input, Button, Alert components
 
 **ClientManagementShowPage.tsx**
-- Full company information form
-- Slug field with link to portal
-- All fields editable except ID and last_activity
-- Displays associated users with remove buttons
-- Updates `last_activity` on save
-- Shows metadata (ID, creation date)
-- Uses shadcn/ui Card, Input, Textarea, Checkbox, Badge components
+- Tabbed company workspace with Overview, Agreements, Invoices, Time & Expenses, Recurring Items, and Activity Log sections
+- Company details remain editable from the overview surface, including slug and portal link
+- Agreement tab embeds cadence-aware agreement cards and recurring item management
+- Invoice tab embeds the admin invoice list with status/kind/date/agreement filters and invoice actions
+- Activity Log tab renders `client_company_activity` entries such as agreement transitions and invoice generation
+- Uses shadcn/ui Tabs, Card, Input, Textarea, Checkbox, Badge components
+
+**ClientAgreementShowPage.tsx**
+- Agreement detail workspace with status header, financial terms, signing/lifecycle controls, cycle preview, and recurring item cards
+- "Change cadence..." opens the cadence transition modal for preview/confirm flow
+- Cycle preview summarizes current cycle window, logged hours, retainer remaining, projected overage, and next-invoice preview
+- Recurring items editor supports create/update/delete with charge cadence, anchor month/day, taxable, and summarized fields
+
+**AdminInvoiceList.tsx**
+- Admin-side invoice surface with filters for status, kind, date range, and agreement
+- Supports issue, mark paid, void, regenerate row action, and "Generate all invoices"
+
+**Shared admin controls**
+- `CurrencyInput`, `DateInput`, `ClientBadges`, `useToast`, and AlertDialog-based confirmations are shared by the cadence/invoice workspace
 
 **InvitePeopleModal.tsx**
 - Modal for assigning users to companies
@@ -520,11 +533,13 @@ const fileManager = useFileManagement({
 > **Note:** Detailed documentation for the Billing & Invoicing system has been moved to [billing.md](billing.md).
 
 ### Quick Summary
-- **Model**: Prior-month billing ("Give and Take")
+- **Model**: Prior-period billing ("Give and Take") with monthly, quarterly, and annual agreement cadences
 - **Key Features**:
   - Retainer-based pricing
   - Rollover hours
   - **Minimum Availability Rule** (Catch-up billing)
+  - Recurring fixed-fee agreement items
+  - Optional interim overage invoices for non-monthly cadences
   - Reimbursable expense tracking
 
 ### Database Schema
@@ -547,6 +562,10 @@ Stores service agreement terms between the admin and client companies.
 - `rollover_months`: Number of months unused hours can roll over (integer, default 1)
 - `hourly_rate`: Rate for hours beyond retainer (decimal 8,2)
 - `monthly_retainer_fee`: Fixed monthly fee (decimal 10,2)
+- `billing_cadence`: Agreement billing cadence (`monthly`, `quarterly`, `annual`; default `monthly`)
+- `bill_overage_interim`: Whether non-monthly agreements generate interim overage invoices at completed month boundaries
+- `first_cycle_proration`: First-cycle behavior (`prorate_hours`, `full_period`, `align_next_cycle`; default `prorate_hours`)
+- `initial_rollover_hours`: Rollover hours carried into this agreement from a transition (decimal 8,4)
 - `created_at`, `updated_at`: Timestamps
 
 **Catch-up Threshold Hours:**
@@ -554,7 +573,7 @@ Stores service agreement terms between the admin and client companies.
 - **Default**: 1.0 hour
 - **Valid Range**: 0 to `monthly_retainer_hours` (inclusive)
 - **Validation**: Enforced at model level (on save) and API level (on create/update)
-- **Behavior**: When prior month work consumes retainer capacity, the system bills catch-up hours to maintain at least `catch_up_threshold_hours` of availability for the current month
+- **Behavior**: When prior period work consumes retainer capacity, the system bills catch-up hours to maintain at least `catch_up_threshold_hours` of availability for the next billing period
 - **Example**: If retainer is 10 hours and 9 hours of prior month work is allocated, 1 hour of catch-up is billed to restore minimum availability (assuming threshold = 1.0)
 
 **Rollover Months Semantics:**
@@ -571,13 +590,16 @@ Stores invoices generated for clients.
 - `client_company_id`: Foreign key to `client_companies`
 - `client_agreement_id`: Foreign key to `client_agreements`
 - `invoice_number`: Unique invoice number (string, nullable)
-- `period_start`: Work period start date (first day of M-1)
-- `period_end`: Work period end date (last day of M-1)
-- `retainer_hours_included`: Hours included in retainer for month M (decimal 8,2)
-- `hours_worked`: Total hours worked in period M-1 (decimal 8,2)
-- `rollover_hours_used`: Hours from rollover applied to work period M-1 (decimal 8,2)
-- `unused_hours_balance`: Hours remaining at end of work period M-1 (decimal 8,2)
-- `negative_hours_balance`: Debt hours at end of work period M-1 (decimal 8,2)
+- `period_start`: Invoice period start date. For monthly invoices this is the work month; for cadence-period invoices this is the cadence cycle start; for interim overage invoices this is the completed monthly slice start.
+- `period_end`: Invoice period end date. For cadence-period invoices this is the cadence cycle end; for interim overage invoices this is the completed monthly slice end.
+- `invoice_kind`: `cadence_period`, `interim_overage`, or `terminal` (default `cadence_period`)
+- `cycle_start`: First day of the cadence cycle this invoice belongs to
+- `cycle_end`: Last day of the cadence cycle this invoice belongs to
+- `retainer_hours_included`: Hours included in the invoice period/cadence cycle (decimal 8,2)
+- `hours_worked`: Total hours worked in the invoice period (decimal 8,2)
+- `rollover_hours_used`: Hours from rollover applied to the invoice period (decimal 8,2)
+- `unused_hours_balance`: Hours remaining at the end of the invoice period (decimal 8,2)
+- `negative_hours_balance`: Debt hours at the end of the invoice period (decimal 8,2)
 - `hours_billed_at_rate`: Hours charged at hourly rate via catch-up billing (decimal 8,2)
 - `invoice_total`: Total invoice amount (decimal 10,2)
 - `status`: draft, issued, paid, void (enum, default draft)
@@ -587,6 +609,34 @@ Stores invoices generated for clients.
 - `notes`: Internal or customer-facing notes (text, nullable)
 - `created_at`, `updated_at`: Timestamps
 - `deleted_at`: Soft delete timestamp (nullable)
+
+For cadence-period invoices, `period_start` / `period_end` match `cycle_start` / `cycle_end`. Interim overage invoices use the completed monthly slice in `period_start` / `period_end` while retaining the parent quarterly or annual cycle in `cycle_start` / `cycle_end`.
+
+#### `client_agreement_recurring_items` table
+Stores fixed-fee items attached to an agreement.
+- `id`: Primary key
+- `client_agreement_id`: Foreign key to `client_agreements`
+- `description`: Line-item description
+- `amount`: Fixed charge amount (decimal 10,2)
+- `charge_cadence`: `monthly`, `quarterly`, `semi_annual`, `annual`, or `one_time`
+- `anchor_month`: Optional 1-12 anchor month for non-monthly charges
+- `anchor_day`: Optional 1-28 anchor day (clamped during billing)
+- `start_date`: First eligible billing date
+- `end_date`: Last eligible billing date (nullable)
+- `is_taxable`: Whether the item is taxable
+- `is_summarized`: Whether display can summarize multiple incidences
+- `notes`: Internal notes (nullable)
+- `deleted_at`: Soft delete timestamp (nullable)
+
+#### `client_company_activity` table
+Stores audit/activity log entries for a company.
+- `id`: Primary key
+- `client_company_id`: Foreign key to `client_companies`
+- `actor_user_id`: Nullable foreign key to `users`
+- `action`: Action key such as `agreement.transitioned` or `invoice.generated`
+- `subject_type`, `subject_id`: Nullable morph reference to the affected model
+- `payload`: JSON metadata for the event
+- `created_at`, `updated_at`: Timestamps
 
 #### `client_invoice_payments` table
 Stores payments made against invoices.
@@ -606,10 +656,11 @@ Individual line items on invoices.
 - `quantity`: Quantity as string (varchar 20) - formatted as "h:mm" for time-based lines or "1" for flat items
 - `unit_price`: Price per unit (decimal 10,2)
 - `line_total`: Calculated total (decimal 10,2)
-- `line_type`: retainer, additional_hours, prior_month_retainer, prior_month_billable, expense, adjustment, credit (string)
-- `line_date`: Date associated with the line item (date, nullable) - e.g., last day of prior month for work, first day of current month for retainer
+- `line_type`: retainer, additional_hours, prior_month_retainer, prior_month_billable, recurring_item, expense, adjustment, credit (string)
+- `line_date`: Date associated with the line item (date, nullable) - e.g., the work/charge date for time, recurring items, expenses, or retainer lines
 - `hours`: Hours if applicable (decimal 8,2, nullable)
 - `sort_order`: Display order (integer)
+- `client_agreement_recurring_item_id`: Nullable reference to the recurring item that generated this line
 - `created_at`, `updated_at`: Timestamps
 
 ### Services
@@ -617,6 +668,9 @@ Individual line items on invoices.
 - **`TimeEntrySplitter`**: Deterministic allocation and fragment creation
 - **`AllocationService`**: Fragment recombination and allocation tracking
 - **`RolloverCalculator`**: Opening/closing balances with FIFO rollover (`app/Services/ClientManagement/RolloverCalculator.php`)
+- **`BillingCycleResolver`**: Resolves monthly, quarterly, and annual cycle windows with first-cycle proration
+- **`RecurringItemBiller`**: Computes recurring item incidences and invoice lines for a cycle
+- **`AgreementTransitionService`**: Terminates outgoing agreements and creates successor agreements for cadence/terms changes
 - **`ClientInvoicingService`**: Orchestrates invoice generation
 
 See [billing.md](billing.md) for full billing logic documentation.
@@ -628,7 +682,7 @@ When a single time entry spans multiple allocation types, it is split into fragm
 **Allocation Order (Deterministic):**
 
 1. **Prior Month Retainer**: Hours allocated against the prior month's retainer capacity
-2. **Current Month Retainer**: Hours allocated against the current month's retainer capacity
+2. **Current Period Retainer**: Hours allocated against the current billing period's retainer capacity
 3. **Catch-up Threshold**: Hours billed to maintain minimum availability (based on `catch_up_threshold_hours`)
 4. **Billable Catch-up**: Remaining hours billed at hourly rate
 
@@ -669,7 +723,8 @@ Splits into 4 fragments:
 |-----------|-------------|-------|-----------|
 | `prior_month_retainer` | Prior month work covered by retainer | $0 | Work from M-1 covered by retainer pool |
 | `additional_hours` | Catch-up or billable overage | Hourly rate | When work exceeds retainer capacity or threshold enforcement |
-| `retainer` | Monthly retainer fee | Fixed fee | Every invoice for the current month |
+| `retainer` | Cadence retainer fee | Fixed fee | Every cadence-period invoice; scaled for quarterly/annual cycles |
+| `recurring_item` | Recurring agreement charge | Fixed fee | When a recurring item incidence falls in the invoice cycle |
 | `expense` | Reimbursable expenses | Actual cost | Client expenses needing reimbursement |
 | `adjustment` | Manual adjustments | Variable | Admin-added corrections or special charges |
 | `credit` | Informational credits | $0 | Balance adjustments or credits |
@@ -679,6 +734,9 @@ Splits into 4 fragments:
 - **`TimeEntrySplitter`**: Handles deterministic allocation and fragment creation
 - **`AllocationService`**: Manages fragment recombination and allocation tracking
 - **`RolloverCalculator`**: Calculates opening/closing balances with FIFO rollover
+- **`BillingCycleResolver`**: Resolves cadence cycle windows and proration
+- **`RecurringItemBiller`**: Computes recurring item invoice lines for a cycle
+- **`AgreementTransitionService`**: Handles terminate-and-create-successor cadence transitions
 - **`ClientInvoicingService`**: Orchestrates invoice generation using above services
 
 ### Delayed Billing
@@ -768,7 +826,7 @@ The `getTimeEntries()` API now returns enhanced data for the monthly grouping UI
 
 ### Automated Invoice Generation
 
-The system provides automated invoice generation for all calendar months via the "Run Invoicing" feature.
+The system provides automated invoice generation for all active agreement cadence windows via the "Run Invoicing" feature. Monthly agreements generate monthly invoices; quarterly and annual agreements generate cadence-period invoices and, when enabled, interim overage invoices for completed month slices inside the current cycle.
 
 **Admin Page Enhancements:**
 
@@ -779,7 +837,7 @@ The Client Management admin page (`/client/mgmt`) now displays key metrics for e
 - **Uninvoiced Tasks**: Total value of completed and incomplete milestone tasks not yet billed (purple badge with package icon)
   - Shows breakdown: `($X.XX complete, $Y.YY incomplete)`
 - **Lifetime Value**: Sum of all paid invoices for the client (green badge with trending up icon)
-- **Run Invoicing Button**: Per-company button to auto-generate invoices for all months
+- **Run Invoicing Button**: Per-company button to auto-generate invoices for all agreement cadence windows
 - **+Add User Button**: Quick access button inline with the user badges on each company card to add users to that specific company (opens Invite People dialog pre-selected)
 - **Manage Button**: (wrench icon) navigates to the company's detail/management page
 - **Portal Button**: navigates to the client portal for the company
@@ -787,17 +845,19 @@ The Client Management admin page (`/client/mgmt`) now displays key metrics for e
 **Workflow:**
 
 1. Admin clicks "Run Invoicing" for a company
-2. System automatically generates invoices for ALL calendar months from agreement start date to **the first day of the next month** (inclusive), enabling preview of the current period
+2. System automatically generates invoices from agreement start date through the current cadence window. Monthly agreements use calendar months; quarterly and annual agreements use calendar-aligned cycles.
 3. Results summary shows:
    - **Generated**: New invoices created (draft status)
    - **Updated**: Existing draft invoices regenerated with latest data
    - **Skipped**: Issued/paid/void invoices left untouched
+   - **Cadence / interim counts**: Summary counts distinguish cadence-period invoices from interim overage invoices
 
 **Key Features:**
 
-- **No manual date selection**: Automatically uses calendar month boundaries
-- **Upcoming period preview**: Generates a draft invoice for the current calendar month so current-period time entries and expenses can be previewed before the month closes
-- **Smart detection**: Skips months without time entries or where invoice already finalized
+- **No manual date selection**: Automatically uses the agreement cadence boundaries
+- **Upcoming period preview**: Generates a draft invoice for the current cadence window so current-period time entries, recurring items, expenses, and milestone tasks can be previewed before the period closes
+- **Interim overage support**: For non-monthly agreements with `bill_overage_interim = true`, completed month slices can generate `interim_overage` invoices without double-billing on the final cadence-period invoice
+- **Smart detection**: Skips periods without billable activity or where invoice already finalized
 - **Draft regeneration**: Updates existing draft invoices with latest time entry data
 - **Protected invoices**: Never modifies issued, paid, or voided invoices
 
@@ -812,19 +872,21 @@ POST /api/client/mgmt/companies/{company}/invoices/generate-all
   "message": "Invoice generation completed",
   "results": {
     "generated": [
-      {"period": "2024-01", "invoice_id": 1, "invoice_number": "INV-001"},
-      {"period": "2024-02", "invoice_id": 2, "invoice_number": "INV-002"}
+      {"period": "2024-Q1", "invoice_id": 1, "invoice_number": "INV-001", "invoice_kind": "cadence_period"},
+      {"period": "2024-01", "invoice_id": 2, "invoice_number": "INV-002", "invoice_kind": "interim_overage"}
     ],
     "updated": [
-      {"period": "2024-03", "invoice_id": 3, "invoice_number": "INV-003"}
+      {"period": "2024-Q2", "invoice_id": 3, "invoice_number": "INV-003", "invoice_kind": "cadence_period"}
     ],
     "skipped": [
-      {"period": "2024-04", "invoice_id": 4, "status": "paid", "reason": "Invoice already exists with status: paid"}
+      {"period": "2024-Q3", "invoice_id": 4, "status": "paid", "reason": "Invoice already exists with status: paid"}
     ],
     "summary": {
       "generated_count": 2,
       "updated_count": 1,
-      "skipped_count": 1
+      "skipped_count": 1,
+      "cadence_period_invoices_created": 1,
+      "interim_invoices_created": 1
     }
   }
 }
@@ -1025,5 +1087,3 @@ Time entries now display an "Invoiced" status badge when:
 - The entry is linked to an invoice line (`client_invoice_line_id IS NOT NULL`)
 
 The `ClientTimeEntry` model has an `is_invoiced` appended attribute that is automatically included in API responses.
-
-
