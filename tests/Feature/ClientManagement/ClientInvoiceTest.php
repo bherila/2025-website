@@ -1592,6 +1592,64 @@ class ClientInvoiceTest extends TestCase
         $this->assertNull($retainerLine, 'Post-termination invoice must not have a retainer fee');
     }
 
+    public function test_generate_all_does_not_let_outgoing_monthly_agreement_bill_successor_period_work(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-15'));
+
+        $this->agreement->update([
+            'active_date' => Carbon::parse('2025-01-01'),
+            'termination_date' => Carbon::parse('2025-03-31'),
+            'hourly_rate' => 100.00,
+        ]);
+
+        $successor = ClientAgreement::factory()->for($this->company)->create([
+            'agreement_text' => 'Successor Retainer',
+            'monthly_retainer_fee' => 2000.00,
+            'monthly_retainer_hours' => 20,
+            'hourly_rate' => 250.00,
+            'active_date' => Carbon::parse('2025-04-01'),
+            'termination_date' => null,
+            'rollover_months' => 3,
+            'is_visible_to_client' => true,
+        ]);
+
+        $entry = ClientTimeEntry::create([
+            'client_company_id' => $this->company->id,
+            'user_id' => $this->admin->id,
+            'project_id' => $this->project->id,
+            'date_worked' => '2025-04-10',
+            'minutes_worked' => 60,
+            'name' => 'Successor-period work',
+            'is_billable' => true,
+        ]);
+
+        $this->invoicingService->generateAllInvoices($this->company);
+
+        Carbon::setTestNow();
+
+        $outgoingAprilInvoice = ClientInvoice::query()
+            ->where('client_agreement_id', $this->agreement->id)
+            ->whereDate('period_start', '2025-04-01')
+            ->first();
+
+        $this->assertNull($outgoingAprilInvoice, 'Outgoing agreement must not generate successor-period invoices.');
+
+        $successorAprilInvoice = ClientInvoice::query()
+            ->where('client_agreement_id', $successor->id)
+            ->whereDate('period_start', '2025-04-01')
+            ->first();
+
+        $this->assertNotNull($successorAprilInvoice, 'Successor agreement must bill its own period.');
+
+        $entry->refresh();
+        $this->assertNotNull($entry->client_invoice_line_id);
+        $this->assertSame(
+            $successorAprilInvoice->client_invoice_id,
+            $entry->invoiceLine->client_invoice_id,
+            'Successor-period work must be linked to the successor invoice.'
+        );
+    }
+
     public function test_generate_all_with_post_termination_expenses_creates_invoice(): void
     {
         Carbon::setTestNow(Carbon::parse('2025-06-15'));
