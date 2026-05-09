@@ -100,10 +100,18 @@ class ClientInvoicingService
     public function generateAllInvoices(ClientCompany $company): array
     {
         $results = $this->emptyGenerationResults();
+        $agreements = $this->agreementsForInvoiceGeneration($company);
 
-        foreach ($this->agreementsForInvoiceGeneration($company) as $agreement) {
+        foreach ($agreements as $agreement) {
+            $successorAgreement = $this->successorAgreementForGeneration($agreements, $agreement);
             $agreementResults = $agreement->effectiveBillingCadence() === BillingCadence::Monthly
-                ? $this->generateAllMonthlyInvoicesForAgreement($company, $agreement)
+                ? $this->generateAllMonthlyInvoicesForAgreement(
+                    $company,
+                    $agreement,
+                    $successorAgreement
+                        ? Carbon::parse($successorAgreement->active_date)->startOfMonth()->subMonth()
+                        : null,
+                )
                 : $this->generateAllCadenceInvoices($company, $agreement);
 
             $results = $this->mergeGenerationResults($results, $agreementResults);
@@ -149,8 +157,11 @@ class ClientInvoicingService
      *     }
      * }
      */
-    protected function generateAllMonthlyInvoicesForAgreement(ClientCompany $company, ClientAgreement $agreement): array
-    {
+    protected function generateAllMonthlyInvoicesForAgreement(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        ?Carbon $postTerminationCatchUpPeriodStartBefore = null,
+    ): array {
         $generated = [];
         $updated = [];
         $skipped = [];
@@ -166,6 +177,16 @@ class ClientInvoicingService
         //   - post-termination periods with unbilled work/expenses are covered.
         $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
         $endDate = now()->startOfMonth()->addMonth();
+        if ($postTerminationCatchUpPeriodStartBefore !== null && $terminationDate !== null) {
+            $terminationSegmentEndDate = $terminationDate->copy()->startOfMonth()->addMonth();
+            $segmentEndDate = $postTerminationCatchUpPeriodStartBefore->gt($terminationSegmentEndDate)
+                ? $postTerminationCatchUpPeriodStartBefore->copy()
+                : $terminationSegmentEndDate;
+
+            if ($segmentEndDate->lt($endDate)) {
+                $endDate = $segmentEndDate;
+            }
+        }
 
         // Precompute all post-termination Y-m periods with any unbilled work or expenses
         // once, to avoid per-month DB queries inside the loop for long-terminated agreements.
@@ -1681,6 +1702,25 @@ class ClientInvoicingService
         }
 
         return $agreements;
+    }
+
+    /**
+     * @param  Collection<int, ClientAgreement>  $agreements
+     */
+    protected function successorAgreementForGeneration(Collection $agreements, ClientAgreement $agreement): ?ClientAgreement
+    {
+        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
+
+        return $agreements->first(function (ClientAgreement $candidate) use ($agreement, $activeDate): bool {
+            if ((int) $candidate->id === (int) $agreement->id) {
+                return false;
+            }
+
+            $candidateActiveDate = Carbon::parse($candidate->active_date)->startOfDay();
+
+            return $candidateActiveDate->gt($activeDate)
+                || ($candidateActiveDate->eq($activeDate) && (int) $candidate->id > (int) $agreement->id);
+        });
     }
 
     protected function agreementCoveringDate(ClientCompany $company, Carbon $date): ?ClientAgreement
