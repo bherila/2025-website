@@ -3,14 +3,12 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ClientManagement\CreatePaymentMethodSetupIntentRequest;
-use App\Http\Requests\ClientManagement\DeleteClientPaymentMethodRequest;
-use App\Http\Requests\ClientManagement\SetDefaultClientPaymentMethodRequest;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientCompanyPaymentMethod;
 use App\Models\User;
 use App\Services\Billing\StripeBillingService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class ClientPaymentMethodApiController extends Controller
@@ -28,7 +26,7 @@ class ClientPaymentMethodApiController extends Controller
     }
 
     public function setup(
-        CreatePaymentMethodSetupIntentRequest $request,
+        Request $request,
         ClientCompany $company,
         StripeBillingService $billing,
     ): JsonResponse {
@@ -41,7 +39,7 @@ class ClientPaymentMethodApiController extends Controller
     }
 
     public function destroy(
-        DeleteClientPaymentMethodRequest $request,
+        Request $request,
         ClientCompany $company,
         ClientCompanyPaymentMethod $paymentMethod,
         StripeBillingService $billing,
@@ -60,7 +58,7 @@ class ClientPaymentMethodApiController extends Controller
     }
 
     public function makeDefault(
-        SetDefaultClientPaymentMethodRequest $request,
+        Request $request,
         ClientCompany $company,
         ClientCompanyPaymentMethod $paymentMethod,
         StripeBillingService $billing,

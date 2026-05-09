@@ -45,7 +45,7 @@ class ClientInvoicePaymentIntentApiController extends Controller
         ], 201);
     }
 
-    public function show(ClientInvoice $invoice, string $paymentIntent): JsonResponse
+    public function show(ClientInvoice $invoice, string $paymentIntent, StripeBillingService $billing): JsonResponse
     {
         Gate::authorize('ClientCompanyMember', $invoice->client_company_id);
 
@@ -58,6 +58,8 @@ class ClientInvoicePaymentIntentApiController extends Controller
                 }
             })
             ->firstOrFail();
+
+        $payment = $billing->refreshPaymentIntentStatus($payment);
 
         return response()->json([
             'payment' => $payment->toActivityArray(),

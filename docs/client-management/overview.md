@@ -635,7 +635,7 @@ Stores audit/activity log entries for a company.
 - `id`: Primary key
 - `client_company_id`: Foreign key to `client_companies`
 - `actor_user_id`: Nullable foreign key to `users`
-- `action`: Action key (`agreement.transitioned`, `invoice.generated`, `invoice.issued`, `invoice.marked_paid`, `invoice.voided`)
+- `action`: Action key such as `agreement.transitioned`, `invoice.generated`, `invoice.issued`, `invoice.marked_paid`, `invoice.voided`, `invoice.payment_received`, `invoice.payment_failed`, `invoice.payment_disputed`, `invoice.payment_refunded`, `payment_method.added`, `payment_method.removed`, or `payment_method.default_changed`
 - `subject_type`, `subject_id`: Nullable morph reference to the affected model
 - `payload`: JSON metadata for the event
 - `created_at`, `updated_at`: Timestamps
@@ -646,7 +646,7 @@ Stores payments made against invoices.
 - `client_invoice_id`: Foreign key to `client_invoices`
 - `amount`: Payment amount (decimal 10,2)
 - `payment_date`: Date payment was received
-- `payment_method`: Credit Card, ACH, Wire, Check, Other (string)
+- `payment_method`: Credit Card, ACH, Wire, Check, Other, stripe_card, stripe_ach, stripe_refund (string)
 - `notes`: Payment notes (text, nullable)
 - `created_at`, `updated_at`: Timestamps
 
@@ -973,7 +973,7 @@ Unlinking occurs when:
 When adding a payment to an invoice:
 - `amount`: Payment amount (supports partial payments)
 - `payment_date`: Date payment received
-- `payment_method`: Credit Card, ACH, Wire Transfer, Check, Other
+- `payment_method`: Credit Card, ACH, Wire Transfer, Check, Other. Stripe-created ledger rows use `stripe_card`, `stripe_ach`, or `stripe_refund`; admins cannot manually create those synthetic Stripe methods.
 - `notes`: Optional payment notes
 
 **Auto-Paid Status:**

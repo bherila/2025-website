@@ -77,6 +77,10 @@ export default function SavedPaymentMethodsCard({ companyId, publishableKey }: S
   }
 
   async function removeMethod(methodId: number): Promise<void> {
+    if (!window.confirm('Remove this saved payment method?')) {
+      return
+    }
+
     setIsMutating(methodId)
     try {
       await fetchWrapper.delete(`/api/client/portal/companies/${companyId}/payment-methods/${methodId}`, {})

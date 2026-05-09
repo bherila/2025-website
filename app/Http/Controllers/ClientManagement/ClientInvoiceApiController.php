@@ -9,6 +9,7 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
+use App\Models\ClientManagement\ClientInvoiceStripePayment;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,10 +33,15 @@ class ClientInvoiceApiController extends Controller
         Gate::authorize('Admin');
 
         $invoices = ClientInvoice::where('client_company_id', $company->id)
-            ->with(['agreement', 'lineItems'])
+            ->with(['agreement', 'lineItems', 'stripePayments'])
             ->orderBy('period_start', 'desc')
             ->get()
             ->map(function ($invoice) {
+                $latestStripeFailure = $invoice->stripePayments
+                    ->filter(fn (ClientInvoiceStripePayment $stripePayment): bool => $stripePayment->failure_reason !== null || in_array($stripePayment->status, ['failed', 'canceled'], true))
+                    ->sortByDesc('updated_at')
+                    ->first();
+
                 return [
                     'id' => $invoice->client_invoice_id,
                     'invoice_number' => $invoice->invoice_number,
@@ -56,6 +62,8 @@ class ClientInvoiceApiController extends Controller
                     'unused_hours_balance' => $invoice->unused_hours_balance,
                     'hours_billed_at_rate' => $invoice->hours_billed_at_rate,
                     'rollover_hours_used' => $invoice->rollover_hours_used,
+                    'stripe_payment_status' => $latestStripeFailure?->status,
+                    'stripe_failure_reason' => $latestStripeFailure?->failure_reason,
                 ];
             });
 
@@ -505,7 +513,7 @@ class ClientInvoiceApiController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other,stripe_card,stripe_ach,stripe_refund',
+            'payment_method' => $this->manualPaymentMethodRule(),
             'notes' => 'nullable|string',
         ]);
 
@@ -539,7 +547,7 @@ class ClientInvoiceApiController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
-            'payment_method' => 'required|string|in:Credit Card,ACH,Wire,Check,Other,stripe_card,stripe_ach,stripe_refund',
+            'payment_method' => $this->paymentMethodRuleFor($payment),
             'notes' => 'nullable|string',
         ]);
 
@@ -586,5 +594,21 @@ class ClientInvoiceApiController extends Controller
             'message' => 'Payment deleted successfully.',
             'invoice' => $invoice->fresh(['payments']),
         ]);
+    }
+
+    private function manualPaymentMethodRule(): string
+    {
+        return 'required|string|in:Credit Card,ACH,Wire,Check,Other';
+    }
+
+    private function paymentMethodRuleFor(ClientInvoicePayment $payment): string
+    {
+        $methods = ['Credit Card', 'ACH', 'Wire', 'Check', 'Other'];
+
+        if ($payment->client_invoice_stripe_payment_id !== null) {
+            $methods = array_merge($methods, ['stripe_card', 'stripe_ach', 'stripe_refund']);
+        }
+
+        return 'required|string|in:'.implode(',', $methods);
     }
 }

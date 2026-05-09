@@ -12,6 +12,7 @@ use App\Models\ClientManagement\ClientInvoiceStripeEvent;
 use App\Models\ClientManagement\ClientInvoiceStripePayment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Stripe\Event as StripeEvent;
@@ -22,11 +23,11 @@ use UnexpectedValueException;
 
 class StripeBillingService
 {
-    private StripeClient $stripe;
+    private ?StripeClient $stripe;
 
     public function __construct(?StripeClient $stripe = null)
     {
-        $this->stripe = $stripe ?? new StripeClient($this->secretKey() ?: 'sk_test_missing');
+        $this->stripe = $stripe;
     }
 
     public function maxAmountCents(): int
@@ -70,7 +71,7 @@ class StripeBillingService
 
         $this->assertStripeIsConfigured();
 
-        $customer = $this->stripe->customers->create([
+        $customer = $this->stripe()->customers->create([
             'name' => $company->company_name,
             'metadata' => [
                 'client_company_id' => (string) $company->id,
@@ -113,7 +114,7 @@ class StripeBillingService
             ];
         }
 
-        $intent = $this->stripe->setupIntents->create($params, [
+        $intent = $this->stripe()->setupIntents->create($params, [
             'idempotency_key' => 'setup_intent_for_company_'.$company->id.'_'.Str::uuid(),
         ]);
 
@@ -172,7 +173,7 @@ class StripeBillingService
             $params['setup_future_usage'] = 'off_session';
         }
 
-        $intent = $this->stripe->paymentIntents->create($params, [
+        $intent = $this->stripe()->paymentIntents->create($params, [
             'idempotency_key' => 'payment_intent_for_invoice_'.$invoice->client_invoice_id.'_'.$nonce,
         ]);
 
@@ -210,7 +211,7 @@ class StripeBillingService
     {
         $this->assertStripeIsConfigured();
 
-        $this->stripe->paymentMethods->detach($paymentMethod->stripe_payment_method_id);
+        $this->detachStripePaymentMethod($paymentMethod->stripe_payment_method_id);
         $company = $paymentMethod->clientCompany;
         $wasDefault = (bool) $paymentMethod->is_default;
         $paymentMethod->delete();
@@ -234,20 +235,26 @@ class StripeBillingService
 
     public function setDefaultPaymentMethod(ClientCompanyPaymentMethod $paymentMethod, ?User $actor = null): ClientCompanyPaymentMethod
     {
-        ClientCompanyPaymentMethod::where('client_company_id', $paymentMethod->client_company_id)
-            ->whereKeyNot($paymentMethod->getKey())
-            ->update(['is_default' => false]);
+        return DB::transaction(function () use ($paymentMethod, $actor): ClientCompanyPaymentMethod {
+            ClientCompanyPaymentMethod::where('client_company_id', $paymentMethod->client_company_id)
+                ->lockForUpdate()
+                ->get();
 
-        $paymentMethod->forceFill(['is_default' => true])->save();
+            ClientCompanyPaymentMethod::where('client_company_id', $paymentMethod->client_company_id)
+                ->whereKeyNot($paymentMethod->getKey())
+                ->update(['is_default' => false]);
 
-        if ($paymentMethod->clientCompany) {
-            ClientCompanyActivity::record($paymentMethod->clientCompany, 'payment_method.default_changed', $paymentMethod, [
-                'method' => $paymentMethod->type,
-                'last4' => $paymentMethod->last4,
-            ], $actor?->id);
-        }
+            $paymentMethod->forceFill(['is_default' => true])->save();
 
-        return $paymentMethod;
+            if ($paymentMethod->clientCompany) {
+                ClientCompanyActivity::record($paymentMethod->clientCompany, 'payment_method.default_changed', $paymentMethod, [
+                    'method' => $paymentMethod->type,
+                    'last4' => $paymentMethod->last4,
+                ], $actor?->id);
+            }
+
+            return $paymentMethod;
+        });
     }
 
     /**
@@ -275,6 +282,8 @@ class StripeBillingService
             return $record;
         }
 
+        $context = $this->prepareWebhookContext($event);
+
         $record = ClientInvoiceStripeEvent::create([
             'stripe_event_id' => $event->id,
             'type' => $event->type,
@@ -282,10 +291,12 @@ class StripeBillingService
         ]);
 
         try {
-            DB::transaction(function () use ($event, $record): void {
-                $this->dispatchWebhookEvent($event);
+            DB::transaction(function () use ($event, $record, $context): void {
+                $this->dispatchWebhookEvent($event, $context);
                 $record->update(['processed_at' => now(), 'error' => null]);
             });
+        } catch (PermanentStripeWebhookException $exception) {
+            $record->update(['processed_at' => now(), 'error' => $exception->getMessage()]);
         } catch (\Throwable $throwable) {
             $record->update(['error' => $throwable->getMessage()]);
 
@@ -295,7 +306,27 @@ class StripeBillingService
         return $record->fresh() ?? $record;
     }
 
-    private function dispatchWebhookEvent(StripeEvent $event): void
+    public function refreshPaymentIntentStatus(ClientInvoiceStripePayment $payment): ClientInvoiceStripePayment
+    {
+        $intent = $this->stripe()->paymentIntents->retrieve($payment->stripe_payment_intent_id);
+        $status = (string) ($this->value($intent, 'status') ?? $payment->status);
+        $eventId = 'client_poll_'.$payment->stripe_payment_intent_id;
+
+        if ($status === 'succeeded' && $payment->status !== 'succeeded') {
+            $this->handlePaymentIntentSucceeded($intent, $eventId);
+        } elseif (in_array($status, ['processing', 'failed', 'canceled'], true) && $payment->status !== $status) {
+            $this->handlePaymentIntentStatus($intent, $status, $eventId);
+        } else {
+            $this->recordPaymentIntent($intent, $status, $eventId);
+        }
+
+        return $payment->fresh() ?? $payment;
+    }
+
+    /**
+     * @param  array{payment_intent_id?: string|null, payment_method?: mixed}  $context
+     */
+    private function dispatchWebhookEvent(StripeEvent $event, array $context): void
     {
         $object = $event->data->object;
 
@@ -304,13 +335,33 @@ class StripeBillingService
             'payment_intent.processing' => $this->handlePaymentIntentStatus($object, 'processing', $event->id),
             'payment_intent.payment_failed' => $this->handlePaymentIntentStatus($object, 'failed', $event->id),
             'payment_intent.canceled' => $this->handlePaymentIntentStatus($object, 'canceled', $event->id),
-            'charge.dispute.created' => $this->handleDisputeCreated($object, $event->id),
-            'charge.dispute.closed' => $this->handleDisputeClosed($object, $event->id),
-            'charge.refunded' => $this->handleChargeRefunded($object, $event->id),
+            'charge.dispute.created' => $this->handleDisputeCreated($object, $event->id, $context['payment_intent_id'] ?? null),
+            'charge.dispute.closed' => $this->handleDisputeClosed($object, $event->id, $context['payment_intent_id'] ?? null),
+            'charge.refunded' => $this->handleChargeRefunded($object, $event->id, $context['payment_intent_id'] ?? null),
             'payment_method.attached' => $this->handlePaymentMethodAttached($object),
             'payment_method.detached' => $this->handlePaymentMethodDetached($object),
-            'setup_intent.succeeded' => $this->handleSetupIntentSucceeded($object),
+            'setup_intent.succeeded' => $this->handleSetupIntentSucceeded($object, $context['payment_method'] ?? null),
             default => null,
+        };
+    }
+
+    /**
+     * @return array{payment_intent_id?: string|null, payment_method?: mixed}
+     */
+    private function prepareWebhookContext(StripeEvent $event): array
+    {
+        $object = $event->data->object;
+
+        return match ($event->type) {
+            'charge.dispute.created',
+            'charge.dispute.closed',
+            'charge.refunded' => [
+                'payment_intent_id' => $this->paymentIntentIdFromChargeLike($object),
+            ],
+            'setup_intent.succeeded' => [
+                'payment_method' => $this->paymentMethodForSetupIntent($object),
+            ],
+            default => [],
         };
     }
 
@@ -319,7 +370,12 @@ class StripeBillingService
         $stripePayment = $this->recordPaymentIntent($intent, 'succeeded', $eventId);
         $invoice = $stripePayment->invoice()->with('clientCompany', 'payments')->first();
         if (! $invoice || ! $invoice->clientCompany) {
-            return;
+            Log::warning('Stripe PaymentIntent could not be matched to an active client invoice.', [
+                'stripe_payment_intent_id' => $stripePayment->stripe_payment_intent_id,
+                'client_invoice_id' => $stripePayment->client_invoice_id,
+            ]);
+
+            throw new PermanentStripeWebhookException('Stripe PaymentIntent could not be matched to an active client invoice.');
         }
 
         $paymentMethodType = $this->paymentMethodTypeForIntent($intent, $stripePayment);
@@ -364,9 +420,9 @@ class StripeBillingService
         }
     }
 
-    private function handleDisputeCreated(mixed $dispute, string $eventId): void
+    private function handleDisputeCreated(mixed $dispute, string $eventId, ?string $paymentIntentId): void
     {
-        $stripePayment = $this->stripePaymentFromChargeLike($dispute);
+        $stripePayment = $this->stripePaymentFromPaymentIntentId($paymentIntentId);
         if (! $stripePayment) {
             return;
         }
@@ -387,9 +443,9 @@ class StripeBillingService
         }
     }
 
-    private function handleDisputeClosed(mixed $dispute, string $eventId): void
+    private function handleDisputeClosed(mixed $dispute, string $eventId, ?string $paymentIntentId): void
     {
-        $stripePayment = $this->stripePaymentFromChargeLike($dispute);
+        $stripePayment = $this->stripePaymentFromPaymentIntentId($paymentIntentId);
         if (! $stripePayment) {
             return;
         }
@@ -413,9 +469,9 @@ class StripeBillingService
         $stripePayment->update(['status' => 'disputed', 'last_event_id' => $eventId]);
     }
 
-    private function handleChargeRefunded(mixed $charge, string $eventId): void
+    private function handleChargeRefunded(mixed $charge, string $eventId, ?string $paymentIntentId): void
     {
-        $stripePayment = $this->stripePaymentFromChargeLike($charge);
+        $stripePayment = $this->stripePaymentFromPaymentIntentId($paymentIntentId);
         if (! $stripePayment) {
             return;
         }
@@ -471,17 +527,12 @@ class StripeBillingService
         ClientCompanyPaymentMethod::where('stripe_payment_method_id', $paymentMethodId)->delete();
     }
 
-    private function handleSetupIntentSucceeded(mixed $setupIntent): void
+    private function handleSetupIntentSucceeded(mixed $setupIntent, mixed $paymentMethod): void
     {
         $customerId = (string) ($this->value($setupIntent, 'customer') ?? '');
         $customer = ClientCompanyStripeCustomer::where('stripe_customer_id', $customerId)->first();
         if (! $customer) {
             return;
-        }
-
-        $paymentMethod = $this->value($setupIntent, 'payment_method');
-        if (is_string($paymentMethod)) {
-            $paymentMethod = $this->stripe->paymentMethods->retrieve($paymentMethod);
         }
 
         $saved = $this->syncPaymentMethod($customer->clientCompany, $paymentMethod);
@@ -494,35 +545,46 @@ class StripeBillingService
 
     private function syncPaymentMethod(ClientCompany $company, mixed $paymentMethod): ClientCompanyPaymentMethod
     {
-        $paymentMethodId = (string) ($this->value($paymentMethod, 'id') ?? '');
-        $type = (string) ($this->value($paymentMethod, 'type') ?? 'card');
-        $card = $this->value($paymentMethod, 'card');
-        $bank = $this->value($paymentMethod, 'us_bank_account');
+        return DB::transaction(function () use ($company, $paymentMethod): ClientCompanyPaymentMethod {
+            ClientCompanyPaymentMethod::withTrashed()
+                ->where('client_company_id', $company->id)
+                ->lockForUpdate()
+                ->get();
 
-        $attributes = [
-            'client_company_id' => $company->id,
-            'type' => $type,
-            'brand' => $this->value($card, 'brand'),
-            'last4' => $this->value($card, 'last4') ?? $this->value($bank, 'last4'),
-            'exp_month' => $this->value($card, 'exp_month'),
-            'exp_year' => $this->value($card, 'exp_year'),
-            'bank_name' => $this->value($bank, 'bank_name'),
-        ];
+            $paymentMethodId = (string) ($this->value($paymentMethod, 'id') ?? '');
+            if ($paymentMethodId === '') {
+                throw new PermanentStripeWebhookException('Stripe PaymentMethod is missing an id.');
+            }
 
-        $method = ClientCompanyPaymentMethod::withTrashed()->updateOrCreate(
-            ['stripe_payment_method_id' => $paymentMethodId],
-            $attributes,
-        );
+            $type = (string) ($this->value($paymentMethod, 'type') ?? 'card');
+            $card = $this->value($paymentMethod, 'card');
+            $bank = $this->value($paymentMethod, 'us_bank_account');
 
-        if ($method->trashed()) {
-            $method->restore();
-        }
+            $attributes = [
+                'client_company_id' => $company->id,
+                'type' => $type,
+                'brand' => $this->value($card, 'brand'),
+                'last4' => $this->value($card, 'last4') ?? $this->value($bank, 'last4'),
+                'exp_month' => $this->value($card, 'exp_month'),
+                'exp_year' => $this->value($card, 'exp_year'),
+                'bank_name' => $this->value($bank, 'bank_name'),
+            ];
 
-        if (! ClientCompanyPaymentMethod::where('client_company_id', $company->id)->where('is_default', true)->exists()) {
-            $method->forceFill(['is_default' => true])->save();
-        }
+            $method = ClientCompanyPaymentMethod::withTrashed()->updateOrCreate(
+                ['stripe_payment_method_id' => $paymentMethodId],
+                $attributes,
+            );
 
-        return $method;
+            if ($method->trashed()) {
+                $method->restore();
+            }
+
+            if (! ClientCompanyPaymentMethod::where('client_company_id', $company->id)->where('is_default', true)->exists()) {
+                $method->forceFill(['is_default' => true])->save();
+            }
+
+            return $method;
+        });
     }
 
     private function recordPaymentIntent(mixed $intent, string $fallbackStatus, string $eventId): ClientInvoiceStripePayment
@@ -534,7 +596,11 @@ class StripeBillingService
         if (! $payment) {
             $invoiceId = (int) ($metadata['client_invoice_id'] ?? 0);
             if ($invoiceId < 1) {
-                throw new RuntimeException('Stripe PaymentIntent is missing client_invoice_id metadata.');
+                throw new PermanentStripeWebhookException('Stripe PaymentIntent is missing client_invoice_id metadata.');
+            }
+
+            if (! ClientInvoice::whereKey($invoiceId)->exists()) {
+                throw new PermanentStripeWebhookException('Stripe PaymentIntent references an invoice that does not exist or is no longer active.');
             }
 
             $payment = new ClientInvoiceStripePayment([
@@ -558,9 +624,8 @@ class StripeBillingService
         return $payment;
     }
 
-    private function stripePaymentFromChargeLike(mixed $chargeLike): ?ClientInvoiceStripePayment
+    private function stripePaymentFromPaymentIntentId(?string $paymentIntentId): ?ClientInvoiceStripePayment
     {
-        $paymentIntentId = $this->paymentIntentIdFromChargeLike($chargeLike);
         if (! $paymentIntentId) {
             return null;
         }
@@ -581,7 +646,7 @@ class StripeBillingService
 
         $charge = $this->value($chargeLike, 'charge');
         if (is_string($charge) && $charge !== '') {
-            return $this->paymentIntentIdFromChargeLike($this->stripe->charges->retrieve($charge));
+            return $this->paymentIntentIdFromChargeLike($this->retrieveStripeCharge($charge));
         }
 
         if (is_array($charge) || is_object($charge)) {
@@ -662,6 +727,43 @@ class StripeBillingService
         if ($this->secretKey() === '') {
             throw new RuntimeException('Stripe secret key is not configured.');
         }
+    }
+
+    private function stripe(): StripeClient
+    {
+        if ($this->stripe instanceof StripeClient) {
+            return $this->stripe;
+        }
+
+        $this->assertStripeIsConfigured();
+        $this->stripe = new StripeClient($this->secretKey());
+
+        return $this->stripe;
+    }
+
+    protected function detachStripePaymentMethod(string $paymentMethodId): void
+    {
+        $this->stripe()->paymentMethods->detach($paymentMethodId);
+    }
+
+    protected function retrieveStripeCharge(string $chargeId): mixed
+    {
+        return $this->stripe()->charges->retrieve($chargeId);
+    }
+
+    protected function retrieveStripePaymentMethod(string $paymentMethodId): mixed
+    {
+        return $this->stripe()->paymentMethods->retrieve($paymentMethodId);
+    }
+
+    private function paymentMethodForSetupIntent(mixed $setupIntent): mixed
+    {
+        $paymentMethod = $this->value($setupIntent, 'payment_method');
+        if (is_string($paymentMethod)) {
+            return $this->retrieveStripePaymentMethod($paymentMethod);
+        }
+
+        return $paymentMethod;
     }
 
     private function secretKey(): string

@@ -25,16 +25,26 @@ interface PaymentIntentResponse {
     id: number
     stripe_payment_intent_id: string
     status: string
+    failure_reason?: string | null
   }
   client_secret: string | null
   status: string
   publishable_key: string | null
 }
 
+interface PaymentIntentStatusResponse {
+  payment: {
+    id: number
+    stripe_payment_intent_id: string
+    status: string
+    failure_reason: string | null
+  }
+  invoice?: Invoice | null
+}
+
 interface NewPaymentFormProps {
-  clientSecret: string
   onCancel: () => void
-  onComplete: () => void
+  onComplete: (paymentIntentId?: string) => void
 }
 
 function savedMethodLabel(method: ClientPaymentMethod): string {
@@ -44,6 +54,23 @@ function savedMethodLabel(method: ClientPaymentMethod): string {
   }
 
   return `${method.brand?.toUpperCase() ?? 'Card'} ${suffix}`
+}
+
+function stripeReturnUrl(): string {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('payment_intent')
+  url.searchParams.delete('payment_intent_client_secret')
+  url.searchParams.delete('redirect_status')
+
+  return url.toString()
+}
+
+function clearStripeReturnParams(): void {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('payment_intent')
+  url.searchParams.delete('payment_intent_client_secret')
+  url.searchParams.delete('redirect_status')
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
 }
 
 function NewPaymentForm({ onCancel, onComplete }: NewPaymentFormProps) {
@@ -64,7 +91,7 @@ function NewPaymentForm({ onCancel, onComplete }: NewPaymentFormProps) {
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: window.location.href,
+        return_url: stripeReturnUrl(),
       },
       redirect: 'if_required',
     })
@@ -75,7 +102,7 @@ function NewPaymentForm({ onCancel, onComplete }: NewPaymentFormProps) {
       return
     }
 
-    onComplete()
+    onComplete(result.paymentIntent?.id)
     setIsConfirming(false)
   }
 
@@ -106,9 +133,10 @@ export default function InvoicePayPanel({
   const [methods, setMethods] = useState<ClientPaymentMethod[]>([])
   const [selectedMethodId, setSelectedMethodId] = useState<number | null>(null)
   const [mode, setMode] = useState<'saved' | 'new' | 'manual'>('new')
-  const [saveNewMethod, setSaveNewMethod] = useState(true)
+  const [saveNewMethod, setSaveNewMethod] = useState(false)
   const [isLoadingMethods, setIsLoadingMethods] = useState(true)
   const [isCreatingIntent, setIsCreatingIntent] = useState(false)
+  const [isPollingReturn, setIsPollingReturn] = useState(false)
   const [newPaymentClientSecret, setNewPaymentClientSecret] = useState<string | null>(null)
   const [activePublishableKey, setActivePublishableKey] = useState<string | null>(stripePublishableKey)
   const [message, setMessage] = useState<string | null>(null)
@@ -118,6 +146,55 @@ export default function InvoicePayPanel({
   const remainingBalance = currency(invoice.remaining_balance)
   const isStripeEligible = invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue <= stripeMaxAmountCents
   const isManualOnly = invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue > stripeMaxAmountCents
+  const latestFailure = useMemo(() => {
+    return [...(invoice.stripe_payments ?? [])]
+      .filter((payment) => payment.failure_reason || ['failed', 'canceled', 'requires_payment_method'].includes(payment.status))
+      .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))[0] ?? null
+  }, [invoice.stripe_payments])
+
+  const pollPaymentIntent = useCallback(async (paymentIntentId: string, shouldCleanUrl = false): Promise<void> => {
+    setIsPollingReturn(true)
+    setMessage('Confirming payment status...')
+    setError(null)
+
+    try {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const response = await fetchWrapper.get(
+          `/api/client/portal/invoices/${invoice.client_invoice_id}/pay-intent/${paymentIntentId}`,
+        ) as PaymentIntentStatusResponse
+
+        const status = response.payment.status
+        if (status !== 'requires_action') {
+          if (status === 'succeeded') {
+            setMessage('Payment received.')
+          } else if (status === 'processing') {
+            setMessage('Payment is processing.')
+          } else if (['failed', 'canceled', 'requires_payment_method'].includes(status)) {
+            setMessage(null)
+            setError(response.payment.failure_reason ?? 'Payment could not be completed.')
+          } else {
+            setMessage(`Payment status: ${status}.`)
+          }
+
+          if (shouldCleanUrl) {
+            clearStripeReturnParams()
+          }
+
+          onPaymentUpdated()
+          return
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 1500))
+      }
+
+      setMessage('Payment confirmation is still pending. Refresh in a moment for the latest status.')
+    } catch (caughtError) {
+      setMessage(null)
+      setError(caughtError instanceof Error ? caughtError.message : String(caughtError))
+    } finally {
+      setIsPollingReturn(false)
+    }
+  }, [invoice.client_invoice_id, onPaymentUpdated])
 
   const loadMethods = useCallback(async (): Promise<void> => {
     setIsLoadingMethods(true)
@@ -148,6 +225,19 @@ export default function InvoicePayPanel({
     }
   }, [isStripeEligible, loadMethods])
 
+  useEffect(() => {
+    if (!isStripeEligible) {
+      return
+    }
+
+    const paymentIntentId = new URLSearchParams(window.location.search).get('payment_intent')
+    if (!paymentIntentId) {
+      return
+    }
+
+    void pollPaymentIntent(paymentIntentId, true)
+  }, [isStripeEligible, pollPaymentIntent])
+
   const stripePromise = useMemo<Promise<Stripe | null> | null>(() => {
     return activePublishableKey ? loadStripe(activePublishableKey) : null
   }, [activePublishableKey])
@@ -161,7 +251,7 @@ export default function InvoicePayPanel({
       const response = await fetchWrapper.post(`/api/client/portal/invoices/${invoice.client_invoice_id}/pay-intent`, {
         saved_payment_method_id: savedPaymentMethodId,
         save_payment_method: savedPaymentMethodId ? false : saveNewMethod,
-        return_url: window.location.href,
+        return_url: stripeReturnUrl(),
       }) as PaymentIntentResponse
 
       setActivePublishableKey(response.publishable_key ?? stripePublishableKey)
@@ -190,7 +280,7 @@ export default function InvoicePayPanel({
       const result = await stripe?.confirmPayment({
         clientSecret: response.client_secret,
         confirmParams: {
-          return_url: window.location.href,
+          return_url: stripeReturnUrl(),
         },
         redirect: 'if_required',
       })
@@ -201,8 +291,7 @@ export default function InvoicePayPanel({
       }
     }
 
-    setMessage(response.status === 'processing' ? 'Payment is processing.' : 'Payment submitted.')
-    onPaymentUpdated()
+    await pollPaymentIntent(response.payment.stripe_payment_intent_id)
   }
 
   async function startNewPayment(): Promise<void> {
@@ -249,6 +338,17 @@ export default function InvoicePayPanel({
       <CardContent className="flex flex-col gap-4">
         {message && <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{message}</div>}
         {error && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
+        {latestFailure && !error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {latestFailure.failure_reason ?? 'The last online payment attempt could not be completed.'}
+          </div>
+        )}
+        {isPollingReturn && (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Checking Stripe confirmation...
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <button
@@ -327,11 +427,15 @@ export default function InvoicePayPanel({
             {newPaymentClientSecret && stripePromise ? (
               <Elements stripe={stripePromise} options={{ clientSecret: newPaymentClientSecret }}>
                 <NewPaymentForm
-                  clientSecret={newPaymentClientSecret}
                   onCancel={() => setNewPaymentClientSecret(null)}
-                  onComplete={() => {
-                    setMessage('Payment submitted.')
+                  onComplete={(paymentIntentId) => {
                     setNewPaymentClientSecret(null)
+                    if (paymentIntentId) {
+                      void pollPaymentIntent(paymentIntentId)
+                      return
+                    }
+
+                    setMessage('Payment submitted.')
                     onPaymentUpdated()
                   }}
                 />
@@ -352,13 +456,13 @@ export default function InvoicePayPanel({
           Refresh
         </Button>
         {mode === 'saved' && methods.length > 0 && (
-          <Button type="button" onClick={() => void paySavedMethod()} disabled={isCreatingIntent || !selectedMethodId}>
+          <Button type="button" onClick={() => void paySavedMethod()} disabled={isCreatingIntent || isPollingReturn || !selectedMethodId}>
             {isCreatingIntent && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Pay {remainingBalance.format()}
           </Button>
         )}
         {mode === 'new' && !newPaymentClientSecret && (
-          <Button type="button" onClick={() => void startNewPayment()} disabled={isCreatingIntent || !stripePublishableKey}>
+          <Button type="button" onClick={() => void startNewPayment()} disabled={isCreatingIntent || isPollingReturn || !stripePublishableKey}>
             {isCreatingIntent && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Continue
           </Button>

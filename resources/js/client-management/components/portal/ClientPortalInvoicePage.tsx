@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clipboard, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { InvoiceKindBadge } from "@/client-management/components/admin/ClientBadges";
@@ -66,6 +66,7 @@ export default function ClientPortalInvoicePage({
     const [selectedLineItem, setSelectedLineItem] = useState<InvoiceLine | null>(null)
     const [selectedPayment, setSelectedPayment] = useState<ClientInvoicePayment | null>(null)
     const [showDetail, setShowDetail] = useState(true)
+    const [copiedPayLink, setCopiedPayLink] = useState(false)
 
     const fetchInvoice = useCallback(async (isRefresh = false) => {
         if (isRefresh) {
@@ -195,6 +196,17 @@ export default function ClientPortalInvoicePage({
         }
     }
 
+    const handleCopyPayLink = async () => {
+        const payLink = `${window.location.origin}/client/portal/${slug}/invoice/${invoiceId}`
+        try {
+            await navigator.clipboard.writeText(payLink)
+            setCopiedPayLink(true)
+            window.setTimeout(() => setCopiedPayLink(false), 2000)
+        } catch (error) {
+            console.error("Failed to copy pay link", error)
+        }
+    }
+
     if (isLoading || !invoice) {
         return (
             <>
@@ -312,6 +324,18 @@ export default function ClientPortalInvoicePage({
                                 ? 'PARTIALLY PAID'
                                 : invoice.status.toUpperCase()}
                         </Badge>
+                        {isAdmin && invoice.status === 'issued' && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3 print:hidden"
+                                onClick={() => void handleCopyPayLink()}
+                            >
+                                {copiedPayLink ? <Check className="mr-2 h-4 w-4" /> : <Clipboard className="mr-2 h-4 w-4" />}
+                                {copiedPayLink ? 'Copied' : 'Copy pay link'}
+                            </Button>
+                        )}
                     </div>
                 </div>
 

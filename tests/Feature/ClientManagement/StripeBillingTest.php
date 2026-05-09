@@ -176,6 +176,99 @@ class StripeBillingTest extends TestCase
         $this->assertSame(1, ClientInvoiceStripeEvent::where('stripe_event_id', 'evt_pi_succeeded')->count());
     }
 
+    public function test_ach_processing_then_succeeded_keeps_invoice_issued_until_success(): void
+    {
+        $invoice = $this->createInvoice(['invoice_total' => 500.00]);
+
+        $processingEvent = $this->paymentIntentEvent('evt_pi_processing', 'payment_intent.processing', [
+            'id' => 'pi_ach',
+            'amount' => 50000,
+            'customer' => 'cus_acme',
+            'payment_method' => [
+                'id' => 'pm_bank',
+                'type' => 'us_bank_account',
+            ],
+            'payment_method_types' => ['us_bank_account'],
+            'status' => 'processing',
+            'metadata' => [
+                'client_invoice_id' => (string) $invoice->client_invoice_id,
+                'client_company_id' => (string) $this->company->id,
+            ],
+        ]);
+
+        $this->postSignedStripeWebhook($processingEvent)->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertDatabaseMissing('client_invoice_payments', [
+            'stripe_payment_intent_id' => 'pi_ach',
+        ]);
+
+        $succeededEvent = $this->paymentIntentEvent('evt_pi_ach_succeeded', 'payment_intent.succeeded', [
+            'id' => 'pi_ach',
+            'amount' => 50000,
+            'customer' => 'cus_acme',
+            'payment_method' => [
+                'id' => 'pm_bank',
+                'type' => 'us_bank_account',
+            ],
+            'payment_method_types' => ['us_bank_account'],
+            'status' => 'succeeded',
+            'metadata' => [
+                'client_invoice_id' => (string) $invoice->client_invoice_id,
+                'client_company_id' => (string) $this->company->id,
+            ],
+        ]);
+
+        $this->postSignedStripeWebhook($succeededEvent)->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('paid', $invoice->status);
+        $this->assertDatabaseHas('client_invoice_payments', [
+            'stripe_payment_intent_id' => 'pi_ach',
+            'payment_method' => 'stripe_ach',
+        ]);
+    }
+
+    public function test_full_refund_reopens_paid_invoice(): void
+    {
+        [$invoice] = $this->createPaidStripeInvoice('pi_full_refund', 400.00);
+
+        $event = $this->chargeRefundedEvent('evt_full_refund', 'pi_full_refund', 40000, 40000);
+
+        $this->postSignedStripeWebhook($event)->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertSoftDeleted('client_invoice_payments', [
+            'stripe_payment_intent_id' => 'pi_full_refund',
+        ]);
+        $this->assertDatabaseHas('client_invoice_stripe_payments', [
+            'stripe_payment_intent_id' => 'pi_full_refund',
+            'status' => 'refunded',
+        ]);
+    }
+
+    public function test_partial_refund_records_negative_payment_and_leaves_invoice_paid(): void
+    {
+        [$invoice, $stripePayment] = $this->createPaidStripeInvoice('pi_partial_refund', 500.00);
+
+        $event = $this->chargeRefundedEvent('evt_partial_refund', 'pi_partial_refund', 50000, 10000);
+
+        $this->postSignedStripeWebhook($event)->assertOk();
+
+        $invoice = $invoice->fresh(['payments']);
+        $this->assertNotNull($invoice);
+        $this->assertSame('paid', $invoice->status);
+        $this->assertEquals(400.00, $invoice->payments_total);
+        $this->assertDatabaseHas('client_invoice_payments', [
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'client_invoice_stripe_payment_id' => $stripePayment->id,
+            'stripe_payment_intent_id' => 'pi_partial_refund_refund_evt_partial_refund',
+            'payment_method' => 'stripe_refund',
+        ]);
+    }
+
     public function test_dispute_webhook_reopens_paid_invoice(): void
     {
         $invoice = $this->createInvoice(['invoice_total' => 250.00]);
@@ -224,6 +317,43 @@ class StripeBillingTest extends TestCase
         ]);
     }
 
+    public function test_dispute_lost_keeps_stripe_payment_disputed_and_invoice_payment_deleted(): void
+    {
+        [$invoice] = $this->createPaidStripeInvoice('pi_dispute_lost', 250.00);
+
+        $this->postSignedStripeWebhook($this->disputeEvent('evt_dispute_lost_created', 'charge.dispute.created', 'pi_dispute_lost', 'needs_response'))->assertOk();
+        $this->postSignedStripeWebhook($this->disputeEvent('evt_dispute_lost_closed', 'charge.dispute.closed', 'pi_dispute_lost', 'lost'))->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('issued', $invoice->status);
+        $this->assertSoftDeleted('client_invoice_payments', [
+            'stripe_payment_intent_id' => 'pi_dispute_lost',
+        ]);
+        $this->assertDatabaseHas('client_invoice_stripe_payments', [
+            'stripe_payment_intent_id' => 'pi_dispute_lost',
+            'status' => 'disputed',
+        ]);
+    }
+
+    public function test_dispute_won_restores_invoice_payment_and_marks_invoice_paid(): void
+    {
+        [$invoice] = $this->createPaidStripeInvoice('pi_dispute_won', 250.00);
+
+        $this->postSignedStripeWebhook($this->disputeEvent('evt_dispute_won_created', 'charge.dispute.created', 'pi_dispute_won', 'needs_response'))->assertOk();
+        $this->postSignedStripeWebhook($this->disputeEvent('evt_dispute_won_closed', 'charge.dispute.closed', 'pi_dispute_won', 'won'))->assertOk();
+
+        $invoice->refresh();
+        $this->assertSame('paid', $invoice->status);
+        $this->assertDatabaseHas('client_invoice_payments', [
+            'stripe_payment_intent_id' => 'pi_dispute_won',
+            'deleted_at' => null,
+        ]);
+        $this->assertDatabaseHas('client_invoice_stripe_payments', [
+            'stripe_payment_intent_id' => 'pi_dispute_won',
+            'status' => 'succeeded',
+        ]);
+    }
+
     public function test_setup_intent_webhook_saves_payment_method(): void
     {
         ClientCompanyStripeCustomer::create([
@@ -267,6 +397,68 @@ class StripeBillingTest extends TestCase
         ]);
     }
 
+    public function test_detaching_default_payment_method_promotes_next_method(): void
+    {
+        $default = ClientCompanyPaymentMethod::factory()->create([
+            'client_company_id' => $this->company->id,
+            'stripe_payment_method_id' => 'pm_default',
+            'is_default' => true,
+            'created_at' => now()->subDay(),
+        ]);
+        $next = ClientCompanyPaymentMethod::factory()->create([
+            'client_company_id' => $this->company->id,
+            'stripe_payment_method_id' => 'pm_next',
+            'is_default' => false,
+            'created_at' => now(),
+        ]);
+
+        $service = new class extends StripeBillingService
+        {
+            public function __construct() {}
+
+            protected function detachStripePaymentMethod(string $paymentMethodId): void {}
+        };
+
+        $service->detachPaymentMethod($default, $this->client);
+
+        $this->assertSoftDeleted('client_company_payment_methods', [
+            'id' => $default->id,
+        ]);
+        $this->assertTrue((bool) $next->fresh()?->is_default);
+    }
+
+    public function test_client_cannot_mutate_payment_method_for_another_company(): void
+    {
+        $otherCompany = ClientCompany::factory()->create();
+        $otherMethod = ClientCompanyPaymentMethod::factory()->create([
+            'client_company_id' => $otherCompany->id,
+            'stripe_payment_method_id' => 'pm_other_company',
+        ]);
+
+        $this->actingAs($this->client)
+            ->deleteJson("/api/client/portal/companies/{$this->company->id}/payment-methods/{$otherMethod->id}")
+            ->assertNotFound();
+
+        $this->actingAs($this->client)
+            ->postJson("/api/client/portal/companies/{$this->company->id}/payment-methods/{$otherMethod->id}/default")
+            ->assertNotFound();
+    }
+
+    public function test_admin_cannot_manually_create_synthetic_stripe_payment_method(): void
+    {
+        $admin = User::factory()->create(['user_role' => 'Admin']);
+        $invoice = $this->createInvoice();
+
+        $this->actingAs($admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/payments", [
+                'amount' => 100.00,
+                'payment_date' => now()->toDateString(),
+                'payment_method' => 'stripe_card',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_method');
+    }
+
     public function test_unsigned_stripe_webhook_is_rejected(): void
     {
         $response = $this->call('POST', '/api/webhooks/stripe', [], [], [], [
@@ -302,6 +494,33 @@ class StripeBillingTest extends TestCase
     }
 
     /**
+     * @return array{0: ClientInvoice, 1: ClientInvoiceStripePayment}
+     */
+    private function createPaidStripeInvoice(string $paymentIntentId, float $amount): array
+    {
+        $invoice = $this->createInvoice(['invoice_total' => $amount]);
+        $stripePayment = ClientInvoiceStripePayment::create([
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'stripe_payment_intent_id' => $paymentIntentId,
+            'stripe_customer_id' => 'cus_acme',
+            'stripe_payment_method_id' => 'pm_card',
+            'amount' => (int) round($amount * 100),
+            'status' => 'succeeded',
+        ]);
+        ClientInvoicePayment::create([
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'amount' => $amount,
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'stripe_card',
+            'client_invoice_stripe_payment_id' => $stripePayment->id,
+            'stripe_payment_intent_id' => $paymentIntentId,
+        ]);
+        $invoice->markPaid(now()->toDateString());
+
+        return [$invoice, $stripePayment];
+    }
+
+    /**
      * @param  array<string, mixed>  $object
      * @return array<string, mixed>
      */
@@ -316,6 +535,48 @@ class StripeBillingTest extends TestCase
                     'object' => 'payment_intent',
                     'currency' => 'usd',
                 ], $object),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function chargeRefundedEvent(string $eventId, string $paymentIntentId, int $amount, int $amountRefunded): array
+    {
+        return [
+            'id' => $eventId,
+            'object' => 'event',
+            'type' => 'charge.refunded',
+            'data' => [
+                'object' => [
+                    'id' => 'ch_'.$paymentIntentId,
+                    'object' => 'charge',
+                    'payment_intent' => $paymentIntentId,
+                    'amount' => $amount,
+                    'amount_refunded' => $amountRefunded,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function disputeEvent(string $eventId, string $type, string $paymentIntentId, string $status): array
+    {
+        return [
+            'id' => $eventId,
+            'object' => 'event',
+            'type' => $type,
+            'data' => [
+                'object' => [
+                    'id' => 'dp_'.$paymentIntentId,
+                    'object' => 'dispute',
+                    'payment_intent' => $paymentIntentId,
+                    'charge' => 'ch_'.$paymentIntentId,
+                    'status' => $status,
+                ],
             ],
         ];
     }
