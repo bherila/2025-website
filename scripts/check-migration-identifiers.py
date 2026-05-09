@@ -39,7 +39,11 @@ def matching_brace_offset(content: str, opening_offset: int) -> int:
 def schema_blocks(content: str) -> list[tuple[str, str]]:
     blocks: list[tuple[str, str]] = []
     pattern = re.compile(
-        r"Schema::(?:create|table)\(['\"]([^'\"]+)['\"]\s*,\s*function\s*\([^)]*\)\s*\{",
+        r"Schema::(?:create|table)\(['\"]([^'\"]+)['\"]\s*,\s*"
+        r"function\s*\([^)]*\)"
+        r"(?:\s*use\s*\([^)]*\))?"
+        r"(?:\s*:\s*\??[\w\\]+)?"
+        r"\s*\{",
         re.DOTALL,
     )
 
