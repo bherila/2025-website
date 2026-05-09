@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
+use App\Services\Finance\Broker1099ParsedDataShapeService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
@@ -16,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class TaxDocumentController extends Controller
 {
@@ -32,6 +34,8 @@ class TaxDocumentController extends Controller
 
     protected TaxDocumentParsedDataNormalizer $parsedDataNormalizer;
 
+    protected Broker1099ParsedDataShapeService $broker1099ShapeService;
+
     protected TaxPreviewFactsService $taxPreviewFactsService;
 
     public function __construct(
@@ -39,12 +43,14 @@ class TaxDocumentController extends Controller
         GenAiJobDispatcherService $dispatcherService,
         TaxDocumentCreationService $creationService,
         TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
+        Broker1099ParsedDataShapeService $broker1099ShapeService,
         TaxPreviewFactsService $taxPreviewFactsService,
     ) {
         $this->fileService = $fileService;
         $this->dispatcherService = $dispatcherService;
         $this->creationService = $creationService;
         $this->parsedDataNormalizer = $parsedDataNormalizer;
+        $this->broker1099ShapeService = $broker1099ShapeService;
         $this->taxPreviewFactsService = $taxPreviewFactsService;
     }
 
@@ -427,7 +433,7 @@ class TaxDocumentController extends Controller
 
         try {
             $info = $this->dispatcherService->getTaxDocumentPromptInfo($effectiveType, $taxYear);
-        } catch (\InvalidArgumentException $e) {
+        } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
@@ -601,6 +607,111 @@ class TaxDocumentController extends Controller
             $this->parsedDataNormalizer->documentForResponse($doc),
             (int) $doc->tax_year,
         );
+    }
+
+    public function convertBrokerFormat(Request $request, int $id): JsonResponse
+    {
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        try {
+            $entries = $this->broker1099ShapeService->convertLegacyFlatDocument($doc);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        DB::transaction(function () use ($doc, $entries): void {
+            $doc->update([
+                'parsed_data' => $entries,
+                'genai_status' => 'parsed',
+            ]);
+
+            foreach ($entries as $entry) {
+                $formType = is_string($entry['form_type'] ?? null) ? $entry['form_type'] : null;
+                if ($formType === null) {
+                    continue;
+                }
+
+                $hasLink = TaxDocumentAccount::where('tax_document_id', $doc->id)
+                    ->where('form_type', $formType)
+                    ->exists();
+
+                if ($hasLink) {
+                    continue;
+                }
+
+                TaxDocumentAccount::createLink(
+                    $doc->id,
+                    null,
+                    $formType,
+                    (int) ($entry['tax_year'] ?? $doc->tax_year),
+                    aiIdentifier: is_string($entry['account_identifier'] ?? null) ? $entry['account_identifier'] : null,
+                    aiAccountName: is_string($entry['account_name'] ?? null) ? $entry['account_name'] : null,
+                );
+            }
+        });
+
+        $freshDoc = $doc->fresh(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
+        if (! $freshDoc instanceof FileForTaxDocument) {
+            abort(404);
+        }
+        $this->parsedDataNormalizer->persistReviewFlagsForDocument($freshDoc);
+
+        return $this->jsonWithOptionalTaxFacts(
+            $request,
+            'document',
+            $this->parsedDataNormalizer->documentForResponse($freshDoc),
+            (int) $freshDoc->tax_year,
+        );
+    }
+
+    public function reprocessBrokerDocument(Request $request, int $id): JsonResponse
+    {
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        try {
+            $queuedDoc = $this->creationService->queueMultiAccountReprocessing($doc, $this->genAiAccountHintsForAuthenticatedUser());
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $queuedDoc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($queuedDoc));
+    }
+
+    public function repairBrokerFormat(Request $request, int $id): JsonResponse
+    {
+        $doc = FileForTaxDocument::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+
+        try {
+            $queuedDoc = $this->creationService->queueMultiAccountFormatRepair($doc, $this->genAiAccountHintsForAuthenticatedUser());
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $queuedDoc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
+
+        return response()->json($this->parsedDataNormalizer->documentForResponse($queuedDoc));
+    }
+
+    /**
+     * @return array<int, array{name: string|null, last4: string|null}>
+     */
+    private function genAiAccountHintsForAuthenticatedUser(): array
+    {
+        return FinAccounts::forOwner((int) Auth::id())
+            ->get(['acct_name', 'acct_number'])
+            ->map(fn (FinAccounts $account): array => [
+                'name' => $account->acct_name,
+                'last4' => $account->acct_number ? substr($account->acct_number, -4) : null,
+            ])
+            ->all();
     }
 
     /**

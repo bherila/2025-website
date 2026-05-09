@@ -21,10 +21,13 @@ class TaxDocumentParsedDataNormalizer
         '1099_int' => [
             'int_1_interest_income' => 'box1_interest',
             '1_interest_income' => 'box1_interest',
+            'int_2_early_withdrawal' => 'box2_early_withdrawal',
             'int_2_early_withdrawal_penalty' => 'box2_early_withdrawal',
             '2_early_withdrawal_penalty' => 'box2_early_withdrawal',
+            'int_3_us_savings_bonds' => 'box3_savings_bond',
             'int_3_us_savings_bonds_treasury' => 'box3_savings_bond',
             '3_interest_on_us_savings_bonds_and_treasury_obligations' => 'box3_savings_bond',
+            'int_4_fed_tax_withheld' => 'box4_fed_tax',
             'int_4_federal_tax_withheld' => 'box4_fed_tax',
             '4_federal_income_tax_withheld' => 'box4_fed_tax',
             'int_5_investment_expenses' => 'box5_investment_expense',
@@ -60,16 +63,26 @@ class TaxDocumentParsedDataNormalizer
             'div_1b_qualified' => 'box1b_qualified',
             '1b_qualified_dividends' => 'box1b_qualified',
             'div_2a_cap_gain' => 'box2a_cap_gain',
+            'div_2a_total_cap_gain' => 'box2a_cap_gain',
             '2a_total_capital_gain_distributions' => 'box2a_cap_gain',
+            'div_2b_unrecap_1250' => 'box2b_unrecap_1250',
             '2b_unrecaptured_section_1250_gain' => 'box2b_unrecap_1250',
+            'div_2c_1202' => 'box2c_section_1202',
             '2c_section_1202_gain' => 'box2c_section_1202',
+            'div_2d_collectibles' => 'box2d_collectibles',
             '2d_collectibles_28_percent_gain' => 'box2d_collectibles',
+            'div_2e_897_ordinary' => 'box2e_section_897_ordinary',
             '2e_section_897_ordinary_dividends' => 'box2e_section_897_ordinary',
+            'div_2f_897_cap_gain' => 'box2f_section_897_cap_gain',
             '2f_section_897_capital_gain' => 'box2f_section_897_cap_gain',
+            'div_3_nondividend' => 'box3_nondividend',
             '3_nondividend_distributions' => 'box3_nondividend',
+            'div_4_fed_tax_withheld' => 'box4_fed_tax',
             'div_4_federal_tax_withheld' => 'box4_fed_tax',
             '4_federal_income_tax_withheld' => 'box4_fed_tax',
+            'div_5_section199a' => 'box5_section_199a',
             '5_section_199a_dividends' => 'box5_section_199a',
+            'div_6_investment_expenses' => 'box6_investment_expense',
             '6_investment_expenses' => 'box6_investment_expense',
             'div_7_foreign_tax_paid' => 'box7_foreign_tax',
             '7_foreign_tax_paid' => 'box7_foreign_tax',
@@ -90,6 +103,7 @@ class TaxDocumentParsedDataNormalizer
             'box3_other' => 'box3_other_income',
             'misc_3_other_income' => 'box3_other_income',
             '3_other_income' => 'box3_other_income',
+            'misc_4_fed_tax_withheld' => 'box4_fed_tax',
             'misc_4_federal_tax_withheld' => 'box4_fed_tax',
             '4_federal_income_tax_withheld' => 'box4_fed_tax',
             'misc_8_substitute_payments' => 'box8_substitute_payments',
@@ -138,6 +152,7 @@ class TaxDocumentParsedDataNormalizer
         ],
         '1099_b' => [
             'b_total_proceeds' => 'total_proceeds',
+            'b_total_cost' => 'total_cost_basis',
             'b_total_cost_basis' => 'total_cost_basis',
             'b_total_wash_sale_disallowed' => 'total_wash_sale_disallowed',
             'b_total_wash_sales' => 'total_wash_sale_disallowed',
@@ -345,6 +360,16 @@ class TaxDocumentParsedDataNormalizer
         [$canonical, $warnings] = $this->normalizeLeaf($this->baseFormType($formType), $parsedData, 'parsed_data');
 
         return [$canonical, $warnings, []];
+    }
+
+    /**
+     * @return array<string, mixed>|mixed
+     */
+    public function canonicalParsedDataForForm(string $formType, mixed $parsedData): mixed
+    {
+        [$canonical] = $this->normalizeLeaf($this->baseFormType($formType), $parsedData, 'parsed_data');
+
+        return $canonical;
     }
 
     /**

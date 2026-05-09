@@ -32,6 +32,10 @@ function normalizeMatchValue(value: string | null | undefined): string | null {
   return trimmed === '' ? null : trimmed
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 /**
  * Whether a parsed_data entry corresponds to a particular account link.
  *
@@ -98,10 +102,18 @@ export function extractLinkParsedData(
   doc: TaxDocument,
   link: TaxDocumentAccountLink,
 ): Record<string, unknown> | null {
-  if (!Array.isArray(doc.parsed_data)) return null
+  if (!Array.isArray(doc.parsed_data)) {
+    return doc.form_type === 'broker_1099' && isRecord(doc.parsed_data)
+      ? doc.parsed_data
+      : null
+  }
   const entries = doc.parsed_data as unknown as MultiAccountParsedEntry[]
   const match = findMatchingEntry(link, entries)
   return (match?.parsed_data as Record<string, unknown>) ?? null
+}
+
+export function hasLegacyFlatBrokerParsedData(doc: TaxDocument | null | undefined): boolean {
+  return doc?.form_type === 'broker_1099' && isRecord(doc.parsed_data)
 }
 
 /**

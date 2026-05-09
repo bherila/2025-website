@@ -12,6 +12,7 @@ class MultiAccountTaxImportPromptTemplate extends PromptTemplate
     {
         $taxYear = (int) ($context['tax_year'] ?? date('Y'));
         $accounts = $context['accounts'] ?? [];
+        $isParsedDataRepair = ($context['input_kind'] ?? null) === 'parsed_data_repair';
 
         $accountHints = $this->buildAccountsContext(
             array_map(fn ($a) => [
@@ -20,10 +21,16 @@ class MultiAccountTaxImportPromptTemplate extends PromptTemplate
             ], $accounts)
         );
 
-        return <<<PROMPT
-You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year {$taxYear}.
+        $sourceDescription = $isParsedDataRepair
+            ? 'You are converting a stored brokerage tax extraction artifact for tax year '.$taxYear.'. The attached text file contains TOON or JSON data that may be in a legacy, flat, or otherwise unsupported shape.'
+            : 'You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year '.$taxYear.'.';
 
-This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
+        $sourceInstructions = $isParsedDataRepair
+            ? "\nUse the attached data as the source of truth. Preserve extracted account names, identifiers, payer metadata, and numeric values. Do not invent fields that are not present. If 1099-B summary totals are present but individual transaction lots are absent, return the summary totals and `transactions: []`.\n"
+            : "\nThis PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.\n";
+
+        return <<<PROMPT
+{$sourceDescription}{$sourceInstructions}{$accountHints}
 
 Return ONLY TOON, no Markdown fences and no other text.
 

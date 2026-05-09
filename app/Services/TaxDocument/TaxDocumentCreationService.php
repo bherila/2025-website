@@ -6,7 +6,11 @@ use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 /**
  * Encapsulates the "create tax document + optional account link + optional AI job" workflow.
@@ -159,6 +163,150 @@ class TaxDocumentCreationService
         }
 
         return $doc;
+    }
+
+    /**
+     * Re-run consolidated broker 1099 extraction for an existing uploaded PDF.
+     *
+     * @param  array<array{name?:string,last4?:string}>  $contextAccounts
+     */
+    public function queueMultiAccountReprocessing(FileForTaxDocument $taxDoc, array $contextAccounts = []): FileForTaxDocument
+    {
+        if ((string) $taxDoc->getAttribute('form_type') !== 'broker_1099') {
+            throw new InvalidArgumentException('Only consolidated broker 1099 documents can be re-extracted with this workflow.');
+        }
+
+        if (! $taxDoc->s3_path) {
+            throw new InvalidArgumentException('This document does not have a source PDF to re-extract.');
+        }
+
+        $job = DB::transaction(function () use ($taxDoc, $contextAccounts): GenAiImportJob {
+            $genaiJob = GenAiImportJob::create([
+                'user_id' => $taxDoc->user_id,
+                'job_type' => 'tax_form_multi_account_import',
+                'file_hash' => $taxDoc->file_hash,
+                'original_filename' => $taxDoc->original_filename,
+                's3_path' => $taxDoc->s3_path,
+                'mime_type' => $taxDoc->mime_type ?? 'application/pdf',
+                'file_size_bytes' => $taxDoc->file_size_bytes,
+                'context_json' => json_encode([
+                    'tax_document_id' => $taxDoc->id,
+                    'tax_year' => (int) $taxDoc->tax_year,
+                    'accounts' => $contextAccounts,
+                ]),
+                'status' => 'pending',
+            ]);
+
+            $taxDoc->update([
+                'genai_job_id' => $genaiJob->id,
+                'genai_status' => 'pending',
+                'is_reviewed' => false,
+            ]);
+            $taxDoc->syncToAccountLinks(['is_reviewed' => false]);
+
+            return $genaiJob;
+        });
+
+        ParseImportJob::dispatch($job->id);
+
+        $fresh = $taxDoc->fresh();
+
+        return $fresh instanceof FileForTaxDocument ? $fresh : $taxDoc;
+    }
+
+    /**
+     * Queue an AI repair job that converts existing parsed broker data into the
+     * current per-account/per-form TOON shape without rereading the source PDF.
+     *
+     * @param  array<array{name?:string,last4?:string}>  $contextAccounts
+     */
+    public function queueMultiAccountFormatRepair(FileForTaxDocument $taxDoc, array $contextAccounts = []): FileForTaxDocument
+    {
+        if ((string) $taxDoc->getAttribute('form_type') !== 'broker_1099') {
+            throw new InvalidArgumentException('Only consolidated broker 1099 documents can be repaired with this workflow.');
+        }
+
+        if ($taxDoc->parsed_data === null) {
+            throw new InvalidArgumentException('This document does not have stored parsed data to repair.');
+        }
+
+        $sourceText = $this->brokerRepairSourceText($taxDoc);
+        $sourcePath = sprintf(
+            'genai-imports/tax-document-format-repair/%d/%d/%s.toon',
+            (int) $taxDoc->user_id,
+            (int) $taxDoc->id,
+            (string) Str::uuid(),
+        );
+
+        if (! Storage::disk('s3')->put($sourcePath, $sourceText)) {
+            throw new InvalidArgumentException('Could not create the stored-data repair artifact.');
+        }
+
+        try {
+            $job = DB::transaction(function () use ($taxDoc, $contextAccounts, $sourcePath, $sourceText): GenAiImportJob {
+                $genaiJob = GenAiImportJob::create([
+                    'user_id' => $taxDoc->user_id,
+                    'job_type' => 'tax_form_multi_account_import',
+                    'file_hash' => hash('sha256', $sourceText),
+                    'original_filename' => $this->repairArtifactFilename($taxDoc),
+                    's3_path' => $sourcePath,
+                    'mime_type' => 'text/plain',
+                    'file_size_bytes' => strlen($sourceText),
+                    'context_json' => json_encode([
+                        'tax_document_id' => $taxDoc->id,
+                        'tax_year' => (int) $taxDoc->tax_year,
+                        'accounts' => $contextAccounts,
+                        'input_kind' => 'parsed_data_repair',
+                        'source_form_type' => (string) $taxDoc->getAttribute('form_type'),
+                    ]),
+                    'status' => 'pending',
+                ]);
+
+                $taxDoc->update([
+                    'genai_job_id' => $genaiJob->id,
+                    'genai_status' => 'pending',
+                    'is_reviewed' => false,
+                ]);
+                $taxDoc->syncToAccountLinks(['is_reviewed' => false]);
+
+                return $genaiJob;
+            });
+        } catch (\Throwable $e) {
+            Storage::disk('s3')->delete($sourcePath);
+
+            throw $e;
+        }
+
+        ParseImportJob::dispatch($job->id);
+
+        $fresh = $taxDoc->fresh();
+
+        return $fresh instanceof FileForTaxDocument ? $fresh : $taxDoc;
+    }
+
+    private function brokerRepairSourceText(FileForTaxDocument $taxDoc): string
+    {
+        $payload = [
+            'source_form_type' => (string) $taxDoc->getAttribute('form_type'),
+            'tax_year' => (int) $taxDoc->tax_year,
+            'original_filename' => $taxDoc->original_filename,
+            'parsed_data' => $taxDoc->parsed_data,
+        ];
+
+        try {
+            return Toon::encode($payload);
+        } catch (\Throwable) {
+            $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            return $json === false ? '{}' : $json;
+        }
+    }
+
+    private function repairArtifactFilename(FileForTaxDocument $taxDoc): string
+    {
+        $baseName = trim((string) ($taxDoc->original_filename ?: 'broker-1099'));
+
+        return $baseName.'.stored-parsed-data.toon';
     }
 
     /**

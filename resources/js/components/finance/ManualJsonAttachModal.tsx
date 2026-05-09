@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
-import { buildManualInputPrompt, formatManualTaxInput, getFormatLabel, type ManualTaxInputFormat, parseManualTaxInput } from '@/lib/finance/taxDocumentManualInput'
+import { buildManualInputPrompt, extractBrokerEntriesFromManualInput, formatManualTaxInput, getFormatLabel, type ManualTaxInputFormat, parseManualTaxInput } from '@/lib/finance/taxDocumentManualInput'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
@@ -25,6 +25,16 @@ import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 /** Performs basic structural validation on parsed JSON for the given form type. */
 function validateParsedData(data: unknown, formType: string): string[] {
   const errors: string[] = []
+  if (formType === 'broker_1099') {
+    try {
+      extractBrokerEntriesFromManualInput(data)
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : 'Broker data must be an array of account/form entries.')
+    }
+
+    return errors
+  }
+
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     errors.push('Data must be a plain object (not an array or primitive).')
     return errors
@@ -128,6 +138,8 @@ function getJsonPlaceholder(formType: string): string {
         '  "fields": { "A": { "value": "Partnership LLC" }, "1": { "value": "12345.67" } },\n' +
         '  "codes": { "11": [{ "code": "A", "value": "500.00", "notes": "Net LT cap gain" }] }\n}'
       )
+    case 'broker_1099':
+      return '[\n  {\n    "account_identifier": "1234-5678",\n    "account_name": "Brokerage Account",\n    "form_type": "1099_b",\n    "tax_year": 2025,\n    "parsed_data": { "transactions": [] }\n  }\n]'
     default:
       return '{\n  /* paste the JSON returned by the LLM here */\n}'
   }
@@ -150,12 +162,13 @@ interface ManualJsonAttachModalProps {
   /** Existing document JSON (for edit mode — pre-fills the textarea). */
   initialJson?: unknown
   hasOriginalParsedData?: boolean
+  defaultInputFormat?: ManualTaxInputFormat
   onLoadOriginalParsedData?: () => Promise<unknown>
   /**
    * When provided, clicking the action button calls onJsonReady(parsedData) instead
    * of posting to the API. Used when attaching JSON before uploading the PDF file.
    */
-  onJsonReady?: (data: unknown) => void
+  onJsonReady?: (data: unknown) => void | Promise<void>
   onSuccess: (document: TaxDocument) => void
   onBack: () => void
 }
@@ -170,6 +183,7 @@ export default function ManualJsonAttachModal({
   employmentEntityId,
   initialJson,
   hasOriginalParsedData = false,
+  defaultInputFormat = 'json',
   onLoadOriginalParsedData,
   onJsonReady,
   onSuccess,
@@ -179,7 +193,7 @@ export default function ManualJsonAttachModal({
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
   const [schemaCopied, setSchemaCopied] = useState(false)
-  const [inputFormat, setInputFormat] = useState<ManualTaxInputFormat>('json')
+  const [inputFormat, setInputFormat] = useState<ManualTaxInputFormat>(defaultInputFormat)
 
   const [jsonInput, setJsonInput] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -193,13 +207,13 @@ export default function ManualJsonAttachModal({
   useEffect(() => {
     if (!open) return
     // Pre-fill with initialJson when in edit mode
-    const initStr = initialJson != null ? JSON.stringify(initialJson, null, 2) : ''
+    const initStr = initialJson != null ? formatManualTaxInput(initialJson, defaultInputFormat) : ''
     setJsonInput(initStr)
     setValidationErrors([])
     setIsValid(initStr !== '')
     setPromptCopied(false)
     setSchemaCopied(false)
-    setInputFormat('json')
+    setInputFormat(defaultInputFormat)
 
     setPromptLoading(true)
     fetchWrapper
@@ -207,7 +221,7 @@ export default function ManualJsonAttachModal({
       .then((data: unknown) => setPromptInfo(data as PromptInfo))
       .catch(() => toast.error('Could not load prompt info.'))
       .finally(() => setPromptLoading(false))
-  }, [open, formType, taxYear, initialJson])
+  }, [open, formType, taxYear, initialJson, defaultInputFormat])
 
   // Validate json input on change
   useEffect(() => {
@@ -283,7 +297,14 @@ export default function ManualJsonAttachModal({
 
     // If caller wants the JSON without an API call (e.g., attach JSON before uploading PDF)
     if (onJsonReady) {
-      onJsonReady(parsedData)
+      setSubmitting(true)
+      try {
+        await onJsonReady(formType === 'broker_1099' ? extractBrokerEntriesFromManualInput(parsedData) : parsedData)
+      } catch (err) {
+        toast.error('Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      } finally {
+        setSubmitting(false)
+      }
       return
     }
 
