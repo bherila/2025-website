@@ -1114,6 +1114,44 @@ class TaxDocumentControllerTest extends TestCase
             ->assertJsonPath('parsed_data_needs_review', true);
     }
 
+    public function test_1099_b_preserves_supplemental_statement_details(): void
+    {
+        $user = $this->createUser();
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_b',
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'payer_tin' => '04-3523567',
+                'total_proceeds' => 749840.20,
+                'total_cost_basis' => 799409.88,
+                'total_wash_sale_disallowed' => 536.36,
+                'total_realized_gain_loss' => -49569.68,
+                'transactions' => [],
+                'supplemental_statement' => [
+                    'short_dividends_total' => 3230.55,
+                    'short_dividends' => [
+                        [
+                            'description' => 'ACUITY INC.',
+                            'cusip' => '00508Y102',
+                            'date' => '2025-11-03',
+                            'amount' => 0.68,
+                        ],
+                    ],
+                    'margin_interest_paid_total' => 7373.74,
+                ],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.supplemental_statement.short_dividends_total', 3230.55)
+            ->assertJsonPath('parsed_data.supplemental_statement.short_dividends.0.cusip', '00508Y102')
+            ->assertJsonPath('parsed_data.supplemental_statement.margin_interest_paid_total', 7373.74)
+            ->assertJsonPath('parsed_data_needs_review', false);
+    }
+
     public function test_can_convert_legacy_flat_broker_1099_to_multi_entry_format(): void
     {
         $user = $this->createUser();

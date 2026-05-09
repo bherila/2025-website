@@ -300,15 +300,41 @@ export interface BrokerTransaction1099B {
   additional_info: string | null
 }
 
+export interface BrokerSupplementalAmountRow {
+  description: string
+  date: string
+  amount: number
+}
+
+export interface BrokerSupplementalShortDividendRow extends BrokerSupplementalAmountRow {
+  cusip: string | null
+}
+
+export interface Broker1099BSupplementalStatement {
+  statement_note?: string | null
+  account_fees_total?: number | null
+  account_fees?: BrokerSupplementalAmountRow[]
+  margin_interest_paid_total?: number | null
+  margin_interest_paid?: BrokerSupplementalAmountRow[]
+  short_dividends_total?: number | null
+  short_dividends?: BrokerSupplementalShortDividendRow[]
+}
+
 /** parsed_data shape for a 1099-B account_link entry from a consolidated broker import. */
 export interface Broker1099BParsedData {
   payer_name: string | null
   payer_tin: string | null
+  recipient_tin?: string | null
+  recipient_tin_last4?: string | null
+  account_number?: string | null
   total_proceeds: number | null
   total_cost_basis: number | null
   total_wash_sale_disallowed: number | null
   total_realized_gain_loss: number | null
+  summary?: Record<string, unknown> | null
   transactions: BrokerTransaction1099B[]
+  supplemental_statement?: Broker1099BSupplementalStatement | null
+  extraction_notes?: Record<string, unknown> | null
 }
 
 /** Parsed field values from 1099-G: government payments (unemployment, state refunds, etc.). */
