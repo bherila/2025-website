@@ -615,6 +615,10 @@ class TaxDocumentController extends Controller
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
+        if ((string) $doc->getAttribute('form_type') !== 'broker_1099') {
+            return response()->json(['message' => 'Only broker_1099 documents can be converted to the current multi-entry format.'], 422);
+        }
+
         try {
             $entries = $this->broker1099ShapeService->convertLegacyFlatDocument($doc);
         } catch (InvalidArgumentException $e) {
@@ -625,7 +629,9 @@ class TaxDocumentController extends Controller
             $doc->update([
                 'parsed_data' => $entries,
                 'genai_status' => 'parsed',
+                'is_reviewed' => false,
             ]);
+            $doc->accountLinks()->update(['is_reviewed' => false]);
 
             foreach ($entries as $entry) {
                 $formType = is_string($entry['form_type'] ?? null) ? $entry['form_type'] : null;

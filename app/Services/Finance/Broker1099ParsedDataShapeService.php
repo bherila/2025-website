@@ -59,6 +59,9 @@ class Broker1099ParsedDataShapeService
             'total_cost_basis',
             'total_wash_sale_disallowed',
             'total_realized_gain_loss',
+            'summary',
+            'transactions',
+            'supplemental_statement',
         ],
     ];
 

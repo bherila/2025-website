@@ -1160,6 +1160,7 @@ class TaxDocumentControllerTest extends TestCase
         $doc = $this->createTaxDocument($user->id, [
             'form_type' => 'broker_1099',
             'account_id' => null,
+            'is_reviewed' => true,
             'parsed_data' => [
                 'payer_name' => 'National Financial Services LLC',
                 'account_number' => '637-768451',
@@ -1169,22 +1170,80 @@ class TaxDocumentControllerTest extends TestCase
                 'b_total_gain_loss' => 200.00,
             ],
         ]);
-        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
-        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+        $divLink = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+        $brokerLink = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
 
         $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
 
         $response->assertOk()
+            ->assertJsonPath('is_reviewed', false)
             ->assertJsonPath('parsed_data.0.account_identifier', '637-768451')
             ->assertJsonPath('parsed_data.0.account_name', 'Fidelity SMA')
             ->assertJsonPath('parsed_data.0.form_type', '1099_div')
             ->assertJsonPath('parsed_data.0.parsed_data.box1a_ordinary', 100.12)
             ->assertJsonPath('parsed_data.1.form_type', '1099_b')
             ->assertJsonPath('parsed_data.1.parsed_data.total_cost_basis', 800)
-            ->assertJsonPath('parsed_data.1.parsed_data.transactions', []);
+            ->assertJsonPath('parsed_data.1.parsed_data.transactions', [])
+            ->assertJsonPath('account_links.0.is_reviewed', false)
+            ->assertJsonPath('account_links.1.is_reviewed', false);
 
         $this->assertTrue(array_is_list($doc->fresh()->parsed_data));
+        $this->assertFalse((bool) $doc->fresh()->is_reviewed);
+        $this->assertFalse((bool) $divLink->fresh()->is_reviewed);
+        $this->assertFalse((bool) $brokerLink->fresh()->is_reviewed);
         $this->assertDatabaseCount('fin_tax_document_accounts', 2);
+    }
+
+    public function test_convert_broker_format_rejects_non_broker_documents(): void
+    {
+        $user = $this->createUser();
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'parsed_data' => [
+                'payer_name' => 'Fidelity',
+                'box1a_ordinary' => 100.12,
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Only broker_1099 documents can be converted to the current multi-entry format.');
+    }
+
+    public function test_convert_broker_format_keeps_1099_b_rows_with_transactions_but_no_totals(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'account_number' => '637-768451',
+                'transactions' => [
+                    [
+                        'symbol' => 'ABBV',
+                        'description' => 'ABBVIE INC COM USD0.01',
+                        'quantity' => 9,
+                        'purchase_date' => '2025-10-08',
+                        'sale_date' => '2025-11-25',
+                        'proceeds' => 2087.74,
+                        'cost_basis' => 2085.98,
+                    ],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.0.form_type', '1099_b')
+            ->assertJsonPath('parsed_data.0.parsed_data.transactions.0.symbol', 'ABBV')
+            ->assertJsonPath('parsed_data.0.parsed_data.transactions.0.proceeds', 2087.74);
     }
 
     public function test_can_queue_broker_1099_reprocessing_from_existing_pdf(): void
