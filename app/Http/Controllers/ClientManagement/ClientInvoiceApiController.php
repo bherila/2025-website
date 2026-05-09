@@ -119,7 +119,7 @@ class ClientInvoiceApiController extends Controller
     }
 
     /**
-     * Generate invoices for all calendar months.
+     * Generate draft invoices through the company's current billing cadence windows.
      */
     public function generateAll(ClientCompany $company): JsonResponse
     {

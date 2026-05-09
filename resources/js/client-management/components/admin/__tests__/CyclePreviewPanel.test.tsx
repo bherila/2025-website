@@ -60,4 +60,23 @@ describe('CyclePreviewPanel', () => {
     expect(screen.getByText('Projected overage (4.00 hours)')).toBeInTheDocument()
     expect(screen.getByText('$3,650.00')).toBeInTheDocument()
   })
+
+  it('uses currency math for fractional rates and fees', () => {
+    render(
+      <CyclePreviewPanel
+        company={company}
+        agreement={{
+          ...baseAgreement,
+          monthly_retainer_fee: '1000.10',
+          hourly_rate: '150.05',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('$600.20')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /preview next invoice/i }))
+
+    expect(screen.getByText('$3,650.50')).toBeInTheDocument()
+  })
 })

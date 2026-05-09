@@ -84,4 +84,23 @@ describe('CadenceTransitionModal', () => {
       expect(onSuccess).toHaveBeenCalledWith(99)
     })
   })
+
+  it('forces interim overage off for monthly successor terms', async () => {
+    render(
+      <CadenceTransitionModal
+        companyId={1}
+        agreement={{ ...agreement, billing_cadence: 'monthly', bill_overage_interim: true }}
+        open
+        onOpenChange={jest.fn()}
+        onSuccess={jest.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/client/mgmt/companies/1/agreements/10/transition/preview',
+        expect.objectContaining({ billing_cadence: 'monthly', bill_overage_interim: false }),
+      )
+    })
+  })
 })

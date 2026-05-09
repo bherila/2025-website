@@ -51,12 +51,13 @@ function currentCycleWindow(agreement: Agreement | null): string {
 
 export default function CyclePreviewPanel({ company, agreement, onPreviewInvoice }: CyclePreviewPanelProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
-  const retainerHours = Number(agreement?.monthly_retainer_hours ?? 0) * cadenceMonths(agreement?.billing_cadence)
-  const retainerFee = Number(agreement?.monthly_retainer_fee ?? 0) * cadenceMonths(agreement?.billing_cadence)
+  const monthsInCycle = cadenceMonths(agreement?.billing_cadence)
+  const retainerHours = Number(agreement?.monthly_retainer_hours ?? 0) * monthsInCycle
+  const retainerFee = currency(agreement?.monthly_retainer_fee ?? 0).multiply(monthsInCycle).value
   const hoursLogged = Number(company.uninvoiced_hours ?? 0)
   const remaining = Math.max(0, retainerHours - hoursLogged)
   const overage = Math.max(0, hoursLogged - retainerHours)
-  const projectedOverage = overage * Number(agreement?.hourly_rate ?? 0)
+  const projectedOverage = currency(agreement?.hourly_rate ?? 0).multiply(overage).value
   const recurringTotal = useMemo(() => {
     return (agreement?.recurring_items ?? []).reduce((total, item) => total.add(item.amount), currency(0)).value
   }, [agreement?.recurring_items])

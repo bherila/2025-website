@@ -66,6 +66,7 @@ export default function CadenceTransitionModal({
   const [preview, setPreview] = useState<TransitionPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const effectiveBillOverageInterim = billingCadence === 'monthly' ? false : billOverageInterim
 
   const payload = useMemo(() => ({
     effective_date: effectiveDate,
@@ -75,15 +76,15 @@ export default function CadenceTransitionModal({
     hourly_rate: hourlyRate,
     rollover_months: rolloverMonths,
     catch_up_threshold_hours: catchUpThresholdHours,
-    bill_overage_interim: billOverageInterim,
+    bill_overage_interim: effectiveBillOverageInterim,
     first_cycle_proration: firstCycleProration,
     carry_rollover: carryRollover,
     recurring_item_handling: recurringItemHandling,
   }), [
-    billOverageInterim,
     billingCadence,
     carryRollover,
     catchUpThresholdHours,
+    effectiveBillOverageInterim,
     effectiveDate,
     firstCycleProration,
     hourlyRate,
@@ -98,15 +99,17 @@ export default function CadenceTransitionModal({
       return
     }
 
-    const controller = new AbortController()
+    let cancelled = false
 
     const loadPreview = async () => {
       setError(null)
       try {
         const data = await fetchWrapper.post(`/api/client/mgmt/companies/${companyId}/agreements/${agreement.id}/transition/preview`, payload)
-        setPreview((data as { preview: TransitionPreview }).preview)
+        if (!cancelled) {
+          setPreview((data as { preview: TransitionPreview }).preview)
+        }
       } catch (error) {
-        if (!controller.signal.aborted) {
+        if (!cancelled) {
           setPreview(null)
           setError(error instanceof Error ? error.message : String(error))
         }
@@ -115,7 +118,9 @@ export default function CadenceTransitionModal({
 
     void loadPreview()
 
-    return () => controller.abort()
+    return () => {
+      cancelled = true
+    }
   }, [
     agreement.id,
     companyId,
@@ -123,6 +128,14 @@ export default function CadenceTransitionModal({
     open,
     payload,
   ])
+
+  const updateBillingCadence = (value: string) => {
+    const nextCadence = value as typeof billingCadence
+    setBillingCadence(nextCadence)
+    if (nextCadence === 'monthly') {
+      setBillOverageInterim(false)
+    }
+  }
 
   const confirm = async () => {
     setSaving(true)
@@ -178,7 +191,7 @@ export default function CadenceTransitionModal({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Cadence</Label>
-                <Select value={billingCadence} onValueChange={(value) => setBillingCadence(value as typeof billingCadence)}>
+                <Select value={billingCadence} onValueChange={updateBillingCadence}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="monthly">Monthly</SelectItem>
@@ -219,7 +232,7 @@ export default function CadenceTransitionModal({
                 </Select>
               </div>
               <label className="flex items-center gap-2 self-end text-sm">
-                <Checkbox checked={billOverageInterim} disabled={billingCadence === 'monthly'} onCheckedChange={(checked) => setBillOverageInterim(Boolean(checked))} />
+                <Checkbox checked={effectiveBillOverageInterim} disabled={billingCadence === 'monthly'} onCheckedChange={(checked) => setBillOverageInterim(Boolean(checked))} />
                 Bill overage interim
               </label>
             </div>
