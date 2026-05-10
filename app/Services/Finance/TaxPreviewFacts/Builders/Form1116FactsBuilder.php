@@ -9,6 +9,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use Illuminate\Support\Facades\Log;
 
 class Form1116FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -335,6 +336,14 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
+     * Allocate Form 4952 investment interest expense across eligible K-1s for Form 1116 line 4b.
+     *
+     * Per the line 4b instructions, interest "directly related" to a category (here: tagged to a
+     * specific K-1 via taxDocumentId) stays on that K-1, and "indirect" interest is apportioned
+     * across all eligible categories by an asset-basis ratio. The remainder distribution
+     * intentionally includes already-tagged K-1s — the indirect bucket is conceptually separate
+     * and applies to every eligible category, including the directly-tagged ones.
+     *
      * @param  FileForTaxDocument[]  $k1Docs
      * @return array<int, float>
      */
@@ -367,12 +376,18 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
 
         foreach ($form4952->investmentInterestSources as $source) {
             if ($source->taxDocumentId !== null && array_key_exists($source->taxDocumentId, $allocations)) {
+                // Form 4952 sources can be stored signed; line 4b expects positive expense.
                 $allocations[$source->taxDocumentId] = $this->sumMoney([$allocations[$source->taxDocumentId], abs($source->amount)]);
             }
         }
 
         $docSpecificTotal = $this->sumMoney(array_values($allocations));
         if ($docSpecificTotal > $form4952->totalInvestmentInterestExpense && $docSpecificTotal !== 0.0) {
+            Log::warning('Form 1116 line 4b: tagged K-1 interest exceeds Form 4952 total; scaling down', [
+                'docSpecificTotal' => $docSpecificTotal,
+                'totalInvestmentInterestExpense' => $form4952->totalInvestmentInterestExpense,
+                'docIds' => array_keys($allocations),
+            ]);
             $scale = $form4952->totalInvestmentInterestExpense / $docSpecificTotal;
             foreach ($allocations as $docId => $amount) {
                 $allocations[$docId] = $amount * $scale;
@@ -386,12 +401,10 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             return $allocations;
         }
 
+        // Weights are abs(passiveRatio) and we filtered out zero ratios above, so $weightTotal > 0.
         $weightTotal = array_sum($weights);
-        $docCount = count($weights);
         foreach ($weights as $docId => $weight) {
-            $share = $weightTotal > 0.0
-                ? $unassignedInterest * ($weight / $weightTotal)
-                : $unassignedInterest / $docCount;
+            $share = $unassignedInterest * ($weight / $weightTotal);
             $allocations[$docId] = $this->sumMoney([$allocations[$docId], $share]);
         }
 
