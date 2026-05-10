@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
 class FinanceLotsReconcileCommandTest extends TestCase
@@ -42,6 +43,43 @@ class FinanceLotsReconcileCommandTest extends TestCase
         ])
             ->assertExitCode(1)
             ->expectsOutputToContain('DRIFT');
+    }
+
+    public function test_lots_reconcile_command_filters_diagnostics_by_severity(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $this->makeLot($account, $document, ['form_8949_box' => null]);
+        $this->makeLot($account, $document, [
+            'symbol' => 'BBB',
+            'description' => 'BBB Inc.',
+            'cost_basis' => 150,
+            'cost_per_unit' => 150,
+            'proceeds' => 200,
+            'realized_gain_loss' => 50,
+            'form_8949_box' => null,
+        ]);
+
+        $exitCode = Artisan::call('finance:lots-reconcile', [
+            '--tax-document' => $document->id,
+            '--format' => 'json',
+            '--severity' => 'error',
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('"status": "ok"', $output);
+        $this->assertStringNotContainsString('box_unset', $output);
+    }
+
+    public function test_lots_reconcile_command_rejects_invalid_tax_document_option(): void
+    {
+        $this->artisan('finance:lots-reconcile', [
+            '--tax-document' => 'abc',
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('--tax-document must be a positive integer.');
     }
 
     private function makeAccount(int $userId): FinAccounts

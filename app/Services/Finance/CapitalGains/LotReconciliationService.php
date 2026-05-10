@@ -14,15 +14,16 @@ use Illuminate\Support\Collection;
  *
  * Diagnostic severities:
  * - error: account_link_missing, parsed_entry_unlinked, lot_count_mismatch,
- *   wash_total_mismatch, proceeds_mismatch, basis_mismatch, gain_mismatch.
- * - warning: missing_summary_adjustment, box_unset, treatment_unknown.
+ *   wash_total_mismatch, proceeds_mismatch, basis_mismatch, gain_mismatch,
+ *   missing_summary_adjustment.
+ * - warning: box_unset, treatment_unknown. Unknown wash-sale treatment stays a
+ *   warning because the totals can still reconcile after importer normalization,
+ *   but the broker semantics should be reviewed by a human.
  * - info: reserved for future non-drift observations.
  */
 class LotReconciliationService
 {
     private const MONEY_TOLERANCE = 0.02;
-
-    private const SYNTHETIC_WASH_SALE_SYMBOL = 'WASHSALEADJ';
 
     /**
      * @var array<string, string>
@@ -35,18 +36,14 @@ class LotReconciliationService
         'proceeds_mismatch' => 'error',
         'basis_mismatch' => 'error',
         'gain_mismatch' => 'error',
-        'missing_summary_adjustment' => 'warning',
+        'missing_summary_adjustment' => 'error',
         'box_unset' => 'warning',
         'treatment_unknown' => 'warning',
     ];
 
-    /**
-     * @var list<string>
-     */
-    private const FORM_8949_BOXES = ['A', 'B', 'C', 'D', 'E', 'F'];
-
     public function __construct(
         private readonly BrokerWashSaleTreatmentNormalizer $washSaleTreatmentNormalizer,
+        private readonly WashSaleAdjustmentSynthesizer $washSaleAdjustmentSynthesizer,
     ) {}
 
     public function reconcileTaxDocument(int $taxDocumentId): TaxDocumentReconciliationReport
@@ -106,6 +103,8 @@ class LotReconciliationService
             }
         }
 
+        // TODO: Add an account_only diagnostic for lots linked to this document
+        // when there is no corresponding parsed 1099-B entry.
         $summary = $this->documentSummary($entryReports, $diagnostics, $lots->count());
 
         return new TaxDocumentReconciliationReport([
@@ -144,8 +143,8 @@ class LotReconciliationService
 
         $parsedData = $this->arrayValue($entry['parsed_data'] ?? null);
         $parsedTransactions = $this->parsedTransactions($parsedData);
-        $defaultWashSaleTreatment = $this->washSaleTreatmentFromParsedData($parsedData);
-        $syntheticTransactions = $this->syntheticWashSaleAdjustmentTransactions(
+        $defaultWashSaleTreatment = $this->washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+        $syntheticTransactions = $this->washSaleAdjustmentSynthesizer->summaryWashSaleAdjustmentTransactions(
             $parsedTransactions,
             $parsedData,
             $defaultWashSaleTreatment,
@@ -346,10 +345,11 @@ class LotReconciliationService
             return $entries;
         }
 
-        $parsedData = $this->arrayValue($data);
-        if (! $this->looksLike1099BParsedData($taxDocument, $parsedData)) {
+        if ($this->stringValue($taxDocument->getAttribute('form_type')) !== '1099_b') {
             return [];
         }
+
+        $parsedData = $this->arrayValue($data);
 
         return [[
             'entry_index' => 0,
@@ -359,21 +359,6 @@ class LotReconciliationService
             'tax_year' => (int) $taxDocument->tax_year,
             'parsed_data' => $parsedData,
         ]];
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function looksLike1099BParsedData(FileForTaxDocument $taxDocument, array $data): bool
-    {
-        if ($this->stringValue($taxDocument->getAttribute('form_type')) === '1099_b') {
-            return true;
-        }
-
-        return array_key_exists('transactions', $data)
-            || array_key_exists('total_proceeds', $data)
-            || array_key_exists('total_cost_basis', $data)
-            || array_key_exists('total_wash_sale_disallowed', $data);
     }
 
     /**
@@ -447,68 +432,6 @@ class LotReconciliationService
             $transactions,
             static fn (mixed $transaction): bool => is_array($transaction),
         ));
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $transactions
-     * @param  array<string, mixed>  $parsedData
-     * @return array<int, array<string, mixed>>
-     */
-    private function syntheticWashSaleAdjustmentTransactions(array $transactions, array $parsedData, ?string $defaultWashSaleTreatment): array
-    {
-        $normalizedDefault = $this->washSaleTreatmentNormalizer->normalizeTreatment($defaultWashSaleTreatment);
-        if (in_array($normalizedDefault, [
-            BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
-            BrokerWashSaleTreatmentNormalizer::TREATMENT_NO_WASH_SALE_AMOUNT,
-        ], true)) {
-            return [];
-        }
-
-        $normalizedTreatment = $this->washSaleTreatmentNormalizer->storesForm8949Adjustment($normalizedDefault)
-            ? $normalizedDefault
-            : $this->inferAdjustmentTreatmentFromTransactions($transactions);
-        if ($normalizedTreatment === null) {
-            return [];
-        }
-
-        $syntheticTransactions = [];
-        $sectionsByBox = $this->summarySectionsByForm8949Box($parsedData);
-        $washSaleByBox = $this->transactionWashSaleByForm8949Box($transactions);
-
-        foreach ($sectionsByBox as $box => $section) {
-            $summaryWashSale = $this->numericFromFirstKey($section, ['total_wash_sales', 'total_wash_sale_disallowed']);
-            if ($summaryWashSale === null || $summaryWashSale <= self::MONEY_TOLERANCE) {
-                continue;
-            }
-
-            $delta = round($summaryWashSale - ($washSaleByBox[$box] ?? 0.0), 4);
-            if ($delta <= self::MONEY_TOLERANCE) {
-                continue;
-            }
-
-            $saleDate = $this->lastTransactionSaleDateForBox($transactions, $box);
-            if ($saleDate === null) {
-                continue;
-            }
-
-            $syntheticTransactions[] = [
-                'symbol' => self::SYNTHETIC_WASH_SALE_SYMBOL,
-                'description' => "Broker summary wash-sale adjustment (Form 8949 Box {$box})",
-                'quantity' => 1,
-                'purchase_date' => 'various',
-                'sale_date' => $saleDate,
-                'proceeds' => 0.0,
-                'cost_basis' => 0.0,
-                'wash_sale_disallowed' => $delta,
-                'realized_gain_loss' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_NET_OF_WASH_SALES ? $delta : 0.0,
-                'is_short_term' => in_array($box, ['A', 'B', 'C'], true),
-                'form_8949_box' => $box,
-                'is_covered' => in_array($box, ['A', 'D'], true) ? true : (in_array($box, ['B', 'E'], true) ? false : null),
-                'wash_sale_treatment' => $normalizedTreatment,
-            ];
-        }
-
-        return $syntheticTransactions;
     }
 
     /**
@@ -675,139 +598,6 @@ class LotReconciliationService
 
     /**
      * @param  array<string, mixed>  $parsedData
-     */
-    private function washSaleTreatmentFromParsedData(array $parsedData): ?string
-    {
-        $candidates = [
-            $parsedData['wash_sale_treatment'] ?? null,
-            $parsedData['wash_sale_basis_treatment'] ?? null,
-            $parsedData['extraction_notes']['wash_sale_treatment'] ?? null,
-        ];
-
-        foreach ($candidates as $candidate) {
-            $treatment = $this->washSaleTreatmentNormalizer->normalizeTreatment($candidate);
-            if ($treatment !== BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN) {
-                return $treatment;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $transactions
-     */
-    private function inferAdjustmentTreatmentFromTransactions(array $transactions): ?string
-    {
-        foreach ($transactions as $transaction) {
-            $treatment = $this->washSaleTreatmentNormalizer->normalizeTreatment($transaction['wash_sale_treatment'] ?? null);
-            if ($this->washSaleTreatmentNormalizer->storesForm8949Adjustment($treatment)) {
-                return $treatment;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsedData
-     * @return array<string, array<string, mixed>>
-     */
-    private function summarySectionsByForm8949Box(array $parsedData): array
-    {
-        $sections = $parsedData['summary']['sections'] ?? [];
-        if (! is_array($sections)) {
-            return [];
-        }
-
-        $byBox = [];
-        foreach ($sections as $section) {
-            if (! is_array($section)) {
-                continue;
-            }
-
-            $box = $this->form8949BoxFromSummarySection($section);
-            if ($box !== null) {
-                $byBox[$box] = $section;
-            }
-        }
-
-        return $byBox;
-    }
-
-    /**
-     * @param  array<string, mixed>  $section
-     */
-    private function form8949BoxFromSummarySection(array $section): ?string
-    {
-        if (is_string($section['form_8949_box'] ?? null)) {
-            $box = strtoupper(trim((string) $section['form_8949_box']));
-            if (in_array($box, self::FORM_8949_BOXES, true)) {
-                return $box;
-            }
-        }
-
-        $name = strtolower((string) ($section['name'] ?? ''));
-
-        return match (true) {
-            str_contains($name, 'box_a') || str_contains($name, 'box a') => 'A',
-            str_contains($name, 'box_b') || str_contains($name, 'box b') => 'B',
-            str_contains($name, 'box_c') || str_contains($name, 'box c') => 'C',
-            str_contains($name, 'box_d') || str_contains($name, 'box d') => 'D',
-            str_contains($name, 'box_e') || str_contains($name, 'box e') => 'E',
-            str_contains($name, 'box_f') || str_contains($name, 'box f') => 'F',
-            default => null,
-        };
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $transactions
-     * @return array<string, float>
-     */
-    private function transactionWashSaleByForm8949Box(array $transactions): array
-    {
-        $byBox = [];
-        foreach ($transactions as $transaction) {
-            $box = $this->form8949Box($transaction['form_8949_box'] ?? null);
-            if ($box === null) {
-                continue;
-            }
-
-            $byBox[$box] = ($byBox[$box] ?? 0.0)
-                + abs($this->numericValue($transaction['wash_sale_disallowed'] ?? null) ?? 0.0);
-        }
-
-        return $byBox;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $transactions
-     */
-    private function lastTransactionSaleDateForBox(array $transactions, string $box): ?string
-    {
-        $saleDates = [];
-        foreach ($transactions as $transaction) {
-            if ($this->form8949Box($transaction['form_8949_box'] ?? null) !== $box) {
-                continue;
-            }
-
-            $saleDate = $this->normalizeDateOrNull($transaction['sale_date'] ?? null);
-            if ($saleDate !== null) {
-                $saleDates[] = $saleDate;
-            }
-        }
-
-        if ($saleDates === []) {
-            return null;
-        }
-
-        rsort($saleDates);
-
-        return $saleDates[0];
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsedData
      * @param  array<int, array<string, mixed>>  $transactions
      * @return list<string>
      */
@@ -816,13 +606,13 @@ class LotReconciliationService
         $boxes = [];
 
         foreach ($transactions as $transaction) {
-            $box = $this->form8949Box($transaction['form_8949_box'] ?? null);
+            $box = $this->washSaleAdjustmentSynthesizer->form8949Box($transaction['form_8949_box'] ?? null);
             if ($box !== null) {
                 $boxes[$box] = true;
             }
         }
 
-        foreach ($this->summarySectionsByForm8949Box($parsedData) as $box => $_section) {
+        foreach ($this->washSaleAdjustmentSynthesizer->summarySectionsByForm8949Box($parsedData) as $box => $_section) {
             $boxes[$box] = true;
         }
 
@@ -838,7 +628,7 @@ class LotReconciliationService
         $boxes = [];
 
         foreach ($lots as $lot) {
-            $box = $this->form8949Box($lot->form_8949_box);
+            $box = $this->washSaleAdjustmentSynthesizer->form8949Box($lot->form_8949_box);
             if ($box !== null) {
                 $boxes[$box] = true;
             }
@@ -904,7 +694,7 @@ class LotReconciliationService
     private function syntheticWashSaleLotCount(Collection $lots): int
     {
         return $lots
-            ->filter(fn (FinAccountLot $lot): bool => strtoupper((string) $lot->symbol) === self::SYNTHETIC_WASH_SALE_SYMBOL)
+            ->filter(fn (FinAccountLot $lot): bool => strtoupper((string) $lot->symbol) === 'WASHSALEADJ')
             ->count();
     }
 
@@ -914,39 +704,6 @@ class LotReconciliationService
     private function hasBlankForm8949Box(Collection $lots): bool
     {
         return $lots->contains(fn (FinAccountLot $lot): bool => trim((string) $lot->form_8949_box) === '');
-    }
-
-    private function form8949Box(mixed $value): ?string
-    {
-        if (! is_string($value)) {
-            return null;
-        }
-
-        $box = strtoupper(trim($value));
-
-        return in_array($box, self::FORM_8949_BOXES, true) ? $box : null;
-    }
-
-    private function normalizeDateOrNull(mixed $value): ?string
-    {
-        if (! is_string($value)) {
-            return null;
-        }
-
-        $trimmed = trim($value);
-        if ($trimmed === '' || strtolower($trimmed) === 'various') {
-            return null;
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed)) {
-            return $trimmed;
-        }
-
-        try {
-            return (new \DateTime($trimmed))->format('Y-m-d');
-        } catch (\Throwable) {
-            return null;
-        }
     }
 
     /**

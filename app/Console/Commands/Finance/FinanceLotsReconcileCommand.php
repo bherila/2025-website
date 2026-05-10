@@ -118,6 +118,7 @@ class FinanceLotsReconcileCommand extends BaseFinanceCommand
                 fn (mixed $document): mixed => is_array($document) ? $this->filterDocumentPayload($document, $allowedSeverities) : $document,
                 $payload['documents'],
             );
+            $payload['summary'] = $this->yearSummary($payload['documents']);
 
             return $payload;
         }
@@ -157,7 +158,141 @@ class FinanceLotsReconcileCommand extends BaseFinanceCommand
             );
         }
 
+        $document['summary'] = $this->documentSummary(
+            is_array($document['summary'] ?? null) ? $document['summary'] : [],
+            is_array($document['diagnostics'] ?? null) ? $document['diagnostics'] : [],
+        );
+        $document['status'] = (string) $document['summary']['status'];
+
         return $document;
+    }
+
+    /**
+     * @param  array<string, mixed>  $existingSummary
+     * @param  array<int, mixed>  $diagnostics
+     * @return array<string, mixed>
+     */
+    private function documentSummary(array $existingSummary, array $diagnostics): array
+    {
+        $severityCounts = $this->severityCounts($diagnostics);
+
+        return array_merge($existingSummary, [
+            'status' => $this->statusFromSeverityCounts($severityCounts),
+            'diagnostics_count' => count($diagnostics),
+            'by_severity' => $severityCounts,
+            'by_reason' => $this->reasonCounts($diagnostics),
+        ]);
+    }
+
+    /**
+     * @param  array<int, mixed>  $documents
+     * @return array<string, mixed>
+     */
+    private function yearSummary(array $documents): array
+    {
+        $diagnostics = [];
+        $documentCount = 0;
+        $entryCount = 0;
+        $expectedLotCount = 0;
+        $brokerLotCount = 0;
+        $maxDelta = 0.0;
+
+        foreach ($documents as $document) {
+            if (! is_array($document)) {
+                continue;
+            }
+
+            $documentCount++;
+            foreach (($document['diagnostics'] ?? []) as $diagnostic) {
+                if (is_array($diagnostic)) {
+                    $diagnostics[] = $diagnostic;
+                }
+            }
+
+            $summary = is_array($document['summary'] ?? null) ? $document['summary'] : [];
+            $entryCount += (int) ($summary['entry_count'] ?? 0);
+            $expectedLotCount += (int) ($summary['expected_lot_count'] ?? 0);
+            $brokerLotCount += (int) ($summary['broker_lot_count'] ?? 0);
+            $maxDelta = max($maxDelta, (float) ($summary['max_delta'] ?? 0.0));
+        }
+
+        $severityCounts = $this->severityCounts($diagnostics);
+
+        return [
+            'status' => $this->statusFromSeverityCounts($severityCounts),
+            'document_count' => $documentCount,
+            'entry_count' => $entryCount,
+            'expected_lot_count' => $expectedLotCount,
+            'broker_lot_count' => $brokerLotCount,
+            'diagnostics_count' => count($diagnostics),
+            'by_severity' => $severityCounts,
+            'by_reason' => $this->reasonCounts($diagnostics),
+            'max_delta' => round($maxDelta, 4),
+        ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $diagnostics
+     * @return array{info: int, warning: int, error: int}
+     */
+    private function severityCounts(array $diagnostics): array
+    {
+        $counts = ['info' => 0, 'warning' => 0, 'error' => 0];
+
+        foreach ($diagnostics as $diagnostic) {
+            if (! is_array($diagnostic)) {
+                continue;
+            }
+
+            $severity = (string) ($diagnostic['severity'] ?? 'info');
+            if (isset($counts[$severity])) {
+                $counts[$severity]++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  array<int, mixed>  $diagnostics
+     * @return array<string, int>
+     */
+    private function reasonCounts(array $diagnostics): array
+    {
+        $counts = [];
+
+        foreach ($diagnostics as $diagnostic) {
+            if (! is_array($diagnostic)) {
+                continue;
+            }
+
+            $code = (string) ($diagnostic['code'] ?? 'unknown');
+            $counts[$code] = ($counts[$code] ?? 0) + 1;
+        }
+
+        ksort($counts);
+
+        return $counts;
+    }
+
+    /**
+     * @param  array{info: int, warning: int, error: int}  $severityCounts
+     */
+    private function statusFromSeverityCounts(array $severityCounts): string
+    {
+        if ($severityCounts['error'] > 0) {
+            return 'error';
+        }
+
+        if ($severityCounts['warning'] > 0) {
+            return 'warning';
+        }
+
+        if ($severityCounts['info'] > 0) {
+            return 'info';
+        }
+
+        return 'ok';
     }
 
     /**

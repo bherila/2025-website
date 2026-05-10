@@ -62,6 +62,18 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->assertJsonPath('documents.0.tax_document_id', $document->id);
     }
 
+    public function test_year_endpoint_returns_empty_rollup_without_1099_b_documents(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)
+            ->getJson('/api/finance/tax-years/2025/lot-reconciliation')
+            ->assertOk()
+            ->assertJsonPath('summary.status', 'ok')
+            ->assertJsonPath('summary.document_count', 0)
+            ->assertJsonPath('documents', []);
+    }
+
     private function makeAccount(int $userId, string $name = 'Brokerage', ?string $number = '1234'): FinAccounts
     {
         return FinAccounts::withoutEvents(function () use ($userId, $name, $number): FinAccounts {
