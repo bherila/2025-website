@@ -311,7 +311,7 @@ export default function InvoicePayPanel({
 
   if (isManualOnly) {
     return (
-      <Card className="rounded-lg border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+      <Card className="rounded-lg border-amber-300 bg-amber-50 text-amber-950 print:hidden dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
         <CardHeader>
           <CardTitle>Manual Payment Required</CardTitle>
           <CardDescription className="text-amber-900/80 dark:text-amber-200/80">
@@ -330,7 +330,7 @@ export default function InvoicePayPanel({
   }
 
   return (
-    <Card className="rounded-lg">
+    <Card className="rounded-lg print:hidden">
       <CardHeader>
         <CardTitle>Pay This Invoice</CardTitle>
         <CardDescription>Remaining balance: {remainingBalance.format()}</CardDescription>
