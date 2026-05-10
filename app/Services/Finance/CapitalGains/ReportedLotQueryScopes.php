@@ -50,4 +50,29 @@ final class ReportedLotQueryScopes
                 ->when($taxDocumentId !== null, fn ($query) => $query->where('overridden_lots.tax_document_id', $taxDocumentId));
         };
     }
+
+    public static function documentedLotsForSameAccountYear(int $taxYear): Closure
+    {
+        return static function ($documentedLotsQuery) use ($taxYear): void {
+            $documentedLotsQuery->selectRaw('1')
+                ->from('fin_account_lots as documented_lots')
+                ->whereColumn('documented_lots.acct_id', 'fin_account_lots.acct_id')
+                ->whereBetween('documented_lots.sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
+                ->whereNull('documented_lots.superseded_by_lot_id')
+                ->whereNotNull('documented_lots.tax_document_id');
+        };
+    }
+
+    public static function orphanReportedLotsForSameAccountYear(int $taxYear): Closure
+    {
+        return static function ($orphanReportedLotsQuery) use ($taxYear): void {
+            $orphanReportedLotsQuery->selectRaw('1')
+                ->from('fin_account_lots as orphan_reported_lots')
+                ->whereColumn('orphan_reported_lots.acct_id', 'fin_account_lots.acct_id')
+                ->whereBetween('orphan_reported_lots.sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
+                ->whereNull('orphan_reported_lots.superseded_by_lot_id')
+                ->whereNull('orphan_reported_lots.tax_document_id')
+                ->whereIn('orphan_reported_lots.lot_source', self::REPORTED_LOT_SOURCES);
+        };
+    }
 }
