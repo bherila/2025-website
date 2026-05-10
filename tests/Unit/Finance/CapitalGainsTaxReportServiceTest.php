@@ -175,6 +175,51 @@ class CapitalGainsTaxReportServiceTest extends TestCase
         $this->assertSame(50.0, $report['scheduleDRollup'][0]->netGainOrLoss);
     }
 
+    public function test_schedule_d_uses_normalized_1099b_wash_sale_amounts_ahead_of_native_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeTaxDocument($user->id);
+
+        $this->makeLot($account, [
+            'symbol' => 'BASIS',
+            'description' => '1099-B basis-adjusted wash sale',
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'wash_sale_disallowed' => 0,
+            'realized_gain_loss' => -200,
+        ]);
+        $this->makeLot($account, [
+            'symbol' => 'GROSS',
+            'description' => '1099-B gross wash sale',
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'wash_sale_disallowed' => 50,
+            'realized_gain_loss' => -150,
+        ]);
+        $this->makeLot($account, [
+            'symbol' => 'BASIS',
+            'description' => 'Native fallback should not drive Schedule D',
+            'lot_source' => 'analyzer',
+            'tax_document_id' => null,
+            'proceeds' => 10000,
+            'cost_basis' => 100,
+        ]);
+
+        $report = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2025);
+
+        $this->assertSame(['BASIS', 'GROSS'], array_map(
+            static fn ($transaction): ?string => $transaction->symbol,
+            $report['transactions'],
+        ));
+        $this->assertSame(-350.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+        $this->assertSame(50.0, $report['scheduleDRollup'][0]->totalAdjustment);
+    }
+
     public function test_account_lot_can_override_documented_1099b_lot_without_suppressing_other_reported_lots(): void
     {
         $user = $this->createUser();
@@ -302,7 +347,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             'sale_date' => $overrides['sale_date'] ?? '2025-02-01',
             'proceeds' => $proceeds,
             'cost_basis' => $costBasis,
-            'realized_gain_loss' => $proceeds - $costBasis,
+            'realized_gain_loss' => $overrides['realized_gain_loss'] ?? ($proceeds - $costBasis),
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? null,
             'tax_document_id' => $overrides['tax_document_id'] ?? null,

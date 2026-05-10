@@ -16,6 +16,10 @@ use App\Models\FinanceTool\TaxDocumentAccount;
  */
 class CapitalGainsImportNormalizer
 {
+    public function __construct(
+        private readonly BrokerWashSaleTreatmentNormalizer $washSaleTreatmentNormalizer,
+    ) {}
+
     /**
      * Convert a FinAccountLot to a CanonicalCapitalGainTransaction.
      *
@@ -74,7 +78,14 @@ class CapitalGainsImportNormalizer
         $proceeds = is_numeric($transaction['proceeds'] ?? null) ? (float) $transaction['proceeds'] : 0.0;
         $costBasis = is_numeric($transaction['cost_basis'] ?? null) ? (float) $transaction['cost_basis'] : 0.0;
         $washSale = is_numeric($transaction['wash_sale_disallowed'] ?? null) ? (float) $transaction['wash_sale_disallowed'] : 0.0;
-        $gainLoss = is_numeric($transaction['realized_gain_loss'] ?? null) ? (float) $transaction['realized_gain_loss'] : 0.0;
+        $reportedGainLoss = is_numeric($transaction['realized_gain_loss'] ?? null) ? (float) $transaction['realized_gain_loss'] : null;
+        $washSaleAmounts = $this->washSaleTreatmentNormalizer->normalizeAmounts(
+            proceeds: $proceeds,
+            costBasis: $costBasis,
+            reportedGainLoss: $reportedGainLoss,
+            washSaleDisallowed: $washSale,
+            treatment: $transaction['wash_sale_treatment'] ?? null,
+        );
         $isShortTerm = isset($transaction['is_short_term']) ? (bool) $transaction['is_short_term'] : null;
         $form8949Box = is_string($transaction['form_8949_box'] ?? null) ? $transaction['form_8949_box'] : null;
         $isCovered = isset($transaction['is_covered']) ? (bool) $transaction['is_covered'] : null;
@@ -98,8 +109,8 @@ class CapitalGainsImportNormalizer
             dateSold: $saleDate,
             proceeds: $proceeds,
             costBasis: $costBasis,
-            washSaleDisallowed: $washSale,
-            realizedGainLoss: $gainLoss,
+            washSaleDisallowed: $washSaleAmounts['wash_sale_disallowed'],
+            realizedGainLoss: $washSaleAmounts['realized_gain_loss'],
             isShortTerm: $isShortTerm,
             form8949Box: $form8949Box,
             isCovered: $isCovered,

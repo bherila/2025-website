@@ -106,6 +106,63 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_json_import_normalizes_broker_wash_sale_treatment(): void
+    {
+        $payload = [
+            'transactions' => [
+                [
+                    'symbol' => 'GROSS',
+                    'description' => 'Broker reports gross gain loss',
+                    'quantity' => 1,
+                    'purchase_date' => '2025-01-15',
+                    'sale_date' => '2025-11-20',
+                    'proceeds' => 1000.00,
+                    'cost_basis' => 1200.00,
+                    'realized_gain_loss' => -200.00,
+                    'wash_sale_disallowed' => 50.00,
+                    'wash_sale_treatment' => 'gross_of_wash_sales',
+                    'is_short_term' => true,
+                ],
+                [
+                    'symbol' => 'BASIS',
+                    'description' => 'Broker includes wash sale in basis',
+                    'quantity' => 1,
+                    'purchase_date' => '2025-01-15',
+                    'sale_date' => '2025-11-20',
+                    'proceeds' => 1000.00,
+                    'cost_basis' => 1200.00,
+                    'realized_gain_loss' => -200.00,
+                    'wash_sale_disallowed' => 50.00,
+                    'wash_sale_treatment' => 'already_reflected_in_cost_basis',
+                    'is_short_term' => true,
+                ],
+            ],
+        ];
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode($payload));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Parsed 2 lot record(s)')
+            ->expectsOutputToContain('Imported: 2 inserted');
+
+        $gross = DB::table('fin_account_lots')->where('symbol', 'GROSS')->first();
+        $basis = DB::table('fin_account_lots')->where('symbol', 'BASIS')->first();
+
+        $this->assertNotNull($gross);
+        $this->assertEquals(-150.00, $gross->realized_gain_loss);
+        $this->assertEquals(50.00, $gross->wash_sale_disallowed);
+
+        $this->assertNotNull($basis);
+        $this->assertEquals(-200.00, $basis->realized_gain_loss);
+        $this->assertEquals(0.00, $basis->wash_sale_disallowed);
+        $this->assertStringContainsString('avoid double-counting', (string) $basis->reconciliation_notes);
+
+        unlink($tmpFile);
+    }
+
     public function test_json_import_dry_run_does_not_write(): void
     {
         $payload = $this->sampleJsonPayload();

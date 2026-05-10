@@ -747,6 +747,8 @@ TEXT);
         $this->assertStringContainsString('Do NOT return a top-level YAML list like `- account_identifier: ...`', $prompt);
         $this->assertStringContainsString('accounts[N]:', $prompt);
         $this->assertStringContainsString('transactions[2]{symbol,description', $prompt);
+        $this->assertStringContainsString('wash_sale_treatment', $prompt);
+        $this->assertStringContainsString('already_reflected_in_cost_basis', $prompt);
     }
 
     public function test_describe_response_failure_reports_truncated_anthropic_response(): void

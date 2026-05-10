@@ -158,6 +158,8 @@ class TaxDocumentParsedDataNormalizer
             'b_total_wash_sales' => 'total_wash_sale_disallowed',
             'b_total_gain_loss' => 'total_realized_gain_loss',
             'total_gain_loss' => 'total_realized_gain_loss',
+            'wash_sale_basis_treatment' => 'wash_sale_treatment',
+            'wash_sale_reporting_treatment' => 'wash_sale_treatment',
             'supplemental' => 'supplemental_statement',
             'supplemental_broker_statement' => 'supplemental_statement',
             'broker_supplemental_statement' => 'supplemental_statement',
@@ -207,7 +209,7 @@ class TaxDocumentParsedDataNormalizer
         '1099_b' => [
             'payer_name', 'payer_tin', 'recipient_name', 'recipient_tin', 'account_number',
             'total_proceeds', 'total_cost_basis', 'total_wash_sale_disallowed',
-            'total_realized_gain_loss', 'summary', 'transactions', 'supplemental_statement',
+            'total_realized_gain_loss', 'wash_sale_treatment', 'summary', 'transactions', 'supplemental_statement',
             'extraction_notes',
         ],
     ];
