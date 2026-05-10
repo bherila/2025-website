@@ -611,6 +611,131 @@ class ParseImportJob1099BTest extends TestCase
         ]);
     }
 
+    public function test_create_multi_account_results_infers_wash_sale_adjustment_treatment_from_row_when_doc_treatment_missing(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Morgan Stanley', '367-671847-209');
+
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+
+        $data = [[
+            'account_identifier' => '367-671847-209',
+            'account_name' => 'Morgan Stanley',
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+            'parsed_data' => [
+                // Document-level wash_sale_treatment intentionally omitted; AI extract
+                // is partially populated and only the per-row treatment is reliable.
+                'total_proceeds' => 1000.0,
+                'total_cost_basis' => 1200.0,
+                'total_wash_sale_disallowed' => 50.0,
+                'total_realized_gain_loss' => -200.0,
+                'summary' => [
+                    'sections' => [[
+                        'name' => 'short_term_covered_box_a',
+                        'total_proceeds' => 1000.0,
+                        'total_cost_basis' => 1200.0,
+                        'total_wash_sales' => 50.0,
+                        'realized_gain_loss' => -200.0,
+                    ]],
+                ],
+                'transactions' => [[
+                    'symbol' => 'MS',
+                    'description' => 'Morgan Stanley lot',
+                    'cusip' => null,
+                    'quantity' => 1,
+                    'purchase_date' => '2024-01-01',
+                    'sale_date' => '2024-03-01',
+                    'proceeds' => 1000.0,
+                    'cost_basis' => 1200.0,
+                    'wash_sale_disallowed' => 0.0,
+                    'wash_sale_treatment' => 'gross_of_wash_sales',
+                    'realized_gain_loss' => -200.0,
+                    'form_8949_box' => 'A',
+                    'is_covered' => true,
+                ]],
+            ],
+        ]];
+
+        $jobInstance = new ParseImportJob($genaiJob->id);
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref->setAccessible(true);
+        $ref->invoke($jobInstance, $genaiJob, $data);
+
+        $this->assertSame(2, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        // Per-row treatment was gross_of_wash_sales, so the synthetic row's normalised
+        // realized_gain_loss ends up at +$50 (gross 0 + wash 50) per the same Form 8949
+        // math used by the existing doc-level synthesis test above.
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $account->acct_id,
+            'symbol' => 'WASHSALEADJ',
+            'wash_sale_disallowed' => 50,
+            'realized_gain_loss' => 50,
+            'form_8949_box' => 'A',
+        ]);
+    }
+
+    public function test_create_multi_account_results_skips_summary_synthesis_when_broker_says_basis_adjusted(): void
+    {
+        $user = $this->createUser();
+        $this->makeAccount($user->id, 'Fidelity', 'X65-385336');
+
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+
+        $data = [[
+            'account_identifier' => 'X65-385336',
+            'account_name' => 'Fidelity',
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+            'parsed_data' => [
+                'total_proceeds' => 1000.0,
+                'total_cost_basis' => 1200.0,
+                'total_wash_sale_disallowed' => 50.0,
+                'total_realized_gain_loss' => -200.0,
+                'wash_sale_treatment' => 'already_reflected_in_cost_basis',
+                'summary' => [
+                    'sections' => [[
+                        'name' => 'short_term_covered_box_a',
+                        'total_proceeds' => 1000.0,
+                        'total_cost_basis' => 1200.0,
+                        'total_wash_sales' => 50.0,
+                        'realized_gain_loss' => -200.0,
+                    ]],
+                ],
+                'transactions' => [[
+                    'symbol' => 'FID',
+                    'description' => 'Fidelity lot',
+                    'cusip' => null,
+                    'quantity' => 1,
+                    'purchase_date' => '2024-01-01',
+                    'sale_date' => '2024-03-01',
+                    'proceeds' => 1000.0,
+                    'cost_basis' => 1200.0,
+                    'wash_sale_disallowed' => 0.0,
+                    'realized_gain_loss' => -200.0,
+                    'form_8949_box' => 'A',
+                    'is_covered' => true,
+                ]],
+            ],
+        ]];
+
+        $jobInstance = new ParseImportJob($genaiJob->id);
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref->setAccessible(true);
+        $ref->invoke($jobInstance, $genaiJob, $data);
+
+        // Basis-adjusted broker explicitly tells us not to add a Form 8949 W row.
+        $this->assertSame(1, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        $this->assertDatabaseMissing('fin_account_lots', [
+            'tax_document_id' => $taxDoc->id,
+            'symbol' => 'WASHSALEADJ',
+        ]);
+    }
+
     public function test_create_multi_account_results_skips_entry_with_unrecognized_form_type(): void
     {
         $user = $this->createUser();

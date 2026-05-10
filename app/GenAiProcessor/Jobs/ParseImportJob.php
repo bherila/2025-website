@@ -695,7 +695,22 @@ class ParseImportJob implements ShouldQueue
     private function appendSummaryWashSaleAdjustmentTransactions(array $transactions, array $parsedData, mixed $defaultWashSaleTreatment): array
     {
         $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
-        if (! $normalizer->storesForm8949Adjustment($defaultWashSaleTreatment)) {
+        $normalizedDefault = $normalizer->normalizeTreatment($defaultWashSaleTreatment);
+
+        // Bail only when the broker explicitly signals that no Form 8949 W row should be added.
+        // For null / unknown document treatment, fall back to inferring from per-row treatments
+        // so that partially-populated AI outputs still get summary→row reconciliation.
+        if (in_array($normalizedDefault, [
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_NO_WASH_SALE_AMOUNT,
+        ], true)) {
+            return $transactions;
+        }
+
+        $normalizedTreatment = $normalizer->storesForm8949Adjustment($normalizedDefault)
+            ? $normalizedDefault
+            : $this->inferAdjustmentTreatmentFromTransactions($transactions);
+        if ($normalizedTreatment === null) {
             return $transactions;
         }
 
@@ -705,7 +720,6 @@ class ParseImportJob implements ShouldQueue
         }
 
         $washSaleByBox = $this->transactionWashSaleByForm8949Box($transactions);
-        $normalizedTreatment = $normalizer->normalizeTreatment($defaultWashSaleTreatment);
 
         foreach ($sectionsByBox as $box => $section) {
             $summaryWashSale = $this->numericFromFirstKey($section, ['total_wash_sales', 'total_wash_sale_disallowed']);
@@ -820,6 +834,30 @@ class ParseImportJob implements ShouldQueue
         }
 
         return $byBox;
+    }
+
+    /**
+     * Look at per-row `wash_sale_treatment` cues and return the first one that
+     * indicates a Form 8949 W row should be stored (gross or already-net).
+     * Used as a fallback when the document-level treatment is null or unknown.
+     *
+     * @param  array<int, mixed>  $transactions
+     */
+    private function inferAdjustmentTreatmentFromTransactions(array $transactions): ?string
+    {
+        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction)) {
+                continue;
+            }
+
+            $treatment = $normalizer->normalizeTreatment($transaction['wash_sale_treatment'] ?? null);
+            if ($normalizer->storesForm8949Adjustment($treatment)) {
+                return $treatment;
+            }
+        }
+
+        return null;
     }
 
     /**
