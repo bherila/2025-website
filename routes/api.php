@@ -412,6 +412,9 @@ Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', 
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/convert-broker-format', [TaxDocumentController::class, 'convertBrokerFormat']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/repair-format', [TaxDocumentController::class, 'repairBrokerFormat']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/reprocess', [TaxDocumentController::class, 'reprocessBrokerDocument']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
 Route::middleware(['web', 'auth'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);

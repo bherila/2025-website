@@ -446,7 +446,7 @@ PROMPT;
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
             'tax_document' => ['tax_year', 'form_type', 'tax_document_id'],
-            'tax_form_multi_account_import' => ['tax_document_id', 'tax_year', 'accounts'],
+            'tax_form_multi_account_import' => ['tax_document_id', 'tax_year', 'accounts', 'input_kind', 'source_form_type'],
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 

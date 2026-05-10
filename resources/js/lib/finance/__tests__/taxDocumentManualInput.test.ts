@@ -13,6 +13,19 @@ describe('taxDocumentManualInput', () => {
     expect(parseManualTaxInput(toon, 'toon')).toEqual(value)
   })
 
+  it('accepts TOON copied with a markdown fence or language label', () => {
+    const value = {
+      payer_name: 'Fidelity',
+      transactions: [
+        { symbol: 'ABBV', proceeds: 2087.74, cost_basis: 2085.98 },
+      ],
+    }
+    const toon = formatManualTaxInput(value, 'toon')
+
+    expect(parseManualTaxInput(`\`\`\`toon\n${toon}\n\`\`\``, 'toon')).toEqual(value)
+    expect(parseManualTaxInput(`toon\n${toon}`, 'toon')).toEqual(value)
+  })
+
   it('extracts broker entries from a TOON-decoded accounts object', () => {
     const parsed = parseManualTaxInput(formatManualTaxInput({
       accounts: [

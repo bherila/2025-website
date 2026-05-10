@@ -174,7 +174,7 @@ export default function MultiAccountImportModal({
   const [skipGenAiProcessing, setSkipGenAiProcessing] = useState(false)
   const [showManualJson, setShowManualJson] = useState(false)
   const [manualJsonInput, setManualJsonInput] = useState('')
-  const [manualInputFormat, setManualInputFormat] = useState<ManualTaxInputFormat>('json')
+  const [manualInputFormat, setManualInputFormat] = useState<ManualTaxInputFormat>('toon')
   const [promptInfo, setPromptInfo] = useState<PromptInfo | null>(null)
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
@@ -192,7 +192,7 @@ export default function MultiAccountImportModal({
     setSkipGenAiProcessing(false)
     setShowManualJson(false)
     setManualJsonInput('')
-    setManualInputFormat('json')
+    setManualInputFormat('toon')
     setPromptInfo(null)
     setPromptCopied(false)
     if (pollTimerRef.current) {

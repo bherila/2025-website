@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 jest.mock('@/fetchWrapper', () => ({
-  fetchWrapper: { get: jest.fn(), put: jest.fn(), patch: jest.fn(), postRaw: jest.fn() },
+  fetchWrapper: { get: jest.fn(), put: jest.fn(), patch: jest.fn(), post: jest.fn(), postRaw: jest.fn() },
 }))
 
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }))
@@ -263,6 +263,28 @@ const BROKER_1099_LINK = {
   updated_at: '2026-01-01T00:00:00Z',
 } as const
 
+const LEGACY_FLAT_BROKER_1099 = {
+  ...BROKER_1099,
+  id: 6,
+  is_reviewed: true,
+  parsed_data: {
+    payer_name: 'National Financial Services LLC',
+    account_number: '637-768451',
+    b_total_proceeds: 1000,
+    b_total_cost: 800,
+    b_total_gain_loss: 200,
+  },
+} as const
+
+const LEGACY_FLAT_BROKER_1099_LINK = {
+  ...BROKER_1099_LINK,
+  id: 66,
+  tax_document_id: 6,
+  ai_identifier: '637-768451',
+  ai_account_name: 'fidelity sma',
+  is_reviewed: true,
+} as const
+
 const WEALTHFRONT_1099_DIV = {
   id: 4,
   user_id: 1,
@@ -423,6 +445,8 @@ describe('TaxDocumentReviewModal — 1099-B exports', () => {
 })
 
 describe('TaxDocumentReviewModal — broker 1099 review data', () => {
+  beforeEach(() => jest.clearAllMocks())
+
   it('renders canonical 1099-DIV boxes and supporting totals in the review panel', async () => {
     render(<TaxDocumentReviewModal {...(baseProps({
       document: WEALTHFRONT_1099_DIV,
@@ -435,5 +459,54 @@ describe('TaxDocumentReviewModal — broker 1099 review data', () => {
     expect(screen.getByText('See detail')).toBeInTheDocument()
     expect(screen.getByText('Detail Totals')).toBeInTheDocument()
     expect(screen.getByText('Foreign Income and Taxes')).toBeInTheDocument()
+  })
+
+  it('warns for legacy flat broker data and offers conversion actions', async () => {
+    ;(fetchWrapper.post as jest.Mock).mockResolvedValue({
+      document: {
+        ...LEGACY_FLAT_BROKER_1099,
+        parsed_data: [{
+          account_identifier: '637-768451',
+          account_name: 'fidelity sma',
+          form_type: '1099_b',
+          tax_year: 2024,
+          parsed_data: {
+            total_proceeds: 1000,
+            total_cost_basis: 800,
+            total_realized_gain_loss: 200,
+            transactions: [],
+          },
+        }],
+      },
+    })
+
+    render(<TaxDocumentReviewModal {...(baseProps({
+      document: LEGACY_FLAT_BROKER_1099,
+      accountLink: LEGACY_FLAT_BROKER_1099_LINK,
+    }) as any)} />)
+
+    expect(await screen.findByText('This consolidated 1099 is stored in a legacy flat format.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /repair with ai/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /queue pdf re-extraction/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /convert stored data/i }))
+
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/finance/tax-documents/6/convert-broker-format?include_tax_facts=1', {}))
+  })
+
+  it('queues AI repair from stored legacy broker data', async () => {
+    ;(fetchWrapper.post as jest.Mock).mockResolvedValue({
+      ...LEGACY_FLAT_BROKER_1099,
+      genai_status: 'pending',
+      is_reviewed: false,
+    })
+
+    render(<TaxDocumentReviewModal {...(baseProps({
+      document: LEGACY_FLAT_BROKER_1099,
+      accountLink: LEGACY_FLAT_BROKER_1099_LINK,
+    }) as any)} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /repair with ai/i }))
+
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/finance/tax-documents/6/repair-format', {}))
   })
 })

@@ -1,6 +1,6 @@
 import type { TaxDocument, TaxDocumentAccountLink } from '@/types/finance/tax-document'
 
-import { getDocAmounts, getPayerName } from '../taxDocumentUtils'
+import { extractLinkParsedData, getDocAmounts, getPayerName, hasLegacyFlatBrokerParsedData } from '../taxDocumentUtils'
 
 function makeDoc(overrides: Partial<TaxDocument> = {}): TaxDocument {
   return {
@@ -85,6 +85,25 @@ describe('getPayerName', () => {
       ] as never,
     })
     expect(getPayerName(doc, link)).toBe('Fidelity')
+  })
+
+  it('detects and exposes legacy flat broker_1099 parsed data for account-link review', () => {
+    const link = makeLink({ form_type: '1099_b', ai_identifier: '637-768451' })
+    const doc = makeDoc({
+      form_type: 'broker_1099',
+      parsed_data: {
+        payer_name: 'National Financial Services LLC',
+        account_number: '637-768451',
+        total_proceeds: 1000,
+      } as never,
+    })
+
+    expect(hasLegacyFlatBrokerParsedData(doc)).toBe(true)
+    expect(extractLinkParsedData(doc, link)).toEqual({
+      payer_name: 'National Financial Services LLC',
+      account_number: '637-768451',
+      total_proceeds: 1000,
+    })
   })
 })
 

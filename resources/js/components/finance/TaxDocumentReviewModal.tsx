@@ -40,7 +40,8 @@ import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { broker1099TransactionsToLots } from '@/lib/finance/form8949Extraction'
 import { getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
-import { extractLinkParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import { extractBrokerEntriesFromManualInput } from '@/lib/finance/taxDocumentManualInput'
+import { extractLinkParsedData, hasLegacyFlatBrokerParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
 import type { MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
@@ -705,6 +706,8 @@ export default function TaxDocumentReviewModal({
   const [deleting, setDeleting] = useState(false)
   const [exporting1099B, setExporting1099B] = useState<'txf' | 'olt' | null>(null)
   const [jsonEditOpen, setJsonEditOpen] = useState(false)
+  const [brokerRepairOpen, setBrokerRepairOpen] = useState(false)
+  const [brokerRepairAction, setBrokerRepairAction] = useState<'convert' | 'repair' | 'reprocess' | null>(null)
   const [imageViewState, setImageViewState] = useState<{ url: string; filename: string } | null>(null)
   
   // Local editor state for the active document
@@ -722,6 +725,7 @@ export default function TaxDocumentReviewModal({
   const parsedDataWarnings = isLinkReview
     ? propAccountLink?.parsed_data_warnings ?? []
     : activeDoc?.parsed_data_warnings ?? []
+  const legacyFlatBrokerData = hasLegacyFlatBrokerParsedData(activeDoc)
 
   // When a K-1 is already confirmed, every section is rendered read-only EXCEPT the K-3 SBP
   // election checkbox (it's a user tax-planning preference, not extracted data). Detect when
@@ -863,28 +867,114 @@ export default function TaxDocumentReviewModal({
     }
   }
 
+  const applyUpdatedDocument = useCallback((updatedDoc: TaxDocument): void => {
+    setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d))
+    if (isLinkReview && propAccountLink) {
+      const updatedLink = updatedDoc.account_links.find(link => link.id === propAccountLink.id) ?? propAccountLink
+      setEditData((extractLinkParsedData(updatedDoc, updatedLink) ?? {}) as TaxDocumentParsedData | Record<string, unknown>)
+      setNotes(updatedLink.notes ?? '')
+      setMiscRouting(updatedLink.misc_routing ?? 'auto')
+    } else {
+      setEditData(updatedDoc.parsed_data ?? {})
+      setNotes(updatedDoc.notes ?? '')
+      setMiscRouting(updatedDoc.misc_routing ?? 'auto')
+    }
+    onDocumentSaved?.(updatedDoc)
+  }, [isLinkReview, onDocumentSaved, propAccountLink])
+
+  const handleConvertBrokerFormat = useCallback(async (): Promise<void> => {
+    if (!activeDoc) return
+
+    setBrokerRepairAction('convert')
+    try {
+      const response = (await fetchWrapper.post(
+        `/api/finance/tax-documents/${activeDoc.id}/convert-broker-format?include_tax_facts=1`,
+        {},
+      )) as TaxDocumentMutationResponse
+      if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+      applyUpdatedDocument(response.document)
+      toast.success('Broker data converted to the current multi-entry format')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to convert broker data')
+    } finally {
+      setBrokerRepairAction(null)
+    }
+  }, [activeDoc, applyUpdatedDocument, onTaxFactsChange])
+
+  const handleReprocessBrokerDocument = useCallback(async (): Promise<void> => {
+    if (!activeDoc) return
+
+    setBrokerRepairAction('reprocess')
+    try {
+      const updatedDoc = (await fetchWrapper.post(`/api/finance/tax-documents/${activeDoc.id}/reprocess`, {})) as TaxDocument
+      applyUpdatedDocument(updatedDoc)
+      toast.success('Re-extraction queued from the source PDF')
+      onDocumentReviewed?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to queue re-extraction')
+    } finally {
+      setBrokerRepairAction(null)
+    }
+  }, [activeDoc, applyUpdatedDocument, onDocumentReviewed])
+
+  const handleRepairBrokerFormat = useCallback(async (): Promise<void> => {
+    if (!activeDoc) return
+
+    setBrokerRepairAction('repair')
+    try {
+      const updatedDoc = (await fetchWrapper.post(`/api/finance/tax-documents/${activeDoc.id}/repair-format`, {})) as TaxDocument
+      applyUpdatedDocument(updatedDoc)
+      toast.success('AI repair queued from stored TOON')
+      onDocumentReviewed?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to queue AI repair')
+    } finally {
+      setBrokerRepairAction(null)
+    }
+  }, [activeDoc, applyUpdatedDocument, onDocumentReviewed])
+
+  const handleBrokerToonRepair = useCallback(async (data: unknown): Promise<void> => {
+    if (!activeDoc) return
+
+    const entries = extractBrokerEntriesFromManualInput(data)
+    const response = (await fetchWrapper.put(`/api/finance/tax-documents/${activeDoc.id}?include_tax_facts=1`, {
+      parsed_data: entries,
+    })) as TaxDocumentMutationResponse
+    if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+    applyUpdatedDocument(response.document)
+    setBrokerRepairOpen(false)
+    toast.success('Broker TOON saved in the current multi-entry format')
+    onDocumentReviewed?.()
+  }, [activeDoc, applyUpdatedDocument, onDocumentReviewed, onTaxFactsChange])
+
   const handleJsonEdit = useCallback(async (doc: TaxDocument, parsedData: unknown) => {
     setSaving(true)
     try {
       if (isLinkReview && propAccountLink) {
-        // Per-link mode: patch only the specific array entry, not the whole parsed_data array.
+        // Current broker imports store per-link data in an array. Legacy broker imports
+        // stored one flat object, so save the whole object until it is converted.
         if (!Array.isArray(doc.parsed_data)) {
-          toast.error('Unable to save: document parsed data is not an array')
-          return
+          const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: parsedData })) as TaxDocumentMutationResponse
+          const updatedDoc = response.document
+          if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+          setEditData((extractLinkParsedData(updatedDoc, propAccountLink) ?? updatedDoc.parsed_data ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
+          setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
+          onDocumentSaved?.(updatedDoc)
+        } else {
+          const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
+          if (existingLinkParsedData == null) {
+            toast.error('Unable to save: account entry was not found in document parsed data')
+            return
+          }
+          const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
+          const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: updatedArray })) as TaxDocumentMutationResponse
+          const updatedDoc = response.document
+          if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
+          const updatedLinkData = extractLinkParsedData(updatedDoc, propAccountLink)
+          setEditData((updatedLinkData ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
+          setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
+          onDocumentSaved?.(updatedDoc)
         }
-        const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
-        if (existingLinkParsedData == null) {
-          toast.error('Unable to save: account entry was not found in document parsed data')
-          return
-        }
-        const updatedArray = patchLinkParsedDataInArray(doc, propAccountLink, parsedData as Record<string, unknown>)
-        const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: updatedArray })) as TaxDocumentMutationResponse
-        const updatedDoc = response.document
-        if (response.taxFacts) onTaxFactsChange?.(response.taxFacts)
-        const updatedLinkData = extractLinkParsedData(updatedDoc, propAccountLink)
-        setEditData((updatedLinkData ?? parsedData) as TaxDocumentParsedData | Record<string, unknown>)
-        setDocuments(prev => prev.map(d => d.id === doc.id ? updatedDoc : d))
-        onDocumentSaved?.(updatedDoc)
       } else {
         const response = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, { parsed_data: parsedData })) as TaxDocumentMutationResponse
         const updatedDoc = response.document
@@ -982,10 +1072,15 @@ export default function TaxDocumentReviewModal({
           onDocumentSaved?.(documentWithUpdatedLink)
         }
 
-        // Also persist the edited parsed_data back into the parent's array,
-        // but only when the parent parsed_data shape is valid and the target entry exists.
+        // Also persist the edited parsed_data back into the parent. Current broker
+        // imports patch one array entry; legacy flat imports save the single object.
         if (!Array.isArray(doc.parsed_data)) {
-          toast.error('Unable to save parent parsed data: document parsed data is not an array')
+          const docResponse = (await fetchWrapper.put(`/api/finance/tax-documents/${doc.id}?include_tax_facts=1`, {
+            parsed_data: editData,
+          })) as TaxDocumentMutationResponse
+          if (docResponse.taxFacts) onTaxFactsChange?.(docResponse.taxFacts)
+          setDocuments(prev => prev.map(d => d.id === doc.id ? docResponse.document : d))
+          onDocumentSaved?.(docResponse.document)
         } else {
           const existingLinkParsedData = extractLinkParsedData(doc, propAccountLink)
 
@@ -1185,6 +1280,67 @@ export default function TaxDocumentReviewModal({
                   </Alert>
                 )}
 
+                {legacyFlatBrokerData && (
+                  <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="space-y-3 text-xs">
+                      <div className="space-y-1">
+                        <p className="font-medium">This consolidated 1099 is stored in a legacy flat format.</p>
+                        <p>
+                          Flat broker data can mix boxes that share names across forms. The current importer expects one
+                          TOON entry per account/form. Convert this known legacy shape directly, queue AI repair from
+                          stored TOON, paste corrected TOON, or re-extract from the source PDF to recover unsupported
+                          fields such as 1099-B lots.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 bg-white/70"
+                          onClick={() => void handleConvertBrokerFormat()}
+                          disabled={brokerRepairAction !== null}
+                        >
+                          {brokerRepairAction === 'convert' && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                          Convert stored data
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 bg-white/70"
+                          onClick={() => void handleRepairBrokerFormat()}
+                          disabled={brokerRepairAction !== null}
+                        >
+                          {brokerRepairAction === 'repair' && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                          Repair with AI
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 bg-white/70"
+                          onClick={() => setBrokerRepairOpen(true)}
+                        >
+                          Edit TOON
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 bg-white/70"
+                          onClick={() => void handleReprocessBrokerDocument()}
+                          disabled={brokerRepairAction !== null || !activeDoc.s3_path}
+                        >
+                          {brokerRepairAction === 'reprocess' && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                          Queue PDF re-extraction
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4">
                   {/* Extracted Data - full width with 2-column internal layout */}
                   <div className="space-y-2">
@@ -1366,6 +1522,19 @@ export default function TaxDocumentReviewModal({
         }}
         onSuccess={() => setJsonEditOpen(false)}
         onBack={() => setJsonEditOpen(false)}
+      />
+    )}
+
+    {activeDoc && (
+      <ManualJsonAttachModal
+        open={brokerRepairOpen}
+        formType="broker_1099"
+        taxYear={taxYear}
+        initialJson={activeDoc.parsed_data ?? []}
+        defaultInputFormat="toon"
+        onJsonReady={handleBrokerToonRepair}
+        onSuccess={() => setBrokerRepairOpen(false)}
+        onBack={() => setBrokerRepairOpen(false)}
       />
     )}
 
