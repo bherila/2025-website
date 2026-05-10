@@ -1491,6 +1491,101 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertTrue($facts['form1116']['passiveIncomeSources'][1]['isReviewed']);
     }
 
+    public function test_form1116_allocates_form4952_interest_once_across_multiple_k1s(): void
+    {
+        $user = $this->createUser();
+        foreach ([
+            ['name' => 'Foreign Fund A', 'interest' => '1000', 'passiveIncome' => '100', 'ratio' => 0.2, 'otherDeductions' => '10'],
+            ['name' => 'Foreign Fund B', 'interest' => '500', 'passiveIncome' => '50', 'ratio' => 0.1, 'otherDeductions' => '5'],
+        ] as $fund) {
+            $this->createTaxDocument($user->id, [
+                'form_type' => 'k1',
+                'is_reviewed' => true,
+                'parsed_data' => $this->k1Data(
+                    fields: ['B' => $fund['name']],
+                    codes: ['13' => [['code' => 'H', 'value' => $fund['interest']]]],
+                    k3: [
+                        'sections' => [
+                            [
+                                'sectionId' => 'part2_section1',
+                                'data' => [
+                                    'line24_totalGrossIncome' => [
+                                        'totals' => ['c' => $fund['passiveIncome']],
+                                    ],
+                                ],
+                            ],
+                            [
+                                'sectionId' => 'part2_section2',
+                                'data' => [
+                                    'line50_otherApportioned' => ['c' => $fund['otherDeductions']],
+                                ],
+                            ],
+                            [
+                                'sectionId' => 'part3_section2',
+                                'data' => ['derivedPassiveAssetRatio' => $fund['ratio']],
+                            ],
+                        ],
+                    ],
+                ),
+            ]);
+        }
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(150.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(265.0, $facts['form1116']['totalLine4b']);
+        $this->assertSame(-115.0, $facts['form1116']['netForeignSourceTaxableIncome']);
+        $this->assertStringContainsString('Interest 1000', $facts['form1116']['line4bSources'][0]['notes']);
+        $this->assertStringContainsString('Interest 500', $facts['form1116']['line4bSources'][1]['notes']);
+    }
+
+    public function test_form1116_deduplicates_k3_row_and_canonical_line_deductions(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section1',
+                            'data' => [
+                                'line24_totalGrossIncome' => [
+                                    'totals' => ['c' => '100'],
+                                ],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part2_section2',
+                            'data' => [
+                                'rows' => [
+                                    ['line' => '39', 'col_g_total' => '100'],
+                                    ['line' => '50', 'col_c_passive' => '10'],
+                                ],
+                                'line39_interestExpense' => ['g' => '100'],
+                                'line50_otherApportioned' => ['c' => '10'],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part3_section2',
+                            'data' => ['derivedPassiveAssetRatio' => 0.2],
+                        ],
+                    ],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(30.0, $facts['form1116']['totalLine4b']);
+        $this->assertSame(70.0, $facts['form1116']['netForeignSourceTaxableIncome']);
+        $this->assertStringContainsString('Interest 100', $facts['form1116']['line4bSources'][0]['notes']);
+        $this->assertStringContainsString('passive other deductions 10', $facts['form1116']['line4bSources'][0]['notes']);
+    }
+
     public function test_form1116_marks_estimated_1099_div_foreign_income_as_needs_review(): void
     {
         $user = $this->createUser();

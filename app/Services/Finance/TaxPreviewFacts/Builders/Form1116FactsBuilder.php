@@ -27,6 +27,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         $sourcedByPartnerSources = [];
         $k1TaxAdded = [];
         $totalK1Box5 = 0.0;
+        $form4952InterestByK1Doc = $this->form4952InterestExpenseByK1Doc($k1Docs, $form4952);
 
         foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
@@ -75,7 +76,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 $k1TaxAdded[] = $doc->id;
             }
 
-            $line4b = $this->k3Line4bApportionment($data, $form4952?->totalInvestmentInterestExpense);
+            $line4b = $this->k3Line4bApportionment($data, $form4952InterestByK1Doc[$doc->id] ?? null);
             if ($line4b !== null) {
                 $line4bSources[] = $this->k1Source(
                     $doc,
@@ -307,7 +308,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
      * @param  array<string, mixed>  $data
      * @return array{interestExpense:float,passiveRatio:float,line4b:float,passiveOtherDeductions:float}|null
      */
-    private function k3Line4bApportionment(array $data, ?float $totalInvestmentInterestExpense = null): ?array
+    private function k3Line4bApportionment(array $data, ?float $allocatedInvestmentInterestExpense = null): ?array
     {
         $passiveRatio = $this->k3PassiveAssetRatio($data);
         $section2 = $this->k3SectionData($data, 'part2_section2');
@@ -315,8 +316,8 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             return null;
         }
 
-        $interestExpense = $totalInvestmentInterestExpense !== null && $totalInvestmentInterestExpense !== 0.0
-            ? $totalInvestmentInterestExpense
+        $interestExpense = $allocatedInvestmentInterestExpense !== null
+            ? $allocatedInvestmentInterestExpense
             : $this->k3InterestExpense($section2);
         $passiveOtherDeductions = $this->k3PassiveOtherDeductions($section2);
         $line4b = $this->roundMoney(($interestExpense * $passiveRatio) + $passiveOtherDeductions);
@@ -334,33 +335,75 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return array<int, float>
+     */
+    private function form4952InterestExpenseByK1Doc(array $k1Docs, ?Form4952Facts $form4952): array
+    {
+        if (! $form4952 instanceof Form4952Facts || $form4952->totalInvestmentInterestExpense <= 0.0) {
+            return [];
+        }
+
+        $allocations = [];
+        $weights = [];
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null || $this->k3SectionData($data, 'part2_section2') === null) {
+                continue;
+            }
+
+            $passiveRatio = $this->k3PassiveAssetRatio($data);
+            if ($passiveRatio === null || $passiveRatio === 0.0) {
+                continue;
+            }
+
+            $allocations[$doc->id] = 0.0;
+            $weights[$doc->id] = abs($passiveRatio);
+        }
+
+        if ($allocations === []) {
+            return [];
+        }
+
+        foreach ($form4952->investmentInterestSources as $source) {
+            if ($source->taxDocumentId !== null && array_key_exists($source->taxDocumentId, $allocations)) {
+                $allocations[$source->taxDocumentId] = $this->sumMoney([$allocations[$source->taxDocumentId], abs($source->amount)]);
+            }
+        }
+
+        $docSpecificTotal = $this->sumMoney(array_values($allocations));
+        if ($docSpecificTotal > $form4952->totalInvestmentInterestExpense && $docSpecificTotal !== 0.0) {
+            $scale = $form4952->totalInvestmentInterestExpense / $docSpecificTotal;
+            foreach ($allocations as $docId => $amount) {
+                $allocations[$docId] = $amount * $scale;
+            }
+
+            return $allocations;
+        }
+
+        $unassignedInterest = $this->subtractMoney($form4952->totalInvestmentInterestExpense, $docSpecificTotal);
+        if ($unassignedInterest <= 0.0) {
+            return $allocations;
+        }
+
+        $weightTotal = array_sum($weights);
+        $docCount = count($weights);
+        foreach ($weights as $docId => $weight) {
+            $share = $weightTotal > 0.0
+                ? $unassignedInterest * ($weight / $weightTotal)
+                : $unassignedInterest / $docCount;
+            $allocations[$docId] = $this->sumMoney([$allocations[$docId], $share]);
+        }
+
+        return $allocations;
+    }
+
+    /**
      * @param  array<string, mixed>  $section2
      */
     private function k3InterestExpense(array $section2): float
     {
-        $interestExpense = 0.0;
-        foreach ($this->sectionRows($section2) as $row) {
-            if (in_array((string) ($row['line'] ?? ''), ['39', '40', '41', '42', '43'], true)) {
-                $interestExpense = $this->sumMoney([$interestExpense, $this->rowColumn($row, 'g')]);
-            }
-        }
-
-        foreach ($section2 as $key => $value) {
-            if (! is_array($value)) {
-                continue;
-            }
-
-            $matches = [];
-            if (! preg_match('/^line(\w+?)_/', (string) $key, $matches)) {
-                continue;
-            }
-
-            if (in_array($matches[1], ['39', '40', '41', '42', '43'], true)) {
-                $interestExpense = $this->sumMoney([$interestExpense, $this->rowColumn($value, 'g')]);
-            }
-        }
-
-        return $interestExpense;
+        return $this->k3SectionLineColumnTotal($section2, ['39', '40', '41', '42', '43'], 'g');
     }
 
     /**
@@ -368,14 +411,26 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
      */
     private function k3PassiveOtherDeductions(array $section2): float
     {
-        $deductions = 0.0;
-        foreach ($this->sectionRows($section2) as $row) {
-            if (in_array((string) ($row['line'] ?? ''), ['49', '50'], true)) {
-                $deductions = $this->sumMoney([$deductions, $this->rowColumn($row, 'c')]);
+        return $this->k3SectionLineColumnTotal($section2, ['49', '50'], 'c');
+    }
+
+    /**
+     * @param  array<string, mixed>  $section
+     * @param  string[]  $lines
+     */
+    private function k3SectionLineColumnTotal(array $section, array $lines, string $column): float
+    {
+        $total = 0.0;
+        $linesFoundInRows = [];
+        foreach ($this->sectionRows($section) as $row) {
+            $line = (string) ($row['line'] ?? '');
+            if (in_array($line, $lines, true)) {
+                $total = $this->sumMoney([$total, $this->rowColumn($row, $column)]);
+                $linesFoundInRows[$line] = true;
             }
         }
 
-        foreach ($section2 as $key => $value) {
+        foreach ($section as $key => $value) {
             if (! is_array($value)) {
                 continue;
             }
@@ -385,12 +440,13 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 continue;
             }
 
-            if (in_array($matches[1], ['49', '50'], true)) {
-                $deductions = $this->sumMoney([$deductions, $this->rowColumn($value, 'c')]);
+            $line = $matches[1];
+            if (in_array($line, $lines, true) && ! isset($linesFoundInRows[$line])) {
+                $total = $this->sumMoney([$total, $this->rowColumn($value, $column)]);
             }
         }
 
-        return $deductions;
+        return $total;
     }
 
     /**
