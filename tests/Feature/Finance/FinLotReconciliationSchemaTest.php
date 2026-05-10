@@ -47,6 +47,15 @@ class FinLotReconciliationSchemaTest extends TestCase
             DB::table('fin_account_lots')->where('lot_id', $accountLot->lot_id)->value('source'),
         );
 
+        $defaultedLot = $this->makeLot($account, [
+            'symbol' => 'TSLA',
+            'tax_document_id' => null,
+        ]);
+        $this->assertSame(
+            FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            DB::table('fin_account_lots')->where('lot_id', $defaultedLot->lot_id)->value('source'),
+        );
+
         $migration->down();
         $this->assertFalse(Schema::hasColumn('fin_account_lots', 'source'));
 
@@ -56,7 +65,7 @@ class FinLotReconciliationSchemaTest extends TestCase
 
     public function test_reconciliation_link_migration_round_trips_on_sqlite(): void
     {
-        $migration = require database_path('migrations/2026_05_10_200602_create_fin_lot_reconciliation_links_table.php');
+        $migration = require database_path('migrations/2026_05_10_200603_create_fin_lot_reconciliation_links_table.php');
 
         $migration->down();
         $this->assertFalse(Schema::hasTable('fin_lot_reconciliation_links'));
@@ -126,6 +135,48 @@ class FinLotReconciliationSchemaTest extends TestCase
         $this->assertSame('factory_fixture', $loaded->match_reason['reason_code']);
     }
 
+    public function test_account_only_reconciliation_link_is_representable(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $accountLot = $this->makeLot($account, [
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+        ]);
+
+        $link = FinLotReconciliationLink::factory()->create([
+            'tax_document_id' => null,
+            'broker_lot_id' => null,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
+            'accepted_by_user_id' => $user->id,
+        ]);
+
+        $loaded = FinLotReconciliationLink::with(['brokerLot', 'accountLot'])->findOrFail($link->id);
+
+        $this->assertNull($loaded->brokerLot);
+        $this->assertSame($accountLot->lot_id, $loaded->accountLot?->lot_id);
+    }
+
+    public function test_factory_overridden_lot_ids_do_not_create_orphan_default_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $taxDocument = $this->makeTaxDocument($user->id);
+        $brokerLot = $this->makeLot($account, [
+            'tax_document_id' => $taxDocument->id,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+        ]);
+
+        FinLotReconciliationLink::factory()->create([
+            'tax_document_id' => $taxDocument->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => null,
+            'accepted_by_user_id' => $user->id,
+        ]);
+
+        $this->assertSame(1, FinAccountLot::count());
+    }
+
     public function test_lot_pair_unique_constraint_is_enforced(): void
     {
         $link = FinLotReconciliationLink::factory()->create();
@@ -158,12 +209,14 @@ class FinLotReconciliationSchemaTest extends TestCase
             ->latest('id')
             ->firstOrFail();
 
+        // TODO(phase-5): assert this through the matcher once cache population lands.
         $this->assertContains($latestLink->state, FinLotReconciliationLink::STATES);
         $this->assertSame($latestLink->state, $brokerLot->fresh()->reconciliation_status);
     }
 
     private function makeAccount(int $userId): FinAccounts
     {
+        // Account model events require an auth context; fixture setup supplies acct_owner directly.
         return FinAccounts::withoutEvents(function () use ($userId): FinAccounts {
             return FinAccounts::withoutGlobalScopes()->forceCreate([
                 'acct_owner' => $userId,

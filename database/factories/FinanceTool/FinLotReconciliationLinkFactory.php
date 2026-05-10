@@ -23,25 +23,29 @@ class FinLotReconciliationLinkFactory extends Factory
      */
     public function definition(): array
     {
-        $user = User::factory()->create();
-        $account = $this->createAccount((int) $user->id);
-        $taxDocument = $this->createTaxDocument((int) $user->id);
-        $brokerLot = $this->createLot($account, [
-            'tax_document_id' => $taxDocument->id,
-            'lot_source' => '1099b',
-            'source' => FinAccountLot::SOURCE_BROKER_1099B,
-        ]);
-        $accountLot = $this->createLot($account, [
-            'lot_source' => 'analyzer',
-            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
-            'proceeds' => 1260,
-            'realized_gain_loss' => 260,
-        ]);
+        $user = null;
+        $account = null;
+        $taxDocument = null;
+
+        $resolveUser = function () use (&$user): User {
+            return $user ??= User::factory()->create();
+        };
+        $resolveAccount = function () use (&$account, $resolveUser): FinAccounts {
+            return $account ??= $this->createAccount((int) $resolveUser()->id);
+        };
+        $resolveTaxDocument = function () use (&$taxDocument, $resolveUser): FileForTaxDocument {
+            return $taxDocument ??= $this->createTaxDocument((int) $resolveUser()->id);
+        };
 
         return [
-            'tax_document_id' => $taxDocument->id,
-            'broker_lot_id' => $brokerLot->lot_id,
-            'account_lot_id' => $accountLot->lot_id,
+            'tax_document_id' => fn (): int => $resolveTaxDocument()->id,
+            'broker_lot_id' => fn (array $attributes): int => $this->createBrokerLot(
+                $resolveAccount(),
+                is_numeric($attributes['tax_document_id'] ?? null)
+                    ? (int) $attributes['tax_document_id']
+                    : $resolveTaxDocument()->id,
+            )->lot_id,
+            'account_lot_id' => fn (): int => $this->createAccountLot($resolveAccount())->lot_id,
             'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
             'match_reason' => [
                 'reason_code' => 'factory_fixture',
@@ -55,13 +59,14 @@ class FinLotReconciliationLinkFactory extends Factory
                 ],
                 'notes' => null,
             ],
-            'accepted_by_user_id' => $user->id,
+            'accepted_by_user_id' => fn (): int => $resolveUser()->id,
             'accepted_at' => now(),
         ];
     }
 
     private function createAccount(int $userId): FinAccounts
     {
+        // Account model events require an auth context; fixture setup supplies acct_owner directly.
         return FinAccounts::withoutEvents(function () use ($userId): FinAccounts {
             return FinAccounts::withoutGlobalScopes()->forceCreate([
                 'acct_owner' => $userId,
@@ -85,6 +90,28 @@ class FinLotReconciliationLinkFactory extends Factory
             'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createBrokerLot(FinAccounts $account, int $taxDocumentId, array $overrides = []): FinAccountLot
+    {
+        return $this->createLot($account, array_merge([
+            'tax_document_id' => $taxDocumentId,
+            'lot_source' => '1099b',
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+        ], $overrides));
+    }
+
+    private function createAccountLot(FinAccounts $account): FinAccountLot
+    {
+        return $this->createLot($account, [
+            'lot_source' => 'analyzer',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'proceeds' => 1260,
+            'realized_gain_loss' => 260,
         ]);
     }
 

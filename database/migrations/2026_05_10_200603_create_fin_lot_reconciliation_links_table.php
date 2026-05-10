@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('fin_lot_reconciliation_links', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tax_document_id')->nullable();
-            $table->unsignedBigInteger('broker_lot_id');
+            $table->unsignedBigInteger('broker_lot_id')->nullable();
             $table->unsignedBigInteger('account_lot_id')->nullable();
             $table->string('state', 32);
             $table->json('match_reason')->nullable();

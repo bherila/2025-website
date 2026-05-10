@@ -22,10 +22,6 @@ return new class extends Migration
         DB::table('fin_account_lots')
             ->whereNotNull('tax_document_id')
             ->update(['source' => 'broker_1099b']);
-
-        DB::table('fin_account_lots')
-            ->whereNull('tax_document_id')
-            ->update(['source' => 'account_derived']);
     }
 
     /**

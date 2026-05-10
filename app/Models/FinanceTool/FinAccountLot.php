@@ -15,12 +15,16 @@ class FinAccountLot extends Model
 {
     use SerializesDatesAsLocal;
 
+    /** New canonical source discriminator stored in fin_account_lots.source. */
     public const string SOURCE_BROKER_1099B = 'broker_1099b';
 
+    /** New canonical source discriminator stored in fin_account_lots.source. */
     public const string SOURCE_ACCOUNT_DERIVED = 'account_derived';
 
+    /** New canonical source discriminator stored in fin_account_lots.source. */
     public const string SOURCE_MANUAL = 'manual';
 
+    /** New canonical source discriminator stored in fin_account_lots.source. */
     public const string SOURCE_SYNTHETIC_ADJUSTMENT = 'synthetic_adjustment';
 
     public const array SOURCE_VALUES = [
@@ -30,8 +34,10 @@ class FinAccountLot extends Model
         self::SOURCE_SYNTHETIC_ADJUSTMENT,
     ];
 
+    /** Legacy lot source value stored in fin_account_lots.lot_source. */
     public const SOURCE_1099B = '1099b';
 
+    /** Legacy lot source value stored in fin_account_lots.lot_source. */
     public const SOURCE_1099B_UNDERSCORE = '1099_b';
 
     protected $table = 'fin_account_lots';
