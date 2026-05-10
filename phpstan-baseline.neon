@@ -85,12 +85,6 @@ parameters:
 			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
 
 		-
-			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
-			count: 1
-			path: app/GenAiProcessor/Jobs/ParseImportJob.php
-
-		-
 			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
 			identifier: isset.offset
 			count: 3

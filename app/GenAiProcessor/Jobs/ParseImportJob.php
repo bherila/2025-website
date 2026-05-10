@@ -9,13 +9,9 @@ use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\GenAiProcessor\Support\GenAiCredentialErrorClassifier;
 use App\Models\Files\FileForTaxDocument;
-use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
-use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
-use App\Services\Finance\CapitalGains\WashSaleAdjustmentSynthesizer;
-use App\Services\Finance\LotMatcher;
+use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
@@ -480,9 +476,6 @@ class ParseImportJob implements ShouldQueue
         // Wrap lot deletion, link creation, and parent update in a transaction so a
         // mid-loop failure leaves the document in a consistent state (no partial imports).
         DB::transaction(function () use ($taxDoc, $entries, $userAccounts, $context): void {
-            // Delete all existing lots linked to this document so re-processing is idempotent.
-            FinAccountLot::where('tax_document_id', $taxDoc->id)->delete();
-
             // Also clear existing account links so re-processing replaces them cleanly.
             $taxDoc->accountLinks()->delete();
 
@@ -528,200 +521,15 @@ class ParseImportJob implements ShouldQueue
                     aiAccountName: $aiAccountName,
                 );
 
-                // For 1099-B entries with a resolved account, import individual lot transactions.
-                if ($formType === '1099_b' && $accountId !== null) {
-                    $parsedData = is_array($entry['parsed_data'] ?? null) ? $entry['parsed_data'] : [];
-                    $transactions = $parsedData['transactions'] ?? [];
-                    if (is_array($transactions) && ! empty($transactions)) {
-                        $washSaleAdjustmentSynthesizer = app(WashSaleAdjustmentSynthesizer::class);
-                        $defaultWashSaleTreatment = $washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
-                        $transactions = $washSaleAdjustmentSynthesizer->appendSummaryWashSaleAdjustmentTransactions(
-                            $transactions,
-                            $parsedData,
-                            $defaultWashSaleTreatment,
-                        );
-                        $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id, $defaultWashSaleTreatment);
-                    }
-                }
             }
 
             $taxDoc->update([
                 'parsed_data' => $entries,
                 'genai_status' => 'parsed',
             ]);
+
+            app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $taxDoc->id);
         });
-    }
-
-    /**
-     * Upsert 1099-B transaction lots into fin_account_lots and link them to existing transactions.
-     *
-     * Lots are keyed by tax_document_id, so re-processing is idempotent:
-     * existing lots for this document were deleted before this method is called.
-     *
-     * @param  array<array<string,mixed>>  $transactions  Normalized lot entries from the AI
-     */
-    private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId, mixed $defaultWashSaleTreatment = null): void
-    {
-        $now = now()->toDateTimeString();
-        $usedTransactionIds = [];
-        $washSaleNormalizer = app(BrokerWashSaleTreatmentNormalizer::class);
-
-        foreach ($transactions as $tx) {
-            if (! is_array($tx)) {
-                continue;
-            }
-
-            $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
-            $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
-            $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
-            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);
-            $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
-            $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
-            $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
-            $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
-            $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
-            $isCovered = array_key_exists('is_covered', $tx) ? $this->normalizeBooleanOrNull($tx['is_covered']) : null;
-            $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
-            $form8949Box = null;
-            if (is_string($tx['form_8949_box'] ?? null)) {
-                $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
-                $form8949Box = in_array($candidateBox, WashSaleAdjustmentSynthesizer::FORM_8949_BOXES, true) ? $candidateBox : null;
-            }
-
-            $purchaseDateRaw = $tx['purchase_date'] ?? null;
-            $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
-
-            // Determine is_short_term from the form_8949_box or explicit field.
-            $isShortTerm = null;
-            if (array_key_exists('is_short_term', $tx)) {
-                $isShortTerm = $this->normalizeBooleanOrNull($tx['is_short_term']);
-            } elseif (isset($tx['form_8949_box'])) {
-                $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
-                if (in_array($box, WashSaleAdjustmentSynthesizer::SHORT_TERM_FORM_8949_BOXES, true)) {
-                    $isShortTerm = true;
-                } elseif (in_array($box, WashSaleAdjustmentSynthesizer::LONG_TERM_FORM_8949_BOXES, true)) {
-                    $isShortTerm = false;
-                }
-            }
-
-            // Skip rows missing required fields.
-            if ($quantity === null || $saleDate === null || $proceeds === null || $costBasis === null) {
-                continue;
-            }
-
-            $washSaleAmounts = $washSaleNormalizer->normalizeAmounts(
-                proceeds: $proceeds,
-                costBasis: $costBasis,
-                reportedGainLoss: $realizedGainLoss,
-                washSaleDisallowed: $washSaleDisallowed,
-                treatment: $tx['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
-            );
-            $reconciliationNotes = BrokerWashSaleTreatmentNormalizer::appendReconciliationNotes(
-                $purchaseDateNormalized === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
-                is_string($tx['reconciliation_notes'] ?? null) ? $tx['reconciliation_notes'] : null,
-                $washSaleAmounts['note'],
-            );
-
-            // Insert the closed lot.
-            $lot = FinAccountLot::create([
-                'acct_id' => $accountId,
-                'symbol' => $symbol ?? $description,
-                'description' => $description,
-                'cusip' => $cusip,
-                'quantity' => $quantity,
-                'purchase_date' => $purchaseDateNormalized ?? $saleDate, // fallback to sale date if "various"
-                'cost_basis' => $costBasis,
-                'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
-                'sale_date' => $saleDate,
-                'proceeds' => $proceeds,
-                'realized_gain_loss' => $washSaleAmounts['realized_gain_loss'],
-                'is_short_term' => $isShortTerm,
-                'lot_source' => FinAccountLot::SOURCE_1099B,
-                'tax_document_id' => $taxDocumentId,
-                'form_8949_box' => $form8949Box,
-                'is_covered' => $isCovered,
-                'accrued_market_discount' => $accruedMarketDiscount,
-                'wash_sale_disallowed' => $washSaleAmounts['wash_sale_disallowed'],
-                'reconciliation_notes' => $reconciliationNotes,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-            $matcher = app(LotMatcher::class);
-            $buyItem = $purchaseDateNormalized !== null ? $matcher->matchingBuyTransaction($lot, $usedTransactionIds) : null;
-            if ($buyItem instanceof FinAccountLineItems) {
-                $usedTransactionIds[] = (int) $buyItem->t_id;
-            }
-
-            $sellItem = $matcher->matchingSellTransaction($lot, $usedTransactionIds);
-            if ($sellItem instanceof FinAccountLineItems) {
-                $usedTransactionIds[] = (int) $sellItem->t_id;
-            }
-
-            if ($buyItem instanceof FinAccountLineItems || $sellItem instanceof FinAccountLineItems) {
-                $lot->update([
-                    'open_t_id' => $buyItem?->t_id,
-                    'close_t_id' => $sellItem?->t_id,
-                ]);
-            }
-        }
-    }
-
-    /**
-     * Parse a date string to "YYYY-MM-DD" or null.
-     * Returns null for "various", empty strings, or unparseable values.
-     */
-    private function normalizeDateOrNull(mixed $value): ?string
-    {
-        if (! is_string($value)) {
-            return null;
-        }
-
-        $trimmed = trim($value);
-        if ($trimmed === '' || strtolower($trimmed) === 'various') {
-            return null;
-        }
-
-        // Already in YYYY-MM-DD
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed)) {
-            return $trimmed;
-        }
-
-        // Try PHP date parsing for common formats (MM/DD/YYYY, M/D/YY, etc.)
-        try {
-            $date = new \DateTime($trimmed);
-
-            return $date->format('Y-m-d');
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    private function normalizeBooleanOrNull(mixed $value): ?bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if (is_int($value)) {
-            return match ($value) {
-                1 => true,
-                0 => false,
-                default => null,
-            };
-        }
-
-        if (is_string($value)) {
-            $normalized = strtolower(trim($value));
-
-            return match ($normalized) {
-                '1', 'true', 'yes', 'y' => true,
-                '0', 'false', 'no', 'n' => false,
-                default => null,
-            };
-        }
-
-        return null;
     }
 
     /**

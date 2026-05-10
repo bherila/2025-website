@@ -41,6 +41,7 @@ use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationController;
+use App\Http\Controllers\FinanceTool\TaxDocumentLotsRebuildController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
 use App\Http\Controllers\LicenseKeyController;
@@ -413,6 +414,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account',
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-rebuild', [TaxDocumentLotsRebuildController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
