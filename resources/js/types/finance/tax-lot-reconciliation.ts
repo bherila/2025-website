@@ -63,6 +63,8 @@ export const taxLotReconciliationDeltasSchema = z.object({
   proceeds: z.number().nullable(),
   cost_basis: z.number().nullable(),
   realized_gain_loss: z.number().nullable(),
+  wash_sale_disallowed: z.number().nullable().optional().default(null),
+  accrued_market_discount: z.number().nullable().optional().default(null),
   sale_date_days: z.number().nullable(),
 })
 

@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\ReportedLotQueryScopes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Validation\ValidationException;
@@ -44,7 +45,7 @@ class Form8949LotExportService
     {
         $accountIds = FinAccounts::forOwner($userId)->pluck('acct_id');
 
-        return $this->reportedLotQuery()
+        return $this->exportableLotQuery(taxYear: $taxYear)
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->get();
@@ -80,24 +81,38 @@ class Form8949LotExportService
             }
         }
 
-        return $this->reportedLotQuery()
+        return $this->exportableLotQuery(taxDocumentId: $taxDocumentId)
             ->where('acct_id', $accountId)
-            ->where('tax_document_id', $taxDocumentId)
+            ->where(function (Builder $query) use ($taxDocumentId): void {
+                $query->where('tax_document_id', $taxDocumentId)
+                    ->orWhereExists(ReportedLotQueryScopes::reportedLotsOverriddenByCurrentLot(taxDocumentId: $taxDocumentId));
+            })
             ->get();
     }
 
     /**
      * @return Builder<FinAccountLot>
      */
-    private function reportedLotQuery(): Builder
+    private function exportableLotQuery(?int $taxYear = null, ?int $taxDocumentId = null): Builder
     {
         return FinAccountLot::query()
             ->whereNotNull('sale_date')
             ->whereNotNull('proceeds')
             ->whereNull('superseded_by_lot_id')
-            ->where(function (Builder $query): void {
-                $query->whereIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE])
-                    ->orWhereNotNull('tax_document_id');
+            ->where(function (Builder $query) use ($taxYear, $taxDocumentId): void {
+                $query->where(function (Builder $reportedLotQuery): void {
+                    ReportedLotQueryScopes::applyReportedLotSource($reportedLotQuery);
+                })
+                    ->orWhere(function (Builder $nativeLotQuery) use ($taxYear, $taxDocumentId): void {
+                        ReportedLotQueryScopes::applyNativeAccountLotSource($nativeLotQuery);
+                        $nativeLotQuery->where(function (Builder $reviewedNativeLotQuery) use ($taxYear, $taxDocumentId): void {
+                            $reviewedNativeLotQuery->where('reconciliation_status', 'accepted')
+                                ->orWhereExists(ReportedLotQueryScopes::reportedLotsOverriddenByCurrentLot(
+                                    taxYear: $taxYear,
+                                    taxDocumentId: $taxDocumentId,
+                                ));
+                        });
+                    });
             })
             ->with([
                 'account',

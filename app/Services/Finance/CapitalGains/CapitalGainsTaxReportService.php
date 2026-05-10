@@ -4,15 +4,10 @@ namespace App\Services\Finance\CapitalGains;
 
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use Closure;
 
 class CapitalGainsTaxReportService
 {
-    private const array REPORTED_LOT_SOURCES = [
-        FinAccountLot::SOURCE_1099B,
-        FinAccountLot::SOURCE_1099B_UNDERSCORE,
-        'import_1099b',
-    ];
-
     public function __construct(
         private readonly WashSaleAnalysisEngine $washSaleEngine,
         private readonly Form8949ReportBuilder $reportBuilder,
@@ -44,9 +39,10 @@ class CapitalGainsTaxReportService
     /**
      * Load closed account lots for the given accounts/year as canonical transactions.
      *
-     * This uses account lots as the reconciliation source of truth. Imported
-     * 1099-B lots are included until they have been matched to native account
-     * transactions; matched reported/account rows are not counted twice.
+     * Imported tax-document lots are the default source of truth for filed-return
+     * Schedule D values. Native account/analyzer lots are included when they
+     * have been explicitly accepted during reconciliation or when they supersede
+     * a reported 1099-B lot.
      *
      * @param  int[]  $accountIds
      * @return CanonicalCapitalGainTransaction[]
@@ -61,13 +57,25 @@ class CapitalGainsTaxReportService
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->whereNull('superseded_by_lot_id')
-            ->where(function ($query): void {
-                $query->whereNull('lot_source')
-                    ->orWhereNotIn('lot_source', self::REPORTED_LOT_SOURCES)
-                    ->orWhere(function ($reportedLotQuery): void {
-                        $reportedLotQuery->whereNotNull('tax_document_id')
-                            ->whereIn('lot_source', self::REPORTED_LOT_SOURCES)
-                            ->whereNull('close_t_id');
+            ->where(function ($query) use ($taxYear): void {
+                $query->whereNotNull('tax_document_id')
+                    ->orWhere(function ($orphanReportedLotQuery) use ($taxYear): void {
+                        $orphanReportedLotQuery->whereNull('tax_document_id')
+                            ->whereIn('lot_source', ReportedLotQueryScopes::REPORTED_LOT_SOURCES)
+                            ->whereNotExists($this->documentedLotsForSameAccountYear($taxYear));
+                    })
+                    ->orWhere(function ($nativeLotQuery) use ($taxYear): void {
+                        ReportedLotQueryScopes::applyNativeAccountLotSource($nativeLotQuery);
+                        $nativeLotQuery->where(function ($reviewedNativeLotQuery) use ($taxYear): void {
+                            $reviewedNativeLotQuery->where('reconciliation_status', 'accepted')
+                                ->orWhereExists(ReportedLotQueryScopes::reportedLotsOverriddenByCurrentLot(taxYear: $taxYear));
+                        });
+                    })
+                    ->orWhere(function ($nativeFallbackLotQuery) use ($taxYear): void {
+                        ReportedLotQueryScopes::applyNativeAccountLotSource($nativeFallbackLotQuery);
+                        $nativeFallbackLotQuery
+                            ->whereNotExists($this->documentedLotsForSameAccountYear($taxYear))
+                            ->whereNotExists($this->orphanReportedLotsForSameAccountYear($taxYear));
                     });
             })
             ->with(['account:acct_id,acct_name'])
@@ -83,6 +91,31 @@ class CapitalGainsTaxReportService
         }
 
         return $transactions;
+    }
+
+    private function documentedLotsForSameAccountYear(int $taxYear): Closure
+    {
+        return static function ($documentedLotsQuery) use ($taxYear): void {
+            $documentedLotsQuery->selectRaw('1')
+                ->from('fin_account_lots as documented_lots')
+                ->whereColumn('documented_lots.acct_id', 'fin_account_lots.acct_id')
+                ->whereBetween('documented_lots.sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
+                ->whereNull('documented_lots.superseded_by_lot_id')
+                ->whereNotNull('documented_lots.tax_document_id');
+        };
+    }
+
+    private function orphanReportedLotsForSameAccountYear(int $taxYear): Closure
+    {
+        return static function ($orphanReportedLotsQuery) use ($taxYear): void {
+            $orphanReportedLotsQuery->selectRaw('1')
+                ->from('fin_account_lots as orphan_reported_lots')
+                ->whereColumn('orphan_reported_lots.acct_id', 'fin_account_lots.acct_id')
+                ->whereBetween('orphan_reported_lots.sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
+                ->whereNull('orphan_reported_lots.superseded_by_lot_id')
+                ->whereNull('orphan_reported_lots.tax_document_id')
+                ->whereIn('orphan_reported_lots.lot_source', ReportedLotQueryScopes::REPORTED_LOT_SOURCES);
+        };
     }
 
     /**

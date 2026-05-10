@@ -239,6 +239,8 @@ class TaxLotReconciliationService
                 'proceeds' => null,
                 'cost_basis' => null,
                 'realized_gain_loss' => null,
+                'wash_sale_disallowed' => null,
+                'accrued_market_discount' => null,
                 'sale_date_days' => null,
             ],
         ];

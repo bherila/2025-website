@@ -80,6 +80,7 @@ totalPassiveIncome: number;
 totalGeneralIncome: number;
 totalForeignTaxes: number;
 totalLine4b: number;
+netForeignSourceTaxableIncome: number;
 totalSourcedByPartnerIncome: number;
 creditValue: number;
 deductionValueAtThirtySevenPercent: number;

@@ -5,6 +5,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
@@ -17,7 +18,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099): Form1116Facts
+    public function build(array $k1Docs, array $docs1099, ?Form4952Facts $form4952 = null): Form1116Facts
     {
         $passiveIncomeSources = [];
         $generalIncomeSources = [];
@@ -37,6 +38,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             $totalK1Box5 = $this->sumMoney([$totalK1Box5, $this->k1Field($data, '5')]);
             $breakdown = $this->k3IncomeBreakdown($data);
             if ($breakdown['sourcedByPartner'] !== 0.0) {
+                $sourcedByPartnerNotes = match (true) {
+                    $this->sourcedByPartnerElection($data) => 'Sourced-by-partner-as-U.S.-source election active.',
+                    $breakdown['sourcedByPartnerIsUsSource'] => 'K-3 line 24 sourced-by-partner amount is surfaced for audit but excluded from foreign-source passive income.',
+                    default => 'Election not active; sourced-by-partner amount is treated as foreign-source passive income.',
+                };
                 $sourcedByPartnerSources[] = $this->k1Source(
                     $doc,
                     "{$partnerName} — K-3 sourced-by-partner income",
@@ -45,11 +51,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                     TaxFactRouting::Form1116SourcedByPartner,
                     'K-3 sourced-by-partner income is surfaced so the election treatment is auditable.',
                     box: 'K-3',
-                    notes: $this->sourcedByPartnerElection($data) ? 'Sourced-by-partner-as-U.S.-source election active.' : 'Election not active; sourced-by-partner amount is treated as foreign-source passive income.',
+                    notes: $sourcedByPartnerNotes,
                 );
             }
 
-            $effectivePassiveIncome = $this->sourcedByPartnerElection($data)
+            $effectivePassiveIncome = $this->sourcedByPartnerElection($data) || $breakdown['sourcedByPartnerIsUsSource']
                 ? $breakdown['passiveIncome']
                 : $this->sumMoney([$breakdown['passiveIncome'], $breakdown['sourcedByPartner']]);
             $foreignTax = $this->k1ForeignTaxTotal($data);
@@ -69,7 +75,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 $k1TaxAdded[] = $doc->id;
             }
 
-            $line4b = $this->k3Line4bApportionment($data);
+            $line4b = $this->k3Line4bApportionment($data, $form4952?->totalInvestmentInterestExpense);
             if ($line4b !== null) {
                 $line4bSources[] = $this->k1Source(
                     $doc,
@@ -79,32 +85,36 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                     TaxFactRouting::Form1116Line4b,
                     'K-3 passive asset ratio apportions interest expense to Form 1116 line 4b.',
                     box: 'K-3',
-                    notes: "Interest {$line4b['interestExpense']}; passive ratio {$line4b['passiveRatio']}",
+                    notes: "Interest {$line4b['interestExpense']}; passive ratio {$line4b['passiveRatio']}; passive other deductions {$line4b['passiveOtherDeductions']}",
                 );
             }
         }
 
         foreach ($docs1099 as $doc) {
             foreach ($this->document1099DivEntries($doc) as $entry) {
-                $foreignTax = $this->firstNumericValue($entry['parsedData'], ['box7_foreign_tax', 'div_7_foreign_tax']);
+                $foreignTax = $this->foreignTaxFrom1099Div($entry['parsedData']);
                 if ($foreignTax === null || $foreignTax === 0.0) {
                     continue;
                 }
 
                 $payer = $this->payerName($doc, $entry['link'], $entry['parsedData']);
+                $foreignIncome = $this->foreignSourceIncomeFrom1099Div($entry['parsedData'], $foreignTax);
+                $incomeIsEstimated = $foreignIncome['isEstimated'];
                 $passiveIncomeSources[] = $this->documentSource(
                     $doc,
                     $entry['link'],
-                    "{$payer} — 1099-DIV estimated foreign source income",
-                    $this->roundMoney($foreignTax / self::ASSUMED_FOREIGN_WITHHOLDING_RATE),
+                    $incomeIsEstimated ? "{$payer} — 1099-DIV estimated foreign source income" : "{$payer} — 1099-DIV foreign source income",
+                    $foreignIncome['amount'],
                     TaxFactSourceType::Form1099DivForeignTax,
                     TaxFactRouting::Form1116Line1a,
-                    '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.',
+                    $incomeIsEstimated
+                        ? '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.'
+                        : '1099-DIV foreign-source income comes from the broker foreign income and taxes summary.',
                     '1099_div',
                     '7',
-                    false,
-                    'needs_review',
-                    'Confirm gross foreign-source dividend income; this source is estimated from 1099-DIV Box 7 foreign tax.',
+                    $incomeIsEstimated ? false : null,
+                    $incomeIsEstimated ? 'needs_review' : null,
+                    $incomeIsEstimated ? 'Confirm gross foreign-source dividend income; this source is estimated from 1099-DIV Box 7 foreign tax.' : null,
                 );
                 $foreignTaxSources[] = $this->documentSource($doc, $entry['link'], "{$payer} — 1099-DIV Box 7 foreign tax", $foreignTax, TaxFactSourceType::Form1099DivForeignTax, TaxFactRouting::Form1116Line8, '1099-DIV Box 7 foreign tax supports Form 1116 line 8.', '1099_div', '7');
             }
@@ -120,17 +130,20 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             }
         }
 
+        $totalPassiveIncome = $this->sumSources($passiveIncomeSources);
+        $totalLine4b = $this->sumSources($line4bSources);
         $totalForeignTaxes = $this->sumSources($foreignTaxSources);
 
         return new Form1116Facts(
             passiveIncomeSources: $passiveIncomeSources,
-            totalPassiveIncome: $this->sumSources($passiveIncomeSources),
+            totalPassiveIncome: $totalPassiveIncome,
             generalIncomeSources: $generalIncomeSources,
             totalGeneralIncome: $this->sumSources($generalIncomeSources),
             foreignTaxSources: $foreignTaxSources,
             totalForeignTaxes: $totalForeignTaxes,
             line4bSources: $line4bSources,
-            totalLine4b: $this->sumSources($line4bSources),
+            totalLine4b: $totalLine4b,
+            netForeignSourceTaxableIncome: $this->subtractMoney($totalPassiveIncome, $totalLine4b),
             sourcedByPartnerElectionSources: $sourcedByPartnerSources,
             totalSourcedByPartnerIncome: $this->sumSources($sourcedByPartnerSources),
             creditValue: $totalForeignTaxes,
@@ -143,12 +156,17 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{passiveIncome:float,generalIncome:float,sourcedByPartner:float}
+     * @return array{passiveIncome:float,generalIncome:float,sourcedByPartner:float,sourcedByPartnerIsUsSource:bool}
      */
     private function k3IncomeBreakdown(array $data): array
     {
         $section2 = $this->k3SectionData($data, 'part2_section2');
         $section1 = $this->k3SectionData($data, 'part2_section1');
+
+        $line24 = $this->k3Part2Line24($section1);
+        if ($line24 !== null) {
+            return $line24;
+        }
 
         if ($section2 !== null) {
             $line55 = $this->sectionRow($section2, '55') ?? $this->canonicalLineRow($section2, 'line55_');
@@ -157,6 +175,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                     'passiveIncome' => $this->rowColumn($line55, 'c'),
                     'generalIncome' => $this->rowColumn($line55, 'd'),
                     'sourcedByPartner' => $this->rowColumn($line55, 'f'),
+                    'sourcedByPartnerIsUsSource' => false,
                 ];
             }
         }
@@ -181,6 +200,53 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             'passiveIncome' => $passive ?: $this->sumK1CodeItems($data, '16', 'B'),
             'generalIncome' => $general ?: $this->sumK1CodeItems($data, '16', 'C'),
             'sourcedByPartner' => $sourcedByPartner,
+            'sourcedByPartnerIsUsSource' => false,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $section1
+     * @return array{passiveIncome:float,generalIncome:float,sourcedByPartner:float,sourcedByPartnerIsUsSource:bool}|null
+     */
+    private function k3Part2Line24(?array $section1): ?array
+    {
+        if ($section1 === null) {
+            return null;
+        }
+
+        $line24 = $this->canonicalLineRow($section1, 'line24_');
+        if ($line24 === null) {
+            return null;
+        }
+
+        $totals = $line24['totals'] ?? null;
+        if (is_array($totals)) {
+            return [
+                'passiveIncome' => $this->rowColumn($totals, 'c'),
+                'generalIncome' => $this->rowColumn($totals, 'd'),
+                'sourcedByPartner' => $this->rowColumn($totals, 'f'),
+                'sourcedByPartnerIsUsSource' => true,
+            ];
+        }
+
+        $passive = 0.0;
+        $general = 0.0;
+        $sourcedByPartner = 0.0;
+        foreach ($this->sectionRows($line24) as $row) {
+            if (($row['country'] ?? null) === 'US') {
+                continue;
+            }
+
+            $passive = $this->sumMoney([$passive, $this->rowColumn($row, 'c')]);
+            $general = $this->sumMoney([$general, $this->rowColumn($row, 'd')]);
+            $sourcedByPartner = $this->sumMoney([$sourcedByPartner, $this->rowColumn($row, 'f')]);
+        }
+
+        return [
+            'passiveIncome' => $passive,
+            'generalIncome' => $general,
+            'sourcedByPartner' => $sourcedByPartner,
+            'sourcedByPartnerIsUsSource' => true,
         ];
     }
 
@@ -239,9 +305,9 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{interestExpense:float,passiveRatio:float,line4b:float}|null
+     * @return array{interestExpense:float,passiveRatio:float,line4b:float,passiveOtherDeductions:float}|null
      */
-    private function k3Line4bApportionment(array $data): ?array
+    private function k3Line4bApportionment(array $data, ?float $totalInvestmentInterestExpense = null): ?array
     {
         $passiveRatio = $this->k3PassiveAssetRatio($data);
         $section2 = $this->k3SectionData($data, 'part2_section2');
@@ -249,6 +315,29 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             return null;
         }
 
+        $interestExpense = $totalInvestmentInterestExpense !== null && $totalInvestmentInterestExpense !== 0.0
+            ? $totalInvestmentInterestExpense
+            : $this->k3InterestExpense($section2);
+        $passiveOtherDeductions = $this->k3PassiveOtherDeductions($section2);
+        $line4b = $this->roundMoney(($interestExpense * $passiveRatio) + $passiveOtherDeductions);
+
+        if ($line4b === 0.0) {
+            return null;
+        }
+
+        return [
+            'interestExpense' => $interestExpense,
+            'passiveRatio' => $passiveRatio,
+            'line4b' => $line4b,
+            'passiveOtherDeductions' => $passiveOtherDeductions,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $section2
+     */
+    private function k3InterestExpense(array $section2): float
+    {
         $interestExpense = 0.0;
         foreach ($this->sectionRows($section2) as $row) {
             if (in_array((string) ($row['line'] ?? ''), ['39', '40', '41', '42', '43'], true)) {
@@ -256,14 +345,83 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             }
         }
 
-        if ($interestExpense === 0.0) {
-            return null;
+        foreach ($section2 as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+
+            $matches = [];
+            if (! preg_match('/^line(\w+?)_/', (string) $key, $matches)) {
+                continue;
+            }
+
+            if (in_array($matches[1], ['39', '40', '41', '42', '43'], true)) {
+                $interestExpense = $this->sumMoney([$interestExpense, $this->rowColumn($value, 'g')]);
+            }
+        }
+
+        return $interestExpense;
+    }
+
+    /**
+     * @param  array<string, mixed>  $section2
+     */
+    private function k3PassiveOtherDeductions(array $section2): float
+    {
+        $deductions = 0.0;
+        foreach ($this->sectionRows($section2) as $row) {
+            if (in_array((string) ($row['line'] ?? ''), ['49', '50'], true)) {
+                $deductions = $this->sumMoney([$deductions, $this->rowColumn($row, 'c')]);
+            }
+        }
+
+        foreach ($section2 as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+
+            $matches = [];
+            if (! preg_match('/^line(\w+?)_/', (string) $key, $matches)) {
+                continue;
+            }
+
+            if (in_array($matches[1], ['49', '50'], true)) {
+                $deductions = $this->sumMoney([$deductions, $this->rowColumn($value, 'c')]);
+            }
+        }
+
+        return $deductions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function foreignTaxFrom1099Div(array $data): ?float
+    {
+        $value = $this->firstNumericOrNestedValue($data, ['box7_foreign_tax', 'div_7_foreign_tax'], ['7_foreign_tax_paid']);
+
+        return $value !== null ? abs($value) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{amount:float,isEstimated:bool}
+     */
+    private function foreignSourceIncomeFrom1099Div(array $data, float $foreignTax): array
+    {
+        $summary = $data['foreign_income_and_taxes_summary'] ?? null;
+        $summaryIncome = is_array($summary)
+            ? $this->parseMoney($summary['total_foreign_source_income'] ?? null)
+            : null;
+        $directIncome = $summaryIncome ?? $this->firstNumericValue($data, ['foreign_source_income', 'total_foreign_source_income']);
+
+        if ($directIncome !== null && $directIncome !== 0.0) {
+            return ['amount' => abs($directIncome), 'isEstimated' => false];
         }
 
         return [
-            'interestExpense' => $interestExpense,
-            'passiveRatio' => $passiveRatio,
-            'line4b' => $this->roundMoney($interestExpense * $passiveRatio),
+            'amount' => $this->roundMoney(abs($foreignTax) / self::ASSUMED_FOREIGN_WITHHOLDING_RATE),
+            'isEstimated' => true,
         ];
     }
 

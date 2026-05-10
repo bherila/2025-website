@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\ScheduleDCarryoverInput;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
 use App\Services\Finance\MoneyMath;
@@ -20,8 +21,13 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $docs1099
      * @param  ScheduleDRollupInput[]  $rollups
      */
-    public function build(array $k1Docs, array $docs1099, array $rollups, ?Form4797Facts $form4797 = null): ScheduleDFacts
-    {
+    public function build(
+        array $k1Docs,
+        array $docs1099,
+        array $rollups,
+        ?Form4797Facts $form4797 = null,
+        ?ScheduleDCarryoverInput $carryoverInput = null,
+    ): ScheduleDFacts {
         $lineBuckets = $this->emptyScheduleDLineBuckets();
         foreach ($rollups as $rollup) {
             if (! isset($lineBuckets[$rollup->scheduleDLine])) {
@@ -38,12 +44,12 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line3Sources = [];
         $line4Sources = $section1256Sources['shortTerm'];
         $line10Sources = [];
-        $line11Sources = $section1256Sources['longTerm'];
-        $line5Sources = $this->scheduleDLine5Sources($k1Docs);
-        $line12Sources = [
-            ...$this->scheduleDLine12Sources($k1Docs),
+        $line11Sources = [
+            ...$section1256Sources['longTerm'],
             ...($form4797 instanceof Form4797Facts ? $form4797->scheduleDSources : []),
         ];
+        $line5Sources = $this->scheduleDLine5Sources($k1Docs);
+        $line12Sources = $this->scheduleDLine12Sources($k1Docs);
         $line13Sources = $this->scheduleDLine13Sources($docs1099);
         $ambiguous11SSources = $this->scheduleDAmbiguous11SSources($k1Docs);
 
@@ -53,7 +59,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line3 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3'));
         $line4 = $this->sumSources($line4Sources);
         $line5 = $this->sumSources($line5Sources);
-        $line6 = 0.0;
+        $line6 = $this->scheduleDCarryoverLineAmount($carryoverInput?->short_term_loss_carryover);
         $line7 = $this->sumMoney([$line1a, $line1b, $line2, $line3, $line4, $line5, $line6]);
 
         $line8a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8a'));
@@ -63,13 +69,13 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line11 = $this->sumSources($line11Sources);
         $line12 = $this->sumSources($line12Sources);
         $line13 = $this->sumSources($line13Sources);
-        $line14 = 0.0;
+        $line14 = $this->scheduleDCarryoverLineAmount($carryoverInput?->long_term_loss_carryover);
         $line15 = $this->sumMoney([$line8a, $line8b, $line9, $line10, $line11, $line12, $line13, $line14]);
         $line16 = $this->sumMoney([$line7, $line15]);
         $line21 = $line16 < 0.0 ? max($line16, -3000.0) : $line16;
         $appliedToReturn = $line21 < 0.0 ? $line21 : 0.0;
         $carryforward = $line16 < 0.0 ? $this->subtractMoney($line16, $appliedToReturn) : 0.0;
-        $businessCapGains = $this->sumMoney([$line5, $line12]);
+        $businessCapGains = $this->sumMoney([$line5, $line11, $line12]);
         $personalCapGains = $this->subtractMoney($line16, $businessCapGains);
         $limited = $this->limitedCapitalGains($line16, $line21, $businessCapGains, $personalCapGains);
 
@@ -110,6 +116,13 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             ambiguous11SSources: $ambiguous11SSources,
             ambiguous11SAmount: $this->sumSources($ambiguous11SSources),
         );
+    }
+
+    private function scheduleDCarryoverLineAmount(?float $lossCarryover): float
+    {
+        $amount = $lossCarryover ?? 0.0;
+
+        return $amount > 0.0 ? -$this->roundMoney($amount) : 0.0;
     }
 
     /**
@@ -193,6 +206,15 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             $box8 = $this->k1Field($data, '8');
             if ($box8 !== 0.0) {
                 $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $box8, TaxFactSourceType::K1ShortTermCapitalGain, '8', null, TaxFactRouting::ScheduleDLine5, 'K-1 Box 8 short-term capital gain/loss flows to Schedule D line 5.');
+            } else {
+                foreach ($this->k1BoxCodeItems($data, '8') as $index => $item) {
+                    $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
+                    if ($amount === 0.0) {
+                        continue;
+                    }
+
+                    $sources[] = $this->k1ScheduleDSource($doc, $partnerName, $amount, TaxFactSourceType::K1ShortTermCapitalGain, '8', null, TaxFactRouting::ScheduleDLine5, 'K-1 Box 8 short-term capital gain/loss flows to Schedule D line 5.', $index, is_string($item['notes'] ?? null) ? $item['notes'] : null);
+                }
             }
 
             foreach ($this->k1CodeItems($data, '11', 'S') as $index => $item) {
@@ -231,7 +253,6 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
                 '9a' => [TaxFactSourceType::K1LongTermCapitalGain, 'K-1 Box 9a long-term capital gain/loss flows to Schedule D line 12.'],
                 '9b' => [TaxFactSourceType::K1CollectiblesGain, 'K-1 Box 9b collectibles gain/loss supports Schedule D line 12.'],
                 '9c' => [TaxFactSourceType::K1Unrecaptured1250Gain, 'K-1 Box 9c unrecaptured Section 1250 gain supports Schedule D line 12.'],
-                '10' => [TaxFactSourceType::K1Section1231Gain, 'K-1 Box 10 net Section 1231 gain/loss flows to Schedule D line 12.'],
             ] as $box => [$sourceType, $reason]) {
                 $amount = $this->k1Field($data, $box);
                 if ($amount !== 0.0) {
@@ -355,6 +376,20 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             reviewStatus: $this->reviewStatus($doc),
             reviewAction: $this->reviewAction($doc),
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<int, array<string, mixed>>
+     */
+    private function k1BoxCodeItems(array $data, string $box): array
+    {
+        $items = $data['codes'][$box] ?? [];
+        if (! is_array($items)) {
+            return [];
+        }
+
+        return array_values(array_filter($items, static fn (mixed $item): bool => is_array($item)));
     }
 
     /**

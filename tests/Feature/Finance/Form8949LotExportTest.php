@@ -206,6 +206,75 @@ class Form8949LotExportTest extends TestCase
         $this->assertNull($sheet->getCell('A4')->getValue());
     }
 
+    public function test_database_export_uses_account_lot_that_overrides_1099b_lot(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $reportedLot = $this->makeLot($account, $document, [
+            'description' => 'Broker AAPL',
+            'cost_basis' => 1000,
+            'wash_sale_disallowed' => null,
+        ]);
+        $accountLot = $this->makeNativeLot($account, [
+            'description' => 'Internal AAPL',
+            'cost_basis' => 900,
+            'wash_sale_disallowed' => 75,
+            'reconciliation_status' => 'accepted',
+        ]);
+        $reportedLot->update([
+            'superseded_by_lot_id' => $accountLot->lot_id,
+            'reconciliation_status' => 'accepted',
+        ]);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-txf', [
+            'source' => 'database',
+            'scope' => 'all',
+            'tax_year' => 2025,
+        ]);
+
+        $response->assertOk();
+        $response->assertSeeText('PInternal AAPL', false);
+        $response->assertSeeText('$900.00', false);
+        $response->assertSeeText('$75.00', false);
+        $response->assertDontSeeText('PBroker AAPL', false);
+    }
+
+    public function test_account_document_export_uses_overriding_account_lot_even_when_sale_date_differs(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $link = TaxDocumentAccount::createLink($document->id, $account->acct_id, '1099_b', 2025, isReviewed: true);
+        $reportedLot = $this->makeLot($account, $document, [
+            'description' => 'Broker AAPL',
+            'sale_date' => '2025-02-03',
+            'cost_basis' => 1000,
+        ]);
+        $accountLot = $this->makeNativeLot($account, [
+            'description' => 'Internal AAPL corrected date',
+            'sale_date' => '2025-02-04',
+            'cost_basis' => 900,
+        ]);
+        $reportedLot->update([
+            'superseded_by_lot_id' => $accountLot->lot_id,
+        ]);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-txf', [
+            'source' => 'database',
+            'scope' => 'account_document',
+            'account_id' => $account->acct_id,
+            'tax_document_id' => $document->id,
+            'account_link_id' => $link->id,
+        ]);
+
+        $response->assertOk();
+        $response->assertSeeText('D02/04/2025', false);
+        $response->assertSeeText('PInternal AAPL corrected date', false);
+        $response->assertSeeText('$900.00', false);
+        $response->assertDontSeeText('PBroker AAPL', false);
+    }
+
     public function test_analyzer_txf_export_uses_shared_backend_writer(): void
     {
         $user = $this->createUser();
@@ -349,6 +418,32 @@ class Form8949LotExportTest extends TestCase
             'is_covered' => false,
             'accrued_market_discount' => 0,
             'wash_sale_disallowed' => 0,
+        ], $overrides));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeNativeLot(FinAccounts $account, array $overrides = []): FinAccountLot
+    {
+        return FinAccountLot::create(array_merge([
+            'acct_id' => $account->acct_id,
+            'symbol' => 'AAPL',
+            'description' => 'Internal AAPL',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-02',
+            'cost_basis' => 900,
+            'cost_per_unit' => 90,
+            'sale_date' => '2025-02-03',
+            'proceeds' => 1250,
+            'realized_gain_loss' => 350,
+            'is_short_term' => true,
+            'lot_source' => 'analyzer',
+            'tax_document_id' => null,
+            'form_8949_box' => 'B',
+            'is_covered' => false,
+            'accrued_market_discount' => 0,
+            'wash_sale_disallowed' => 75,
         ], $overrides));
     }
 }

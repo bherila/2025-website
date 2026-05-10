@@ -3,10 +3,12 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\PalCarryforward;
+use App\Models\FinanceTool\ScheduleDCarryoverInput;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
@@ -748,6 +750,55 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('needs_review_schedule_d_line_5_or_12', $facts['scheduleD']['ambiguous11SSources'][0]['routing']);
     }
 
+    public function test_schedule_d_honors_account_lot_override_after_1099b_reconciliation(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [],
+        ]);
+        $reportedLot = $this->createLot($account, [
+            'description' => 'Broker AAPL',
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'cost_basis' => 900,
+            'proceeds' => 1000,
+            'is_short_term' => true,
+            'form_8949_box' => 'A',
+            'wash_sale_disallowed' => null,
+        ]);
+        $accountLot = $this->createLot($account, [
+            'description' => 'Internal AAPL with cross-account wash sale',
+            'lot_source' => 'analyzer',
+            'tax_document_id' => null,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'cost_basis' => 1100,
+            'proceeds' => 1000,
+            'is_short_term' => true,
+            'form_8949_box' => 'A',
+            'wash_sale_disallowed' => 250,
+        ]);
+        $reportedLot->update([
+            'superseded_by_lot_id' => $accountLot->lot_id,
+            'reconciliation_status' => 'accepted',
+        ]);
+        $accountLot->update(['reconciliation_status' => 'accepted']);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(150.0, $facts['scheduleD']['line1bGainLoss']);
+        $this->assertSame(150.0, $facts['scheduleD']['line7NetShortTerm']);
+        $this->assertSame(150.0, $facts['scheduleD']['line16Combined']);
+        $this->assertSame(1000.0, $facts['scheduleD']['form8949Rollups'][0]['totalProceeds']);
+        $this->assertSame(1100.0, $facts['scheduleD']['form8949Rollups'][0]['totalCostBasis']);
+        $this->assertSame(250.0, $facts['scheduleD']['form8949Rollups'][0]['totalAdjustment']);
+    }
+
     public function test_schedule_d_limited_capital_gains_handles_mixed_sign_business_and_personal(): void
     {
         $user = $this->createUser();
@@ -806,6 +857,73 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(-1000.0, $facts['scheduleD']['limitedPersonalCapGains']);
     }
 
+    public function test_schedule_d_prior_year_carryover_input_flows_to_schedule_d_and_form_1040(): void
+    {
+        $user = $this->createUser();
+
+        ScheduleDCarryoverInput::factory()->create([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'short_term_loss_carryover' => 7000,
+            'long_term_loss_carryover' => 2000,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(-7000.0, $facts['scheduleD']['line6Carryover']);
+        $this->assertSame(-2000.0, $facts['scheduleD']['line14Carryover']);
+        $this->assertSame(-7000.0, $facts['scheduleD']['line7NetShortTerm']);
+        $this->assertSame(-2000.0, $facts['scheduleD']['line15NetLongTerm']);
+        $this->assertSame(-9000.0, $facts['scheduleD']['line16Combined']);
+        $this->assertSame(-3000.0, $facts['scheduleD']['line21LimitedLossOrGain']);
+        $this->assertSame(-6000.0, $facts['scheduleD']['carryforward']);
+        $this->assertSame(-3000.0, $facts['form1040']['line7']);
+    }
+
+    public function test_schedule_d_routes_k1_box8_code_rows_and_box10_through_form4797(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Partnership Fund', '8' => '0', '9a' => '200', '10' => '1020'],
+                codes: [
+                    '8' => [
+                        ['code' => '8', 'value' => '-209', 'notes' => 'Net short-term capital gain (loss)'],
+                    ],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(-209.0, $facts['scheduleD']['line5GainLoss']);
+        $this->assertSame(1020.0, $facts['scheduleD']['line11GainLoss']);
+        $this->assertSame(200.0, $facts['scheduleD']['line12GainLoss']);
+        $this->assertSame('form_4797_part_i_1231_gain', $facts['scheduleD']['line11Sources'][0]['sourceType']);
+        $this->assertSame('schedule_d_line_11', $facts['scheduleD']['line11Sources'][0]['routing']);
+    }
+
+    public function test_form4797_collects_k1_box10_section1231_before_schedule_d_routing(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(fields: ['B' => 'Section 1231 Fund', '10' => '1020']),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(1020.0, $facts['form4797']['partINet1231']);
+        $this->assertSame(1020.0, $facts['form4797']['netToScheduleDLongTerm']);
+        $this->assertSame('k1_section_1231_gain', $facts['form4797']['partISources'][0]['sourceType']);
+        $this->assertSame('form_4797_part_i_line_7', $facts['form4797']['partISources'][0]['routing']);
+        $this->assertSame(1020.0, $facts['scheduleD']['line11GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line12GainLoss']);
+    }
+
     public function test_facts_from_documents_requires_user_id_for_capital_gains_documents(): void
     {
         $user = $this->createUser();
@@ -856,6 +974,125 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(1, $facts['form8949']['rowCount']);
         $this->assertSame(25.0, $facts['form8949']['rows'][0]['gainOrLoss']);
+    }
+
+    public function test_orphan_imported_1099b_lots_feed_form8949_facts_when_no_documented_lots_exist(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $this->createLot($account, [
+            'lot_source' => 'import_1099b',
+            'tax_document_id' => null,
+            'form_8949_box' => null,
+            'is_covered' => null,
+            'is_short_term' => true,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 100,
+            'cost_basis' => 300,
+        ]);
+        $this->createLot($account, [
+            'lot_source' => 'import_1099b',
+            'tax_document_id' => null,
+            'form_8949_box' => null,
+            'is_covered' => null,
+            'is_short_term' => false,
+            'purchase_date' => '2023-01-01',
+            'sale_date' => '2025-03-01',
+            'proceeds' => 250,
+            'cost_basis' => 150,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(-200.0, $facts['scheduleD']['line1bGainLoss']);
+        $this->assertSame(100.0, $facts['scheduleD']['line8bGainLoss']);
+        $this->assertSame(-100.0, $facts['scheduleD']['line16Combined']);
+    }
+
+    public function test_orphan_imported_1099b_lots_do_not_duplicate_documented_reported_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [],
+        ]);
+        $this->createLot($account, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 125,
+            'cost_basis' => 100,
+        ]);
+        $this->createLot($account, [
+            'lot_source' => 'import_1099b',
+            'tax_document_id' => null,
+            'form_8949_box' => null,
+            'is_covered' => null,
+            'is_short_term' => true,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 125,
+            'cost_basis' => 100,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(25.0, $facts['scheduleD']['line1bGainLoss']);
+        $this->assertCount(1, $facts['scheduleD']['form8949Rollups']);
+        $this->assertSame(1, $facts['scheduleD']['form8949Rollups'][0]['rowCount']);
+    }
+
+    public function test_schedule_d_uses_imported_tax_document_lots_even_when_matched_to_transactions(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $document = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [],
+        ]);
+        $sell = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2025-02-01',
+            't_type' => 'Sell',
+            't_symbol' => 'AAPL',
+            't_qty' => -10,
+            't_amt' => 125,
+            't_source' => 'import',
+        ]);
+        $this->createLot($account, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 125,
+            'cost_basis' => 100,
+            'close_t_id' => $sell->t_id,
+        ]);
+        $this->createLot($account, [
+            'lot_source' => 'analyzer',
+            'tax_document_id' => null,
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'proceeds' => 1000,
+            'cost_basis' => 100,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleD');
+
+        $this->assertSame(25.0, $facts['scheduleD']['line1bGainLoss']);
+        $this->assertCount(1, $facts['scheduleD']['form8949Rollups']);
+        $this->assertSame(1, $facts['scheduleD']['form8949Rollups'][0]['rowCount']);
     }
 
     public function test_schedule_a_collects_itemized_sources_and_applies_salt_cap(): void
@@ -1029,6 +1266,7 @@ class TaxPreviewFactsServiceTest extends TestCase
                 totalForeignTaxes: 123.0,
                 line4bSources: [],
                 totalLine4b: 0.0,
+                netForeignSourceTaxableIncome: 0.0,
                 sourcedByPartnerElectionSources: [],
                 totalSourcedByPartnerIncome: 0.0,
                 creditValue: 123.0,
@@ -1184,6 +1422,73 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(1000.0, $facts['form1116']['totalPassiveIncome']);
         $this->assertSame(200.0, $facts['form1116']['totalSourcedByPartnerIncome']);
         $this->assertSame('Sourced-by-partner-as-U.S.-source election active.', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+    }
+
+    public function test_form1116_prefers_k3_line24_gross_income_and_uses_form4952_interest_apportionment(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                codes: ['13' => [['code' => 'H', 'value' => '1000']]],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section1',
+                            'data' => [
+                                'line24_totalGrossIncome' => [
+                                    'totals' => ['c' => '100', 'd' => '0', 'f' => '1000', 'g' => '1100'],
+                                ],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part2_section2',
+                            'data' => [
+                                'line50_otherApportioned' => ['c' => '10', 'g' => '10'],
+                                'line55_netIncomeLoss' => ['c' => '-900', 'f' => '-1000', 'g' => '-1900'],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part3_section2',
+                            'data' => ['derivedPassiveAssetRatio' => 0.2],
+                        ],
+                        [
+                            'sectionId' => 'part3_section4',
+                            'data' => ['grandTotalUSD' => '15'],
+                        ],
+                    ],
+                ],
+            ),
+        ]);
+        $brokerDoc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                [
+                    'form_type' => '1099_div',
+                    'account_identifier' => '1234',
+                    'parsed_data' => [
+                        'payer_name' => 'Broker Div',
+                        'boxes' => ['7_foreign_tax_paid' => '3'],
+                        'foreign_income_and_taxes_summary' => ['total_foreign_source_income' => '12'],
+                    ],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($brokerDoc->id, $account->acct_id, '1099_div', 2025, isReviewed: true, aiIdentifier: '1234');
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(112.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1000.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertSame(210.0, $facts['form1116']['totalLine4b']);
+        $this->assertSame(-98.0, $facts['form1116']['netForeignSourceTaxableIncome']);
+        $this->assertSame(18.0, $facts['form1116']['totalForeignTaxes']);
+        $this->assertStringContainsString('excluded from foreign-source passive income', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+        $this->assertTrue($facts['form1116']['passiveIncomeSources'][1]['isReviewed']);
     }
 
     public function test_form1116_marks_estimated_1099_div_foreign_income_as_needs_review(): void
@@ -1784,7 +2089,8 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(0.0, $capitalFacts['form4797']['netToSchedule1Line4']);
         $this->assertSame(6000.0, $capitalFacts['form4797']['netToScheduleDLongTerm']);
         $this->assertSame(0.0, $capitalFacts['schedule1']['line4Total']);
-        $this->assertSame(6000.0, $capitalFacts['scheduleD']['line12GainLoss']);
+        $this->assertSame(6000.0, $capitalFacts['scheduleD']['line11GainLoss']);
+        $this->assertSame(0.0, $capitalFacts['scheduleD']['line12GainLoss']);
     }
 
     public function test_form8606_backend_facts_use_manual_basis_and_ira_1099r(): void
@@ -2831,9 +3137,9 @@ class TaxPreviewFactsServiceTest extends TestCase
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? 'analyzer',
             'tax_document_id' => $overrides['tax_document_id'] ?? null,
-            'form_8949_box' => $overrides['form_8949_box'] ?? 'A',
-            'is_covered' => $overrides['is_covered'] ?? true,
-            'wash_sale_disallowed' => $overrides['wash_sale_disallowed'] ?? null,
+            'form_8949_box' => array_key_exists('form_8949_box', $overrides) ? $overrides['form_8949_box'] : 'A',
+            'is_covered' => array_key_exists('is_covered', $overrides) ? $overrides['is_covered'] : true,
+            'wash_sale_disallowed' => array_key_exists('wash_sale_disallowed', $overrides) ? $overrides['wash_sale_disallowed'] : null,
             'open_t_id' => $overrides['open_t_id'] ?? null,
             'close_t_id' => $overrides['close_t_id'] ?? null,
         ]);
