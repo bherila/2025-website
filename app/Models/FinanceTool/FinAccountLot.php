@@ -4,12 +4,31 @@ namespace App\Models\FinanceTool;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string|null $reconciliation_status Latest fin_lot_reconciliation_links.state cache for this lot when reconciliation links exist.
+ */
 class FinAccountLot extends Model
 {
     use SerializesDatesAsLocal;
+
+    public const string SOURCE_BROKER_1099B = 'broker_1099b';
+
+    public const string SOURCE_ACCOUNT_DERIVED = 'account_derived';
+
+    public const string SOURCE_MANUAL = 'manual';
+
+    public const string SOURCE_SYNTHETIC_ADJUSTMENT = 'synthetic_adjustment';
+
+    public const array SOURCE_VALUES = [
+        self::SOURCE_BROKER_1099B,
+        self::SOURCE_ACCOUNT_DERIVED,
+        self::SOURCE_MANUAL,
+        self::SOURCE_SYNTHETIC_ADJUSTMENT,
+    ];
 
     public const SOURCE_1099B = '1099b';
 
@@ -33,6 +52,7 @@ class FinAccountLot extends Model
         'realized_gain_loss',
         'is_short_term',
         'lot_source',
+        'source',
         'statement_id',
         'open_t_id',
         'close_t_id',
@@ -83,6 +103,12 @@ class FinAccountLot extends Model
     public function taxDocument(): BelongsTo
     {
         return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id', 'id');
+    }
+
+    /** @param  Builder<self>  $query */
+    public function scopeWhereSource(Builder $query, string $source): void
+    {
+        $query->where('source', $source);
     }
 
     /**
