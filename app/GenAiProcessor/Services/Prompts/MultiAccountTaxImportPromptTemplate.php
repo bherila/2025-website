@@ -64,7 +64,13 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
 **1099-MISC** (`form_type: "1099_misc"`): Extract box values: `payer_name`, `payer_tin`, `box1_rents`, `box2_royalties`, `box3_other_income`, `box4_fed_tax`, `box8_substitute_payments`. All amounts are numbers or null. Omit if all fields are zero.
 
 **1099-B** (`form_type: "1099_b"`): Extract the summary totals AND all individual transaction lots.
-- Summary fields: `payer_name`, `payer_tin`, `total_proceeds`, `total_cost_basis`, `total_wash_sale_disallowed`, `total_realized_gain_loss`
+- Summary fields: `payer_name`, `payer_tin`, `total_proceeds`, `total_cost_basis`, `total_wash_sale_disallowed`, `total_realized_gain_loss`, `wash_sale_treatment`
+- `wash_sale_treatment`: identify how the broker reports wash sales. Use exactly one of:
+  - `gross_of_wash_sales`: broker gain/loss equals proceeds minus cost basis, and wash-sale disallowed is shown separately as a Form 8949 W adjustment.
+  - `already_reflected_in_cost_basis`: broker says disallowed loss is included in cost basis or otherwise already reflected in realized gain/loss; do not add it again.
+  - `already_net_of_wash_sales`: broker gain/loss already equals proceeds minus cost basis plus wash-sale disallowed, but basis is not described as already adjusted.
+  - `no_wash_sale_amount`: no wash-sale disallowed amount is reported.
+  - `unknown`: the statement does not make the treatment clear.
 - `transactions`: TOON array of every individual lot line from the 1099-B sections (short-term covered, long-term covered, etc.). Each transaction object:
   - `symbol`: ticker symbol if shown, otherwise null (string or null)
   - `description`: security name / description (string)
@@ -76,6 +82,7 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
   - `cost_basis`: cost or other basis (number)
   - `accrued_market_discount`: accrued market discount if shown (number or null)
   - `wash_sale_disallowed`: wash sale loss disallowed amount (number, 0 if blank)
+  - `wash_sale_treatment`: same values as summary; repeat the summary value unless a row clearly differs (string)
   - `realized_gain_loss`: net gain or loss (number)
   - `is_short_term`: true for short-term, false for long-term, null for undetermined (boolean or null)
   - `form_8949_box`: IRS Form 8949 reporting box — "A" (short covered), "B" (short not covered), "C" (short other), "D" (long covered), "E" (long not covered), "F" (long other) (string)
@@ -91,6 +98,13 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
 
 Extract EVERY individual lot line. Do not skip lines or summarize. If a security shows subtotals, emit a separate transaction row for each individual lot line (not the subtotal row).
 
+When wash-sale totals appear in a section summary, the transaction rows must reconcile to the summary whenever the lot detail provides enough data. If the broker shows total wash-sale disallowed but individual rows omit the amounts, preserve the summary total, set `wash_sale_treatment`, and mention the mismatch in `extraction_notes`.
+
+Common broker cues:
+- Fidelity/NFS statements may say the disallowed loss is included in cost basis and calculated into realized gain/loss; mark those as `already_reflected_in_cost_basis`.
+- Wealthfront statements usually show gain/loss net of a separate W amount; mark those as `already_net_of_wash_sales`.
+- Morgan Stanley/E*TRADE summaries may report gain/loss gross of wash sales; mark those as `gross_of_wash_sales` when the displayed gain/loss equals proceeds minus cost basis.
+
 Use TOON tabular arrays for repeated rows whenever possible, especially `transactions`, to avoid repeating field names. Example shape:
 
 accounts[1]:
@@ -105,9 +119,10 @@ accounts[1]:
       total_cost_basis: 1000
       total_wash_sale_disallowed: 0
       total_realized_gain_loss: 234.56
-      transactions[2]{symbol,description,cusip,quantity,purchase_date,sale_date,proceeds,cost_basis,accrued_market_discount,wash_sale_disallowed,realized_gain_loss,is_short_term,form_8949_box,is_covered,additional_info}:
-        NET,CLOUDFLARE INC CL A COM,18915M107,10,2025-03-27,2025-05-06,1229.74,1191.4,null,0,38.34,true,A,true,null
-        FDMO,FIDELITY MOMENTUM FACTOR ETF,316092816,0.028,2024-06-24,2025-05-06,1.88,1.78,null,0,0.1,true,A,true,null
+      wash_sale_treatment: no_wash_sale_amount
+      transactions[2]{symbol,description,cusip,quantity,purchase_date,sale_date,proceeds,cost_basis,accrued_market_discount,wash_sale_disallowed,wash_sale_treatment,realized_gain_loss,is_short_term,form_8949_box,is_covered,additional_info}:
+        NET,CLOUDFLARE INC CL A COM,18915M107,10,2025-03-27,2025-05-06,1229.74,1191.4,null,0,no_wash_sale_amount,38.34,true,A,true,null
+        FDMO,FIDELITY MOMENTUM FACTOR ETF,316092816,0.028,2024-06-24,2025-05-06,1.88,1.78,null,0,no_wash_sale_amount,0.1,true,A,true,null
       supplemental_statement:
         short_dividends_total: 12.34
         short_dividends[1]{description,cusip,date,amount}:

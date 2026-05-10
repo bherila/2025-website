@@ -13,6 +13,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
 use App\Services\Finance\LotMatcher;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
@@ -528,9 +529,16 @@ class ParseImportJob implements ShouldQueue
 
                 // For 1099-B entries with a resolved account, import individual lot transactions.
                 if ($formType === '1099_b' && $accountId !== null) {
-                    $transactions = $entry['parsed_data']['transactions'] ?? [];
+                    $parsedData = is_array($entry['parsed_data'] ?? null) ? $entry['parsed_data'] : [];
+                    $transactions = $parsedData['transactions'] ?? [];
                     if (is_array($transactions) && ! empty($transactions)) {
-                        $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id);
+                        $defaultWashSaleTreatment = $this->washSaleTreatmentFromParsedData($parsedData);
+                        $transactions = $this->appendSummaryWashSaleAdjustmentTransactions(
+                            $transactions,
+                            $parsedData,
+                            $defaultWashSaleTreatment,
+                        );
+                        $this->upsertLotsFromBroker($accountId, $transactions, $taxDoc->id, $defaultWashSaleTreatment);
                     }
                 }
             }
@@ -550,10 +558,11 @@ class ParseImportJob implements ShouldQueue
      *
      * @param  array<array<string,mixed>>  $transactions  Normalized lot entries from the AI
      */
-    private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId): void
+    private function upsertLotsFromBroker(int $accountId, array $transactions, int $taxDocumentId, mixed $defaultWashSaleTreatment = null): void
     {
         $now = now()->toDateTimeString();
         $usedTransactionIds = [];
+        $washSaleNormalizer = app(BrokerWashSaleTreatmentNormalizer::class);
 
         foreach ($transactions as $tx) {
             if (! is_array($tx)) {
@@ -598,6 +607,19 @@ class ParseImportJob implements ShouldQueue
                 continue;
             }
 
+            $washSaleAmounts = $washSaleNormalizer->normalizeAmounts(
+                proceeds: $proceeds,
+                costBasis: $costBasis,
+                reportedGainLoss: $realizedGainLoss,
+                washSaleDisallowed: $washSaleDisallowed,
+                treatment: $tx['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
+            );
+            $reconciliationNotes = $this->appendReconciliationNotes(
+                $purchaseDateNormalized === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
+                is_string($tx['reconciliation_notes'] ?? null) ? $tx['reconciliation_notes'] : null,
+                $washSaleAmounts['note'],
+            );
+
             // Insert the closed lot.
             $lot = FinAccountLot::create([
                 'acct_id' => $accountId,
@@ -610,14 +632,15 @@ class ParseImportJob implements ShouldQueue
                 'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
                 'sale_date' => $saleDate,
                 'proceeds' => $proceeds,
-                'realized_gain_loss' => $realizedGainLoss ?? ($proceeds - $costBasis + $washSaleDisallowed),
+                'realized_gain_loss' => $washSaleAmounts['realized_gain_loss'],
                 'is_short_term' => $isShortTerm,
                 'lot_source' => FinAccountLot::SOURCE_1099B,
                 'tax_document_id' => $taxDocumentId,
                 'form_8949_box' => $form8949Box,
                 'is_covered' => $isCovered,
                 'accrued_market_discount' => $accruedMarketDiscount,
-                'wash_sale_disallowed' => $washSaleDisallowed,
+                'wash_sale_disallowed' => $washSaleAmounts['wash_sale_disallowed'],
+                'reconciliation_notes' => $reconciliationNotes,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -640,6 +663,211 @@ class ParseImportJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function washSaleTreatmentFromParsedData(array $parsedData): ?string
+    {
+        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
+        $candidates = [
+            $parsedData['wash_sale_treatment'] ?? null,
+            $parsedData['wash_sale_basis_treatment'] ?? null,
+            $parsedData['extraction_notes']['wash_sale_treatment'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            $treatment = $normalizer->normalizeTreatment($candidate);
+            if ($treatment !== BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN) {
+                return $treatment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, mixed>  $transactions
+     * @param  array<string, mixed>  $parsedData
+     * @return array<int, mixed>
+     */
+    private function appendSummaryWashSaleAdjustmentTransactions(array $transactions, array $parsedData, mixed $defaultWashSaleTreatment): array
+    {
+        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
+        if (! $normalizer->storesForm8949Adjustment($defaultWashSaleTreatment)) {
+            return $transactions;
+        }
+
+        $sectionsByBox = $this->summarySectionsByForm8949Box($parsedData);
+        if ($sectionsByBox === []) {
+            return $transactions;
+        }
+
+        $washSaleByBox = $this->transactionWashSaleByForm8949Box($transactions);
+        $normalizedTreatment = $normalizer->normalizeTreatment($defaultWashSaleTreatment);
+
+        foreach ($sectionsByBox as $box => $section) {
+            $summaryWashSale = $this->numericFromFirstKey($section, ['total_wash_sales', 'total_wash_sale_disallowed']);
+            if ($summaryWashSale === null || $summaryWashSale <= 0.02) {
+                continue;
+            }
+
+            $delta = round($summaryWashSale - ($washSaleByBox[$box] ?? 0.0), 4);
+            if ($delta <= 0.02) {
+                continue;
+            }
+
+            $saleDate = $this->lastTransactionSaleDateForBox($transactions, $box);
+            if ($saleDate === null) {
+                continue;
+            }
+
+            $transactions[] = [
+                'symbol' => 'WASHSALEADJ',
+                'description' => "Broker summary wash-sale adjustment (Form 8949 Box {$box})",
+                'cusip' => null,
+                'quantity' => 1,
+                'purchase_date' => 'various',
+                'sale_date' => $saleDate,
+                'proceeds' => 0.0,
+                'cost_basis' => 0.0,
+                'accrued_market_discount' => null,
+                'wash_sale_disallowed' => $delta,
+                'realized_gain_loss' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_NET_OF_WASH_SALES ? $delta : 0.0,
+                'is_short_term' => in_array($box, ['A', 'B', 'C'], true),
+                'form_8949_box' => $box,
+                'is_covered' => in_array($box, ['A', 'D'], true) ? true : (in_array($box, ['B', 'E'], true) ? false : null),
+                'wash_sale_treatment' => $normalizedTreatment,
+                'reconciliation_notes' => 'Synthetic adjustment created because the 1099-B summary reported more wash-sale disallowed than the extracted transaction rows.',
+                'skip_transaction_matching' => true,
+            ];
+        }
+
+        return $transactions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     * @return array<string, array<string, mixed>>
+     */
+    private function summarySectionsByForm8949Box(array $parsedData): array
+    {
+        $sections = $parsedData['summary']['sections'] ?? [];
+        if (! is_array($sections)) {
+            return [];
+        }
+
+        $byBox = [];
+        foreach ($sections as $section) {
+            if (! is_array($section)) {
+                continue;
+            }
+
+            $box = $this->form8949BoxFromSummarySection($section);
+            if ($box !== null) {
+                $byBox[$box] = $section;
+            }
+        }
+
+        return $byBox;
+    }
+
+    /**
+     * @param  array<string, mixed>  $section
+     */
+    private function form8949BoxFromSummarySection(array $section): ?string
+    {
+        if (is_string($section['form_8949_box'] ?? null)) {
+            $box = strtoupper(trim((string) $section['form_8949_box']));
+            if (in_array($box, ['A', 'B', 'C', 'D', 'E', 'F'], true)) {
+                return $box;
+            }
+        }
+
+        $name = strtolower((string) ($section['name'] ?? ''));
+
+        return match (true) {
+            str_contains($name, 'box_a') || str_contains($name, 'box a') => 'A',
+            str_contains($name, 'box_b') || str_contains($name, 'box b') => 'B',
+            str_contains($name, 'box_c') || str_contains($name, 'box c') => 'C',
+            str_contains($name, 'box_d') || str_contains($name, 'box d') => 'D',
+            str_contains($name, 'box_e') || str_contains($name, 'box e') => 'E',
+            str_contains($name, 'box_f') || str_contains($name, 'box f') => 'F',
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<int, mixed>  $transactions
+     * @return array<string, float>
+     */
+    private function transactionWashSaleByForm8949Box(array $transactions): array
+    {
+        $byBox = [];
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction) || ! is_string($transaction['form_8949_box'] ?? null)) {
+                continue;
+            }
+
+            $box = strtoupper(trim((string) $transaction['form_8949_box']));
+            if (! in_array($box, ['A', 'B', 'C', 'D', 'E', 'F'], true)) {
+                continue;
+            }
+
+            $byBox[$box] = ($byBox[$box] ?? 0.0)
+                + (is_numeric($transaction['wash_sale_disallowed'] ?? null) ? abs((float) $transaction['wash_sale_disallowed']) : 0.0);
+        }
+
+        return $byBox;
+    }
+
+    /**
+     * @param  array<int, mixed>  $transactions
+     */
+    private function lastTransactionSaleDateForBox(array $transactions, string $box): ?string
+    {
+        $saleDates = [];
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction) || strtoupper((string) ($transaction['form_8949_box'] ?? '')) !== $box) {
+                continue;
+            }
+
+            $saleDate = $this->normalizeDateOrNull($transaction['sale_date'] ?? null);
+            if ($saleDate !== null) {
+                $saleDates[] = $saleDate;
+            }
+        }
+
+        if ($saleDates === []) {
+            return null;
+        }
+
+        rsort($saleDates);
+
+        return $saleDates[0];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  string[]  $keys
+     */
+    private function numericFromFirstKey(array $data, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            if (is_numeric($data[$key] ?? null)) {
+                return (float) $data[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function appendReconciliationNotes(?string ...$notes): ?string
+    {
+        $notes = array_values(array_filter(array_map(static fn (?string $note): string => trim((string) $note), $notes)));
+
+        return $notes === [] ? null : implode(' ', $notes);
     }
 
     /**

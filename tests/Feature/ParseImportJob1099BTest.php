@@ -323,6 +323,54 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertFalse($lot->is_short_term);
     }
 
+    public function test_upsert_lots_normalizes_explicit_broker_wash_sale_treatments(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Brokerage');
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+
+        $transactions = [
+            [
+                'symbol' => 'GROSS', 'description' => 'Gross treatment', 'cusip' => null,
+                'quantity' => 1, 'purchase_date' => '2024-01-01', 'sale_date' => '2024-03-01',
+                'proceeds' => 1000, 'cost_basis' => 1200, 'wash_sale_disallowed' => 50,
+                'wash_sale_treatment' => 'gross_of_wash_sales', 'realized_gain_loss' => -200,
+                'form_8949_box' => 'A', 'is_covered' => true,
+            ],
+            [
+                'symbol' => 'BASIS', 'description' => 'Basis treatment', 'cusip' => null,
+                'quantity' => 1, 'purchase_date' => '2024-01-01', 'sale_date' => '2024-03-01',
+                'proceeds' => 1000, 'cost_basis' => 1200, 'wash_sale_disallowed' => 50,
+                'wash_sale_treatment' => 'already_reflected_in_cost_basis', 'realized_gain_loss' => -200,
+                'form_8949_box' => 'A', 'is_covered' => true,
+            ],
+            [
+                'symbol' => 'NET', 'description' => 'Net treatment', 'cusip' => null,
+                'quantity' => 1, 'purchase_date' => '2024-01-01', 'sale_date' => '2024-03-01',
+                'proceeds' => 1000, 'cost_basis' => 1200, 'wash_sale_disallowed' => 50,
+                'wash_sale_treatment' => 'already_net_of_wash_sales', 'realized_gain_loss' => -150,
+                'form_8949_box' => 'A', 'is_covered' => true,
+            ],
+        ];
+
+        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+
+        $lots = FinAccountLot::where('acct_id', $account->acct_id)
+            ->orderBy('symbol')
+            ->get()
+            ->keyBy('symbol');
+
+        $this->assertSame(-200.0, (float) $lots['BASIS']->realized_gain_loss);
+        $this->assertSame(0.0, (float) $lots['BASIS']->wash_sale_disallowed);
+        $this->assertStringContainsString('avoid double-counting', (string) $lots['BASIS']->reconciliation_notes);
+
+        $this->assertSame(-150.0, (float) $lots['GROSS']->realized_gain_loss);
+        $this->assertSame(50.0, (float) $lots['GROSS']->wash_sale_disallowed);
+
+        $this->assertSame(-150.0, (float) $lots['NET']->realized_gain_loss);
+        $this->assertSame(50.0, (float) $lots['NET']->wash_sale_disallowed);
+    }
+
     public function test_upsert_lots_links_existing_sell_line_items(): void
     {
         $user = $this->createUser();
@@ -498,6 +546,68 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertDatabaseHas('fin_tax_documents', [
             'id' => $taxDoc->id,
             'genai_status' => 'parsed',
+        ]);
+    }
+
+    public function test_create_multi_account_results_imports_summary_wash_sale_adjustment_when_rows_omit_it(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Morgan Stanley', '367-671847-209');
+
+        $taxDoc = $this->makeTaxDoc($user->id, 0);
+        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+
+        $data = [[
+            'account_identifier' => '367-671847-209',
+            'account_name' => 'Morgan Stanley',
+            'form_type' => '1099_b',
+            'tax_year' => 2024,
+            'parsed_data' => [
+                'total_proceeds' => 1000.0,
+                'total_cost_basis' => 1200.0,
+                'total_wash_sale_disallowed' => 50.0,
+                'total_realized_gain_loss' => -150.0,
+                'wash_sale_treatment' => 'gross_of_wash_sales',
+                'summary' => [
+                    'sections' => [[
+                        'name' => 'short_term_covered_box_a',
+                        'total_proceeds' => 1000.0,
+                        'total_cost_basis' => 1200.0,
+                        'total_wash_sales' => 50.0,
+                        'realized_gain_loss' => -150.0,
+                    ]],
+                ],
+                'transactions' => [[
+                    'symbol' => 'MS',
+                    'description' => 'Morgan Stanley lot',
+                    'cusip' => null,
+                    'quantity' => 1,
+                    'purchase_date' => '2024-01-01',
+                    'sale_date' => '2024-03-01',
+                    'proceeds' => 1000.0,
+                    'cost_basis' => 1200.0,
+                    'wash_sale_disallowed' => 0.0,
+                    'realized_gain_loss' => -200.0,
+                    'form_8949_box' => 'A',
+                    'is_covered' => true,
+                ]],
+            ],
+        ]];
+
+        $jobInstance = new ParseImportJob($genaiJob->id);
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref->setAccessible(true);
+        $ref->invoke($jobInstance, $genaiJob, $data);
+
+        $this->assertSame(2, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        $this->assertSame(50.0, (float) FinAccountLot::where('tax_document_id', $taxDoc->id)->sum('wash_sale_disallowed'));
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $account->acct_id,
+            'symbol' => 'WASHSALEADJ',
+            'wash_sale_disallowed' => 50,
+            'realized_gain_loss' => 50,
+            'form_8949_box' => 'A',
         ]);
     }
 

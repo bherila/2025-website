@@ -3,6 +3,7 @@
 namespace App\Console\Commands\Finance;
 
 use App\Models\FinanceTool\FinAccountLot;
+use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
 use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
 use App\Services\Finance\Wealthfront1099BLotParser;
 use HelgeSverre\Toon\Toon;
@@ -66,7 +67,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
     private const CSV_REQUIRED_COLS = ['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'realized_gain_loss'];
 
-    private const CSV_OPTIONAL_COLS = ['description', 'cusip', 'wash_sale_disallowed', 'is_short_term', 'form_8949_box', 'is_covered'];
+    private const CSV_OPTIONAL_COLS = ['description', 'cusip', 'wash_sale_disallowed', 'wash_sale_treatment', 'is_short_term', 'form_8949_box', 'is_covered'];
 
     private string $currentSymbol = '';
 
@@ -127,6 +128,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         if ($lots === null) {
             return 1;
         }
+
+        $lots = $this->normaliseImportedLotWashSales($lots);
 
         $this->info(sprintf('Parsed %d lot record(s).', count($lots)));
 
@@ -295,6 +298,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return null;
         }
 
+        $defaultWashSaleTreatment = $data['wash_sale_treatment'] ?? $data['wash_sale_basis_treatment'] ?? null;
         $lots = [];
         foreach ($txns as $i => $row) {
             if (! is_array($row)) {
@@ -331,6 +335,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'proceeds' => round((float) $row['proceeds'], 4),
                 'realized_gain_loss' => round((float) $row['realized_gain_loss'], 4),
                 'wash_sale_disallowed' => round((float) ($row['wash_sale_disallowed'] ?? 0), 4),
+                'wash_sale_treatment' => $row['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
                 'is_short_term' => (bool) ($row['is_short_term'] ?? true),
                 'form_8949_box' => isset($row['form_8949_box']) ? strtoupper(trim((string) $row['form_8949_box'])) : null,
                 'is_covered' => array_key_exists('is_covered', $row) ? (bool) $row['is_covered'] : null,
@@ -437,6 +442,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'proceeds' => round((float) str_replace(',', '', $get('proceeds')), 4),
                 'realized_gain_loss' => round((float) str_replace(',', '', $get('realized_gain_loss')), 4),
                 'wash_sale_disallowed' => round((float) str_replace(',', '', $get('wash_sale_disallowed')), 4),
+                'wash_sale_treatment' => $get('wash_sale_treatment') ?: null,
                 'is_short_term' => $isShortTermBool,
                 'form_8949_box' => strtoupper($get('form_8949_box')) ?: null,
                 'is_covered' => $get('is_covered') !== '' ? ! in_array(strtolower($get('is_covered')), ['0', 'false', 'no', 'n'], true) : null,
@@ -540,6 +546,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'proceeds' => round($proceeds, 4),
                 'realized_gain_loss' => round($gainLoss, 4),
                 'wash_sale_disallowed' => round($washSale, 4),
+                'wash_sale_treatment' => BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
                 'is_short_term' => ! $this->isLongTerm,
                 'date_acquired_various' => $dateAcquired === null,
                 'reconciliation_notes' => $dateAcquired === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
@@ -547,6 +554,48 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         return $lots;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @return array<int, array<string, mixed>>
+     */
+    private function normaliseImportedLotWashSales(array $lots): array
+    {
+        return array_map(fn (array $lot): array => $this->normaliseImportedLotWashSale($lot), $lots);
+    }
+
+    /**
+     * @param  array<string, mixed>  $lot
+     * @return array<string, mixed>
+     */
+    private function normaliseImportedLotWashSale(array $lot): array
+    {
+        $washSaleNormalizer = app(BrokerWashSaleTreatmentNormalizer::class);
+        $amounts = $washSaleNormalizer->normalizeAmounts(
+            proceeds: (float) ($lot['proceeds'] ?? 0),
+            costBasis: (float) ($lot['cost_basis'] ?? 0),
+            reportedGainLoss: is_numeric($lot['realized_gain_loss'] ?? null) ? (float) $lot['realized_gain_loss'] : null,
+            washSaleDisallowed: is_numeric($lot['wash_sale_disallowed'] ?? null) ? (float) $lot['wash_sale_disallowed'] : 0.0,
+            treatment: $lot['wash_sale_treatment'] ?? null,
+        );
+
+        $lot['realized_gain_loss'] = round($amounts['realized_gain_loss'], 4);
+        $lot['wash_sale_disallowed'] = round($amounts['wash_sale_disallowed'], 4);
+        $lot['wash_sale_treatment'] = $amounts['wash_sale_treatment'];
+        $lot['reconciliation_notes'] = $this->appendReconciliationNotes(
+            is_string($lot['reconciliation_notes'] ?? null) ? $lot['reconciliation_notes'] : null,
+            $amounts['note'],
+        );
+
+        return $lot;
+    }
+
+    private function appendReconciliationNotes(?string ...$notes): ?string
+    {
+        $notes = array_values(array_filter(array_map(static fn (?string $note): string => trim((string) $note), $notes)));
+
+        return $notes === [] ? null : implode(' ', $notes);
     }
 
     /**
@@ -1008,8 +1057,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                     'sale_date' => 'string — YYYY-MM-DD',
                     'proceeds' => 'number — gross proceeds in USD',
                     'cost_basis' => 'number — total cost basis in USD',
-                    'realized_gain_loss' => 'number — proceeds minus cost_basis (negative = loss)',
+                    'realized_gain_loss' => 'number — broker-reported gain/loss (negative = loss)',
                     'wash_sale_disallowed' => 'number (optional, default 0)',
+                    'wash_sale_treatment' => 'string (optional) — gross_of_wash_sales, already_reflected_in_cost_basis, already_net_of_wash_sales, no_wash_sale_amount, or unknown',
                     'is_short_term' => 'boolean — true if held ≤ 1 year',
                     'form_8949_box' => 'string (optional) — A=ST covered, D=LT covered, etc.',
                     'is_covered' => 'boolean (optional) — whether basis is reported to IRS',
@@ -1029,8 +1079,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->line('  '.$optionalCols);
         $this->line('');
         $this->line('Example CSV (header + one row):');
-        $this->line('symbol,description,quantity,purchase_date,sale_date,proceeds,cost_basis,realized_gain_loss,wash_sale_disallowed,is_short_term');
-        $this->line('AAPL,"APPLE INC",10,2025-01-15,2025-11-20,2350.00,2000.00,350.00,0.00,true');
+        $this->line('symbol,description,quantity,purchase_date,sale_date,proceeds,cost_basis,realized_gain_loss,wash_sale_disallowed,wash_sale_treatment,is_short_term');
+        $this->line('AAPL,"APPLE INC",10,2025-01-15,2025-11-20,2350.00,2000.00,350.00,0.00,no_wash_sale_amount,true');
         $this->line('');
         $this->line('Dates may be YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, or "various" (purchase_date only).');
         $this->line('is_short_term: true/false/1/0/yes/no/lt/st');
@@ -1051,6 +1101,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->line('    proceeds: 2350.00');
         $this->line('    cost_basis: 2000.00');
         $this->line('    realized_gain_loss: 350.00');
+        $this->line('    wash_sale_treatment: no_wash_sale_amount');
         $this->line('    is_short_term: true');
         $this->line('');
         $this->line('Files with .toon extension are auto-detected. Use --input-format=toon to force.');
