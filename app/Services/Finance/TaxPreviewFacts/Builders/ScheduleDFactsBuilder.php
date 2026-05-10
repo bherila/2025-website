@@ -393,7 +393,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
-     * @return array<string, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>
+     * @return array<array-key, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>
      */
     private function emptyScheduleDLineBuckets(): array
     {
@@ -406,7 +406,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
-     * @param  array<string, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>  $lineBuckets
+     * @param  array<array-key, array{proceeds:float,cost:float,adjustments:float,gainLoss:float}>  $lineBuckets
      */
     private function scheduleDLineGainLoss(array $lineBuckets, string $line): float
     {
