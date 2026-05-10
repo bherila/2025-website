@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
 use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
 use Smalot\PdfParser\Parser;
 use Throwable;
@@ -160,6 +161,7 @@ class Wealthfront1099BLotParser
             'proceeds' => round($this->amount($matches['proceeds']), 4),
             'realized_gain_loss' => round($this->amount($matches['gain_loss']), 4),
             'wash_sale_disallowed' => round($this->amount($washSale), 4),
+            'wash_sale_treatment' => BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_NET_OF_WASH_SALES,
             'is_short_term' => $isShortTerm,
             'form_8949_box' => $isShortTerm ? 'A' : 'D',
             'is_covered' => true,

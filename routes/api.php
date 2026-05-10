@@ -40,6 +40,8 @@ use App\Http\Controllers\FinanceTool\Form8949LotExportController;
 use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
+use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationController;
+use App\Http\Controllers\FinanceTool\TaxDocumentLotsRebuildController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
 use App\Http\Controllers\LicenseKeyController;
@@ -403,6 +405,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
@@ -410,6 +413,8 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDo
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account', [TaxDocumentController::class, 'storeMultiAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-rebuild', [TaxDocumentLotsRebuildController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
