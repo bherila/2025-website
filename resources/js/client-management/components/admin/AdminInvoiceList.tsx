@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { FileText, RefreshCw, RotateCcw } from 'lucide-react'
+import { AlertTriangle, FileText, RefreshCw, RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { InvoiceKindBadge, InvoiceStatusBadge } from '@/client-management/components/admin/ClientBadges'
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 
-interface AdminInvoice {
+export interface AdminInvoice {
   id: number
   client_agreement_id?: number | null
   agreement_id?: number | null
@@ -27,6 +27,8 @@ interface AdminInvoice {
   hours_worked?: string | number
   retainer_hours_included?: string | number
   hours_billed_at_rate?: string | number
+  stripe_payment_status?: string | null
+  stripe_failure_reason?: string | null
 }
 
 interface AdminInvoiceListProps {
@@ -50,11 +52,16 @@ function countByKind(results: Record<string, unknown>): string {
   return parts.length > 0 ? `Created ${parts.join(', ')}.` : 'No new invoices to generate.'
 }
 
+export function hasStripePaymentFailure(invoice: Pick<AdminInvoice, 'stripe_failure_reason' | 'stripe_payment_status'>): boolean {
+  return Boolean(invoice.stripe_failure_reason || ['failed', 'canceled'].includes(invoice.stripe_payment_status ?? ''))
+}
+
 export default function AdminInvoiceList({ companyId, agreements = [] }: AdminInvoiceListProps) {
   const [invoices, setInvoices] = useState<AdminInvoice[]>([])
   const [statusFilter, setStatusFilter] = useState('all')
   const [kindFilter, setKindFilter] = useState('all')
   const [agreementFilter, setAgreementFilter] = useState('all')
+  const [stripeFailureFilter, setStripeFailureFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selected, setSelected] = useState<number[]>([])
@@ -90,6 +97,12 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
       if (agreementFilter !== 'all' && String(invoice.client_agreement_id ?? invoice.agreement_id ?? '') !== agreementFilter) {
         return false
       }
+      if (stripeFailureFilter === 'failed' && !hasStripePaymentFailure(invoice)) {
+        return false
+      }
+      if (stripeFailureFilter === 'clear' && hasStripePaymentFailure(invoice)) {
+        return false
+      }
       if (dateFrom && (invoice.period_end ?? '') < dateFrom) {
         return false
       }
@@ -99,7 +112,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
 
       return true
     })
-  }, [agreementFilter, dateFrom, dateTo, invoices, kindFilter, statusFilter])
+  }, [agreementFilter, dateFrom, dateTo, invoices, kindFilter, statusFilter, stripeFailureFilter])
 
   const selectedInvoices = useMemo(
     () => invoices.filter((invoice) => selected.includes(invoice.id)),
@@ -224,6 +237,16 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
               ))}
             </SelectContent>
           </Select>
+          <Select value={stripeFailureFilter} onValueChange={setStripeFailureFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stripe results</SelectItem>
+              <SelectItem value="failed">Stripe failures</SelectItem>
+              <SelectItem value="clear">No Stripe failure</SelectItem>
+            </SelectContent>
+          </Select>
           <DateInput id="invoice-date-from" value={dateFrom} onValueChange={setDateFrom} />
           <DateInput id="invoice-date-to" value={dateTo} onValueChange={setDateTo} />
         </div>
@@ -266,6 +289,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
               <TableHead>Hours</TableHead>
               <TableHead>Total</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Stripe Failure</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -293,6 +317,18 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
                 </TableCell>
                 <TableCell>{currency(invoice.invoice_total).format()}</TableCell>
                 <TableCell><InvoiceStatusBadge value={invoice.status} /></TableCell>
+                <TableCell className="max-w-[220px] text-xs text-muted-foreground">
+                  {hasStripePaymentFailure(invoice) ? (
+                    <div className="flex items-start gap-2 text-destructive">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span className="line-clamp-2">
+                        {invoice.stripe_failure_reason ?? `Stripe payment ${invoice.stripe_payment_status}`}
+                      </span>
+                    </div>
+                  ) : (
+                    <span>—</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
                     {invoice.status === 'draft' && (
@@ -315,7 +351,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
             ))}
             {filteredInvoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                   No invoices match these filters.
                 </TableCell>
               </TableRow>

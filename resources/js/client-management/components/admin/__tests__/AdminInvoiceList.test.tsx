@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-import AdminInvoiceList from '@/client-management/components/admin/AdminInvoiceList'
+import AdminInvoiceList, { hasStripePaymentFailure } from '@/client-management/components/admin/AdminInvoiceList'
 import { fetchWrapper } from '@/fetchWrapper'
 
 jest.mock('@/fetchWrapper', () => ({
@@ -97,5 +97,47 @@ describe('AdminInvoiceList', () => {
     await waitFor(() => {
       expect(screen.getByText('No new invoices to generate.')).toBeInTheDocument()
     })
+  })
+
+  it('surfaces Stripe payment failures and exposes the filter predicate', async () => {
+    mockGet.mockResolvedValue([
+      {
+        id: 1,
+        invoice_number: 'INV-FAILED',
+        period_start: '2026-01-01',
+        period_end: '2026-01-31',
+        cycle_start: '2026-01-01',
+        cycle_end: '2026-01-31',
+        invoice_total: '500.00',
+        status: 'issued',
+        invoice_kind: 'cadence_period',
+        hours_worked: '0.0',
+        retainer_hours_included: '0.0',
+        stripe_payment_status: 'failed',
+        stripe_failure_reason: 'Card declined',
+      },
+      {
+        id: 2,
+        invoice_number: 'INV-OK',
+        period_start: '2026-02-01',
+        period_end: '2026-02-28',
+        cycle_start: '2026-02-01',
+        cycle_end: '2026-02-28',
+        invoice_total: '500.00',
+        status: 'issued',
+        invoice_kind: 'cadence_period',
+        hours_worked: '0.0',
+        retainer_hours_included: '0.0',
+        stripe_payment_status: null,
+        stripe_failure_reason: null,
+      },
+    ])
+
+    render(<AdminInvoiceList companyId={1} />)
+
+    expect(await screen.findByText('Card declined')).toBeInTheDocument()
+    expect(screen.getByText('Stripe Failure')).toBeInTheDocument()
+    expect(hasStripePaymentFailure({ stripe_payment_status: 'failed', stripe_failure_reason: null })).toBe(true)
+    expect(hasStripePaymentFailure({ stripe_payment_status: null, stripe_failure_reason: null })).toBe(false)
   })
 })

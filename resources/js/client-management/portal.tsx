@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 
 import ClientPortalAgreementPage from '@/client-management/components/portal/ClientPortalAgreementPage'
+import ClientPortalBillingPage from '@/client-management/components/portal/ClientPortalBillingPage'
 import ClientPortalExpensesPage from '@/client-management/components/portal/ClientPortalExpensesPage'
 import ClientPortalIndexPage from '@/client-management/components/portal/ClientPortalIndexPage'
 import ClientPortalInvoicePage from '@/client-management/components/portal/ClientPortalInvoicePage'
@@ -255,6 +256,25 @@ document.addEventListener('DOMContentLoaded', () => {
     />)
   }
 
+  const billingDiv = document.getElementById('ClientPortalBillingPage')
+  if (billingDiv) {
+    const script = document.getElementById('client-portal-initial-data') as HTMLScriptElement | null
+    const serverData: any = script && script.textContent ? JSON.parse(script.textContent) : null
+
+    if (!serverData || !serverData.slug) {
+      console.error('Missing server-hydrated payload for Client Portal billing — aborting mount.')
+      return
+    }
+
+    const root = createRoot(billingDiv)
+    root.render(<ClientPortalBillingPage
+      slug={serverData.slug}
+      companyName={serverData.companyName}
+      companyId={serverData.companyId}
+      stripePublishableKey={serverData.stripePublishableKey ?? null}
+    />)
+  }
+
   const invoiceDiv = document.getElementById('ClientPortalInvoicePage')
   if (invoiceDiv) {
     // Read head-embedded JSON payload for invoice page
@@ -325,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
               created_at: p.created_at ?? p.payment_date ?? new Date().toISOString(),
               updated_at: p.updated_at ?? p.payment_date ?? new Date().toISOString(),
             })),
+            stripe_payments: src.stripe_payments ?? [],
             previous_invoice_id: src.previous_invoice_id ?? null,
             next_invoice_id: src.next_invoice_id ?? null,
           }
@@ -355,6 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
       companyId={companyId}
       invoiceId={invoiceId}
       initialInvoice={initialInvoice}
+      stripePublishableKey={serverData.stripePublishableKey ?? null}
+      stripeMaxAmountCents={serverData.stripeMaxAmountCents ?? 100000}
     />)
   }
 

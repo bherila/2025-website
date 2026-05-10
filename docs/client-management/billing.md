@@ -4,6 +4,7 @@
 
 - **[Deferred billing](deferred-billing.md)** — per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists. Deferred entries are never split and are force-billed at the hourly rate on the termination invoice.
 - **[Overpayment credits](overpayment-credits.md)** — any overpaid amount carries forward as a credit applied automatically to the next draft invoice(s); credits never expire.
+- **[Stripe billing](stripe-billing.md)** — online invoice payments for issued invoices up to the configured cap, saved payment methods, and webhook-driven payment state.
 
 ## Overview
 The billing and invoicing system handles automatic invoice generation with prior-period billing, retainer-based pricing, rollover hours, recurring fixed-fee items, reimbursable expense tracking, and agreement billing cadences. Agreements can bill on monthly, quarterly, or annual cadence cycles. Monthly agreements preserve the original prior-month behavior; non-monthly agreements generate one cadence-period invoice per cycle and may optionally generate interim overage invoices at completed month boundaries inside the cycle.

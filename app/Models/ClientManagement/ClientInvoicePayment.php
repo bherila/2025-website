@@ -4,6 +4,7 @@ namespace App\Models\ClientManagement;
 
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientInvoicePayment extends Model
@@ -20,6 +21,8 @@ class ClientInvoicePayment extends Model
         'payment_date',
         'payment_method',
         'notes',
+        'client_invoice_stripe_payment_id',
+        'stripe_payment_intent_id',
     ];
 
     protected $casts = [
@@ -27,8 +30,19 @@ class ClientInvoicePayment extends Model
         'payment_date' => 'date',
     ];
 
-    public function invoice()
+    /**
+     * @return BelongsTo<ClientInvoice, $this>
+     */
+    public function invoice(): BelongsTo
     {
         return $this->belongsTo(ClientInvoice::class, 'client_invoice_id', 'client_invoice_id');
+    }
+
+    /**
+     * @return BelongsTo<ClientInvoiceStripePayment, $this>
+     */
+    public function stripePayment(): BelongsTo
+    {
+        return $this->belongsTo(ClientInvoiceStripePayment::class, 'client_invoice_stripe_payment_id');
     }
 }
