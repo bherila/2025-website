@@ -8,6 +8,17 @@ export interface PromptInfoForManualInput {
   form_label: string
 }
 
+function normalizeManualTaxInput(input: string, format: ManualTaxInputFormat): string {
+  const trimmed = input.trim().replace(/^\uFEFF/, '')
+  const fenced = trimmed.match(/^```(?:json|toon)?\s*\n([\s\S]*?)\n?```$/i)
+  if (fenced?.[1] != null) {
+    return fenced[1].trim()
+  }
+
+  const label = format === 'toon' ? 'toon' : 'json'
+  return trimmed.replace(new RegExp(`^${label}\\s*\\n`, 'i'), '')
+}
+
 export function formatManualTaxInput(data: unknown, format: ManualTaxInputFormat): string {
   if (format === 'toon') {
     return encode(data)
@@ -17,7 +28,9 @@ export function formatManualTaxInput(data: unknown, format: ManualTaxInputFormat
 }
 
 export function parseManualTaxInput(input: string, format: ManualTaxInputFormat): unknown {
-  return format === 'toon' ? decode(input) : JSON.parse(input)
+  const normalizedInput = normalizeManualTaxInput(input, format)
+
+  return format === 'toon' ? decode(normalizedInput) : JSON.parse(normalizedInput)
 }
 
 export function getFormatLabel(format: ManualTaxInputFormat): string {

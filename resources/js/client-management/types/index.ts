@@ -10,8 +10,10 @@ export type {
   ClientAdminActionsProps,
   Invoice,
   InvoiceLine,
-  InvoicePreview} from './invoice'
+  InvoicePreview,
+  InvoiceStripePayment} from './invoice'
 export type { ClientInvoicePayment } from './invoice-payment'
+export type { ClientPaymentMethod } from './payment-method'
 export type {
   MonthlyClosingBalance,
   MonthlyData,

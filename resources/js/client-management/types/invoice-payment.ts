@@ -1,16 +1,16 @@
 import { z } from 'zod'
 
-import { coerceMoney } from './zod-helpers'
+import { coerceMoney, nullableStringDefault } from './zod-helpers'
 
 export const ClientInvoicePaymentSchema = z.object({
   client_invoice_payment_id: z.number(),
   client_invoice_id: z.number(),
   amount: z.string(),
   payment_date: z.string(),
-  payment_method: z.union([z.literal('Credit Card'), z.literal('ACH'), z.literal('Wire'), z.literal('Check'), z.literal('Other')]),
-  notes: z.string().nullable(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
+  payment_method: z.string().min(1),
+  notes: nullableStringDefault,
+  created_at: nullableStringDefault,
+  updated_at: nullableStringDefault,
 })
 
 export type ClientInvoicePayment = z.infer<typeof ClientInvoicePaymentSchema>
@@ -23,8 +23,8 @@ export const ClientInvoicePaymentHydrationSchema = z.object({
   amount: coerceMoney('0.00').optional(),
   payment_date: z.string().optional(),
   payment_method: z.string().optional(),
-  notes: z.union([z.string(), z.null()]).optional(),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
+  notes: nullableStringDefault,
+  created_at: nullableStringDefault,
+  updated_at: nullableStringDefault,
 })
 export type ClientInvoicePaymentHydration = z.infer<typeof ClientInvoicePaymentHydrationSchema>

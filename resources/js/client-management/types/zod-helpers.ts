@@ -1,6 +1,8 @@
 import currency from 'currency.js'
 import { z } from 'zod'
 
+export const nullableStringDefault = z.string().nullable().optional().default(null)
+
 /**
  * Coerces a value to a string with 2 decimal places using currency.js.
  * Useful for money fields.

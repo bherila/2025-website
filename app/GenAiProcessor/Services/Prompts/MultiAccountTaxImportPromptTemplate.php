@@ -12,6 +12,7 @@ class MultiAccountTaxImportPromptTemplate extends PromptTemplate
     {
         $taxYear = (int) ($context['tax_year'] ?? date('Y'));
         $accounts = $context['accounts'] ?? [];
+        $isParsedDataRepair = ($context['input_kind'] ?? null) === 'parsed_data_repair';
 
         $accountHints = $this->buildAccountsContext(
             array_map(fn ($a) => [
@@ -20,10 +21,16 @@ class MultiAccountTaxImportPromptTemplate extends PromptTemplate
             ], $accounts)
         );
 
-        return <<<PROMPT
-You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year {$taxYear}.
+        $sourceDescription = $isParsedDataRepair
+            ? 'You are converting a stored brokerage tax extraction artifact for tax year '.$taxYear.'. The attached text file contains TOON or JSON data that may be in a legacy, flat, or otherwise unsupported shape.'
+            : 'You are processing a consolidated brokerage tax statement (e.g. Fidelity Tax Reporting Statement, Wealthfront 1099) for tax year '.$taxYear.'.';
 
-This PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.{$accountHints}
+        $sourceInstructions = $isParsedDataRepair
+            ? "\nUse the attached data as the source of truth. Preserve extracted account names, identifiers, payer metadata, and numeric values. Do not invent fields that are not present. If 1099-B summary totals are present but individual transaction lots are absent, return the summary totals and `transactions: []`.\n"
+            : "\nThis PDF may contain forms for multiple accounts (1099-DIV, 1099-INT, 1099-MISC, 1099-B, etc.) across one or more brokerage accounts.\n";
+
+        return <<<PROMPT
+{$sourceDescription}{$sourceInstructions}{$accountHints}
 
 Return ONLY TOON, no Markdown fences and no other text.
 
@@ -74,6 +81,13 @@ If the PDF is a consolidated 1099 that covers multiple form types for the same a
   - `form_8949_box`: IRS Form 8949 reporting box — "A" (short covered), "B" (short not covered), "C" (short other), "D" (long covered), "E" (long not covered), "F" (long other) (string)
   - `is_covered`: whether basis is reported to IRS (boolean)
   - `additional_info`: any additional information column text (string or null)
+- `supplemental_statement`: if the broker statement includes supplemental details not reported to the IRS, extract them here instead of mixing them into `transactions`. Use these fields when present:
+  - `account_fees_total`: total account fees (number or null)
+  - `account_fees`: rows with `description`, `date`, `amount`
+  - `margin_interest_paid_total`: total margin interest paid (number or null)
+  - `margin_interest_paid`: rows with `description`, `date`, `amount`
+  - `short_dividends_total`: total short dividends paid/substitute dividend charges (number or null)
+  - `short_dividends`: rows with `description`, `cusip`, `date`, `amount`
 
 Extract EVERY individual lot line. Do not skip lines or summarize. If a security shows subtotals, emit a separate transaction row for each individual lot line (not the subtotal row).
 
@@ -94,6 +108,10 @@ accounts[1]:
       transactions[2]{symbol,description,cusip,quantity,purchase_date,sale_date,proceeds,cost_basis,accrued_market_discount,wash_sale_disallowed,realized_gain_loss,is_short_term,form_8949_box,is_covered,additional_info}:
         NET,CLOUDFLARE INC CL A COM,18915M107,10,2025-03-27,2025-05-06,1229.74,1191.4,null,0,38.34,true,A,true,null
         FDMO,FIDELITY MOMENTUM FACTOR ETF,316092816,0.028,2024-06-24,2025-05-06,1.88,1.78,null,0,0.1,true,A,true,null
+      supplemental_statement:
+        short_dividends_total: 12.34
+        short_dividends[1]{description,cusip,date,amount}:
+          EXAMPLE SHORT DIVIDEND,123456789,2025-12-31,12.34
 PROMPT;
     }
 }

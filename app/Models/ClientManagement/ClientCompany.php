@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientCompany extends Model
@@ -117,6 +118,30 @@ class ClientCompany extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(ClientInvoice::class, 'client_company_id');
+    }
+
+    /**
+     * @return HasMany<ClientCompanyPaymentMethod, $this>
+     */
+    public function paymentMethods(): HasMany
+    {
+        return $this->hasMany(ClientCompanyPaymentMethod::class, 'client_company_id');
+    }
+
+    /**
+     * @return HasMany<ClientCompanyStripeCustomer, $this>
+     */
+    public function stripeCustomers(): HasMany
+    {
+        return $this->hasMany(ClientCompanyStripeCustomer::class, 'client_company_id');
+    }
+
+    /**
+     * @return HasOne<ClientCompanyStripeCustomer, $this>
+     */
+    public function stripeCustomer(): HasOne
+    {
+        return $this->hasOne(ClientCompanyStripeCustomer::class, 'client_company_id');
     }
 
     /**

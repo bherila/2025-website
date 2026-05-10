@@ -11,8 +11,11 @@ use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyUserController;
 use App\Http\Controllers\ClientManagement\ClientExpenseApiController;
 use App\Http\Controllers\ClientManagement\ClientInvoiceApiController;
+use App\Http\Controllers\ClientManagement\ClientInvoicePaymentIntentApiController;
+use App\Http\Controllers\ClientManagement\ClientPaymentMethodApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
+use App\Http\Controllers\ClientManagement\StripeWebhookController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\Finance\PalCarryforwardController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
@@ -49,6 +52,8 @@ use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/webhooks/stripe', StripeWebhookController::class);
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
@@ -292,6 +297,12 @@ Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/exp
 
 // Client Portal API routes
 Route::middleware(['web', 'auth'])->get('/client/portal/companies', [ClientPortalApiController::class, 'getAccessibleCompanies']);
+Route::middleware(['web', 'auth'])->get('/client/portal/companies/{company}/payment-methods', [ClientPaymentMethodApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/client/portal/companies/{company}/payment-methods/setup', [ClientPaymentMethodApiController::class, 'setup']);
+Route::middleware(['web', 'auth'])->delete('/client/portal/companies/{company}/payment-methods/{paymentMethod}', [ClientPaymentMethodApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/client/portal/companies/{company}/payment-methods/{paymentMethod}/default', [ClientPaymentMethodApiController::class, 'makeDefault']);
+Route::middleware(['web', 'auth'])->post('/client/portal/invoices/{invoice}/pay-intent', [ClientInvoicePaymentIntentApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/client/portal/invoices/{invoice}/pay-intent/{paymentIntent}', [ClientInvoicePaymentIntentApiController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}', [ClientPortalApiController::class, 'getCompany']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'getProjects']);
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/projects', [ClientPortalApiController::class, 'createProject']);
@@ -404,6 +415,9 @@ Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', 
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
 Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/convert-broker-format', [TaxDocumentController::class, 'convertBrokerFormat']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/repair-format', [TaxDocumentController::class, 'repairBrokerFormat']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/reprocess', [TaxDocumentController::class, 'reprocessBrokerDocument']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
 Route::middleware(['web', 'auth'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);

@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown, Clock, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
+import { ChevronDown, Clock, CreditCard, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { PortalNavButton } from '@/components/nav/PortalNavButton'
@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { fetchWrapper } from '@/fetchWrapper'
 import { useClientCompanies, useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { cn } from '@/lib/utils'
 
@@ -38,7 +39,7 @@ interface Company {
 interface ClientPortalNavProps {
   slug: string
   companyName: string
-  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses' | 'manage'
+  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses' | 'billing' | 'manage'
   currentProjectSlug?: string | undefined
   projectName?: string | undefined
   invoiceNumber?: string | undefined
@@ -55,6 +56,7 @@ export function getPagePathSuffix(currentPage: ClientPortalNavProps['currentPage
   switch (currentPage) {
     case 'time': return '/time'
     case 'expenses': return '/expenses'
+    case 'billing': return '/billing'
     case 'invoices': return '/invoices'
     case 'invoice': return '/invoices'  // strip invoice ID, go to list
     case 'home':
@@ -86,11 +88,8 @@ export default function ClientPortalNav({
 
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await fetch(`/api/client/portal/${slug}/projects`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data)
-      }
+      const data = await fetchWrapper.get(`/api/client/portal/${slug}/projects`)
+      setProjects(data as Project[])
     } catch (error) {
       console.error('Error fetching projects:', error)
     } finally {
@@ -106,11 +105,8 @@ export default function ClientPortalNav({
     }
 
     try {
-      const response = await fetch('/api/client/portal/companies')
-      if (response.ok) {
-        const data = await response.json()
-        setCompanies(data)
-      }
+      const data = await fetchWrapper.get('/api/client/portal/companies')
+      setCompanies(data as Company[])
     } catch (error) {
       console.error('Error fetching companies:', error)
     } finally {
@@ -209,6 +205,13 @@ export default function ClientPortalNav({
                 </a>
               </PortalNavButton>
 
+              <PortalNavButton active={currentPage === 'billing'} asChild>
+                <a href={`/client/portal/${slug}/billing`}>
+                  <CreditCard className="h-4 w-4 mr-1" />
+                  Billing
+                </a>
+              </PortalNavButton>
+
               {/* Tasks dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -292,6 +295,15 @@ export default function ClientPortalNav({
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
                     <BreadcrumbPage>Invoices</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'billing' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Billing</BreadcrumbPage>
                   </BreadcrumbItem>
                 </>
               )}

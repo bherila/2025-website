@@ -194,6 +194,26 @@ describe('TaxDocuments1099Section', () => {
     expect(screen.getByText('fidelity taxable').closest('table')?.parentElement).toHaveClass('border-muted')
   })
 
+  it('hides debt accounts from the current 1099 account list', () => {
+    render(
+      <TaxDocuments1099Section
+        selectedYear={2025}
+        documents={[]}
+        accounts={[
+          { acct_id: 8, acct_name: 'green', acct_is_debt: true },
+          { acct_id: 9, acct_name: 'fidelity taxable', acct_is_debt: false },
+          { acct_id: 10, acct_name: 'traditional ira', acct_is_debt: false },
+        ]}
+        activeAccountIds={[]}
+        isLoading={false}
+      />,
+    )
+
+    expect(screen.queryByText('green')).toBeNull()
+    expect(screen.getByText('fidelity taxable')).toBeTruthy()
+    expect(screen.getByText('traditional ira')).toBeTruthy()
+  })
+
   it('shows and persists the 1099-B reporting mode for account links', async () => {
     const onDocumentsReload = jest.fn().mockResolvedValue(undefined)
     const doc = makeDoc({

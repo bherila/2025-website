@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { ClientInvoicePaymentHydrationSchema,ClientInvoicePaymentSchema } from './invoice-payment'
-import { coerceMoney, coerceNumberLike } from './zod-helpers'
+import { coerceMoney, coerceNumberLike, nullableStringDefault } from './zod-helpers'
 
 // Basic time entry schema (used as a subitem on an invoice line)
 export const InvoiceLineTimeEntrySchema = z.object({
@@ -44,6 +44,19 @@ export const InvoiceLineSchema = z.object({
 })
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>
 
+export const InvoiceStripePaymentSchema = z.object({
+  id: z.number(),
+  stripe_payment_intent_id: z.string(),
+  stripe_payment_method_id: nullableStringDefault,
+  amount: z.number(),
+  status: z.string(),
+  failure_reason: nullableStringDefault,
+  last_event_id: nullableStringDefault,
+  created_at: nullableStringDefault,
+  updated_at: nullableStringDefault,
+})
+export type InvoiceStripePayment = z.infer<typeof InvoiceStripePaymentSchema>
+
 // NOTE: payments shape isn't fully modeled here — keep as unknown for now.
 export const InvoiceSchema = z.object({
   client_invoice_id: z.number(),
@@ -73,6 +86,7 @@ export const InvoiceSchema = z.object({
   notes: z.string().nullable(),
   line_items: z.array(InvoiceLineSchema),
   payments: z.array(ClientInvoicePaymentSchema),
+  stripe_payments: z.array(InvoiceStripePaymentSchema).optional().default([]),
   remaining_balance: z.string(),
   payments_total: z.string(),
   credit_applied: z.number().optional(),
@@ -113,6 +127,7 @@ export const InvoiceHydrationSchema = z.object({
   notes: z.string().nullable().optional(),
   line_items: z.array(InvoiceLineSchema).optional().default([]),
   payments: z.array(ClientInvoicePaymentHydrationSchema).optional().default([]),
+  stripe_payments: z.array(InvoiceStripePaymentSchema).optional().default([]),
   remaining_balance: coerceMoney('0.00').optional(),
   payments_total: coerceMoney('0.00').optional(),
   credit_applied: z.number().optional(),

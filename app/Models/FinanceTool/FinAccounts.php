@@ -2,11 +2,14 @@
 
 namespace App\Models\FinanceTool;
 
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class FinAccounts extends Model
 {
+    use SerializesDatesAsLocal;
+
     protected $table = 'fin_accounts';
 
     protected $primaryKey = 'acct_id';
@@ -33,7 +36,7 @@ class FinAccounts extends Model
         ];
     }
 
-    protected static function boot()
+    protected static function boot(): void
     {
         parent::boot();
 

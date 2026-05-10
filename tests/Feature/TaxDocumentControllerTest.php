@@ -2,12 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\GenAiProcessor\Jobs\ParseImportJob;
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class TaxDocumentControllerTest extends TestCase
@@ -1069,6 +1073,252 @@ class TaxDocumentControllerTest extends TestCase
 
         $this->assertFalse((bool) $doc->fresh()->parsed_data_needs_review);
         $this->assertFalse((bool) $link->fresh()->parsed_data_needs_review);
+    }
+
+    public function test_show_canonicalizes_legacy_flat_broker_1099_aliases(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'account_number' => '637-768451',
+                'div_1a_total_ordinary' => 100.12,
+                'div_2a_total_cap_gain' => 25.34,
+                'div_4_fed_tax_withheld' => 5.00,
+                'div_5_section199a' => 2.50,
+                'int_1_interest_income' => 10.00,
+                'int_4_fed_tax_withheld' => 1.00,
+                'misc_4_fed_tax_withheld' => 0.50,
+                'b_total_proceeds' => 1000.00,
+                'b_total_cost' => 800.00,
+                'b_total_gain_loss' => 200.00,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.box1a_ordinary', 100.12)
+            ->assertJsonPath('parsed_data.box2a_cap_gain', 25.34)
+            ->assertJsonPath('parsed_data.box5_section_199a', 2.5)
+            ->assertJsonPath('parsed_data.box1_interest', 10)
+            ->assertJsonPath('parsed_data.total_proceeds', 1000)
+            ->assertJsonPath('parsed_data.total_cost_basis', 800)
+            ->assertJsonPath('parsed_data.total_realized_gain_loss', 200)
+            ->assertJsonPath('parsed_data_needs_review', true);
+    }
+
+    public function test_1099_b_preserves_supplemental_statement_details(): void
+    {
+        $user = $this->createUser();
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_b',
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'payer_tin' => '04-3523567',
+                'total_proceeds' => 749840.20,
+                'total_cost_basis' => 799409.88,
+                'total_wash_sale_disallowed' => 536.36,
+                'total_realized_gain_loss' => -49569.68,
+                'transactions' => [],
+                'supplemental_statement' => [
+                    'short_dividends_total' => 3230.55,
+                    'short_dividends' => [
+                        [
+                            'description' => 'ACUITY INC.',
+                            'cusip' => '00508Y102',
+                            'date' => '2025-11-03',
+                            'amount' => 0.68,
+                        ],
+                    ],
+                    'margin_interest_paid_total' => 7373.74,
+                ],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.supplemental_statement.short_dividends_total', 3230.55)
+            ->assertJsonPath('parsed_data.supplemental_statement.short_dividends.0.cusip', '00508Y102')
+            ->assertJsonPath('parsed_data.supplemental_statement.margin_interest_paid_total', 7373.74)
+            ->assertJsonPath('parsed_data_needs_review', false);
+    }
+
+    public function test_can_convert_legacy_flat_broker_1099_to_multi_entry_format(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'account_number' => '637-768451',
+                'div_1a_total_ordinary' => 100.12,
+                'b_total_proceeds' => 1000.00,
+                'b_total_cost' => 800.00,
+                'b_total_gain_loss' => 200.00,
+            ],
+        ]);
+        $divLink = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+        $brokerLink = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
+
+        $response->assertOk()
+            ->assertJsonPath('is_reviewed', false)
+            ->assertJsonPath('parsed_data.0.account_identifier', '637-768451')
+            ->assertJsonPath('parsed_data.0.account_name', 'Fidelity SMA')
+            ->assertJsonPath('parsed_data.0.form_type', '1099_div')
+            ->assertJsonPath('parsed_data.0.parsed_data.box1a_ordinary', 100.12)
+            ->assertJsonPath('parsed_data.1.form_type', '1099_b')
+            ->assertJsonPath('parsed_data.1.parsed_data.total_cost_basis', 800)
+            ->assertJsonPath('parsed_data.1.parsed_data.transactions', [])
+            ->assertJsonPath('account_links.0.is_reviewed', false)
+            ->assertJsonPath('account_links.1.is_reviewed', false);
+
+        $this->assertTrue(array_is_list($doc->fresh()->parsed_data));
+        $this->assertFalse((bool) $doc->fresh()->is_reviewed);
+        $this->assertFalse((bool) $divLink->fresh()->is_reviewed);
+        $this->assertFalse((bool) $brokerLink->fresh()->is_reviewed);
+        $this->assertDatabaseCount('fin_tax_document_accounts', 2);
+    }
+
+    public function test_convert_broker_format_rejects_non_broker_documents(): void
+    {
+        $user = $this->createUser();
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'parsed_data' => [
+                'payer_name' => 'Fidelity',
+                'box1a_ordinary' => 100.12,
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Only broker_1099 documents can be converted to the current multi-entry format.');
+    }
+
+    public function test_convert_broker_format_keeps_1099_b_rows_with_transactions_but_no_totals(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'account_number' => '637-768451',
+                'transactions' => [
+                    [
+                        'symbol' => 'ABBV',
+                        'description' => 'ABBVIE INC COM USD0.01',
+                        'quantity' => 9,
+                        'purchase_date' => '2025-10-08',
+                        'sale_date' => '2025-11-25',
+                        'proceeds' => 2087.74,
+                        'cost_basis' => 2085.98,
+                    ],
+                ],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/convert-broker-format");
+
+        $response->assertOk()
+            ->assertJsonPath('parsed_data.0.form_type', '1099_b')
+            ->assertJsonPath('parsed_data.0.parsed_data.transactions.0.symbol', 'ABBV')
+            ->assertJsonPath('parsed_data.0.parsed_data.transactions.0.proceeds', 2087.74);
+    }
+
+    public function test_can_queue_broker_1099_reprocessing_from_existing_pdf(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'is_reviewed' => true,
+            'genai_status' => 'parsed',
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'b_total_proceeds' => 1000.00,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/reprocess");
+
+        $response->assertOk()
+            ->assertJsonPath('genai_status', 'pending')
+            ->assertJsonPath('is_reviewed', false)
+            ->assertJsonPath('account_links.0.is_reviewed', false);
+
+        $job = GenAiImportJob::latest('id')->first();
+        $this->assertNotNull($job);
+        $this->assertSame('tax_form_multi_account_import', $job->job_type);
+        $this->assertSame($doc->id, $job->getContextArray()['tax_document_id']);
+        Queue::assertPushed(ParseImportJob::class);
+    }
+
+    public function test_can_queue_broker_1099_format_repair_from_stored_data(): void
+    {
+        Queue::fake();
+        Storage::fake('s3');
+
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'Fidelity SMA');
+
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'broker_1099',
+            'account_id' => null,
+            'is_reviewed' => true,
+            'genai_status' => 'parsed',
+            'parsed_data' => [
+                'payer_name' => 'National Financial Services LLC',
+                'account_number' => '637-768451',
+                'div_1a_total_ordinary' => 100.12,
+                'b_total_proceeds' => 1000.00,
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024, isReviewed: true, aiIdentifier: '637-768451', aiAccountName: 'Fidelity SMA');
+
+        $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/repair-format");
+
+        $response->assertOk()
+            ->assertJsonPath('genai_status', 'pending')
+            ->assertJsonPath('is_reviewed', false)
+            ->assertJsonPath('account_links.0.is_reviewed', false);
+
+        $job = GenAiImportJob::latest('id')->first();
+        $this->assertNotNull($job);
+        $this->assertSame('tax_form_multi_account_import', $job->job_type);
+        $this->assertSame('text/plain', $job->mime_type);
+        $this->assertSame('parsed_data_repair', $job->getContextArray()['input_kind']);
+        $this->assertSame($doc->id, $job->getContextArray()['tax_document_id']);
+        Storage::disk('s3')->assertExists($job->s3_path);
+        $sourceText = Storage::disk('s3')->get($job->s3_path);
+        $this->assertStringContainsString('div_1a_total_ordinary', $sourceText);
+        $this->assertStringContainsString('b_total_proceeds', $sourceText);
+        Queue::assertPushed(ParseImportJob::class);
     }
 
     public function test_broker_1099_matches_link_by_account_name_and_merges_repeated_warnings(): void
