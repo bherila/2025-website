@@ -14,6 +14,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
+use App\Services\Finance\CapitalGains\WashSaleAdjustmentSynthesizer;
 use App\Services\Finance\LotMatcher;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
@@ -532,8 +533,9 @@ class ParseImportJob implements ShouldQueue
                     $parsedData = is_array($entry['parsed_data'] ?? null) ? $entry['parsed_data'] : [];
                     $transactions = $parsedData['transactions'] ?? [];
                     if (is_array($transactions) && ! empty($transactions)) {
-                        $defaultWashSaleTreatment = $this->washSaleTreatmentFromParsedData($parsedData);
-                        $transactions = $this->appendSummaryWashSaleAdjustmentTransactions(
+                        $washSaleAdjustmentSynthesizer = app(WashSaleAdjustmentSynthesizer::class);
+                        $defaultWashSaleTreatment = $washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+                        $transactions = $washSaleAdjustmentSynthesizer->appendSummaryWashSaleAdjustmentTransactions(
                             $transactions,
                             $parsedData,
                             $defaultWashSaleTreatment,
@@ -583,7 +585,7 @@ class ParseImportJob implements ShouldQueue
             $form8949Box = null;
             if (is_string($tx['form_8949_box'] ?? null)) {
                 $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
-                $form8949Box = in_array($candidateBox, ['A', 'B', 'C', 'D', 'E', 'F'], true) ? $candidateBox : null;
+                $form8949Box = in_array($candidateBox, WashSaleAdjustmentSynthesizer::FORM_8949_BOXES, true) ? $candidateBox : null;
             }
 
             $purchaseDateRaw = $tx['purchase_date'] ?? null;
@@ -595,9 +597,9 @@ class ParseImportJob implements ShouldQueue
                 $isShortTerm = $this->normalizeBooleanOrNull($tx['is_short_term']);
             } elseif (isset($tx['form_8949_box'])) {
                 $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
-                if (in_array($box, ['A', 'B', 'C'], true)) {
+                if (in_array($box, WashSaleAdjustmentSynthesizer::SHORT_TERM_FORM_8949_BOXES, true)) {
                     $isShortTerm = true;
-                } elseif (in_array($box, ['D', 'E', 'F'], true)) {
+                } elseif (in_array($box, WashSaleAdjustmentSynthesizer::LONG_TERM_FORM_8949_BOXES, true)) {
                     $isShortTerm = false;
                 }
             }
@@ -663,242 +665,6 @@ class ParseImportJob implements ShouldQueue
                 ]);
             }
         }
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsedData
-     */
-    private function washSaleTreatmentFromParsedData(array $parsedData): ?string
-    {
-        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
-        $candidates = [
-            $parsedData['wash_sale_treatment'] ?? null,
-            $parsedData['wash_sale_basis_treatment'] ?? null,
-            $parsedData['extraction_notes']['wash_sale_treatment'] ?? null,
-        ];
-
-        foreach ($candidates as $candidate) {
-            $treatment = $normalizer->normalizeTreatment($candidate);
-            if ($treatment !== BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN) {
-                return $treatment;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<int, mixed>  $transactions
-     * @param  array<string, mixed>  $parsedData
-     * @return array<int, mixed>
-     */
-    private function appendSummaryWashSaleAdjustmentTransactions(array $transactions, array $parsedData, mixed $defaultWashSaleTreatment): array
-    {
-        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
-        $normalizedDefault = $normalizer->normalizeTreatment($defaultWashSaleTreatment);
-
-        // Bail only when the broker explicitly signals that no Form 8949 W row should be added.
-        // For null / unknown document treatment, fall back to inferring from per-row treatments
-        // so that partially-populated AI outputs still get summary→row reconciliation.
-        if (in_array($normalizedDefault, [
-            BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
-            BrokerWashSaleTreatmentNormalizer::TREATMENT_NO_WASH_SALE_AMOUNT,
-        ], true)) {
-            return $transactions;
-        }
-
-        $normalizedTreatment = $normalizer->storesForm8949Adjustment($normalizedDefault)
-            ? $normalizedDefault
-            : $this->inferAdjustmentTreatmentFromTransactions($transactions);
-        if ($normalizedTreatment === null) {
-            return $transactions;
-        }
-
-        $sectionsByBox = $this->summarySectionsByForm8949Box($parsedData);
-        if ($sectionsByBox === []) {
-            return $transactions;
-        }
-
-        $washSaleByBox = $this->transactionWashSaleByForm8949Box($transactions);
-
-        foreach ($sectionsByBox as $box => $section) {
-            $summaryWashSale = $this->numericFromFirstKey($section, ['total_wash_sales', 'total_wash_sale_disallowed']);
-            if ($summaryWashSale === null || $summaryWashSale <= 0.02) {
-                continue;
-            }
-
-            $delta = round($summaryWashSale - ($washSaleByBox[$box] ?? 0.0), 4);
-            if ($delta <= 0.02) {
-                continue;
-            }
-
-            $saleDate = $this->lastTransactionSaleDateForBox($transactions, $box);
-            if ($saleDate === null) {
-                continue;
-            }
-
-            $transactions[] = [
-                'symbol' => 'WASHSALEADJ',
-                'description' => "Broker summary wash-sale adjustment (Form 8949 Box {$box})",
-                'cusip' => null,
-                'quantity' => 1,
-                'purchase_date' => 'various',
-                'sale_date' => $saleDate,
-                'proceeds' => 0.0,
-                'cost_basis' => 0.0,
-                'accrued_market_discount' => null,
-                'wash_sale_disallowed' => $delta,
-                'realized_gain_loss' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_NET_OF_WASH_SALES ? $delta : 0.0,
-                'is_short_term' => in_array($box, ['A', 'B', 'C'], true),
-                'form_8949_box' => $box,
-                'is_covered' => in_array($box, ['A', 'D'], true) ? true : (in_array($box, ['B', 'E'], true) ? false : null),
-                'wash_sale_treatment' => $normalizedTreatment,
-                'reconciliation_notes' => 'Synthetic adjustment created because the 1099-B summary reported more wash-sale disallowed than the extracted transaction rows.',
-                'skip_transaction_matching' => true,
-            ];
-        }
-
-        return $transactions;
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsedData
-     * @return array<string, array<string, mixed>>
-     */
-    private function summarySectionsByForm8949Box(array $parsedData): array
-    {
-        $sections = $parsedData['summary']['sections'] ?? [];
-        if (! is_array($sections)) {
-            return [];
-        }
-
-        $byBox = [];
-        foreach ($sections as $section) {
-            if (! is_array($section)) {
-                continue;
-            }
-
-            $box = $this->form8949BoxFromSummarySection($section);
-            if ($box !== null) {
-                $byBox[$box] = $section;
-            }
-        }
-
-        return $byBox;
-    }
-
-    /**
-     * @param  array<string, mixed>  $section
-     */
-    private function form8949BoxFromSummarySection(array $section): ?string
-    {
-        if (is_string($section['form_8949_box'] ?? null)) {
-            $box = strtoupper(trim((string) $section['form_8949_box']));
-            if (in_array($box, ['A', 'B', 'C', 'D', 'E', 'F'], true)) {
-                return $box;
-            }
-        }
-
-        $name = strtolower((string) ($section['name'] ?? ''));
-
-        return match (true) {
-            str_contains($name, 'box_a') || str_contains($name, 'box a') => 'A',
-            str_contains($name, 'box_b') || str_contains($name, 'box b') => 'B',
-            str_contains($name, 'box_c') || str_contains($name, 'box c') => 'C',
-            str_contains($name, 'box_d') || str_contains($name, 'box d') => 'D',
-            str_contains($name, 'box_e') || str_contains($name, 'box e') => 'E',
-            str_contains($name, 'box_f') || str_contains($name, 'box f') => 'F',
-            default => null,
-        };
-    }
-
-    /**
-     * @param  array<int, mixed>  $transactions
-     * @return array<string, float>
-     */
-    private function transactionWashSaleByForm8949Box(array $transactions): array
-    {
-        $byBox = [];
-        foreach ($transactions as $transaction) {
-            if (! is_array($transaction) || ! is_string($transaction['form_8949_box'] ?? null)) {
-                continue;
-            }
-
-            $box = strtoupper(trim((string) $transaction['form_8949_box']));
-            if (! in_array($box, ['A', 'B', 'C', 'D', 'E', 'F'], true)) {
-                continue;
-            }
-
-            $byBox[$box] = ($byBox[$box] ?? 0.0)
-                + (is_numeric($transaction['wash_sale_disallowed'] ?? null) ? abs((float) $transaction['wash_sale_disallowed']) : 0.0);
-        }
-
-        return $byBox;
-    }
-
-    /**
-     * Look at per-row `wash_sale_treatment` cues and return the first one that
-     * indicates a Form 8949 W row should be stored (gross or already-net).
-     * Used as a fallback when the document-level treatment is null or unknown.
-     *
-     * @param  array<int, mixed>  $transactions
-     */
-    private function inferAdjustmentTreatmentFromTransactions(array $transactions): ?string
-    {
-        $normalizer = app(BrokerWashSaleTreatmentNormalizer::class);
-        foreach ($transactions as $transaction) {
-            if (! is_array($transaction)) {
-                continue;
-            }
-
-            $treatment = $normalizer->normalizeTreatment($transaction['wash_sale_treatment'] ?? null);
-            if ($normalizer->storesForm8949Adjustment($treatment)) {
-                return $treatment;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<int, mixed>  $transactions
-     */
-    private function lastTransactionSaleDateForBox(array $transactions, string $box): ?string
-    {
-        $saleDates = [];
-        foreach ($transactions as $transaction) {
-            if (! is_array($transaction) || strtoupper((string) ($transaction['form_8949_box'] ?? '')) !== $box) {
-                continue;
-            }
-
-            $saleDate = $this->normalizeDateOrNull($transaction['sale_date'] ?? null);
-            if ($saleDate !== null) {
-                $saleDates[] = $saleDate;
-            }
-        }
-
-        if ($saleDates === []) {
-            return null;
-        }
-
-        rsort($saleDates);
-
-        return $saleDates[0];
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     * @param  string[]  $keys
-     */
-    private function numericFromFirstKey(array $data, array $keys): ?float
-    {
-        foreach ($keys as $key) {
-            if (is_numeric($data[$key] ?? null)) {
-                return (float) $data[$key];
-            }
-        }
-
-        return null;
     }
 
     /**
