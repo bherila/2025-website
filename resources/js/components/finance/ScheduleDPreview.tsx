@@ -1,19 +1,65 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronLeft } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronLeft, Loader2, Save } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { z } from 'zod'
 
 import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
 import { TaxFactSourcesModal } from '@/components/finance/TaxFactSourcesModal'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { fetchWrapper } from '@/fetchWrapper'
+import type { CapitalLossCarryoverLines } from '@/types/finance/tax-return'
 import type { ScheduleDFacts, ScheduleDRollupFact, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface ScheduleDPreviewProps {
   taxFacts?: ScheduleDFacts | null
   selectedYear?: number
+  availableYears?: number[]
+  priorYearCapitalLossCarryover?: CapitalLossCarryoverLines | null
   onOpenDoc?: (docId: number) => void
   onGoToForm1040?: () => void
+  onCarryoverSaved?: (() => Promise<void> | void) | undefined
+}
+
+const SCHEDULE_D_CARRYOVER_ENDPOINT = '/api/finance/schedule-d-carryovers'
+
+const nonnegativeMoneyString = z.string().trim().refine((value) => {
+  if (value === '') {
+    return true
+  }
+
+  const amount = Number(value)
+
+  return Number.isFinite(amount) && amount >= 0
+}, 'Enter zero or a positive amount.')
+
+const scheduleDCarryoverInputSchema = z.object({
+  short_term_loss_carryover: nonnegativeMoneyString,
+  long_term_loss_carryover: nonnegativeMoneyString,
+  notes: z.string(),
+})
+
+type ScheduleDCarryoverInputForm = z.infer<typeof scheduleDCarryoverInputSchema>
+
+interface ScheduleDCarryoverInputResponse {
+  id: number | null
+  tax_year: number
+  short_term_loss_carryover: number
+  long_term_loss_carryover: number
+  notes: string | null
+}
+
+interface CarryoverNotice {
+  title: string
+  body: string
+}
+
+function moneyInputString(value: number | null | undefined): string {
+  return value === null || value === undefined ? '0' : String(value)
 }
 
 function sourceFormLabel(source: TaxFactSource): string {
@@ -67,14 +113,141 @@ function RollupLine({ rollup }: { rollup: ScheduleDRollupFact }) {
   )
 }
 
+function carryoverNoticeFor({
+  taxYear,
+  availableYears,
+  hasOpeningCarryover,
+  priorYearCapitalLossCarryover,
+}: {
+  taxYear: number
+  availableYears: number[]
+  hasOpeningCarryover: boolean
+  priorYearCapitalLossCarryover: CapitalLossCarryoverLines | null | undefined
+}): CarryoverNotice | null {
+  if (hasOpeningCarryover) {
+    return null
+  }
+
+  if (priorYearCapitalLossCarryover?.hasCarryover) {
+    return {
+      title: 'Prior-year carryover not applied',
+      body: `The nearest prior-year preview shows ${fmtAmt(priorYearCapitalLossCarryover.totalCarryover)} of capital-loss carryover, but Schedule D lines 6 and 14 are still zero. Save opening carryovers below to apply them.`,
+    }
+  }
+
+  const hasExactPriorYear = availableYears.includes(taxYear - 1)
+
+  if (!hasExactPriorYear) {
+    return {
+      title: 'Prior-year Schedule D not found',
+      body: `${taxYear - 1} is not available in Tax Preview. New users often need to enter carryovers from their filed Schedule D or Capital Loss Carryover Worksheet before this preview is complete.`,
+    }
+  }
+
+  return {
+    title: 'Prior-year carryover showing zero',
+    body: 'The prior-year preview is present, but no opening capital-loss carryover is applied here. Confirm against the filed return and enter an override if needed.',
+  }
+}
+
 export default function ScheduleDPreview({
   taxFacts,
   selectedYear,
+  availableYears = [],
+  priorYearCapitalLossCarryover,
   onOpenDoc,
   onGoToForm1040,
+  onCarryoverSaved,
 }: ScheduleDPreviewProps) {
   const [line5DetailsOpen, setLine5DetailsOpen] = useState(false)
   const taxYear = selectedYear ?? new Date().getFullYear()
+  const [carryoverForm, setCarryoverForm] = useState<ScheduleDCarryoverInputForm>({
+    short_term_loss_carryover: '0',
+    long_term_loss_carryover: '0',
+    notes: '',
+  })
+  const [carryoverLoading, setCarryoverLoading] = useState(false)
+  const [carryoverSaving, setCarryoverSaving] = useState(false)
+  const [carryoverError, setCarryoverError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCarryovers = async () => {
+      setCarryoverLoading(true)
+      setCarryoverError(null)
+
+      try {
+        const row = await fetchWrapper.get(`${SCHEDULE_D_CARRYOVER_ENDPOINT}?year=${taxYear}`) as ScheduleDCarryoverInputResponse
+        if (!cancelled) {
+          setCarryoverForm({
+            short_term_loss_carryover: moneyInputString(row.short_term_loss_carryover),
+            long_term_loss_carryover: moneyInputString(row.long_term_loss_carryover),
+            notes: row.notes ?? '',
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setCarryoverError('Failed to load Schedule D carryover inputs.')
+        }
+      } finally {
+        if (!cancelled) {
+          setCarryoverLoading(false)
+        }
+      }
+    }
+
+    void loadCarryovers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [taxYear])
+
+  const hasOpeningCarryover = taxFacts ? taxFacts.line6Carryover !== 0 || taxFacts.line14Carryover !== 0 : false
+  const carryoverNotice = useMemo(() => carryoverNoticeFor({
+    taxYear,
+    availableYears,
+    hasOpeningCarryover,
+    priorYearCapitalLossCarryover,
+  }), [availableYears, hasOpeningCarryover, priorYearCapitalLossCarryover, taxYear])
+
+  async function saveCarryovers(): Promise<void> {
+    const parsed = scheduleDCarryoverInputSchema.safeParse(carryoverForm)
+    if (!parsed.success) {
+      setCarryoverError('Carryovers must be zero or positive amounts.')
+      return
+    }
+
+    setCarryoverSaving(true)
+    setCarryoverError(null)
+
+    try {
+      await fetchWrapper.put(SCHEDULE_D_CARRYOVER_ENDPOINT, {
+        tax_year: taxYear,
+        short_term_loss_carryover: Number(parsed.data.short_term_loss_carryover || 0),
+        long_term_loss_carryover: Number(parsed.data.long_term_loss_carryover || 0),
+        notes: parsed.data.notes.trim() || null,
+      })
+      await onCarryoverSaved?.()
+    } catch {
+      setCarryoverError('Failed to save Schedule D carryover inputs.')
+    } finally {
+      setCarryoverSaving(false)
+    }
+  }
+
+  function fillFromPriorYearPreview(): void {
+    if (!priorYearCapitalLossCarryover?.hasCarryover) {
+      return
+    }
+
+    setCarryoverForm((current) => ({
+      ...current,
+      short_term_loss_carryover: moneyInputString(priorYearCapitalLossCarryover.shortTermCarryover),
+      long_term_loss_carryover: moneyInputString(priorYearCapitalLossCarryover.longTermCarryover),
+    }))
+  }
 
   if (!taxFacts) {
     return <FactsLoadingPlaceholder label="Schedule D" />
@@ -153,6 +326,93 @@ export default function ScheduleDPreview({
           />
         </FormBlock>
       )}
+
+      <FormBlock title="Prior-Year Capital Loss Carryovers">
+        <div className="space-y-3 px-3 py-3">
+          {carryoverNotice && (
+            <Callout kind="warn" title={carryoverNotice.title}>
+              <p>{carryoverNotice.body}</p>
+            </Callout>
+          )}
+          {carryoverError && (
+            <div role="alert" className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {carryoverError}
+            </div>
+          )}
+          {carryoverLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Enter loss carryovers as positive amounts. The preview posts them to Schedule D line 6 and line 14 as negative values.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`schedule-d-short-carryover-${taxYear}`}>Short-term loss carryover</Label>
+                  <Input
+                    id={`schedule-d-short-carryover-${taxYear}`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={carryoverForm.short_term_loss_carryover}
+                    onChange={(event) => setCarryoverForm((current) => ({
+                      ...current,
+                      short_term_loss_carryover: event.target.value,
+                    }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`schedule-d-long-carryover-${taxYear}`}>Long-term loss carryover</Label>
+                  <Input
+                    id={`schedule-d-long-carryover-${taxYear}`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={carryoverForm.long_term_loss_carryover}
+                    onChange={(event) => setCarryoverForm((current) => ({
+                      ...current,
+                      long_term_loss_carryover: event.target.value,
+                    }))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                <div>Current line 6: {fmtAmt(taxFacts.line6Carryover)}</div>
+                <div>Current line 14: {fmtAmt(taxFacts.line14Carryover)}</div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`schedule-d-carryover-notes-${taxYear}`}>Notes</Label>
+                <Textarea
+                  id={`schedule-d-carryover-notes-${taxYear}`}
+                  value={carryoverForm.notes}
+                  onChange={(event) => setCarryoverForm((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="Filed return worksheet, preparer note, or other source"
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {priorYearCapitalLossCarryover?.hasCarryover
+                    ? `Prior-year preview carryover: ${fmtAmt(priorYearCapitalLossCarryover.totalCarryover)}`
+                    : 'Use the prior filed return if this is the first year tracked here.'}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {priorYearCapitalLossCarryover?.hasCarryover && (
+                    <Button type="button" variant="outline" size="sm" onClick={fillFromPriorYearPreview}>
+                      Use prior-year preview
+                    </Button>
+                  )}
+                  <Button type="button" size="sm" onClick={saveCarryovers} disabled={carryoverSaving}>
+                    {carryoverSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save carryovers
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </FormBlock>
 
       <div className="grid grid-cols-1 gap-4">
         <FormBlock title="Schedule D Part I — Short-Term">

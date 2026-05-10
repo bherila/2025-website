@@ -279,6 +279,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             'line8bGainLoss' => 'line8b',
             'line9GainLoss' => 'line9',
             'line10GainLoss' => 'line10',
+            'line11GainLoss' => 'line11',
             'line12GainLoss' => 'line12',
             'line13CapitalGainDistributions' => 'line13',
             'line15NetLongTerm' => 'line15',
@@ -293,6 +294,12 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
         foreach (($facts['scheduleD']['line5Sources'] ?? []) as $source) {
             if (is_array($source)) {
                 $rows[] = ['scheduleD', 'line5Source', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
+            }
+        }
+
+        foreach (($facts['scheduleD']['line11Sources'] ?? []) as $source) {
+            if (is_array($source)) {
+                $rows[] = ['scheduleD', 'line11Source', $source['label'] ?? '', $source['amount'] ?? 0, $source['id'] ?? ''];
             }
         }
 
@@ -359,6 +366,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             'totalGeneralIncome',
             'totalForeignTaxes',
             'totalLine4b',
+            'netForeignSourceTaxableIncome',
         ] as $key) {
             if (isset($facts['form1116'][$key])) {
                 $rows[] = ['form1116', $key, $key, $facts['form1116'][$key], ''];

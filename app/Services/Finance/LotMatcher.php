@@ -60,7 +60,9 @@ class LotMatcher
         float $moneyTolerance = self::MONEY_TOLERANCE,
     ): bool {
         return $this->nullableNumericClose($reportedLot->cost_basis, $accountLot->cost_basis, $moneyTolerance)
-            && $this->nullableNumericClose($reportedLot->realized_gain_loss, $accountLot->realized_gain_loss, $moneyTolerance);
+            && $this->nullableNumericClose($reportedLot->realized_gain_loss, $accountLot->realized_gain_loss, $moneyTolerance)
+            && $this->zeroEquivalentNumericClose($reportedLot->wash_sale_disallowed, $accountLot->wash_sale_disallowed, $moneyTolerance)
+            && $this->zeroEquivalentNumericClose($reportedLot->accrued_market_discount, $accountLot->accrued_market_discount, $moneyTolerance);
     }
 
     public function matchingSellTransactionExists(FinAccountLot $lot): bool
@@ -109,7 +111,7 @@ class LotMatcher
     }
 
     /**
-     * @return array{quantity: float, proceeds: float, cost_basis: float, realized_gain_loss: float, sale_date_days: int|null}
+     * @return array{quantity: float, proceeds: float, cost_basis: float, realized_gain_loss: float, wash_sale_disallowed: float, accrued_market_discount: float, sale_date_days: int|null}
      */
     public function deltas(FinAccountLot $reportedLot, ?FinAccountLot $accountLot): array
     {
@@ -119,6 +121,8 @@ class LotMatcher
                 'proceeds' => 0.0,
                 'cost_basis' => 0.0,
                 'realized_gain_loss' => 0.0,
+                'wash_sale_disallowed' => 0.0,
+                'accrued_market_discount' => 0.0,
                 'sale_date_days' => null,
             ];
         }
@@ -128,6 +132,8 @@ class LotMatcher
             'proceeds' => $this->numericValue($accountLot->proceeds) - $this->numericValue($reportedLot->proceeds),
             'cost_basis' => $this->numericValue($accountLot->cost_basis) - $this->numericValue($reportedLot->cost_basis),
             'realized_gain_loss' => $this->numericValue($accountLot->realized_gain_loss) - $this->numericValue($reportedLot->realized_gain_loss),
+            'wash_sale_disallowed' => $this->numericValue($accountLot->wash_sale_disallowed) - $this->numericValue($reportedLot->wash_sale_disallowed),
+            'accrued_market_discount' => $this->numericValue($accountLot->accrued_market_discount) - $this->numericValue($reportedLot->accrued_market_discount),
             'sale_date_days' => $this->dateDeltaDays($reportedLot, $accountLot),
         ];
     }
@@ -267,6 +273,11 @@ class LotMatcher
         }
 
         return $this->numericClose((float) $left, (float) $right, $tolerance);
+    }
+
+    private function zeroEquivalentNumericClose(mixed $left, mixed $right, float $tolerance): bool
+    {
+        return $this->numericClose($this->numericValue($left), $this->numericValue($right), $tolerance);
     }
 
     private function dateDeltaDays(FinAccountLot $reportedLot, FinAccountLot $accountLot): ?int

@@ -106,6 +106,51 @@ class TaxLotReconciliationEndpointTest extends TestCase
         $this->assertSame($reportedLot->lot_id, $lotsResponse->json('lots.0.lot_id'));
     }
 
+    public function test_apply_reconciliation_can_override_1099b_lot_with_account_lot(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $reportedLot = $this->makeClosedLot($account, [
+            'lot_source' => '1099b',
+            'wash_sale_disallowed' => null,
+        ]);
+        $statementLot = $this->makeClosedLot($account, [
+            'lot_source' => 'analyzer',
+            'wash_sale_disallowed' => 125,
+        ]);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/lots/reconciliation/apply", [
+            'supersede' => [[
+                'keep_lot_id' => $reportedLot->lot_id,
+                'drop_lot_id' => $statementLot->lot_id,
+            ]],
+        ])->assertOk();
+
+        $response = $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/lots/reconciliation/apply", [
+            'supersede' => [[
+                'keep_lot_id' => $statementLot->lot_id,
+                'drop_lot_id' => $reportedLot->lot_id,
+            ]],
+        ]);
+
+        $response->assertOk()->assertJson(['success' => true]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'lot_id' => $reportedLot->lot_id,
+            'superseded_by_lot_id' => $statementLot->lot_id,
+            'reconciliation_status' => 'accepted',
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'lot_id' => $statementLot->lot_id,
+            'superseded_by_lot_id' => null,
+            'reconciliation_status' => 'accepted',
+        ]);
+
+        $lotsResponse = $this->actingAs($user)->getJson('/api/finance/all/lots?status=closed&year=2025');
+        $lotsResponse->assertOk();
+        $this->assertCount(1, $lotsResponse->json('lots'));
+        $this->assertSame($statementLot->lot_id, $lotsResponse->json('lots.0.lot_id'));
+    }
+
     public function test_apply_reconciliation_rejects_lots_outside_account_scope(): void
     {
         $user = $this->createUser();

@@ -37,6 +37,7 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionsDedupeApiController;
 use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\Form8829InputController;
 use App\Http\Controllers\FinanceTool\Form8949LotExportController;
+use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
@@ -104,6 +105,8 @@ Route::middleware(['web', 'auth'])->delete('/finance/employment-entities/{id}/ye
 
 Route::middleware(['web', 'auth'])->get('/finance/form-8829', [Form8829InputController::class, 'index']);
 Route::middleware(['web', 'auth'])->put('/finance/form-8829', [Form8829InputController::class, 'upsert']);
+Route::middleware(['web', 'auth'])->get('/finance/schedule-d-carryovers', [ScheduleDCarryoverInputController::class, 'index']);
+Route::middleware(['web', 'auth'])->put('/finance/schedule-d-carryovers', [ScheduleDCarryoverInputController::class, 'upsert']);
 
 Route::middleware(['web', 'auth'])->get('/finance/tax-line-adjustments', [TaxLineAdjustmentController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-line-adjustments', [TaxLineAdjustmentController::class, 'store']);

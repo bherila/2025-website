@@ -1,9 +1,19 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import React from 'react'
 
+import { fetchWrapper } from '@/fetchWrapper'
 import type { ScheduleDFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import ScheduleDPreview from '../ScheduleDPreview'
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: jest.fn(),
+    put: jest.fn(),
+  },
+}))
+
+const mockedFetchWrapper = fetchWrapper as jest.Mocked<typeof fetchWrapper>
 
 function makeSource(overrides: Partial<TaxFactSource> = {}): TaxFactSource {
   return {
@@ -69,6 +79,12 @@ function makeFacts(overrides: Partial<ScheduleDFacts> = {}): ScheduleDFacts {
 }
 
 describe('ScheduleDPreview detail navigation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockedFetchWrapper.get.mockImplementation(() => new Promise(() => {}))
+    mockedFetchWrapper.put.mockResolvedValue({})
+  })
+
   it('renders detail buttons for Schedule D fact source rows and opens the associated tax document', () => {
     const onOpenDoc = jest.fn()
     const facts = makeFacts({
@@ -135,6 +151,77 @@ describe('ScheduleDPreview detail navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Form 1040 line 7' }))
 
     expect(onGoToForm1040).toHaveBeenCalledTimes(1)
+  })
+
+  it('flags missing prior-year carryovers and saves manual opening amounts', async () => {
+    const onCarryoverSaved = jest.fn()
+    mockedFetchWrapper.get.mockResolvedValue({
+      id: null,
+      tax_year: 2025,
+      short_term_loss_carryover: 0,
+      long_term_loss_carryover: 0,
+      notes: null,
+    })
+
+    render(
+      <ScheduleDPreview
+        taxFacts={makeFacts()}
+        selectedYear={2025}
+        availableYears={[2025]}
+        onCarryoverSaved={onCarryoverSaved}
+      />,
+    )
+
+    expect(await screen.findByText('Prior-year Schedule D not found')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Short-term loss carryover'), { target: { value: '7000' } })
+    fireEvent.change(screen.getByLabelText('Long-term loss carryover'), { target: { value: '2000' } })
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'From filed 2024 return' } })
+    fireEvent.click(screen.getByRole('button', { name: /save carryovers/i }))
+
+    await waitFor(() => {
+      expect(mockedFetchWrapper.put).toHaveBeenCalledWith('/api/finance/schedule-d-carryovers', {
+        tax_year: 2025,
+        short_term_loss_carryover: 7000,
+        long_term_loss_carryover: 2000,
+        notes: 'From filed 2024 return',
+      })
+    })
+    expect(onCarryoverSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it('can prefill carryovers from the prior-year preview calculation', async () => {
+    mockedFetchWrapper.get.mockResolvedValue({
+      id: null,
+      tax_year: 2025,
+      short_term_loss_carryover: 0,
+      long_term_loss_carryover: 0,
+      notes: null,
+    })
+
+    render(
+      <ScheduleDPreview
+        taxFacts={makeFacts()}
+        selectedYear={2025}
+        availableYears={[2025, 2024]}
+        priorYearCapitalLossCarryover={{
+          netShortTerm: -10000,
+          netLongTerm: -5000,
+          combined: -15000,
+          appliedToOrdinaryIncome: 3000,
+          shortTermCarryover: 7000,
+          longTermCarryover: 5000,
+          totalCarryover: 12000,
+          hasCarryover: true,
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('Prior-year carryover not applied')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Use prior-year preview' }))
+
+    expect(screen.getByLabelText<HTMLInputElement>('Short-term loss carryover').value).toBe('7000')
+    expect(screen.getByLabelText<HTMLInputElement>('Long-term loss carryover').value).toBe('5000')
   })
 
   it('renders Section 1256 Form 6781 allocations on Schedule D lines 4 and 11', () => {

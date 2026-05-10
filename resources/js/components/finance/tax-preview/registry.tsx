@@ -117,8 +117,11 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
     <ScheduleDPreview
       taxFacts={state.taxFacts?.scheduleD ?? null}
       selectedYear={state.year}
+      availableYears={state.availableYears}
+      priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
       onOpenDoc={openTaxDocumentDetail}
       onGoToForm1040={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}
+      onCarryoverSaved={() => state.refreshAll({ includeTaxFacts: true })}
     />
   )
 }

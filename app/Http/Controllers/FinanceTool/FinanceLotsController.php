@@ -227,7 +227,10 @@ class FinanceLotsController extends Controller
                 ]);
 
                 $keepLot = $this->reconciliationLotFromMap($lots, $keepLotId);
-                $keepLot->update(['reconciliation_status' => 'accepted']);
+                $keepLot->update([
+                    'superseded_by_lot_id' => null,
+                    'reconciliation_status' => 'accepted',
+                ]);
             }
 
             foreach ($acceptedLotIds as $lotId) {

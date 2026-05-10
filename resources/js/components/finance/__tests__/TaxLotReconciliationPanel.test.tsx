@@ -209,6 +209,53 @@ describe('TaxLotReconciliationPanel', () => {
     expect(mockGet).toHaveBeenCalledTimes(2)
   })
 
+  it('posts inverse supersede payload when overriding a 1099-B variance with the account lot', async () => {
+    mockGet.mockResolvedValue({
+      ...response,
+      summary: {
+        ...response.summary,
+        matched: 0,
+        variance: 1,
+      },
+      accounts: [{
+        ...response.accounts[0]!,
+        summary: {
+          ...response.accounts[0]!.summary,
+          matched: 0,
+          variance: 1,
+        },
+        rows: [{
+          ...response.accounts[0]!.rows[0]!,
+          status: 'variance',
+          reported_lot: lot(101, { wash_sale_disallowed: null }),
+          account_lot: lot(202, { lot_source: 'analyzer', tax_document_id: null, wash_sale_disallowed: 125 }),
+          candidate_lots: [lot(202, { lot_source: 'analyzer', tax_document_id: null, wash_sale_disallowed: 125 })],
+          deltas: {
+            quantity: 0,
+            proceeds: 0,
+            cost_basis: 0,
+            realized_gain_loss: 0,
+            wash_sale_disallowed: 125,
+            accrued_market_discount: 0,
+            sale_date_days: 0,
+          },
+        }],
+      }],
+    })
+    mockPost.mockResolvedValue({ success: true })
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /override 1099-b/i }))
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/api/finance/10/lots/reconciliation/apply', {
+        supersede: [{ keep_lot_id: 202, drop_lot_id: 101 }],
+      })
+    })
+  })
+
   it('renders applied state for rows that were already superseded', async () => {
     mockGet.mockResolvedValue({
       ...response,
@@ -234,6 +281,38 @@ describe('TaxLotReconciliationPanel', () => {
 
     await waitFor(() => expect(screen.getByText('Applied')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /use 1099-b/i })).not.toBeInTheDocument()
+  })
+
+  it('renders override applied state when the reported lot was superseded by the account lot', async () => {
+    mockGet.mockResolvedValue({
+      ...response,
+      accounts: [{
+        ...response.accounts[0]!,
+        rows: [{
+          ...response.accounts[0]!.rows[0]!,
+          status: 'variance',
+          reported_lot: lot(101, {
+            superseded_by_lot_id: 202,
+            reconciliation_status: 'accepted',
+          }),
+          account_lot: lot(202, {
+            lot_source: 'analyzer',
+            tax_document_id: null,
+            reconciliation_status: 'accepted',
+          }),
+          candidate_lots: [lot(202, {
+            lot_source: 'analyzer',
+            tax_document_id: null,
+            reconciliation_status: 'accepted',
+          })],
+        }],
+      }],
+    })
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Override applied')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /override 1099-b/i })).not.toBeInTheDocument()
   })
 
   it('renders accepted state for accepted account-only lots', async () => {

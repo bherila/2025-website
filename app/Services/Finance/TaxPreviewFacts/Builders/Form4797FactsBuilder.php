@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Enums\Finance\DeductionCategory;
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
@@ -13,12 +14,14 @@ class Form4797FactsBuilder extends TaxPreviewFactBuilder
 {
     /**
      * @param  UserDeduction[]  $userDeductions
+     * @param  FileForTaxDocument[]  $k1Docs
      */
-    public function build(array $userDeductions): Form4797Facts
+    public function build(array $userDeductions, array $k1Docs = []): Form4797Facts
     {
         $partISources = [
             ...$this->manualSources($userDeductions, DeductionCategory::Form4797PartI1231Gain->value, TaxFactSourceType::Form4797PartI1231Gain, TaxFactRouting::Form4797PartILine7, 'Form 4797 Part I line 7 net Section 1231 gain.'),
             ...$this->manualSources($userDeductions, DeductionCategory::Form4797PartI1231Loss->value, TaxFactSourceType::Form4797PartI1231Loss, TaxFactRouting::Form4797PartILine7, 'Form 4797 Part I line 7 net Section 1231 loss.', -1.0),
+            ...$this->k1Box10Sources($k1Docs),
         ];
         $partIISources = [
             ...$this->manualSources($userDeductions, DeductionCategory::Form4797PartIIOrdinaryGain->value, TaxFactSourceType::Form4797PartIIOrdinaryGain, TaxFactRouting::Form4797PartIILine18b, 'Form 4797 Part II line 18b ordinary gain.'),
@@ -93,14 +96,53 @@ class Form4797FactsBuilder extends TaxPreviewFactBuilder
     private function scheduleDSource(float $amount): TaxFactSource
     {
         return new TaxFactSource(
-            id: 'form-4797-schedule-d-line-12',
+            id: 'form-4797-schedule-d-line-11',
             label: 'Form 4797 net Section 1231 gain',
             amount: $amount,
             sourceType: TaxFactSourceType::Form4797PartI1231Gain,
-            routing: TaxFactRouting::ScheduleDLine12,
-            routingReason: 'A positive Form 4797 Part I net Section 1231 gain flows to Schedule D as long-term capital gain.',
+            routing: TaxFactRouting::ScheduleDLine11,
+            routingReason: 'A positive Form 4797 Part I net Section 1231 gain flows to Schedule D line 11 as long-term capital gain.',
             isReviewed: true,
         );
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     * @return TaxFactSource[]
+     */
+    private function k1Box10Sources(array $k1Docs): array
+    {
+        $sources = [];
+
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            $amount = $this->k1Field($data, '10');
+            if ($amount === 0.0) {
+                continue;
+            }
+
+            $partnerName = $this->k1PartnerName($doc, $data);
+            $sources[] = new TaxFactSource(
+                id: "k1-{$doc->id}-box10-form-4797-part-i",
+                label: "{$partnerName} — K-1 Box 10 Section 1231 gain/loss",
+                amount: $this->roundMoney($amount),
+                sourceType: TaxFactSourceType::K1Section1231Gain,
+                taxDocumentId: $doc->id,
+                formType: 'k1',
+                box: '10',
+                routing: TaxFactRouting::Form4797PartILine7,
+                routingReason: 'K-1 Box 10 Section 1231 gain/loss is reported through Form 4797 Part I before ordinary-vs-capital character is determined.',
+                isReviewed: $this->sourceIsReviewed($doc),
+                reviewStatus: $this->reviewStatus($doc),
+                reviewAction: $this->reviewAction($doc),
+            );
+        }
+
+        return $sources;
     }
 
     private function defaultLabel(string $category): string

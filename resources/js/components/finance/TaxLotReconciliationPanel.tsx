@@ -115,6 +115,15 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
     await apply(account.account_id, { supersede }, 'Updated lot reconciliation')
   }
 
+  async function preferAccountLot(account: TaxLotReconciliationAccount, row: TaxLotReconciliationRow): Promise<void> {
+    const supersede = overrideReportedRows(row)
+    if (supersede.length === 0) {
+      return
+    }
+
+    await apply(account.account_id, { supersede }, 'Overrode 1099-B lot with account lot')
+  }
+
   async function acceptAccountLot(account: TaxLotReconciliationAccount, row: TaxLotReconciliationRow): Promise<void> {
     if (!row.account_lot) {
       return
@@ -225,6 +234,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
             applying={applyingAccountId === account.account_id}
             onAcceptExact={() => void acceptExactMatches(account)}
             onUseReported={(row) => void preferReportedLot(account, row)}
+            onOverrideReported={(row) => void preferAccountLot(account, row)}
             onAcceptAccountLot={(row) => void acceptAccountLot(account, row)}
           />
         ))
@@ -238,12 +248,14 @@ function AccountReconciliationTable({
   applying,
   onAcceptExact,
   onUseReported,
+  onOverrideReported,
   onAcceptAccountLot,
 }: {
   account: TaxLotReconciliationAccount
   applying: boolean
   onAcceptExact: () => void
   onUseReported: (row: TaxLotReconciliationRow) => void
+  onOverrideReported: (row: TaxLotReconciliationRow) => void
   onAcceptAccountLot: (row: TaxLotReconciliationRow) => void
 }) {
   return (
@@ -270,6 +282,7 @@ function AccountReconciliationTable({
               <TableHead className="text-right">Proceeds Δ</TableHead>
               <TableHead className="text-right">Basis Δ</TableHead>
               <TableHead className="text-right">Gain Δ</TableHead>
+              <TableHead className="text-right">Wash Δ</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -291,11 +304,13 @@ function AccountReconciliationTable({
                 <TableCell className="text-right">{formatDelta(row.deltas.proceeds)}</TableCell>
                 <TableCell className="text-right">{formatDelta(row.deltas.cost_basis)}</TableCell>
                 <TableCell className="text-right">{formatDelta(row.deltas.realized_gain_loss)}</TableCell>
+                <TableCell className="text-right">{formatDelta(row.deltas.wash_sale_disallowed ?? null)}</TableCell>
                 <TableCell className="text-right">
                   <RowAction
                     row={row}
                     applying={applying}
                     onUseReported={onUseReported}
+                    onOverrideReported={onOverrideReported}
                     onAcceptAccountLot={onAcceptAccountLot}
                   />
                 </TableCell>
@@ -344,6 +359,14 @@ function LotSummary({ lot, source, duplicateCount = 0 }: { lot: TaxLotReconcilia
       <div className="text-muted-foreground">
         Proceeds {money(lot.proceeds)} · Basis {money(lot.cost_basis)}
       </div>
+      <div className="text-muted-foreground">
+        Gain {money(lot.realized_gain_loss)} · Wash {money(lot.wash_sale_disallowed)}
+      </div>
+      {lot.form_8949_box && (
+        <div className="text-muted-foreground">
+          Form 8949 box {lot.form_8949_box}{lot.is_covered === false ? ' · noncovered' : ''}
+        </div>
+      )}
       {lot.tax_document_filename && <div className="truncate text-muted-foreground">{lot.tax_document_filename}</div>}
     </div>
   )
@@ -397,26 +420,44 @@ function RowAction({
   row,
   applying,
   onUseReported,
+  onOverrideReported,
   onAcceptAccountLot,
 }: {
   row: TaxLotReconciliationRow
   applying: boolean
   onUseReported: (row: TaxLotReconciliationRow) => void
+  onOverrideReported: (row: TaxLotReconciliationRow) => void
   onAcceptAccountLot: (row: TaxLotReconciliationRow) => void
 }) {
   const supersede = supersedeRows(row)
   const supersedeApplied = isSupersedeApplied(row)
+  const overrideReported = overrideReportedRows(row)
+  const overrideApplied = isReportedOverrideApplied(row)
+
+  if (overrideApplied) {
+    return <span className="text-xs text-muted-foreground">Override applied</span>
+  }
 
   if (supersedeApplied) {
     return <span className="text-xs text-muted-foreground">Applied</span>
   }
 
-  if (supersede.length > 0) {
+  if (supersede.length > 0 || overrideReported.length > 0) {
     return (
-      <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={() => onUseReported(row)}>
-        <Link2 className="h-3.5 w-3.5" />
-        Use 1099-B
-      </Button>
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {overrideReported.length > 0 && (
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={() => onOverrideReported(row)}>
+            <Scale className="h-3.5 w-3.5" />
+            Override 1099-B
+          </Button>
+        )}
+        {supersede.length > 0 && (
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={() => onUseReported(row)}>
+            <Link2 className="h-3.5 w-3.5" />
+            Use 1099-B
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -446,6 +487,12 @@ function isSupersedeApplied(row: TaxLotReconciliationRow): boolean {
   return accountLots.length > 0 && accountLots.every(lot => lot.superseded_by_lot_id === reportedLot.lot_id)
 }
 
+function isReportedOverrideApplied(row: TaxLotReconciliationRow): boolean {
+  const reportedLot = row.reported_lot
+  const accountLot = row.account_lot
+  return Boolean(reportedLot && accountLot && reportedLot.superseded_by_lot_id === accountLot.lot_id)
+}
+
 function supersedeRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: number; drop_lot_id: number }> {
   const reportedLot = row.reported_lot
   if (!reportedLot) {
@@ -457,6 +504,16 @@ function supersedeRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: numbe
   return accountLots
     .filter(lot => lot.superseded_by_lot_id !== reportedLot.lot_id)
     .map(lot => ({ keep_lot_id: reportedLot.lot_id, drop_lot_id: lot.lot_id }))
+}
+
+function overrideReportedRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: number; drop_lot_id: number }> {
+  const reportedLot = row.reported_lot
+  const accountLot = row.account_lot
+  if (row.status !== 'variance' || !reportedLot || !accountLot || reportedLot.superseded_by_lot_id === accountLot.lot_id) {
+    return []
+  }
+
+  return [{ keep_lot_id: accountLot.lot_id, drop_lot_id: reportedLot.lot_id }]
 }
 
 function money(value: number | null): string {

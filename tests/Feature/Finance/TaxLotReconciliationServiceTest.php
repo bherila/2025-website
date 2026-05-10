@@ -389,6 +389,35 @@ class TaxLotReconciliationServiceTest extends TestCase
         $this->assertSame($sell->t_id, $row['transaction_match']['closing']['transaction']['t_id']);
     }
 
+    public function test_reconcile_flags_wash_sale_adjustment_variance(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $taxDocument = $this->makeTaxDocument($user->id);
+
+        $reportedLot = $this->makeLot($account, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $taxDocument->id,
+            'wash_sale_disallowed' => null,
+        ]);
+        $this->makeLot($account, [
+            'lot_source' => 'analyzer',
+            'purchase_date' => $reportedLot->purchase_date,
+            'sale_date' => $reportedLot->sale_date,
+            'quantity' => $reportedLot->quantity,
+            'proceeds' => $reportedLot->proceeds,
+            'cost_basis' => $reportedLot->cost_basis,
+            'realized_gain_loss' => $reportedLot->realized_gain_loss,
+            'wash_sale_disallowed' => 125,
+        ]);
+
+        $result = app(TaxLotReconciliationService::class)->reconcile($user->id, 2025);
+        $row = $result['accounts'][0]['rows'][0];
+
+        $this->assertSame('variance', $row['status']);
+        $this->assertSame(125.0, $row['deltas']['wash_sale_disallowed']);
+    }
+
     public function test_reconcile_preserves_null_transaction_amounts_and_quantities(): void
     {
         $user = $this->createUser();
