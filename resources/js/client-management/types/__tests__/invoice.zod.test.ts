@@ -78,7 +78,7 @@ describe('InvoiceSchema (zod)', () => {
     expect(result.data?.stripe_payments[0]?.failure_reason).toBeNull()
   })
 
-  it('InvoiceSchema accepts existing custom payment method labels', () => {
+  it('InvoiceSchema accepts existing custom payment method labels with compact nullable fields', () => {
     const payload = {
       client_invoice_id: 1,
       client_company_id: 2,
@@ -107,7 +107,6 @@ describe('InvoiceSchema (zod)', () => {
           amount: '123.45',
           payment_date: '2024-01-15',
           payment_method: 'Wire Transfer',
-          notes: null,
         },
       ],
       remaining_balance: '0.00',
@@ -116,6 +115,9 @@ describe('InvoiceSchema (zod)', () => {
 
     const result = InvoiceSchema.safeParse(payload)
     expect(result.success).toBe(true)
+    expect(result.data?.payments[0]?.notes).toBeNull()
+    expect(result.data?.payments[0]?.created_at).toBeNull()
+    expect(result.data?.payments[0]?.updated_at).toBeNull()
   })
 
   it('rejects an invalid invoice shape', () => {

@@ -6,6 +6,7 @@ import ClientPortalInvoicePage from '@/client-management/components/portal/Clien
 import ClientPortalInvoicesPage from '@/client-management/components/portal/ClientPortalInvoicesPage'
 import ClientPortalProjectPage from '@/client-management/components/portal/ClientPortalProjectPage'
 import ClientPortalTimePage from '@/client-management/components/portal/ClientPortalTimePage'
+import type { Invoice } from '@/client-management/types'
 import { _resetCache } from '@/hooks/useAppInitialData'
 import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
 
@@ -81,6 +82,7 @@ describe('Client-portal hydration', () => {
 
     // Renders synchronously from hydrated prop (use heading to avoid duplicate-text matches)
     expect(screen.getByRole('heading', { name: /Invoice TEST-001/ })).toBeInTheDocument()
+    expect(screen.getByText('Period: Jan 1, 2024 - Jan 31, 2024')).toBeInTheDocument()
     expect(screen.getByText(/1 entry deferred to a future invoice/)).toBeInTheDocument()
     expect(screen.getByText('Deferred Feature Work')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'TEST-002' })).toHaveAttribute('href', '/client/portal/acme/invoice/2')
@@ -89,7 +91,7 @@ describe('Client-portal hydration', () => {
   })
 
   it('ClientPortalInvoicePage renders sparse invoice period data without crashing', async () => {
-    const mockInvoice = {
+    const mockInvoice: Invoice = {
       client_invoice_id: 1,
       client_company_id: 2,
       invoice_number: 'TEST-LEGACY',
@@ -123,13 +125,13 @@ describe('Client-portal hydration', () => {
           companyName="Acme"
           companyId={1}
           invoiceId={1}
-          initialInvoice={mockInvoice as any}
+          initialInvoice={mockInvoice}
         />
       )
     })
 
     expect(screen.getByRole('heading', { name: /Invoice TEST-LEGACY/ })).toBeInTheDocument()
-    expect(screen.getByText('Period: —')).toBeInTheDocument()
+    expect(screen.queryByText(/^Period:/)).not.toBeInTheDocument()
   })
 
   it('ClientPortalProjectPage uses hydrated props and does not fetch tasks/users/files on mount', async () => {

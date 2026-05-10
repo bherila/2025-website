@@ -1,9 +1,7 @@
 import { z } from 'zod'
 
 import { ClientInvoicePaymentHydrationSchema,ClientInvoicePaymentSchema } from './invoice-payment'
-import { coerceMoney, coerceNumberLike } from './zod-helpers'
-
-const nullableStringDefault = z.string().nullable().optional().default(null)
+import { coerceMoney, coerceNumberLike, nullableStringDefault } from './zod-helpers'
 
 // Basic time entry schema (used as a subitem on an invoice line)
 export const InvoiceLineTimeEntrySchema = z.object({

@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { Check, ChevronLeft, ChevronRight, Clipboard, Pencil } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
@@ -41,13 +41,13 @@ function renderQuantity(qty: string): string {
 function formatInvoiceDate(date: string | null | undefined): string | null {
     if (!date) return null
 
-    const parsed = new Date(date)
+    const parsed = parseISO(date)
     if (Number.isNaN(parsed.getTime())) return null
 
     return format(parsed, 'MMM d, yyyy')
 }
 
-function renderInvoicePeriod(start: string | null | undefined, end: string | null | undefined): string {
+function renderInvoicePeriod(start: string | null | undefined, end: string | null | undefined): string | null {
     const formattedStart = formatInvoiceDate(start)
     const formattedEnd = formatInvoiceDate(end)
 
@@ -55,7 +55,7 @@ function renderInvoicePeriod(start: string | null | undefined, end: string | nul
         return `${formattedStart} - ${formattedEnd}`
     }
 
-    return formattedStart ?? formattedEnd ?? '—'
+    return formattedStart ?? formattedEnd
 }
 
 interface ClientPortalInvoicePageProps {
@@ -263,6 +263,7 @@ export default function ClientPortalInvoicePage({
     const hasPayments = invoice.payments.length > 0;
     const canVoid = invoice.status !== 'void' && invoice.status !== 'paid' && !hasPayments;
     const alreadyBilledLine = invoice.line_items.find((item) => item.line_type === 'reconciliation');
+    const invoicePeriod = renderInvoicePeriod(invoice.period_start, invoice.period_end);
 
     return (
         <>
@@ -295,7 +296,7 @@ export default function ClientPortalInvoicePage({
                         <div className="text-muted-foreground">
                             For {companyName} <br />
                             <div className="flex items-center gap-2">
-                                <span>Period: {renderInvoicePeriod(invoice.period_start, invoice.period_end)}</span>
+                                {invoicePeriod && <span>Period: {invoicePeriod}</span>}
                                 <InvoiceKindBadge value={invoice.invoice_kind} />
                                 {(invoice.previous_invoice_id || invoice.next_invoice_id) && (
                                     <span className="inline-flex items-center gap-1 ml-1 print:hidden">
