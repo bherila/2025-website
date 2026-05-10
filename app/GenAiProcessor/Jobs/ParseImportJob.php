@@ -614,7 +614,7 @@ class ParseImportJob implements ShouldQueue
                 washSaleDisallowed: $washSaleDisallowed,
                 treatment: $tx['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
             );
-            $reconciliationNotes = $this->appendReconciliationNotes(
+            $reconciliationNotes = BrokerWashSaleTreatmentNormalizer::appendReconciliationNotes(
                 $purchaseDateNormalized === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
                 is_string($tx['reconciliation_notes'] ?? null) ? $tx['reconciliation_notes'] : null,
                 $washSaleAmounts['note'],
@@ -861,13 +861,6 @@ class ParseImportJob implements ShouldQueue
         }
 
         return null;
-    }
-
-    private function appendReconciliationNotes(?string ...$notes): ?string
-    {
-        $notes = array_values(array_filter(array_map(static fn (?string $note): string => trim((string) $note), $notes)));
-
-        return $notes === [] ? null : implode(' ', $notes);
     }
 
     /**

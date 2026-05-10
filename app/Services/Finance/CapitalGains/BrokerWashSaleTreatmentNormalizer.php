@@ -185,12 +185,23 @@ class BrokerWashSaleTreatmentNormalizer
     }
 
     /**
+     * Trim, drop empty/null, and join reconciliation notes with single spaces.
+     */
+    public static function appendReconciliationNotes(?string ...$notes): ?string
+    {
+        $filtered = array_values(array_filter(array_map(
+            static fn (?string $note): string => trim((string) $note),
+            $notes,
+        )));
+
+        return $filtered === [] ? null : implode(' ', $filtered);
+    }
+
+    /**
      * @param  string[]  $notes
      */
     private function note(array $notes): ?string
     {
-        $notes = array_values(array_filter(array_map('trim', $notes)));
-
-        return $notes === [] ? null : implode(' ', $notes);
+        return self::appendReconciliationNotes(...$notes);
     }
 }

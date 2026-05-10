@@ -583,19 +583,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $lot['realized_gain_loss'] = round($amounts['realized_gain_loss'], 4);
         $lot['wash_sale_disallowed'] = round($amounts['wash_sale_disallowed'], 4);
         $lot['wash_sale_treatment'] = $amounts['wash_sale_treatment'];
-        $lot['reconciliation_notes'] = $this->appendReconciliationNotes(
+        $lot['reconciliation_notes'] = BrokerWashSaleTreatmentNormalizer::appendReconciliationNotes(
             is_string($lot['reconciliation_notes'] ?? null) ? $lot['reconciliation_notes'] : null,
             $amounts['note'],
         );
 
         return $lot;
-    }
-
-    private function appendReconciliationNotes(?string ...$notes): ?string
-    {
-        $notes = array_values(array_filter(array_map(static fn (?string $note): string => trim((string) $note), $notes)));
-
-        return $notes === [] ? null : implode(' ', $notes);
     }
 
     /**
