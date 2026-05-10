@@ -55,6 +55,59 @@ class LotImportFromParsedDataServiceTest extends TestCase
         $this->assertSame(0, FinAccountLot::query()->where('tax_document_id', $document->id)->count());
     }
 
+    public function test_rebuild_partitions_multiple_1099_b_entries_without_reusing_links(): void
+    {
+        $user = $this->createUser();
+        $firstAccount = $this->makeAccount($user->id, 'Wealthfront Taxable', 'WF-1111');
+        $secondAccount = $this->makeAccount($user->id, 'Wealthfront IRA', 'WF-2222');
+        $document = $this->makeBrokerDocumentWithEntries($user->id, [
+            [
+                'account_identifier' => 'WF-1111',
+                'account_name' => 'Wealthfront Taxable',
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'parsed_data' => $this->parsedData(['symbol' => 'VTI', 'description' => 'Vanguard Total Stock']),
+            ],
+            [
+                'account_identifier' => 'WF-2222',
+                'account_name' => 'Wealthfront IRA',
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'parsed_data' => $this->parsedData(['symbol' => 'VXUS', 'description' => 'Vanguard International']),
+            ],
+            [
+                'account_identifier' => 'WF-1111',
+                'account_name' => 'Wealthfront Taxable Duplicate',
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'parsed_data' => $this->parsedData(['symbol' => 'DUP', 'description' => 'Duplicate account entry']),
+            ],
+        ]);
+        TaxDocumentAccount::createLink((int) $document->id, $firstAccount->acct_id, '1099_b', 2025, aiIdentifier: 'WF-1111', aiAccountName: 'Wealthfront Taxable');
+        TaxDocumentAccount::createLink((int) $document->id, $secondAccount->acct_id, '1099_b', 2025, aiIdentifier: 'WF-2222', aiAccountName: 'Wealthfront IRA');
+
+        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+
+        $this->assertSame(2, $result->insertedCount);
+        $this->assertSame(0, $result->deletedCount);
+        $this->assertCount(1, $result->warnings);
+        $this->assertStringContainsString('Entry 2: did not resolve to a finance account', $result->warnings[0]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'tax_document_id' => $document->id,
+            'acct_id' => $firstAccount->acct_id,
+            'symbol' => 'VTI',
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'tax_document_id' => $document->id,
+            'acct_id' => $secondAccount->acct_id,
+            'symbol' => 'VXUS',
+        ]);
+        $this->assertDatabaseMissing('fin_account_lots', [
+            'tax_document_id' => $document->id,
+            'symbol' => 'DUP',
+        ]);
+    }
+
     public function test_rebuild_clears_stale_broker_lots_when_no_1099_b_entries_exist(): void
     {
         $user = $this->createUser();
@@ -85,8 +138,57 @@ class LotImportFromParsedDataServiceTest extends TestCase
 
         $this->assertSame(0, $result->insertedCount);
         $this->assertSame(1, $result->deletedCount);
-        $this->assertSame([], $result->warnings);
+        $this->assertCount(1, $result->warnings);
+        $this->assertStringContainsString('parsed data contains no 1099-B entries', $result->warnings[0]);
         $this->assertSame(0, FinAccountLot::query()->where('tax_document_id', $document->id)->count());
+    }
+
+    public function test_rebuild_warns_when_legacy_tagged_lots_are_replaced(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, $this->parsedData());
+        $this->makeLot($account, $document, [
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => 'import_1099b',
+        ]);
+
+        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+
+        $this->assertSame(1, $result->insertedCount);
+        $this->assertSame(1, $result->deletedCount);
+        $this->assertCount(1, $result->warnings);
+        $this->assertStringContainsString('legacy/manually tagged 1099-B lot(s) are in rebuild scope', $result->warnings[0]);
+    }
+
+    public function test_import_transactions_normalizes_dates_through_public_import_api(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makePendingBrokerDocument($user->id);
+
+        $result = app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, [
+            $this->transaction([
+                'symbol' => 'DATEOK',
+                'purchase_date' => 'various',
+                'sale_date' => '03/15/2024',
+            ]),
+            $this->transaction([
+                'symbol' => 'BADDATE',
+                'sale_date' => 'not-a-date',
+            ]),
+            $this->transaction([
+                'symbol' => 'NODATE',
+                'sale_date' => null,
+            ]),
+        ], (int) $document->id);
+
+        $this->assertSame(1, $result->insertedCount);
+        $lot = FinAccountLot::query()->where('tax_document_id', $document->id)->firstOrFail();
+        $this->assertSame('DATEOK', $lot->symbol);
+        $this->assertSame('2024-03-15', $lot->purchase_date?->format('Y-m-d'));
+        $this->assertSame('2024-03-15', $lot->sale_date?->format('Y-m-d'));
+        $this->assertStringContainsString('Date acquired reported as Various', (string) $lot->reconciliation_notes);
     }
 
     public function test_rebuild_synthesizes_summary_wash_sale_adjustment_and_warns_on_row_delta(): void
@@ -255,6 +357,27 @@ class LotImportFromParsedDataServiceTest extends TestCase
         }
 
         return $document;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $entries
+     */
+    private function makeBrokerDocumentWithEntries(int $userId, array $entries): FileForTaxDocument
+    {
+        return FileForTaxDocument::create([
+            'user_id' => $userId,
+            'tax_year' => 2025,
+            'form_type' => 'broker_1099',
+            'original_filename' => 'multi-account-1099.pdf',
+            'stored_filename' => 'multi-account-1099.pdf',
+            's3_path' => "tax_docs/{$userId}/multi-account-1099.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => str_repeat('f', 64),
+            'uploaded_by_user_id' => $userId,
+            'genai_status' => 'parsed',
+            'parsed_data' => $entries,
+        ]);
     }
 
     private function makePendingBrokerDocument(int $userId): FileForTaxDocument

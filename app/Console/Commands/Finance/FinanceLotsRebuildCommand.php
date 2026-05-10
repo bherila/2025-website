@@ -141,7 +141,7 @@ class FinanceLotsRebuildCommand extends BaseFinanceCommand
             return false;
         }
 
-        return FileForTaxDocument::query()
+        $documents = FileForTaxDocument::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->where(function (Builder $query): void {
@@ -152,6 +152,14 @@ class FinanceLotsRebuildCommand extends BaseFinanceCommand
             })
             ->orderBy('id')
             ->get();
+
+        if ($documents->isEmpty()) {
+            $this->error("No matching 1099-B documents found for user {$userId}, year {$year}.");
+
+            return false;
+        }
+
+        return $documents;
     }
 
     private function positiveIntegerOption(string $name): int|false|null
@@ -194,7 +202,7 @@ class FinanceLotsRebuildCommand extends BaseFinanceCommand
     {
         $first = $documents->first();
         if (! $first instanceof FileForTaxDocument) {
-            return 'Next: php artisan finance:lots-reconcile --all-broker-docs equivalent is not available; pass --tax-document for a specific document.';
+            throw new \LogicException('Cannot build a lot reconciliation hint without at least one tax document.');
         }
 
         if ($documents->count() === 1) {

@@ -70,9 +70,10 @@ class LotImportFromParsedDataService
         $entries = $this->parsed1099BEntries($taxDocument);
 
         return DB::transaction(function () use ($taxDocument, $entries, $dryRun): LotImportRebuildResult {
+            $legacyTaggedLotCount = $this->legacyTaggedBrokerLotsCount((int) $taxDocument->id);
             $deletedCount = $this->deleteExistingBrokerLots((int) $taxDocument->id, $dryRun);
             $insertedCount = 0;
-            $warnings = [];
+            $warnings = $this->replacementWarnings($entries, $deletedCount, $legacyTaggedLotCount, $dryRun);
             $lotIds = [];
             $usedLinkIds = [];
 
@@ -242,6 +243,19 @@ class LotImportFromParsedDataService
         return $deletedCount;
     }
 
+    private function legacyTaggedBrokerLotsCount(int $taxDocumentId): int
+    {
+        return (clone $this->existingBrokerLotsQuery($taxDocumentId))
+            ->where(function (Builder $query): void {
+                $query->whereNull('source')
+                    ->orWhereNotIn('source', [
+                        FinAccountLot::SOURCE_BROKER_1099B,
+                        FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+                    ]);
+            })
+            ->count();
+    }
+
     /**
      * @return Builder<FinAccountLot>
      */
@@ -259,6 +273,35 @@ class LotImportFromParsedDataService
                     'import_1099b',
                 ]);
             });
+    }
+
+    /**
+     * @param  array<int, array{entry_index: int, account_identifier: string|null, account_name: string|null, form_type: string, tax_year: int, parsed_data: array<string, mixed>}>  $entries
+     * @return list<string>
+     */
+    private function replacementWarnings(array $entries, int $deletedCount, int $legacyTaggedLotCount, bool $dryRun): array
+    {
+        if ($deletedCount === 0) {
+            return [];
+        }
+
+        $warnings = [];
+        if ($entries === []) {
+            $warnings[] = sprintf(
+                'Rebuild %s %d broker lot(s), but parsed data contains no 1099-B entries; verify document classification before relying on the rebuild.',
+                $dryRun ? 'would remove' : 'removed',
+                $deletedCount,
+            );
+        }
+
+        if ($legacyTaggedLotCount > 0) {
+            $warnings[] = sprintf(
+                '%d legacy/manually tagged 1099-B lot(s) are in rebuild scope for this tax document; parsed data is canonical and scoped lots are replaced before inserting rebuilt rows.',
+                $legacyTaggedLotCount,
+            );
+        }
+
+        return $warnings;
     }
 
     /**

@@ -92,6 +92,19 @@ class FinanceLotsRebuildCommandTest extends TestCase
             ->expectsOutputToContain('Pass --tax-document=<id> or --all-broker-docs.');
     }
 
+    public function test_lots_rebuild_command_reports_when_all_broker_docs_selection_is_empty(): void
+    {
+        $user = $this->createUser();
+
+        $this->artisan('finance:lots-rebuild', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--all-broker-docs' => true,
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain("No matching 1099-B documents found for user {$user->id}, year 2025.");
+    }
+
     private function makeAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(function () use ($userId): FinAccounts {

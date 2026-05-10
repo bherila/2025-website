@@ -9,16 +9,16 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use ReflectionMethod;
 use Tests\TestCase;
 
 /**
- * Tests for ParseImportJob's multi-account 1099-B import logic:
- * - normalizeDateOrNull
+ * Tests for ParseImportJob's multi-account import logic and service-backed 1099-B lot import:
  * - matchAccount
- * - upsertLotsFromBroker
+ * - LotImportFromParsedDataService::importTransactions
  * - createMultiAccountTaxDocumentResults (integration)
  */
 class ParseImportJob1099BTest extends TestCase
@@ -97,42 +97,6 @@ class ParseImportJob1099BTest extends TestCase
     }
 
     // ---------------------------------------------------------------------------
-    // normalizeDateOrNull
-    // ---------------------------------------------------------------------------
-
-    public function test_normalize_date_returns_null_for_various(): void
-    {
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', 'various'));
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', 'VARIOUS'));
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', '  various  '));
-    }
-
-    public function test_normalize_date_returns_null_for_empty_and_non_string(): void
-    {
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', ''));
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', null));
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', 42));
-    }
-
-    public function test_normalize_date_passes_through_yyyy_mm_dd(): void
-    {
-        $this->assertSame('2024-01-15', $this->callPrivate('normalizeDateOrNull', '2024-01-15'));
-        $this->assertSame('2023-12-31', $this->callPrivate('normalizeDateOrNull', '2023-12-31'));
-    }
-
-    public function test_normalize_date_parses_m_d_y_slash_format(): void
-    {
-        $this->assertSame('2024-03-15', $this->callPrivate('normalizeDateOrNull', '03/15/2024'));
-        $this->assertSame('2024-01-05', $this->callPrivate('normalizeDateOrNull', '1/5/2024'));
-    }
-
-    public function test_normalize_date_returns_null_for_unparseable(): void
-    {
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', 'not-a-date'));
-        $this->assertNull($this->callPrivate('normalizeDateOrNull', 'Q1 2024'));
-    }
-
-    // ---------------------------------------------------------------------------
     // matchAccount
     // ---------------------------------------------------------------------------
 
@@ -198,10 +162,10 @@ class ParseImportJob1099BTest extends TestCase
     }
 
     // ---------------------------------------------------------------------------
-    // upsertLotsFromBroker
+    // LotImportFromParsedDataService::importTransactions
     // ---------------------------------------------------------------------------
 
-    public function test_upsert_lots_creates_lot_without_synthetic_line_item(): void
+    public function test_import_transactions_creates_lot_without_synthetic_line_item(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -226,7 +190,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDocId);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, $taxDocId);
 
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'AAPL')->firstOrFail();
         $this->assertSame(10.0, (float) $lot->quantity);
@@ -251,7 +215,7 @@ class ParseImportJob1099BTest extends TestCase
         ]);
     }
 
-    public function test_upsert_lots_normalizes_empty_symbol_to_description_fallback(): void
+    public function test_import_transactions_normalizes_empty_symbol_to_description_fallback(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -273,14 +237,14 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
 
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->firstOrFail();
         $this->assertSame('APPLE INC', $lot->symbol);
         $this->assertSame('037833100', $lot->cusip);
     }
 
-    public function test_upsert_lots_determines_short_term_from_form_8949_box(): void
+    public function test_import_transactions_determines_short_term_from_form_8949_box(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -294,7 +258,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $shortTermTx, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $shortTermTx, (int) $taxDoc->id);
 
         $this->assertDatabaseHas('fin_account_lots', [
             'symbol' => 'TSLA',
@@ -302,7 +266,7 @@ class ParseImportJob1099BTest extends TestCase
         ]);
     }
 
-    public function test_upsert_lots_normalizes_string_booleans_from_ai_payload(): void
+    public function test_import_transactions_normalizes_string_booleans_from_ai_payload(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -316,14 +280,14 @@ class ParseImportJob1099BTest extends TestCase
             'is_short_term' => 'false', 'additional_info' => null,
         ]];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
 
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'NVDA')->firstOrFail();
         $this->assertFalse($lot->is_covered);
         $this->assertFalse($lot->is_short_term);
     }
 
-    public function test_upsert_lots_normalizes_explicit_broker_wash_sale_treatments(): void
+    public function test_import_transactions_normalizes_explicit_broker_wash_sale_treatments(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Brokerage');
@@ -353,7 +317,7 @@ class ParseImportJob1099BTest extends TestCase
             ],
         ];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
 
         $lots = FinAccountLot::where('acct_id', $account->acct_id)
             ->orderBy('symbol')
@@ -371,7 +335,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertSame(50.0, (float) $lots['NET']->wash_sale_disallowed);
     }
 
-    public function test_upsert_lots_links_existing_sell_line_items(): void
+    public function test_import_transactions_links_existing_sell_line_items(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -396,7 +360,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
 
         // Lot is created and linked to the native sell without creating a duplicate transaction.
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'MSFT')->firstOrFail();
@@ -407,7 +371,7 @@ class ParseImportJob1099BTest extends TestCase
             ->count());
     }
 
-    public function test_upsert_lots_does_not_reuse_same_sell_line_item_for_duplicate_lots(): void
+    public function test_import_transactions_does_not_reuse_same_sell_line_item_for_duplicate_lots(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -440,7 +404,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, [$lotRow, $lotRow], $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, [$lotRow, $lotRow], (int) $taxDoc->id);
 
         $closeIds = FinAccountLot::where('acct_id', $account->acct_id)
             ->where('symbol', 'MSFT')
@@ -451,7 +415,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertSame([$firstSell->t_id, $secondSell->t_id], $closeIds);
     }
 
-    public function test_upsert_lots_skips_rows_missing_required_fields(): void
+    public function test_import_transactions_skips_rows_missing_required_fields(): void
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
@@ -472,7 +436,7 @@ class ParseImportJob1099BTest extends TestCase
                 'additional_info' => null],
         ];
 
-        $this->callPrivate('upsertLotsFromBroker', $account->acct_id, $transactions, $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
 
         $this->assertDatabaseCount('fin_account_lots', 0);
     }

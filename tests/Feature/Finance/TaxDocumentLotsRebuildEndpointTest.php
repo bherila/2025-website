@@ -57,6 +57,27 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
         $this->assertDatabaseMissing('fin_account_lots', ['symbol' => 'STALE']);
     }
 
+    public function test_endpoint_rebuilds_unparsed_status_when_parsed_data_is_usable(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $document->update(['genai_status' => 'failed']);
+
+        $this->actingAs($user)
+            ->postJson("/api/finance/tax-documents/{$document->id}/lots-rebuild")
+            ->assertOk()
+            ->assertJsonPath('insertedCount', 1)
+            ->assertJsonPath('deletedCount', 0)
+            ->assertJsonPath('warnings', []);
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'tax_document_id' => $document->id,
+            'symbol' => 'AAPL',
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+        ]);
+    }
+
     public function test_endpoint_refuses_unparsed_document_without_usable_parsed_data(): void
     {
         $user = $this->createUser();
