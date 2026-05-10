@@ -73,7 +73,25 @@ describe('InvoicePayPanel', () => {
     )
 
     expect(screen.getByText('Manual Payment Required')).toBeInTheDocument()
+    expect(screen.getByText('Manual Payment Required').closest('[data-slot="card"]')).toHaveClass('print:hidden')
     expect(screen.queryByText('Pay This Invoice')).not.toBeInTheDocument()
+  })
+
+  it('hides the online payment panel when printing', async () => {
+    mockGet.mockResolvedValue({ payment_methods: [] })
+
+    render(
+      <InvoicePayPanel
+        invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
+        companyId={20}
+        stripePublishableKey="pk_test_local"
+        stripeMaxAmountCents={100000}
+        onPaymentUpdated={() => undefined}
+      />
+    )
+
+    expect(await screen.findByText('Pay This Invoice')).toBeInTheDocument()
+    expect(screen.getByText('Pay This Invoice').closest('[data-slot="card"]')).toHaveClass('print:hidden')
   })
 
   it('defaults saving a new payment method to explicit opt-in', async () => {

@@ -6,6 +6,7 @@ import ClientPortalInvoicePage from '@/client-management/components/portal/Clien
 import ClientPortalInvoicesPage from '@/client-management/components/portal/ClientPortalInvoicesPage'
 import ClientPortalProjectPage from '@/client-management/components/portal/ClientPortalProjectPage'
 import ClientPortalTimePage from '@/client-management/components/portal/ClientPortalTimePage'
+import type { Invoice } from '@/client-management/types'
 import { _resetCache } from '@/hooks/useAppInitialData'
 import { makePortalFetchMock } from '@/test-utils/portalFetchMock'
 
@@ -81,11 +82,56 @@ describe('Client-portal hydration', () => {
 
     // Renders synchronously from hydrated prop (use heading to avoid duplicate-text matches)
     expect(screen.getByRole('heading', { name: /Invoice TEST-001/ })).toBeInTheDocument()
+    expect(screen.getByText('Period: Jan 1, 2024 - Jan 31, 2024')).toBeInTheDocument()
     expect(screen.getByText(/1 entry deferred to a future invoice/)).toBeInTheDocument()
     expect(screen.getByText('Deferred Feature Work')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'TEST-002' })).toHaveAttribute('href', '/client/portal/acme/invoice/2')
     // ensure no invoice-specific network request was made
     expect((window as any).fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/client/portal/acme/invoices/1'))
+  })
+
+  it('ClientPortalInvoicePage renders sparse invoice period data without crashing', async () => {
+    const mockInvoice: Invoice = {
+      client_invoice_id: 1,
+      client_company_id: 2,
+      invoice_number: 'TEST-LEGACY',
+      invoice_total: '100.00',
+      issue_date: null,
+      due_date: null,
+      paid_date: null,
+      status: 'issued',
+      period_start: null,
+      period_end: null,
+      retainer_hours_included: '0',
+      hours_worked: '0',
+      rollover_hours_used: '0',
+      unused_hours_balance: '0',
+      negative_hours_balance: '0',
+      starting_unused_hours: '0',
+      starting_negative_hours: '0',
+      hours_billed_at_rate: '0',
+      notes: null,
+      line_items: [],
+      payments: [],
+      stripe_payments: [],
+      remaining_balance: '100.00',
+      payments_total: '0.00',
+    }
+
+    await act(async () => {
+      render(
+        <ClientPortalInvoicePage
+          slug="acme"
+          companyName="Acme"
+          companyId={1}
+          invoiceId={1}
+          initialInvoice={mockInvoice}
+        />
+      )
+    })
+
+    expect(screen.getByRole('heading', { name: /Invoice TEST-LEGACY/ })).toBeInTheDocument()
+    expect(screen.queryByText(/^Period:/)).not.toBeInTheDocument()
   })
 
   it('ClientPortalProjectPage uses hydrated props and does not fetch tasks/users/files on mount', async () => {
