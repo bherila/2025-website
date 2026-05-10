@@ -38,6 +38,26 @@ function renderQuantity(qty: string): string {
     return qty
 }
 
+function formatInvoiceDate(date: string | null | undefined): string | null {
+    if (!date) return null
+
+    const parsed = new Date(date)
+    if (Number.isNaN(parsed.getTime())) return null
+
+    return format(parsed, 'MMM d, yyyy')
+}
+
+function renderInvoicePeriod(start: string | null | undefined, end: string | null | undefined): string {
+    const formattedStart = formatInvoiceDate(start)
+    const formattedEnd = formatInvoiceDate(end)
+
+    if (formattedStart && formattedEnd) {
+        return `${formattedStart} - ${formattedEnd}`
+    }
+
+    return formattedStart ?? formattedEnd ?? '—'
+}
+
 interface ClientPortalInvoicePageProps {
     slug: string;
     companyName: string;
@@ -275,7 +295,7 @@ export default function ClientPortalInvoicePage({
                         <div className="text-muted-foreground">
                             For {companyName} <br />
                             <div className="flex items-center gap-2">
-                                <span>Period: {format(new Date(invoice.period_start!), 'MMM d, yyyy')} - {format(new Date(invoice.period_end!), 'MMM d, yyyy')}</span>
+                                <span>Period: {renderInvoicePeriod(invoice.period_start, invoice.period_end)}</span>
                                 <InvoiceKindBadge value={invoice.invoice_kind} />
                                 {(invoice.previous_invoice_id || invoice.next_invoice_id) && (
                                     <span className="inline-flex items-center gap-1 ml-1 print:hidden">

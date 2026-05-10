@@ -88,6 +88,50 @@ describe('Client-portal hydration', () => {
     expect((window as any).fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/client/portal/acme/invoices/1'))
   })
 
+  it('ClientPortalInvoicePage renders sparse invoice period data without crashing', async () => {
+    const mockInvoice = {
+      client_invoice_id: 1,
+      client_company_id: 2,
+      invoice_number: 'TEST-LEGACY',
+      invoice_total: '100.00',
+      issue_date: null,
+      due_date: null,
+      paid_date: null,
+      status: 'issued',
+      period_start: null,
+      period_end: null,
+      retainer_hours_included: '0',
+      hours_worked: '0',
+      rollover_hours_used: '0',
+      unused_hours_balance: '0',
+      negative_hours_balance: '0',
+      starting_unused_hours: '0',
+      starting_negative_hours: '0',
+      hours_billed_at_rate: '0',
+      notes: null,
+      line_items: [],
+      payments: [],
+      stripe_payments: [],
+      remaining_balance: '100.00',
+      payments_total: '0.00',
+    }
+
+    await act(async () => {
+      render(
+        <ClientPortalInvoicePage
+          slug="acme"
+          companyName="Acme"
+          companyId={1}
+          invoiceId={1}
+          initialInvoice={mockInvoice as any}
+        />
+      )
+    })
+
+    expect(screen.getByRole('heading', { name: /Invoice TEST-LEGACY/ })).toBeInTheDocument()
+    expect(screen.getByText('Period: —')).toBeInTheDocument()
+  })
+
   it('ClientPortalProjectPage uses hydrated props and does not fetch tasks/users/files on mount', async () => {
     const fetchMock = (window as any).fetch
 

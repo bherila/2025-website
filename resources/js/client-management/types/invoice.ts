@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { ClientInvoicePaymentHydrationSchema,ClientInvoicePaymentSchema } from './invoice-payment'
 import { coerceMoney, coerceNumberLike } from './zod-helpers'
 
+const nullableStringDefault = z.string().nullable().optional().default(null)
+
 // Basic time entry schema (used as a subitem on an invoice line)
 export const InvoiceLineTimeEntrySchema = z.object({
   name: z.string().nullable(),
@@ -47,13 +49,13 @@ export type InvoiceLine = z.infer<typeof InvoiceLineSchema>
 export const InvoiceStripePaymentSchema = z.object({
   id: z.number(),
   stripe_payment_intent_id: z.string(),
-  stripe_payment_method_id: z.string().nullable(),
+  stripe_payment_method_id: nullableStringDefault,
   amount: z.number(),
   status: z.string(),
-  failure_reason: z.string().nullable(),
-  last_event_id: z.string().nullable(),
-  created_at: z.string().nullable(),
-  updated_at: z.string().nullable(),
+  failure_reason: nullableStringDefault,
+  last_event_id: nullableStringDefault,
+  created_at: nullableStringDefault,
+  updated_at: nullableStringDefault,
 })
 export type InvoiceStripePayment = z.infer<typeof InvoiceStripePaymentSchema>
 
