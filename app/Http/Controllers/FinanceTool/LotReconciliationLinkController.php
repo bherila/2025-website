@@ -88,6 +88,22 @@ class LotReconciliationLinkController extends Controller
     {
         return FinAccountLot::query()
             ->whereKey($id)
+            ->whereNull('tax_document_id')
+            ->where(function ($query): void {
+                $query->whereNull('source')
+                    ->orWhereNotIn('source', [
+                        FinAccountLot::SOURCE_BROKER_1099B,
+                        FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+                    ]);
+            })
+            ->where(function ($query): void {
+                $query->whereNull('lot_source')
+                    ->orWhereNotIn('lot_source', [
+                        FinAccountLot::SOURCE_1099B,
+                        FinAccountLot::SOURCE_1099B_UNDERSCORE,
+                        'import_1099b',
+                    ]);
+            })
             ->whereHas('account', fn ($accountQuery) => $accountQuery->withoutGlobalScopes()->where('acct_owner', (int) Auth::id()))
             ->firstOrFail();
     }

@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use Tests\TestCase;
 
@@ -34,7 +35,14 @@ class LotMatcherServiceTest extends TestCase
     {
         [$document, $account] = $this->documentAndAccount();
         $this->makeBrokerLot($account, $document);
-        $this->makeAccountLot($account, ['proceeds' => 1250.01]);
+        $this->makeAccountLot($account, [
+            'proceeds' => 1250.01,
+            'cost_basis' => 900,
+        ]);
+        $this->makeAccountLot($account, [
+            'proceeds' => 1250.01,
+            'cost_basis' => 1000.01,
+        ]);
 
         app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
 
@@ -42,6 +50,67 @@ class LotMatcherServiceTest extends TestCase
         $this->assertSame(FinLotReconciliationLink::STATE_AUTO_MATCHED, $link->state);
         $this->assertSame('fuzzy_amounts', $link->match_reason['reason_code']);
         $this->assertSame(0.01, round((float) $link->match_reason['deltas']['proceeds'], 2));
+    }
+
+    public function test_treatment_mismatch_does_not_auto_match(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document, [
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+        ]);
+        $this->makeAccountLot($account, [
+            'form_8949_box' => 'D',
+            'is_short_term' => false,
+        ]);
+
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $this->assertSame(0, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_BROKER_ONLY]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_ACCOUNT_ONLY]);
+    }
+
+    public function test_treatment_match_required_for_fuzzy_amounts(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document, [
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+        ]);
+        $this->makeAccountLot($account, [
+            'proceeds' => 1250.01,
+            'cost_basis' => 1000.01,
+            'form_8949_box' => 'D',
+            'is_short_term' => false,
+        ]);
+
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $this->assertSame(0, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_BROKER_ONLY]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_ACCOUNT_ONLY]);
+    }
+
+    public function test_treatment_match_required_for_date_delta(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document, [
+            'sale_date' => '2025-02-07',
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+        ]);
+        $this->makeAccountLot($account, [
+            'sale_date' => '2025-02-10',
+            'form_8949_box' => 'D',
+            'is_short_term' => false,
+        ]);
+
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $this->assertSame(0, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_BROKER_ONLY]);
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_ACCOUNT_ONLY]);
     }
 
     public function test_date_delta_matches_one_weekday_apart(): void
@@ -56,6 +125,19 @@ class LotMatcherServiceTest extends TestCase
         $this->assertSame(FinLotReconciliationLink::STATE_AUTO_MATCHED, $link->state);
         $this->assertSame('date_delta', $link->match_reason['reason_code']);
         $this->assertSame(3, $link->match_reason['deltas']['date_days']);
+    }
+
+    public function test_date_delta_can_see_account_lots_just_outside_tax_year(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document, ['sale_date' => '2025-01-01']);
+        $this->makeAccountLot($account, ['sale_date' => '2024-12-31']);
+
+        app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $link = FinLotReconciliationLink::query()->firstOrFail();
+        $this->assertSame(FinLotReconciliationLink::STATE_AUTO_MATCHED, $link->state);
+        $this->assertSame('date_delta', $link->match_reason['reason_code']);
     }
 
     public function test_split_broker_matches_one_broker_lot_to_multiple_account_lots(): void
@@ -157,6 +239,24 @@ class LotMatcherServiceTest extends TestCase
         $this->assertSame($firstRows, $this->linkRows());
     }
 
+    public function test_preview_preserves_accepted_decisions_by_default(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $service = app(LotMatcherService::class);
+        $service->runMatcherForDocument((int) $document->id);
+        $link = FinLotReconciliationLink::query()->firstOrFail();
+        $service->acceptBrokerLink((int) $link->id, $this->createUser()->id);
+
+        $preservedPreview = $service->previewMatcherForDocument((int) $document->id);
+        $rebuildPreview = $service->previewMatcherForDocument((int) $document->id, preserveDecisions: false);
+
+        $this->assertSame(0, $preservedPreview->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame([], $preservedPreview->proposals);
+        $this->assertSame(1, $rebuildPreview->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+    }
+
     public function test_preserve_decisions_keeps_accepted_links_on_rerun(): void
     {
         [$document, $account] = $this->documentAndAccount();
@@ -205,6 +305,32 @@ class LotMatcherServiceTest extends TestCase
         $this->assertSame(FinLotReconciliationLink::STATE_AUTO_MATCHED, FinLotReconciliationLink::query()->firstOrFail()->state);
     }
 
+    public function test_matcher_partitions_multiple_tax_document_accounts(): void
+    {
+        $user = $this->createUser();
+        $firstAccount = $this->makeAccount($user->id);
+        $secondAccount = $this->makeAccount($user->id);
+        $document = $this->makeTaxDocument($user->id);
+        TaxDocumentAccount::createLink((int) $document->id, $firstAccount->acct_id, '1099_b', 2025, isReviewed: true);
+        TaxDocumentAccount::createLink((int) $document->id, $secondAccount->acct_id, '1099_b', 2025, isReviewed: true);
+        $firstBrokerLot = $this->makeBrokerLot($firstAccount, $document, ['symbol' => 'AAPL']);
+        $secondBrokerLot = $this->makeBrokerLot($secondAccount, $document, ['symbol' => 'MSFT']);
+        $firstAccountLot = $this->makeAccountLot($firstAccount, ['symbol' => 'AAPL']);
+        $secondAccountLot = $this->makeAccountLot($secondAccount, ['symbol' => 'MSFT']);
+
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $this->assertSame(2, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertDatabaseHas('fin_lot_reconciliation_links', [
+            'broker_lot_id' => $firstBrokerLot->lot_id,
+            'account_lot_id' => $firstAccountLot->lot_id,
+        ]);
+        $this->assertDatabaseHas('fin_lot_reconciliation_links', [
+            'broker_lot_id' => $secondBrokerLot->lot_id,
+            'account_lot_id' => $secondAccountLot->lot_id,
+        ]);
+    }
+
     /**
      * @return array{FileForTaxDocument, FinAccounts}
      */
@@ -222,8 +348,8 @@ class LotMatcherServiceTest extends TestCase
         return FinAccounts::withoutEvents(function () use ($userId): FinAccounts {
             return FinAccounts::withoutGlobalScopes()->forceCreate([
                 'acct_owner' => $userId,
-                'acct_name' => 'Brokerage',
-                'acct_number' => '1234',
+                'acct_name' => fake()->unique()->company(),
+                'acct_number' => fake()->unique()->numerify('####'),
                 'acct_last_balance' => '0',
             ]);
         });

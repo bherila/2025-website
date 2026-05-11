@@ -49,7 +49,7 @@ class FinanceLotsMatchCommand extends BaseFinanceCommand
 
         foreach ($documents as $document) {
             $result = $isDryRun
-                ? $this->lotMatcherService->previewMatcherForDocument((int) $document->id)
+                ? $this->lotMatcherService->previewMatcherForDocument((int) $document->id, $preserveDecisions)
                 : $this->lotMatcherService->runMatcherForDocument((int) $document->id, $preserveDecisions);
 
             $results[] = $this->documentPayload($document, $result);

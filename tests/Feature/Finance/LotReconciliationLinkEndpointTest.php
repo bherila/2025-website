@@ -86,13 +86,31 @@ class LotReconciliationLinkEndpointTest extends TestCase
     {
         [$document, $account, $userId] = $this->documentAndAccount();
         $brokerLot = $this->makeBrokerLot($account, $document);
+        $duplicateLink = FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => null,
+            'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
+            'match_reason' => [
+                'reason_code' => 'broker_only',
+                'score' => 0.0,
+                'deltas' => [
+                    'proceeds' => null,
+                    'basis' => null,
+                    'wash' => null,
+                    'qty' => null,
+                    'date_days' => null,
+                ],
+                'notes' => null,
+            ],
+        ]);
         $oldAccountLot = $this->makeAccountLot($account);
-        $newAccountLot = $this->makeAccountLot($account, ['proceeds' => 1260]);
-        $link = $this->makeLink($document, $brokerLot, $oldAccountLot);
+        $newAccountLot = $this->makeAccountLot($account);
+        $this->makeLink($document, $brokerLot, $oldAccountLot);
         $owner = User::query()->findOrFail($userId);
 
         $this->actingAs($owner)
-            ->postJson("/api/finance/lot-reconciliation-links/{$link->id}/mark-duplicate")
+            ->postJson("/api/finance/lot-reconciliation-links/{$duplicateLink->id}/mark-duplicate")
             ->assertOk()
             ->assertJsonPath('state', FinLotReconciliationLink::STATE_IGNORED_DUPLICATE);
 
@@ -102,9 +120,54 @@ class LotReconciliationLinkEndpointTest extends TestCase
                 'account_lot_id' => $newAccountLot->lot_id,
             ])
             ->assertOk()
-            ->assertJsonPath('state', FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE)
+            ->assertJsonPath('state', FinLotReconciliationLink::STATE_AUTO_MATCHED)
             ->assertJsonPath('brokerLotId', $brokerLot->lot_id)
             ->assertJsonPath('accountLotId', $newAccountLot->lot_id);
+    }
+
+    public function test_relink_endpoint_rejects_broker_reported_account_target(): void
+    {
+        [$document, $account, $userId] = $this->documentAndAccount();
+        $brokerLot = $this->makeBrokerLot($account, $document);
+        $otherBrokerLot = $this->makeBrokerLot($account, $document);
+        $owner = User::query()->findOrFail($userId);
+
+        $this->actingAs($owner)
+            ->postJson('/api/finance/lot-reconciliation-links/relink', [
+                'broker_lot_id' => $brokerLot->lot_id,
+                'account_lot_id' => $otherBrokerLot->lot_id,
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_transition_endpoint_returns_validation_error_for_invalid_state_change(): void
+    {
+        [$document, $account, $userId] = $this->documentAndAccount();
+        $brokerLot = $this->makeBrokerLot($account, $document);
+        $link = FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => null,
+            'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
+            'match_reason' => [
+                'reason_code' => 'broker_only',
+                'score' => 0.0,
+                'deltas' => [
+                    'proceeds' => null,
+                    'basis' => null,
+                    'wash' => null,
+                    'qty' => null,
+                    'date_days' => null,
+                ],
+                'notes' => null,
+            ],
+        ]);
+        $owner = User::query()->findOrFail($userId);
+
+        $this->actingAs($owner)
+            ->postJson("/api/finance/lot-reconciliation-links/{$link->id}/accept-broker")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('state');
     }
 
     private function makeLink(FileForTaxDocument $document, FinAccountLot $brokerLot, FinAccountLot $accountLot): FinLotReconciliationLink

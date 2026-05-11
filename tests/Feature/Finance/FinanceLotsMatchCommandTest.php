@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
+use App\Services\Finance\CapitalGains\LotMatcherService;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -39,6 +40,28 @@ class FinanceLotsMatchCommandTest extends TestCase
             ->expectsOutputToContain('Dry-run mode');
 
         $this->assertSame(0, FinLotReconciliationLink::query()->count());
+    }
+
+    public function test_lots_match_dry_run_honors_preserve_decisions(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $service = app(LotMatcherService::class);
+        $service->runMatcherForDocument((int) $document->id);
+        $link = FinLotReconciliationLink::query()->firstOrFail();
+        $service->acceptBrokerLink((int) $link->id, $this->createUser()->id);
+
+        $exitCode = Artisan::call('finance:lots-match', [
+            '--tax-document' => $document->id,
+            '--dry-run' => true,
+            '--format' => 'json',
+        ]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame(0, $payload['totals'][FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame([], $payload['results'][0]['proposals']);
     }
 
     public function test_lots_match_all_broker_docs_walks_user_year(): void

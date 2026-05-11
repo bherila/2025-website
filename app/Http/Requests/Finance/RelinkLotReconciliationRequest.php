@@ -23,8 +23,8 @@ class RelinkLotReconciliationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'broker_lot_id' => ['required', 'integer', 'min:1'],
-            'account_lot_id' => ['required', 'integer', 'min:1'],
+            'broker_lot_id' => ['required', 'integer', 'min:1', 'exists:fin_account_lots,lot_id'],
+            'account_lot_id' => ['required', 'integer', 'min:1', 'exists:fin_account_lots,lot_id'],
         ];
     }
 }

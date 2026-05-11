@@ -9,6 +9,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\LotMatcher;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Persists broker-to-account lot reconciliation links.
@@ -18,6 +19,9 @@ use Illuminate\Support\Facades\DB;
  * recomputed from current broker/account lots. The link table is the source of
  * truth; fin_account_lots.reconciliation_status and superseded_by_lot_id are
  * denormalised caches refreshed from the latest link state for each lot.
+ *
+ * Split matching is intentionally conservative in this first pass: same-account,
+ * same-symbol, same-date candidates must all sum to the target split lot.
  */
 class LotMatcherService
 {
@@ -40,6 +44,13 @@ class LotMatcherService
         FinLotReconciliationLink::STATE_UNLINKED,
         FinLotReconciliationLink::STATE_BROKER_ONLY,
         FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
+    ];
+
+    private const array MATCHED_LINK_STATES = [
+        FinLotReconciliationLink::STATE_AUTO_MATCHED,
+        FinLotReconciliationLink::STATE_NEEDS_REVIEW,
+        FinLotReconciliationLink::STATE_ACCEPTED_BROKER,
+        FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
     ];
 
     public function __construct(
@@ -114,7 +125,7 @@ class LotMatcherService
                 }
             }
 
-            $this->refreshLotCaches($affectedLotIds);
+            $this->refreshLotCaches((int) $taxDocument->id, $affectedLotIds);
 
             return new LotMatcherResult(
                 taxDocumentId: (int) $taxDocument->id,
@@ -126,9 +137,18 @@ class LotMatcherService
         });
     }
 
-    public function previewMatcherForDocument(int $taxDocumentId): LotMatcherResult
+    public function previewMatcherForDocument(int $taxDocumentId, bool $preserveDecisions = true): LotMatcherResult
     {
-        $proposals = $this->proposeMatchesForDocument($taxDocumentId);
+        $taxDocument = $this->taxDocument($taxDocumentId);
+        $existingLinks = $this->linksForDocument((int) $taxDocument->id);
+        $preservedLinks = $preserveDecisions
+            ? $existingLinks->filter(fn (FinLotReconciliationLink $link): bool => in_array($link->state, self::PRESERVED_STATES, true))->values()
+            : new EloquentCollection;
+        $proposals = $this->proposeForDocument(
+            $taxDocument,
+            $this->brokerLotIds($preservedLinks),
+            $this->accountLotIds($preservedLinks),
+        );
 
         return new LotMatcherResult(
             taxDocumentId: $taxDocumentId,
@@ -141,22 +161,49 @@ class LotMatcherService
 
     public function acceptBrokerLink(int $linkId, int $userId): FinLotReconciliationLink
     {
-        return $this->transitionLink($linkId, FinLotReconciliationLink::STATE_ACCEPTED_BROKER, $userId);
+        return $this->transitionLink(
+            linkId: $linkId,
+            state: FinLotReconciliationLink::STATE_ACCEPTED_BROKER,
+            userId: $userId,
+            allowedCurrentStates: self::MATCHED_LINK_STATES,
+            requiresBothLots: true,
+            stampAcceptedDecision: true,
+        );
     }
 
     public function acceptAccountOverride(int $linkId, int $userId): FinLotReconciliationLink
     {
-        return $this->transitionLink($linkId, FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE, $userId);
+        return $this->transitionLink(
+            linkId: $linkId,
+            state: FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+            userId: $userId,
+            allowedCurrentStates: self::MATCHED_LINK_STATES,
+            requiresBothLots: true,
+            stampAcceptedDecision: true,
+        );
     }
 
     public function markDuplicate(int $linkId, int $userId): FinLotReconciliationLink
     {
-        return $this->transitionLink($linkId, FinLotReconciliationLink::STATE_IGNORED_DUPLICATE, $userId);
+        return $this->transitionLink(
+            linkId: $linkId,
+            state: FinLotReconciliationLink::STATE_IGNORED_DUPLICATE,
+            userId: $userId,
+            allowedCurrentStates: [
+                FinLotReconciliationLink::STATE_BROKER_ONLY,
+                FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
+            ],
+            requiresSingleLot: true,
+        );
     }
 
     public function unlinkLot(int $linkId, int $userId): FinLotReconciliationLink
     {
-        return $this->transitionLink($linkId, FinLotReconciliationLink::STATE_UNLINKED, $userId);
+        return $this->transitionLink(
+            linkId: $linkId,
+            state: FinLotReconciliationLink::STATE_UNLINKED,
+            userId: $userId,
+        );
     }
 
     public function relinkLot(int $brokerLotId, int $accountLotId, int $userId): FinLotReconciliationLink
@@ -166,10 +213,14 @@ class LotMatcherService
         $taxDocumentId = $brokerLot->tax_document_id;
 
         if ($taxDocumentId === null) {
-            throw new \InvalidArgumentException('Broker lot must belong to a tax document.');
+            throw ValidationException::withMessages([
+                'broker_lot_id' => 'Broker lot must belong to a tax document.',
+            ]);
         }
 
-        return DB::transaction(function () use ($brokerLot, $accountLot, $taxDocumentId, $userId): FinLotReconciliationLink {
+        $this->validateRelinkTarget($brokerLot, $accountLot);
+
+        return DB::transaction(function () use ($brokerLot, $accountLot, $taxDocumentId): FinLotReconciliationLink {
             $existingLinks = FinLotReconciliationLink::query()
                 ->where('tax_document_id', $taxDocumentId)
                 ->where(function ($query) use ($brokerLot, $accountLot): void {
@@ -192,14 +243,15 @@ class LotMatcherService
                 $existingLink->delete();
             }
 
+            $deltas = $this->deltas($brokerLot, $accountLot);
             $link = FinLotReconciliationLink::create([
                 'tax_document_id' => (int) $taxDocumentId,
                 'broker_lot_id' => (int) $brokerLot->lot_id,
                 'account_lot_id' => (int) $accountLot->lot_id,
-                'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
-                'match_reason' => $this->matchReason('manual_relink', 1.0, $this->deltas($brokerLot, $accountLot), 'User manually relinked this broker lot to an account lot.'),
-                'accepted_by_user_id' => $userId,
-                'accepted_at' => now(),
+                'state' => $this->stateForDeltas($deltas),
+                'match_reason' => $this->matchReason('manual_relink', 1.0, $deltas, 'User manually relinked this broker lot to an account lot.'),
+                'accepted_by_user_id' => null,
+                'accepted_at' => null,
             ]);
 
             foreach (array_unique($displacedBrokerLotIds) as $displacedBrokerLotId) {
@@ -225,7 +277,7 @@ class LotMatcherService
             $affectedLotIds[] = (int) $brokerLot->lot_id;
             $affectedLotIds[] = (int) $accountLot->lot_id;
             $affectedLotIds = array_merge($affectedLotIds, $displacedBrokerLotIds, $displacedAccountLotIds);
-            $this->refreshLotCaches($affectedLotIds);
+            $this->refreshLotCaches((int) $taxDocumentId, $affectedLotIds);
 
             return $link->fresh(['brokerLot', 'accountLot']) ?? $link;
         });
@@ -339,8 +391,9 @@ class LotMatcherService
         $candidates = $accountLots
             ->filter(fn (FinAccountLot $accountLot): bool => ! isset($usedAccountLotIds[(int) $accountLot->lot_id])
                 && $this->sameAccountSymbolQuantity($brokerLot, $accountLot)
+                && $this->sameTreatment($brokerLot, $accountLot)
                 && $this->sameSaleDate($brokerLot, $accountLot)
-                && $this->exactMoney($brokerLot->proceeds, $accountLot->proceeds))
+                && $this->moneyClose($brokerLot->proceeds, $accountLot->proceeds))
             ->sortBy('lot_id')
             ->values();
 
@@ -358,6 +411,7 @@ class LotMatcherService
         $candidates = $accountLots
             ->filter(fn (FinAccountLot $accountLot): bool => ! isset($usedAccountLotIds[(int) $accountLot->lot_id])
                 && $this->sameAccountSymbolQuantity($brokerLot, $accountLot)
+                && $this->sameTreatment($brokerLot, $accountLot)
                 && $this->sameSaleDate($brokerLot, $accountLot)
                 && $this->moneyClose($brokerLot->proceeds, $accountLot->proceeds)
                 && $this->moneyClose($brokerLot->cost_basis, $accountLot->cost_basis))
@@ -378,6 +432,7 @@ class LotMatcherService
         $candidates = $accountLots
             ->filter(fn (FinAccountLot $accountLot): bool => ! isset($usedAccountLotIds[(int) $accountLot->lot_id])
                 && $this->sameAccountSymbolQuantity($brokerLot, $accountLot)
+                && $this->sameTreatment($brokerLot, $accountLot)
                 && $this->tradingDayDelta($brokerLot, $accountLot) !== null
                 && abs((int) $this->tradingDayDelta($brokerLot, $accountLot)) <= 1
                 && ! $this->sameSaleDate($brokerLot, $accountLot)
@@ -401,6 +456,7 @@ class LotMatcherService
         $candidates = $accountLots
             ->filter(fn (FinAccountLot $accountLot): bool => ! isset($usedAccountLotIds[(int) $accountLot->lot_id])
                 && $this->sameAccountSymbol($brokerLot, $accountLot)
+                && $this->sameTreatment($brokerLot, $accountLot)
                 && $this->sameSaleDate($brokerLot, $accountLot))
             ->sortBy('lot_id')
             ->values();
@@ -425,6 +481,7 @@ class LotMatcherService
         $candidates = $brokerLots
             ->filter(fn (FinAccountLot $brokerLot): bool => ! isset($usedBrokerLotIds[(int) $brokerLot->lot_id])
                 && $this->sameAccountSymbol($brokerLot, $accountLot)
+                && $this->sameTreatment($brokerLot, $accountLot)
                 && $this->sameSaleDate($brokerLot, $accountLot))
             ->sortBy('lot_id')
             ->values();
@@ -487,17 +544,36 @@ class LotMatcherService
         return (float) $lots->sum(fn (FinAccountLot $lot): float => $this->number($lot->getAttribute($field)));
     }
 
-    private function transitionLink(int $linkId, string $state, int $userId): FinLotReconciliationLink
-    {
-        return DB::transaction(function () use ($linkId, $state, $userId): FinLotReconciliationLink {
+    /**
+     * @param  string[]  $allowedCurrentStates
+     */
+    private function transitionLink(
+        int $linkId,
+        string $state,
+        int $userId,
+        array $allowedCurrentStates = [],
+        bool $requiresBothLots = false,
+        bool $requiresSingleLot = false,
+        bool $stampAcceptedDecision = false,
+    ): FinLotReconciliationLink {
+        return DB::transaction(function () use ($linkId, $state, $userId, $allowedCurrentStates, $requiresBothLots, $requiresSingleLot, $stampAcceptedDecision): FinLotReconciliationLink {
             $link = FinLotReconciliationLink::query()->findOrFail($linkId);
+            $this->validateTransition($link, $allowedCurrentStates, $requiresBothLots, $requiresSingleLot);
+
+            $acceptedAt = $stampAcceptedDecision ? now() : null;
             $link->update([
                 'state' => $state,
-                'accepted_by_user_id' => $userId,
-                'accepted_at' => now(),
+                'accepted_by_user_id' => $stampAcceptedDecision ? $userId : null,
+                'accepted_at' => $acceptedAt,
             ]);
 
-            $this->refreshLotCaches($this->linkLotIds(new EloquentCollection([$link])));
+            if ($link->tax_document_id === null) {
+                throw ValidationException::withMessages([
+                    'link' => 'Reconciliation link must belong to a tax document.',
+                ]);
+            }
+
+            $this->refreshLotCaches((int) $link->tax_document_id, $this->linkLotIds(new EloquentCollection([$link])));
 
             return $link->fresh(['brokerLot', 'accountLot']) ?? $link;
         });
@@ -562,7 +638,7 @@ class LotMatcherService
         return FinAccountLot::query()
             ->whereIn('acct_id', $accountIds)
             ->whereNull('tax_document_id')
-            ->whereBetween('sale_date', ["{$taxDocument->tax_year}-01-01", "{$taxDocument->tax_year}-12-31"])
+            ->whereBetween('sale_date', $this->accountCandidateDateWindow((int) $taxDocument->tax_year))
             ->when($excludedAccountLotIds !== [], fn ($query) => $query->whereNotIn('lot_id', $excludedAccountLotIds))
             ->where(function ($query): void {
                 $query->whereNull('source')
@@ -662,22 +738,53 @@ class LotMatcherService
     /**
      * @param  int[]  $lotIds
      */
-    private function refreshLotCaches(array $lotIds): void
+    private function refreshLotCaches(int $taxDocumentId, array $lotIds): void
     {
         $lotIds = array_values(array_unique(array_filter($lotIds)));
-        foreach ($lotIds as $lotId) {
-            $latestLink = FinLotReconciliationLink::query()
-                ->where(function ($query) use ($lotId): void {
-                    $query->where('broker_lot_id', $lotId)
-                        ->orWhere('account_lot_id', $lotId);
-                })
-                ->latest('id')
-                ->first();
+        if ($lotIds === []) {
+            return;
+        }
 
-            $updates = [
-                'reconciliation_status' => $latestLink instanceof FinLotReconciliationLink ? $latestLink->state : null,
-                'superseded_by_lot_id' => null,
-            ];
+        $lotIdLookup = array_fill_keys($lotIds, true);
+        $latestLinksByLotId = [];
+        $links = FinLotReconciliationLink::query()
+            ->where('tax_document_id', $taxDocumentId)
+            ->where(function ($query) use ($lotIds): void {
+                $query->whereIn('broker_lot_id', $lotIds)
+                    ->orWhereIn('account_lot_id', $lotIds);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($links as $link) {
+            foreach ([$link->broker_lot_id, $link->account_lot_id] as $linkedLotId) {
+                if ($linkedLotId === null) {
+                    continue;
+                }
+
+                $linkedLotId = (int) $linkedLotId;
+                if (isset($lotIdLookup[$linkedLotId]) && ! isset($latestLinksByLotId[$linkedLotId])) {
+                    $latestLinksByLotId[$linkedLotId] = $link;
+                }
+            }
+        }
+
+        $existingLotIds = FinAccountLot::query()
+            ->whereKey($lotIds)
+            ->pluck('lot_id')
+            ->map(static fn (int|string $lotId): int => (int) $lotId)
+            ->all();
+        $statusCases = [];
+        $statusBindings = [];
+        $supersededCases = [];
+        $supersededBindings = [];
+
+        foreach ($existingLotIds as $lotId) {
+            $latestLink = $latestLinksByLotId[$lotId] ?? null;
+            $statusCases[] = 'WHEN ? THEN ?';
+            $statusBindings[] = $lotId;
+            $statusBindings[] = $latestLink instanceof FinLotReconciliationLink ? $latestLink->state : null;
+            $supersededByLotId = null;
 
             if (
                 $latestLink instanceof FinLotReconciliationLink
@@ -685,10 +792,24 @@ class LotMatcherService
                 && $latestLink->broker_lot_id !== null
                 && (int) $latestLink->broker_lot_id === (int) $lotId
             ) {
-                $updates['superseded_by_lot_id'] = $latestLink->account_lot_id;
+                $supersededByLotId = $latestLink->account_lot_id !== null ? (int) $latestLink->account_lot_id : null;
             }
 
-            FinAccountLot::query()->whereKey($lotId)->update($updates);
+            $supersededCases[] = 'WHEN ? THEN ?';
+            $supersededBindings[] = $lotId;
+            $supersededBindings[] = $supersededByLotId;
+        }
+
+        if ($existingLotIds !== []) {
+            $wherePlaceholders = implode(', ', array_fill(0, count($existingLotIds), '?'));
+            DB::update(
+                'UPDATE fin_account_lots
+                    SET reconciliation_status = CASE lot_id '.implode(' ', $statusCases).' END,
+                        superseded_by_lot_id = CASE lot_id '.implode(' ', $supersededCases).' END,
+                        updated_at = ?
+                    WHERE lot_id IN ('.$wherePlaceholders.')',
+                array_merge($statusBindings, $supersededBindings, [now()], $existingLotIds),
+            );
         }
     }
 
@@ -743,11 +864,6 @@ class LotMatcherService
         return $this->lotMatcher->dateValue($brokerLot->sale_date) === $this->lotMatcher->dateValue($accountLot->sale_date);
     }
 
-    private function exactMoney(mixed $left, mixed $right): bool
-    {
-        return $this->numericClose($this->number($left), $this->number($right), 0.000001);
-    }
-
     private function moneyClose(mixed $left, mixed $right): bool
     {
         return $this->numericClose($this->number($left), $this->number($right), self::MONEY_TOLERANCE);
@@ -761,6 +877,35 @@ class LotMatcherService
     private function symbol(FinAccountLot $lot): string
     {
         return strtoupper(trim((string) $lot->symbol));
+    }
+
+    private function sameTreatment(FinAccountLot $brokerLot, FinAccountLot $accountLot): bool
+    {
+        return $this->form8949Box($brokerLot) === $this->form8949Box($accountLot)
+            && $this->termValue($brokerLot) === $this->termValue($accountLot);
+    }
+
+    private function form8949Box(FinAccountLot $lot): ?string
+    {
+        $box = strtoupper(trim((string) $lot->form_8949_box));
+
+        return $box === '' ? null : $box;
+    }
+
+    private function termValue(FinAccountLot $lot): ?bool
+    {
+        return $lot->is_short_term === null ? null : (bool) $lot->is_short_term;
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function accountCandidateDateWindow(int $taxYear): array
+    {
+        $start = (new \DateTimeImmutable("{$taxYear}-01-01"))->modify('-5 days')->format('Y-m-d');
+        $end = (new \DateTimeImmutable("{$taxYear}-12-31"))->modify('+5 days')->format('Y-m-d');
+
+        return [$start, $end];
     }
 
     private function number(mixed $value): float
@@ -852,5 +997,68 @@ class LotMatcherService
     private function isWeekday(\DateTimeImmutable $date): bool
     {
         return (int) $date->format('N') <= 5;
+    }
+
+    /**
+     * @param  string[]  $allowedCurrentStates
+     */
+    private function validateTransition(
+        FinLotReconciliationLink $link,
+        array $allowedCurrentStates,
+        bool $requiresBothLots,
+        bool $requiresSingleLot,
+    ): void {
+        if ($allowedCurrentStates !== [] && ! in_array($link->state, $allowedCurrentStates, true)) {
+            throw ValidationException::withMessages([
+                'state' => "Cannot transition a {$link->state} reconciliation link to the requested state.",
+            ]);
+        }
+
+        $hasBrokerLot = $link->broker_lot_id !== null;
+        $hasAccountLot = $link->account_lot_id !== null;
+
+        if ($requiresBothLots && (! $hasBrokerLot || ! $hasAccountLot)) {
+            throw ValidationException::withMessages([
+                'link' => 'This transition requires both a broker lot and an account lot.',
+            ]);
+        }
+
+        if ($requiresSingleLot && ($hasBrokerLot === $hasAccountLot)) {
+            throw ValidationException::withMessages([
+                'link' => 'This transition requires exactly one linked lot.',
+            ]);
+        }
+    }
+
+    private function validateRelinkTarget(FinAccountLot $brokerLot, FinAccountLot $accountLot): void
+    {
+        if ((int) $brokerLot->acct_id !== (int) $accountLot->acct_id) {
+            throw ValidationException::withMessages([
+                'account_lot_id' => 'Account lot must belong to the same account as the broker lot.',
+            ]);
+        }
+
+        if (! $this->isAccountDerivedRelinkTarget($accountLot)) {
+            throw ValidationException::withMessages([
+                'account_lot_id' => 'Relink target must be an account-derived lot, not a broker-reported lot.',
+            ]);
+        }
+    }
+
+    private function isAccountDerivedRelinkTarget(FinAccountLot $lot): bool
+    {
+        if ($lot->tax_document_id !== null) {
+            return false;
+        }
+
+        if (in_array($lot->source, [FinAccountLot::SOURCE_BROKER_1099B, FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT], true)) {
+            return false;
+        }
+
+        return ! in_array($lot->lot_source, [
+            FinAccountLot::SOURCE_1099B,
+            FinAccountLot::SOURCE_1099B_UNDERSCORE,
+            'import_1099b',
+        ], true);
     }
 }
