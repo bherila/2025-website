@@ -46,6 +46,7 @@ use App\Http\Controllers\FinanceTool\TaxDocumentLotsMatchController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotsRebuildController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
+use App\Http\Controllers\FinanceTool\TaxYearLotsMatchController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
 use App\Http\Controllers\PasskeyController;
@@ -408,6 +409,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
@@ -416,6 +418,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account',
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'show']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation-links', [TaxDocumentLotReconciliationController::class, 'links']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-rebuild', [TaxDocumentLotsRebuildController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-match', [TaxDocumentLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-match/full-rebuild', [TaxDocumentLotsMatchController::class, 'fullRebuild']);

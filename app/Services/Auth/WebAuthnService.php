@@ -266,7 +266,7 @@ class WebAuthnService
     {
         $rawId = base64_decode(strtr($credential->credential_id, '-_', '+/'));
 
-        return PublicKeyCredentialSource::create(
+        return new PublicKeyCredentialSource(
             publicKeyCredentialId: $rawId,
             type: 'public-key',
             transports: $credential->transports ?? [],
