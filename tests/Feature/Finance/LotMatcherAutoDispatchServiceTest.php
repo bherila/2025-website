@@ -67,6 +67,27 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         Queue::assertPushed(LotsMatchJob::class, 1);
     }
 
+    public function test_dispatch_for_account_years_includes_adjacent_tax_year_documents(): void
+    {
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $nextYearDocument = $this->makeTaxDocument($user->id, '1099_b', accountId: (int) $account->acct_id);
+
+        $queued = app(LotMatcherAutoDispatchService::class)->dispatchForAccountYears(
+            userId: $user->id,
+            accountId: (int) $account->acct_id,
+            taxYears: [2024],
+            trigger: LotMatcherAutoTrigger::ManualLotUpdate,
+        );
+
+        $this->assertSame(1, $queued);
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $nextYearDocument->id,
+        );
+    }
+
     public function test_job_properties_and_handler_are_pinned(): void
     {
         $job = new LotsMatchJob(42);
@@ -77,6 +98,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
 
         $this->assertSame('42', $job->uniqueId());
         $this->assertSame(300, $job->uniqueFor);
+        $this->assertSame(300, $job->timeout);
         $this->assertSame(3, $job->tries);
         $this->assertSame([30, 120], $job->backoff);
     }

@@ -769,6 +769,38 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertTrue($lot->is_short_term);
     }
 
+    public function test_update_lot_transaction_assignment_only_does_not_queue_matcher(): void
+    {
+        Queue::fake();
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Update Lot Assignment Only',
+            'acct_last_balance' => '0',
+        ]);
+        $this->createBrokerDocument($user->id, $acctId);
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2025-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 100, 't_amt' => -15000, 'when_added' => now(),
+        ]);
+
+        $lot = FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 100,
+            'purchase_date' => '2025-01-15',
+            'cost_basis' => 15000.00,
+            'sale_date' => '2025-06-15',
+            'proceeds' => 17000.00,
+            'lot_source' => 'analyzer',
+        ]);
+
+        $this->actingAs($user)->putJson("/api/finance/{$acctId}/lots/{$lot->lot_id}", [
+            'open_t_id' => $buyTId,
+        ])->assertOk();
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+    }
+
     public function test_delete_lot(): void
     {
         $user = $this->createAdminUser();

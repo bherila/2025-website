@@ -172,5 +172,5 @@ function formatLastMatchedAt(value: string | null): string {
     return 'matcher not run'
   }
 
-  return `matched ${new Date(value).toLocaleString()}`
+  return `matched ${new Date(value).toLocaleString(undefined, { timeZoneName: 'short' })}`
 }

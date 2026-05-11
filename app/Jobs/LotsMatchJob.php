@@ -18,6 +18,8 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 3;
 
+    public int $timeout = self::UNIQUE_FOR_SECONDS;
+
     /**
      * @var list<int>
      */
@@ -27,6 +29,7 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public function __construct(
         public readonly int $taxDocumentId,
+        public readonly ?int $taxYear = null,
     ) {}
 
     public function handle(LotMatcherService $lotMatcherService): void
@@ -43,6 +46,7 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
     {
         Log::error('LotsMatchJob: permanent failure while refreshing lot reconciliation links', [
             'tax_document_id' => $this->taxDocumentId,
+            'tax_year' => $this->taxYear,
             'error' => $exception->getMessage(),
         ]);
     }

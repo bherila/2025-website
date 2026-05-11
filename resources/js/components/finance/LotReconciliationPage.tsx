@@ -807,7 +807,7 @@ function formatLastMatchedAt(value: string | null): string {
     return 'Matcher has not run yet'
   }
 
-  return `Matcher last ran ${new Date(value).toLocaleString()}`
+  return `Matcher last ran ${new Date(value).toLocaleString(undefined, { timeZoneName: 'short' })}`
 }
 
 function moneyDelta(accountValue: number | null | undefined, brokerValue: number | null | undefined): number | null {

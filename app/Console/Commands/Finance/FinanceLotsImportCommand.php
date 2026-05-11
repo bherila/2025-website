@@ -681,15 +681,10 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      */
     private function closedLotYearsForAccount(int $acctId): array
     {
-        return FinAccountLot::query()
+        return LotMatcherAutoDispatchService::yearsFromDates(FinAccountLot::query()
             ->where('acct_id', $acctId)
             ->whereNotNull('sale_date')
-            ->pluck('sale_date')
-            ->map(fn (mixed $saleDate): ?int => $this->yearFromDate($saleDate))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+            ->pluck('sale_date'));
     }
 
     /**
@@ -698,25 +693,10 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      */
     private function closedLotYearsFromLots(array $lots): array
     {
-        return collect($lots)
-            ->map(fn (array $lot): ?int => $this->yearFromDate($lot['sale_date'] ?? null))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    private function yearFromDate(mixed $date): ?int
-    {
-        if ($date instanceof \DateTimeInterface) {
-            return (int) $date->format('Y');
-        }
-
-        if (! is_string($date) || trim($date) === '') {
-            return null;
-        }
-
-        return (int) substr($date, 0, 4);
+        return LotMatcherAutoDispatchService::yearsFromDates(array_map(
+            static fn (array $lot): mixed => $lot['sale_date'] ?? null,
+            $lots,
+        ));
     }
 
     /**

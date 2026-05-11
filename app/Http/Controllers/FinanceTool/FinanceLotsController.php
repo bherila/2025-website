@@ -639,7 +639,7 @@ class FinanceLotsController extends Controller
 
         $lot->update($updateData);
         $freshLot = $lot->fresh();
-        if ($updateData !== [] && $freshLot instanceof FinAccountLot) {
+        if ($updateData !== [] && $freshLot instanceof FinAccountLot && $this->lotUpdateAffectsMatcher($validated)) {
             $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, [$oldSaleDate, $freshLot->sale_date], LotMatcherAutoTrigger::ManualLotUpdate);
         }
 
@@ -774,7 +774,7 @@ class FinanceLotsController extends Controller
                     'open_t_id' => $assignment['open_t_id'],
                     'close_t_id' => $assignment['close_t_id'],
                 ]);
-                $saleYear = $this->yearFromSaleDate($assignment['sale_date']);
+                $saleYear = LotMatcherAutoDispatchService::yearsFromDates([$assignment['sale_date']])[0] ?? null;
                 if ($saleYear !== null) {
                     $affectedAccountYears[(int) $closeTx->t_account][$saleYear] = true;
                 }
@@ -797,17 +797,10 @@ class FinanceLotsController extends Controller
      */
     private function dispatchForLotSaleYears(int $userId, int $accountId, array $saleDates, LotMatcherAutoTrigger $trigger): void
     {
-        $years = collect($saleDates)
-            ->map(fn (mixed $saleDate): ?int => $this->yearFromSaleDate($saleDate))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
         $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
             userId: $userId,
             accountId: $accountId,
-            taxYears: $years,
+            taxYears: LotMatcherAutoDispatchService::yearsFromDates($saleDates),
             trigger: $trigger,
         );
     }
@@ -827,16 +820,19 @@ class FinanceLotsController extends Controller
         }
     }
 
-    private function yearFromSaleDate(mixed $saleDate): ?int
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function lotUpdateAffectsMatcher(array $validated): bool
     {
-        if ($saleDate instanceof \DateTimeInterface) {
-            return (int) $saleDate->format('Y');
+        $matcherFields = ['quantity', 'cost_basis', 'proceeds', 'sale_date'];
+
+        foreach ($matcherFields as $field) {
+            if (array_key_exists($field, $validated)) {
+                return true;
+            }
         }
 
-        if (! is_string($saleDate) || trim($saleDate) === '') {
-            return null;
-        }
-
-        return (int) substr($saleDate, 0, 4);
+        return false;
     }
 }

@@ -49,23 +49,25 @@ class LotMatcherAutoDispatchService
         iterable $taxYears,
         LotMatcherAutoTrigger $trigger,
     ): int {
-        $years = $this->normalizeYears($taxYears);
+        $years = self::normalizeYears($taxYears);
         if ($years === []) {
             return 0;
         }
 
+        $candidateYears = $this->candidateDocumentYears($years);
+
         $documents = FileForTaxDocument::query()
             ->with('accountLinks')
             ->where('user_id', $userId)
-            ->whereIn('tax_year', $years)
-            ->where(function (Builder $query) use ($accountId, $years): void {
+            ->whereIn('tax_year', $candidateYears)
+            ->where(function (Builder $query) use ($accountId, $candidateYears): void {
                 $query->where(function (Builder $directQuery) use ($accountId): void {
                     $directQuery->whereIn('form_type', ['1099_b', 'broker_1099'])
                         ->where('account_id', $accountId);
-                })->orWhereHas('accountLinks', function (Builder $linkQuery) use ($accountId, $years): void {
+                })->orWhereHas('accountLinks', function (Builder $linkQuery) use ($accountId, $candidateYears): void {
                     $linkQuery->where('account_id', $accountId)
                         ->where('form_type', '1099_b')
-                        ->whereIn('tax_year', $years);
+                        ->whereIn('tax_year', $candidateYears);
                 });
             })
             ->orderBy('id')
@@ -98,7 +100,7 @@ class LotMatcherAutoDispatchService
      * @param  iterable<int|string>  $taxYears
      * @return list<int>
      */
-    private function normalizeYears(iterable $taxYears): array
+    private static function normalizeYears(iterable $taxYears): array
     {
         $years = [];
         foreach ($taxYears as $taxYear) {
@@ -113,6 +115,54 @@ class LotMatcherAutoDispatchService
         }
 
         return array_keys($years);
+    }
+
+    /**
+     * @param  iterable<mixed>  $dates
+     * @return list<int>
+     */
+    public static function yearsFromDates(iterable $dates): array
+    {
+        $years = [];
+        foreach ($dates as $date) {
+            $year = self::yearFromDate($date);
+            if ($year !== null) {
+                $years[$year] = true;
+            }
+        }
+
+        return array_keys($years);
+    }
+
+    /**
+     * @param  list<int>  $years
+     * @return list<int>
+     */
+    private function candidateDocumentYears(array $years): array
+    {
+        $candidateYears = [];
+        foreach ($years as $year) {
+            $candidateYears[] = $year - 1;
+            $candidateYears[] = $year;
+            $candidateYears[] = $year + 1;
+        }
+
+        return self::normalizeYears($candidateYears);
+    }
+
+    private static function yearFromDate(mixed $date): ?int
+    {
+        if ($date instanceof \DateTimeInterface) {
+            return (int) $date->format('Y');
+        }
+
+        if (! is_string($date) || trim($date) === '') {
+            return null;
+        }
+
+        $year = (int) substr(trim($date), 0, 4);
+
+        return $year >= 1900 && $year <= 2100 ? $year : null;
     }
 
     private function isBroker1099BDocument(FileForTaxDocument $taxDocument): bool
@@ -137,7 +187,7 @@ class LotMatcherAutoDispatchService
         ?int $accountId,
         ?int $taxYear,
     ): void {
-        LotsMatchJob::dispatch($taxDocumentId)
+        LotsMatchJob::dispatch($taxDocumentId, $taxYear)
             ->delay(now()->addSeconds(LotsMatchJob::DELAY_SECONDS))
             ->afterCommit();
 

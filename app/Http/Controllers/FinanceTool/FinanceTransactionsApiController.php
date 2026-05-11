@@ -261,7 +261,10 @@ class FinanceTransactionsApiController extends Controller
             $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
                 userId: (int) Auth::id(),
                 accountId: (int) $account->acct_id,
-                taxYears: $this->transactionYears($result->rows),
+                taxYears: LotMatcherAutoDispatchService::yearsFromDates(array_map(
+                    static fn (array $row): mixed => $row['t_date'] ?? null,
+                    $result->rows,
+                )),
                 trigger: LotMatcherAutoTrigger::CsvImport,
             );
         }
@@ -288,31 +291,6 @@ class FinanceTransactionsApiController extends Controller
 
             return $lineItem;
         }, array_values($lineItems));
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $rows
-     * @return list<int>
-     */
-    private function transactionYears(array $rows): array
-    {
-        return collect($rows)
-            ->map(function (array $row): ?int {
-                $date = $row['t_date'] ?? null;
-                if ($date instanceof \DateTimeInterface) {
-                    return (int) $date->format('Y');
-                }
-
-                if (! is_string($date) || trim($date) === '') {
-                    return null;
-                }
-
-                return (int) substr($date, 0, 4);
-            })
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
     }
 
     /**
