@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class LotMatcherServiceTest extends TestCase
@@ -236,6 +237,29 @@ class LotMatcherServiceTest extends TestCase
         $firstRows = $this->linkRows();
         app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
 
+        $this->assertSame($firstRows, $this->linkRows());
+    }
+
+    public function test_last_matched_at_advances_without_link_churn(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $service = app(LotMatcherService::class);
+
+        Carbon::setTestNow(Carbon::parse('2026-05-10 10:00:00'));
+        $service->runMatcherForDocument((int) $document->id);
+        $firstMatchedAt = $service->lastMatchedAtForDocument((int) $document->id);
+        $firstRows = $this->linkRows();
+
+        Carbon::setTestNow(Carbon::parse('2026-05-10 10:05:00'));
+        $service->runMatcherForDocument((int) $document->id);
+        $secondMatchedAt = $service->lastMatchedAtForDocument((int) $document->id);
+        Carbon::setTestNow();
+
+        $this->assertNotNull($firstMatchedAt);
+        $this->assertNotNull($secondMatchedAt);
+        $this->assertTrue(Carbon::parse($secondMatchedAt)->greaterThan(Carbon::parse($firstMatchedAt)));
         $this->assertSame($firstRows, $this->linkRows());
     }
 

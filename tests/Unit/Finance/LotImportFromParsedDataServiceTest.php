@@ -4,11 +4,13 @@ namespace Tests\Unit\Finance;
 
 use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
+use Illuminate\Support\Facades\Queue;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -38,6 +40,21 @@ class LotImportFromParsedDataServiceTest extends TestCase
         $this->assertSame(FinAccountLot::SOURCE_BROKER_1099B, $lot->source);
         $this->assertSame(250.0, (float) $lot->realized_gain_loss);
         $this->assertSame('D', $lot->form_8949_box);
+    }
+
+    public function test_rebuild_queues_lot_matcher_refresh(): void
+    {
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, $this->parsedData());
+
+        app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
     }
 
     public function test_rebuild_warns_and_skips_when_account_link_is_missing(): void

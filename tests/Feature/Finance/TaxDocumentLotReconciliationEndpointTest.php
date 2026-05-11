@@ -7,6 +7,8 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\LotMatcherService;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class TaxDocumentLotReconciliationEndpointTest extends TestCase
@@ -35,6 +37,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         $account = $this->makeAccount($user->id);
         $document = $this->makeBrokerDocument($user->id, $account);
         $this->makeLot($account, $document);
+        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->id), '2026-05-10T17:00:00.000000Z');
 
         $this->actingAs($user)
             ->getJson("/api/finance/tax-documents/{$document->id}/lot-reconciliation")
@@ -43,6 +46,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->assertJsonPath('summary.entry_count', 1)
             ->assertJsonPath('entries.0.summary.parsed_transaction_count', 1)
             ->assertJsonPath('link_state_counts.auto_matched', 0)
+            ->assertJsonPath('last_matched_at', '2026-05-10T17:00:00.000000Z')
             ->assertJsonPath('dashboard_status', 'in_sync');
     }
 
@@ -71,11 +75,13 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
                 'notes' => null,
             ],
         ]);
+        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->id), '2026-05-10T17:00:00.000000Z');
 
         $this->actingAs($user)
             ->getJson("/api/finance/tax-documents/{$document->id}/lot-reconciliation-links")
             ->assertOk()
             ->assertJsonPath('document.id', $document->id)
+            ->assertJsonPath('document.last_matched_at', '2026-05-10T17:00:00.000000Z')
             ->assertJsonPath('summary.link_state_counts.needs_review', 1)
             ->assertJsonPath('links.0.id', $link->id)
             ->assertJsonPath('links.0.broker_lot.lot_id', $brokerLot->lot_id)

@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use Database\Seeders\Finance\FinanceAccountsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class FinanceLotsImportCommandTest extends TestCase
@@ -165,6 +168,7 @@ class FinanceLotsImportCommandTest extends TestCase
 
     public function test_json_import_dry_run_does_not_write(): void
     {
+        Queue::fake();
         $payload = $this->sampleJsonPayload();
         $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode($payload));
@@ -177,6 +181,7 @@ class FinanceLotsImportCommandTest extends TestCase
             ->expectsOutputToContain('Dry-run mode');
 
         $this->assertDatabaseCount('fin_account_lots', 0);
+        Queue::assertNotPushed(LotsMatchJob::class);
 
         unlink($tmpFile);
     }
@@ -198,6 +203,31 @@ class FinanceLotsImportCommandTest extends TestCase
             ->expectsOutputToContain('Cleared 3 existing lot record(s)');
 
         $this->assertDatabaseCount('fin_account_lots', 3);
+
+        unlink($tmpFile);
+    }
+
+    public function test_json_import_clear_queues_matcher_for_deleted_lot_years(): void
+    {
+        $payload = $this->sampleJsonPayload();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode($payload));
+        $userId = (int) User::where('email', 'test@example.com')->value('id');
+
+        $this->artisan('finance:lots-import', ['--account' => $this->acctId, '--file' => $tmpFile])->assertSuccessful();
+        $document = $this->createBrokerDocument($userId, $this->acctId, 2025);
+
+        Queue::fake();
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--clear' => true,
+        ])->assertSuccessful();
+
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
 
         unlink($tmpFile);
     }
@@ -445,5 +475,26 @@ class FinanceLotsImportCommandTest extends TestCase
                 ],
             ],
         ];
+    }
+
+    private function createBrokerDocument(int $userId, int $accountId, int $taxYear): FileForTaxDocument
+    {
+        $document = FileForTaxDocument::create([
+            'user_id' => $userId,
+            'tax_year' => $taxYear,
+            'form_type' => 'broker_1099',
+            'original_filename' => 'broker-1099.pdf',
+            'stored_filename' => 'broker-1099.pdf',
+            's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => str_repeat('e', 64),
+            'uploaded_by_user_id' => $userId,
+            'is_reviewed' => true,
+        ]);
+
+        TaxDocumentAccount::createLink((int) $document->id, $accountId, '1099_b', $taxYear, isReviewed: true);
+
+        return $document;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\GenAiProcessor\Jobs;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\GenAiProcessor\Mail\GenAiJobCompleteMail;
 use App\GenAiProcessor\Mail\GenAiJobDeferredMail;
 use App\GenAiProcessor\Models\GenAiImportJob;
@@ -528,7 +529,7 @@ class ParseImportJob implements ShouldQueue
                 'genai_status' => 'parsed',
             ]);
 
-            app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $taxDoc->id);
+            app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $taxDoc->id, LotMatcherAutoTrigger::ParseImport);
         });
     }
 

@@ -121,7 +121,9 @@ export default function LotReconciliationHealthWidget({ selectedYear }: LotRecon
             >
               <div className="min-w-0">
                 <div className="truncate font-medium text-foreground">{document.broker ?? `Tax document #${document.tax_document_id}`}</div>
-                <div className="truncate text-xs text-muted-foreground">1099-B - doc #{document.tax_document_id}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  1099-B - doc #{document.tax_document_id} - {formatLastMatchedAt(document.last_matched_at)}
+                </div>
               </div>
               <StatusBadge status={document.dashboard_status} />
               <span className="text-xs text-muted-foreground md:text-right">
@@ -163,4 +165,12 @@ function documentSummary(document: TaxYearLotReconciliationResponse['documents']
 function formatMoney(value: number): string {
   const formatted = currency(Math.abs(value), { precision: 2 }).format()
   return value < 0 ? `(${formatted})` : formatted
+}
+
+function formatLastMatchedAt(value: string | null): string {
+  if (!value) {
+    return 'matcher not run'
+  }
+
+  return `matched ${new Date(value).toLocaleString()}`
 }

@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinStatement;
+use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\Finance\TransactionImportService;
 use Carbon\CarbonImmutable;
@@ -21,6 +23,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class FinanceTransactionsApiController extends Controller
 {
     use QueriesUserAccounts;
+
+    public function __construct(
+        private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+    ) {}
 
     /**
      * Get line items (transactions) for one or all accounts.
@@ -251,6 +257,15 @@ class FinanceTransactionsApiController extends Controller
             ], 422);
         }
 
+        if ($result->inserted > 0) {
+            $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
+                userId: (int) Auth::id(),
+                accountId: (int) $account->acct_id,
+                taxYears: $this->transactionYears($result->rows),
+                trigger: LotMatcherAutoTrigger::CsvImport,
+            );
+        }
+
         return response()->json([
             'success' => true,
             'imported' => $result->inserted,
@@ -273,6 +288,31 @@ class FinanceTransactionsApiController extends Controller
 
             return $lineItem;
         }, array_values($lineItems));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<int>
+     */
+    private function transactionYears(array $rows): array
+    {
+        return collect($rows)
+            ->map(function (array $row): ?int {
+                $date = $row['t_date'] ?? null;
+                if ($date instanceof \DateTimeInterface) {
+                    return (int) $date->format('Y');
+                }
+
+                if (! is_string($date) || trim($date) === '') {
+                    return null;
+                }
+
+                return (int) substr($date, 0, 4);
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Http\Requests\Finance\ApplyLotReconciliationRequest;
@@ -9,6 +10,7 @@ use App\Http\Requests\Finance\TaxLotReconciliationRequest;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TaxLotReconciliationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +21,10 @@ use Illuminate\Validation\ValidationException;
 class FinanceLotsController extends Controller
 {
     use QueriesUserAccounts;
+
+    public function __construct(
+        private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+    ) {}
 
     /**
      * List all lots for the current user (across all accounts).
@@ -340,6 +346,8 @@ class FinanceLotsController extends Controller
             'close_t_id' => $validated['close_t_id'] ?? null,
         ]);
 
+        $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, [$lot->sale_date], LotMatcherAutoTrigger::ManualLotCreate);
+
         return response()->json([
             'success' => true,
             'lot' => $lot,
@@ -393,6 +401,7 @@ class FinanceLotsController extends Controller
 
         $created = 0;
         $updated = 0;
+        $affectedSaleDates = [];
 
         DB::beginTransaction();
         try {
@@ -421,6 +430,8 @@ class FinanceLotsController extends Controller
                         $updateData['close_t_id'] = $lotData['close_t_id'];
                     }
                     if (! empty($updateData)) {
+                        $affectedSaleDates[] = $existing->sale_date;
+                        $affectedSaleDates[] = $updateData['sale_date'] ?? $existing->sale_date;
                         $existing->update($updateData);
                         $updated++;
                     }
@@ -456,11 +467,13 @@ class FinanceLotsController extends Controller
                         'open_t_id' => $lotData['open_t_id'] ?? null,
                         'close_t_id' => $lotData['close_t_id'] ?? null,
                     ]);
+                    $affectedSaleDates[] = $lotData['sale_date'] ?? null;
                     $created++;
                 }
             }
 
             DB::commit();
+            $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, $affectedSaleDates, LotMatcherAutoTrigger::LotImportEndpoint);
 
             return response()->json([
                 'success' => true,
@@ -520,6 +533,12 @@ class FinanceLotsController extends Controller
             'lots.*.close_t_id' => 'nullable|integer',
         ]);
 
+        $affectedSaleDates = FinAccountLot::where('acct_id', $account->acct_id)
+            ->where('lot_source', 'analyzer')
+            ->whereNotNull('sale_date')
+            ->pluck('sale_date')
+            ->all();
+
         DB::beginTransaction();
         try {
             // Remove previously analyzer-saved lots for this account
@@ -561,10 +580,12 @@ class FinanceLotsController extends Controller
                     'open_t_id' => $lotData['open_t_id'] ?? null,
                     'close_t_id' => $lotData['close_t_id'] ?? null,
                 ]);
+                $affectedSaleDates[] = $lotData['sale_date'] ?? null;
                 $created++;
             }
 
             DB::commit();
+            $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, $affectedSaleDates, LotMatcherAutoTrigger::AnalyzerLotsSave);
 
             return response()->json([
                 'success' => true,
@@ -587,6 +608,7 @@ class FinanceLotsController extends Controller
         $lot = FinAccountLot::where('lot_id', $lot_id)
             ->where('acct_id', $account->acct_id)
             ->firstOrFail();
+        $oldSaleDate = $lot->sale_date;
 
         $validated = $request->validate([
             'open_t_id' => 'nullable|integer',
@@ -616,8 +638,12 @@ class FinanceLotsController extends Controller
         }
 
         $lot->update($updateData);
+        $freshLot = $lot->fresh();
+        if ($updateData !== [] && $freshLot instanceof FinAccountLot) {
+            $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, [$oldSaleDate, $freshLot->sale_date], LotMatcherAutoTrigger::ManualLotUpdate);
+        }
 
-        return response()->json(['success' => true, 'lot' => $lot->fresh()]);
+        return response()->json(['success' => true, 'lot' => $freshLot]);
     }
 
     /**
@@ -630,8 +656,10 @@ class FinanceLotsController extends Controller
         $lot = FinAccountLot::where('lot_id', $lot_id)
             ->where('acct_id', $account->acct_id)
             ->firstOrFail();
+        $saleDate = $lot->sale_date;
 
         $lot->delete();
+        $this->dispatchForLotSaleYears((int) Auth::id(), (int) $account->acct_id, [$saleDate], LotMatcherAutoTrigger::ManualLotDelete);
 
         return response()->json(['success' => true]);
     }
@@ -713,6 +741,7 @@ class FinanceLotsController extends Controller
         $accountIds = $this->getUserAccountIds();
 
         $created = 0;
+        $affectedAccountYears = [];
         DB::beginTransaction();
         try {
             foreach ($validated['assignments'] as $assignment) {
@@ -745,10 +774,15 @@ class FinanceLotsController extends Controller
                     'open_t_id' => $assignment['open_t_id'],
                     'close_t_id' => $assignment['close_t_id'],
                 ]);
+                $saleYear = $this->yearFromSaleDate($assignment['sale_date']);
+                if ($saleYear !== null) {
+                    $affectedAccountYears[(int) $closeTx->t_account][$saleYear] = true;
+                }
                 $created++;
             }
 
             DB::commit();
+            $this->dispatchForAccountYearMap((int) Auth::id(), $affectedAccountYears, LotMatcherAutoTrigger::LotAssignment);
 
             return response()->json(['success' => true, 'created' => $created]);
         } catch (\Exception $e) {
@@ -756,5 +790,53 @@ class FinanceLotsController extends Controller
 
             return response()->json(['error' => 'Failed to save lot assignments: '.$e->getMessage()], 500);
         }
+    }
+
+    /**
+     * @param  array<int, mixed>  $saleDates
+     */
+    private function dispatchForLotSaleYears(int $userId, int $accountId, array $saleDates, LotMatcherAutoTrigger $trigger): void
+    {
+        $years = collect($saleDates)
+            ->map(fn (mixed $saleDate): ?int => $this->yearFromSaleDate($saleDate))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
+            userId: $userId,
+            accountId: $accountId,
+            taxYears: $years,
+            trigger: $trigger,
+        );
+    }
+
+    /**
+     * @param  array<int, array<int, true>>  $accountYears
+     */
+    private function dispatchForAccountYearMap(int $userId, array $accountYears, LotMatcherAutoTrigger $trigger): void
+    {
+        foreach ($accountYears as $accountId => $years) {
+            $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
+                userId: $userId,
+                accountId: (int) $accountId,
+                taxYears: array_keys($years),
+                trigger: $trigger,
+            );
+        }
+    }
+
+    private function yearFromSaleDate(mixed $saleDate): ?int
+    {
+        if ($saleDate instanceof \DateTimeInterface) {
+            return (int) $saleDate->format('Y');
+        }
+
+        if (! is_string($saleDate) || trim($saleDate) === '') {
+            return null;
+        }
+
+        return (int) substr($saleDate, 0, 4);
     }
 }

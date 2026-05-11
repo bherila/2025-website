@@ -267,6 +267,9 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
               1099-B reconciliation - {linksData.document.broker ?? 'Broker document'} | Tax year {linksData.document.tax_year} | doc #{linksData.document.id}
             </h1>
             <p className="text-sm text-muted-foreground">{linksData.document.original_filename}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatLastMatchedAt(linksData.document.last_matched_at ?? report.last_matched_at)}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" disabled={busyLabel !== null} onClick={() => setConfirmation(confirmations.rerun)}>
@@ -797,6 +800,14 @@ function formatMoney(value: number): string {
 
 function formatNullableMoney(value: number | null): string {
   return value === null ? 'N/A' : formatMoney(value)
+}
+
+function formatLastMatchedAt(value: string | null): string {
+  if (!value) {
+    return 'Matcher has not run yet'
+  }
+
+  return `Matcher last ran ${new Date(value).toLocaleString()}`
 }
 
 function moneyDelta(accountValue: number | null | undefined, brokerValue: number | null | undefined): number | null {

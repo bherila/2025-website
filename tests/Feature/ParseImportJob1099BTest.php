@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
@@ -12,6 +13,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -447,6 +449,7 @@ class ParseImportJob1099BTest extends TestCase
 
     public function test_create_multi_account_results_creates_links_and_lots(): void
     {
+        Queue::fake();
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity Brokerage', 'X65-385336');
 
@@ -511,6 +514,10 @@ class ParseImportJob1099BTest extends TestCase
             'id' => $taxDoc->id,
             'genai_status' => 'parsed',
         ]);
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $taxDoc->id,
+        );
     }
 
     public function test_create_multi_account_results_imports_summary_wash_sale_adjustment_when_rows_omit_it(): void
