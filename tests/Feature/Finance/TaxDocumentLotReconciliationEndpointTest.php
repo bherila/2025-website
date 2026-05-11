@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Tests\TestCase;
 
@@ -40,7 +41,46 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->assertOk()
             ->assertJsonPath('tax_document_id', $document->id)
             ->assertJsonPath('summary.entry_count', 1)
-            ->assertJsonPath('entries.0.summary.parsed_transaction_count', 1);
+            ->assertJsonPath('entries.0.summary.parsed_transaction_count', 1)
+            ->assertJsonPath('link_state_counts.auto_matched', 0)
+            ->assertJsonPath('dashboard_status', 'in_sync');
+    }
+
+    public function test_document_links_endpoint_returns_persisted_links_with_lot_summaries(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $brokerLot = $this->makeLot($account, $document);
+        $accountLot = $this->makeAccountLot($account);
+        $link = FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
+            'match_reason' => [
+                'reason_code' => 'basis_delta',
+                'score' => 0.9,
+                'deltas' => [
+                    'proceeds' => 0,
+                    'basis' => 50,
+                    'wash' => 0,
+                    'qty' => 0,
+                    'date_days' => 0,
+                ],
+                'notes' => null,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson("/api/finance/tax-documents/{$document->id}/lot-reconciliation-links")
+            ->assertOk()
+            ->assertJsonPath('document.id', $document->id)
+            ->assertJsonPath('summary.link_state_counts.needs_review', 1)
+            ->assertJsonPath('links.0.id', $link->id)
+            ->assertJsonPath('links.0.broker_lot.lot_id', $brokerLot->lot_id)
+            ->assertJsonPath('links.0.account_lot.lot_id', $accountLot->lot_id)
+            ->assertJsonPath('relink_candidates.0.lot_id', $accountLot->lot_id);
     }
 
     public function test_year_endpoint_rolls_up_owned_documents_only(): void
@@ -59,7 +99,82 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user_id', $user->id)
             ->assertJsonPath('summary.document_count', 1)
+            ->assertJsonPath('summary.documents_by_status.in_sync', 1)
             ->assertJsonPath('documents.0.tax_document_id', $document->id);
+    }
+
+    public function test_year_endpoint_combines_diagnostic_and_link_state_status(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $brokerLot = $this->makeLot($account, $document);
+        $accountLot = $this->makeAccountLot($account, ['cost_basis' => 1100, 'realized_gain_loss' => 150]);
+        FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
+            'match_reason' => [
+                'reason_code' => 'basis_delta',
+                'score' => 0.9,
+                'deltas' => [
+                    'proceeds' => 0,
+                    'basis' => 100,
+                    'wash' => 0,
+                    'qty' => 0,
+                    'date_days' => 0,
+                ],
+                'notes' => null,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/finance/tax-years/2025/lot-reconciliation')
+            ->assertOk()
+            ->assertJsonPath('summary.dashboard_status', 'needs_review')
+            ->assertJsonPath('summary.documents_by_status.needs_review', 1)
+            ->assertJsonPath('documents.0.dashboard_status', 'needs_review')
+            ->assertJsonPath('documents.0.link_state_counts.needs_review', 1);
+    }
+
+    public function test_year_endpoint_treats_drift_as_higher_priority_than_clean_link_state(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $brokerLot = $this->makeLot($account, $document, [
+            'cost_basis' => 900,
+            'realized_gain_loss' => 350,
+        ]);
+        $accountLot = $this->makeAccountLot($account);
+        FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+            'match_reason' => [
+                'reason_code' => 'exact',
+                'score' => 1.0,
+                'deltas' => [
+                    'proceeds' => 0,
+                    'basis' => 0,
+                    'wash' => 0,
+                    'qty' => 0,
+                    'date_days' => 0,
+                ],
+                'notes' => null,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/finance/tax-years/2025/lot-reconciliation')
+            ->assertOk()
+            ->assertJsonPath('summary.dashboard_status', 'drift')
+            ->assertJsonPath('summary.documents_by_status.drift', 1)
+            ->assertJsonPath('summary.documents_by_status.needs_review', 0)
+            ->assertJsonPath('documents.0.dashboard_status', 'drift')
+            ->assertJsonPath('documents.0.link_state_counts.auto_matched', 1);
     }
 
     public function test_year_endpoint_returns_empty_rollup_without_1099_b_documents(): void
@@ -70,7 +185,9 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->getJson('/api/finance/tax-years/2025/lot-reconciliation')
             ->assertOk()
             ->assertJsonPath('summary.status', 'ok')
+            ->assertJsonPath('summary.dashboard_status', 'in_sync')
             ->assertJsonPath('summary.document_count', 0)
+            ->assertJsonPath('summary.documents_by_status.in_sync', 0)
             ->assertJsonPath('documents', []);
     }
 
@@ -138,9 +255,12 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         return $document;
     }
 
-    private function makeLot(FinAccounts $account, FileForTaxDocument $document): FinAccountLot
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
-        return FinAccountLot::create([
+        return FinAccountLot::create(array_merge([
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
             'description' => 'Apple Inc.',
@@ -156,6 +276,30 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             'tax_document_id' => $document->id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
-        ]);
+        ], $overrides));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeAccountLot(FinAccounts $account, array $overrides = []): FinAccountLot
+    {
+        return FinAccountLot::create(array_merge([
+            'acct_id' => $account->acct_id,
+            'symbol' => 'AAPL',
+            'description' => 'Apple Inc.',
+            'quantity' => 10,
+            'purchase_date' => '2024-01-02',
+            'cost_basis' => 1000,
+            'cost_per_unit' => 100,
+            'sale_date' => '2025-02-03',
+            'proceeds' => 1250,
+            'realized_gain_loss' => 250,
+            'is_short_term' => false,
+            'lot_source' => 'analyzer',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'form_8949_box' => 'D',
+            'wash_sale_disallowed' => 0,
+        ], $overrides));
     }
 }
