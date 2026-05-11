@@ -1,0 +1,17 @@
+@extends('layouts.app')
+
+@section('title', 'Roth Conversion Planner | ' . config('app.name', 'Ben Herila'))
+
+@push('data-head')
+  <script id="roth-conversion-initial-data" type="application/json" @cspNonce>
+    {!! json_encode($initialData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+  </script>
+@endpush
+
+@section('content')
+  <div id="app"></div>
+@endsection
+
+@push('scripts')
+  @vite('resources/js/financial-planning/roth-conversion.tsx')
+@endpush

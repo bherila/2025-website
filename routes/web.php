@@ -12,6 +12,7 @@ use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
+use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\UserManagementController;
@@ -139,6 +140,11 @@ Route::get('/financial-planning/retirement-contribution-calculator', function ()
 Route::get('/financial-planning/rent-vs-buy', function () {
     return view('financial-planning.rent-vs-buy');
 })->name('financial-planning.rent-vs-buy');
+
+Route::get('/financial-planning/roth-conversion', [RothConversionController::class, 'show'])
+    ->name('financial-planning.roth-conversion');
+Route::get('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'showByCode'])
+    ->name('financial-planning.roth-conversion.shared');
 
 Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');

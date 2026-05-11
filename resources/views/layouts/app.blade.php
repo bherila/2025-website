@@ -29,6 +29,7 @@
         ['type' => 'link', 'label' => 'Overview', 'href' => '/financial-planning'],
         ['type' => 'link', 'label' => 'Retirement Contribution Calculator', 'href' => '/financial-planning/retirement-contribution-calculator'],
         ['type' => 'link', 'label' => 'Rent vs Buy', 'href' => '/financial-planning/rent-vs-buy'],
+        ['type' => 'link', 'label' => 'Roth Conversion Planner', 'href' => '/financial-planning/roth-conversion'],
       ];
 
       // Build Tools submenu (admin sub-items filtered server-side)

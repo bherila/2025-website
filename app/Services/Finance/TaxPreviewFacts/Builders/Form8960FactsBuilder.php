@@ -10,6 +10,8 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use App\Services\Tax\PureTaxMath\FilingStatus;
+use App\Services\Tax\PureTaxMath\Niit;
 use LogicException;
 
 class Form8960FactsBuilder extends TaxPreviewFactBuilder
@@ -44,8 +46,8 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
             thresholdMarriedFilingJointly: self::MARRIED_FILING_JOINTLY_THRESHOLD,
             magiExcessSingle: $this->magiExcess($magi, self::SINGLE_THRESHOLD),
             magiExcessMarriedFilingJointly: $this->magiExcess($magi, self::MARRIED_FILING_JOINTLY_THRESHOLD),
-            niitTaxSingle: $this->niitTax($magi, self::SINGLE_THRESHOLD, $netInvestmentIncome),
-            niitTaxMarriedFilingJointly: $this->niitTax($magi, self::MARRIED_FILING_JOINTLY_THRESHOLD, $netInvestmentIncome),
+            niitTaxSingle: $this->niitTax($magi, FilingStatus::Single, $netInvestmentIncome),
+            niitTaxMarriedFilingJointly: $this->niitTax($magi, FilingStatus::MarriedFilingJointly, $netInvestmentIncome),
             needsMagi: $magi === null,
             componentSources: $this->componentSources($scheduleB, $scheduleE, $scheduleD, $form4952, $netCapGains, $userId, $year),
         );
@@ -135,13 +137,13 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
         return $magi === null ? null : max(0.0, $this->subtractMoney($magi, $threshold));
     }
 
-    private function niitTax(?float $magi, float $threshold, float $netInvestmentIncome): ?float
+    private function niitTax(?float $magi, FilingStatus $status, float $netInvestmentIncome): ?float
     {
-        $magiExcess = $this->magiExcess($magi, $threshold);
+        $magiExcess = $this->magiExcess($magi, $status->niitThreshold());
         if ($magiExcess === null) {
             return null;
         }
 
-        return $this->roundMoney(min($netInvestmentIncome, $magiExcess) * 0.038);
+        return Niit::tax($status, $magi, $netInvestmentIncome);
     }
 }

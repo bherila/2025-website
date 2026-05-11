@@ -23,6 +23,7 @@ class NavbarFinancialPlanningTest extends TestCase
             '/financial-planning',
             '/financial-planning/retirement-contribution-calculator',
             '/financial-planning/rent-vs-buy',
+            '/financial-planning/roth-conversion',
         ], array_column($financialPlanning['items'], 'href'));
         $this->assertContains('Retirement Contribution Calculator', array_column($financialPlanning['items'], 'label'));
     }

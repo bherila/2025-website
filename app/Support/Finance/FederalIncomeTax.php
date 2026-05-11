@@ -3,6 +3,8 @@
 namespace App\Support\Finance;
 
 use App\Services\Finance\MoneyMath;
+use App\Services\Tax\PureTaxMath\FederalBrackets;
+use App\Services\Tax\PureTaxMath\FilingStatus;
 use Illuminate\Support\Facades\Log;
 
 final class FederalIncomeTax
@@ -69,6 +71,10 @@ final class FederalIncomeTax
 
     public static function ordinaryTax(float $taxableIncome, int $year, bool $isMarried): float
     {
+        if ($year >= 2025) {
+            return FederalBrackets::taxOnOrdinary($year, $isMarried ? FilingStatus::MarriedFilingJointly : FilingStatus::Single, $taxableIncome);
+        }
+
         $rows = self::ORDINARY_BRACKETS[self::tableYear(self::ORDINARY_BRACKETS, $year)][$isMarried ? 'mfj' : 'single'];
         $tax = 0.0;
         $previousTop = 0.0;
