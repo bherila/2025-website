@@ -9,6 +9,7 @@ import FinanceConfigPage from '@/components/finance/FinanceConfigPage'
 import FinanceNavbar, { type FinanceSection } from '@/components/finance/FinanceNavbar'
 import ImportTransactionsClient from '@/components/finance/import_transactions/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
+import LotReconciliationPage from '@/components/finance/LotReconciliationPage'
 import ManageTagsPage from '@/components/finance/ManageTagsPage'
 import FinanceAccountStatementsPage from '@/components/finance/statements/FinanceAccountStatementsPage'
 import SummaryClient from '@/components/finance/SummaryClient'
@@ -151,5 +152,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (configPageDiv) {
     const root = createRoot(configPageDiv)
     root.render(<FinanceConfigPage />)
+  }
+
+  const lotReconciliationDiv = document.getElementById('LotReconciliationPage')
+  if (lotReconciliationDiv) {
+    const root = createRoot(lotReconciliationDiv)
+    root.render(<LotReconciliationPage taxDocumentId={parseInt(lotReconciliationDiv.dataset.taxDocumentId!)} />)
   }
 })

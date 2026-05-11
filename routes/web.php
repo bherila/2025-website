@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
+use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\UserManagementController;
@@ -48,6 +49,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
     Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show']);
+    Route::get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationPageController::class, 'show'])->where('id', '[0-9]+');
     // Backward compat redirect for old Schedule C URL
     Route::redirect('/finance/schedule-c', '/finance/tax-preview', 301);
     Route::get('/finance/tags', function () {
