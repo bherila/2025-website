@@ -9,6 +9,14 @@ use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
+/**
+ * Central taxable-lot visibility layer for Schedule D and Form 8949 readers.
+ *
+ * CapitalGainsTaxReportService and Form8949LotExportService call this directly.
+ * Form8949ReportBuilder, ScheduleDFactsBuilder, and TaxPreviewFactsService are
+ * intentionally transitively covered through CapitalGainsTaxReportService, while
+ * CapitalGainsImportNormalizer only maps supplied lots or parsed transactions.
+ */
 final class NormalizedLotQuery
 {
     private const string LEGACY_ACCEPTED_STATUS = 'accepted';

@@ -10,6 +10,10 @@ use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * Set UPDATE_SCHEDULE_D_SNAPSHOTS=1 only when intentionally regenerating these
+ * committed fixtures after reviewing the Schedule D/Form 8949 output diff.
+ */
 class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
 {
     use RefreshDatabase;
@@ -19,6 +23,7 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
         $snapshots = [
             'documented_broker_priority' => $this->documentedBrokerPriorityPayload(),
             'accepted_account_override' => $this->acceptedAccountOverridePayload(),
+            'doc_12_wash_sale_adjustment' => $this->doc12WashSaleAdjustmentPayload(),
         ];
 
         foreach ($snapshots as $name => $payload) {
@@ -58,6 +63,44 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
             'proceeds' => 2000,
             'cost_basis' => 2500,
             'realized_gain_loss' => -500,
+        ]);
+
+        return $this->scheduleDPayload((int) $user->id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function doc12WashSaleAdjustmentPayload(): array
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id, 'Doc 12 Brokerage');
+        $document = $this->makeTaxDocument((int) $user->id);
+        $this->makeLot($account, [
+            'symbol' => 'DOC12',
+            'description' => 'Doc 12 broker lot',
+            'tax_document_id' => $document->id,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'proceeds' => 749840.20,
+            'cost_basis' => 799409.88,
+            'realized_gain_loss' => -49569.68,
+            'form_8949_box' => 'D',
+        ]);
+        $this->makeLot($account, [
+            'symbol' => 'WASHSALEADJ',
+            'description' => 'Broker summary wash-sale adjustment (Form 8949 Box D)',
+            'quantity' => 1,
+            'purchase_date' => '2025-12-15',
+            'sale_date' => '2025-12-15',
+            'tax_document_id' => $document->id,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+            'proceeds' => 0,
+            'cost_basis' => 0,
+            'realized_gain_loss' => 536.36,
+            'wash_sale_disallowed' => 536.36,
+            'form_8949_box' => 'D',
         ]);
 
         return $this->scheduleDPayload((int) $user->id);

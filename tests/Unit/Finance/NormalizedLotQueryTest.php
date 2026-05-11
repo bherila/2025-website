@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * Mirrors the #478 override-semantics matrix: account override, accepted broker,
+ * ignored duplicate, unlinked broker, pure manual, and synthetic adjustment.
+ */
 class NormalizedLotQueryTest extends TestCase
 {
     use RefreshDatabase;

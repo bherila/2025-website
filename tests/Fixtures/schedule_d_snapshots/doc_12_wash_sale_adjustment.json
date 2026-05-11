@@ -1,0 +1,50 @@
+{
+    "rows": [
+        {
+            "form_8949_box": "D",
+            "description": "Doc 12 broker lot",
+            "date_acquired": "2024-01-02",
+            "date_sold": "2025-02-03",
+            "proceeds": 749840.2,
+            "cost_basis": 799409.88,
+            "adjustment_code": null,
+            "adjustment_amount": 0,
+            "gain_or_loss": -49569.68000000005,
+            "is_short_term": false,
+            "is_covered": true,
+            "is_summary_row": false,
+            "account_name": null,
+            "tax_document_id": 3,
+            "source_transaction_id": "1099b:6"
+        },
+        {
+            "form_8949_box": "D",
+            "description": "Broker summary wash-sale adjustment (Form 8949 Box D)",
+            "date_acquired": "2025-12-15",
+            "date_sold": "2025-12-15",
+            "proceeds": 0,
+            "cost_basis": 0,
+            "adjustment_code": "W",
+            "adjustment_amount": 536.36,
+            "gain_or_loss": 536.36,
+            "is_short_term": false,
+            "is_covered": true,
+            "is_summary_row": false,
+            "account_name": null,
+            "tax_document_id": 3,
+            "source_transaction_id": "1099b:7"
+        }
+    ],
+    "scheduleDRollup": [
+        {
+            "form_8949_box": "D",
+            "is_short_term": false,
+            "schedule_d_line": "8b",
+            "total_proceeds": 749840.2,
+            "total_cost_basis": 799409.88,
+            "total_adjustment": 536.36,
+            "net_gain_or_loss": -49033.32000000005,
+            "row_count": 2
+        }
+    ]
+}
