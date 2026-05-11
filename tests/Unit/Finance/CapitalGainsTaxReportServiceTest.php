@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -270,6 +271,66 @@ class CapitalGainsTaxReportServiceTest extends TestCase
         $this->assertSame(95.0, $report['scheduleDRollup'][0]->netGainOrLoss);
     }
 
+    public function test_accepted_account_override_link_flips_schedule_d_to_account_lot_amounts(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeTaxDocument($user->id);
+
+        $brokerLot = $this->makeLot($account, [
+            'symbol' => 'AAPL',
+            'description' => 'Broker AAPL',
+            'lot_source' => '1099b',
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'tax_document_id' => $document->id,
+            'proceeds' => 1000,
+            'cost_basis' => 1100,
+        ]);
+        $accountLot = $this->makeLot($account, [
+            'symbol' => 'AAPL',
+            'description' => 'Accepted account AAPL',
+            'lot_source' => 'analyzer',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'tax_document_id' => null,
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+        ]);
+        FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+            'match_reason' => [
+                'reason_code' => 'test_fixture',
+                'score' => 1.0,
+                'deltas' => [
+                    'proceeds' => 0.0,
+                    'basis' => 100.0,
+                    'wash' => 0.0,
+                    'qty' => 0.0,
+                    'date_days' => 0,
+                ],
+                'notes' => null,
+            ],
+            'accepted_by_user_id' => $user->id,
+            'accepted_at' => now(),
+        ]);
+        $brokerLot->update([
+            'superseded_by_lot_id' => $accountLot->lot_id,
+            'reconciliation_status' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+        $accountLot->update(['reconciliation_status' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE]);
+
+        $report = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2025);
+
+        $this->assertSame(['Accepted account AAPL'], array_map(
+            static fn ($transaction): string => $transaction->description,
+            $report['transactions'],
+        ));
+        $this->assertSame(-200.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+        $this->assertSame(1200.0, $report['scheduleDRollup'][0]->totalCostBasis);
+    }
+
     public function test_accepted_native_lots_are_used_for_reviewed_1099b_gaps(): void
     {
         $user = $this->createUser();
@@ -350,6 +411,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             'realized_gain_loss' => $overrides['realized_gain_loss'] ?? ($proceeds - $costBasis),
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? null,
+            'source' => $overrides['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             'tax_document_id' => $overrides['tax_document_id'] ?? null,
             'form_8949_box' => array_key_exists('form_8949_box', $overrides) ? $overrides['form_8949_box'] : 'A',
             'is_covered' => array_key_exists('is_covered', $overrides) ? $overrides['is_covered'] : true,
