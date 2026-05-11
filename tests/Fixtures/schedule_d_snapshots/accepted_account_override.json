@@ -1,0 +1,33 @@
+{
+    "rows": [
+        {
+            "form_8949_box": "D",
+            "description": "Accepted account AAPL",
+            "date_acquired": "2024-01-02",
+            "date_sold": "2025-02-03",
+            "proceeds": 1000,
+            "cost_basis": 1200,
+            "adjustment_code": null,
+            "adjustment_amount": 0,
+            "gain_or_loss": -200,
+            "is_short_term": false,
+            "is_covered": true,
+            "is_summary_row": false,
+            "account_name": null,
+            "tax_document_id": null,
+            "source_transaction_id": "account_lot:5"
+        }
+    ],
+    "scheduleDRollup": [
+        {
+            "form_8949_box": "D",
+            "is_short_term": false,
+            "schedule_d_line": "8b",
+            "total_proceeds": 1000,
+            "total_cost_basis": 1200,
+            "total_adjustment": 0,
+            "net_gain_or_loss": -200,
+            "row_count": 1
+        }
+    ]
+}

@@ -2,7 +2,6 @@
 
 namespace App\Services\Finance\CapitalGains;
 
-use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 
 class CapitalGainsTaxReportService
@@ -52,31 +51,7 @@ class CapitalGainsTaxReportService
             return [];
         }
 
-        $lots = FinAccountLot::query()
-            ->whereIn('acct_id', $accountIds)
-            ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
-            ->whereNull('superseded_by_lot_id')
-            ->where(function ($query) use ($taxYear): void {
-                $query->whereNotNull('tax_document_id')
-                    ->orWhere(function ($orphanReportedLotQuery) use ($taxYear): void {
-                        $orphanReportedLotQuery->whereNull('tax_document_id')
-                            ->whereIn('lot_source', ReportedLotQueryScopes::REPORTED_LOT_SOURCES)
-                            ->whereNotExists(ReportedLotQueryScopes::documentedLotsForSameAccountYear($taxYear));
-                    })
-                    ->orWhere(function ($nativeLotQuery) use ($taxYear): void {
-                        ReportedLotQueryScopes::applyNativeAccountLotSource($nativeLotQuery);
-                        $nativeLotQuery->where(function ($reviewedNativeLotQuery) use ($taxYear): void {
-                            $reviewedNativeLotQuery->where('reconciliation_status', 'accepted')
-                                ->orWhereExists(ReportedLotQueryScopes::reportedLotsOverriddenByCurrentLot(taxYear: $taxYear));
-                        });
-                    })
-                    ->orWhere(function ($nativeFallbackLotQuery) use ($taxYear): void {
-                        ReportedLotQueryScopes::applyNativeAccountLotSource($nativeFallbackLotQuery);
-                        $nativeFallbackLotQuery
-                            ->whereNotExists(ReportedLotQueryScopes::documentedLotsForSameAccountYear($taxYear))
-                            ->whereNotExists(ReportedLotQueryScopes::orphanReportedLotsForSameAccountYear($taxYear));
-                    });
-            })
+        $lots = NormalizedLotQuery::forAccountIdsYear($accountIds, $taxYear)
             ->with(['account:acct_id,acct_name'])
             ->orderBy('acct_id')
             ->orderBy('symbol')
