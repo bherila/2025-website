@@ -138,6 +138,45 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             ->assertJsonPath('documents.0.link_state_counts.needs_review', 1);
     }
 
+    public function test_year_endpoint_treats_drift_as_higher_priority_than_clean_link_state(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $brokerLot = $this->makeLot($account, $document, [
+            'cost_basis' => 900,
+            'realized_gain_loss' => 350,
+        ]);
+        $accountLot = $this->makeAccountLot($account);
+        FinLotReconciliationLink::create([
+            'tax_document_id' => $document->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+            'match_reason' => [
+                'reason_code' => 'exact',
+                'score' => 1.0,
+                'deltas' => [
+                    'proceeds' => 0,
+                    'basis' => 0,
+                    'wash' => 0,
+                    'qty' => 0,
+                    'date_days' => 0,
+                ],
+                'notes' => null,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/finance/tax-years/2025/lot-reconciliation')
+            ->assertOk()
+            ->assertJsonPath('summary.dashboard_status', 'drift')
+            ->assertJsonPath('summary.documents_by_status.drift', 1)
+            ->assertJsonPath('summary.documents_by_status.needs_review', 0)
+            ->assertJsonPath('documents.0.dashboard_status', 'drift')
+            ->assertJsonPath('documents.0.link_state_counts.auto_matched', 1);
+    }
+
     public function test_year_endpoint_returns_empty_rollup_without_1099_b_documents(): void
     {
         $user = $this->createUser();
@@ -216,9 +255,12 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         return $document;
     }
 
-    private function makeLot(FinAccounts $account, FileForTaxDocument $document): FinAccountLot
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
-        return FinAccountLot::create([
+        return FinAccountLot::create(array_merge([
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
             'description' => 'Apple Inc.',
@@ -234,7 +276,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             'tax_document_id' => $document->id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
-        ]);
+        ], $overrides));
     }
 
     /**
