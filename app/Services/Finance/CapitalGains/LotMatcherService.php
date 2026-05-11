@@ -8,6 +8,8 @@ use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\LotMatcher;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -69,7 +71,7 @@ class LotMatcherService
     {
         $taxDocument = $this->taxDocument($taxDocumentId);
 
-        return DB::transaction(function () use ($taxDocument, $preserveDecisions): LotMatcherResult {
+        $result = DB::transaction(function () use ($taxDocument, $preserveDecisions): LotMatcherResult {
             $existingLinks = $this->linksForDocument((int) $taxDocument->id);
             $preservedLinks = $preserveDecisions
                 ? $existingLinks->filter(fn (FinLotReconciliationLink $link): bool => in_array($link->state, self::PRESERVED_STATES, true))->values()
@@ -135,6 +137,29 @@ class LotMatcherService
                 counts: $this->countsForDocument((int) $taxDocument->id),
             );
         });
+
+        $this->recordLastMatchedAt((int) $taxDocument->id);
+
+        return $result;
+    }
+
+    public static function lastMatchedAtCacheKey(int $taxDocumentId): string
+    {
+        return "finance:lot_matcher:last_matched_at:{$taxDocumentId}";
+    }
+
+    public function lastMatchedAtForDocument(int $taxDocumentId): ?string
+    {
+        $cached = Cache::get(self::lastMatchedAtCacheKey($taxDocumentId));
+        if ($cached instanceof \DateTimeInterface) {
+            return Carbon::instance($cached)->toJSON();
+        }
+
+        if (is_string($cached) && trim($cached) !== '') {
+            return Carbon::parse($cached)->toJSON();
+        }
+
+        return $this->lastLinkTimestampForDocument($taxDocumentId);
     }
 
     public function previewMatcherForDocument(int $taxDocumentId, bool $preserveDecisions = true): LotMatcherResult
@@ -678,6 +703,29 @@ class LotMatcherService
             ->where('tax_document_id', $taxDocumentId)
             ->orderBy('id')
             ->get();
+    }
+
+    private function recordLastMatchedAt(int $taxDocumentId): void
+    {
+        Cache::forever(self::lastMatchedAtCacheKey($taxDocumentId), now()->toJSON());
+    }
+
+    private function lastLinkTimestampForDocument(int $taxDocumentId): ?string
+    {
+        $timestamps = array_filter([
+            FinLotReconciliationLink::query()
+                ->where('tax_document_id', $taxDocumentId)
+                ->max('updated_at'),
+            FinLotReconciliationLink::query()
+                ->where('tax_document_id', $taxDocumentId)
+                ->max('created_at'),
+        ], static fn (mixed $timestamp): bool => is_string($timestamp) && trim($timestamp) !== '');
+
+        if ($timestamps === []) {
+            return null;
+        }
+
+        return Carbon::parse(max($timestamps))->toJSON();
     }
 
     /**

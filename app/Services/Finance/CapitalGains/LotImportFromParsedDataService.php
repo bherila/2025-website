@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance\CapitalGains;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
@@ -18,11 +19,18 @@ class LotImportFromParsedDataService
         private readonly BrokerWashSaleTreatmentNormalizer $washSaleNormalizer,
         private readonly WashSaleAdjustmentSynthesizer $washSaleAdjustmentSynthesizer,
         private readonly LotMatcher $lotMatcher,
+        private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
     ) {}
 
-    public function rebuildForTaxDocument(int $taxDocumentId): LotImportRebuildResult
-    {
-        return $this->rebuild($taxDocumentId, dryRun: false);
+    public function rebuildForTaxDocument(
+        int $taxDocumentId,
+        LotMatcherAutoTrigger $trigger = LotMatcherAutoTrigger::ParsedDataRebuild,
+    ): LotImportRebuildResult {
+        $result = $this->rebuild($taxDocumentId, dryRun: false);
+
+        $this->lotMatcherAutoDispatchService->dispatchForTaxDocument($taxDocumentId, $trigger);
+
+        return $result;
     }
 
     public function previewForTaxDocument(int $taxDocumentId): LotImportRebuildResult

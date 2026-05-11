@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotReconciliationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
@@ -16,6 +17,7 @@ class TaxDocumentLotReconciliationController extends Controller
 {
     public function __construct(
         private readonly LotReconciliationService $lotReconciliationService,
+        private readonly LotMatcherService $lotMatcherService,
     ) {}
 
     public function show(int $id): JsonResponse
@@ -48,6 +50,7 @@ class TaxDocumentLotReconciliationController extends Controller
                 'tax_year' => (int) $taxDocument->tax_year,
                 'form_type' => (string) $taxDocument->form_type,
                 'original_filename' => $taxDocument->original_filename,
+                'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->id),
             ],
             'summary' => [
                 'total' => $links->count(),

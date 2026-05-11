@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
@@ -29,7 +30,7 @@ class TaxDocumentLotsRebuildController extends Controller
             ], 422);
         }
 
-        $result = $this->lotImportFromParsedDataService->rebuildForTaxDocument((int) $taxDocument->id);
+        $result = $this->lotImportFromParsedDataService->rebuildForTaxDocument((int) $taxDocument->id, LotMatcherAutoTrigger::RebuildEndpoint);
 
         return response()->json(array_merge($result->toArray(), [
             'refreshedTaxFacts' => $this->taxPreviewFactsService->arrayForYear(

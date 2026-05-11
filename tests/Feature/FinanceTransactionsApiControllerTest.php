@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\LotsMatchJob;
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinStatement;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class FinanceTransactionsApiControllerTest extends TestCase
@@ -371,6 +375,39 @@ class FinanceTransactionsApiControllerTest extends TestCase
             ->count());
     }
 
+    public function test_import_line_items_queues_lot_matcher_once_for_affected_year(): void
+    {
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->createAccountWithTransactions($user->id);
+        $document = $this->createBrokerDocument($user->id, (int) $account->acct_id, 2026);
+
+        $this->actingAs($user)->postJson("/api/finance/{$account->acct_id}/line_items", [
+            'transactions' => [
+                [
+                    't_date' => '2026-05-03',
+                    't_amt' => 42.00,
+                    't_type' => 'deposit',
+                    't_description' => 'API deposit',
+                ],
+                [
+                    't_date' => '2026-06-03',
+                    't_amt' => 25.00,
+                    't_type' => 'deposit',
+                    't_description' => 'Second API deposit',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('imported', 2);
+
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
+        Queue::assertPushed(LotsMatchJob::class, 1);
+    }
+
     public function test_import_line_items_normalizes_decimal_amounts_for_duplicate_detection(): void
     {
         $user = $this->createUser();
@@ -545,5 +582,26 @@ class FinanceTransactionsApiControllerTest extends TestCase
     {
         $response = $this->getJson('/api/finance/all/transaction-years');
         $response->assertUnauthorized();
+    }
+
+    private function createBrokerDocument(int $userId, int $accountId, int $taxYear): FileForTaxDocument
+    {
+        $document = FileForTaxDocument::create([
+            'user_id' => $userId,
+            'tax_year' => $taxYear,
+            'form_type' => 'broker_1099',
+            'original_filename' => 'broker-1099.pdf',
+            'stored_filename' => 'broker-1099.pdf',
+            's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => str_repeat('d', 64),
+            'uploaded_by_user_id' => $userId,
+            'is_reviewed' => true,
+        ]);
+
+        TaxDocumentAccount::createLink((int) $document->id, $accountId, '1099_b', $taxYear, isReviewed: true);
+
+        return $document;
     }
 }

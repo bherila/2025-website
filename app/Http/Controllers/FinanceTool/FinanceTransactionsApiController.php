@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinStatement;
+use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\Finance\TransactionImportService;
 use Carbon\CarbonImmutable;
@@ -21,6 +23,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class FinanceTransactionsApiController extends Controller
 {
     use QueriesUserAccounts;
+
+    public function __construct(
+        private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+    ) {}
 
     /**
      * Get line items (transactions) for one or all accounts.
@@ -249,6 +255,18 @@ class FinanceTransactionsApiController extends Controller
                 'success' => false,
                 'errors' => $result->errors,
             ], 422);
+        }
+
+        if ($result->inserted > 0) {
+            $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
+                userId: (int) Auth::id(),
+                accountId: (int) $account->acct_id,
+                taxYears: LotMatcherAutoDispatchService::yearsFromDates(array_map(
+                    static fn (array $row): mixed => $row['t_date'] ?? null,
+                    $result->rows,
+                )),
+                trigger: LotMatcherAutoTrigger::CsvImport,
+            );
         }
 
         return response()->json([

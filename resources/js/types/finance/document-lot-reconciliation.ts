@@ -80,6 +80,7 @@ export const lotReconciliationLinksResponseSchema = z.object({
     tax_year: z.number(),
     form_type: z.string(),
     original_filename: z.string().nullable(),
+    last_matched_at: z.string().nullable(),
   }),
   summary: z.object({
     total: z.number(),
@@ -94,6 +95,7 @@ export const taxDocumentReconciliationReportSchema = z.object({
   broker: z.string().nullable(),
   tax_year: z.number(),
   form_type: z.string(),
+  last_matched_at: z.string().nullable(),
   status: z.string(),
   dashboard_status: lotReconciliationDashboardStatusSchema,
   link_state_counts: lotReconciliationLinkStateCountsSchema,
@@ -133,6 +135,7 @@ export const taxYearLotReconciliationResponseSchema = z.object({
     broker: z.string().nullable(),
     tax_year: z.number(),
     form_type: z.string(),
+    last_matched_at: z.string().nullable(),
     status: z.string(),
     dashboard_status: lotReconciliationDashboardStatusSchema,
     link_state_counts: lotReconciliationLinkStateCountsSchema,

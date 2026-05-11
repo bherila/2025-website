@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class TaxDocumentLotsRebuildEndpointTest extends TestCase
@@ -30,6 +32,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
 
     public function test_endpoint_rebuilds_lots_and_returns_refreshed_tax_facts(): void
     {
+        Queue::fake();
         $user = $this->createUser();
         $account = $this->makeAccount($user->id);
         $document = $this->makeBrokerDocument($user->id, $account);
@@ -55,6 +58,10 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
             'form_8949_box' => 'D',
         ]);
         $this->assertDatabaseMissing('fin_account_lots', ['symbol' => 'STALE']);
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
     }
 
     public function test_endpoint_rebuilds_unparsed_status_when_parsed_data_is_usable(): void

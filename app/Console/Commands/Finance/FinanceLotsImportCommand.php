@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands\Finance;
 
+use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
+use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\Exceptions\WealthfrontPdfParseException;
 use App\Services\Finance\Wealthfront1099BLotParser;
 use HelgeSverre\Toon\Toon;
@@ -74,6 +76,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private string $currentDescription = '';
 
     private bool $isLongTerm = false;
+
+    public function __construct(
+        private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -152,6 +160,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return 0;
         }
 
+        $deletedYears = $doClear ? $this->closedLotYearsForAccount($acctId) : [];
+        $deleted = 0;
+
         if ($doClear) {
             $deleted = DB::table('fin_account_lots')->where('acct_id', $acctId)->delete();
             $this->info("Cleared {$deleted} existing lot record(s) for account {$acctId}.");
@@ -163,6 +174,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         [$inserted, $skipped] = $this->persistLots($acctId, $lots, $taxDocumentId, skipDuplicateCheck: $doClear);
+        $this->dispatchMatcherAfterImport($userId, $acctId, $taxDocumentId, $inserted, $deleted, $lots, $deletedYears);
 
         $this->info("Imported: {$inserted} inserted, {$skipped} skipped (duplicate).");
 
@@ -622,6 +634,69 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->bulkMatchTransactions($acctId, $taxDocumentId, $lotsToInsert);
 
         return [count($lotsToInsert), $skipped];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @param  list<int>  $deletedYears
+     */
+    private function dispatchMatcherAfterImport(
+        int $userId,
+        int $acctId,
+        ?int $taxDocumentId,
+        int $inserted,
+        int $deleted,
+        array $lots,
+        array $deletedYears,
+    ): void {
+        if ($inserted === 0 && $deleted === 0) {
+            return;
+        }
+
+        if ($taxDocumentId !== null) {
+            $this->lotMatcherAutoDispatchService->dispatchForTaxDocument(
+                taxDocumentId: $taxDocumentId,
+                trigger: LotMatcherAutoTrigger::LotsImportCli,
+                accountId: $acctId,
+            );
+
+            return;
+        }
+
+        $years = $deletedYears;
+        if ($inserted > 0) {
+            $years = array_merge($years, $this->closedLotYearsFromLots($lots));
+        }
+
+        $this->lotMatcherAutoDispatchService->dispatchForAccountYears(
+            userId: $userId,
+            accountId: $acctId,
+            taxYears: $years,
+            trigger: LotMatcherAutoTrigger::LotsImportCli,
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function closedLotYearsForAccount(int $acctId): array
+    {
+        return LotMatcherAutoDispatchService::yearsFromDates(FinAccountLot::query()
+            ->where('acct_id', $acctId)
+            ->whereNotNull('sale_date')
+            ->pluck('sale_date'));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lots
+     * @return list<int>
+     */
+    private function closedLotYearsFromLots(array $lots): array
+    {
+        return LotMatcherAutoDispatchService::yearsFromDates(array_map(
+            static fn (array $lot): mixed => $lot['sale_date'] ?? null,
+            $lots,
+        ));
     }
 
     /**

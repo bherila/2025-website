@@ -126,6 +126,7 @@ const reportResponse = {
   broker: 'Synthetic Broker',
   tax_year: 2025,
   form_type: 'broker_1099',
+  last_matched_at: '2026-05-10T17:00:00.000Z',
   status: 'ok',
   dashboard_status: 'needs_review',
   link_state_counts: counts,
@@ -148,6 +149,7 @@ const linksResponse = {
     tax_year: 2025,
     form_type: 'broker_1099',
     original_filename: 'broker.pdf',
+    last_matched_at: '2026-05-10T17:00:00.000Z',
   },
   summary: {
     total: 1,
@@ -177,6 +179,7 @@ const yearResponse = {
     broker: 'Synthetic Broker',
     tax_year: 2025,
     form_type: 'broker_1099',
+    last_matched_at: '2026-05-10T17:00:00.000Z',
     status: 'ok',
     dashboard_status: 'needs_review',
     link_state_counts: counts,
@@ -217,6 +220,7 @@ describe('LotReconciliationPage', () => {
     render(<LotReconciliationPage taxDocumentId={12} />)
 
     await waitFor(() => expect(screen.getByText(/Synthetic Broker/)).toBeInTheDocument())
+    expect(screen.getByText(/Matcher last ran/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /accept broker/i }))
 
     await waitFor(() => {

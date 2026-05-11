@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\LotsMatchJob;
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class FinanceLotsControllerTest extends TestCase
@@ -235,6 +239,53 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertEquals(500.00, (float) $lot->realized_gain_loss);
     }
 
+    public function test_create_open_lot_does_not_queue_lot_matcher(): void
+    {
+        Queue::fake();
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_last_balance' => '0',
+        ]);
+        $this->createBrokerDocument($user->id, $acctId);
+
+        $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots", [
+            'symbol' => 'TSLA',
+            'quantity' => 10,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 2500.00,
+        ])->assertStatus(201);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+    }
+
+    public function test_create_closed_lot_queues_lot_matcher_for_affected_broker_document(): void
+    {
+        Queue::fake();
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Account',
+            'acct_last_balance' => '0',
+        ]);
+        $document = $this->createBrokerDocument($user->id, $acctId);
+
+        $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots", [
+            'symbol' => 'TSLA',
+            'quantity' => 10,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 2500.00,
+            'sale_date' => '2025-07-01',
+            'proceeds' => 3000.00,
+        ])->assertStatus(201);
+
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
+    }
+
     public function test_cannot_see_other_users_lots(): void
     {
         $owner = $this->createUser();
@@ -310,6 +361,49 @@ class FinanceLotsControllerTest extends TestCase
             'close_t_id' => $sellTId,
             'lot_source' => 'fidelity_import',
         ]);
+    }
+
+    public function test_import_lots_queues_one_matcher_job_for_multiple_closed_lots(): void
+    {
+        Queue::fake();
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Import Dispatch',
+            'acct_last_balance' => '0',
+        ]);
+        $document = $this->createBrokerDocument($user->id, $acctId);
+
+        $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots/import", [
+            'lots' => [
+                [
+                    'symbol' => 'ARKG',
+                    'quantity' => 0.101,
+                    'purchase_date' => '2024-12-19',
+                    'cost_basis' => 2.25,
+                    'sale_date' => '2025-05-06',
+                    'proceeds' => 2.06,
+                    'realized_gain_loss' => -0.19,
+                    'is_short_term' => true,
+                ],
+                [
+                    'symbol' => 'AAPL',
+                    'quantity' => 1,
+                    'purchase_date' => '2024-12-20',
+                    'cost_basis' => 100,
+                    'sale_date' => '2025-05-07',
+                    'proceeds' => 110,
+                    'realized_gain_loss' => 10,
+                    'is_short_term' => true,
+                ],
+            ],
+        ])->assertOk();
+
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+        );
+        Queue::assertPushed(LotsMatchJob::class, 1);
     }
 
     public function test_import_lots_updates_existing_open_lot(): void
@@ -675,6 +769,38 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertTrue($lot->is_short_term);
     }
 
+    public function test_update_lot_transaction_assignment_only_does_not_queue_matcher(): void
+    {
+        Queue::fake();
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Update Lot Assignment Only',
+            'acct_last_balance' => '0',
+        ]);
+        $this->createBrokerDocument($user->id, $acctId);
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId, 't_date' => '2025-01-15', 't_type' => 'Buy', 't_symbol' => 'AAPL', 't_qty' => 100, 't_amt' => -15000, 'when_added' => now(),
+        ]);
+
+        $lot = FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 100,
+            'purchase_date' => '2025-01-15',
+            'cost_basis' => 15000.00,
+            'sale_date' => '2025-06-15',
+            'proceeds' => 17000.00,
+            'lot_source' => 'analyzer',
+        ]);
+
+        $this->actingAs($user)->putJson("/api/finance/{$acctId}/lots/{$lot->lot_id}", [
+            'open_t_id' => $buyTId,
+        ])->assertOk();
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+    }
+
     public function test_delete_lot(): void
     {
         $user = $this->createAdminUser();
@@ -842,5 +968,26 @@ class FinanceLotsControllerTest extends TestCase
             'assignments' => [],
         ]);
         $response->assertUnauthorized();
+    }
+
+    private function createBrokerDocument(int $userId, int $accountId): FileForTaxDocument
+    {
+        $document = FileForTaxDocument::create([
+            'user_id' => $userId,
+            'tax_year' => 2025,
+            'form_type' => 'broker_1099',
+            'original_filename' => 'broker-1099.pdf',
+            'stored_filename' => 'broker-1099.pdf',
+            's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => str_repeat('b', 64),
+            'uploaded_by_user_id' => $userId,
+            'is_reviewed' => true,
+        ]);
+
+        TaxDocumentAccount::createLink((int) $document->id, $accountId, '1099_b', 2025, isReviewed: true);
+
+        return $document;
     }
 }

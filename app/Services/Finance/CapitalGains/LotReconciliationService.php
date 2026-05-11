@@ -45,6 +45,7 @@ class LotReconciliationService
     public function __construct(
         private readonly BrokerWashSaleTreatmentNormalizer $washSaleTreatmentNormalizer,
         private readonly WashSaleAdjustmentSynthesizer $washSaleAdjustmentSynthesizer,
+        private readonly LotMatcherService $lotMatcherService,
     ) {}
 
     public function reconcileTaxDocument(int $taxDocumentId): TaxDocumentReconciliationReport
@@ -130,6 +131,7 @@ class LotReconciliationService
             'broker' => $this->brokerName($taxDocument, $entries),
             'tax_year' => (int) $taxDocument->tax_year,
             'form_type' => (string) $taxDocument->form_type,
+            'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->id),
             'status' => $summary['status'],
             'dashboard_status' => $dashboardStatus,
             'link_state_counts' => $linkStateCounts,
