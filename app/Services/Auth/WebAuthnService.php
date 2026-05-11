@@ -17,6 +17,7 @@ use Webauthn\AuthenticatorAssertionResponseValidator;
 use Webauthn\AuthenticatorAttestationResponse;
 use Webauthn\AuthenticatorAttestationResponseValidator;
 use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
+use Webauthn\CredentialRecord;
 use Webauthn\Denormalizer\WebauthnSerializerFactory;
 use Webauthn\PublicKeyCredential;
 use Webauthn\PublicKeyCredentialCreationOptions;
@@ -24,7 +25,6 @@ use Webauthn\PublicKeyCredentialDescriptor;
 use Webauthn\PublicKeyCredentialParameters;
 use Webauthn\PublicKeyCredentialRequestOptions;
 use Webauthn\PublicKeyCredentialRpEntity;
-use Webauthn\PublicKeyCredentialSource;
 use Webauthn\PublicKeyCredentialUserEntity;
 use Webauthn\TrustPath\EmptyTrustPath;
 
@@ -183,20 +183,19 @@ class WebAuthnService
         }
 
         $user = $storedCredential->user;
-        if (! $user || ! $user->canLogin()) {
+        if (! $user instanceof User || ! $user->canLogin()) {
             throw new \RuntimeException('User account is disabled.');
         }
 
-        // Reconstruct the source
-        $source = $this->credentialToSource($storedCredential, $user);
+        $record = $this->credentialToRecord($storedCredential, $user);
 
         /** @var AuthenticatorAssertionResponse $response */
         $response = $credential->response;
 
         $host = $this->getRpId($request);
         $validator = $this->createAssertionValidator($request);
-        $updatedSource = $validator->check(
-            $source,
+        $updatedRecord = $validator->check(
+            $record,
             $response,
             $options,
             $host,
@@ -204,7 +203,7 @@ class WebAuthnService
         );
 
         // Update counter
-        $storedCredential->update(['counter' => $updatedSource->counter]);
+        $storedCredential->update(['counter' => $updatedRecord->counter]);
 
         return $user;
     }
@@ -262,11 +261,11 @@ class WebAuthnService
         return AuthenticatorAssertionResponseValidator::create($factory->requestCeremony());
     }
 
-    private function credentialToSource(WebAuthnCredential $credential, User $user): PublicKeyCredentialSource
+    private function credentialToRecord(WebAuthnCredential $credential, User $user): CredentialRecord
     {
         $rawId = base64_decode(strtr($credential->credential_id, '-_', '+/'));
 
-        return new PublicKeyCredentialSource(
+        return CredentialRecord::create(
             publicKeyCredentialId: $rawId,
             type: 'public-key',
             transports: $credential->transports ?? [],
