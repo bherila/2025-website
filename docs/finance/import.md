@@ -54,14 +54,15 @@ The frontend (`accountMatcher.ts`) automatically matches each parsed account blo
 
 ---
 
-## Multi-Account Tax Document Import
+## Unified Document Import
 
-Consolidated brokerage 1099 PDFs (e.g., Fidelity Tax Reporting Statement) are imported via the `tax_form_multi_account_import` GenAI job type:
+Consolidated brokerage 1099 PDFs (e.g., Fidelity Tax Reporting Statement) and statement documents are created through the unified document import flow:
 
-1. Upload PDF via `POST /api/finance/tax-documents/multi-account` (no `account_id` required)
-2. GenAI returns per-account `{ account_identifier, account_name, form_type, tax_year, parsed_data }` entries
-3. Server-side matching creates `fin_tax_document_accounts` rows; unmatched entries get `account_id = null`
-4. User reviews/corrects assignments in `MultiAccountImportModal`, then confirms
+1. Upload PDF via `POST /api/finance/documents/request-upload`
+2. Confirm via `POST /api/finance/documents` with `document_kind`
+3. GenAI uses the `document_extract` job type with `document_kind` in context
+4. Server-side matching creates `fin_document_accounts` rows; unmatched tax-form entries get `account_id = null`
+5. User reviews/corrects assignments in `DocumentImportModal`, then confirms account links
 
 ---
 
@@ -95,7 +96,9 @@ The file management system uses SHA-256 hashing:
 | `POST /api/genai/import/request-upload` | Get a pre-signed S3 URL for uploading a PDF |
 | `POST /api/genai/import/jobs` | Create a new async import job after S3 upload |
 | `GET /api/genai/import/jobs` | List recent import jobs (supports `job_type` and `acct_id` filters) |
-| `POST /api/finance/multi-import-pdf` | Import data for multiple accounts in one transaction |
+| `GET /api/finance/documents` | List unified import documents; supports `document_kind` filtering |
+| `POST /api/finance/documents/request-upload` | Get a pre-signed S3 URL for unified document uploads |
+| `POST /api/finance/documents` | Confirm and ingest a tax form, statement, CSV, JSON, or TOON document |
 
 ---
 

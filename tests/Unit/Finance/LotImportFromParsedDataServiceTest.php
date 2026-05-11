@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\Queue;
 use ReflectionMethod;
 use Tests\TestCase;
@@ -26,7 +27,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(1, $result->insertedCount);
         $this->assertSame(1, $result->deletedCount);
@@ -49,11 +50,11 @@ class LotImportFromParsedDataServiceTest extends TestCase
         $account = $this->makeAccount($user->id);
         $document = $this->makeBrokerDocument($user->id, $account, $this->parsedData());
 
-        app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
     }
 
@@ -63,13 +64,13 @@ class LotImportFromParsedDataServiceTest extends TestCase
         $account = $this->makeAccount($user->id);
         $document = $this->makeBrokerDocument($user->id, $account, $this->parsedData(), createLink: false);
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(0, $result->insertedCount);
         $this->assertSame(0, $result->deletedCount);
         $this->assertCount(1, $result->warnings);
         $this->assertStringContainsString('did not resolve to a finance account', $result->warnings[0]);
-        $this->assertSame(0, FinAccountLot::query()->where('tax_document_id', $document->id)->count());
+        $this->assertSame(0, FinAccountLot::query()->where('document_id', $document->document_id)->count());
     }
 
     public function test_rebuild_partitions_multiple_1099_b_entries_without_reusing_links(): void
@@ -103,24 +104,24 @@ class LotImportFromParsedDataServiceTest extends TestCase
         TaxDocumentAccount::createLink((int) $document->id, $firstAccount->acct_id, '1099_b', 2025, aiIdentifier: 'WF-1111', aiAccountName: 'Wealthfront Taxable');
         TaxDocumentAccount::createLink((int) $document->id, $secondAccount->acct_id, '1099_b', 2025, aiIdentifier: 'WF-2222', aiAccountName: 'Wealthfront IRA');
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(2, $result->insertedCount);
         $this->assertSame(0, $result->deletedCount);
         $this->assertCount(1, $result->warnings);
         $this->assertStringContainsString('Entry 2: did not resolve to a finance account', $result->warnings[0]);
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'acct_id' => $firstAccount->acct_id,
             'symbol' => 'VTI',
         ]);
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'acct_id' => $secondAccount->acct_id,
             'symbol' => 'VXUS',
         ]);
         $this->assertDatabaseMissing('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'DUP',
         ]);
     }
@@ -129,7 +130,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
     {
         $user = $this->createUser();
         $account = $this->makeAccount($user->id);
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -151,13 +152,13 @@ class LotImportFromParsedDataServiceTest extends TestCase
         ]);
         $this->makeLot($account, $document, ['source' => FinAccountLot::SOURCE_BROKER_1099B]);
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(0, $result->insertedCount);
         $this->assertSame(1, $result->deletedCount);
         $this->assertCount(1, $result->warnings);
         $this->assertStringContainsString('parsed data contains no 1099-B entries', $result->warnings[0]);
-        $this->assertSame(0, FinAccountLot::query()->where('tax_document_id', $document->id)->count());
+        $this->assertSame(0, FinAccountLot::query()->where('document_id', $document->document_id)->count());
     }
 
     public function test_rebuild_warns_when_legacy_tagged_lots_are_replaced(): void
@@ -170,7 +171,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
             'lot_source' => 'import_1099b',
         ]);
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(1, $result->insertedCount);
         $this->assertSame(1, $result->deletedCount);
@@ -198,10 +199,10 @@ class LotImportFromParsedDataServiceTest extends TestCase
                 'symbol' => 'NODATE',
                 'sale_date' => null,
             ]),
-        ], (int) $document->id);
+        ], (int) $document->document_id);
 
         $this->assertSame(1, $result->insertedCount);
-        $lot = FinAccountLot::query()->where('tax_document_id', $document->id)->firstOrFail();
+        $lot = FinAccountLot::query()->where('document_id', $document->document_id)->firstOrFail();
         $this->assertSame('DATEOK', $lot->symbol);
         $this->assertSame('2024-03-15', $lot->purchase_date?->format('Y-m-d'));
         $this->assertSame('2024-03-15', $lot->sale_date?->format('Y-m-d'));
@@ -239,12 +240,12 @@ class LotImportFromParsedDataServiceTest extends TestCase
             ],
         ]));
 
-        $result = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(2, $result->insertedCount);
         $this->assertStringContainsString('wash-sale summary total 50.00 does not match parsed row total 0.00', $result->warnings[0]);
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'WASHSALEADJ',
             'source' => FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
             'wash_sale_disallowed' => 50,
@@ -266,19 +267,19 @@ class LotImportFromParsedDataServiceTest extends TestCase
         ]];
 
         $jobDocument = $this->makePendingBrokerDocument($user->id);
-        $genaiJob = $this->makeGenAiJob($user->id, (int) $jobDocument->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $jobDocument->document_id);
         $jobDocument->update(['genai_job_id' => $genaiJob->id]);
         $job = new ParseImportJob((int) $genaiJob->id);
-        $method = new ReflectionMethod($job, 'createMultiAccountTaxDocumentResults');
+        $method = new ReflectionMethod($job, 'createMultiAccountDocumentResults');
         $method->setAccessible(true);
         $method->invoke($job, $genaiJob, $data);
 
         $serviceDocument = $this->makeBrokerDocument($user->id, $account, $this->parsedData(), filename: 'service-1099.pdf');
-        app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $serviceDocument->id);
+        app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $serviceDocument->document_id);
 
         $this->assertSame(
-            $this->canonicalLotRows((int) $jobDocument->id),
-            $this->canonicalLotRows((int) $serviceDocument->id),
+            $this->canonicalLotRows((int) $jobDocument->document_id),
+            $this->canonicalLotRows((int) $serviceDocument->document_id),
         );
     }
 
@@ -311,17 +312,17 @@ class LotImportFromParsedDataServiceTest extends TestCase
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
 
-        $first = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
-        $firstRows = $this->canonicalLotRows((int) $document->id);
-        $second = app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $document->id);
+        $first = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
+        $firstRows = $this->canonicalLotRows((int) $document->document_id);
+        $second = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
 
         $this->assertSame(1, $first->insertedCount);
         $this->assertSame(1, $first->deletedCount);
         $this->assertSame(1, $second->insertedCount);
         $this->assertSame(1, $second->deletedCount);
-        $this->assertSame($firstRows, $this->canonicalLotRows((int) $document->id));
+        $this->assertSame($firstRows, $this->canonicalLotRows((int) $document->document_id));
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'DOC12',
             'wash_sale_disallowed' => 50,
             'realized_gain_loss' => -150,
@@ -348,7 +349,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
         bool $createLink = true,
         string $filename = 'broker-1099.pdf',
     ): FileForTaxDocument {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -381,7 +382,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
      */
     private function makeBrokerDocumentWithEntries(int $userId, array $entries): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -399,7 +400,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
 
     private function makePendingBrokerDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -414,18 +415,19 @@ class LotImportFromParsedDataServiceTest extends TestCase
         ]);
     }
 
-    private function makeGenAiJob(int $userId, int $taxDocumentId): GenAiImportJob
+    private function makeGenAiJob(int $userId, int $documentId): GenAiImportJob
     {
         return GenAiImportJob::create([
             'user_id' => $userId,
-            'job_type' => 'tax_form_multi_account_import',
+            'job_type' => 'document_extract',
             'file_hash' => str_repeat('e', 64),
             'original_filename' => 'job-1099.pdf',
             's3_path' => "tax_docs/{$userId}/job-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
             'context_json' => json_encode([
-                'tax_document_id' => $taxDocumentId,
+                'document_id' => $documentId,
+                'document_kind' => 'tax_form',
                 'tax_year' => 2025,
                 'accounts' => [],
             ]),
@@ -452,7 +454,8 @@ class LotImportFromParsedDataServiceTest extends TestCase
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));
@@ -504,7 +507,7 @@ class LotImportFromParsedDataServiceTest extends TestCase
     private function canonicalLotRows(int $taxDocumentId): array
     {
         return FinAccountLot::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $taxDocumentId)
             ->orderBy('symbol')
             ->get()
             ->map(fn (FinAccountLot $lot): array => [

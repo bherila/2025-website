@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -132,7 +133,7 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
             'realized_gain_loss' => -200,
         ]);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
@@ -206,7 +207,7 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -227,7 +228,7 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
      */
     private function makeLot(FinAccounts $account, array $overrides = []): FinAccountLot
     {
-        return FinAccountLot::create(array_merge([
+        $attributes = array_merge([
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
             'description' => 'Apple Inc.',
@@ -243,6 +244,18 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
             'form_8949_box' => 'D',
             'is_covered' => true,
             'wash_sale_disallowed' => 0,
-        ], $overrides));
+        ], $overrides);
+
+        if (array_key_exists('tax_document_id', $attributes)) {
+            $taxDocumentId = $attributes['tax_document_id'];
+            unset($attributes['tax_document_id']);
+
+            if ($taxDocumentId !== null) {
+                $taxDocument = FileForTaxDocument::query()->findOrFail((int) $taxDocumentId);
+                $attributes['document_id'] = (int) $taxDocument->document_id;
+            }
+        }
+
+        return FinAccountLot::create($attributes);
     }
 }

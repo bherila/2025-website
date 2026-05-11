@@ -3,12 +3,15 @@
 namespace App\Models\FinanceTool;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FinStatement extends Model
 {
+    use SerializesDatesAsLocal;
+
     protected $table = 'fin_statements';
 
     protected $primaryKey = 'statement_id';
@@ -16,6 +19,7 @@ class FinStatement extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'document_id',
         'acct_id',
         'balance',
         'statement_opening_date',
@@ -33,7 +37,14 @@ class FinStatement extends Model
             'cost_basis' => 'decimal:4',
             'is_cost_basis_override' => 'boolean',
             'genai_job_id' => 'integer',
+            'document_id' => 'integer',
         ];
+    }
+
+    /** @return BelongsTo<FinDocument, $this> */
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(FinDocument::class, 'document_id');
     }
 
     public function account(): BelongsTo

@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
 use Database\Factories\FinanceTool\FinLotReconciliationLinkFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,7 +49,7 @@ class FinLotReconciliationLink extends Model
     protected $table = 'fin_lot_reconciliation_links';
 
     protected $fillable = [
-        'tax_document_id',
+        'document_id',
         'broker_lot_id',
         'account_lot_id',
         'state',
@@ -62,13 +63,32 @@ class FinLotReconciliationLink extends Model
         return [
             'match_reason' => 'array',
             'accepted_at' => 'datetime',
+            'document_id' => 'integer',
         ];
+    }
+
+    /** @return BelongsTo<FinDocument, $this> */
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(FinDocument::class, 'document_id');
     }
 
     /** @return BelongsTo<FileForTaxDocument, $this> */
     public function taxDocument(): BelongsTo
     {
-        return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id');
+        return $this->belongsTo(FileForTaxDocument::class, 'document_id', 'document_id');
+    }
+
+    /**
+     * @return Attribute<int|null, never>
+     */
+    protected function taxDocumentId(): Attribute
+    {
+        return Attribute::make(get: function (): ?int {
+            $taxDocument = $this->relationLoaded('taxDocument') ? $this->getRelation('taxDocument') : $this->taxDocument;
+
+            return $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null;
+        });
     }
 
     /** @return BelongsTo<FinAccountLot, $this> */

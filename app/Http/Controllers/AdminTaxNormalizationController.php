@@ -200,13 +200,14 @@ class AdminTaxNormalizationController extends Controller
     private function linkPayload(TaxDocumentAccount $link, array $warnings): array
     {
         /** @var FileForTaxDocument|null $parentDoc */
-        $parentDoc = $link->document;
+        $parentDoc = $link->taxDocument;
         /** @var FinAccounts|null $account */
         $account = $link->account;
 
         return [
             'item_type' => 'link',
-            'document_id' => $link->tax_document_id,
+            'document_id' => $parentDoc?->id,
+            'fin_document_id' => $link->document_id,
             'link_id' => $link->id,
             'form_type' => $link->form_type,
             'tax_year' => $link->tax_year,
@@ -219,7 +220,9 @@ class AdminTaxNormalizationController extends Controller
             'warnings' => $warnings,
             'is_reviewed' => (bool) $link->is_reviewed,
             'parsed_data_needs_review' => true,
-            'review_url' => $this->reviewUrl($link->tax_year, $link->tax_document_id),
+            'review_url' => $parentDoc instanceof FileForTaxDocument
+                ? $this->reviewUrl($link->tax_year, (int) $parentDoc->id)
+                : null,
             'created_at' => $link->created_at,
             'updated_at' => $link->updated_at,
         ];

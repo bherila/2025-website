@@ -131,7 +131,7 @@ export function useImportExecution({
         }
       }
 
-      // PDF import — always use the unified multi-import-pdf endpoint
+      // PDF import — always use the unified document ingestion endpoint
       if (pdfData) {
         const payload = buildMultiImportPayload(pdfAccountBlocks, accountMappings, accountId, {
           importTransactions,
@@ -154,7 +154,8 @@ export function useImportExecution({
 
         if (hasAnyContent) {
           try {
-            const response = (await fetchWrapper.post('/api/finance/multi-import-pdf', {
+            const response = (await fetchWrapper.post('/api/finance/documents', {
+              document_kind: 'statement',
               accounts: payload,
             })) as { accounts: Array<{ acct_id: number; statement_id: number }> }
 
@@ -172,7 +173,7 @@ export function useImportExecution({
       }
 
       // Filter out duplicates and import remaining transactions.
-      // For PDF imports, transactions are already submitted via multi-import-pdf, so skip here.
+      // For PDF imports, transactions are already submitted via document ingestion, so skip here.
       const isPdfImport = !!pdfData
       const transactionsToProcess = importTransactions && !isPdfImport ? importData : []
       const newTransactions = filterDuplicates(transactionsToProcess)

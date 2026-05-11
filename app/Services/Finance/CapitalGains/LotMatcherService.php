@@ -2,10 +2,9 @@
 
 namespace App\Services\Finance\CapitalGains;
 
-use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinLotReconciliationLink;
-use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\LotMatcher;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Carbon;
@@ -62,17 +61,17 @@ class LotMatcherService
     /**
      * @return list<LotMatchProposal>
      */
-    public function proposeMatchesForDocument(int $taxDocumentId): array
+    public function proposeMatchesForDocument(int $documentId): array
     {
-        return $this->proposeForDocument($this->taxDocument($taxDocumentId), [], []);
+        return $this->proposeForDocument($this->document($documentId), [], []);
     }
 
-    public function runMatcherForDocument(int $taxDocumentId, bool $preserveDecisions = true): LotMatcherResult
+    public function runMatcherForDocument(int $documentId, bool $preserveDecisions = true): LotMatcherResult
     {
-        $taxDocument = $this->taxDocument($taxDocumentId);
+        $document = $this->document($documentId);
 
-        $result = DB::transaction(function () use ($taxDocument, $preserveDecisions): LotMatcherResult {
-            $existingLinks = $this->linksForDocument((int) $taxDocument->id);
+        $result = DB::transaction(function () use ($document, $preserveDecisions): LotMatcherResult {
+            $existingLinks = $this->linksForDocument((int) $document->id);
             $preservedLinks = $preserveDecisions
                 ? $existingLinks->filter(fn (FinLotReconciliationLink $link): bool => in_array($link->state, self::PRESERVED_STATES, true))->values()
                 : new EloquentCollection;
@@ -82,14 +81,14 @@ class LotMatcherService
 
             if (! $preserveDecisions) {
                 FinLotReconciliationLink::query()
-                    ->where('tax_document_id', $taxDocument->id)
+                    ->where('document_id', $document->id)
                     ->delete();
                 $mutableLinks = new EloquentCollection;
                 $preservedLinks = new EloquentCollection;
             }
 
             $proposals = $this->proposeForDocument(
-                $taxDocument,
+                $document,
                 $this->brokerLotIds($preservedLinks),
                 $this->accountLotIds($preservedLinks),
             );
@@ -107,7 +106,7 @@ class LotMatcherService
                 $proposalKeys[] = $proposal->key();
                 $link = $existingByKey[$proposal->key()] ?? new FinLotReconciliationLink;
                 $link->fill([
-                    'tax_document_id' => (int) $taxDocument->id,
+                    'document_id' => (int) $document->id,
                     'broker_lot_id' => $proposal->brokerLotId,
                     'account_lot_id' => $proposal->accountLotId,
                     'state' => $proposal->state,
@@ -127,30 +126,30 @@ class LotMatcherService
                 }
             }
 
-            $this->refreshLotCaches((int) $taxDocument->id, $affectedLotIds);
+            $this->refreshLotCaches((int) $document->id, $affectedLotIds);
 
             return new LotMatcherResult(
-                taxDocumentId: (int) $taxDocument->id,
+                documentId: (int) $document->id,
                 dryRun: false,
                 proposals: $proposals,
                 linkIds: $linkIds,
-                counts: $this->countsForDocument((int) $taxDocument->id),
+                counts: $this->countsForDocument((int) $document->id),
             );
         });
 
-        $this->recordLastMatchedAt((int) $taxDocument->id);
+        $this->recordLastMatchedAt((int) $document->id);
 
         return $result;
     }
 
-    public static function lastMatchedAtCacheKey(int $taxDocumentId): string
+    public static function lastMatchedAtCacheKey(int $documentId): string
     {
-        return "finance:lot_matcher:last_matched_at:{$taxDocumentId}";
+        return "finance:lot_matcher:last_matched_at:{$documentId}";
     }
 
-    public function lastMatchedAtForDocument(int $taxDocumentId): ?string
+    public function lastMatchedAtForDocument(int $documentId): ?string
     {
-        $cached = Cache::get(self::lastMatchedAtCacheKey($taxDocumentId));
+        $cached = Cache::get(self::lastMatchedAtCacheKey($documentId));
         if ($cached instanceof \DateTimeInterface) {
             return Carbon::instance($cached)->toJSON();
         }
@@ -159,24 +158,24 @@ class LotMatcherService
             return Carbon::parse($cached)->toJSON();
         }
 
-        return $this->lastLinkTimestampForDocument($taxDocumentId);
+        return $this->lastLinkTimestampForDocument($documentId);
     }
 
-    public function previewMatcherForDocument(int $taxDocumentId, bool $preserveDecisions = true): LotMatcherResult
+    public function previewMatcherForDocument(int $documentId, bool $preserveDecisions = true): LotMatcherResult
     {
-        $taxDocument = $this->taxDocument($taxDocumentId);
-        $existingLinks = $this->linksForDocument((int) $taxDocument->id);
+        $document = $this->document($documentId);
+        $existingLinks = $this->linksForDocument((int) $document->id);
         $preservedLinks = $preserveDecisions
             ? $existingLinks->filter(fn (FinLotReconciliationLink $link): bool => in_array($link->state, self::PRESERVED_STATES, true))->values()
             : new EloquentCollection;
         $proposals = $this->proposeForDocument(
-            $taxDocument,
+            $document,
             $this->brokerLotIds($preservedLinks),
             $this->accountLotIds($preservedLinks),
         );
 
         return new LotMatcherResult(
-            taxDocumentId: $taxDocumentId,
+            documentId: $documentId,
             dryRun: true,
             proposals: $proposals,
             linkIds: [],
@@ -233,21 +232,21 @@ class LotMatcherService
 
     public function relinkLot(int $brokerLotId, int $accountLotId, int $userId): FinLotReconciliationLink
     {
-        $brokerLot = FinAccountLot::query()->with('taxDocument')->findOrFail($brokerLotId);
+        $brokerLot = FinAccountLot::query()->with('document')->findOrFail($brokerLotId);
         $accountLot = FinAccountLot::query()->findOrFail($accountLotId);
-        $taxDocumentId = $brokerLot->tax_document_id;
+        $documentId = $brokerLot->document_id;
 
-        if ($taxDocumentId === null) {
+        if ($documentId === null) {
             throw ValidationException::withMessages([
-                'broker_lot_id' => 'Broker lot must belong to a tax document.',
+                'broker_lot_id' => 'Broker lot must belong to a document.',
             ]);
         }
 
         $this->validateRelinkTarget($brokerLot, $accountLot);
 
-        return DB::transaction(function () use ($brokerLot, $accountLot, $taxDocumentId): FinLotReconciliationLink {
+        return DB::transaction(function () use ($brokerLot, $accountLot, $documentId): FinLotReconciliationLink {
             $existingLinks = FinLotReconciliationLink::query()
-                ->where('tax_document_id', $taxDocumentId)
+                ->where('document_id', $documentId)
                 ->where(function ($query) use ($brokerLot, $accountLot): void {
                     $query->where('broker_lot_id', $brokerLot->lot_id)
                         ->orWhere('account_lot_id', $accountLot->lot_id);
@@ -270,7 +269,7 @@ class LotMatcherService
 
             $deltas = $this->deltas($brokerLot, $accountLot);
             $link = FinLotReconciliationLink::create([
-                'tax_document_id' => (int) $taxDocumentId,
+                'document_id' => (int) $documentId,
                 'broker_lot_id' => (int) $brokerLot->lot_id,
                 'account_lot_id' => (int) $accountLot->lot_id,
                 'state' => $this->stateForDeltas($deltas),
@@ -281,7 +280,7 @@ class LotMatcherService
 
             foreach (array_unique($displacedBrokerLotIds) as $displacedBrokerLotId) {
                 FinLotReconciliationLink::create([
-                    'tax_document_id' => (int) $taxDocumentId,
+                    'document_id' => (int) $documentId,
                     'broker_lot_id' => $displacedBrokerLotId,
                     'account_lot_id' => null,
                     'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
@@ -291,7 +290,7 @@ class LotMatcherService
 
             foreach (array_unique($displacedAccountLotIds) as $displacedAccountLotId) {
                 FinLotReconciliationLink::create([
-                    'tax_document_id' => (int) $taxDocumentId,
+                    'document_id' => (int) $documentId,
                     'broker_lot_id' => null,
                     'account_lot_id' => $displacedAccountLotId,
                     'state' => FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
@@ -302,7 +301,7 @@ class LotMatcherService
             $affectedLotIds[] = (int) $brokerLot->lot_id;
             $affectedLotIds[] = (int) $accountLot->lot_id;
             $affectedLotIds = array_merge($affectedLotIds, $displacedBrokerLotIds, $displacedAccountLotIds);
-            $this->refreshLotCaches((int) $taxDocumentId, $affectedLotIds);
+            $this->refreshLotCaches((int) $documentId, $affectedLotIds);
 
             return $link->fresh(['brokerLot', 'accountLot']) ?? $link;
         });
@@ -313,10 +312,10 @@ class LotMatcherService
      * @param  int[]  $excludedAccountLotIds
      * @return list<LotMatchProposal>
      */
-    private function proposeForDocument(FileForTaxDocument $taxDocument, array $excludedBrokerLotIds, array $excludedAccountLotIds): array
+    private function proposeForDocument(FinDocument $document, array $excludedBrokerLotIds, array $excludedAccountLotIds): array
     {
-        $brokerLots = $this->brokerLotsForDocument($taxDocument, $excludedBrokerLotIds);
-        $accountLots = $this->accountLotsForDocument($taxDocument, $brokerLots, $excludedAccountLotIds);
+        $brokerLots = $this->brokerLotsForDocument($document, $excludedBrokerLotIds);
+        $accountLots = $this->accountLotsForDocument($document, $brokerLots, $excludedAccountLotIds);
         $proposals = [];
         $usedBrokerLotIds = [];
         $usedAccountLotIds = [];
@@ -592,46 +591,55 @@ class LotMatcherService
                 'accepted_at' => $acceptedAt,
             ]);
 
-            if ($link->tax_document_id === null) {
+            if ($link->document_id === null) {
                 throw ValidationException::withMessages([
-                    'link' => 'Reconciliation link must belong to a tax document.',
+                    'link' => 'Reconciliation link must belong to a document.',
                 ]);
             }
 
-            $this->refreshLotCaches((int) $link->tax_document_id, $this->linkLotIds(new EloquentCollection([$link])));
+            $this->refreshLotCaches((int) $link->document_id, $this->linkLotIds(new EloquentCollection([$link])));
 
             return $link->fresh(['brokerLot', 'accountLot']) ?? $link;
         });
     }
 
-    private function taxDocument(int $taxDocumentId): FileForTaxDocument
+    private function document(int $documentId): FinDocument
     {
-        /** @var FileForTaxDocument $taxDocument */
-        $taxDocument = FileForTaxDocument::query()
-            ->with(['accountLinks.account'])
-            ->findOrFail($taxDocumentId);
+        /** @var FinDocument $document */
+        $document = FinDocument::query()
+            ->with(['accounts.account', 'taxDocument'])
+            ->findOrFail($documentId);
 
-        return $taxDocument;
+        return $document;
     }
 
     /**
      * @param  int[]  $excludedBrokerLotIds
      * @return EloquentCollection<int, FinAccountLot>
      */
-    private function brokerLotsForDocument(FileForTaxDocument $taxDocument, array $excludedBrokerLotIds): EloquentCollection
+    private function brokerLotsForDocument(FinDocument $document, array $excludedBrokerLotIds): EloquentCollection
     {
         return FinAccountLot::query()
-            ->where('tax_document_id', $taxDocument->id)
+            ->where('document_id', $document->id)
             ->when($excludedBrokerLotIds !== [], fn ($query) => $query->whereNotIn('lot_id', $excludedBrokerLotIds))
             ->where(function ($query): void {
-                $query->whereIn('source', [
-                    FinAccountLot::SOURCE_BROKER_1099B,
-                    FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
-                ])->orWhereIn('lot_source', [
-                    FinAccountLot::SOURCE_1099B,
-                    FinAccountLot::SOURCE_1099B_UNDERSCORE,
-                    'import_1099b',
-                ]);
+                $query->whereIn('lot_origin', [
+                    FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                    FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                ])->orWhere(function ($sourceQuery): void {
+                    $sourceQuery->whereIn('source', [
+                        FinAccountLot::SOURCE_BROKER_1099B,
+                        FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+                    ])->orWhereIn('lot_source', [
+                        FinAccountLot::SOURCE_1099B,
+                        FinAccountLot::SOURCE_1099B_UNDERSCORE,
+                        'import_1099b',
+                    ]);
+                });
+            })
+            ->where(function ($query): void {
+                $query->whereNull('lot_origin')
+                    ->orWhere('lot_origin', '!=', FinAccountLot::ORIGIN_STATEMENT_POSITION);
             })
             ->orderBy('acct_id')
             ->orderBy('symbol')
@@ -645,11 +653,11 @@ class LotMatcherService
      * @param  int[]  $excludedAccountLotIds
      * @return EloquentCollection<int, FinAccountLot>
      */
-    private function accountLotsForDocument(FileForTaxDocument $taxDocument, EloquentCollection $brokerLots, array $excludedAccountLotIds): EloquentCollection
+    private function accountLotsForDocument(FinDocument $document, EloquentCollection $brokerLots, array $excludedAccountLotIds): EloquentCollection
     {
         $accountIds = $brokerLots
             ->pluck('acct_id')
-            ->merge($this->taxDocumentAccountIds($taxDocument))
+            ->merge($this->documentAccountIds($document))
             ->filter()
             ->map(static fn (int|string $accountId): int => (int) $accountId)
             ->unique()
@@ -662,8 +670,15 @@ class LotMatcherService
 
         return FinAccountLot::query()
             ->whereIn('acct_id', $accountIds)
-            ->whereNull('tax_document_id')
-            ->whereBetween('sale_date', $this->accountCandidateDateWindow((int) $taxDocument->tax_year))
+            ->where(function ($query): void {
+                $query->whereNull('document_id')
+                    ->orWhereNotIn('lot_origin', [
+                        FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                    ]);
+            })
+            ->whereBetween('sale_date', $this->accountCandidateDateWindow((int) $document->tax_year))
             ->when($excludedAccountLotIds !== [], fn ($query) => $query->whereNotIn('lot_id', $excludedAccountLotIds))
             ->where(function ($query): void {
                 $query->whereNull('source')
@@ -671,6 +686,10 @@ class LotMatcherService
                         FinAccountLot::SOURCE_BROKER_1099B,
                         FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
                     ]);
+            })
+            ->where(function ($query): void {
+                $query->whereNull('lot_origin')
+                    ->orWhere('lot_origin', '!=', FinAccountLot::ORIGIN_STATEMENT_POSITION);
             })
             ->orderBy('acct_id')
             ->orderBy('symbol')
@@ -682,11 +701,11 @@ class LotMatcherService
     /**
      * @return int[]
      */
-    private function taxDocumentAccountIds(FileForTaxDocument $taxDocument): array
+    private function documentAccountIds(FinDocument $document): array
     {
         $accountIds = [];
-        foreach ($taxDocument->accountLinks as $link) {
-            if ($link instanceof TaxDocumentAccount && $link->account_id !== null) {
+        foreach ($document->accounts as $link) {
+            if ($link->account_id !== null) {
                 $accountIds[] = (int) $link->account_id;
             }
         }
@@ -697,27 +716,27 @@ class LotMatcherService
     /**
      * @return EloquentCollection<int, FinLotReconciliationLink>
      */
-    private function linksForDocument(int $taxDocumentId): EloquentCollection
+    private function linksForDocument(int $documentId): EloquentCollection
     {
         return FinLotReconciliationLink::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
             ->orderBy('id')
             ->get();
     }
 
-    private function recordLastMatchedAt(int $taxDocumentId): void
+    private function recordLastMatchedAt(int $documentId): void
     {
-        Cache::forever(self::lastMatchedAtCacheKey($taxDocumentId), now()->toJSON());
+        Cache::forever(self::lastMatchedAtCacheKey($documentId), now()->toJSON());
     }
 
-    private function lastLinkTimestampForDocument(int $taxDocumentId): ?string
+    private function lastLinkTimestampForDocument(int $documentId): ?string
     {
         $timestamps = array_filter([
             FinLotReconciliationLink::query()
-                ->where('tax_document_id', $taxDocumentId)
+                ->where('document_id', $documentId)
                 ->max('updated_at'),
             FinLotReconciliationLink::query()
-                ->where('tax_document_id', $taxDocumentId)
+                ->where('document_id', $documentId)
                 ->max('created_at'),
         ], static fn (mixed $timestamp): bool => is_string($timestamp) && trim($timestamp) !== '');
 
@@ -785,9 +804,9 @@ class LotMatcherService
 
     /**
      * Refresh the denormalised reconciliation_status / superseded_by_lot_id columns
-     * on fin_account_lots from the latest link state in the given tax document.
+     * on fin_account_lots from the latest link state in the given document.
      *
-     * Scoping note: the query is intentionally constrained to $taxDocumentId so it
+     * Scoping note: the query is intentionally constrained to $documentId so it
      * matches LotReconciliationStatusCacheVerifier::auditDocument, which also
      * audits per-document. For account-derived lots that legitimately participate
      * in links from multiple tax documents (e.g. cross-year carryover), this means
@@ -798,7 +817,7 @@ class LotMatcherService
      *
      * @param  int[]  $lotIds
      */
-    private function refreshLotCaches(int $taxDocumentId, array $lotIds): void
+    private function refreshLotCaches(int $documentId, array $lotIds): void
     {
         $lotIds = array_values(array_unique(array_filter($lotIds)));
         if ($lotIds === []) {
@@ -808,7 +827,7 @@ class LotMatcherService
         $lotIdLookup = array_fill_keys($lotIds, true);
         $latestLinksByLotId = [];
         $links = FinLotReconciliationLink::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
             ->where(function ($query) use ($lotIds): void {
                 $query->whereIn('broker_lot_id', $lotIds)
                     ->orWhereIn('account_lot_id', $lotIds);
@@ -876,11 +895,11 @@ class LotMatcherService
     /**
      * @return array<string, int>
      */
-    private function countsForDocument(int $taxDocumentId): array
+    private function countsForDocument(int $documentId): array
     {
         $counts = array_fill_keys(self::COUNT_STATES, 0);
         $rows = FinLotReconciliationLink::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
             ->selectRaw('state, COUNT(*) as aggregate')
             ->groupBy('state')
             ->pluck('aggregate', 'state')
@@ -1107,7 +1126,11 @@ class LotMatcherService
 
     private function isAccountDerivedRelinkTarget(FinAccountLot $lot): bool
     {
-        if ($lot->tax_document_id !== null) {
+        if (in_array($lot->lot_origin, [
+            FinAccountLot::ORIGIN_1099B_DISPOSITION,
+            FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+            FinAccountLot::ORIGIN_STATEMENT_POSITION,
+        ], true)) {
             return false;
         }
 

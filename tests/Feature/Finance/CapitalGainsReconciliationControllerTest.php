@@ -43,7 +43,7 @@ class CapitalGainsReconciliationControllerTest extends TestCase
             'realized_gain_loss' => $gain,
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? 'analyzer',
-            'tax_document_id' => $overrides['tax_document_id'] ?? null,
+            'document_id' => $overrides['document_id'] ?? null,
             'form_8949_box' => $overrides['form_8949_box'] ?? 'A',
             'is_covered' => $overrides['is_covered'] ?? true,
             'wash_sale_disallowed' => $overrides['wash_sale_disallowed'] ?? null,

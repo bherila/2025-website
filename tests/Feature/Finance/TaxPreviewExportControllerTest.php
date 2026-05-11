@@ -4,6 +4,7 @@ namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -112,7 +113,7 @@ class TaxPreviewExportControllerTest extends TestCase
      */
     private function createReviewedTaxDocument(User $user, string $formType, string $filename, array $parsedData): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
             'form_type' => $formType,

@@ -38,7 +38,7 @@ class TaxDocumentLotReconciliationController extends Controller
 
         /** @var Collection<int, FinLotReconciliationLink> $links */
         $links = FinLotReconciliationLink::query()
-            ->where('tax_document_id', $taxDocument->id)
+            ->where('document_id', $taxDocument->document_id)
             ->with(['brokerLot.account', 'accountLot.account'])
             ->orderBy('id')
             ->get();
@@ -50,14 +50,14 @@ class TaxDocumentLotReconciliationController extends Controller
                 'tax_year' => (int) $taxDocument->tax_year,
                 'form_type' => (string) $taxDocument->form_type,
                 'original_filename' => $taxDocument->original_filename,
-                'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->id),
+                'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->document_id),
             ],
             'summary' => [
                 'total' => $links->count(),
                 'link_state_counts' => $this->linkStateCounts($links),
             ],
             'links' => $links
-                ->map(fn (FinLotReconciliationLink $link): array => $this->linkPayload($link))
+                ->map(fn (FinLotReconciliationLink $link): array => $this->linkPayload($link, (int) $taxDocument->id))
                 ->values(),
             'relink_candidates' => $this->relinkCandidates($taxDocument, $links)
                 ->map(fn (FinAccountLot $lot): array => $this->lotPayload($lot))
@@ -97,14 +97,15 @@ class TaxDocumentLotReconciliationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function linkPayload(FinLotReconciliationLink $link): array
+    private function linkPayload(FinLotReconciliationLink $link, ?int $taxDocumentId = null): array
     {
         $brokerLot = $link->relationLoaded('brokerLot') ? $link->getRelation('brokerLot') : null;
         $accountLot = $link->relationLoaded('accountLot') ? $link->getRelation('accountLot') : null;
 
         return [
             'id' => (int) $link->id,
-            'tax_document_id' => $link->tax_document_id !== null ? (int) $link->tax_document_id : null,
+            'tax_document_id' => $taxDocumentId,
+            'document_id' => $link->document_id !== null ? (int) $link->document_id : null,
             'broker_lot_id' => $link->broker_lot_id !== null ? (int) $link->broker_lot_id : null,
             'account_lot_id' => $link->account_lot_id !== null ? (int) $link->account_lot_id : null,
             'state' => (string) $link->state,
@@ -175,7 +176,14 @@ class TaxDocumentLotReconciliationController extends Controller
 
         return FinAccountLot::query()
             ->whereIn('acct_id', $accountIds)
-            ->whereNull('tax_document_id')
+            ->where(function ($query): void {
+                $query->whereNull('document_id')
+                    ->orWhereNotIn('lot_origin', [
+                        FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                    ]);
+            })
             ->whereBetween('sale_date', [$start, $end])
             ->where(function ($query): void {
                 $query->whereNull('source')

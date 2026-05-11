@@ -57,7 +57,7 @@ class LotReconciliationService
 
         return $this->reportForDocument(
             $taxDocument,
-            $this->linkStateCountsForDocument((int) $taxDocument->id),
+            $this->linkStateCountsForDocument((int) $taxDocument->document_id),
         );
     }
 
@@ -78,7 +78,7 @@ class LotReconciliationService
 
         $linkStateCounts = $this->linkStateCountsByDocumentIds(
             $documents
-                ->pluck('id')
+                ->pluck('document_id')
                 ->map(static fn (int|string $documentId): int => (int) $documentId)
                 ->all(),
         );
@@ -86,7 +86,7 @@ class LotReconciliationService
         $reports = $documents
             ->map(fn (FileForTaxDocument $document): array => $this->reportForDocument(
                 $document,
-                $linkStateCounts[(int) $document->id] ?? $this->emptyLinkStateCounts(),
+                $linkStateCounts[(int) $document->document_id] ?? $this->emptyLinkStateCounts(),
             )->toArray())
             ->values()
             ->all();
@@ -105,7 +105,7 @@ class LotReconciliationService
     private function reportForDocument(FileForTaxDocument $taxDocument, array $linkStateCounts): TaxDocumentReconciliationReport
     {
         $entries = $this->parsed1099BEntries($taxDocument);
-        $lots = $this->lotsForDocument((int) $taxDocument->id);
+        $lots = $this->lotsForDocument((int) $taxDocument->document_id);
         $usedLinkIds = [];
         $entryReports = [];
         $diagnostics = [];
@@ -128,10 +128,11 @@ class LotReconciliationService
 
         return new TaxDocumentReconciliationReport([
             'tax_document_id' => (int) $taxDocument->id,
+            'document_id' => (int) $taxDocument->document_id,
             'broker' => $this->brokerName($taxDocument, $entries),
             'tax_year' => (int) $taxDocument->tax_year,
             'form_type' => (string) $taxDocument->form_type,
-            'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->id),
+            'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->document_id),
             'status' => $summary['status'],
             'dashboard_status' => $dashboardStatus,
             'link_state_counts' => $linkStateCounts,
@@ -326,10 +327,14 @@ class LotReconciliationService
     /**
      * @return Collection<int, FinAccountLot>
      */
-    private function lotsForDocument(int $taxDocumentId): Collection
+    private function lotsForDocument(int $documentId): Collection
     {
         return FinAccountLot::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
+            ->where(function (Builder $query): void {
+                $query->whereNull('lot_origin')
+                    ->orWhere('lot_origin', '!=', FinAccountLot::ORIGIN_STATEMENT_POSITION);
+            })
             ->with('account')
             ->orderBy('acct_id')
             ->orderBy('sale_date')
@@ -993,38 +998,38 @@ class LotReconciliationService
     /**
      * @return array<string, int>
      */
-    private function linkStateCountsForDocument(int $taxDocumentId): array
+    private function linkStateCountsForDocument(int $documentId): array
     {
-        return $this->linkStateCountsByDocumentIds([$taxDocumentId])[$taxDocumentId]
+        return $this->linkStateCountsByDocumentIds([$documentId])[$documentId]
             ?? $this->emptyLinkStateCounts();
     }
 
     /**
-     * @param  int[]  $taxDocumentIds
+     * @param  int[]  $documentIds
      * @return array<int, array<string, int>>
      */
-    private function linkStateCountsByDocumentIds(array $taxDocumentIds): array
+    private function linkStateCountsByDocumentIds(array $documentIds): array
     {
-        $taxDocumentIds = array_values(array_unique($taxDocumentIds));
-        if ($taxDocumentIds === []) {
+        $documentIds = array_values(array_unique($documentIds));
+        if ($documentIds === []) {
             return [];
         }
 
         $counts = [];
-        foreach ($taxDocumentIds as $taxDocumentId) {
-            $counts[$taxDocumentId] = $this->emptyLinkStateCounts();
+        foreach ($documentIds as $documentId) {
+            $counts[$documentId] = $this->emptyLinkStateCounts();
         }
 
         $rows = FinLotReconciliationLink::query()
-            ->whereIn('tax_document_id', $taxDocumentIds)
-            ->selectRaw('tax_document_id, state, COUNT(*) as aggregate')
-            ->groupBy('tax_document_id', 'state')
+            ->whereIn('document_id', $documentIds)
+            ->selectRaw('document_id, state, COUNT(*) as aggregate')
+            ->groupBy('document_id', 'state')
             ->get();
 
         foreach ($rows as $row) {
-            $taxDocumentId = (int) $row->getAttribute('tax_document_id');
+            $documentId = (int) $row->getAttribute('document_id');
             $state = (string) $row->getAttribute('state');
-            $counts[$taxDocumentId][$state] = (int) $row->getAttribute('aggregate');
+            $counts[$documentId][$state] = (int) $row->getAttribute('aggregate');
         }
 
         return $counts;

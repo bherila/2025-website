@@ -12,6 +12,7 @@ use App\Models\FinanceTool\ScheduleDCarryoverInput;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\FinanceTool\UserDeduction;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxPreviewFacts\Builders\Schedule3FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
@@ -3218,6 +3219,11 @@ class TaxPreviewFactsServiceTest extends TestCase
         $costBasis = (float) ($overrides['cost_basis'] ?? 1000);
         $proceeds = isset($overrides['proceeds']) ? (float) $overrides['proceeds'] : null;
         $gain = $proceeds !== null ? $proceeds - $costBasis : null;
+        $documentId = $overrides['document_id'] ?? null;
+        if ($documentId === null && array_key_exists('tax_document_id', $overrides) && $overrides['tax_document_id'] !== null) {
+            $taxDocument = FileForTaxDocument::query()->findOrFail((int) $overrides['tax_document_id']);
+            $documentId = (int) $taxDocument->document_id;
+        }
 
         return FinAccountLot::create([
             'acct_id' => $account->acct_id,
@@ -3231,7 +3237,8 @@ class TaxPreviewFactsServiceTest extends TestCase
             'realized_gain_loss' => $gain,
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? 'analyzer',
-            'tax_document_id' => $overrides['tax_document_id'] ?? null,
+            'source' => $overrides['source'] ?? ($documentId !== null ? FinAccountLot::SOURCE_BROKER_1099B : FinAccountLot::SOURCE_ACCOUNT_DERIVED),
+            'document_id' => $documentId,
             'form_8949_box' => array_key_exists('form_8949_box', $overrides) ? $overrides['form_8949_box'] : 'A',
             'is_covered' => array_key_exists('is_covered', $overrides) ? $overrides['is_covered'] : true,
             'wash_sale_disallowed' => array_key_exists('wash_sale_disallowed', $overrides) ? $overrides['wash_sale_disallowed'] : null,
@@ -3245,7 +3252,7 @@ class TaxPreviewFactsServiceTest extends TestCase
      */
     private function createTaxDocument(int $userId, array $overrides): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        return app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => '1099_misc',
@@ -3254,7 +3261,7 @@ class TaxPreviewFactsServiceTest extends TestCase
             's3_path' => '',
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
         ], $overrides));
     }

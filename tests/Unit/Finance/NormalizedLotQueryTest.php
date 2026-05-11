@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\NormalizedLotQuery;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -26,7 +27,7 @@ class NormalizedLotQueryTest extends TestCase
         $document = $this->makeTaxDocument((int) $user->id);
 
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
@@ -47,7 +48,7 @@ class NormalizedLotQueryTest extends TestCase
         $account = $this->makeAccount((int) $user->id);
         $document = $this->makeTaxDocument((int) $user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'cost_basis' => 1100,
@@ -76,7 +77,7 @@ class NormalizedLotQueryTest extends TestCase
         $account = $this->makeAccount((int) $user->id);
         $document = $this->makeTaxDocument((int) $user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
@@ -100,7 +101,7 @@ class NormalizedLotQueryTest extends TestCase
         $account = $this->makeAccount((int) $user->id);
         $document = $this->makeTaxDocument((int) $user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
@@ -124,7 +125,7 @@ class NormalizedLotQueryTest extends TestCase
         $document = $this->makeTaxDocument((int) $user->id);
         $brokerLot = $this->makeLot($account, [
             'symbol' => 'AAPL',
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'reconciliation_status' => FinLotReconciliationLink::STATE_UNLINKED,
@@ -138,7 +139,7 @@ class NormalizedLotQueryTest extends TestCase
         $syntheticLot = $this->makeLot($account, [
             'symbol' => 'WASHSALEADJ',
             'description' => 'Synthetic wash adjustment',
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'source' => FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
         ]);
 
@@ -154,7 +155,7 @@ class NormalizedLotQueryTest extends TestCase
         $account = $this->makeAccount((int) $user->id);
         $document = $this->makeTaxDocument((int) $user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'sale_date' => '2025-02-03',
@@ -173,7 +174,7 @@ class NormalizedLotQueryTest extends TestCase
 
         $this->assertSame(
             [$accountLot->lot_id],
-            $this->lotIds(NormalizedLotQuery::forTaxDocument((int) $document->id)),
+            $this->lotIds(NormalizedLotQuery::forDocument((int) $document->document_id)),
         );
     }
 
@@ -200,7 +201,7 @@ class NormalizedLotQueryTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -224,7 +225,7 @@ class NormalizedLotQueryTest extends TestCase
         $proceeds = (float) ($overrides['proceeds'] ?? 1000);
         $costBasis = (float) ($overrides['cost_basis'] ?? 900);
 
-        return FinAccountLot::create(array_merge([
+        $attributes = array_merge([
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
             'description' => 'Apple Inc.',
@@ -240,7 +241,13 @@ class NormalizedLotQueryTest extends TestCase
             'form_8949_box' => 'D',
             'is_covered' => true,
             'wash_sale_disallowed' => 0,
-        ], $overrides));
+        ], $overrides);
+
+        if (($attributes['document_id'] ?? null) !== null && ($attributes['lot_origin'] ?? null) === null) {
+            $attributes['lot_origin'] = FinAccountLot::ORIGIN_1099B_DISPOSITION;
+        }
+
+        return FinAccountLot::create($attributes);
     }
 
     private function makeLink(
@@ -250,7 +257,7 @@ class NormalizedLotQueryTest extends TestCase
         string $state,
     ): FinLotReconciliationLink {
         return FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot?->lot_id,
             'account_lot_id' => $accountLot?->lot_id,
             'state' => $state,

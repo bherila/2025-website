@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -296,7 +297,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             'cost_basis' => 1200,
         ]);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
@@ -375,7 +376,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -384,7 +385,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             's3_path' => '',
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
             'parsed_data' => [],
@@ -398,6 +399,11 @@ class CapitalGainsTaxReportServiceTest extends TestCase
     {
         $costBasis = (float) ($overrides['cost_basis'] ?? 100);
         $proceeds = (float) ($overrides['proceeds'] ?? 125);
+        $documentId = $overrides['document_id'] ?? null;
+        if ($documentId === null && array_key_exists('tax_document_id', $overrides) && $overrides['tax_document_id'] !== null) {
+            $taxDocument = FileForTaxDocument::query()->findOrFail((int) $overrides['tax_document_id']);
+            $documentId = (int) $taxDocument->document_id;
+        }
 
         return FinAccountLot::create([
             'acct_id' => $account->acct_id,
@@ -411,8 +417,8 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             'realized_gain_loss' => $overrides['realized_gain_loss'] ?? ($proceeds - $costBasis),
             'is_short_term' => $overrides['is_short_term'] ?? true,
             'lot_source' => $overrides['lot_source'] ?? null,
-            'source' => $overrides['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED,
-            'tax_document_id' => $overrides['tax_document_id'] ?? null,
+            'source' => $overrides['source'] ?? ($documentId !== null ? FinAccountLot::SOURCE_BROKER_1099B : FinAccountLot::SOURCE_ACCOUNT_DERIVED),
+            'document_id' => $documentId,
             'form_8949_box' => array_key_exists('form_8949_box', $overrides) ? $overrides['form_8949_box'] : 'A',
             'is_covered' => array_key_exists('is_covered', $overrides) ? $overrides['is_covered'] : true,
             'wash_sale_disallowed' => array_key_exists('wash_sale_disallowed', $overrides) ? $overrides['wash_sale_disallowed'] : null,

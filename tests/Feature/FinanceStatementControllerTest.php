@@ -145,7 +145,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
     }
 
-    public function test_import_pdf_statement_truncates_dates(): void
+    public function test_document_statement_import_truncates_dates(): void
     {
         $user = $this->createAdminUser(['gemini_api_key' => 'test-key']);
         $acctId = DB::table('fin_accounts')->insertGetId([
@@ -155,16 +155,24 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
-            'statementInfo' => [
-                'periodStart' => '2025-01-01T12:34:56Z',
-                'periodEnd' => '2025-01-31T23:59:59-05:00',
-                'closingBalance' => 1234.56,
+            'document_kind' => 'statement',
+            'accounts' => [
+                [
+                    'acct_id' => $acctId,
+                    'statementInfo' => [
+                        'periodStart' => '2025-01-01T12:34:56Z',
+                        'periodEnd' => '2025-01-31T23:59:59-05:00',
+                        'closingBalance' => 1234.56,
+                    ],
+                    'statementDetails' => [],
+                    'transactions' => [],
+                    'lots' => [],
+                ],
             ],
-            'statementDetails' => [],
         ];
 
-        $response = $this->actingAs($user)->postJson("/api/finance/{$acctId}/import-pdf-statement", $payload);
-        $response->assertOk();
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', $payload);
+        $response->assertCreated();
 
         $this->assertDatabaseHas('fin_statements', [
             'acct_id' => $acctId,
@@ -172,7 +180,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
     }
 
-    public function test_import_multi_account_pdf_creates_statements_for_each_account(): void
+    public function test_document_statement_import_creates_statements_for_each_account(): void
     {
         $user = $this->createAdminUser();
 
@@ -190,6 +198,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
+            'document_kind' => 'statement',
             'accounts' => [
                 [
                     'acct_id' => $acctId1,
@@ -212,8 +221,8 @@ class FinanceStatementControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
-        $response->assertOk();
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', $payload);
+        $response->assertCreated();
 
         $json = $response->json();
         $this->assertTrue($json['success']);
@@ -240,13 +249,16 @@ class FinanceStatementControllerTest extends TestCase
         ]);
     }
 
-    public function test_import_multi_account_pdf_requires_authentication(): void
+    public function test_document_statement_import_requires_authentication(): void
     {
-        $response = $this->postJson('/api/finance/multi-import-pdf', ['accounts' => []]);
+        $response = $this->postJson('/api/finance/documents', [
+            'document_kind' => 'statement',
+            'accounts' => [],
+        ]);
         $response->assertUnauthorized();
     }
 
-    public function test_import_multi_account_pdf_rejects_other_users_accounts(): void
+    public function test_document_statement_import_rejects_other_users_accounts(): void
     {
         $user1 = $this->createAdminUser();
         $user2 = $this->createUser();
@@ -258,6 +270,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
+            'document_kind' => 'statement',
             'accounts' => [
                 [
                     'acct_id' => $acctId,
@@ -269,8 +282,8 @@ class FinanceStatementControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->actingAs($user1)->postJson('/api/finance/multi-import-pdf', $payload);
-        $response->assertStatus(404);
+        $response = $this->actingAs($user1)->postJson('/api/finance/documents', $payload);
+        $response->assertUnprocessable();
     }
 
     public function test_account_flags_update_includes_account_number(): void
@@ -341,7 +354,7 @@ class FinanceStatementControllerTest extends TestCase
         $this->assertEquals('123456789012', $assetAccounts[0]['acct_number']);
     }
 
-    public function test_import_multi_account_pdf_updates_file_record_statement_id_when_file_exists(): void
+    public function test_document_statement_import_updates_file_record_statement_id_when_file_exists(): void
     {
         $user = $this->createAdminUser();
 
@@ -368,6 +381,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
+            'document_kind' => 'statement',
             'file_hash' => $fileHash,
             'accounts' => [
                 [
@@ -380,8 +394,8 @@ class FinanceStatementControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
-        $response->assertOk();
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', $payload);
+        $response->assertCreated();
 
         $json = $response->json();
         $statementId = $json['accounts'][0]['statement_id'];
@@ -395,7 +409,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
     }
 
-    public function test_import_multi_account_pdf_clones_file_record_for_additional_accounts(): void
+    public function test_document_statement_import_clones_file_record_for_additional_accounts(): void
     {
         $user = $this->createAdminUser();
 
@@ -427,6 +441,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
+            'document_kind' => 'statement',
             'file_hash' => $fileHash,
             'accounts' => [
                 [
@@ -446,8 +461,8 @@ class FinanceStatementControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
-        $response->assertOk();
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', $payload);
+        $response->assertCreated();
 
         $json = $response->json();
         $statementId2 = $json['accounts'][1]['statement_id'];
@@ -466,7 +481,7 @@ class FinanceStatementControllerTest extends TestCase
         $this->assertEquals(2, $count);
     }
 
-    public function test_import_multi_account_pdf_no_file_hash_does_not_create_file_records(): void
+    public function test_document_statement_import_no_file_hash_does_not_create_file_records(): void
     {
         $user = $this->createAdminUser();
 
@@ -477,6 +492,7 @@ class FinanceStatementControllerTest extends TestCase
         ]);
 
         $payload = [
+            'document_kind' => 'statement',
             'accounts' => [
                 [
                     'acct_id' => $acctId,
@@ -488,8 +504,8 @@ class FinanceStatementControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->actingAs($user)->postJson('/api/finance/multi-import-pdf', $payload);
-        $response->assertOk();
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', $payload);
+        $response->assertCreated();
 
         $this->assertDatabaseCount('files_for_fin_accounts', 0);
     }

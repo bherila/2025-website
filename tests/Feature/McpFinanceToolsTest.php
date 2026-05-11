@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
+use App\Services\Finance\DocumentIngestionService;
 use Tests\TestCase;
 
 /**
@@ -188,7 +188,7 @@ class McpFinanceToolsTest extends TestCase
         $userA = $this->createUser();
         $userB = $this->createUser();
 
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userA->id,
             'tax_year' => 2024,
             'form_type' => 'w2',
@@ -201,7 +201,7 @@ class McpFinanceToolsTest extends TestCase
             'genai_status' => 'pending',
         ]);
 
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userB->id,
             'tax_year' => 2024,
             'form_type' => '1099_int',
@@ -227,7 +227,7 @@ class McpFinanceToolsTest extends TestCase
         $user = $this->createUser();
 
         foreach ([2023, 2024, 2024] as $i => $year) {
-            FileForTaxDocument::create([
+            app(DocumentIngestionService::class)->createTaxFormDetail([
                 'user_id' => $user->id,
                 'tax_year' => $year,
                 'form_type' => 'w2',
@@ -251,7 +251,7 @@ class McpFinanceToolsTest extends TestCase
         $user = $this->createUser();
 
         foreach ([true, false] as $i => $reviewed) {
-            FileForTaxDocument::create([
+            app(DocumentIngestionService::class)->createTaxFormDetail([
                 'user_id' => $user->id,
                 'tax_year' => 2024,
                 'form_type' => 'w2',

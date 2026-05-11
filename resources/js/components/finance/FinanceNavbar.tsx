@@ -34,6 +34,7 @@ export type FinanceSection =
   | 'rsu'
   | 'payslips'
   | 'all-transactions'
+  | 'documents'
   | 'tax-preview'
   | 'tags'
   | 'config'
@@ -41,6 +42,7 @@ export type FinanceSection =
 /** Right-side nav items */
 const RIGHT_SECTIONS: { value: FinanceSection; label: string; href: string }[] = [
   { value: 'tax-preview', label: 'Tax Preview', href: '/finance/tax-preview' },
+  { value: 'documents', label: 'Documents', href: '/finance/documents' },
   { value: 'rsu', label: 'RSU', href: '/finance/rsu' },
   { value: 'payslips', label: 'Payslips', href: '/finance/payslips' },
   { value: 'tags', label: 'Tags', href: '/finance/tags' },

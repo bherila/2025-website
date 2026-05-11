@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -14,27 +15,22 @@ use Tests\TestCase;
 
 class FinLotReconciliationSchemaTest extends TestCase
 {
-    public function test_source_migration_round_trips_and_backfills_existing_lots(): void
+    public function test_source_column_tracks_lot_origin_after_unified_cutover(): void
     {
-        $migration = require database_path('migrations/2026_05_10_200602_add_source_to_fin_account_lots_table.php');
-
-        $migration->down();
-        $this->assertFalse(Schema::hasColumn('fin_account_lots', 'source'));
-
         $user = $this->createUser();
         $account = $this->makeAccount($user->id);
         $taxDocument = $this->makeTaxDocument($user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
             'lot_source' => '1099b',
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
         $accountLot = $this->makeLot($account, [
             'symbol' => 'MSFT',
-            'tax_document_id' => null,
+            'document_id' => null,
             'lot_source' => 'analyzer',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ]);
-
-        $migration->up();
 
         $this->assertTrue(Schema::hasColumn('fin_account_lots', 'source'));
         $this->assertTrue(Schema::hasIndex('fin_account_lots', 'fin_account_lots_source_idx'));
@@ -49,31 +45,19 @@ class FinLotReconciliationSchemaTest extends TestCase
 
         $defaultedLot = $this->makeLot($account, [
             'symbol' => 'TSLA',
-            'tax_document_id' => null,
+            'document_id' => null,
         ]);
         $this->assertSame(
             FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             DB::table('fin_account_lots')->where('lot_id', $defaultedLot->lot_id)->value('source'),
         );
-
-        $migration->down();
-        $this->assertFalse(Schema::hasColumn('fin_account_lots', 'source'));
-
-        $migration->up();
-        $this->assertTrue(Schema::hasColumn('fin_account_lots', 'source'));
     }
 
-    public function test_reconciliation_link_migration_round_trips_on_sqlite(): void
+    public function test_reconciliation_links_use_unified_document_schema(): void
     {
-        $migration = require database_path('migrations/2026_05_10_200603_create_fin_lot_reconciliation_links_table.php');
-
-        $migration->down();
-        $this->assertFalse(Schema::hasTable('fin_lot_reconciliation_links'));
-
-        $migration->up();
-
         $this->assertTrue(Schema::hasTable('fin_lot_reconciliation_links'));
-        $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'tax_document_id'));
+        $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'document_id'));
+        $this->assertFalse(Schema::hasColumn('fin_lot_reconciliation_links', 'tax_document_id'));
         $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'broker_lot_id'));
         $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'account_lot_id'));
         $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'match_reason'));
@@ -103,7 +87,7 @@ class FinLotReconciliationSchemaTest extends TestCase
         $account = $this->makeAccount($user->id);
         $taxDocument = $this->makeTaxDocument($user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
         $this->makeLot($account, [
@@ -144,7 +128,7 @@ class FinLotReconciliationSchemaTest extends TestCase
         ]);
 
         $link = FinLotReconciliationLink::factory()->create([
-            'tax_document_id' => null,
+            'document_id' => null,
             'broker_lot_id' => null,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
@@ -163,12 +147,12 @@ class FinLotReconciliationSchemaTest extends TestCase
         $account = $this->makeAccount($user->id);
         $taxDocument = $this->makeTaxDocument($user->id);
         $brokerLot = $this->makeLot($account, [
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
 
         FinLotReconciliationLink::factory()->create([
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => null,
             'accepted_by_user_id' => $user->id,
@@ -184,7 +168,7 @@ class FinLotReconciliationSchemaTest extends TestCase
         $this->expectException(QueryException::class);
 
         FinLotReconciliationLink::create([
-            'tax_document_id' => $link->tax_document_id,
+            'document_id' => $link->document_id,
             'broker_lot_id' => $link->broker_lot_id,
             'account_lot_id' => $link->account_lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -228,7 +212,7 @@ class FinLotReconciliationSchemaTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -237,7 +221,7 @@ class FinLotReconciliationSchemaTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);

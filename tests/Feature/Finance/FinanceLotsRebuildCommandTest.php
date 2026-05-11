@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -30,7 +31,7 @@ class FinanceLotsRebuildCommandTest extends TestCase
         $this->assertSame(0, $payload['totals']['deletedCount']);
         $this->assertStringContainsString('finance:lots-reconcile --tax-document='.$document->id, $payload['hint']);
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'AAPL',
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
@@ -61,11 +62,11 @@ class FinanceLotsRebuildCommandTest extends TestCase
         $this->assertSame(1, $payload['totals']['insertedCount']);
         $this->assertSame(1, $payload['totals']['deletedCount']);
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'STALE',
         ]);
         $this->assertDatabaseMissing('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'AAPL',
         ]);
     }
@@ -119,7 +120,7 @@ class FinanceLotsRebuildCommandTest extends TestCase
 
     private function makeBrokerDocument(int $userId, FinAccounts $account, bool $createLink = true): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -128,7 +129,7 @@ class FinanceLotsRebuildCommandTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'genai_status' => 'parsed',
             'parsed_data' => [[
@@ -184,7 +185,7 @@ class FinanceLotsRebuildCommandTest extends TestCase
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));

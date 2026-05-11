@@ -61,10 +61,10 @@ final class NormalizedLotQuery
     /**
      * @return Builder<FinAccountLot>
      */
-    public static function forTaxDocument(int $taxDocumentId): Builder
+    public static function forDocument(int $documentId): Builder
     {
         return FinAccountLot::query()
-            ->where(fn (Builder $query) => self::applyTaxDocumentVisibility($query, $taxDocumentId));
+            ->where(fn (Builder $query) => self::applyDocumentVisibility($query, $documentId));
     }
 
     /** @param  Builder<FinAccountLot>  $query */
@@ -96,20 +96,20 @@ final class NormalizedLotQuery
     }
 
     /** @param  Builder<FinAccountLot>  $query */
-    private static function applyTaxDocumentVisibility(Builder $query, int $taxDocumentId): void
+    private static function applyDocumentVisibility(Builder $query, int $documentId): void
     {
         $query
-            ->where(function (Builder $syntheticLotQuery) use ($taxDocumentId): void {
+            ->where(function (Builder $syntheticLotQuery) use ($documentId): void {
                 self::applySyntheticAdjustmentSource($syntheticLotQuery);
-                $syntheticLotQuery->where('tax_document_id', $taxDocumentId);
+                $syntheticLotQuery->where('document_id', $documentId);
             })
-            ->orWhere(function (Builder $reportedLotQuery) use ($taxDocumentId): void {
+            ->orWhere(function (Builder $reportedLotQuery) use ($documentId): void {
                 self::applyDocumentedReportedLot($reportedLotQuery);
-                $reportedLotQuery->where('tax_document_id', $taxDocumentId);
+                $reportedLotQuery->where('document_id', $documentId);
             })
-            ->orWhere(function (Builder $overrideLotQuery) use ($taxDocumentId): void {
+            ->orWhere(function (Builder $overrideLotQuery) use ($documentId): void {
                 self::applyAccountDerivedLotSource($overrideLotQuery);
-                $overrideLotQuery->whereExists(self::overriddenReportedLotForCurrentLot(taxDocumentId: $taxDocumentId));
+                $overrideLotQuery->whereExists(self::overriddenReportedLotForCurrentLot(documentId: $documentId));
             });
     }
 
@@ -117,7 +117,15 @@ final class NormalizedLotQuery
     private static function applyDocumentedReportedLot(Builder $query): void
     {
         $query
-            ->whereNotNull('tax_document_id')
+            ->whereNotNull('document_id')
+            ->where(function (Builder $originQuery): void {
+                $originQuery->whereIn('lot_origin', [
+                    FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                    FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                ])->orWhere(function (Builder $sourceQuery): void {
+                    self::applyReportedLotSource($sourceQuery);
+                });
+            })
             ->whereNull('superseded_by_lot_id')
             ->where(fn (Builder $stateQuery) => self::applyNotIgnoredDuplicate($stateQuery));
     }
@@ -126,7 +134,7 @@ final class NormalizedLotQuery
     private static function applyOrphanReportedLot(Builder $query, int $year): void
     {
         $query
-            ->whereNull('tax_document_id')
+            ->whereNull('document_id')
             ->whereNull('superseded_by_lot_id')
             ->where(fn (Builder $sourceQuery) => self::applyReportedLotSource($sourceQuery))
             ->whereNotExists(self::documentedLotsForSameAccountYear($year))
@@ -181,7 +189,14 @@ final class NormalizedLotQuery
     private static function applyAccountDerivedLotSource(Builder $query): void
     {
         $query
-            ->whereNull('tax_document_id')
+            ->where(function (Builder $originQuery): void {
+                $originQuery->whereNull('lot_origin')
+                    ->orWhereNotIn('lot_origin', [
+                        FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                    ]);
+            })
             ->where(function (Builder $sourceQuery): void {
                 $sourceQuery
                     ->whereIn('source', [
@@ -205,9 +220,9 @@ final class NormalizedLotQuery
             ->orWhere('reconciliation_status', '!=', FinLotReconciliationLink::STATE_IGNORED_DUPLICATE);
     }
 
-    private static function overriddenReportedLotForCurrentLot(?int $taxYear = null, ?int $taxDocumentId = null): Closure
+    private static function overriddenReportedLotForCurrentLot(?int $taxYear = null, ?int $documentId = null): Closure
     {
-        return static function (QueryBuilder $overriddenLotsQuery) use ($taxYear, $taxDocumentId): void {
+        return static function (QueryBuilder $overriddenLotsQuery) use ($taxYear, $documentId): void {
             $overriddenLotsQuery
                 ->selectRaw('1')
                 ->from('fin_account_lots as overridden_lots')
@@ -215,12 +230,15 @@ final class NormalizedLotQuery
                 ->whereColumn('overridden_lots.acct_id', 'fin_account_lots.acct_id')
                 ->where(function (QueryBuilder $reportedLotQuery): void {
                     $reportedLotQuery
-                        ->whereNotNull('overridden_lots.tax_document_id')
+                        ->whereIn('overridden_lots.lot_origin', [
+                            FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                            FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        ])
                         ->orWhere('overridden_lots.source', FinAccountLot::SOURCE_BROKER_1099B)
                         ->orWhereIn('overridden_lots.lot_source', ReportedLotQueryScopes::REPORTED_LOT_SOURCES);
                 })
                 ->when($taxYear !== null, fn (QueryBuilder $query) => $query->whereBetween('overridden_lots.sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"]))
-                ->when($taxDocumentId !== null, fn (QueryBuilder $query) => $query->where('overridden_lots.tax_document_id', $taxDocumentId));
+                ->when($documentId !== null, fn (QueryBuilder $query) => $query->where('overridden_lots.document_id', $documentId));
         };
     }
 
@@ -233,7 +251,16 @@ final class NormalizedLotQuery
                 ->whereColumn('documented_lots.acct_id', 'fin_account_lots.acct_id')
                 ->whereBetween('documented_lots.sale_date', ["{$year}-01-01", "{$year}-12-31"])
                 ->whereNull('documented_lots.superseded_by_lot_id')
-                ->whereNotNull('documented_lots.tax_document_id');
+                ->whereNotNull('documented_lots.document_id')
+                ->where(function (QueryBuilder $reportedLotQuery): void {
+                    $reportedLotQuery
+                        ->whereIn('documented_lots.lot_origin', [
+                            FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                            FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        ])
+                        ->orWhere('documented_lots.source', FinAccountLot::SOURCE_BROKER_1099B)
+                        ->orWhereIn('documented_lots.lot_source', ReportedLotQueryScopes::REPORTED_LOT_SOURCES);
+                });
         };
     }
 
@@ -246,7 +273,7 @@ final class NormalizedLotQuery
                 ->whereColumn('orphan_reported_lots.acct_id', 'fin_account_lots.acct_id')
                 ->whereBetween('orphan_reported_lots.sale_date', ["{$year}-01-01", "{$year}-12-31"])
                 ->whereNull('orphan_reported_lots.superseded_by_lot_id')
-                ->whereNull('orphan_reported_lots.tax_document_id')
+                ->whereNull('orphan_reported_lots.document_id')
                 ->where(function (QueryBuilder $reportedLotQuery): void {
                     $reportedLotQuery
                         ->where('orphan_reported_lots.source', FinAccountLot::SOURCE_BROKER_1099B)

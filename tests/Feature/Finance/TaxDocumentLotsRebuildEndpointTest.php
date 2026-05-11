@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -52,7 +53,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
             ->assertJsonStructure(['refreshedTaxFacts' => ['scheduleD', 'form8949']]);
 
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'AAPL',
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'form_8949_box' => 'D',
@@ -60,7 +61,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
         $this->assertDatabaseMissing('fin_account_lots', ['symbol' => 'STALE']);
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
     }
 
@@ -79,7 +80,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
             ->assertJsonPath('warnings', []);
 
         $this->assertDatabaseHas('fin_account_lots', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'symbol' => 'AAPL',
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
@@ -88,7 +89,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
     public function test_endpoint_refuses_unparsed_document_without_usable_parsed_data(): void
     {
         $user = $this->createUser();
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -123,7 +124,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
 
     private function makeBrokerDocument(int $userId, FinAccounts $account): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -132,7 +133,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'genai_status' => 'parsed',
             'parsed_data' => [[
@@ -187,7 +188,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));

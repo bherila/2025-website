@@ -6,6 +6,7 @@ use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -57,7 +58,9 @@ class TaxDocumentCreationServiceTest extends TestCase
 
         $genaiJob = GenAiImportJob::find($doc->genai_job_id);
         $this->assertNotNull($genaiJob);
-        $this->assertEquals('tax_document', $genaiJob->job_type);
+        $this->assertEquals('document_extract', $genaiJob->job_type);
+        $this->assertSame(FinDocument::KIND_TAX_FORM, $genaiJob->getContextArray()['document_kind']);
+        $this->assertSame($doc->document_id, $genaiJob->getContextArray()['document_id']);
 
         Queue::assertPushed(ParseImportJob::class);
     }
@@ -101,7 +104,7 @@ class TaxDocumentCreationServiceTest extends TestCase
             ]
         );
 
-        $links = TaxDocumentAccount::where('tax_document_id', $doc->id)->get();
+        $links = TaxDocumentAccount::where('document_id', $doc->document_id)->get();
         $this->assertCount(1, $links);
         $this->assertEquals($account->acct_id, $links->first()->account_id);
     }
@@ -115,7 +118,7 @@ class TaxDocumentCreationServiceTest extends TestCase
             $this->baseDocAttributes($user->id)
         );
 
-        $links = TaxDocumentAccount::where('tax_document_id', $doc->id)->get();
+        $links = TaxDocumentAccount::where('document_id', $doc->document_id)->get();
         $this->assertCount(0, $links);
     }
 
@@ -137,10 +140,11 @@ class TaxDocumentCreationServiceTest extends TestCase
 
         $genaiJob = GenAiImportJob::find($doc->genai_job_id);
         $this->assertNotNull($genaiJob);
-        $this->assertEquals('tax_form_multi_account_import', $genaiJob->job_type);
+        $this->assertEquals('document_extract', $genaiJob->job_type);
 
         $contextJson = json_decode($genaiJob->context_json, true);
-        $this->assertEquals($doc->id, $contextJson['tax_document_id']);
+        $this->assertEquals($doc->document_id, $contextJson['document_id']);
+        $this->assertEquals(FinDocument::KIND_TAX_FORM, $contextJson['document_kind']);
         $this->assertEquals(2024, $contextJson['tax_year']);
         $this->assertCount(1, $contextJson['accounts']);
 
@@ -203,7 +207,7 @@ class TaxDocumentCreationServiceTest extends TestCase
             ]
         );
 
-        $links = TaxDocumentAccount::where('tax_document_id', $doc->id)->get();
+        $links = TaxDocumentAccount::where('document_id', $doc->document_id)->get();
         $this->assertCount(1, $links);
         $this->assertEquals($account->acct_id, $links->first()->account_id);
         $this->assertEquals('1099_div', $links->first()->form_type);

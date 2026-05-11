@@ -10,7 +10,7 @@ class LotMatcherResult
      * @param  array<string, int>  $counts
      */
     public function __construct(
-        public readonly int $taxDocumentId,
+        public readonly int $documentId,
         public readonly bool $dryRun,
         public readonly array $proposals,
         public readonly array $linkIds,
@@ -18,12 +18,12 @@ class LotMatcherResult
     ) {}
 
     /**
-     * @return array{taxDocumentId: int, dryRun: bool, counts: array<string, int>, linkIds: list<int>, proposals: list<array<string, mixed>>}
+     * @return array{documentId: int, dryRun: bool, counts: array<string, int>, linkIds: list<int>, proposals: list<array<string, mixed>>}
      */
     public function toArray(): array
     {
         return [
-            'taxDocumentId' => $this->taxDocumentId,
+            'documentId' => $this->documentId,
             'dryRun' => $this->dryRun,
             'counts' => $this->counts,
             'linkIds' => $this->linkIds,

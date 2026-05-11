@@ -6,6 +6,7 @@ import DuplicatesPage from '@/components/finance/DuplicatesPage'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceConfigPage from '@/components/finance/FinanceConfigPage'
+import FinanceDocumentsPage from '@/components/finance/FinanceDocumentsPage'
 import FinanceNavbar, { type FinanceSection } from '@/components/finance/FinanceNavbar'
 import ImportTransactionsClient from '@/components/finance/import_transactions/ImportTransactionsClient'
 import LinkerPage from '@/components/finance/LinkerPage'
@@ -85,6 +86,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (accountsDiv) {
     const root = createRoot(accountsDiv)
     root.render(<FinanceAccountsPage />)
+  }
+
+  const documentsDiv = document.getElementById('FinanceDocumentsPage')
+  if (documentsDiv) {
+    const root = createRoot(documentsDiv)
+    root.render(<FinanceDocumentsPage />)
   }
 
   const balanceHistoryDiv = document.getElementById('FinanceAccountStatementsPage')

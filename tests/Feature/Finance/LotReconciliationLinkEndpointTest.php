@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Tests\TestCase;
 
 class LotReconciliationLinkEndpointTest extends TestCase
@@ -87,7 +88,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
         [$document, $account, $userId] = $this->documentAndAccount();
         $brokerLot = $this->makeBrokerLot($account, $document);
         $duplicateLink = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => null,
             'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
@@ -145,7 +146,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
         [$document, $account, $userId] = $this->documentAndAccount();
         $brokerLot = $this->makeBrokerLot($account, $document);
         $link = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => null,
             'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
@@ -173,7 +174,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
     private function makeLink(FileForTaxDocument $document, FinAccountLot $brokerLot, FinAccountLot $accountLot): FinLotReconciliationLink
     {
         return FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -206,7 +207,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
                 'acct_last_balance' => '0',
             ]);
         });
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -215,7 +216,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
             's3_path' => "tax_docs/{$user->id}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $user->id,
             'is_reviewed' => true,
         ]);
@@ -229,7 +230,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
     private function makeBrokerLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ], $overrides));
@@ -241,7 +242,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
     private function makeAccountLot(FinAccounts $account, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => null,
+            'document_id' => null,
             'lot_source' => 'analyzer',
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ], $overrides));

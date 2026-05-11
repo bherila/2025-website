@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import AccountTaxDocumentsSection from '../AccountTaxDocumentsSection'
 import type { StatementDetail, StatementInfo } from '../StatementDetailsModal'
 import StatementDetailView from './StatementDetailView'
 import StatementsListView, { type StatementSnapshot } from './StatementsListView'
@@ -138,7 +137,6 @@ export default function FinanceAccountStatementsPage({ id }: { id: number }) {
           <h2 className="text-xl font-semibold mb-4">No Statements Found</h2>
           <p className="mb-6 text-muted-foreground">This account doesn&apos;t have any statements yet.</p>
         </div>
-        <AccountTaxDocumentsSection accountId={id} />
       </div>
     )
   }

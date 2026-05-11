@@ -271,7 +271,8 @@ class TaxLotReconciliationService
             'wash_sale_disallowed' => $lot->wash_sale_disallowed !== null ? $this->lotMatcher->numericValue($lot->wash_sale_disallowed) : null,
             'statement_id' => $lot->statement_id !== null ? (int) $lot->statement_id : null,
             'close_t_id' => $lot->close_t_id !== null ? (int) $lot->close_t_id : null,
-            'tax_document_id' => $lot->tax_document_id !== null ? (int) $lot->tax_document_id : null,
+            'document_id' => $lot->document_id !== null ? (int) $lot->document_id : null,
+            'tax_document_id' => $lot->taxDocument instanceof FileForTaxDocument ? (int) $lot->taxDocument->id : null,
             'superseded_by_lot_id' => $lot->superseded_by_lot_id !== null ? (int) $lot->superseded_by_lot_id : null,
             'reconciliation_status' => $lot->reconciliation_status,
             'reconciliation_notes' => $lot->reconciliation_notes,
@@ -368,12 +369,15 @@ class TaxLotReconciliationService
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->where(function ($query): void {
                 $query->where('lot_source', FinAccountLot::SOURCE_1099B)
-                    ->orWhereNotNull('tax_document_id');
+                    ->orWhereIn('lot_origin', [
+                        FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                    ]);
             })
             ->with([
                 'closeTransaction:t_id,t_date,t_type,t_amt,t_symbol,t_cusip,t_qty,t_price,t_description,t_source',
                 'openTransaction:t_id,t_date,t_type,t_amt,t_symbol,t_cusip,t_qty,t_price,t_description,t_source',
-                'taxDocument:id,original_filename,form_type,tax_year',
+                'taxDocument:id,document_id,original_filename,form_type,tax_year',
             ])
             ->orderBy('acct_id')
             ->orderBy('symbol')
@@ -392,7 +396,14 @@ class TaxLotReconciliationService
             ->whereIn('acct_id', $accountIds)
             ->whereBetween('sale_date', ["{$taxYear}-01-01", "{$taxYear}-12-31"])
             ->where(function ($query): void {
-                $query->whereNull('tax_document_id')
+                $query->where(function ($originQuery): void {
+                    $originQuery->whereNull('lot_origin')
+                        ->orWhereNotIn('lot_origin', [
+                            FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                            FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                            FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                        ]);
+                })
                     ->where(function ($sourceQuery): void {
                         $sourceQuery->whereNull('lot_source')
                             ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);
@@ -413,18 +424,20 @@ class TaxLotReconciliationService
         $links = TaxDocumentAccount::query()
             ->whereNull('account_id')
             ->where('tax_year', $taxYear)
-            ->whereIn('form_type', ['1099_b', 'broker_1099'])
+            ->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
             ->whereHas('document', fn ($query) => $query->where('user_id', $userId))
-            ->with('document:id,original_filename,form_type,tax_year')
-            ->orderBy('tax_document_id')
+            ->with('taxDocument:id,document_id,original_filename,form_type,tax_year')
+            ->orderBy('document_id')
             ->orderBy('id')
             ->get();
 
         $payload = [];
         foreach ($links as $link) {
+            $taxDocument = $link->taxDocument;
             $payload[] = [
                 'id' => (int) $link->id,
-                'tax_document_id' => (int) $link->tax_document_id,
+                'document_id' => (int) $link->document_id,
+                'tax_document_id' => $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null,
                 'filename' => $this->taxDocumentAccountFilename($link),
                 'form_type' => $link->form_type,
                 'tax_year' => (int) $link->tax_year,
@@ -467,7 +480,7 @@ class TaxLotReconciliationService
 
     private function taxDocumentAccountFilename(TaxDocumentAccount $link): ?string
     {
-        $document = $link->document;
+        $document = $link->taxDocument;
         if (! $document instanceof FileForTaxDocument) {
             return null;
         }

@@ -243,6 +243,7 @@ class TaxDocumentParsedDataNormalizer
                     continue;
                 }
 
+                $linkPayload['tax_document_id'] ??= (int) $doc->id;
                 $linkWarnings = $normalized['warnings_by_link'][(int) $linkPayload['id']] ?? ($linkPayload['parsed_data_warnings'] ?? []);
                 $linkPayload['parsed_data_warnings'] = $linkWarnings;
                 $linkPayload['parsed_data_needs_review'] = $linkWarnings !== [];

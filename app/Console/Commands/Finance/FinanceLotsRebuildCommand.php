@@ -42,11 +42,12 @@ class FinanceLotsRebuildCommand extends BaseFinanceCommand
 
         foreach ($documents as $document) {
             $result = $isDryRun
-                ? $this->lotImportFromParsedDataService->previewForTaxDocument((int) $document->id)
-                : $this->lotImportFromParsedDataService->rebuildForTaxDocument((int) $document->id);
+                ? $this->lotImportFromParsedDataService->previewForDocument((int) $document->document_id)
+                : $this->lotImportFromParsedDataService->rebuildForDocument((int) $document->document_id);
 
             $results[] = array_merge([
                 'taxDocumentId' => (int) $document->id,
+                'documentId' => (int) $document->document_id,
                 'taxYear' => (int) $document->tax_year,
                 'filename' => (string) $document->original_filename,
             ], $result->toArray());
@@ -145,9 +146,9 @@ class FinanceLotsRebuildCommand extends BaseFinanceCommand
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->where(function (Builder $query): void {
-                $query->whereIn('form_type', ['1099_b', 'broker_1099'])
+                $query->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
                     ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
-                        $linkQuery->where('form_type', '1099_b');
+                        $linkQuery->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B);
                     });
             })
             ->orderBy('id')

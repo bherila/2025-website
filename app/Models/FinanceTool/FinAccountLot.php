@@ -5,10 +5,12 @@ namespace App\Models\FinanceTool;
 use App\Models\Files\FileForTaxDocument;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * @property int|null $document_id
  * @property string|null $reconciliation_status Latest fin_lot_reconciliation_links.state cache for this lot when reconciliation links exist.
  */
 class FinAccountLot extends Model
@@ -40,6 +42,24 @@ class FinAccountLot extends Model
     /** Legacy lot source value stored in fin_account_lots.lot_source. */
     public const SOURCE_1099B_UNDERSCORE = '1099_b';
 
+    public const string ORIGIN_1099B_DISPOSITION = '1099b_disposition';
+
+    public const string ORIGIN_STATEMENT_DISPOSITION = 'statement_disposition';
+
+    public const string ORIGIN_STATEMENT_POSITION = 'statement_position';
+
+    public const string ORIGIN_CSV_IMPORT = 'csv_import';
+
+    public const string ORIGIN_MANUAL = 'manual';
+
+    public const array LOT_ORIGINS = [
+        self::ORIGIN_1099B_DISPOSITION,
+        self::ORIGIN_STATEMENT_DISPOSITION,
+        self::ORIGIN_STATEMENT_POSITION,
+        self::ORIGIN_CSV_IMPORT,
+        self::ORIGIN_MANUAL,
+    ];
+
     protected $table = 'fin_account_lots';
 
     protected $primaryKey = 'lot_id';
@@ -62,7 +82,8 @@ class FinAccountLot extends Model
         'statement_id',
         'open_t_id',
         'close_t_id',
-        'tax_document_id',
+        'document_id',
+        'lot_origin',
         'form_8949_box',
         'is_covered',
         'accrued_market_discount',
@@ -84,6 +105,7 @@ class FinAccountLot extends Model
         'wash_sale_disallowed' => 'decimal:4',
         'purchase_date' => 'date',
         'sale_date' => 'date',
+        'document_id' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -94,6 +116,12 @@ class FinAccountLot extends Model
     public function statement(): BelongsTo
     {
         return $this->belongsTo(FinStatement::class, 'statement_id', 'statement_id');
+    }
+
+    /** @return BelongsTo<FinDocument, $this> */
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(FinDocument::class, 'document_id');
     }
 
     public function openTransaction(): BelongsTo
@@ -108,7 +136,19 @@ class FinAccountLot extends Model
 
     public function taxDocument(): BelongsTo
     {
-        return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id', 'id');
+        return $this->belongsTo(FileForTaxDocument::class, 'document_id', 'document_id');
+    }
+
+    /**
+     * @return Attribute<int|null, never>
+     */
+    protected function taxDocumentId(): Attribute
+    {
+        return Attribute::make(get: function (): ?int {
+            $taxDocument = $this->relationLoaded('taxDocument') ? $this->getRelation('taxDocument') : $this->taxDocument;
+
+            return $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null;
+        });
     }
 
     /** @param  Builder<self>  $query */

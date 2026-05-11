@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -33,14 +34,16 @@ class FinanceTaxCommandsTest extends TestCase
 
     private function makeTaxDoc(string $formType, int $year = 2024, array $parsedData = [], array $overrides = []): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        return app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $this->user->id,
             'form_type' => $formType,
             'tax_year' => $year,
             'original_filename' => "{$formType}-{$year}.pdf",
             'stored_filename' => "{$formType}_{$year}_stored.pdf",
+            's3_path' => "tax_docs/{$this->user->id}/{$formType}_{$year}_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => uniqid("{$formType}_{$year}_"),
+            'file_hash' => hash('sha256', uniqid("{$formType}_{$year}_", true)),
             'genai_status' => 'parsed',
             'parsed_data' => $parsedData ?: null,
         ], $overrides));
@@ -100,13 +103,7 @@ class FinanceTaxCommandsTest extends TestCase
         });
 
         $doc = $this->makeTaxDoc('k1', 2024);
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => 'k1',
-            'tax_year' => 2024,
-            'is_reviewed' => false,
-        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, 'k1', 2024);
 
         // Only the k1 with the specific account should appear
         $this->artisan('finance:tax-docs', ['--year' => '2024', '--account' => (string) $account->acct_id])
@@ -117,14 +114,16 @@ class FinanceTaxCommandsTest extends TestCase
     public function test_tax_docs_does_not_show_other_users_documents(): void
     {
         $otherUser = User::factory()->create();
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $otherUser->id,
             'form_type' => 'w2',
             'tax_year' => 2024,
             'original_filename' => 'other-w2.pdf',
             'stored_filename' => 'other_w2_stored.pdf',
+            's3_path' => "tax_docs/{$otherUser->id}/other_w2_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => uniqid('other_'),
+            'file_hash' => hash('sha256', uniqid('other_', true)),
         ]);
 
         $this->artisan('finance:tax-docs', ['--year' => '2024', '--format' => 'json'])
@@ -411,8 +410,8 @@ class FinanceTaxCommandsTest extends TestCase
             ->first();
 
         $this->assertNotNull($doc);
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $doc->id,
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $doc->document_id,
             'form_type' => 'k1',
             'tax_year' => 2024,
         ]);
