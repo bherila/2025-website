@@ -736,6 +736,18 @@ class LotMatcherService
     }
 
     /**
+     * Refresh the denormalised reconciliation_status / superseded_by_lot_id columns
+     * on fin_account_lots from the latest link state in the given tax document.
+     *
+     * Scoping note: the query is intentionally constrained to $taxDocumentId so it
+     * matches LotReconciliationStatusCacheVerifier::auditDocument, which also
+     * audits per-document. For account-derived lots that legitimately participate
+     * in links from multiple tax documents (e.g. cross-year carryover), this means
+     * the cache reflects the state from the last document to touch the lot, not a
+     * globally-latest value. Phase 6 (NormalizedLotQuery) and Phase 7 (UI) should
+     * read per-document link state directly rather than treat this cache as the
+     * cross-document source of truth.
+     *
      * @param  int[]  $lotIds
      */
     private function refreshLotCaches(int $taxDocumentId, array $lotIds): void
