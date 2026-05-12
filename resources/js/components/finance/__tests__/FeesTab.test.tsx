@@ -1,7 +1,9 @@
 import '@testing-library/jest-dom'
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
+
+import { fetchWrapper } from '@/fetchWrapper'
 
 import type { FeesTabData } from '../FeesTab'
 import FeesTab from '../FeesTab'
@@ -12,6 +14,8 @@ jest.mock('@/fetchWrapper', () => ({
     post: jest.fn(),
   },
 }))
+
+const mockedFetchWrapper = fetchWrapper as jest.Mocked<typeof fetchWrapper>
 
 jest.mock('../TransactionDetailsModal', () => ({
   __esModule: true,
@@ -78,6 +82,10 @@ function makeFeesData(overrides: Partial<FeesTabData> = {}): FeesTabData {
 }
 
 describe('FeesTab', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   it('hides the delta row when no expected-fees state exists', () => {
     render(<FeesTab accountId={1} initialData={makeFeesData()} />)
 
@@ -125,5 +133,36 @@ describe('FeesTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /K-1 Reconciliation/i }))
 
     expect(screen.getByText('Review this K-1 to classify the 13ZZ fee subtotal.')).toBeInTheDocument()
+  })
+
+  it('saves expected fees only from the save button', async () => {
+    mockedFetchWrapper.post.mockResolvedValue({})
+    mockedFetchWrapper.get.mockResolvedValue(makeFeesData({
+      account: {
+        acct_id: 1,
+        acct_name: 'Brokerage',
+        acct_last_balance: 10000,
+        expected_fee_pct: 1,
+        expected_fee_flat: null,
+        expected_fee_notes: null,
+      },
+      expected: { total: 100, has_expectation: true },
+    }))
+
+    render(<FeesTab accountId={1} initialData={makeFeesData()} />)
+
+    fireEvent.change(screen.getByLabelText('Annual AUM fee'), { target: { value: '1' } })
+    fireEvent.blur(screen.getByLabelText('Annual AUM fee'))
+
+    expect(mockedFetchWrapper.post).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Save/i }))
+
+    await waitFor(() => expect(mockedFetchWrapper.post).toHaveBeenCalledTimes(1))
+    expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/1/update-flags', {
+      expectedFeePct: 1,
+      expectedFeeFlat: null,
+      expectedFeeNotes: null,
+    })
   })
 })

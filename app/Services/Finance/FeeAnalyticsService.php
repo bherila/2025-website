@@ -20,19 +20,25 @@ class FeeAnalyticsService
 
     private const array FEE_CHARACTERISTICS = ['fee_schE', 'fee_irc67g'];
 
+    private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
+
     // Keep in sync with resources/js/lib/finance/transactionTypes.ts.
     private const array CASH_FLOW_TRANSACTION_TYPES = ['Transfer', 'Deposit', 'Withdrawal'];
 
     /**
      * @return array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}
      */
-    public function actualFeesForAccount(int $accountId, int $year): array
+    public function actualFeesForAccount(int|FinAccounts $account, int $year): array
     {
-        $account = FinAccounts::query()->where('acct_id', $accountId)->first();
-        if ($account instanceof FinAccounts && $this->accountPeriodForYear($account, $year) === null) {
+        $resolvedAccount = $account instanceof FinAccounts
+            ? $account
+            : FinAccounts::query()->where('acct_id', $account)->first();
+
+        if ($resolvedAccount instanceof FinAccounts && $this->accountPeriodForYear($resolvedAccount, $year) === null) {
             return $this->emptyActualFees();
         }
 
+        $accountId = $resolvedAccount instanceof FinAccounts ? (int) $resolvedAccount->acct_id : $account;
         [$start, $end] = $this->yearBounds($year);
 
         return $this->actualFeesForPeriod($accountId, $start, $end, true);
@@ -54,8 +60,12 @@ class FeeAnalyticsService
         $averageBalance = $this->avgBalanceForPeriod((int) $account->acct_id, $start, $end);
         $percentage = (float) ($account->expected_fee_pct ?? 0);
         $flat = (float) ($account->expected_fee_flat ?? 0);
+        $percentageAnnualFee = MoneyMath::multiply($averageBalance, $percentage / 100);
 
-        return MoneyMath::round(($averageBalance * ($percentage / 100) * $yearsInPeriod) + ($flat * $yearsInPeriod));
+        return MoneyMath::add(
+            MoneyMath::multiply($percentageAnnualFee, $yearsInPeriod),
+            MoneyMath::multiply($flat, $yearsInPeriod),
+        );
     }
 
     /**
@@ -72,7 +82,7 @@ class FeeAnalyticsService
             $cashFlows = $this->cashFlowsForPeriod($accountId, $start, $end);
             $startingBalance = $this->balanceAtPeriodStart($accountId, $start);
             $endingBalance = $this->balanceAtPeriodEnd($accountId, $end) ?? $startingBalance;
-            $netReturn = MoneyMath::round(($endingBalance - $startingBalance) + $cashFlows['withdrawals'] - $cashFlows['deposits']);
+            $netReturn = $this->netReturn($startingBalance, $endingBalance, $cashFlows['deposits'], $cashFlows['withdrawals']);
 
             $series[] = [
                 'month' => $start->format('Y-m'),
@@ -86,11 +96,72 @@ class FeeAnalyticsService
     }
 
     /**
+     * @param  array<int, int>  $accountIds
+     * @return array<int, array{month:string,gross_return:float,net_return:float,fees:float}>
+     */
+    public function monthlyFeeDragSeriesForAccounts(array $accountIds, int $year): array
+    {
+        $accountIds = array_values(array_unique(array_map(static fn (mixed $accountId): int => (int) $accountId, $accountIds)));
+        [$yearStart, $yearEnd] = $this->yearBounds($year);
+
+        $feeTotalsByMonth = [];
+        foreach ($this->feeLineItemsForAccountsForPeriod($accountIds, $yearStart, $yearEnd) as $row) {
+            $month = CarbonImmutable::parse((string) $row->t_date)->format('Y-m');
+            $feeTotalsByMonth[$month] = MoneyMath::add($feeTotalsByMonth[$month] ?? 0.0, $this->feeAmountForLineItem($row));
+        }
+
+        $cashFlows = $this->cashFlowsForAccountsForPeriod($accountIds, $yearStart, $yearEnd);
+        $statements = FinStatement::query()
+            ->whereIn('acct_id', $accountIds)
+            ->whereNotNull('statement_closing_date')
+            ->where('statement_closing_date', '<=', $yearEnd->toDateString())
+            ->orderBy('statement_closing_date')
+            ->orderBy('statement_id')
+            ->get(['acct_id', 'balance', 'statement_closing_date', 'statement_id']);
+        $lastBalances = FinAccounts::query()
+            ->whereIn('acct_id', $accountIds)
+            ->pluck('acct_last_balance', 'acct_id')
+            ->map(static fn (mixed $balance): float => (float) $balance);
+
+        $series = [];
+        for ($month = 1; $month <= 12; $month++) {
+            $start = CarbonImmutable::create($year, $month, 1)->startOfDay();
+            $end = $start->endOfMonth();
+            $monthKey = $start->format('Y-m');
+            $netReturn = 0.0;
+
+            foreach ($accountIds as $accountId) {
+                $startingBalance = $this->statementBalanceOnOrBeforeFromCollection($statements, $accountId, $start->subDay())
+                    ?? $this->statementBalanceOnOrAfterFromCollection($statements, $accountId, $start)
+                    ?? (float) ($lastBalances[$accountId] ?? 0.0);
+                $endingBalance = $this->statementBalanceOnOrBeforeFromCollection($statements, $accountId, $end)
+                    ?? $startingBalance;
+                $accountCashFlows = $cashFlows[$accountId][$monthKey] ?? ['deposits' => 0.0, 'withdrawals' => 0.0];
+                $netReturn = MoneyMath::add(
+                    $netReturn,
+                    $this->netReturn($startingBalance, $endingBalance, $accountCashFlows['deposits'], $accountCashFlows['withdrawals']),
+                );
+            }
+
+            $fees = $feeTotalsByMonth[$monthKey] ?? 0.0;
+            $series[] = [
+                'month' => $monthKey,
+                'gross_return' => MoneyMath::add($netReturn, $fees),
+                'net_return' => $netReturn,
+                'fees' => $fees,
+            ];
+        }
+
+        return $series;
+    }
+
+    /**
+     * @param  array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}|null  $actual
      * @return array<int, array{entity_name:string,k1_fees_schE:float,k1_fees_irc67g:float,statement_fees_schE:float,statement_fees_irc67g:float,delta_schE:float,delta_irc67g:float,status:string,tax_document_id:int|null,account_id:int}>
      */
-    public function reconcileK1Fees(int $accountId, int $year): array
+    public function reconcileK1Fees(int $accountId, int $year, ?array $actual = null): array
     {
-        $actual = $this->actualFeesForAccount($accountId, $year);
+        $actual ??= $this->actualFeesForAccount($accountId, $year);
         $statementSchE = $actual['by_characteristic']['fee_schE'];
         $statementIrc67g = $actual['by_characteristic']['fee_irc67g'];
 
@@ -111,26 +182,40 @@ class FeeAnalyticsService
             ->orderBy('id')
             ->get();
 
+        if ($documents->count() > 1) {
+            $k1Fees = ['schE' => 0.0, 'irc67g' => 0.0, 'has_unclassified_13zz' => false];
+
+            foreach ($documents as $document) {
+                $documentFees = $this->k1FeeBuckets($document);
+                $k1Fees['schE'] = MoneyMath::add($k1Fees['schE'], $documentFees['schE']);
+                $k1Fees['irc67g'] = MoneyMath::add($k1Fees['irc67g'], $documentFees['irc67g']);
+                $k1Fees['has_unclassified_13zz'] = $k1Fees['has_unclassified_13zz'] || $documentFees['has_unclassified_13zz'];
+            }
+
+            return [
+                $this->reconciliationRow(
+                    'All linked K-1s',
+                    $k1Fees,
+                    $statementSchE,
+                    $statementIrc67g,
+                    null,
+                    $accountId,
+                ),
+            ];
+        }
+
         $rows = [];
 
         foreach ($documents as $document) {
             $k1Fees = $this->k1FeeBuckets($document);
-            $deltaSchE = MoneyMath::subtract($statementSchE, $k1Fees['schE']);
-            $deltaIrc67g = MoneyMath::subtract($statementIrc67g, $k1Fees['irc67g']);
-            $status = $this->reconciliationStatus($deltaSchE, $deltaIrc67g, $k1Fees['has_unclassified_13zz']);
-
-            $rows[] = [
-                'entity_name' => $this->k1EntityName($document),
-                'k1_fees_schE' => $k1Fees['schE'],
-                'k1_fees_irc67g' => $k1Fees['irc67g'],
-                'statement_fees_schE' => $statementSchE,
-                'statement_fees_irc67g' => $statementIrc67g,
-                'delta_schE' => $deltaSchE,
-                'delta_irc67g' => $deltaIrc67g,
-                'status' => $status,
-                'tax_document_id' => (int) $document->id,
-                'account_id' => $accountId,
-            ];
+            $rows[] = $this->reconciliationRow(
+                $this->k1EntityName($document),
+                $k1Fees,
+                $statementSchE,
+                $statementIrc67g,
+                (int) $document->id,
+                $accountId,
+            );
         }
 
         return $rows;
@@ -138,7 +223,7 @@ class FeeAnalyticsService
 
     public function feeAmountForLineItem(FinAccountLineItems $row): float
     {
-        if ($this->isFeeType($row->t_type) || $this->lineItemFeeTags($row)->isNotEmpty()) {
+        if ($this->isFeeType($row->t_type)) {
             return MoneyMath::round(abs((float) ($row->t_amt ?? 0)));
         }
 
@@ -259,7 +344,7 @@ class FeeAnalyticsService
                 ->map(fn (FinStatement $statement): float => (float) $statement->balance)
                 ->all();
 
-            return MoneyMath::round(array_sum($balances) / count($balances));
+            return MoneyMath::divide(MoneyMath::sum($balances), $statements->count());
         }
 
         $openingBalance = $this->statementBalanceOnOrBefore($accountId, $start->subDay())
@@ -268,7 +353,7 @@ class FeeAnalyticsService
         $closingBalance = $this->statementBalanceOnOrBefore($accountId, $end)
             ?? $openingBalance;
 
-        return MoneyMath::round(($openingBalance + $closingBalance) / 2);
+        return MoneyMath::divide(MoneyMath::add($openingBalance, $closingBalance), 2);
     }
 
     /**
@@ -305,13 +390,22 @@ class FeeAnalyticsService
      */
     private function feeLineItemsForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): Collection
     {
+        return $this->feeLineItemsForAccountsForPeriod([$accountId], $start, $end);
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return Collection<int, FinAccountLineItems>
+     */
+    private function feeLineItemsForAccountsForPeriod(array $accountIds, CarbonImmutable $start, CarbonImmutable $end): Collection
+    {
         return FinAccountLineItems::query()
             ->with('tags')
-            ->where('t_account', $accountId)
+            ->whereIn('t_account', $accountIds)
             ->whereBetween('t_date', [$start->toDateString(), $end->toDateString()])
             ->where(function (Builder $query): void {
                 $query
-                    ->whereRaw("LOWER(COALESCE(t_type, '')) LIKE ?", ['%fee%'])
+                    ->whereRaw("LOWER(COALESCE(t_type, '')) IN (?, ?, ?)", self::FEE_TRANSACTION_TYPES)
                     ->orWhereRaw('ABS(COALESCE(t_fee, 0)) > 0.000001')
                     ->orWhereHas('tags', function (Builder $tagQuery): void {
                         $tagQuery->whereIn('tax_characteristic', self::FEE_CHARACTERISTICS);
@@ -330,6 +424,7 @@ class FeeAnalyticsService
             ->values()
             ->all();
 
+        // Sch E wins when an item has both fee tags so deductible fee treatment is deterministic.
         foreach (self::FEE_CHARACTERISTICS as $characteristic) {
             if (in_array($characteristic, $characteristics, true)) {
                 return $characteristic;
@@ -353,7 +448,7 @@ class FeeAnalyticsService
 
     private function isFeeType(mixed $type): bool
     {
-        return is_string($type) && str_contains(strtolower($type), 'fee');
+        return is_string($type) && in_array(strtolower(trim($type)), self::FEE_TRANSACTION_TYPES, true);
     }
 
     /**
@@ -386,29 +481,50 @@ class FeeAnalyticsService
      */
     private function cashFlowsForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
     {
-        $deposits = 0.0;
-        $withdrawals = 0.0;
+        $cashFlows = $this->cashFlowsForAccountsForPeriod([$accountId], $start, $end);
+
+        return $cashFlows[$accountId][$start->format('Y-m')] ?? ['deposits' => 0.0, 'withdrawals' => 0.0];
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return array<int, array<string, array{deposits:float,withdrawals:float}>>
+     */
+    private function cashFlowsForAccountsForPeriod(array $accountIds, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $cashFlows = [];
 
         $rows = FinAccountLineItems::query()
-            ->where('t_account', $accountId)
+            ->whereIn('t_account', $accountIds)
             ->whereBetween('t_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('t_type', self::CASH_FLOW_TRANSACTION_TYPES)
-            ->get(['t_type', 't_amt']);
+            ->get(['t_account', 't_date', 't_type', 't_amt']);
 
         foreach ($rows as $row) {
+            $accountId = (int) $row->t_account;
+            $month = CarbonImmutable::parse((string) $row->t_date)->format('Y-m');
+            $cashFlows[$accountId][$month] ??= ['deposits' => 0.0, 'withdrawals' => 0.0];
             $amount = (float) ($row->t_amt ?? 0);
             if ($row->t_type === 'Deposit') {
-                $deposits = MoneyMath::add($deposits, abs($amount));
+                $cashFlows[$accountId][$month]['deposits'] = MoneyMath::add($cashFlows[$accountId][$month]['deposits'], abs($amount));
             } elseif ($row->t_type === 'Withdrawal') {
-                $withdrawals = MoneyMath::add($withdrawals, abs($amount));
+                $cashFlows[$accountId][$month]['withdrawals'] = MoneyMath::add($cashFlows[$accountId][$month]['withdrawals'], abs($amount));
             } elseif ($row->t_type === 'Transfer' && $amount >= 0) {
-                $deposits = MoneyMath::add($deposits, $amount);
+                $cashFlows[$accountId][$month]['deposits'] = MoneyMath::add($cashFlows[$accountId][$month]['deposits'], $amount);
             } elseif ($row->t_type === 'Transfer') {
-                $withdrawals = MoneyMath::add($withdrawals, abs($amount));
+                $cashFlows[$accountId][$month]['withdrawals'] = MoneyMath::add($cashFlows[$accountId][$month]['withdrawals'], abs($amount));
             }
         }
 
-        return ['deposits' => $deposits, 'withdrawals' => $withdrawals];
+        return $cashFlows;
+    }
+
+    private function netReturn(float $startingBalance, float $endingBalance, float $deposits, float $withdrawals): float
+    {
+        return MoneyMath::subtract(
+            MoneyMath::add(MoneyMath::subtract($endingBalance, $startingBalance), $withdrawals),
+            $deposits,
+        );
     }
 
     private function balanceAtPeriodStart(int $accountId, CarbonImmutable $start): float
@@ -447,6 +563,46 @@ class FeeAnalyticsService
             ->first(['balance']);
 
         return $statement instanceof FinStatement ? (float) $statement->balance : null;
+    }
+
+    /**
+     * @param  Collection<int, FinStatement>  $statements
+     */
+    private function statementBalanceOnOrBeforeFromCollection(Collection $statements, int $accountId, CarbonImmutable $date): ?float
+    {
+        $balance = null;
+
+        foreach ($statements as $statement) {
+            if ((int) $statement->acct_id !== $accountId) {
+                continue;
+            }
+
+            $statementDate = $this->carbonFromMixed($statement->statement_closing_date)?->startOfDay();
+            if ($statementDate instanceof CarbonImmutable && $statementDate->lessThanOrEqualTo($date)) {
+                $balance = (float) $statement->balance;
+            }
+        }
+
+        return $balance;
+    }
+
+    /**
+     * @param  Collection<int, FinStatement>  $statements
+     */
+    private function statementBalanceOnOrAfterFromCollection(Collection $statements, int $accountId, CarbonImmutable $date): ?float
+    {
+        foreach ($statements as $statement) {
+            if ((int) $statement->acct_id !== $accountId) {
+                continue;
+            }
+
+            $statementDate = $this->carbonFromMixed($statement->statement_closing_date)?->startOfDay();
+            if ($statementDate instanceof CarbonImmutable && $statementDate->greaterThanOrEqualTo($date)) {
+                return (float) $statement->balance;
+            }
+        }
+
+        return null;
     }
 
     private function accountLastBalance(int $accountId): float
@@ -554,6 +710,35 @@ class FeeAnalyticsService
         }
 
         return 'match';
+    }
+
+    /**
+     * @param  array{schE:float,irc67g:float,has_unclassified_13zz:bool}  $k1Fees
+     * @return array{entity_name:string,k1_fees_schE:float,k1_fees_irc67g:float,statement_fees_schE:float,statement_fees_irc67g:float,delta_schE:float,delta_irc67g:float,status:string,tax_document_id:int|null,account_id:int}
+     */
+    private function reconciliationRow(
+        string $entityName,
+        array $k1Fees,
+        float $statementSchE,
+        float $statementIrc67g,
+        ?int $taxDocumentId,
+        int $accountId,
+    ): array {
+        $deltaSchE = MoneyMath::subtract($statementSchE, $k1Fees['schE']);
+        $deltaIrc67g = MoneyMath::subtract($statementIrc67g, $k1Fees['irc67g']);
+
+        return [
+            'entity_name' => $entityName,
+            'k1_fees_schE' => $k1Fees['schE'],
+            'k1_fees_irc67g' => $k1Fees['irc67g'],
+            'statement_fees_schE' => $statementSchE,
+            'statement_fees_irc67g' => $statementIrc67g,
+            'delta_schE' => $deltaSchE,
+            'delta_irc67g' => $deltaIrc67g,
+            'status' => $this->reconciliationStatus($deltaSchE, $deltaIrc67g, $k1Fees['has_unclassified_13zz']),
+            'tax_document_id' => $taxDocumentId,
+            'account_id' => $accountId,
+        ];
     }
 
     private function k1EntityName(FileForTaxDocument $document): string

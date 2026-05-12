@@ -43,25 +43,22 @@ class FinanceFeesController extends Controller
             ->get();
 
         $totals = ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0];
-        $monthly = $this->emptyMonthlySeries($year);
         $accountRows = [];
         $reconciliationRows = [];
+        $accountIds = $accounts
+            ->pluck('acct_id')
+            ->map(static fn (mixed $accountId): int => (int) $accountId)
+            ->all();
 
         foreach ($accounts as $account) {
-            $payload = $this->accountPayload($account, $year, $fees, false);
+            $payload = $this->accountPayload($account, $year, $fees, false, false, false);
             $accountRows[] = $payload['summary'];
 
             foreach ($payload['actual']['by_characteristic'] as $bucket => $amount) {
                 $totals[$bucket] = MoneyMath::add($totals[$bucket], (float) $amount);
             }
 
-            foreach ($payload['monthly_fee_drag'] as $index => $row) {
-                $monthly[$index]['gross_return'] = MoneyMath::add($monthly[$index]['gross_return'], $row['gross_return']);
-                $monthly[$index]['net_return'] = MoneyMath::add($monthly[$index]['net_return'], $row['net_return']);
-                $monthly[$index]['fees'] = MoneyMath::add($monthly[$index]['fees'], $row['fees']);
-            }
-
-            foreach ($payload['reconciliation'] as $row) {
+            foreach ($fees->reconcileK1Fees((int) $account->acct_id, $year, $payload['actual']) as $row) {
                 $reconciliationRows[] = $row + [
                     'account_name' => $account->acct_name,
                     'account_url' => "/finance/account/{$account->acct_id}/fees?year={$year}",
@@ -76,7 +73,7 @@ class FinanceFeesController extends Controller
                 'by_characteristic' => $totals,
             ],
             'accounts' => $accountRows,
-            'monthly_fee_drag' => $monthly,
+            'monthly_fee_drag' => $fees->monthlyFeeDragSeriesForAccounts($accountIds, $year),
             'reconciliation_summary' => [
                 'matched' => count(array_filter($reconciliationRows, static fn (array $row): bool => $row['status'] === 'match')),
                 'mismatched' => count(array_filter($reconciliationRows, static fn (array $row): bool => $row['status'] === 'mismatch')),
@@ -94,9 +91,15 @@ class FinanceFeesController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function accountPayload(FinAccounts $account, int $year, FeeAnalyticsService $fees, bool $includeLineItems): array
-    {
-        $actual = $fees->actualFeesForAccount((int) $account->acct_id, $year);
+    private function accountPayload(
+        FinAccounts $account,
+        int $year,
+        FeeAnalyticsService $fees,
+        bool $includeLineItems,
+        bool $includeMonthlyFeeDrag = true,
+        bool $includeReconciliation = true,
+    ): array {
+        $actual = $fees->actualFeesForAccount($account, $year);
         $expected = $fees->expectedFeesForAccount($account, $year);
         $hasExpectation = $fees->accountHasExpectedFees($account);
         $delta = MoneyMath::subtract($actual['total'], $expected);
@@ -136,32 +139,14 @@ class FinanceFeesController extends Controller
             ],
             'delta' => $delta,
             'status' => $summary['status'],
-            'monthly_fee_drag' => $fees->monthlyFeeDragSeries((int) $account->acct_id, $year),
-            'reconciliation' => $fees->reconcileK1Fees((int) $account->acct_id, $year),
+            'monthly_fee_drag' => $includeMonthlyFeeDrag ? $fees->monthlyFeeDragSeries((int) $account->acct_id, $year) : [],
+            'reconciliation' => $includeReconciliation ? $fees->reconcileK1Fees((int) $account->acct_id, $year, $actual) : [],
             'summary' => $summary,
             'constants' => [
                 'mismatch_threshold_usd' => FeeAnalyticsService::MISMATCH_THRESHOLD_USD,
                 'on_target_tolerance' => FeeAnalyticsService::ON_TARGET_TOLERANCE,
             ],
         ];
-    }
-
-    /**
-     * @return array<int, array{month:string,gross_return:float,net_return:float,fees:float}>
-     */
-    private function emptyMonthlySeries(int $year): array
-    {
-        $series = [];
-        for ($month = 1; $month <= 12; $month++) {
-            $series[] = [
-                'month' => sprintf('%d-%02d', $year, $month),
-                'gross_return' => 0.0,
-                'net_return' => 0.0,
-                'fees' => 0.0,
-            ];
-        }
-
-        return $series;
     }
 
     private function unlinkedK1Count(int $year): int

@@ -11,6 +11,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\FeeAnalyticsService;
+use App\Services\Finance\MoneyMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -35,6 +36,7 @@ class FeeAnalyticsServiceTest extends TestCase
             't_amt' => -1000,
             't_fee' => 7.5,
         ]);
+        $commissionRow->tags()->attach($tag->tag_id);
 
         $service = app(FeeAnalyticsService::class);
 
@@ -50,7 +52,7 @@ class FeeAnalyticsServiceTest extends TestCase
         $schETag = $this->createFeeTag($user, 'fee_schE', 'Schedule E Fees');
         $irc67gTag = $this->createFeeTag($user, 'fee_irc67g', 'Personal Fees');
 
-        $this->createLineItem($account, ['t_type' => 'Debit', 't_amt' => -20])->tags()->attach($schETag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Debit', 't_amt' => -200, 't_fee' => 20])->tags()->attach($schETag->tag_id);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -30])->tags()->attach($irc67gTag->tag_id);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -40]);
         $this->createLineItem($account, ['t_type' => 'Buy', 't_amt' => -1000, 't_fee' => 5]);
@@ -116,8 +118,35 @@ class FeeAnalyticsServiceTest extends TestCase
 
         $this->assertCount(12, $series);
         foreach ($series as $row) {
-            $this->assertEqualsWithDelta($row['gross_return'], $row['net_return'] + $row['fees'], 0.001);
+            $this->assertEqualsWithDelta($row['gross_return'], MoneyMath::add($row['net_return'], $row['fees']), 0.001);
         }
+    }
+
+    public function test_monthly_fee_drag_series_for_accounts_returns_batched_aggregate_series(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $firstAccount = $this->createAccount($user);
+        $secondAccount = $this->createAccount($user);
+        $this->createStatement($firstAccount, '2024-12-31', 1000);
+        $this->createStatement($firstAccount, '2025-01-31', 1100);
+        $this->createLineItem($firstAccount, ['t_date' => '2025-01-10', 't_type' => 'Deposit', 't_amt' => 100]);
+        $this->createLineItem($firstAccount, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -10]);
+        $this->createStatement($secondAccount, '2024-12-31', 2000);
+        $this->createStatement($secondAccount, '2025-01-31', 2100);
+        $this->createLineItem($secondAccount, ['t_date' => '2025-01-10', 't_type' => 'Withdrawal', 't_amt' => -50]);
+        $this->createLineItem($secondAccount, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -5]);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeriesForAccounts([
+            (int) $firstAccount->acct_id,
+            (int) $secondAccount->acct_id,
+        ], 2025);
+
+        $this->assertCount(12, $series);
+        $this->assertSame('2025-01', $series[0]['month']);
+        $this->assertSame(150.0, $series[0]['net_return']);
+        $this->assertSame(15.0, $series[0]['fees']);
+        $this->assertSame(165.0, $series[0]['gross_return']);
     }
 
     public function test_reconcile_k1_fees_flags_unclassified_when_13zz_has_no_fee_subtotal(): void
@@ -175,6 +204,28 @@ class FeeAnalyticsServiceTest extends TestCase
         $rows = app(FeeAnalyticsService::class)->reconcileK1Fees((int) $account->acct_id, 2025);
 
         $this->assertSame('match', $rows[0]['status']);
+    }
+
+    public function test_reconcile_k1_fees_compares_multiple_linked_k1s_in_aggregate(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -150])
+            ->tags()
+            ->attach($this->createFeeTag($user, 'fee_schE')->tag_id);
+        $firstDocument = $this->createK1Document($user, ['13' => [['code' => 'L', 'value' => '100']]]);
+        $secondDocument = $this->createK1Document($user, ['13' => [['code' => 'L', 'value' => '50']]]);
+        TaxDocumentAccount::createLink($firstDocument->id, $account->acct_id, 'k1', 2025, isReviewed: true);
+        TaxDocumentAccount::createLink($secondDocument->id, $account->acct_id, 'k1', 2025, isReviewed: true);
+
+        $rows = app(FeeAnalyticsService::class)->reconcileK1Fees((int) $account->acct_id, 2025);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('All linked K-1s', $rows[0]['entity_name']);
+        $this->assertSame('match', $rows[0]['status']);
+        $this->assertSame(150.0, $rows[0]['k1_fees_schE']);
+        $this->assertSame(150.0, $rows[0]['statement_fees_schE']);
     }
 
     public function test_fee_api_endpoints_return_shape_require_auth_and_scope_accounts(): void

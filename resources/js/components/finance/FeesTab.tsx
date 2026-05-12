@@ -326,7 +326,6 @@ export default function FeesTab({ accountId, initialData }: FeesTabProps) {
                 id="expectedFeePct"
                 inputMode="decimal"
                 value={form.expectedFeePct}
-                onBlur={saveExpectedFees}
                 onChange={(event) => updateField('expectedFeePct', event.target.value)}
                 placeholder="1.00"
               />
@@ -337,7 +336,6 @@ export default function FeesTab({ accountId, initialData }: FeesTabProps) {
                 id="expectedFeeFlat"
                 inputMode="decimal"
                 value={form.expectedFeeFlat}
-                onBlur={saveExpectedFees}
                 onChange={(event) => updateField('expectedFeeFlat', event.target.value)}
                 placeholder="100.00"
               />
@@ -347,7 +345,6 @@ export default function FeesTab({ accountId, initialData }: FeesTabProps) {
               <Textarea
                 id="expectedFeeNotes"
                 value={form.expectedFeeNotes}
-                onBlur={saveExpectedFees}
                 onChange={(event) => updateField('expectedFeeNotes', event.target.value)}
                 rows={2}
               />

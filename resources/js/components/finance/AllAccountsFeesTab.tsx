@@ -7,7 +7,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { FeeDragLineChart } from '@/components/finance/FeesTab'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
@@ -62,6 +65,15 @@ function currentTaxYear(): number {
   return new Date().getFullYear()
 }
 
+function initialTaxYear(): number {
+  if (typeof window === 'undefined') return currentTaxYear()
+
+  const queryYear = Number(new URLSearchParams(window.location.search).get('year'))
+  if (Number.isInteger(queryYear) && queryYear >= 1900 && queryYear <= 2100) return queryYear
+
+  return currentTaxYear()
+}
+
 function statusLabel(status: AccountFeeSummary['status']): string {
   if (status === 'under') return 'Under'
   if (status === 'over') return 'Over'
@@ -77,7 +89,8 @@ function statusClassName(status: AccountFeeSummary['status']): string {
 }
 
 export default function AllAccountsFeesTab() {
-  const [year] = useState(currentTaxYear())
+  const [year, setYear] = useState(initialTaxYear)
+  const [yearInput, setYearInput] = useState(() => String(initialTaxYear()))
   const [data, setData] = useState<AllAccountsFeesData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -98,6 +111,15 @@ export default function AllAccountsFeesTab() {
   useEffect(() => {
     loadFees()
   }, [loadFees])
+
+  const applyYear = () => {
+    const parsedYear = Number(yearInput)
+    if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2100) {
+      setYear(parsedYear)
+    } else {
+      setYearInput(String(year))
+    }
+  }
 
   if (isLoading && !data) {
     return (
@@ -125,6 +147,31 @@ export default function AllAccountsFeesTab() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          applyYear()
+        }}
+      >
+        <div className="grid gap-2">
+          <Label htmlFor="allAccountsFeeYear">Tax year</Label>
+          <Input
+            id="allAccountsFeeYear"
+            className="w-28"
+            inputMode="numeric"
+            min={1900}
+            max={2100}
+            type="number"
+            value={yearInput}
+            onChange={(event) => setYearInput(event.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={isLoading}>
+          Apply
+        </Button>
+      </form>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <Card>

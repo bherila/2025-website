@@ -35,6 +35,21 @@ class MoneyMath
         return self::fromCents(self::toCents($left) - self::toCents($right));
     }
 
+    public static function multiply(float|int|string $value, float|int|string $multiplier): float
+    {
+        return self::fromCents((int) round(self::toCents($value) * (float) $multiplier));
+    }
+
+    public static function divide(float|int|string $value, float|int|string $divisor): float
+    {
+        $numericDivisor = (float) $divisor;
+        if ($numericDivisor === 0.0) {
+            throw new \DivisionByZeroError('Cannot divide a money value by zero.');
+        }
+
+        return self::fromCents((int) round(self::toCents($value) / $numericDivisor));
+    }
+
     /**
      * @return array{allocated:float,remainder:float}
      */
