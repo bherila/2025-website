@@ -17,14 +17,16 @@ class ComputeRothConversionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return self::scenarioRules();
+        return self::scenarioRules($this->input('inputs.filingStatus'));
     }
 
     /**
      * @return array<string, mixed>
      */
-    public static function scenarioRules(): array
+    public static function scenarioRules(?string $filingStatus = null): array
     {
+        $requiresSpouse = in_array($filingStatus, ['married_filing_jointly', 'qualifying_surviving_spouse'], true);
+
         return [
             'inputs' => ['required', 'array'],
             'inputs.currentYear' => ['required', 'integer', 'min:2024', 'max:2100'],
@@ -33,9 +35,9 @@ class ComputeRothConversionRequest extends FormRequest
             'inputs.people.primaryBirthYear' => ['required', 'integer', 'min:1900', 'max:2100'],
             'inputs.people.primaryCurrentAge' => ['required', 'integer', 'min:18', 'max:100'],
             'inputs.people.primaryEndAge' => ['required', 'integer', 'min:18', 'max:120'],
-            'inputs.people.spouseBirthYear' => ['nullable', 'integer', 'min:1900', 'max:2100'],
-            'inputs.people.spouseCurrentAge' => ['nullable', 'integer', 'min:18', 'max:120'],
-            'inputs.people.spouseEndAge' => ['nullable', 'integer', 'min:18', 'max:120'],
+            'inputs.people.spouseBirthYear' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:1900', 'max:2100'],
+            'inputs.people.spouseCurrentAge' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:18', 'max:120'],
+            'inputs.people.spouseEndAge' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:18', 'max:120'],
             'inputs.people.firstDeathAge' => ['nullable', 'integer', 'min:18', 'max:120'],
             'inputs.income' => ['required', 'array'],
             'inputs.income.*' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
@@ -54,13 +56,13 @@ class ComputeRothConversionRequest extends FormRequest
             'inputs.strategy.conversionMode' => ['required', 'string', Rule::in(['constant', 'fill_bracket', 'schedule'])],
             'inputs.strategy.conversionStartAge' => ['required', 'integer', 'min:18', 'max:120'],
             'inputs.strategy.conversionEndAge' => ['required', 'integer', 'min:18', 'max:120'],
-            'inputs.strategy.annualConversion' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
-            'inputs.strategy.bracketTarget' => ['nullable', 'numeric', Rule::in([12, 22, 24])],
+            'inputs.strategy.annualConversion' => ['required', 'numeric', 'min:0', 'max:100000000'],
+            'inputs.strategy.bracketTarget' => ['required', 'numeric', Rule::in([12, 22, 24, 32])],
             'inputs.strategy.perYearConversions' => ['nullable', 'array'],
             'inputs.strategy.perYearConversions.*' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
-            'inputs.strategy.harvestLtcg' => ['boolean'],
-            'inputs.strategy.ltcgTargetRate' => ['nullable', 'numeric', Rule::in([0, 15])],
-            'inputs.strategy.withdrawalOrder' => ['nullable', 'string', 'max:80'],
+            'inputs.strategy.harvestLtcg' => ['required', 'boolean'],
+            'inputs.strategy.ltcgTargetRate' => ['required', 'numeric', Rule::in([0, 15])],
+            'inputs.strategy.withdrawalOrder' => ['required', 'string', 'max:80'],
             'inputs.scenarios' => ['nullable', 'array', 'max:3'],
             'inputs.scenarios.*.name' => ['nullable', 'string', 'max:80'],
             'inputs.scenarios.*.claimAgePrimary' => ['nullable', 'integer', 'min:62', 'max:70'],
@@ -68,10 +70,11 @@ class ComputeRothConversionRequest extends FormRequest
             'inputs.scenarios.*.strategy' => ['nullable', 'array'],
             'inputs.scenarios.*.strategy.conversionMode' => ['nullable', 'string', Rule::in(['constant', 'fill_bracket', 'schedule'])],
             'inputs.scenarios.*.strategy.annualConversion' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
-            'inputs.scenarios.*.strategy.bracketTarget' => ['nullable', 'numeric', Rule::in([12, 22, 24])],
+            'inputs.scenarios.*.strategy.bracketTarget' => ['nullable', 'numeric', Rule::in([12, 22, 24, 32])],
             'inputs.assumptions' => ['required', 'array'],
             'inputs.assumptions.preRetirementGrowthPercent' => ['nullable', 'numeric', 'min:0', 'max:25'],
             'inputs.assumptions.postRetirementGrowthPercent' => ['nullable', 'numeric', 'min:0', 'max:25'],
+            'inputs.assumptions.cashYieldPercent' => ['nullable', 'numeric', 'min:0', 'max:25'],
             'inputs.assumptions.inflationPercent' => ['nullable', 'numeric', 'min:0', 'max:20'],
             'inputs.assumptions.stateTaxPercent' => ['nullable', 'numeric', 'min:0', 'max:25'],
             'inputs.assumptions.stateTaxesLtcg' => ['boolean'],

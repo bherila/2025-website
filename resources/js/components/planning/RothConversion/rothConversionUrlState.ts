@@ -1,7 +1,8 @@
 import currency from 'currency.js'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
-import { type FilingStatus, type RothConversionInputs, rothConversionInputsSchema } from './types'
+import type { FilingStatus, RothConversionInputs, RothConversionStrategy } from './types'
+import { rothConversionInputsSchema } from './types'
 
 const QUERY_KEYS = {
   filingStatus: 'fs',
@@ -21,6 +22,7 @@ const QUERY_KEYS = {
   stateTaxPercent: 'state',
   inflationPercent: 'infl',
   growthPercent: 'growth',
+  cashYieldPercent: 'cashYield',
   priorYearMagi: 'magi1',
   twoYearsPriorMagi: 'magi2',
 } as const
@@ -31,6 +33,9 @@ const filingStatuses = new Set<FilingStatus>([
   'head_of_household',
   'qualifying_surviving_spouse',
 ])
+
+const conversionModes = new Set<RothConversionStrategy['conversionMode']>(['constant', 'fill_bracket', 'schedule'])
+const bracketTargets = new Set<RothConversionStrategy['bracketTarget']>([12, 22, 24, 32])
 
 function parseMoney(raw: string | null, fallback: number): number {
   if (raw === null) {
@@ -52,6 +57,19 @@ function parseNumber(raw: string | null, fallback: number): number {
 
 function parseFilingStatus(raw: string | null, fallback: FilingStatus): FilingStatus {
   return raw !== null && filingStatuses.has(raw as FilingStatus) ? raw as FilingStatus : fallback
+}
+
+function parseConversionMode(raw: string | null, fallback: RothConversionStrategy['conversionMode']): RothConversionStrategy['conversionMode'] {
+  return raw !== null && conversionModes.has(raw as RothConversionStrategy['conversionMode']) ? raw as RothConversionStrategy['conversionMode'] : fallback
+}
+
+function parseBracketTarget(raw: string | null, fallback: RothConversionStrategy['bracketTarget']): RothConversionStrategy['bracketTarget'] {
+  if (raw === null) {
+    return fallback
+  }
+
+  const parsed = Number(raw)
+  return bracketTargets.has(parsed as RothConversionStrategy['bracketTarget']) ? parsed as RothConversionStrategy['bracketTarget'] : fallback
 }
 
 export function parseRothConversionUrlState(search: string, base: RothConversionInputs = DEFAULT_ROTH_CONVERSION_INPUTS): RothConversionInputs {
@@ -84,20 +102,22 @@ export function parseRothConversionUrlState(search: string, base: RothConversion
     strategy: {
       ...base.strategy,
       annualConversion: parseMoney(params.get(QUERY_KEYS.annualConversion), base.strategy.annualConversion),
-      conversionMode: params.get(QUERY_KEYS.conversionMode) === 'constant' ? 'constant' : base.strategy.conversionMode,
-      bracketTarget: parseNumber(params.get(QUERY_KEYS.bracketTarget), base.strategy.bracketTarget) as 12 | 22 | 24,
+      conversionMode: parseConversionMode(params.get(QUERY_KEYS.conversionMode), base.strategy.conversionMode),
+      bracketTarget: parseBracketTarget(params.get(QUERY_KEYS.bracketTarget), base.strategy.bracketTarget),
     },
     assumptions: {
       ...base.assumptions,
       stateTaxPercent: parseNumber(params.get(QUERY_KEYS.stateTaxPercent), base.assumptions.stateTaxPercent),
       inflationPercent: parseNumber(params.get(QUERY_KEYS.inflationPercent), base.assumptions.inflationPercent),
       postRetirementGrowthPercent: parseNumber(params.get(QUERY_KEYS.growthPercent), base.assumptions.postRetirementGrowthPercent),
+      cashYieldPercent: parseNumber(params.get(QUERY_KEYS.cashYieldPercent), base.assumptions.cashYieldPercent),
       priorYearMagi: parseMoney(params.get(QUERY_KEYS.priorYearMagi), base.assumptions.priorYearMagi),
       twoYearsPriorMagi: parseMoney(params.get(QUERY_KEYS.twoYearsPriorMagi), base.assumptions.twoYearsPriorMagi),
     },
   }
 
-  return rothConversionInputsSchema.parse(next)
+  const parsed = rothConversionInputsSchema.safeParse(next)
+  return parsed.success ? parsed.data : base
 }
 
 export function serializeRothConversionUrlState(inputs: RothConversionInputs): string {
@@ -154,6 +174,9 @@ export function serializeRothConversionUrlState(inputs: RothConversionInputs): s
   }
   if (inputs.assumptions.postRetirementGrowthPercent !== defaults.assumptions.postRetirementGrowthPercent) {
     params.set(QUERY_KEYS.growthPercent, String(inputs.assumptions.postRetirementGrowthPercent))
+  }
+  if (inputs.assumptions.cashYieldPercent !== defaults.assumptions.cashYieldPercent) {
+    params.set(QUERY_KEYS.cashYieldPercent, String(inputs.assumptions.cashYieldPercent))
   }
   if (inputs.assumptions.priorYearMagi !== defaults.assumptions.priorYearMagi) {
     params.set(QUERY_KEYS.priorYearMagi, String(inputs.assumptions.priorYearMagi))

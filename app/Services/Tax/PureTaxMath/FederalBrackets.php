@@ -90,13 +90,15 @@ final class FederalBrackets
 
     public static function ordinaryBracketCeiling(int $year, FilingStatus $status, float $rate, float $inflationRate = 0.0): float
     {
-        foreach (self::ordinaryRows($year, $status, $inflationRate) as [$top, $rowRate]) {
+        $rows = self::ordinaryRows($year, $status, $inflationRate);
+
+        foreach ($rows as [$top, $rowRate]) {
             if (abs($rowRate - $rate) < 0.0001) {
                 return $top;
             }
         }
 
-        return self::ordinaryRows($year, $status, $inflationRate)[array_key_last(self::ordinaryRows($year, $status, $inflationRate))][0];
+        return $rows[array_key_last($rows)][0];
     }
 
     public static function capitalGainZeroRateCeiling(int $year, FilingStatus $status, float $inflationRate = 0.0): float

@@ -8,7 +8,7 @@ class StoreRothConversionScenarioRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user() !== null;
     }
 
     /**
@@ -18,6 +18,6 @@ class StoreRothConversionScenarioRequest extends FormRequest
     {
         return array_merge([
             'title' => ['nullable', 'string', 'max:120'],
-        ], ComputeRothConversionRequest::scenarioRules());
+        ], ComputeRothConversionRequest::scenarioRules($this->input('inputs.filingStatus')));
     }
 }

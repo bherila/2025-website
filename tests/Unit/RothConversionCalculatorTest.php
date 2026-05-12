@@ -38,7 +38,7 @@ class RothConversionCalculatorTest extends TestCase
         }
 
         $this->assertNotNull($conversionYear);
-        $this->assertGreaterThan($conversionYear['beginningBalances']['roth'], $conversionYear['endingBalances']['roth']);
+        $this->assertLessThan($conversionYear['endingBalances']['roth'], $conversionYear['beginningBalances']['roth']);
     }
 
     public function test_mfj_to_qss_to_single_transition_is_modeled(): void
@@ -173,6 +173,39 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertSame(50400.0, $year['taxableIncome']);
     }
 
+    public function test_fill_bracket_conversion_includes_taxable_social_security(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['people']['primaryCurrentAge'] = 67;
+        $inputs['people']['primaryEndAge'] = 67;
+        $inputs['socialSecurity']['piaPrimary'] = 3000.0;
+        $inputs['socialSecurity']['claimAgePrimary'] = 67;
+        $inputs['strategy']['conversionMode'] = 'fill_bracket';
+        $inputs['strategy']['bracketTarget'] = 12;
+        $inputs['strategy']['conversionStartAge'] = 67;
+        $inputs['strategy']['conversionEndAge'] = 67;
+        $inputs['scenarios'] = [['name' => 'Fill 12%', 'strategy' => []]];
+
+        $year = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'][0];
+
+        $this->assertSame(40864.86, $year['rothConversion']);
+        $this->assertSame(25635.13, $year['taxableSocialSecurity']);
+        $this->assertSame(50399.99, $year['taxableIncome']);
+    }
+
+    public function test_cash_uses_cash_yield_instead_of_portfolio_growth(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['balances']['cash'] = 1000.0;
+        $inputs['assumptions']['postRetirementGrowthPercent'] = 10.0;
+        $inputs['assumptions']['cashYieldPercent'] = 1.0;
+
+        $year = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'][0];
+
+        $this->assertSame(275000.0, $year['endingBalances']['traditional']);
+        $this->assertSame(1010.0, $year['endingBalances']['cash']);
+    }
+
     public function test_harvested_long_term_gains_respect_zero_percent_cap(): void
     {
         $inputs = $this->singleYearNoIncomeInputs();
@@ -206,7 +239,7 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertGreaterThan(0.0, $year['cashShortfallWithdrawals']['taxable']);
         $this->assertGreaterThan(0.0, $year['cashShortfallWithdrawals']['total']);
         $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxApproximationYears']);
-        $this->assertNotEmpty($projection['warnings']);
+        $this->assertStringStartsWith('Cash shortfall:', $projection['warnings'][0]);
     }
 
     public function test_tax_exempt_interest_is_added_to_magi_but_not_agi(): void
@@ -220,6 +253,33 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertSame(0.0, $year['agi']);
         $this->assertSame(10000.0, $year['magi']);
         $this->assertSame(10000.0, $year['ordinaryIncomeStack']['taxExemptInterest']);
+    }
+
+    public function test_first_death_age_inside_conversion_window_rolls_spouse_traditional_to_survivor(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['filingStatus'] = 'married_filing_jointly';
+        $inputs['people']['primaryCurrentAge'] = 70;
+        $inputs['people']['primaryEndAge'] = 74;
+        $inputs['people']['primaryBirthYear'] = 1956;
+        $inputs['people']['spouseCurrentAge'] = 70;
+        $inputs['people']['spouseEndAge'] = 95;
+        $inputs['people']['spouseBirthYear'] = 1956;
+        $inputs['people']['firstDeathAge'] = 71;
+        $inputs['balances']['traditionalPrimary'] = 0.0;
+        $inputs['balances']['traditionalSpouse'] = 100000.0;
+        $inputs['strategy']['annualConversion'] = 10000.0;
+        $inputs['strategy']['conversionStartAge'] = 70;
+        $inputs['strategy']['conversionEndAge'] = 74;
+        $inputs['scenarios'] = [['name' => 'Death during conversions', 'strategy' => []]];
+
+        $years = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'];
+        $survivorYear = $years[2];
+
+        $this->assertSame('qualifying_surviving_spouse', $survivorYear['filingStatus']);
+        $this->assertGreaterThan(0.0, $survivorYear['beginningBalances']['traditionalPrimary']);
+        $this->assertSame(0.0, $survivorYear['beginningBalances']['traditionalSpouse']);
+        $this->assertSame(10000.0, $survivorYear['rothConversion']);
     }
 
     /**
@@ -264,6 +324,7 @@ class RothConversionCalculatorTest extends TestCase
         $inputs['strategy']['harvestLtcg'] = false;
         $inputs['assumptions']['preRetirementGrowthPercent'] = 0.0;
         $inputs['assumptions']['postRetirementGrowthPercent'] = 0.0;
+        $inputs['assumptions']['cashYieldPercent'] = 0.0;
         $inputs['assumptions']['inflationPercent'] = 0.0;
         $inputs['assumptions']['stateTaxPercent'] = 0.0;
         $inputs['assumptions']['priorYearMagi'] = 0.0;

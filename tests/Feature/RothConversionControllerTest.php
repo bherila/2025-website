@@ -31,6 +31,55 @@ class RothConversionControllerTest extends TestCase
         $this->assertGreaterThan(20, count($response->json('scenarios.0.years')));
     }
 
+    public function test_married_compute_requires_spouse_age_fields(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        unset($inputs['people']['spouseBirthYear'], $inputs['people']['spouseCurrentAge'], $inputs['people']['spouseEndAge']);
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors([
+            'inputs.people.spouseBirthYear',
+            'inputs.people.spouseCurrentAge',
+            'inputs.people.spouseEndAge',
+        ]);
+    }
+
+    public function test_single_compute_allows_omitted_spouse_age_fields(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        $inputs['filingStatus'] = 'single';
+        unset($inputs['people']['spouseBirthYear'], $inputs['people']['spouseCurrentAge'], $inputs['people']['spouseEndAge']);
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+    }
+
+    public function test_root_strategy_numbers_must_not_be_null(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        $inputs['strategy']['annualConversion'] = null;
+        $inputs['strategy']['bracketTarget'] = null;
+        $inputs['strategy']['ltcgTargetRate'] = null;
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors([
+            'inputs.strategy.annualConversion',
+            'inputs.strategy.bracketTarget',
+            'inputs.strategy.ltcgTargetRate',
+        ]);
+    }
+
     public function test_login_is_required_to_save_short_code(): void
     {
         $response = $this->postJson('/api/financial-planning/roth-conversion/save', [
@@ -62,6 +111,23 @@ class RothConversionControllerTest extends TestCase
         $view = $this->get("/financial-planning/roth-conversion/s/{$shortCode}");
         $view->assertOk();
         $view->assertSee($shortCode);
+    }
+
+    public function test_shared_page_escapes_initial_json_script_data(): void
+    {
+        $this->withoutVite();
+        $scenario = FinPlanningRothScenario::factory()->create([
+            'title' => '</script><script>alert(1)</script>',
+            'short_code' => 'safe123',
+            'inputs_json' => RothConversionInputs::defaults(),
+        ]);
+
+        $response = $this->get("/financial-planning/roth-conversion/s/{$scenario->short_code}");
+
+        $response->assertOk();
+        $content = $response->getContent();
+        $this->assertStringNotContainsString('</script><script>alert(1)</script>', $content);
+        $this->assertStringContainsString('\\u003C/script\\u003E\\u003Cscript\\u003Ealert(1)\\u003C/script\\u003E', $content);
     }
 
     public function test_only_owner_can_update_saved_scenario(): void

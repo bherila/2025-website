@@ -64,6 +64,7 @@ export const DEFAULT_ROTH_CONVERSION_INPUTS: RothConversionInputs = {
   assumptions: {
     preRetirementGrowthPercent: 6,
     postRetirementGrowthPercent: 5,
+    cashYieldPercent: 0,
     inflationPercent: 2.5,
     stateTaxPercent: 5,
     stateTaxesLtcg: true,

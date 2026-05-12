@@ -16,6 +16,7 @@ final class RothConversionInputs
      */
     public static function fromArray(array $values): self
     {
+        $values = self::withoutNulls($values);
         $merged = array_replace_recursive(self::defaults(), $values);
         if (array_key_exists('scenarios', $values)) {
             $merged['scenarios'] = $values['scenarios'];
@@ -114,6 +115,7 @@ final class RothConversionInputs
             'assumptions' => [
                 'preRetirementGrowthPercent' => 6.0,
                 'postRetirementGrowthPercent' => 5.0,
+                'cashYieldPercent' => 0.0,
                 'inflationPercent' => 2.5,
                 'stateTaxPercent' => 5.0,
                 'stateTaxesLtcg' => true,
@@ -201,5 +203,28 @@ final class RothConversionInputs
         }
 
         return $value;
+    }
+
+    /**
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, mixed>  $values
+     * @return array<TKey, mixed>
+     */
+    private static function withoutNulls(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if ($value === null) {
+                unset($values[$key]);
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $values[$key] = self::withoutNulls($value);
+            }
+        }
+
+        return $values;
     }
 }

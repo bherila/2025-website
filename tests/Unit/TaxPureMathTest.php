@@ -9,6 +9,7 @@ use App\Services\Tax\PureTaxMath\Irmaa;
 use App\Services\Tax\PureTaxMath\Niit;
 use App\Services\Tax\PureTaxMath\Rmd;
 use App\Services\Tax\PureTaxMath\SocialSecurity;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 class TaxPureMathTest extends TestCase
@@ -58,5 +59,12 @@ class TaxPureMathTest extends TestCase
     public function test_inflation_projection_compounds_threshold(): void
     {
         $this->assertSame(11038.13, Inflation::projectThreshold(10000.0, 2026, 2030, 0.025));
+    }
+
+    public function test_unknown_filing_status_input_throws(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        FilingStatus::fromInput('married_separately');
     }
 }

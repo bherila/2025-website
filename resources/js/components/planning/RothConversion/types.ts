@@ -15,7 +15,7 @@ export const rothConversionStrategySchema = z.object({
   conversionStartAge: z.number(),
   conversionEndAge: z.number(),
   annualConversion: z.number(),
-  bracketTarget: z.union([z.literal(12), z.literal(22), z.literal(24)]),
+  bracketTarget: z.union([z.literal(12), z.literal(22), z.literal(24), z.literal(32)]),
   perYearConversions: z.record(z.string(), z.number()).default({}),
   harvestLtcg: z.boolean(),
   ltcgTargetRate: z.union([z.literal(0), z.literal(15)]),
@@ -78,6 +78,7 @@ export const rothConversionInputsSchema = z.object({
   assumptions: z.object({
     preRetirementGrowthPercent: z.number(),
     postRetirementGrowthPercent: z.number(),
+    cashYieldPercent: z.number(),
     inflationPercent: z.number(),
     stateTaxPercent: z.number(),
     stateTaxesLtcg: z.boolean(),

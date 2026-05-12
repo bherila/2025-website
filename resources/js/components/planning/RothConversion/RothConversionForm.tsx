@@ -284,7 +284,7 @@ export default function RothConversionForm({ inputs, onChange }: RothConversionF
           <MoneyField label="Annual conversion" value={inputs.strategy.annualConversion} onChange={(value) => updateStrategy('annualConversion', value)} />
           <div className="grid gap-2">
             <Label>Bracket target</Label>
-            <Select value={String(inputs.strategy.bracketTarget)} onValueChange={(value) => updateStrategy('bracketTarget', Number(value) as 12 | 22 | 24)}>
+            <Select value={String(inputs.strategy.bracketTarget)} onValueChange={(value) => updateStrategy('bracketTarget', Number(value) as RothConversionStrategy['bracketTarget'])}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -292,8 +292,10 @@ export default function RothConversionForm({ inputs, onChange }: RothConversionF
                 <SelectItem value="12">12%</SelectItem>
                 <SelectItem value="22">22%</SelectItem>
                 <SelectItem value="24">24%</SelectItem>
+                <SelectItem value="32">32%</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">Target is the highest ordinary bracket to fill after deductions and taxable Social Security.</p>
           </div>
           <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
             <Checkbox checked={inputs.strategy.harvestLtcg} onCheckedChange={(checked) => updateStrategy('harvestLtcg', checked === true)} />
@@ -317,6 +319,7 @@ export default function RothConversionForm({ inputs, onChange }: RothConversionF
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <NumberField label="Pre-retirement growth" value={inputs.assumptions.preRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('preRetirementGrowthPercent', value)} />
           <NumberField label="Post-retirement growth" value={inputs.assumptions.postRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('postRetirementGrowthPercent', value)} />
+          <NumberField label="Cash yield" value={inputs.assumptions.cashYieldPercent} suffix="%" onChange={(value) => updateAssumption('cashYieldPercent', value)} />
           <NumberField label="Inflation" value={inputs.assumptions.inflationPercent} suffix="%" onChange={(value) => updateAssumption('inflationPercent', value)} />
           <NumberField label="Flat state tax" value={inputs.assumptions.stateTaxPercent} suffix="%" onChange={(value) => updateAssumption('stateTaxPercent', value)} />
           <NumberField label="SS COLA" value={inputs.socialSecurity.colaPercent} suffix="%" onChange={(value) => updateSocialSecurity('colaPercent', value)} />

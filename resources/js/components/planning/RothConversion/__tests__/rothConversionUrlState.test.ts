@@ -3,15 +3,24 @@ import { parseRothConversionUrlState, serializeRothConversionUrlState } from '..
 
 describe('rothConversionUrlState', () => {
   it('parses compact URL state into planner inputs', () => {
-    const parsed = parseRothConversionUrlState('?fs=single&age=60&end=90&trad=500000&conv=25000&mode=constant&ss=67')
+    const parsed = parseRothConversionUrlState('?fs=single&age=60&end=90&trad=500000&conv=25000&mode=fill_bracket&bracket=32&ss=67')
 
     expect(parsed.filingStatus).toBe('single')
     expect(parsed.people.primaryCurrentAge).toBe(60)
     expect(parsed.people.primaryEndAge).toBe(90)
     expect(parsed.balances.traditionalPrimary).toBe(500000)
     expect(parsed.strategy.annualConversion).toBe(25000)
-    expect(parsed.strategy.conversionMode).toBe('constant')
+    expect(parsed.strategy.conversionMode).toBe('fill_bracket')
+    expect(parsed.strategy.bracketTarget).toBe(32)
     expect(parsed.socialSecurity.claimAgePrimary).toBe(67)
+    expect(parseRothConversionUrlState('?mode=schedule').strategy.conversionMode).toBe('schedule')
+  })
+
+  it('falls back for malformed conversion mode and bracket query values', () => {
+    const parsed = parseRothConversionUrlState('?mode=bogus&bracket=13')
+
+    expect(parsed.strategy.conversionMode).toBe(DEFAULT_ROTH_CONVERSION_INPUTS.strategy.conversionMode)
+    expect(parsed.strategy.bracketTarget).toBe(DEFAULT_ROTH_CONVERSION_INPUTS.strategy.bracketTarget)
   })
 
   it('serializes only values that differ from defaults', () => {
@@ -67,6 +76,7 @@ describe('rothConversionUrlState', () => {
         stateTaxPercent: 6,
         inflationPercent: 3,
         postRetirementGrowthPercent: 4,
+        cashYieldPercent: 1.25,
         priorYearMagi: 120_000,
         twoYearsPriorMagi: 110_000,
       },
@@ -91,6 +101,7 @@ describe('rothConversionUrlState', () => {
     expect(reparsed.assumptions.stateTaxPercent).toBe(inputs.assumptions.stateTaxPercent)
     expect(reparsed.assumptions.inflationPercent).toBe(inputs.assumptions.inflationPercent)
     expect(reparsed.assumptions.postRetirementGrowthPercent).toBe(inputs.assumptions.postRetirementGrowthPercent)
+    expect(reparsed.assumptions.cashYieldPercent).toBe(inputs.assumptions.cashYieldPercent)
     expect(reparsed.assumptions.priorYearMagi).toBe(inputs.assumptions.priorYearMagi)
     expect(reparsed.assumptions.twoYearsPriorMagi).toBe(inputs.assumptions.twoYearsPriorMagi)
   })

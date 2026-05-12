@@ -112,7 +112,8 @@ final class RothConversionCalculator
             }
 
             $growthRate = $this->growthRateForAge($inputs, $primaryAge);
-            $balances = $this->growBalances($balances, $growthRate);
+            $cashYieldRate = $this->rate($inputs->number('assumptions.cashYieldPercent'));
+            $balances = $this->growBalances($balances, $growthRate, $cashYieldRate);
             $beginningBalances = $this->visibleBalances($balances);
 
             $wagesPrimary = $primaryAge < $inputs->int('income.retirementAgePrimary')
@@ -131,9 +132,27 @@ final class RothConversionCalculator
             $rmds = $this->requiredMinimumDistributions($balances['traditionalPrimary'], $balances['traditionalSpouse'], $primaryAge, $spouseAge, $primaryBirthYear, $spouseBirthYear, $spouseAlive);
             $rmd = $rmds['total'];
             $traditionalAvailable = $this->traditionalBalance($balances);
-            $conversion = $this->rothConversionAmount($strategy, $traditionalAvailable, $calendarYear, $primaryAge, $status, $inflationRate, [
+
+            $grossSocialSecurity = $this->socialSecurityBenefit($inputs->number('socialSecurity.piaPrimary'), $inputs->int('socialSecurity.fraPrimary'), $claimAgePrimary, $primaryAge, $yearIndex, $inputs->number('socialSecurity.colaPercent'));
+            if ($spouseAlive) {
+                $grossSocialSecurity += $this->socialSecurityBenefit($inputs->number('socialSecurity.piaSpouse'), $inputs->int('socialSecurity.fraSpouse'), $claimAgeSpouse, $spouseAge, $yearIndex, $inputs->number('socialSecurity.colaPercent'));
+            }
+
+            $ordinaryBeforeConversionComponents = [
                 $wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd,
-            ]);
+            ];
+            $conversion = $this->rothConversionAmount(
+                $strategy,
+                $traditionalAvailable,
+                $calendarYear,
+                $primaryAge,
+                $status,
+                $inflationRate,
+                $ordinaryBeforeConversionComponents,
+                $grossSocialSecurity,
+                $taxExemptInterest,
+                $qualifiedDividends + $recurringLtcg,
+            );
             $conversion = min($conversion, max(0.0, $traditionalAvailable - $rmd));
 
             $balances['traditionalPrimary'] = $this->money($balances['traditionalPrimary'] - $rmds['primary']);
@@ -141,11 +160,6 @@ final class RothConversionCalculator
             $balances = $this->withdrawFromTraditionalBuckets($balances, $conversion);
             $balances['roth'] = $this->money($balances['roth'] + $conversion);
             $balances['cash'] = $this->money($balances['cash'] + $rmd);
-
-            $grossSocialSecurity = $this->socialSecurityBenefit($inputs->number('socialSecurity.piaPrimary'), $inputs->int('socialSecurity.fraPrimary'), $claimAgePrimary, $primaryAge, $yearIndex, $inputs->number('socialSecurity.colaPercent'));
-            if ($spouseAlive) {
-                $grossSocialSecurity += $this->socialSecurityBenefit($inputs->number('socialSecurity.piaSpouse'), $inputs->int('socialSecurity.fraSpouse'), $claimAgeSpouse, $spouseAge, $yearIndex, $inputs->number('socialSecurity.colaPercent'));
-            }
 
             $otherIncomeForSs = MoneyMath::sum([$wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd, $conversion, $qualifiedDividends, $recurringLtcg]);
             $taxableSocialSecurity = SocialSecurity::taxablePortion($status, $grossSocialSecurity, $otherIncomeForSs, $taxExemptInterest);
@@ -160,7 +174,7 @@ final class RothConversionCalculator
             $preferentialIncome = MoneyMath::sum([$qualifiedDividends, $longTermGains]);
             $agi = MoneyMath::sum([$ordinaryBeforeDeduction, $preferentialIncome]);
             $magi = MoneyMath::sum([$agi, $taxExemptInterest]);
-            $taxableIncome = max(0.0, $agi - $deduction);
+            $taxableIncome = $this->money(max(0.0, $agi - $deduction));
             $federalTax = FederalBrackets::taxOnCombined($calendarYear, $status, $taxableIncome, $preferentialIncome, $inflationRate);
             $niit = Niit::tax($status, $magi, MoneyMath::sum([$interest, $qualifiedDividends, $longTermGains]));
             $stateTaxBase = MoneyMath::sum([$ordinaryBeforeDeduction, $inputs->bool('assumptions.stateTaxesLtcg') ? $longTermGains : 0.0]);
@@ -249,11 +263,12 @@ final class RothConversionCalculator
      * @param  array<string, float>  $balances
      * @return array<string, float>
      */
-    private function growBalances(array $balances, float $growthRate): array
+    private function growBalances(array $balances, float $growthRate, float $cashYieldRate): array
     {
-        foreach (['traditionalPrimary', 'traditionalSpouse', 'roth', 'hsa', 'taxable', 'cash'] as $key) {
+        foreach (['traditionalPrimary', 'traditionalSpouse', 'roth', 'hsa', 'taxable'] as $key) {
             $balances[$key] = $this->money($balances[$key] * (1.0 + $growthRate));
         }
+        $balances['cash'] = $this->money($balances['cash'] * (1.0 + $cashYieldRate));
 
         return $balances;
     }
@@ -311,6 +326,9 @@ final class RothConversionCalculator
         return $this->rate($rate);
     }
 
+    /**
+     * V1 models the statutory survivor filing bridge only: MFJ, then two QSS years, then Single.
+     */
     private function statusForAge(FilingStatus $initial, int $primaryAge, ?int $firstDeathAge): FilingStatus
     {
         if (! $initial->isMarriedLike() || $firstDeathAge === null || $primaryAge <= $firstDeathAge) {
@@ -348,9 +366,9 @@ final class RothConversionCalculator
 
     /**
      * @param  array<string, mixed>  $strategy
-     * @param  array<int, float>  $ordinaryComponents
+     * @param  array<int, float>  $ordinaryBeforeConversionComponents
      */
-    private function rothConversionAmount(array $strategy, float $traditionalBalance, int $year, int $primaryAge, FilingStatus $status, float $inflationRate, array $ordinaryComponents): float
+    private function rothConversionAmount(array $strategy, float $traditionalBalance, int $year, int $primaryAge, FilingStatus $status, float $inflationRate, array $ordinaryBeforeConversionComponents, float $grossSocialSecurity, float $taxExemptInterest, float $preferentialIncomeForSocialSecurity): float
     {
         if ($traditionalBalance <= 0.0) {
             return 0.0;
@@ -372,15 +390,37 @@ final class RothConversionCalculator
             $targetRate = ((float) ($strategy['bracketTarget'] ?? 24)) / 100.0;
             $ceiling = FederalBrackets::ordinaryBracketCeiling($year, $status, $targetRate, $inflationRate);
             $deduction = StandardDeduction::amount($year, $status, $inflationRate);
-            $ordinaryBeforeConversion = MoneyMath::sum($ordinaryComponents);
+            $ordinaryBeforeConversion = MoneyMath::sum($ordinaryBeforeConversionComponents);
+            $targetOrdinaryIncome = $ceiling + $deduction;
+            $high = min($traditionalBalance, max(0.0, $targetOrdinaryIncome - $ordinaryBeforeConversion));
+            $low = 0.0;
 
-            return $this->money(min($traditionalBalance, max(0.0, $ceiling + $deduction - $ordinaryBeforeConversion)));
+            for ($iteration = 0; $iteration < 24; $iteration++) {
+                $candidate = ($low + $high) / 2.0;
+                $taxableSocialSecurity = SocialSecurity::taxablePortion(
+                    $status,
+                    $grossSocialSecurity,
+                    $ordinaryBeforeConversion + $candidate + $preferentialIncomeForSocialSecurity,
+                    $taxExemptInterest,
+                );
+                $ordinaryIncome = $ordinaryBeforeConversion + $candidate + $taxableSocialSecurity;
+
+                if ($ordinaryIncome <= $targetOrdinaryIncome + 0.005) {
+                    $low = $candidate;
+                } else {
+                    $high = $candidate;
+                }
+            }
+
+            return $this->money($low);
         }
 
         return $this->money(min($traditionalBalance, max(0.0, (float) ($strategy['annualConversion'] ?? 0.0))));
     }
 
     /**
+     * Assumes a sell-and-immediate-rebuy harvest: taxable balance stays invested while basis steps up.
+     *
      * @param  array<string, mixed>  $strategy
      * @param  array<string, float>  $balances
      */
@@ -557,16 +597,17 @@ final class RothConversionCalculator
      */
     private function projectionWarnings(array $scenarios): array
     {
+        $warnings = [];
+
         foreach ($scenarios as $scenario) {
             $summary = is_array($scenario['summary'] ?? null) ? $scenario['summary'] : [];
             if (($summary['cashShortfallTaxApproximationYears'] ?? 0) > 0) {
-                return [
-                    'Cash shortfall withdrawals from taxable or pre-tax accounts reduce balances, but this v1 projection does not recompute additional realized-gain or ordinary-income tax in that same year. Review rows with cash shortfall withdrawals before relying on lifetime-tax totals.',
-                ];
+                $name = (string) ($scenario['name'] ?? 'Scenario');
+                $warnings[] = "{$name}: Cash shortfall withdrawals from taxable or pre-tax accounts reduce balances, but this v1 projection does not recompute additional realized-gain or ordinary-income tax in that same year. Review rows with cash shortfall withdrawals before relying on lifetime-tax totals.";
             }
         }
 
-        return [];
+        return $warnings;
     }
 
     private function inflate(float $amount, float $inflationRate, int $yearIndex): float

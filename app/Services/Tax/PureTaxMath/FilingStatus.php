@@ -2,6 +2,8 @@
 
 namespace App\Services\Tax\PureTaxMath;
 
+use InvalidArgumentException;
+
 enum FilingStatus: string
 {
     case Single = 'single';
@@ -15,7 +17,8 @@ enum FilingStatus: string
             'mfj', 'married', 'marriedFilingJointly', 'Married Filing Jointly', self::MarriedFilingJointly->value => self::MarriedFilingJointly,
             'hoh', 'headOfHousehold', 'Head of Household', self::HeadOfHousehold->value => self::HeadOfHousehold,
             'qss', 'qualifyingWidow', 'Qualifying Surviving Spouse', self::QualifyingSurvivingSpouse->value => self::QualifyingSurvivingSpouse,
-            default => self::Single,
+            'Single', self::Single->value => self::Single,
+            default => throw new InvalidArgumentException("Unknown filing status [{$value}]."),
         };
     }
 
