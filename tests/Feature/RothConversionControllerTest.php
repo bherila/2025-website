@@ -31,6 +31,44 @@ class RothConversionControllerTest extends TestCase
         $this->assertGreaterThan(20, count($response->json('scenarios.0.years')));
     }
 
+    public function test_compute_endpoint_surfaces_scenario_prefixed_cash_shortfall_warning(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        $inputs['filingStatus'] = 'single';
+        $inputs['people']['primaryCurrentAge'] = 60;
+        $inputs['people']['primaryEndAge'] = 60;
+        $inputs['income']['wagesPrimary'] = 0.0;
+        $inputs['income']['wagesSpouse'] = 0.0;
+        $inputs['income']['retirementAgePrimary'] = 60;
+        $inputs['income']['retirementAgeSpouse'] = 60;
+        $inputs['income']['selfEmploymentPrimary'] = 0.0;
+        $inputs['income']['selfEmploymentSpouse'] = 0.0;
+        $inputs['income']['interest'] = 0.0;
+        $inputs['income']['taxExemptInterest'] = 0.0;
+        $inputs['income']['qualifiedDividends'] = 0.0;
+        $inputs['income']['longTermCapitalGains'] = 0.0;
+        $inputs['income']['otherOrdinary'] = 0.0;
+        $inputs['socialSecurity']['piaPrimary'] = 0.0;
+        $inputs['socialSecurity']['piaSpouse'] = 0.0;
+        $inputs['balances']['cash'] = 0.0;
+        $inputs['balances']['taxableBrokerage'] = 50000.0;
+        $inputs['balances']['taxableBasis'] = 25000.0;
+        $inputs['strategy']['conversionMode'] = 'constant';
+        $inputs['strategy']['annualConversion'] = 100000.0;
+        $inputs['strategy']['conversionStartAge'] = 60;
+        $inputs['strategy']['conversionEndAge'] = 60;
+        $inputs['strategy']['harvestLtcg'] = false;
+        $inputs['scenarios'] = [['name' => 'Cash shortfall', 'strategy' => []]];
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('scenarios.0.summary.cashShortfallTaxApproximationYears', 1);
+        $this->assertStringStartsWith('Cash shortfall:', $response->json('warnings.0'));
+    }
+
     public function test_married_compute_requires_spouse_age_fields(): void
     {
         $inputs = RothConversionInputs::defaults();
