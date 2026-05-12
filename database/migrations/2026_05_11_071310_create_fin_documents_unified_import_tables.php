@@ -126,7 +126,7 @@ return new class extends Migration
             $table->foreign('genai_job_id', 'fin_docs_genai_fk')->references('id')->on('genai_import_jobs')->nullOnDelete();
             $table->index(['user_id', 'document_kind'], 'fin_docs_user_kind_idx');
             $table->index(['user_id', 'tax_year'], 'fin_docs_user_year_idx');
-            $table->unique(['user_id', 'file_hash'], 'fin_docs_user_hash_unique');
+            $table->unique(['user_id', 'document_kind', 'file_hash'], 'fin_docs_user_kind_hash_unique');
             $table->index('genai_status', 'fin_docs_genai_status_idx');
         });
     }
@@ -298,38 +298,43 @@ return new class extends Migration
             $table->index('lot_origin', 'fin_lots_origin_idx');
         });
 
+        DB::statement(
+            'UPDATE fin_account_lots
+                SET document_id = (
+                    SELECT fin_tax_documents.document_id
+                    FROM fin_tax_documents
+                    WHERE fin_tax_documents.id = fin_account_lots.tax_document_id
+                ),
+                lot_origin = ?
+                WHERE tax_document_id IS NOT NULL',
+            [FinAccountLot::ORIGIN_1099B_DISPOSITION],
+        );
+
+        DB::statement(
+            'UPDATE fin_account_lots
+                SET document_id = (
+                    SELECT fin_statements.document_id
+                    FROM fin_statements
+                    WHERE fin_statements.statement_id = fin_account_lots.statement_id
+                ),
+                lot_origin = CASE
+                    WHEN sale_date IS NOT NULL THEN ?
+                    ELSE ?
+                END
+                WHERE tax_document_id IS NULL
+                  AND statement_id IS NOT NULL',
+            [FinAccountLot::ORIGIN_STATEMENT_DISPOSITION, FinAccountLot::ORIGIN_STATEMENT_POSITION],
+        );
+
         DB::table('fin_account_lots')
-            ->select('lot_id', 'tax_document_id', 'statement_id', 'sale_date', 'source')
-            ->orderBy('lot_id')
-            ->chunkById(500, function ($lots): void {
-                foreach ($lots as $lot) {
-                    $documentId = null;
-                    $lotOrigin = FinAccountLot::ORIGIN_MANUAL;
+            ->whereNull('tax_document_id')
+            ->whereNull('statement_id')
+            ->where('source', FinAccountLot::SOURCE_BROKER_1099B)
+            ->update(['lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION]);
 
-                    if ($lot->tax_document_id !== null) {
-                        $documentId = DB::table('fin_tax_documents')
-                            ->where('id', $lot->tax_document_id)
-                            ->value('document_id');
-                        $lotOrigin = FinAccountLot::ORIGIN_1099B_DISPOSITION;
-                    } elseif ($lot->statement_id !== null) {
-                        $documentId = DB::table('fin_statements')
-                            ->where('statement_id', $lot->statement_id)
-                            ->value('document_id');
-                        $lotOrigin = $lot->sale_date !== null
-                            ? FinAccountLot::ORIGIN_STATEMENT_DISPOSITION
-                            : FinAccountLot::ORIGIN_STATEMENT_POSITION;
-                    } elseif ((string) ($lot->source ?? '') === FinAccountLot::SOURCE_BROKER_1099B) {
-                        $lotOrigin = FinAccountLot::ORIGIN_1099B_DISPOSITION;
-                    }
-
-                    DB::table('fin_account_lots')
-                        ->where('lot_id', $lot->lot_id)
-                        ->update([
-                            'document_id' => $documentId,
-                            'lot_origin' => $lotOrigin,
-                        ]);
-                }
-            }, 'lot_id');
+        DB::table('fin_account_lots')
+            ->whereNull('lot_origin')
+            ->update(['lot_origin' => FinAccountLot::ORIGIN_MANUAL]);
 
         Schema::table('fin_account_lots', function (Blueprint $table): void {
             $this->dropForeignIfNotSqlite($table, 'fin_account_lots_tax_document_id_foreign', ['tax_document_id']);
@@ -347,20 +352,10 @@ return new class extends Migration
         });
 
         DB::table('fin_lot_reconciliation_links')
-            ->select('id', 'tax_document_id')
             ->whereNotNull('tax_document_id')
-            ->orderBy('id')
-            ->chunkById(500, function ($links): void {
-                foreach ($links as $link) {
-                    $documentId = DB::table('fin_tax_documents')
-                        ->where('id', $link->tax_document_id)
-                        ->value('document_id');
-
-                    DB::table('fin_lot_reconciliation_links')
-                        ->where('id', $link->id)
-                        ->update(['document_id' => $documentId]);
-                }
-            });
+            ->update([
+                'document_id' => DB::raw('(SELECT fin_tax_documents.document_id FROM fin_tax_documents WHERE fin_tax_documents.id = fin_lot_reconciliation_links.tax_document_id)'),
+            ]);
 
         Schema::table('fin_lot_reconciliation_links', function (Blueprint $table): void {
             $this->dropForeignIfNotSqlite($table, 'flrl_tax_doc_fk', ['tax_document_id']);
@@ -384,10 +379,13 @@ return new class extends Migration
         if ($fileHash !== null) {
             $existingId = DB::table('fin_documents')
                 ->where('user_id', $userId)
+                ->where('document_kind', $attributes['document_kind'])
                 ->where('file_hash', $fileHash)
                 ->value('id');
 
             if (is_numeric($existingId)) {
+                $this->mergeDocumentDateRange((int) $existingId, $attributes);
+
                 return (int) $existingId;
             }
         }
@@ -434,6 +432,54 @@ return new class extends Migration
 
     private function dropIndexIfPossible(Blueprint $table, string $name): void
     {
+        if (! Schema::hasIndex($table->getTable(), $name)) {
+            return;
+        }
+
         $table->dropIndex($name);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function mergeDocumentDateRange(int $documentId, array $attributes): void
+    {
+        $current = DB::table('fin_documents')
+            ->where('id', $documentId)
+            ->first(['period_start', 'period_end']);
+
+        if ($current === null) {
+            return;
+        }
+
+        $updates = [];
+        $periodStart = $this->dateOnly($attributes['period_start'] ?? null);
+        $periodEnd = $this->dateOnly($attributes['period_end'] ?? null);
+        $existingStart = $this->dateOnly($current->period_start ?? null);
+        $existingEnd = $this->dateOnly($current->period_end ?? null);
+
+        if ($periodStart !== null && ($existingStart === null || $periodStart < $existingStart)) {
+            $updates['period_start'] = $periodStart;
+        }
+
+        if ($periodEnd !== null && ($existingEnd === null || $periodEnd > $existingEnd)) {
+            $updates['period_end'] = $periodEnd;
+        }
+
+        if ($updates !== []) {
+            $updates['updated_at'] = now()->toDateTimeString();
+            DB::table('fin_documents')
+                ->where('id', $documentId)
+                ->update($updates);
+        }
+    }
+
+    private function dateOnly(mixed $value): ?string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return substr(trim($value), 0, 10);
     }
 };

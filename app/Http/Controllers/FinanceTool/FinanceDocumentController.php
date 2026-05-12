@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
+use App\Http\Resources\FinanceTool\FinDocumentResource;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
@@ -50,7 +51,7 @@ class FinanceDocumentController extends Controller
             $query->whereHas('accounts', fn ($accountQuery) => $accountQuery->where('account_id', (int) $request->query('account_id')));
         }
 
-        return response()->json($query->get());
+        return response()->json(FinDocumentResource::collection($query->get())->resolve($request));
     }
 
     public function requestUpload(Request $request): JsonResponse
@@ -194,7 +195,7 @@ class FinanceDocumentController extends Controller
             'original_filename' => 'nullable|string|max:255',
             's3_key' => 'nullable|string',
             'file_size_bytes' => 'nullable|integer|min:0',
-            'file_hash' => 'nullable|string',
+            'file_hash' => 'required_with:s3_key|string',
             'mime_type' => 'nullable|string|max:255',
             'accounts' => 'required|array|min:1',
             'accounts.*.acct_id' => 'required|integer',

@@ -370,7 +370,9 @@ export interface MultiAccountParsedEntry {
 /** One row from fin_document_accounts — links an imported document section to a specific account. */
 export interface TaxDocumentAccountLink {
   id: number
-  tax_document_id: number
+  document_id?: number
+  /** Legacy compatibility id for callers still scoped to fin_tax_documents. */
+  tax_document_id?: number
   account_id: number | null
   form_type: string
   tax_year: number

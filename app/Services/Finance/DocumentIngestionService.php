@@ -54,10 +54,17 @@ class DocumentIngestionService
         ];
 
         if ($fileHash !== null) {
-            return FinDocument::query()->firstOrCreate([
+            $document = FinDocument::query()->firstOrCreate([
                 'user_id' => $attributes['user_id'],
+                'document_kind' => $attributes['document_kind'],
                 'file_hash' => $fileHash,
             ], $values);
+
+            if (! $document->wasRecentlyCreated) {
+                $this->mergeDocumentDateRange($document, $values);
+            }
+
+            return $document;
         }
 
         return FinDocument::create($values);
@@ -127,14 +134,13 @@ class DocumentIngestionService
             if (! is_array($accounts) || $accounts === []) {
                 throw ValidationException::withMessages(['accounts' => 'At least one account block is required.']);
             }
-            $firstAccount = is_array($accounts[0] ?? null) ? $accounts[0] : [];
-            $firstStatementInfo = is_array($firstAccount['statementInfo'] ?? null) ? $firstAccount['statementInfo'] : [];
+            $periodBounds = $this->statementPeriodBounds($accounts);
 
             $document = $this->createDocument([
                 'user_id' => $userId,
                 'document_kind' => $payload['document_kind'] ?? FinDocument::KIND_STATEMENT,
-                'period_start' => $this->dateOnly($firstStatementInfo['periodStart'] ?? null),
-                'period_end' => $this->dateOnly($firstStatementInfo['periodEnd'] ?? null),
+                'period_start' => $periodBounds['period_start'],
+                'period_end' => $periodBounds['period_end'],
                 'original_filename' => $payload['original_filename'] ?? null,
                 'stored_filename' => $payload['stored_filename'] ?? null,
                 's3_path' => $payload['s3_key'] ?? $payload['s3_path'] ?? null,
@@ -147,6 +153,11 @@ class DocumentIngestionService
             ]);
 
             if (! $document->wasRecentlyCreated && $document->statements()->exists()) {
+                $this->lotMatcherAutoDispatchService->dispatchForDocument(
+                    documentId: (int) $document->id,
+                    trigger: LotMatcherAutoTrigger::CsvImport,
+                );
+
                 return [
                     'document' => $document->fresh(['accounts.account']) ?? $document,
                     'accounts' => $this->existingStatementResults($document),
@@ -482,6 +493,66 @@ class DocumentIngestionService
     }
 
     /**
+     * @param  array<int, mixed>  $accounts
+     * @return array{period_start: string|null, period_end: string|null}
+     */
+    private function statementPeriodBounds(array $accounts): array
+    {
+        $starts = [];
+        $ends = [];
+
+        foreach ($accounts as $accountData) {
+            if (! is_array($accountData)) {
+                continue;
+            }
+
+            $statementInfo = is_array($accountData['statementInfo'] ?? null) ? $accountData['statementInfo'] : [];
+            $periodStart = $this->dateOnly($statementInfo['periodStart'] ?? null);
+            $periodEnd = $this->dateOnly($statementInfo['periodEnd'] ?? null);
+
+            if ($periodStart !== null) {
+                $starts[] = $periodStart;
+            }
+
+            if ($periodEnd !== null) {
+                $ends[] = $periodEnd;
+            }
+        }
+
+        sort($starts);
+        sort($ends);
+
+        return [
+            'period_start' => $starts[0] ?? null,
+            'period_end' => $ends === [] ? null : $ends[count($ends) - 1],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function mergeDocumentDateRange(FinDocument $document, array $attributes): void
+    {
+        $updates = [];
+        $periodStart = $this->dateOnly($attributes['period_start'] ?? null);
+        $periodEnd = $this->dateOnly($attributes['period_end'] ?? null);
+        $existingStart = $this->dateOnly($document->getAttribute('period_start'));
+        $existingEnd = $this->dateOnly($document->getAttribute('period_end'));
+
+        if ($periodStart !== null && ($existingStart === null || $periodStart < $existingStart)) {
+            $updates['period_start'] = $periodStart;
+        }
+
+        if ($periodEnd !== null && ($existingEnd === null || $periodEnd > $existingEnd)) {
+            $updates['period_end'] = $periodEnd;
+        }
+
+        if ($updates !== []) {
+            $document->forceFill($updates)->save();
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function attributesFromTaxDocument(FileForTaxDocument $taxDocument, bool $includeKeys = true): array
@@ -543,6 +614,10 @@ class DocumentIngestionService
 
     private function dateOnly(mixed $value): ?string
     {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
         if (! is_string($value) || trim($value) === '') {
             return null;
         }

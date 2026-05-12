@@ -124,6 +124,8 @@ class DocumentIngestionServiceTest extends TestCase
 
     public function test_statement_upload_reuses_existing_document_for_same_user_file_hash(): void
     {
+        Queue::fake();
+
         $user = $this->createUser();
         $accountId = $this->createAccount($user->id, 'Brokerage');
         $payload = [
@@ -155,6 +157,150 @@ class DocumentIngestionServiceTest extends TestCase
         $this->assertSame($first->json('accounts.0.statement_id'), $second->json('accounts.0.statement_id'));
         $this->assertSame(1, FinDocument::query()->where('user_id', $user->id)->where('file_hash', str_repeat('c', 64))->count());
         $this->assertSame(1, DB::table('fin_statements')->where('document_id', $first->json('document.id'))->count());
+        Queue::assertPushed(LotsMatchJob::class, 1);
+    }
+
+    public function test_same_file_hash_can_exist_once_per_document_kind(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $sharedHash = str_repeat('d', 64);
+
+        $taxDocument = app(TaxDocumentCreationService::class)->createSingleAccountDocument([
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'form_type' => '1099_b',
+            'original_filename' => 'shared.pdf',
+            'stored_filename' => 'shared-tax.pdf',
+            's3_path' => "tax_docs/{$user->id}/shared-tax.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1000,
+            'file_hash' => $sharedHash,
+            'uploaded_by_user_id' => $user->id,
+            'parsed_data' => ['transactions' => []],
+        ], [
+            'account_id' => $accountId,
+            'form_type' => '1099_b',
+            'tax_year' => 2025,
+        ]);
+
+        $statement = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'shared.pdf',
+            'file_hash' => $sharedHash,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 1000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $statement->assertCreated();
+        $this->assertNotSame((int) $taxDocument->document_id, (int) $statement->json('document.id'));
+        $this->assertSame(2, FinDocument::query()->where('user_id', $user->id)->where('file_hash', $sharedHash)->count());
+    }
+
+    public function test_multi_account_statement_document_uses_full_payload_period_range(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $firstAccountId = $this->createAccount($user->id, 'Brokerage');
+        $secondAccountId = $this->createAccount($user->id, 'Checking');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'multi.pdf',
+            'file_hash' => str_repeat('e', 64),
+            'accounts' => [[
+                'acct_id' => $firstAccountId,
+                'statementInfo' => ['periodStart' => '2025-02-01', 'periodEnd' => '2025-02-28', 'closingBalance' => 1000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ], [
+                'acct_id' => $secondAccountId,
+                'statementInfo' => ['periodStart' => '2025-01-15', 'periodEnd' => '2025-03-15', 'closingBalance' => 2000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+
+        $this->assertSame('2025-01-15', substr((string) DB::table('fin_documents')->where('id', $documentId)->value('period_start'), 0, 10));
+        $this->assertSame('2025-03-15', substr((string) DB::table('fin_documents')->where('id', $documentId)->value('period_end'), 0, 10));
+        $this->assertSame(2, DB::table('fin_statements')->where('document_id', $documentId)->count());
+        $this->assertSame(2, DB::table('fin_document_accounts')->where('document_id', $documentId)->count());
+    }
+
+    public function test_uploaded_statement_requires_file_hash_when_s3_key_is_present(): void
+    {
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            's3_key' => "fin_documents/{$user->id}/statement/upload.pdf",
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 1000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertJsonValidationErrors('file_hash');
+    }
+
+    public function test_documents_index_uses_stable_resource_shape(): void
+    {
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'resource.pdf',
+            'file_hash' => str_repeat('f', 64),
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodStart' => '2025-04-01', 'periodEnd' => '2025-04-30', 'closingBalance' => 1000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ])->assertCreated();
+
+        $response = $this->actingAs($user)->getJson('/api/finance/documents?document_kind=statement');
+
+        $response->assertOk()
+            ->assertJsonPath('0.document_kind', FinDocument::KIND_STATEMENT)
+            ->assertJsonPath('0.original_filename', 'resource.pdf')
+            ->assertJsonPath('0.accounts.0.account_id', $accountId)
+            ->assertJsonMissingPath('0.file_hash')
+            ->assertJsonMissingPath('0.download_history');
+    }
+
+    public function test_document_download_history_appends_entries(): void
+    {
+        $user = $this->createUser();
+        $document = FinDocument::query()->create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'download.pdf',
+        ]);
+
+        $document->recordDownload($user->id);
+        $document->recordDownload($user->id);
+
+        $this->assertSame(2, $document->refresh()->download_count);
     }
 
     public function test_statement_position_lots_do_not_auto_dispatch_matcher_jobs(): void
@@ -203,6 +349,7 @@ class DocumentIngestionServiceTest extends TestCase
         $this->assertTrue(Schema::hasColumn('fin_account_lots', 'document_id'));
         $this->assertTrue(Schema::hasColumn('fin_lot_reconciliation_links', 'document_id'));
         $this->assertTrue(Schema::hasColumn('fin_document_accounts', 'document_id'));
+        $this->assertTrue(Schema::hasIndex('fin_documents', 'fin_docs_user_kind_hash_unique'));
     }
 
     public function test_tax_document_creation_creates_unified_document_parent(): void

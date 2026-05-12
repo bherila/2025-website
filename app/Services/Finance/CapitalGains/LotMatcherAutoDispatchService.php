@@ -61,18 +61,27 @@ class LotMatcherAutoDispatchService
         $documents = FinDocument::query()
             ->with(['taxDocument.accountLinks', 'accounts'])
             ->where('user_id', $userId)
-            ->whereIn('tax_year', $candidateYears)
             ->where(function (Builder $query) use ($accountId, $candidateYears): void {
-                $query->whereHas('taxDocument', function (Builder $taxDocumentQuery) use ($accountId): void {
-                    $taxDocumentQuery->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
-                        ->where('account_id', $accountId);
-                })->orWhereHas('accounts', function (Builder $linkQuery) use ($accountId, $candidateYears): void {
-                    $linkQuery->where('account_id', $accountId)
-                        ->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B)
-                        ->whereIn('tax_year', $candidateYears);
-                })->orWhereHas('lots', function (Builder $lotQuery) use ($accountId): void {
+                $query->where(function (Builder $taxFormQuery) use ($accountId, $candidateYears): void {
+                    $taxFormQuery->whereIn('tax_year', $candidateYears)
+                        ->where(function (Builder $linkableQuery) use ($accountId, $candidateYears): void {
+                            $linkableQuery->whereHas('taxDocument', function (Builder $taxDocumentQuery) use ($accountId): void {
+                                $taxDocumentQuery->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
+                                    ->where('account_id', $accountId);
+                            })->orWhereHas('accounts', function (Builder $linkQuery) use ($accountId, $candidateYears): void {
+                                $linkQuery->where('account_id', $accountId)
+                                    ->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B)
+                                    ->whereIn('tax_year', $candidateYears);
+                            });
+                        });
+                })->orWhereHas('lots', function (Builder $lotQuery) use ($accountId, $candidateYears): void {
                     $lotQuery->where('acct_id', $accountId)
-                        ->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_DISPOSITION);
+                        ->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_DISPOSITION)
+                        ->where(function (Builder $dateQuery) use ($candidateYears): void {
+                            foreach ($candidateYears as $year) {
+                                $dateQuery->orWhereBetween('sale_date', ["{$year}-01-01", "{$year}-12-31"]);
+                            }
+                        });
                 });
             })
             ->orderBy('id')
@@ -93,7 +102,7 @@ class LotMatcherAutoDispatchService
                 documentId: $documentId,
                 trigger: $trigger,
                 accountId: $accountId,
-                taxYear: (int) $document->tax_year,
+                taxYear: $document->tax_year === null ? $years[0] : (int) $document->tax_year,
             );
             $queuedDocumentIds[$documentId] = true;
         }

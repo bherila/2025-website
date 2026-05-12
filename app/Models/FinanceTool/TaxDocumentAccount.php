@@ -15,9 +15,13 @@ class TaxDocumentAccount extends FinDocumentAccount
 {
     /**
      * Create a tax-form account link on the unified document-account table.
+     *
+     * The first argument is the legacy fin_tax_documents primary key. Use
+     * FinDocumentAccount::createLink() when you already have a unified
+     * fin_documents id.
      */
     public static function createLink(
-        int $documentId,
+        int $taxDocumentId,
         ?int $accountId,
         ?string $formType = null,
         ?int $taxYear = null,
@@ -29,7 +33,7 @@ class TaxDocumentAccount extends FinDocumentAccount
         ?string $aiIdentifier = null,
         ?string $aiAccountName = null,
     ): static {
-        $taxDocument = FileForTaxDocument::query()->findOrFail($documentId);
+        $taxDocument = FileForTaxDocument::query()->findOrFail($taxDocumentId);
 
         /** @var static $link */
         $link = static::create([

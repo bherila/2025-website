@@ -20,7 +20,7 @@ class LotMatcherServiceTest extends TestCase
         $brokerLot = $this->makeBrokerLot($account, $document);
         $accountLot = $this->makeAccountLot($account);
 
-        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->document_id);
 
         $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
         $this->assertDatabaseHas('fin_lot_reconciliation_links', [

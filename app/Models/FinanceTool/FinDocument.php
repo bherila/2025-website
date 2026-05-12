@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class FinDocument extends Model
 {
@@ -91,25 +93,37 @@ class FinDocument extends Model
     public static function generateStoredFilename(string $originalFilename): string
     {
         $datePart = now()->format('Y.m.d');
-        $randomPart = strtolower(substr(bin2hex(random_bytes(4)), 0, 5));
+        $randomPart = Str::lower(Str::random(5));
 
         return $datePart.' '.$randomPart.' '.$originalFilename;
     }
 
     public function recordDownload(?int $userId = null): void
     {
-        $history = $this->getAttribute('download_history');
-        if (! is_array($history)) {
-            $history = [];
-        }
+        DB::transaction(function () use ($userId): void {
+            $document = self::query()
+                ->whereKey($this->getKey())
+                ->lockForUpdate()
+                ->first();
 
-        $history[] = [
-            'user_id' => $userId ?? Auth::id(),
-            'downloaded_at' => now()->toIso8601String(),
-        ];
+            if (! $document instanceof self) {
+                return;
+            }
 
-        $this->setAttribute('download_history', $history);
-        $this->save();
+            $history = $document->getAttribute('download_history');
+            if (! is_array($history)) {
+                $history = [];
+            }
+
+            $history[] = [
+                'user_id' => $userId ?? Auth::id(),
+                'downloaded_at' => now()->toIso8601String(),
+            ];
+
+            $document->setAttribute('download_history', $history);
+            $document->save();
+            $this->setRawAttributes($document->getAttributes(), true);
+        });
     }
 
     public function getHumanFileSizeAttribute(): string
