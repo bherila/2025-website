@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
-use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatementDetail;
-use App\Services\Finance\TransactionImportService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -301,7 +301,7 @@ class StatementController extends Controller
      * Import statement details from PDF parsing (MTD/YTD line items).
      * Creates a statement record and adds statement details to it.
      */
-    public function importPdfStatement(Request $request, int $account_id, TransactionImportService $transactionImportService): JsonResponse
+    public function importPdfStatement(Request $request, int $account_id, DocumentIngestionService $documentIngestionService): JsonResponse
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
@@ -345,107 +345,34 @@ class StatementController extends Controller
         $periodEnd = isset($statementInfo['periodEnd']) ? substr($statementInfo['periodEnd'], 0, 10) : now()->format('Y-m-d');
         $closingBalance = $statementInfo['closingBalance'] ?? null;
 
-        // Create the statement record
-        $statementId = DB::table('fin_statements')->insertGetId([
-            'acct_id' => $account->acct_id,
-            'balance' => $closingBalance,
-            'statement_opening_date' => $periodStart,
-            'statement_closing_date' => $periodEnd,
+        $result = $documentIngestionService->ingestStatementDocument((int) $uid, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'accounts' => [[
+                'acct_id' => $account->acct_id,
+                'statementInfo' => $statementInfo,
+                'statementDetails' => $statementDetails,
+                'transactions' => $transactions,
+                'lots' => $lots,
+            ]],
         ]);
-
-        // Insert statement detail rows
-        if (! empty($statementDetails)) {
-            $detailRows = array_map(function ($row) use ($statementId) {
-                return [
-                    'statement_id' => $statementId,
-                    'section' => $row['section'] ?? '',
-                    'line_item' => $row['line_item'] ?? '',
-                    'statement_period_value' => $row['statement_period_value'] ?? 0,
-                    'ytd_value' => $row['ytd_value'] ?? 0,
-                    'is_percentage' => $row['is_percentage'] ?? false,
-                ];
-            }, $statementDetails);
-            FinStatementDetail::insert($detailRows);
-        }
-
-        // Insert transactions
-        $transactionsCount = 0;
-        $skippedDuplicateTransactionsCount = 0;
-        if (! empty($transactions)) {
-            $result = $transactionImportService->importForUser((int) $uid, TransactionImportService::transactionsFromPayload(['transactions' => $transactions]), [
-                'default_account_id' => (int) $account->acct_id,
-                'default_statement_id' => (int) $statementId,
-                'require_type' => false,
-                'source' => 'import',
-                'include_defaults' => true,
-            ]);
-
-            if ($result->hasErrors()) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => $result->errors,
-                ], 422);
-            }
-
-            $transactionsCount = $result->inserted;
-            $skippedDuplicateTransactionsCount = $result->skippedDuplicate;
-        }
-
-        // Insert lot rows
-        $lotsCount = 0;
-        if (! empty($lots)) {
-            $lotRows = [];
-            foreach ($lots as $lot) {
-                $purchaseDate = $lot['purchaseDate'] ?? null;
-                $saleDate = $lot['saleDate'] ?? null;
-
-                // Compute is_short_term and realized_gain_loss
-                $isShortTerm = null;
-                $realizedGainLoss = $lot['realizedGainLoss'] ?? null;
-
-                if ($saleDate && $purchaseDate) {
-                    $pDate = new \DateTime($purchaseDate);
-                    $sDate = new \DateTime($saleDate);
-                    $diff = $pDate->diff($sDate);
-                    $isShortTerm = $diff->days <= 365;
-
-                    if ($realizedGainLoss === null && isset($lot['proceeds']) && isset($lot['costBasis'])) {
-                        $realizedGainLoss = $lot['proceeds'] - $lot['costBasis'];
-                    }
-                }
-
-                $lotRows[] = [
-                    'acct_id' => $account->acct_id,
-                    'symbol' => $lot['symbol'] ?? '',
-                    'description' => $lot['description'] ?? null,
-                    'quantity' => $lot['quantity'] ?? 0,
-                    'purchase_date' => $purchaseDate,
-                    'cost_basis' => $lot['costBasis'] ?? 0,
-                    'cost_per_unit' => $lot['costPerUnit'] ?? null,
-                    'sale_date' => $saleDate,
-                    'proceeds' => $lot['proceeds'] ?? null,
-                    'realized_gain_loss' => $realizedGainLoss,
-                    'is_short_term' => $isShortTerm,
-                    'lot_source' => 'import',
-                    'statement_id' => $statementId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-            FinAccountLot::insert($lotRows);
-            $lotsCount = count($lotRows);
-        }
+        $accountResult = $result['accounts'][0] ?? [
+            'statement_id' => 0,
+            'transactions_count' => 0,
+            'lots_count' => 0,
+            'details_count' => 0,
+        ];
 
         return response()->json([
             'success' => true,
-            'statement_id' => $statementId,
+            'document_id' => $result['document']->id,
+            'statement_id' => $accountResult['statement_id'],
             'period_start' => $periodStart,
             'period_end' => $periodEnd,
             'closing_balance' => $closingBalance,
-            'details_count' => count($statementDetails),
-            'transactions_count' => $transactionsCount,
-            'skipped_duplicate_transactions_count' => $skippedDuplicateTransactionsCount,
-            'lots_count' => $lotsCount,
+            'details_count' => $accountResult['details_count'],
+            'transactions_count' => $accountResult['transactions_count'],
+            'skipped_duplicate_transactions_count' => 0,
+            'lots_count' => $accountResult['lots_count'],
         ]);
     }
 
@@ -455,7 +382,7 @@ class StatementController extends Controller
      * transactions, statementDetails, and lots. The file_hash (if provided) is
      * stored once in files_for_fin_accounts and referenced by all created statements.
      */
-    public function importMultiAccountPdf(Request $request, TransactionImportService $transactionImportService): JsonResponse
+    public function importMultiAccountPdf(Request $request, DocumentIngestionService $documentIngestionService): JsonResponse
     {
         $uid = Auth::id();
 
@@ -490,163 +417,24 @@ class StatementController extends Controller
             'file_hash' => 'nullable|string',
         ]);
 
-        $results = [];
         $fileHash = $request->input('file_hash');
 
-        DB::transaction(function () use ($request, $uid, $fileHash, &$results, $transactionImportService): void {
-            foreach ($request->input('accounts') as $accountData) {
-                $account = FinAccounts::where('acct_id', $accountData['acct_id'])
-                    ->where('acct_owner', $uid)
-                    ->firstOrFail();
+        foreach ($request->input('accounts') as $accountData) {
+            FinAccounts::where('acct_id', $accountData['acct_id'])
+                ->where('acct_owner', $uid)
+                ->firstOrFail();
+        }
 
-                $statementInfo = $accountData['statementInfo'] ?? [];
-                $statementDetails = $accountData['statementDetails'] ?? [];
-                $transactions = $accountData['transactions'] ?? [];
-                $lots = $accountData['lots'] ?? [];
-
-                $periodStart = isset($statementInfo['periodStart']) ? substr($statementInfo['periodStart'], 0, 10) : null;
-                $periodEnd = isset($statementInfo['periodEnd']) ? substr($statementInfo['periodEnd'], 0, 10) : now()->format('Y-m-d');
-                $closingBalance = $statementInfo['closingBalance'] ?? null;
-
-                $statementId = DB::table('fin_statements')->insertGetId([
-                    'acct_id' => $account->acct_id,
-                    'balance' => $closingBalance,
-                    'statement_opening_date' => $periodStart,
-                    'statement_closing_date' => $periodEnd,
-                ]);
-
-                // Link the uploaded file (by hash) to the created statement
-                if ($fileHash) {
-                    // Try to find an existing file record for this specific account
-                    $fileRecord = DB::table('files_for_fin_accounts')
-                        ->where('acct_id', $account->acct_id)
-                        ->where('file_hash', $fileHash)
-                        ->first();
-
-                    if ($fileRecord) {
-                        // Update statement_id if not yet set
-                        if (! $fileRecord->statement_id) {
-                            DB::table('files_for_fin_accounts')
-                                ->where('id', $fileRecord->id)
-                                ->update(['statement_id' => $statementId, 'updated_at' => now()]);
-                        }
-                    } else {
-                        // Find the source file from any of the user's accounts
-                        $sourceFile = DB::table('files_for_fin_accounts')
-                            ->where('file_hash', $fileHash)
-                            ->whereIn('acct_id', function ($q) use ($uid) {
-                                $q->select('acct_id')->from('fin_accounts')->where('acct_owner', $uid);
-                            })
-                            ->first();
-
-                        if ($sourceFile) {
-                            // Clone the file record for this account
-                            DB::table('files_for_fin_accounts')->insert([
-                                'acct_id' => $account->acct_id,
-                                'statement_id' => $statementId,
-                                'file_hash' => $sourceFile->file_hash,
-                                'original_filename' => $sourceFile->original_filename,
-                                'stored_filename' => $sourceFile->stored_filename,
-                                's3_path' => $sourceFile->s3_path,
-                                'mime_type' => $sourceFile->mime_type,
-                                'file_size_bytes' => $sourceFile->file_size_bytes,
-                                'uploaded_by_user_id' => $sourceFile->uploaded_by_user_id,
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ]);
-                        }
-                    }
-                }
-
-                if (! empty($statementDetails)) {
-                    $detailRows = array_map(function ($row) use ($statementId) {
-                        return [
-                            'statement_id' => $statementId,
-                            'section' => $row['section'] ?? '',
-                            'line_item' => $row['line_item'] ?? '',
-                            'statement_period_value' => $row['statement_period_value'] ?? 0,
-                            'ytd_value' => $row['ytd_value'] ?? 0,
-                            'is_percentage' => $row['is_percentage'] ?? false,
-                        ];
-                    }, $statementDetails);
-                    FinStatementDetail::insert($detailRows);
-                }
-
-                $transactionsCount = 0;
-                $skippedDuplicateTransactionsCount = 0;
-                if (! empty($transactions)) {
-                    $result = $transactionImportService->importForUser((int) $uid, TransactionImportService::transactionsFromPayload(['transactions' => $transactions]), [
-                        'default_account_id' => (int) $account->acct_id,
-                        'default_statement_id' => (int) $statementId,
-                        'require_type' => false,
-                        'source' => 'import',
-                        'include_defaults' => true,
-                    ]);
-
-                    if ($result->hasErrors()) {
-                        throw new \InvalidArgumentException(implode(' ', $result->errors));
-                    }
-
-                    $transactionsCount = $result->inserted;
-                    $skippedDuplicateTransactionsCount = $result->skippedDuplicate;
-                }
-
-                $lotsCount = 0;
-                if (! empty($lots)) {
-                    $lotRows = [];
-                    foreach ($lots as $lot) {
-                        $purchaseDate = $lot['purchaseDate'] ?? null;
-                        $saleDate = $lot['saleDate'] ?? null;
-                        $isShortTerm = null;
-                        $realizedGainLoss = $lot['realizedGainLoss'] ?? null;
-
-                        if ($saleDate && $purchaseDate) {
-                            $pDate = new \DateTime($purchaseDate);
-                            $sDate = new \DateTime($saleDate);
-                            $diff = $pDate->diff($sDate);
-                            $isShortTerm = $diff->days <= 365;
-
-                            if ($realizedGainLoss === null && isset($lot['proceeds']) && isset($lot['costBasis'])) {
-                                $realizedGainLoss = $lot['proceeds'] - $lot['costBasis'];
-                            }
-                        }
-
-                        $lotRows[] = [
-                            'acct_id' => $account->acct_id,
-                            'symbol' => $lot['symbol'] ?? '',
-                            'description' => $lot['description'] ?? null,
-                            'quantity' => $lot['quantity'] ?? 0,
-                            'purchase_date' => $purchaseDate,
-                            'cost_basis' => $lot['costBasis'] ?? 0,
-                            'cost_per_unit' => $lot['costPerUnit'] ?? null,
-                            'sale_date' => $saleDate,
-                            'proceeds' => $lot['proceeds'] ?? null,
-                            'realized_gain_loss' => $realizedGainLoss,
-                            'is_short_term' => $isShortTerm,
-                            'lot_source' => 'import',
-                            'statement_id' => $statementId,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ];
-                    }
-                    FinAccountLot::insert($lotRows);
-                    $lotsCount = count($lotRows);
-                }
-
-                $results[] = [
-                    'acct_id' => $account->acct_id,
-                    'statement_id' => $statementId,
-                    'transactions_count' => $transactionsCount,
-                    'skipped_duplicate_transactions_count' => $skippedDuplicateTransactionsCount,
-                    'lots_count' => $lotsCount,
-                    'details_count' => count($statementDetails),
-                ];
-            }
-        });
+        $result = $documentIngestionService->ingestStatementDocument((int) $uid, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'file_hash' => $fileHash,
+            'accounts' => $request->input('accounts'),
+        ]);
 
         return response()->json([
             'success' => true,
-            'accounts' => $results,
+            'document_id' => $result['document']->id,
+            'accounts' => $result['accounts'],
         ]);
     }
 }

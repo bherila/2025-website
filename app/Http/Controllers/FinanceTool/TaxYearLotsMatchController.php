@@ -38,10 +38,11 @@ class TaxYearLotsMatchController extends Controller
         $documentResults = [];
 
         foreach ($documents as $document) {
-            $result = $this->lotMatcherService->runMatcherForDocument((int) $document->id, preserveDecisions: true);
+            $result = $this->lotMatcherService->runMatcherForDocument((int) $document->document_id, preserveDecisions: true);
             $aggregateCounts = $this->mergeCounts($aggregateCounts, $result->counts);
             $documentResults[] = [
                 'tax_document_id' => (int) $document->id,
+                'document_id' => (int) $document->document_id,
                 'broker' => $document->original_filename,
                 'counts' => $result->counts,
             ];

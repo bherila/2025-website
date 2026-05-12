@@ -275,7 +275,7 @@ import type { FK1StructuredData as _FK1StructuredData } from './k1-data'
 
 /**
  * One individual transaction lot from a 1099-B section.
- * Extracted by the AI during broker_1099 / tax_form_multi_account_import processing
+ * Extracted by the AI during broker_1099 / document_extract processing
  * and stored in parsed_data[n].transactions for 1099_b entries.
  * These are upserted into fin_account_lots and fin_account_line_items automatically.
  */
@@ -367,10 +367,12 @@ export interface MultiAccountParsedEntry {
   parsed_data: Record<string, unknown> | null
 }
 
-/** One row from fin_tax_document_accounts — links a PDF to a specific account. */
+/** One row from fin_document_accounts — links an imported document section to a specific account. */
 export interface TaxDocumentAccountLink {
   id: number
-  tax_document_id: number
+  document_id?: number
+  /** Legacy compatibility id for callers still scoped to fin_tax_documents. */
+  tax_document_id?: number
   account_id: number | null
   form_type: string
   tax_year: number

@@ -132,7 +132,7 @@ class GenAiJobDispatcherService
      */
     public function getTaxDocumentPromptInfo(string $formType, int $taxYear): array
     {
-        $rawPrompt = $this->buildPrompt('tax_document', ['form_type' => $formType, 'tax_year' => $taxYear]);
+        $rawPrompt = $this->buildPrompt('document_extract', ['document_kind' => 'tax_form', 'form_type' => $formType, 'tax_year' => $taxYear]);
 
         // Strip the internal `<!-- tool:... -->` marker so users don't see it
         $cleanInstructions = trim((string) preg_replace('/<!--\s*tool:[^>]+-->\s*\n?/', '', $rawPrompt));
@@ -247,8 +247,9 @@ PROMPT;
             'finance_transactions' => new FinanceTransactionsPromptTemplate,
             'finance_payslip' => new PayslipPromptTemplate,
             'utility_bill' => new UtilityBillPromptTemplate,
-            'tax_document' => new TaxDocumentPromptTemplate,
-            'tax_form_multi_account_import' => new MultiAccountTaxImportPromptTemplate,
+            'document_extract' => $this->isMultiAccountDocumentContext($context)
+                ? new MultiAccountTaxImportPromptTemplate
+                : new TaxDocumentPromptTemplate,
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -256,10 +257,18 @@ PROMPT;
     }
 
     /**
+     * @param  array<string, mixed>  $context
+     */
+    private function isMultiAccountDocumentContext(array $context): bool
+    {
+        return isset($context['accounts']) || isset($context['input_kind']);
+    }
+
+    /**
      * Build the tool configuration for a given job type.
      * Returns null for job types that use text output instead of function calling.
      *
-     * @param  string  $prompt  Required for tax_document jobs to extract the form type marker.
+     * @param  string  $prompt  Required for document_extract tax-form jobs to extract the form type marker.
      */
     public function buildToolConfig(string $jobType, string $prompt = ''): ?ToolConfig
     {
@@ -270,7 +279,7 @@ PROMPT;
             );
         }
 
-        if ($jobType === 'tax_document' && $prompt !== '') {
+        if ($jobType === 'document_extract' && $prompt !== '' && ! str_contains($prompt, 'accounts[')) {
             $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
             if ($toolDef !== null) {
                 return new ToolConfig(
@@ -291,7 +300,7 @@ PROMPT;
         }
 
         return match ($jobType) {
-            'tax_form_multi_account_import' => 'accounts[',
+            'document_extract' => null,
             default => null,
         };
     }
@@ -350,7 +359,7 @@ PROMPT;
             return $payload;
         }
 
-        if ($jobType === 'tax_document') {
+        if ($jobType === 'document_extract') {
             // Extract the form_type from the prompt text to pick the right tool
             // The prompt is built with the context; we store the tool name in a comment marker
             $toolDef = $this->buildTaxDocumentToolDefinitionFromPrompt($prompt);
@@ -384,11 +393,12 @@ PROMPT;
             return $this->extractFinanceGenerateContentData($responseBody, $client);
         }
 
-        if ($jobType === 'tax_document') {
-            return $this->extractTaxDocumentGenerateContentData($responseBody, $client);
-        }
+        if ($jobType === 'document_extract') {
+            $toolData = $this->extractTaxDocumentGenerateContentData($responseBody, $client);
+            if ($toolData !== null) {
+                return $toolData;
+            }
 
-        if ($jobType === 'tax_form_multi_account_import') {
             // Expects a TOON or JSON array of per-account entries from the model.
             $data = $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
             if (! is_array($data)) {
@@ -445,8 +455,7 @@ PROMPT;
             'finance_transactions' => ['accounts'],
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
-            'tax_document' => ['tax_year', 'form_type', 'tax_document_id'],
-            'tax_form_multi_account_import' => ['tax_document_id', 'tax_year', 'accounts', 'input_kind', 'source_form_type'],
+            'document_extract' => ['document_id', 'document_kind', 'tax_year', 'form_type', 'accounts', 'input_kind', 'source_form_type'],
             default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -1270,7 +1279,7 @@ PROMPT;
     }
 
     /**
-     * Extract structured data from a tax_document Gemini tool-call response.
+     * Extract structured data from a document_extract Gemini tool-call response.
      * Falls back to TOON/JSON text parsing if no function call is found.
      *
      * @param  array<string, mixed>  $responseBody
@@ -1296,8 +1305,7 @@ PROMPT;
             return $this->coerceTaxDocumentArgs($toolCall['name'], $toolCall['input']);
         }
 
-        // Fallback: try to extract TOON/JSON from text parts
-        return $this->decodeStructuredText($this->extractResponseText($responseBody, $client));
+        return null;
     }
 
     /**

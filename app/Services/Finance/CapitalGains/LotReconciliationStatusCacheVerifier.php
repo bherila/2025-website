@@ -10,11 +10,11 @@ class LotReconciliationStatusCacheVerifier
     /**
      * @return list<string>
      */
-    public function auditDocument(int $taxDocumentId): array
+    public function auditDocument(int $documentId): array
     {
         $findings = [];
         $links = FinLotReconciliationLink::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
             ->orderBy('id')
             ->get();
         $lotIds = [];
@@ -37,7 +37,7 @@ class LotReconciliationStatusCacheVerifier
             }
 
             $latestLink = FinLotReconciliationLink::query()
-                ->where('tax_document_id', $taxDocumentId)
+                ->where('document_id', $documentId)
                 ->where(function ($query) use ($lotId): void {
                     $query->where('broker_lot_id', $lotId)
                         ->orWhere('account_lot_id', $lotId);

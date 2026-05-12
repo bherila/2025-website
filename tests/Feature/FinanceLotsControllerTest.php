@@ -6,6 +6,7 @@ use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -282,7 +283,7 @@ class FinanceLotsControllerTest extends TestCase
 
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
     }
 
@@ -401,7 +402,7 @@ class FinanceLotsControllerTest extends TestCase
 
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
         Queue::assertPushed(LotsMatchJob::class, 1);
     }
@@ -972,7 +973,7 @@ class FinanceLotsControllerTest extends TestCase
 
     private function createBrokerDocument(int $userId, int $accountId): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -981,7 +982,7 @@ class FinanceLotsControllerTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('b', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);

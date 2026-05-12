@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -371,15 +372,16 @@ class Form8949LotExportTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
             'original_filename' => 'consolidated.pdf',
             'stored_filename' => 'consolidated.pdf',
+            's3_path' => "tax_docs/{$userId}/consolidated.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('c', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'genai_status' => 'parsed',
             'parsed_data' => [[
@@ -413,7 +415,8 @@ class Form8949LotExportTest extends TestCase
             'realized_gain_loss' => 250,
             'is_short_term' => true,
             'lot_source' => '1099b',
-            'tax_document_id' => $document->id,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'document_id' => $document->document_id,
             'form_8949_box' => 'B',
             'is_covered' => false,
             'accrued_market_discount' => 0,
@@ -439,7 +442,8 @@ class Form8949LotExportTest extends TestCase
             'realized_gain_loss' => 350,
             'is_short_term' => true,
             'lot_source' => 'analyzer',
-            'tax_document_id' => null,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'document_id' => null,
             'form_8949_box' => 'B',
             'is_covered' => false,
             'accrued_market_discount' => 0,

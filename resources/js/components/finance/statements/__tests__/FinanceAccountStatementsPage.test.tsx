@@ -85,14 +85,6 @@ jest.mock('@/components/shared/FileManager', () => ({
   }),
 }));
 
-jest.mock('../../AccountTaxDocumentsSection', () => {
-  const AccountTaxDocumentsSection = ({ accountId }: { accountId: number }) => (
-    <div data-testid="account-tax-documents">Tax documents for {accountId}</div>
-  );
-  AccountTaxDocumentsSection.displayName = 'AccountTaxDocumentsSection';
-  return { __esModule: true, default: AccountTaxDocumentsSection };
-});
-
 jest.mock('../../StatementDetailsModal', () => ({
   StatementDetailsModal: () => <div data-testid="statement-details-modal" />,
 }));
@@ -164,7 +156,6 @@ describe('FinanceAccountStatementsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('No Statements Found')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('account-tax-documents')).toHaveTextContent('Tax documents for 32');
   });
 
   it('does NOT cause an infinite fetch loop', async () => {
@@ -204,7 +195,6 @@ describe('FinanceAccountStatementsPage', () => {
 
     expect(screen.getByText('Download CSV')).toBeInTheDocument();
     expect(screen.getByTestId('file-list')).toBeInTheDocument();
-    expect(screen.getByTestId('account-tax-documents')).toHaveTextContent('Tax documents for 32');
   });
 
   it('shows chart when Show Chart toggle is enabled', async () => {

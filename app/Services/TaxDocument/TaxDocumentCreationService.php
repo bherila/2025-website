@@ -6,6 +6,7 @@ use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -27,6 +28,10 @@ use InvalidArgumentException;
  */
 class TaxDocumentCreationService
 {
+    public function __construct(
+        private readonly DocumentIngestionService $documentIngestionService,
+    ) {}
+
     /**
      * Create a single-account tax document, its account link (if applicable), and dispatch
      * an AI parsing job. When $docAttributes already contains 'parsed_data', or
@@ -63,7 +68,7 @@ class TaxDocumentCreationService
         }
 
         $doc = DB::transaction(function () use ($docAttributes, $linkAttributes, $hasParsedData, $skipGenAiProcessing): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create($docAttributes);
+            $taxDoc = $this->documentIngestionService->createTaxFormDetail($docAttributes);
 
             // Create the account link if link attributes are provided.
             if ($linkAttributes !== null) {
@@ -79,7 +84,7 @@ class TaxDocumentCreationService
             if (! $hasParsedData && ! $skipGenAiProcessing) {
                 $genaiJob = GenAiImportJob::create([
                     'user_id' => $docAttributes['user_id'],
-                    'job_type' => 'tax_document',
+                    'job_type' => 'document_extract',
                     'file_hash' => $docAttributes['file_hash'],
                     'original_filename' => $docAttributes['original_filename'],
                     's3_path' => $docAttributes['s3_path'],
@@ -88,12 +93,14 @@ class TaxDocumentCreationService
                     'context_json' => json_encode([
                         'tax_year' => (int) $docAttributes['tax_year'],
                         'form_type' => $docAttributes['form_type'],
-                        'tax_document_id' => $taxDoc->id,
+                        'document_id' => $taxDoc->document_id,
+                        'document_kind' => 'tax_form',
                     ]),
                     'status' => 'pending',
                 ]);
 
                 $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+                $this->documentIngestionService->syncFromTaxDocument($taxDoc->refresh());
             }
 
             return $taxDoc;
@@ -131,7 +138,7 @@ class TaxDocumentCreationService
         $docAttributes['genai_status'] = $hasParsedData ? 'parsed' : 'pending';
 
         $doc = DB::transaction(function () use ($docAttributes, $contextAccounts, $hasParsedData, $skipGenAiProcessing): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create($docAttributes);
+            $taxDoc = $this->documentIngestionService->createTaxFormDetail($docAttributes);
 
             if ($hasParsedData || $skipGenAiProcessing) {
                 return $taxDoc;
@@ -139,14 +146,15 @@ class TaxDocumentCreationService
 
             $genaiJob = GenAiImportJob::create([
                 'user_id' => $docAttributes['user_id'],
-                'job_type' => 'tax_form_multi_account_import',
+                'job_type' => 'document_extract',
                 'file_hash' => $docAttributes['file_hash'],
                 'original_filename' => $docAttributes['original_filename'],
                 's3_path' => $docAttributes['s3_path'],
                 'mime_type' => $docAttributes['mime_type'] ?? 'application/pdf',
                 'file_size_bytes' => $docAttributes['file_size_bytes'],
                 'context_json' => json_encode([
-                    'tax_document_id' => $taxDoc->id,
+                    'document_id' => $taxDoc->document_id,
+                    'document_kind' => 'tax_form',
                     'tax_year' => (int) $docAttributes['tax_year'],
                     'accounts' => $contextAccounts,
                 ]),
@@ -154,6 +162,7 @@ class TaxDocumentCreationService
             ]);
 
             $taxDoc->update(['genai_job_id' => $genaiJob->id]);
+            $this->documentIngestionService->syncFromTaxDocument($taxDoc->refresh());
 
             return $taxDoc;
         });
@@ -183,14 +192,15 @@ class TaxDocumentCreationService
         $job = DB::transaction(function () use ($taxDoc, $contextAccounts): GenAiImportJob {
             $genaiJob = GenAiImportJob::create([
                 'user_id' => $taxDoc->user_id,
-                'job_type' => 'tax_form_multi_account_import',
+                'job_type' => 'document_extract',
                 'file_hash' => $taxDoc->file_hash,
                 'original_filename' => $taxDoc->original_filename,
                 's3_path' => $taxDoc->s3_path,
                 'mime_type' => $taxDoc->mime_type ?? 'application/pdf',
                 'file_size_bytes' => $taxDoc->file_size_bytes,
                 'context_json' => json_encode([
-                    'tax_document_id' => $taxDoc->id,
+                    'document_id' => $taxDoc->document_id,
+                    'document_kind' => 'tax_form',
                     'tax_year' => (int) $taxDoc->tax_year,
                     'accounts' => $contextAccounts,
                 ]),
@@ -202,6 +212,7 @@ class TaxDocumentCreationService
                 'genai_status' => 'pending',
                 'is_reviewed' => false,
             ]);
+            $this->documentIngestionService->syncFromTaxDocument($taxDoc->refresh());
             $taxDoc->syncToAccountLinks(['is_reviewed' => false]);
 
             return $genaiJob;
@@ -246,14 +257,15 @@ class TaxDocumentCreationService
             $job = DB::transaction(function () use ($taxDoc, $contextAccounts, $sourcePath, $sourceText): GenAiImportJob {
                 $genaiJob = GenAiImportJob::create([
                     'user_id' => $taxDoc->user_id,
-                    'job_type' => 'tax_form_multi_account_import',
+                    'job_type' => 'document_extract',
                     'file_hash' => hash('sha256', $sourceText),
                     'original_filename' => $this->repairArtifactFilename($taxDoc),
                     's3_path' => $sourcePath,
                     'mime_type' => 'text/plain',
                     'file_size_bytes' => strlen($sourceText),
                     'context_json' => json_encode([
-                        'tax_document_id' => $taxDoc->id,
+                        'document_id' => $taxDoc->document_id,
+                        'document_kind' => 'tax_form',
                         'tax_year' => (int) $taxDoc->tax_year,
                         'accounts' => $contextAccounts,
                         'input_kind' => 'parsed_data_repair',
@@ -267,6 +279,7 @@ class TaxDocumentCreationService
                     'genai_status' => 'pending',
                     'is_reviewed' => false,
                 ]);
+                $this->documentIngestionService->syncFromTaxDocument($taxDoc->refresh());
                 $taxDoc->syncToAccountLinks(['is_reviewed' => false]);
 
                 return $genaiJob;
@@ -327,7 +340,7 @@ class TaxDocumentCreationService
         array $accountLinks = [],
     ): FileForTaxDocument {
         return DB::transaction(function () use ($docAttributes, $accountLinks): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create($docAttributes);
+            $taxDoc = $this->documentIngestionService->createTaxFormDetail($docAttributes);
 
             foreach ($accountLinks as $link) {
                 TaxDocumentAccount::createLink(

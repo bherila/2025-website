@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotReconciliationService;
+use App\Services\Finance\DocumentIngestionService;
 use Tests\TestCase;
 
 class LotReconciliationServiceTest extends TestCase
@@ -197,7 +198,7 @@ class LotReconciliationServiceTest extends TestCase
         $this->assertContains('wash_total_mismatch', $preRebuildCodes);
         $this->assertContains('box_unset', $preRebuildCodes);
 
-        FinAccountLot::query()->where('tax_document_id', $document->id)->delete();
+        FinAccountLot::query()->where('document_id', $document->document_id)->delete();
         $this->makeLot($account, $document, [
             'symbol' => 'DOC12',
             'proceeds' => 749840.20,
@@ -242,7 +243,7 @@ class LotReconciliationServiceTest extends TestCase
      */
     private function makeBrokerDocument(int $userId, ?FinAccounts $account, array $parsedData, string $filename = 'broker-1099.pdf'): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -251,7 +252,7 @@ class LotReconciliationServiceTest extends TestCase
             's3_path' => "tax_docs/{$userId}/{$filename}",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
             'parsed_data' => [[
@@ -293,7 +294,8 @@ class LotReconciliationServiceTest extends TestCase
             'realized_gain_loss' => 250,
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
-            'tax_document_id' => $document->id,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'document_id' => $document->document_id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));

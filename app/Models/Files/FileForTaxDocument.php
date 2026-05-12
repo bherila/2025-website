@@ -5,6 +5,8 @@ namespace App\Models\Files;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Jobs\DeleteS3Object;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\FinDocumentAccount;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\K1LegacyTransformer;
@@ -16,11 +18,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
+ * @property int|null $document_id
  * @property string|null $misc_routing
  */
 class FileForTaxDocument extends Model
 {
     use HasFileStorage, SerializesDatesAsLocal;
+
+    public const string FORM_TYPE_1099_B = '1099_b';
 
     protected $table = 'fin_tax_documents';
 
@@ -30,13 +35,13 @@ class FileForTaxDocument extends Model
      * Two categories:
      *   - Container type: `broker_1099` — used for consolidated brokerage PDFs that contain
      *     multiple sub-forms (1099-DIV, 1099-INT, 1099-B) per account. The individual form
-     *     types are stored on fin_tax_document_accounts rows, not on the parent document.
+     *     types are stored on fin_document_accounts rows, not on the parent document.
      *   - Leaf types: all others — represent a single standalone IRS form.
      *
      * When adding a new form type, update this constant AND ACCOUNT_FORM_TYPES (if account-linked)
      * AND the TypeScript FORM_TYPE_LABELS / ACCOUNT_FORM_TYPES_1099 in tax-document.ts.
      */
-    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
+    public const FORM_TYPES = ['w2', 'w2c', '1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', self::FORM_TYPE_1099_B, 'broker_1099', 'k1', '1116'];
 
     /** W-2 family form types (linked to employment entities, not accounts). */
     public const W2_FORM_TYPES = ['w2', 'w2c'];
@@ -44,12 +49,13 @@ class FileForTaxDocument extends Model
     /**
      * Form types linked to financial accounts (not employment entities).
      * Includes `broker_1099` — consolidated PDFs are account-linked even though
-     * their per-form data lives on fin_tax_document_accounts rows.
+     * their per-form data lives on fin_document_accounts rows.
      */
-    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', '1099_b', 'broker_1099', 'k1', '1116'];
+    public const ACCOUNT_FORM_TYPES = ['1099_int', '1099_int_c', '1099_div', '1099_div_c', '1099_g', '1099_misc', '1099_nec', '1099_r', self::FORM_TYPE_1099_B, 'broker_1099', 'k1', '1116'];
 
     protected $fillable = [
         'user_id',
+        'document_id',
         'tax_year',
         'form_type',
         'employment_entity_id',
@@ -79,6 +85,7 @@ class FileForTaxDocument extends Model
         'parsed_data_warnings' => 'array',
         'tax_year' => 'integer',
         'download_history' => 'array',
+        'document_id' => 'integer',
     ];
 
     /**
@@ -123,6 +130,12 @@ class FileForTaxDocument extends Model
         return $this->belongsTo(FinAccounts::class, 'account_id', 'acct_id');
     }
 
+    /** @return BelongsTo<FinDocument, $this> */
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(FinDocument::class, 'document_id');
+    }
+
     public function genaiJob(): BelongsTo
     {
         return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
@@ -131,7 +144,13 @@ class FileForTaxDocument extends Model
     /** Account links — canonical source of truth for which accounts this document belongs to. */
     public function accountLinks(): HasMany
     {
-        return $this->hasMany(TaxDocumentAccount::class, 'tax_document_id')->orderBy('id');
+        return $this->hasMany(TaxDocumentAccount::class, 'document_id', 'document_id')->orderBy('id');
+    }
+
+    /** @return HasMany<FinDocumentAccount, $this> */
+    public function documentAccounts(): HasMany
+    {
+        return $this->hasMany(FinDocumentAccount::class, 'document_id', 'document_id')->orderBy('id');
     }
 
     /**

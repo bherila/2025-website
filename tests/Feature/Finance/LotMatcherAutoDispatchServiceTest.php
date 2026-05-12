@@ -5,10 +5,13 @@ namespace Tests\Feature\Finance;
 use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -41,7 +44,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         Queue::assertPushed(LotsMatchJob::class, 2);
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => in_array($job->taxDocumentId, [(int) $standalone->id, (int) $consolidated->id], true)
+            fn (LotsMatchJob $job): bool => in_array($job->documentId, [(int) $standalone->document_id, (int) $consolidated->document_id], true)
                 && $job->delay instanceof \DateTimeInterface,
         );
         Log::shouldHaveReceived('info')
@@ -61,8 +64,8 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $document = $this->makeTaxDocument($user->id, '1099_b');
 
         $service = app(LotMatcherAutoDispatchService::class);
-        $service->dispatchForTaxDocument((int) $document->id, LotMatcherAutoTrigger::ParsedDataRebuild);
-        $service->dispatchForTaxDocument((int) $document->id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
 
         Queue::assertPushed(LotsMatchJob::class, 1);
     }
@@ -84,7 +87,55 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $this->assertSame(1, $queued);
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $nextYearDocument->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $nextYearDocument->document_id,
+        );
+    }
+
+    public function test_dispatch_for_account_years_includes_statement_disposition_documents_without_tax_year(): void
+    {
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = FinDocument::query()->create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'period_start' => '2025-01-01',
+            'period_end' => '2025-01-31',
+            'original_filename' => 'statement.pdf',
+            'file_hash' => hash('sha256', fake()->uuid()),
+            'uploaded_by_user_id' => $user->id,
+        ]);
+
+        FinAccountLot::query()->create([
+            'acct_id' => $account->acct_id,
+            'document_id' => $document->id,
+            'symbol' => 'AAPL',
+            'description' => 'Apple Inc.',
+            'quantity' => 1,
+            'purchase_date' => '2024-01-01',
+            'cost_basis' => 100,
+            'cost_per_unit' => 100,
+            'sale_date' => '2025-01-15',
+            'proceeds' => 125,
+            'realized_gain_loss' => 25,
+            'is_short_term' => false,
+            'lot_source' => 'import',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+        ]);
+
+        $queued = app(LotMatcherAutoDispatchService::class)->dispatchForAccountYears(
+            userId: $user->id,
+            accountId: (int) $account->acct_id,
+            taxYears: [2025],
+            trigger: LotMatcherAutoTrigger::ManualLotUpdate,
+        );
+
+        $this->assertSame(1, $queued);
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->id
+                && $job->taxYear === 2025,
         );
     }
 
@@ -117,7 +168,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
 
     private function makeTaxDocument(int $userId, string $formType, ?int $accountId = null): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => $formType,
@@ -127,7 +178,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
             's3_path' => "tax_docs/{$userId}/{$formType}.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', "{$userId}|{$formType}|{$accountId}"),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);

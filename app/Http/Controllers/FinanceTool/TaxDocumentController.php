@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
@@ -127,24 +128,8 @@ class TaxDocumentController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreTaxFormDocumentRequest $request): JsonResponse
     {
-        $request->validate([
-            's3_key' => 'required|string',
-            'original_filename' => 'required|string|max:255',
-            'form_type' => 'required|string|in:'.implode(',', FileForTaxDocument::FORM_TYPES),
-            'tax_year' => 'required|integer|min:1900|max:2100',
-            'file_size_bytes' => 'required|integer|min:1',
-            'file_hash' => 'required|string',
-            'mime_type' => 'nullable|string|max:255',
-            'employment_entity_id' => 'nullable|integer',
-            'account_id' => 'nullable|integer',
-            'notes' => 'nullable|string',
-            'parsed_data' => 'nullable|array',
-            'skip_gen_ai_processing' => 'nullable|boolean',
-            'misc_routing' => 'nullable|string|in:'.implode(',', self::VALID_MISC_ROUTINGS),
-        ]);
-
         $userId = Auth::id();
         $formType = $request->form_type;
 
@@ -331,7 +316,7 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $link = TaxDocumentAccount::where('id', $linkId)
-            ->where('tax_document_id', $doc->id)
+            ->where('document_id', $doc->document_id)
             ->firstOrFail();
 
         $request->validate([
@@ -383,7 +368,7 @@ class TaxDocumentController extends Controller
             ->firstOrFail();
 
         $link = TaxDocumentAccount::where('id', $linkId)
-            ->where('tax_document_id', $doc->id)
+            ->where('document_id', $doc->document_id)
             ->firstOrFail();
 
         $deleteDoc = false;
@@ -391,7 +376,7 @@ class TaxDocumentController extends Controller
         DB::transaction(function () use ($doc, $link, &$deleteDoc): void {
             $link->delete();
 
-            $remaining = TaxDocumentAccount::where('tax_document_id', $doc->id)->count();
+            $remaining = TaxDocumentAccount::where('document_id', $doc->document_id)->count();
             if ($remaining === 0) {
                 // Last link removed — delete the parent document DB row inside the transaction.
                 $doc->delete();
@@ -468,39 +453,33 @@ class TaxDocumentController extends Controller
 
         $isReviewed = $request->boolean('is_reviewed', false);
 
-        $doc = DB::transaction(function () use ($request, $userId, $formType, $isReviewed): FileForTaxDocument {
-            $taxDoc = FileForTaxDocument::create([
-                'user_id' => $userId,
-                'tax_year' => $request->tax_year,
+        $accountLinks = [];
+        if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)) {
+            $accountLinks[] = [
+                'account_id' => $request->account_id,
                 'form_type' => $formType,
-                'employment_entity_id' => in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true)
-                    ? $request->employment_entity_id
-                    : null,
-                'original_filename' => 'Manual entry',
-                'stored_filename' => 'manual-entry',
-                's3_path' => '',
-                'mime_type' => 'application/octet-stream',
-                'file_size_bytes' => 0,
-                'file_hash' => '',
-                'uploaded_by_user_id' => $userId,
-                'genai_status' => 'parsed',
-                'parsed_data' => $request->parsed_data,
-                'is_reviewed' => $isReviewed,
-            ]);
+                'tax_year' => $request->tax_year,
+            ];
+        }
 
-            // Create the canonical account link for account-based form types.
-            if ($request->filled('account_id') && in_array($formType, FileForTaxDocument::ACCOUNT_FORM_TYPES, true)) {
-                TaxDocumentAccount::createLink(
-                    $taxDoc->id,
-                    $request->account_id,
-                    $formType,
-                    $request->tax_year,
-                    $isReviewed,
-                );
-            }
-
-            return $taxDoc;
-        });
+        $doc = $this->creationService->createImportedDocument([
+            'user_id' => $userId,
+            'tax_year' => $request->tax_year,
+            'form_type' => $formType,
+            'employment_entity_id' => in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true)
+                ? $request->employment_entity_id
+                : null,
+            'original_filename' => 'Manual entry',
+            'stored_filename' => 'manual-entry',
+            's3_path' => '',
+            'mime_type' => 'application/octet-stream',
+            'file_size_bytes' => 0,
+            'file_hash' => '',
+            'uploaded_by_user_id' => $userId,
+            'genai_status' => 'parsed',
+            'parsed_data' => $request->parsed_data,
+            'is_reviewed' => $isReviewed,
+        ], $accountLinks);
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
@@ -639,7 +618,7 @@ class TaxDocumentController extends Controller
                     continue;
                 }
 
-                $hasLink = TaxDocumentAccount::where('tax_document_id', $doc->id)
+                $hasLink = TaxDocumentAccount::where('document_id', $doc->document_id)
                     ->where('form_type', $formType)
                     ->exists();
 

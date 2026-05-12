@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Database\Seeders\Finance\FinanceAccountsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -226,7 +227,7 @@ class FinanceLotsImportCommandTest extends TestCase
 
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $document->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
 
         unlink($tmpFile);
@@ -335,8 +336,9 @@ class FinanceLotsImportCommandTest extends TestCase
 
     public function test_wealthfront_text_import_inserts_covered_lots_and_tax_document_reference(): void
     {
-        $taxDocument = FileForTaxDocument::create([
-            'user_id' => User::where('email', 'test@example.com')->value('id'),
+        $userId = (int) User::where('email', 'test@example.com')->value('id');
+        $taxDocument = app(DocumentIngestionService::class)->createTaxFormDetail([
+            'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
             'original_filename' => '2025 1099 Wealthfront.pdf',
@@ -344,8 +346,8 @@ class FinanceLotsImportCommandTest extends TestCase
             's3_path' => 'tax_docs/1/2025 1099 Wealthfront.pdf',
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1234,
-            'file_hash' => str_repeat('c', 64),
-            'uploaded_by_user_id' => User::where('email', 'test@example.com')->value('id'),
+            'file_hash' => hash('sha256', fake()->uuid()),
+            'uploaded_by_user_id' => $userId,
             'genai_status' => 'parsed',
         ]);
 
@@ -382,7 +384,7 @@ class FinanceLotsImportCommandTest extends TestCase
             'purchase_date' => '2025-04-14',
             'form_8949_box' => 'A',
             'is_covered' => 1,
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
             'reconciliation_notes' => 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.',
         ]);
         $this->assertDatabaseHas('fin_account_lots', [
@@ -390,14 +392,14 @@ class FinanceLotsImportCommandTest extends TestCase
             'symbol' => '808513105',
             'wash_sale_disallowed' => 11.90,
             'realized_gain_loss' => 0.00,
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
         ]);
         $this->assertDatabaseHas('fin_account_lots', [
             'acct_id' => $this->acctId,
             'symbol' => '023135106',
             'is_short_term' => 0,
             'form_8949_box' => 'D',
-            'tax_document_id' => $taxDocument->id,
+            'document_id' => $taxDocument->document_id,
         ]);
 
         unlink($tmpFile);
@@ -479,7 +481,7 @@ class FinanceLotsImportCommandTest extends TestCase
 
     private function createBrokerDocument(int $userId, int $accountId, int $taxYear): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => $taxYear,
             'form_type' => 'broker_1099',
@@ -488,7 +490,7 @@ class FinanceLotsImportCommandTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('e', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);

@@ -4,6 +4,7 @@ namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -28,14 +29,16 @@ class FinanceK1MigrateCommandTest extends TestCase
 
     private function makeLegacyK1(array $overrides = []): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        return app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $this->user->id,
             'form_type' => 'k1',
             'tax_year' => 2023,
             'original_filename' => 'k1.pdf',
             'stored_filename' => 'k1_stored.pdf',
+            's3_path' => "tax_docs/{$this->user->id}/k1_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => 'test_hash_'.uniqid(),
+            'file_hash' => hash('sha256', uniqid('test_hash_', true)),
             'parsed_data' => [
                 'entity_name' => 'Acme Partners LLC',
                 'partner_name' => 'John Doe',
@@ -66,14 +69,16 @@ class FinanceK1MigrateCommandTest extends TestCase
 
     public function test_skips_already_canonical_records(): void
     {
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $this->user->id,
             'form_type' => 'k1',
             'tax_year' => 2023,
             'original_filename' => 'k1.pdf',
             'stored_filename' => 'k1_stored.pdf',
+            's3_path' => "tax_docs/{$this->user->id}/k1_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => 'canonical_hash',
+            'file_hash' => hash('sha256', 'canonical_hash'),
             'parsed_data' => [
                 'schemaVersion' => '2026.1',
                 'fields' => ['1' => ['value' => '500']],
@@ -105,14 +110,16 @@ class FinanceK1MigrateCommandTest extends TestCase
 
     public function test_skips_non_k1_documents(): void
     {
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $this->user->id,
             'form_type' => 'w2',
             'tax_year' => 2023,
             'original_filename' => 'w2.pdf',
             'stored_filename' => 'w2_stored.pdf',
+            's3_path' => "tax_docs/{$this->user->id}/w2_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => 'w2_hash',
+            'file_hash' => hash('sha256', 'w2_hash'),
             'parsed_data' => ['box1' => 50000],
         ]);
 
@@ -154,14 +161,16 @@ class FinanceK1MigrateCommandTest extends TestCase
     public function test_only_migrates_records_belonging_to_configured_user(): void
     {
         $otherUser = User::factory()->create();
-        FileForTaxDocument::create([
+        app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $otherUser->id,
             'form_type' => 'k1',
             'tax_year' => 2023,
             'original_filename' => 'k1_other.pdf',
             'stored_filename' => 'k1_other_stored.pdf',
+            's3_path' => "tax_docs/{$otherUser->id}/k1_other_stored.pdf",
+            'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => 'other_hash',
+            'file_hash' => hash('sha256', 'other_hash'),
             'parsed_data' => ['entity_name' => 'Other LLC', 'box1_ordinary_income' => 100],
         ]);
 

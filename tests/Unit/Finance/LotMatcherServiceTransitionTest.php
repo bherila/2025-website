@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotReconciliationStatusCacheVerifier;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -43,7 +44,7 @@ class LotMatcherServiceTransitionTest extends TestCase
         [$document, $account, $userId] = $this->documentAccountAndUser();
         $brokerLot = $this->makeBrokerLot($account, $document);
         $link = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => null,
             'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
@@ -81,7 +82,7 @@ class LotMatcherServiceTransitionTest extends TestCase
         $oldAccountLot = $this->makeAccountLot($account);
         $newAccountLot = $this->makeAccountLot($account);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $oldAccountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -107,14 +108,14 @@ class LotMatcherServiceTransitionTest extends TestCase
         $targetOldAccountLot = $this->makeAccountLot($account);
         $newAccountLot = $this->makeAccountLot($account);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $targetBrokerLot->lot_id,
             'account_lot_id' => $targetOldAccountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
             'match_reason' => $this->matchReason('exact'),
         ]);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $displacedBrokerLot->lot_id,
             'account_lot_id' => $newAccountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -136,14 +137,14 @@ class LotMatcherServiceTransitionTest extends TestCase
         $brokerLot = $this->makeBrokerLot($account, $document);
         $accountLot = $this->makeAccountLot($account);
         $brokerOnly = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => null,
             'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
             'match_reason' => $this->matchReason('broker_only'),
         ]);
         $matched = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -168,7 +169,7 @@ class LotMatcherServiceTransitionTest extends TestCase
     public function test_cache_refresh_and_verifier_agree_for_document_scoped_account_lot_links(): void
     {
         [$firstDocument, $account, $userId] = $this->documentAccountAndUser();
-        $secondDocument = FileForTaxDocument::create([
+        $secondDocument = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -185,14 +186,14 @@ class LotMatcherServiceTransitionTest extends TestCase
         $firstBrokerLot = $this->makeBrokerLot($account, $firstDocument);
         $secondBrokerLot = $this->makeBrokerLot($account, $secondDocument);
         $firstLink = FinLotReconciliationLink::create([
-            'tax_document_id' => $firstDocument->id,
+            'document_id' => $firstDocument->document_id,
             'broker_lot_id' => $firstBrokerLot->lot_id,
             'account_lot_id' => $sharedAccountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
             'match_reason' => $this->matchReason('exact'),
         ]);
         $secondLink = FinLotReconciliationLink::create([
-            'tax_document_id' => $secondDocument->id,
+            'document_id' => $secondDocument->document_id,
             'broker_lot_id' => $secondBrokerLot->lot_id,
             'account_lot_id' => $sharedAccountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -204,7 +205,7 @@ class LotMatcherServiceTransitionTest extends TestCase
         $service->acceptAccountOverride((int) $secondLink->id, $userId);
 
         $this->assertSame(FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE, $sharedAccountLot->fresh()->reconciliation_status);
-        $this->assertSame([], app(LotReconciliationStatusCacheVerifier::class)->auditDocument((int) $secondDocument->id));
+        $this->assertSame([], app(LotReconciliationStatusCacheVerifier::class)->auditDocument((int) $secondDocument->document_id));
     }
 
     public function test_cache_verifier_reports_status_and_superseded_mismatches(): void
@@ -217,7 +218,7 @@ class LotMatcherServiceTransitionTest extends TestCase
             'superseded_by_lot_id' => null,
         ]);
 
-        $findings = app(LotReconciliationStatusCacheVerifier::class)->auditDocument((int) $link->tax_document_id);
+        $findings = app(LotReconciliationStatusCacheVerifier::class)->auditDocument((int) $link->document_id);
 
         $this->assertCount(2, $findings);
         $this->assertStringContainsString('reconciliation_status cache is wrong', $findings[0]);
@@ -233,7 +234,7 @@ class LotMatcherServiceTransitionTest extends TestCase
         $brokerLot = $this->makeBrokerLot($account, $document);
         $accountLot = $this->makeAccountLot($account);
         $link = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -257,7 +258,7 @@ class LotMatcherServiceTransitionTest extends TestCase
                 'acct_last_balance' => '0',
             ]);
         });
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -266,7 +267,7 @@ class LotMatcherServiceTransitionTest extends TestCase
             's3_path' => "tax_docs/{$user->id}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $user->id,
             'is_reviewed' => true,
         ]);
@@ -280,7 +281,7 @@ class LotMatcherServiceTransitionTest extends TestCase
     private function makeBrokerLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ], $overrides));
@@ -292,7 +293,7 @@ class LotMatcherServiceTransitionTest extends TestCase
     private function makeAccountLot(FinAccounts $account, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => null,
+            'document_id' => null,
             'lot_source' => 'analyzer',
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ], $overrides));

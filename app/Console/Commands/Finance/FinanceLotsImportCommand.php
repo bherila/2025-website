@@ -168,13 +168,13 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             $this->info("Cleared {$deleted} existing lot record(s) for account {$acctId}.");
         }
 
-        $taxDocumentId = $this->taxDocumentId();
-        if ($taxDocumentId === false) {
+        $documentId = $this->documentIdFromTaxDocumentOption();
+        if ($documentId === false) {
             return 1;
         }
 
-        [$inserted, $skipped] = $this->persistLots($acctId, $lots, $taxDocumentId, skipDuplicateCheck: $doClear);
-        $this->dispatchMatcherAfterImport($userId, $acctId, $taxDocumentId, $inserted, $deleted, $lots, $deletedYears);
+        [$inserted, $skipped] = $this->persistLots($acctId, $lots, $documentId, skipDuplicateCheck: $doClear);
+        $this->dispatchMatcherAfterImport($userId, $acctId, $documentId, $inserted, $deleted, $lots, $deletedYears);
 
         $this->info("Imported: {$inserted} inserted, {$skipped} skipped (duplicate).");
 
@@ -612,7 +612,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      * @param  array<int, array<string, mixed>>  $lots
      * @return array{0: int, 1: int} [inserted, skipped]
      */
-    private function persistLots(int $acctId, array $lots, ?int $taxDocumentId = null, bool $skipDuplicateCheck = false): array
+    private function persistLots(int $acctId, array $lots, ?int $documentId = null, bool $skipDuplicateCheck = false): array
     {
         $now = now();
         $lotsToInsert = $skipDuplicateCheck ? $this->filterDuplicateLotsInMemory($lots) : $this->filterDuplicateLots($acctId, $lots);
@@ -624,14 +624,14 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         foreach (array_chunk($lotsToInsert, 500) as $chunk) {
             $rows = array_map(
-                fn (array $lot): array => $this->makeLotInsertRow($acctId, $lot, $taxDocumentId, $now),
+                fn (array $lot): array => $this->makeLotInsertRow($acctId, $lot, $documentId, $now),
                 $chunk,
             );
 
             FinAccountLot::query()->insert($rows);
         }
 
-        $this->bulkMatchTransactions($acctId, $taxDocumentId, $lotsToInsert);
+        $this->bulkMatchTransactions($acctId, $documentId, $lotsToInsert);
 
         return [count($lotsToInsert), $skipped];
     }
@@ -643,7 +643,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private function dispatchMatcherAfterImport(
         int $userId,
         int $acctId,
-        ?int $taxDocumentId,
+        ?int $documentId,
         int $inserted,
         int $deleted,
         array $lots,
@@ -653,9 +653,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return;
         }
 
-        if ($taxDocumentId !== null) {
-            $this->lotMatcherAutoDispatchService->dispatchForTaxDocument(
-                taxDocumentId: $taxDocumentId,
+        if ($documentId !== null) {
+            $this->lotMatcherAutoDispatchService->dispatchForDocument(
+                documentId: $documentId,
                 trigger: LotMatcherAutoTrigger::LotsImportCli,
                 accountId: $acctId,
             );
@@ -781,7 +781,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private function makeLotInsertRow(
         int $acctId,
         array $lot,
-        ?int $taxDocumentId,
+        ?int $documentId,
         Carbon $now,
     ): array {
         $costPerUnit = $lot['quantity'] > 0
@@ -802,9 +802,11 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             'realized_gain_loss' => $lot['realized_gain_loss'],
             'is_short_term' => $lot['is_short_term'] ? 1 : 0,
             'lot_source' => 'import_1099b',
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'open_t_id' => null,
             'close_t_id' => null,
-            'tax_document_id' => $taxDocumentId,
+            'document_id' => $documentId,
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
             'form_8949_box' => $lot['form_8949_box'] ?? null,
             'is_covered' => $lot['is_covered'] ?? null,
             'wash_sale_disallowed' => $lot['wash_sale_disallowed'] ?? 0,
@@ -817,7 +819,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     /**
      * @param  array<int, array<string, mixed>>  $lots
      */
-    private function bulkMatchTransactions(int $acctId, ?int $taxDocumentId, array $lots): void
+    private function bulkMatchTransactions(int $acctId, ?int $documentId, array $lots): void
     {
         $matchingLots = [];
         foreach ($lots as $lot) {
@@ -831,7 +833,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         $matchingLotRows = array_values($matchingLots);
-        $insertedLots = $this->loadInsertedLots($acctId, $taxDocumentId, $matchingLotRows);
+        $insertedLots = $this->loadInsertedLots($acctId, $documentId, $matchingLotRows);
         if (empty($insertedLots)) {
             return;
         }
@@ -877,7 +879,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      * @param  array<int, array<string, mixed>>  $lots
      * @return array<string, array<string, mixed>>
      */
-    private function loadInsertedLots(int $acctId, ?int $taxDocumentId, array $lots): array
+    private function loadInsertedLots(int $acctId, ?int $documentId, array $lots): array
     {
         $lotKeys = [];
         $symbols = [];
@@ -899,10 +901,10 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             ->whereIn('purchase_date', array_values(array_unique($purchaseDates)))
             ->whereIn('sale_date', array_values(array_unique($saleDates)));
 
-        if ($taxDocumentId === null) {
-            $query->whereNull('tax_document_id');
+        if ($documentId === null) {
+            $query->whereNull('document_id');
         } else {
-            $query->where('tax_document_id', $taxDocumentId);
+            $query->where('document_id', $documentId);
         }
 
         $insertedLots = [];
@@ -1006,7 +1008,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         return implode(' ', $cases);
     }
 
-    private function taxDocumentId(): int|false|null
+    private function documentIdFromTaxDocumentOption(): int|false|null
     {
         $raw = $this->option('tax-document');
         if ($raw === null || $raw === '') {
@@ -1020,18 +1022,18 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return false;
         }
 
-        $exists = DB::table('fin_tax_documents')
+        $documentId = DB::table('fin_tax_documents')
             ->where('id', $taxDocumentId)
             ->where('user_id', $this->userId())
-            ->exists();
+            ->value('document_id');
 
-        if (! $exists) {
+        if (! is_numeric($documentId)) {
             $this->error("Tax document {$taxDocumentId} not found or does not belong to user {$this->userId()}.");
 
             return false;
         }
 
-        return $taxDocumentId;
+        return (int) $documentId;
     }
 
     /**

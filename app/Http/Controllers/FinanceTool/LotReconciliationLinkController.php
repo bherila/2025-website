@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FinanceTool;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\RelinkLotReconciliationRequest;
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\LotMatcherService;
@@ -68,7 +69,7 @@ class LotReconciliationLinkController extends Controller
         return FinLotReconciliationLink::query()
             ->whereKey($id)
             ->where(function ($query): void {
-                $query->whereHas('taxDocument', fn ($documentQuery) => $documentQuery->where('user_id', (int) Auth::id()))
+                $query->whereHas('document', fn ($documentQuery) => $documentQuery->where('user_id', (int) Auth::id()))
                     ->orWhereHas('brokerLot.account', fn ($accountQuery) => $accountQuery->withoutGlobalScopes()->where('acct_owner', (int) Auth::id()))
                     ->orWhereHas('accountLot.account', fn ($accountQuery) => $accountQuery->withoutGlobalScopes()->where('acct_owner', (int) Auth::id()));
             })
@@ -79,8 +80,21 @@ class LotReconciliationLinkController extends Controller
     {
         return FinAccountLot::query()
             ->whereKey($id)
-            ->whereNotNull('tax_document_id')
-            ->whereHas('taxDocument', fn ($documentQuery) => $documentQuery->where('user_id', (int) Auth::id()))
+            ->whereNotNull('document_id')
+            ->where(function ($query): void {
+                $query->whereIn('lot_origin', [
+                    FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                    FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                ])->orWhereIn('source', [
+                    FinAccountLot::SOURCE_BROKER_1099B,
+                    FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+                ])->orWhereIn('lot_source', [
+                    FinAccountLot::SOURCE_1099B,
+                    FinAccountLot::SOURCE_1099B_UNDERSCORE,
+                    'import_1099b',
+                ]);
+            })
+            ->whereHas('document', fn ($documentQuery) => $documentQuery->where('user_id', (int) Auth::id()))
             ->firstOrFail();
     }
 
@@ -88,7 +102,14 @@ class LotReconciliationLinkController extends Controller
     {
         return FinAccountLot::query()
             ->whereKey($id)
-            ->whereNull('tax_document_id')
+            ->where(function ($query): void {
+                $query->whereNull('document_id')
+                    ->orWhereNotIn('lot_origin', [
+                        FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                        FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                    ]);
+            })
             ->where(function ($query): void {
                 $query->whereNull('source')
                     ->orWhereNotIn('source', [
@@ -113,9 +134,12 @@ class LotReconciliationLinkController extends Controller
      */
     private function linkPayload(FinLotReconciliationLink $link): array
     {
+        $taxDocument = $link->relationLoaded('taxDocument') ? $link->getRelation('taxDocument') : $link->taxDocument;
+
         return [
             'id' => (int) $link->id,
-            'taxDocumentId' => $link->tax_document_id !== null ? (int) $link->tax_document_id : null,
+            'documentId' => $link->document_id !== null ? (int) $link->document_id : null,
+            'taxDocumentId' => $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null,
             'brokerLotId' => $link->broker_lot_id !== null ? (int) $link->broker_lot_id : null,
             'accountLotId' => $link->account_lot_id !== null ? (int) $link->account_lot_id : null,
             'state' => $link->state,

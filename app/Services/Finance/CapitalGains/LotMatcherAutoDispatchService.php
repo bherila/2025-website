@@ -5,6 +5,8 @@ namespace App\Services\Finance\CapitalGains;
 use App\Enums\Finance\LotMatcherAutoTrigger;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
@@ -12,27 +14,27 @@ use Illuminate\Support\Facades\Log;
 class LotMatcherAutoDispatchService
 {
     /**
-     * Dispatch a matcher refresh for one tax document when it contains 1099-B data.
+     * Dispatch a matcher refresh for one unified document when it contains broker-reported disposition data.
      */
-    public function dispatchForTaxDocument(
-        int $taxDocumentId,
+    public function dispatchForDocument(
+        int $documentId,
         LotMatcherAutoTrigger $trigger,
         ?int $accountId = null,
         ?int $taxYear = null,
     ): int {
-        $taxDocument = FileForTaxDocument::query()
-            ->with('accountLinks')
-            ->find($taxDocumentId);
+        $document = FinDocument::query()
+            ->with(['taxDocument.accountLinks', 'accounts'])
+            ->find($documentId);
 
-        if (! $taxDocument instanceof FileForTaxDocument || ! $this->isBroker1099BDocument($taxDocument)) {
+        if (! $document instanceof FinDocument || ! $this->isBrokerDocument($document)) {
             return 0;
         }
 
         $this->queueDocument(
-            taxDocumentId: (int) $taxDocument->id,
+            documentId: (int) $document->id,
             trigger: $trigger,
             accountId: $accountId,
-            taxYear: $taxYear ?? (int) $taxDocument->tax_year,
+            taxYear: $taxYear ?? (int) $document->tax_year,
         );
 
         return 1;
@@ -56,18 +58,30 @@ class LotMatcherAutoDispatchService
 
         $candidateYears = $this->candidateDocumentYears($years);
 
-        $documents = FileForTaxDocument::query()
-            ->with('accountLinks')
+        $documents = FinDocument::query()
+            ->with(['taxDocument.accountLinks', 'accounts'])
             ->where('user_id', $userId)
-            ->whereIn('tax_year', $candidateYears)
             ->where(function (Builder $query) use ($accountId, $candidateYears): void {
-                $query->where(function (Builder $directQuery) use ($accountId): void {
-                    $directQuery->whereIn('form_type', ['1099_b', 'broker_1099'])
-                        ->where('account_id', $accountId);
-                })->orWhereHas('accountLinks', function (Builder $linkQuery) use ($accountId, $candidateYears): void {
-                    $linkQuery->where('account_id', $accountId)
-                        ->where('form_type', '1099_b')
-                        ->whereIn('tax_year', $candidateYears);
+                $query->where(function (Builder $taxFormQuery) use ($accountId, $candidateYears): void {
+                    $taxFormQuery->whereIn('tax_year', $candidateYears)
+                        ->where(function (Builder $linkableQuery) use ($accountId, $candidateYears): void {
+                            $linkableQuery->whereHas('taxDocument', function (Builder $taxDocumentQuery) use ($accountId): void {
+                                $taxDocumentQuery->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
+                                    ->where('account_id', $accountId);
+                            })->orWhereHas('accounts', function (Builder $linkQuery) use ($accountId, $candidateYears): void {
+                                $linkQuery->where('account_id', $accountId)
+                                    ->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B)
+                                    ->whereIn('tax_year', $candidateYears);
+                            });
+                        });
+                })->orWhereHas('lots', function (Builder $lotQuery) use ($accountId, $candidateYears): void {
+                    $lotQuery->where('acct_id', $accountId)
+                        ->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_DISPOSITION)
+                        ->where(function (Builder $dateQuery) use ($candidateYears): void {
+                            foreach ($candidateYears as $year) {
+                                $dateQuery->orWhereBetween('sale_date', ["{$year}-01-01", "{$year}-12-31"]);
+                            }
+                        });
                 });
             })
             ->orderBy('id')
@@ -75,7 +89,7 @@ class LotMatcherAutoDispatchService
 
         $queuedDocumentIds = [];
         foreach ($documents as $document) {
-            if (! $this->isBroker1099BDocument($document)) {
+            if (! $this->isBrokerDocument($document)) {
                 continue;
             }
 
@@ -85,10 +99,10 @@ class LotMatcherAutoDispatchService
             }
 
             $this->queueDocument(
-                taxDocumentId: $documentId,
+                documentId: $documentId,
                 trigger: $trigger,
                 accountId: $accountId,
-                taxYear: (int) $document->tax_year,
+                taxYear: $document->tax_year === null ? $years[0] : (int) $document->tax_year,
             );
             $queuedDocumentIds[$documentId] = true;
         }
@@ -165,9 +179,25 @@ class LotMatcherAutoDispatchService
         return $year >= 1900 && $year <= 2100 ? $year : null;
     }
 
-    private function isBroker1099BDocument(FileForTaxDocument $taxDocument): bool
+    private function isBrokerDocument(FinDocument $document): bool
     {
-        if ((string) $taxDocument->getAttribute('form_type') === '1099_b') {
+        if ($document->document_kind === FinDocument::KIND_STATEMENT) {
+            return FinAccountLot::query()
+                ->where('document_id', $document->id)
+                ->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_DISPOSITION)
+                ->exists();
+        }
+
+        if ($document->document_kind !== FinDocument::KIND_TAX_FORM) {
+            return false;
+        }
+
+        $taxDocument = $document->taxDocument;
+        if (! $taxDocument instanceof FileForTaxDocument) {
+            return false;
+        }
+
+        if ((string) $taxDocument->getAttribute('form_type') === FileForTaxDocument::FORM_TYPE_1099_B) {
             return true;
         }
 
@@ -177,22 +207,22 @@ class LotMatcherAutoDispatchService
 
         return $taxDocument->accountLinks->contains(
             fn (mixed $link): bool => $link instanceof TaxDocumentAccount
-                && (string) $link->getAttribute('form_type') === '1099_b',
+                && (string) $link->getAttribute('form_type') === FileForTaxDocument::FORM_TYPE_1099_B,
         );
     }
 
     private function queueDocument(
-        int $taxDocumentId,
+        int $documentId,
         LotMatcherAutoTrigger $trigger,
         ?int $accountId,
         ?int $taxYear,
     ): void {
-        LotsMatchJob::dispatch($taxDocumentId, $taxYear)
+        LotsMatchJob::dispatch($documentId, $taxYear)
             ->delay(now()->addSeconds(LotsMatchJob::DELAY_SECONDS))
             ->afterCommit();
 
         Log::info('Lot matcher auto-dispatch queued', [
-            'tax_document_id' => $taxDocumentId,
+            'document_id' => $documentId,
             'trigger' => $trigger->value,
             'account_id' => $accountId,
             'tax_year' => $taxYear,

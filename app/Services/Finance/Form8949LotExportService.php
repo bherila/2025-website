@@ -68,16 +68,16 @@ class Form8949LotExportService
         if ($accountLinkId !== null) {
             $link = TaxDocumentAccount::query()
                 ->where('id', $accountLinkId)
-                ->where('tax_document_id', $taxDocumentId)
+                ->where('document_id', $document->document_id)
                 ->where('account_id', $accountId)
-                ->where('form_type', '1099_b')
+                ->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B)
                 ->first();
             if (! $link instanceof TaxDocumentAccount) {
                 throw new NotFoundHttpException;
             }
         }
 
-        return $this->exportableLotQuery(NormalizedLotQuery::forTaxDocument($taxDocumentId))
+        return $this->exportableLotQuery(NormalizedLotQuery::forDocument((int) $document->document_id))
             ->where('acct_id', $accountId)
             ->get();
     }
@@ -93,8 +93,8 @@ class Form8949LotExportService
             ->whereNotNull('proceeds')
             ->with([
                 'account',
-                'taxDocument:id,original_filename,form_type,tax_year,parsed_data',
-                'taxDocument.accountLinks:id,tax_document_id,account_id,form_type,ai_identifier,ai_account_name',
+                'taxDocument:id,document_id,original_filename,form_type,tax_year,parsed_data',
+                'taxDocument.accountLinks:id,document_id,account_id,form_type,ai_identifier,ai_account_name',
             ])
             ->orderBy('acct_id')
             ->orderBy('sale_date')
@@ -250,7 +250,7 @@ class Form8949LotExportService
 
         $entries = [];
         foreach ($document->parsed_data as $entry) {
-            if (! is_array($entry) || ($entry['form_type'] ?? null) !== '1099_b') {
+            if (! is_array($entry) || ($entry['form_type'] ?? null) !== FileForTaxDocument::FORM_TYPE_1099_B) {
                 continue;
             }
 
@@ -283,15 +283,15 @@ class Form8949LotExportService
         $document = $lot->taxDocument;
         if ($document instanceof FileForTaxDocument && $document->relationLoaded('accountLinks')) {
             $link = $document->accountLinks
-                ->first(fn ($candidate): bool => $candidate instanceof TaxDocumentAccount && $candidate->account_id === $lot->acct_id && $candidate->form_type === '1099_b');
+                ->first(fn ($candidate): bool => $candidate instanceof TaxDocumentAccount && $candidate->account_id === $lot->acct_id && $candidate->form_type === FileForTaxDocument::FORM_TYPE_1099_B);
 
             return $link instanceof TaxDocumentAccount ? $link : null;
         }
 
         return TaxDocumentAccount::query()
-            ->where('tax_document_id', $lot->tax_document_id)
+            ->where('document_id', $lot->document_id)
             ->where('account_id', $lot->acct_id)
-            ->where('form_type', '1099_b')
+            ->where('form_type', FileForTaxDocument::FORM_TYPE_1099_B)
             ->first();
     }
 

@@ -47,6 +47,9 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
+    Route::get('/finance/documents', function () {
+        return view('finance.documents');
+    });
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
     Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show']);

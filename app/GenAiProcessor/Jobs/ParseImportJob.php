@@ -13,6 +13,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
+use App\Services\Finance\DocumentIngestionService;
 use App\Services\GenAiFileHelper;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
@@ -318,11 +319,8 @@ class ParseImportJob implements ShouldQueue
             case 'utility_bill':
                 $this->createUtilityBillResults($job, $data);
                 break;
-            case 'tax_document':
-                $this->createTaxDocumentResults($job, $data);
-                break;
-            case 'tax_form_multi_account_import':
-                $this->createMultiAccountTaxDocumentResults($job, $data);
+            case 'document_extract':
+                $this->createDocumentResults($job, $data);
                 break;
         }
     }
@@ -377,23 +375,23 @@ class ParseImportJob implements ShouldQueue
     }
 
     /**
-     * If this is a tax_document job, mark the linked FileForTaxDocument as failed.
-     * This is a no-op for non-tax_document job types (finance_transactions, finance_payslip, etc.)
+     * If this is a document_extract tax-form job, mark the linked FileForTaxDocument as failed.
+     * This is a no-op for non-document extraction job types (finance_transactions, finance_payslip, etc.)
      * since those don't have a linked document record with a genai_status column.
      *
      * Called in all failure catch blocks to prevent the document being stuck in 'pending' indefinitely.
      */
     private function markLinkedTaxDocumentFailed(GenAiImportJob $job): void
     {
-        if (! in_array($job->job_type, ['tax_document', 'tax_form_multi_account_import'])) {
+        if ($job->job_type !== 'document_extract') {
             return;
         }
 
         try {
             $context = $job->getContextArray();
-            $taxDocId = $context['tax_document_id'] ?? null;
-            if ($taxDocId) {
-                $taxDoc = FileForTaxDocument::find($taxDocId);
+            $documentId = $context['document_id'] ?? null;
+            if ($documentId) {
+                $taxDoc = FileForTaxDocument::query()->where('document_id', $documentId)->first();
                 if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
                     $taxDoc->update(['genai_status' => 'failed']);
                 }
@@ -409,7 +407,22 @@ class ParseImportJob implements ShouldQueue
     /**
      * @param  array<string, mixed>  $data
      */
-    private function createTaxDocumentResults(GenAiImportJob $job, array $data): void
+    private function createDocumentResults(GenAiImportJob $job, array $data): void
+    {
+        $context = $job->getContextArray();
+        if (isset($context['accounts']) || isset($context['input_kind']) || $this->hasNumericFirstEntry($data)) {
+            $this->createMultiAccountDocumentResults($job, $data);
+
+            return;
+        }
+
+        $this->createSingleAccountDocumentResults($job, $data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function createSingleAccountDocumentResults(GenAiImportJob $job, array $data): void
     {
         // Store the result in genai_import_results
         GenAiImportResult::create([
@@ -421,33 +434,34 @@ class ParseImportJob implements ShouldQueue
 
         // Update the linked FileForTaxDocument with parsed data
         $context = $job->getContextArray();
-        $taxDocId = $context['tax_document_id'] ?? null;
-        if ($taxDocId) {
-            $taxDoc = FileForTaxDocument::find($taxDocId);
+        $documentId = $context['document_id'] ?? null;
+        if ($documentId) {
+            $taxDoc = FileForTaxDocument::query()->where('document_id', $documentId)->first();
             if ($taxDoc && $taxDoc->genai_job_id === $job->id) {
                 $taxDoc->update([
                     'parsed_data' => $data,
                     'genai_status' => 'parsed',
                 ]);
+                app(DocumentIngestionService::class)->syncFromTaxDocument($taxDoc->refresh());
             }
         }
     }
 
     /**
-     * Handle results for a tax_form_multi_account_import job.
+     * Handle results for a multi-account document_extract job.
      *
      * The AI returns a JSON array — one element per account/form pair. Each element has:
      *   account_identifier, account_name, form_type, tax_year, parsed_data
      *
      * This method:
-     * 1. Stores the full array on the parent fin_tax_documents.parsed_data.
+     * 1. Stores the full array on the tax-form detail parsed_data.
      * 2. Attempts server-side account matching (last-4 suffix, then name overlap).
-     * 3. Creates one fin_tax_document_accounts row per detected account/form pair.
+     * 3. Creates one fin_document_accounts row per detected account/form pair.
      *    Rows with no match have account_id = null; the user resolves them in the UI.
      *
      * @param  array<string, mixed>  $data
      */
-    private function createMultiAccountTaxDocumentResults(GenAiImportJob $job, array $data): void
+    private function createMultiAccountDocumentResults(GenAiImportJob $job, array $data): void
     {
         GenAiImportResult::create([
             'job_id' => $job->id,
@@ -457,12 +471,12 @@ class ParseImportJob implements ShouldQueue
         ]);
 
         $context = $job->getContextArray();
-        $taxDocId = $context['tax_document_id'] ?? null;
-        if (! $taxDocId) {
+        $documentId = $context['document_id'] ?? null;
+        if (! $documentId) {
             return;
         }
 
-        $taxDoc = FileForTaxDocument::find($taxDocId);
+        $taxDoc = FileForTaxDocument::query()->where('document_id', $documentId)->first();
         if (! $taxDoc || $taxDoc->genai_job_id !== $job->id) {
             return;
         }
@@ -472,13 +486,14 @@ class ParseImportJob implements ShouldQueue
             ->get(['acct_id', 'acct_name', 'acct_number']);
 
         // Normalise the AI output: wrap a bare object in an array.
-        $entries = isset($data[0]) ? $data : [$data];
+        $entries = $this->hasNumericFirstEntry($data) ? $data : [$data];
 
         // Wrap lot deletion, link creation, and parent update in a transaction so a
         // mid-loop failure leaves the document in a consistent state (no partial imports).
         DB::transaction(function () use ($taxDoc, $entries, $userAccounts, $context): void {
             // Also clear existing account links so re-processing replaces them cleanly.
             $taxDoc->accountLinks()->delete();
+            $taxDoc->documentAccounts()->delete();
 
             foreach ($entries as $entry) {
                 $accountId = $this->matchAccount($entry, $userAccounts);
@@ -490,7 +505,7 @@ class ParseImportJob implements ShouldQueue
                 $rawFormType = trim((string) ($entry['form_type'] ?? ''));
                 if (! in_array($rawFormType, FileForTaxDocument::FORM_TYPES, true)) {
                     \Log::error('ParseImportJob: unrecognized form_type from AI, skipping entry', [
-                        'tax_document_id' => $taxDoc->id,
+                        'document_id' => $taxDoc->document_id,
                         'raw_form_type' => $rawFormType,
                     ]);
 
@@ -528,9 +543,18 @@ class ParseImportJob implements ShouldQueue
                 'parsed_data' => $entries,
                 'genai_status' => 'parsed',
             ]);
+            app(DocumentIngestionService::class)->syncFromTaxDocument($taxDoc->refresh());
 
-            app(LotImportFromParsedDataService::class)->rebuildForTaxDocument((int) $taxDoc->id, LotMatcherAutoTrigger::ParseImport);
+            app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $taxDoc->document_id, LotMatcherAutoTrigger::ParseImport);
         });
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $data
+     */
+    private function hasNumericFirstEntry(array $data): bool
+    {
+        return array_key_first($data) === 0;
     }
 
     /**

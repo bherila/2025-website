@@ -40,7 +40,7 @@ class FinanceTaxImportCommand extends BaseFinanceCommand
                         'parsed_data' => ['type' => 'object', 'description' => 'Structured form data (form-type-specific JSON).'],
                         'account_links' => [
                             'type' => 'array',
-                            'description' => 'Additional account links (fin_tax_document_accounts rows).',
+                            'description' => 'Additional account links (fin_document_accounts rows).',
                             'items' => [
                                 'type' => 'object',
                                 'properties' => [

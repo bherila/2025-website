@@ -57,8 +57,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   finance_transactions: 'Finance Transactions',
   finance_payslip: 'Payslip',
   utility_bill: 'Utility Bill',
-  tax_document: 'Tax Document',
-  tax_form_multi_account_import: 'Multi-account Tax Import',
+  document_extract: 'Document Extract',
 }
 
 function formatBytes(bytes: number): string {

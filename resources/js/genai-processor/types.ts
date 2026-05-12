@@ -2,8 +2,7 @@ export type GenAiJobType =
   | 'finance_transactions'
   | 'finance_payslip'
   | 'utility_bill'
-  | 'tax_document'
-  | 'tax_form_multi_account_import'
+  | 'document_extract'
 
 export type GenAiJobStatus =
   | 'pending'

@@ -290,10 +290,11 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $result = $service->validateContext('tax_document', [
+        $result = $service->validateContext('document_extract', [
             'tax_year' => 2024,
             'form_type' => 'w2',
-            'tax_document_id' => 1,
+            'document_id' => 1,
+            'document_kind' => 'tax_form',
         ]);
         $this->assertTrue($result);
     }
@@ -304,14 +305,14 @@ class GenAiJobDispatcherServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Unexpected context keys/');
-        $service->validateContext('tax_document', ['invalid_key' => 'value']);
+        $service->validateContext('document_extract', ['invalid_key' => 'value']);
     }
 
     public function test_build_prompt_for_w2(): void
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_document', ['form_type' => 'w2', 'tax_year' => 2024]);
+        $prompt = $service->buildPrompt('document_extract', ['form_type' => 'w2', 'tax_year' => 2024]);
         $this->assertStringContainsString('W-2', $prompt);
         $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_W2_TOOL_NAME, $prompt);
         $this->assertStringContainsString('2024', $prompt);
@@ -321,7 +322,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_int', 'tax_year' => 2024]);
+        $prompt = $service->buildPrompt('document_extract', ['form_type' => '1099_int', 'tax_year' => 2024]);
         $this->assertStringContainsString('1099-INT', $prompt);
         $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099INT_TOOL_NAME, $prompt);
     }
@@ -330,7 +331,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_div', 'tax_year' => 2024]);
+        $prompt = $service->buildPrompt('document_extract', ['form_type' => '1099_div', 'tax_year' => 2024]);
         $this->assertStringContainsString('1099-DIV', $prompt);
         $this->assertStringContainsString(GenAiJobDispatcherService::TAX_DOCUMENT_1099DIV_TOOL_NAME, $prompt);
     }
@@ -339,8 +340,8 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_document', ['form_type' => '1099_r', 'tax_year' => 2024]);
-        $payload = $service->buildGenerateContentPayload('tax_document', 'files/abc123', 'application/pdf', $prompt);
+        $prompt = $service->buildPrompt('document_extract', ['form_type' => '1099_r', 'tax_year' => 2024]);
+        $payload = $service->buildGenerateContentPayload('document_extract', 'files/abc123', 'application/pdf', $prompt);
 
         $this->assertStringContainsString('1099-R', $prompt);
         $this->assertStringContainsString('return both characters concatenated with no separator', $prompt);
@@ -363,8 +364,8 @@ class GenAiJobDispatcherServiceTest extends TestCase
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_document', ['form_type' => 'w2', 'tax_year' => 2024]);
-        $payload = $service->buildGenerateContentPayload('tax_document', 'files/abc123', 'application/pdf', $prompt);
+        $prompt = $service->buildPrompt('document_extract', ['form_type' => 'w2', 'tax_year' => 2024]);
+        $payload = $service->buildGenerateContentPayload('document_extract', 'files/abc123', 'application/pdf', $prompt);
 
         $this->assertArrayHasKey('tools', $payload);
         $this->assertArrayHasKey('toolConfig', $payload);
@@ -399,7 +400,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             ]],
         ];
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertIsArray($data);
         $this->assertEquals('Acme Corp', $data['employer_name']);
         $this->assertEquals(75000.0, $data['box1_wages']);
@@ -424,7 +425,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             ]],
         ];
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertIsArray($data);
         $this->assertSame('First National Bank', $data['payer_name']);
@@ -450,7 +451,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             ]],
         ];
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertIsArray($data);
         $this->assertSame('IRA Custodian', $data['payer_name']);
@@ -481,7 +482,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             'stop_reason' => 'end_turn',
         ];
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertIsArray($data);
         $this->assertSame('X65-385336', $data[0]['account_identifier']);
@@ -518,7 +519,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             ],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+        $data = $service->extractGenerateContentData('document_extract', [
             'content' => [['type' => 'text', 'text' => $toon]],
             'stop_reason' => 'end_turn',
         ]);
@@ -546,7 +547,7 @@ class GenAiJobDispatcherServiceTest extends TestCase
             ],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+        $data = $service->extractGenerateContentData('document_extract', [
             'content' => [['type' => 'text', 'text' => $toon]],
             'stop_reason' => 'end_turn',
         ]);
@@ -587,7 +588,7 @@ TEXT,
             'stop_reason' => 'end_turn',
         ];
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertIsArray($data);
         $this->assertCount(2, $data);
@@ -622,7 +623,7 @@ TEXT,
             'stop_reason' => 'end_turn',
         ];
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertIsArray($data);
         $this->assertSame('123456789', $data[0]['account_identifier']);
@@ -634,7 +635,7 @@ TEXT,
     {
         $service = new GenAiJobDispatcherService;
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+        $data = $service->extractGenerateContentData('document_extract', [
             'content' => [['type' => 'text', 'text' => 'not valid structured output']],
             'stop_reason' => 'end_turn',
         ]);
@@ -646,7 +647,7 @@ TEXT,
     {
         $service = new GenAiJobDispatcherService;
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+        $data = $service->extractGenerateContentData('document_extract', [
             'content' => [[
                 'type' => 'text',
                 'text' => <<<'TEXT'
@@ -678,7 +679,7 @@ TEXT,
             ]],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', [
+        $data = $service->extractGenerateContentData('document_extract', [
             'content' => [['type' => 'text', 'text' => $toon]],
             'stop_reason' => 'end_turn',
         ]);
@@ -707,7 +708,7 @@ TEXT,
       box1_interest: 12.34
 TEXT);
 
-        $data = $service->extractGenerateContentData('tax_form_multi_account_import', $response, $client);
+        $data = $service->extractGenerateContentData('document_extract', $response, $client);
 
         $this->assertIsArray($data);
         $this->assertSame('X65-385336', $data[0]['account_identifier']);
@@ -715,14 +716,13 @@ TEXT);
         $this->assertSame(12.34, $data[0]['parsed_data']['box1_interest']);
     }
 
-    public function test_multi_account_tax_import_uses_assistant_prefill(): void
+    public function test_document_extract_does_not_use_assistant_prefill_without_context(): void
     {
         $service = new GenAiJobDispatcherService;
 
         $client = $this->fakeGenAiClient(provider: 'anthropic', model: 'claude-sonnet-4-5');
 
-        $this->assertSame('accounts[', $service->assistantPrefillForJobType('tax_form_multi_account_import', $client));
-        $this->assertNull($service->assistantPrefillForJobType('tax_document', $client));
+        $this->assertNull($service->assistantPrefillForJobType('document_extract', $client));
     }
 
     public function test_multi_account_tax_import_does_not_prefill_unsupported_claude_models(): void
@@ -730,14 +730,14 @@ TEXT);
         $service = new GenAiJobDispatcherService;
         $client = $this->fakeGenAiClient(provider: 'bedrock', model: 'us.anthropic.claude-sonnet-4-6');
 
-        $this->assertNull($service->assistantPrefillForJobType('tax_form_multi_account_import', $client));
+        $this->assertNull($service->assistantPrefillForJobType('document_extract', $client));
     }
 
     public function test_multi_account_tax_import_prompt_requests_toon(): void
     {
         $service = new GenAiJobDispatcherService;
 
-        $prompt = $service->buildPrompt('tax_form_multi_account_import', [
+        $prompt = $service->buildPrompt('document_extract', [
             'tax_year' => 2025,
             'accounts' => [],
         ]);
@@ -811,7 +811,7 @@ TEXT);
             ]],
         ];
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertIsArray($data);
         $this->assertSame(523.45, $data['box1_interest']); // should be cast to float
         $this->assertNull($data['box4_fed_tax']);
@@ -847,7 +847,7 @@ TEXT);
             'field_1' => 15000.0,
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertIsArray($data);
         $this->assertSame('2026.1', $data['schemaVersion']);
         $this->assertSame('K-1-1065', $data['formType']);
@@ -865,7 +865,7 @@ TEXT);
             'field_C' => 'Ogden',
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertSame('12-3456789', $data['fields']['A']['value']);
         $this->assertSame("Acme Partners\n123 Main St", $data['fields']['B']['value']);
         $this->assertSame('Ogden', $data['fields']['C']['value']);
@@ -878,7 +878,7 @@ TEXT);
         // Only provide field_A; field_B is absent
         $response = $this->buildK1ToolResponse(['field_A' => '12-3456789']);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayHasKey('A', $data['fields']);
         $this->assertArrayNotHasKey('B', $data['fields']);
     }
@@ -891,7 +891,7 @@ TEXT);
 
         foreach ($cases as $value) {
             $response = $this->buildK1ToolResponse(['field_D' => $value]);
-            $data = $service->extractGenerateContentData('tax_document', $response);
+            $data = $service->extractGenerateContentData('document_extract', $response);
             $this->assertSame('true', $data['fields']['D']['value'], "Expected 'true' for input: ".var_export($value, true));
         }
     }
@@ -904,7 +904,7 @@ TEXT);
 
         foreach ($cases as $value) {
             $response = $this->buildK1ToolResponse(['field_D' => $value]);
-            $data = $service->extractGenerateContentData('tax_document', $response);
+            $data = $service->extractGenerateContentData('document_extract', $response);
             $this->assertSame('false', $data['fields']['D']['value'], "Expected 'false' for input: ".var_export($value, true));
         }
     }
@@ -914,7 +914,7 @@ TEXT);
         $service = new GenAiJobDispatcherService;
 
         $response = $this->buildK1ToolResponse([]);
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayNotHasKey('D', $data['fields']);
         $this->assertArrayNotHasKey('H2', $data['fields']);
     }
@@ -929,7 +929,7 @@ TEXT);
             'field_12' => 0,
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertSame('15000.5', $data['fields']['1']['value']);
         $this->assertSame('2500', $data['fields']['5']['value']);
         $this->assertSame('0', $data['fields']['12']['value']);
@@ -946,7 +946,7 @@ TEXT);
             ],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayHasKey('13', $data['codes']);
         $this->assertCount(2, $data['codes']['13']);
         $this->assertSame('G', $data['codes']['13'][0]['code']);
@@ -965,7 +965,7 @@ TEXT);
             'codes_13' => [['code' => 'G', 'value' => 200.0]],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayNotHasKey('11', $data['codes']);
         $this->assertArrayHasKey('13', $data['codes']);
     }
@@ -980,7 +980,7 @@ TEXT);
             ],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayHasKey('k3', $data);
         $this->assertCount(1, $data['k3']['sections']);
         $this->assertSame('K3-1', $data['k3']['sections'][0]['sectionId']);
@@ -994,7 +994,7 @@ TEXT);
         $service = new GenAiJobDispatcherService;
 
         $response = $this->buildK1ToolResponse(['field_A' => 'test']);
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
 
         $this->assertArrayHasKey('extraction', $data);
         $this->assertSame('gemini', $data['extraction']['model']);
@@ -1015,7 +1015,7 @@ TEXT);
             ],
         ]);
 
-        $data = $service->extractGenerateContentData('tax_document', $response);
+        $data = $service->extractGenerateContentData('document_extract', $response);
         $this->assertArrayHasKey('20', $data['codes']);
         $this->assertCount(1, $data['codes']['20']);
         $this->assertSame('V', $data['codes']['20'][0]['code']);

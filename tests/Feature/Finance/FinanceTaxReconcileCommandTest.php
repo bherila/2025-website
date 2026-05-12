@@ -3,6 +3,7 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -116,7 +117,7 @@ class FinanceTaxReconcileCommandTest extends TestCase
      */
     private function createTaxDocument(int $userId, array $overrides): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        return app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => '1099_int',
@@ -125,7 +126,7 @@ class FinanceTaxReconcileCommandTest extends TestCase
             's3_path' => '',
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 0,
-            'file_hash' => str_repeat('c', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => false,
         ], $overrides));

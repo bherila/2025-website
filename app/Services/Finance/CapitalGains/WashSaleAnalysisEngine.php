@@ -323,7 +323,14 @@ class WashSaleAnalysisEngine
      */
     private function accountLotSourceQuery(Builder $query): void
     {
-        $query->whereNull('tax_document_id')
+        $query->where(function (Builder $originQuery): void {
+            $originQuery->whereNull('lot_origin')
+                ->orWhereNotIn('lot_origin', [
+                    FinAccountLot::ORIGIN_1099B_DISPOSITION,
+                    FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+                    FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                ]);
+        })
             ->where(function ($sourceQuery): void {
                 $sourceQuery->whereNull('lot_source')
                     ->orWhereNotIn('lot_source', [FinAccountLot::SOURCE_1099B, FinAccountLot::SOURCE_1099B_UNDERSCORE]);

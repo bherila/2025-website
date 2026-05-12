@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use Tests\TestCase;
 
 class TaxYearLotsMatchEndpointTest extends TestCase
@@ -43,14 +44,14 @@ class TaxYearLotsMatchEndpointTest extends TestCase
             ->assertJsonPath('documents.0.tax_document_id', $document->id);
 
         $this->assertDatabaseHas('fin_lot_reconciliation_links', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
         ]);
         $this->assertDatabaseMissing('fin_lot_reconciliation_links', [
-            'tax_document_id' => $unreviewedDocument->id,
+            'document_id' => $unreviewedDocument->document_id,
         ]);
         $this->assertDatabaseMissing('fin_lot_reconciliation_links', [
-            'tax_document_id' => $otherDocument->id,
+            'document_id' => $otherDocument->document_id,
         ]);
     }
 
@@ -93,7 +94,7 @@ class TaxYearLotsMatchEndpointTest extends TestCase
      */
     private function makeBrokerDocument(int $userId, FinAccounts $account, array $overrides = []): FileForTaxDocument
     {
-        $document = FileForTaxDocument::create(array_merge([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -102,7 +103,7 @@ class TaxYearLotsMatchEndpointTest extends TestCase
             's3_path' => "tax_docs/{$userId}/broker-1099.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('c', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ], $overrides));
@@ -118,7 +119,7 @@ class TaxYearLotsMatchEndpointTest extends TestCase
     private function makeBrokerLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ], $overrides));
@@ -130,7 +131,7 @@ class TaxYearLotsMatchEndpointTest extends TestCase
     private function makeAccountLot(FinAccounts $account, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => null,
+            'document_id' => null,
             'lot_source' => 'analyzer',
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ], $overrides));

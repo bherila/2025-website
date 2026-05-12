@@ -136,8 +136,7 @@ Create an import job after the file has been uploaded to S3.
 | `finance_transactions` | `accounts` (array of `{name, last4}`)           |
 | `finance_payslip`      | `employment_entity_id`, `file_count`            |
 | `utility_bill`         | `account_type`, `utility_account_id`, `file_count` |
-| `tax_document`         | `tax_year`, `form_type`, `tax_document_id`      |
-| `tax_form_multi_account_import` | `tax_document_id`, `tax_year`, `accounts` (array of `{name, last4}`) |
+| `document_extract`     | `document_id`, `document_kind`, `tax_year`, `form_type`, `accounts` (array of `{name, last4}`) |
 
 Context JSON is strictly validated per `job_type` to prevent injection attacks. Unexpected keys are rejected with a 422 error.
 
@@ -409,4 +408,3 @@ resources/js/genai-processor/
 resources/js/components/admin/
 └── AdminGenAiJobsPage.tsx             # Admin jobs management UI
 ```
-

@@ -27,7 +27,7 @@ This document enumerates every place the application produces downloadable files
 
 - **Endpoint:** `GET /api/finance/tax-documents/{id}/download`
 - **Controller:** `app/Http/Controllers/FinanceTool/TaxDocumentController.php` (`download()`)
-- **Client:** `TaxDocumentReviewModal`, `AccountTaxDocumentsSection`
+- **Client:** `TaxDocumentReviewModal`, `FinanceDocumentsPage`
 - **Contents:** W-2, 1099-*, K-1, K-3, broker consolidated 1099s and similar tax forms.
 - **Current watermark:** none; download count is tracked server-side.
 

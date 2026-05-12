@@ -11,6 +11,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -21,7 +22,7 @@ use Tests\TestCase;
  * Tests for ParseImportJob's multi-account import logic and service-backed 1099-B lot import:
  * - matchAccount
  * - LotImportFromParsedDataService::importTransactions
- * - createMultiAccountTaxDocumentResults (integration)
+ * - createMultiAccountDocumentResults (integration)
  */
 class ParseImportJob1099BTest extends TestCase
 {
@@ -63,7 +64,7 @@ class ParseImportJob1099BTest extends TestCase
 
     private function makeTaxDoc(int $userId, int $genaiJobId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        $attributes = [
             'user_id' => $userId,
             'tax_year' => 2024,
             'form_type' => 'broker_1099',
@@ -74,23 +75,29 @@ class ParseImportJob1099BTest extends TestCase
             'file_size_bytes' => 1024,
             'file_hash' => str_repeat('a', 64),
             'uploaded_by_user_id' => $userId,
-            'genai_job_id' => $genaiJobId,
             'genai_status' => 'processing',
-        ]);
+        ];
+
+        if ($genaiJobId > 0) {
+            $attributes['genai_job_id'] = $genaiJobId;
+        }
+
+        return app(DocumentIngestionService::class)->createTaxFormDetail($attributes);
     }
 
     private function makeGenAiJob(int $userId, int $taxDocId, int $taxYear = 2024): GenAiImportJob
     {
         return GenAiImportJob::create([
             'user_id' => $userId,
-            'job_type' => 'tax_form_multi_account_import',
+            'job_type' => 'document_extract',
             'file_hash' => str_repeat('b', 64),
             'original_filename' => 'consolidated.pdf',
             's3_path' => "tax_docs/{$userId}/consolidated.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
             'context_json' => json_encode([
-                'tax_document_id' => $taxDocId,
+                'document_id' => $taxDocId,
+                'document_kind' => 'tax_form',
                 'tax_year' => $taxYear,
                 'accounts' => [],
             ]),
@@ -172,7 +179,7 @@ class ParseImportJob1099BTest extends TestCase
         $user = $this->createUser();
         $account = $this->makeAccount($user->id, 'Fidelity');
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $taxDocId = $taxDoc->id;
+        $taxDocId = (int) $taxDoc->document_id;
 
         $transactions = [[
             'symbol' => 'AAPL',
@@ -202,7 +209,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertSame(300.0, (float) $lot->realized_gain_loss);
         $this->assertSame('1099b', $lot->lot_source);
         $this->assertSame('037833100', $lot->cusip);
-        $this->assertSame($taxDocId, $lot->tax_document_id);
+        $this->assertSame($taxDocId, $lot->document_id);
         $this->assertSame('D', $lot->form_8949_box);
         $this->assertTrue($lot->is_covered);
         $this->assertSame(12.34, (float) $lot->accrued_market_discount);
@@ -239,7 +246,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->document_id);
 
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->firstOrFail();
         $this->assertSame('APPLE INC', $lot->symbol);
@@ -260,7 +267,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $shortTermTx, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $shortTermTx, (int) $taxDoc->document_id);
 
         $this->assertDatabaseHas('fin_account_lots', [
             'symbol' => 'TSLA',
@@ -282,7 +289,7 @@ class ParseImportJob1099BTest extends TestCase
             'is_short_term' => 'false', 'additional_info' => null,
         ]];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->document_id);
 
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'NVDA')->firstOrFail();
         $this->assertFalse($lot->is_covered);
@@ -319,7 +326,7 @@ class ParseImportJob1099BTest extends TestCase
             ],
         ];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->document_id);
 
         $lots = FinAccountLot::where('acct_id', $account->acct_id)
             ->orderBy('symbol')
@@ -362,7 +369,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ]];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->document_id);
 
         // Lot is created and linked to the native sell without creating a duplicate transaction.
         $lot = FinAccountLot::where('acct_id', $account->acct_id)->where('symbol', 'MSFT')->firstOrFail();
@@ -406,7 +413,7 @@ class ParseImportJob1099BTest extends TestCase
             'additional_info' => null,
         ];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, [$lotRow, $lotRow], (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, [$lotRow, $lotRow], (int) $taxDoc->document_id);
 
         $closeIds = FinAccountLot::where('acct_id', $account->acct_id)
             ->where('symbol', 'MSFT')
@@ -438,13 +445,13 @@ class ParseImportJob1099BTest extends TestCase
                 'additional_info' => null],
         ];
 
-        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->id);
+        app(LotImportFromParsedDataService::class)->importTransactions($account->acct_id, $transactions, (int) $taxDoc->document_id);
 
         $this->assertDatabaseCount('fin_account_lots', 0);
     }
 
     // ---------------------------------------------------------------------------
-    // createMultiAccountTaxDocumentResults (integration)
+    // createMultiAccountDocumentResults (integration)
     // ---------------------------------------------------------------------------
 
     public function test_create_multi_account_results_creates_links_and_lots(): void
@@ -455,7 +462,7 @@ class ParseImportJob1099BTest extends TestCase
 
         // Bootstrap the tax doc first (we need its id for the GenAI job context)
         $taxDoc = $this->makeTaxDoc($user->id, 0); // placeholder genai_job_id
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [
@@ -485,20 +492,20 @@ class ParseImportJob1099BTest extends TestCase
         ];
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
         $ref->invoke($jobInstance, $genaiJob, $data);
 
         // Two account links created
-        $this->assertDatabaseCount('fin_tax_document_accounts', 2);
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $taxDoc->id,
+        $this->assertDatabaseCount('fin_document_accounts', 2);
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $taxDoc->document_id,
             'account_id' => $account->acct_id,
             'form_type' => '1099_div',
             'ai_identifier' => 'X65-385336',
         ]);
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $taxDoc->id,
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $taxDoc->document_id,
             'form_type' => '1099_b',
         ]);
 
@@ -506,7 +513,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->assertDatabaseHas('fin_account_lots', [
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
-            'tax_document_id' => $taxDoc->id,
+            'document_id' => $taxDoc->document_id,
         ]);
 
         // Parent doc marked parsed
@@ -516,7 +523,7 @@ class ParseImportJob1099BTest extends TestCase
         ]);
         Queue::assertPushed(
             LotsMatchJob::class,
-            fn (LotsMatchJob $job): bool => $job->taxDocumentId === (int) $taxDoc->id,
+            fn (LotsMatchJob $job): bool => $job->documentId === (int) $taxDoc->document_id,
         );
     }
 
@@ -526,7 +533,7 @@ class ParseImportJob1099BTest extends TestCase
         $account = $this->makeAccount($user->id, 'Morgan Stanley', '367-671847-209');
 
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [[
@@ -567,12 +574,12 @@ class ParseImportJob1099BTest extends TestCase
         ]];
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
         $ref->invoke($jobInstance, $genaiJob, $data);
 
-        $this->assertSame(2, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
-        $this->assertSame(50.0, (float) FinAccountLot::where('tax_document_id', $taxDoc->id)->sum('wash_sale_disallowed'));
+        $this->assertSame(2, FinAccountLot::where('document_id', $taxDoc->document_id)->count());
+        $this->assertSame(50.0, (float) FinAccountLot::where('document_id', $taxDoc->document_id)->sum('wash_sale_disallowed'));
         $this->assertDatabaseHas('fin_account_lots', [
             'acct_id' => $account->acct_id,
             'symbol' => 'WASHSALEADJ',
@@ -588,7 +595,7 @@ class ParseImportJob1099BTest extends TestCase
         $account = $this->makeAccount($user->id, 'Morgan Stanley', '367-671847-209');
 
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [[
@@ -631,11 +638,11 @@ class ParseImportJob1099BTest extends TestCase
         ]];
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
         $ref->invoke($jobInstance, $genaiJob, $data);
 
-        $this->assertSame(2, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        $this->assertSame(2, FinAccountLot::where('document_id', $taxDoc->document_id)->count());
         // Per-row treatment was gross_of_wash_sales, so the synthetic row's normalised
         // realized_gain_loss ends up at +$50 (gross 0 + wash 50) per the same Form 8949
         // math used by the existing doc-level synthesis test above.
@@ -654,7 +661,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->makeAccount($user->id, 'Fidelity', 'X65-385336');
 
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [[
@@ -695,14 +702,14 @@ class ParseImportJob1099BTest extends TestCase
         ]];
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
         $ref->invoke($jobInstance, $genaiJob, $data);
 
         // Basis-adjusted broker explicitly tells us not to add a Form 8949 W row.
-        $this->assertSame(1, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        $this->assertSame(1, FinAccountLot::where('document_id', $taxDoc->document_id)->count());
         $this->assertDatabaseMissing('fin_account_lots', [
-            'tax_document_id' => $taxDoc->id,
+            'document_id' => $taxDoc->document_id,
             'symbol' => 'WASHSALEADJ',
         ]);
     }
@@ -713,7 +720,7 @@ class ParseImportJob1099BTest extends TestCase
         $this->makeAccount($user->id, 'Fidelity', 'X65-385336');
 
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [
@@ -740,17 +747,17 @@ class ParseImportJob1099BTest extends TestCase
             ]));
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
         $ref->invoke($jobInstance, $genaiJob, $data);
 
         // Only the valid entry was persisted — the bad entry is silently dropped
-        $this->assertDatabaseCount('fin_tax_document_accounts', 1);
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $taxDoc->id,
+        $this->assertDatabaseCount('fin_document_accounts', 1);
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $taxDoc->document_id,
             'form_type' => '1099_div',
         ]);
-        $this->assertDatabaseMissing('fin_tax_document_accounts', [
+        $this->assertDatabaseMissing('fin_document_accounts', [
             'form_type' => 'broker_1099',
         ]);
     }
@@ -761,7 +768,7 @@ class ParseImportJob1099BTest extends TestCase
         $account = $this->makeAccount($user->id, 'Fidelity', 'X65-385336');
 
         $taxDoc = $this->makeTaxDoc($user->id, 0);
-        $genaiJob = $this->makeGenAiJob($user->id, $taxDoc->id);
+        $genaiJob = $this->makeGenAiJob($user->id, (int) $taxDoc->document_id);
         $taxDoc->update(['genai_job_id' => $genaiJob->id]);
 
         $data = [[
@@ -781,7 +788,7 @@ class ParseImportJob1099BTest extends TestCase
         ]];
 
         $jobInstance = new ParseImportJob($genaiJob->id);
-        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountTaxDocumentResults');
+        $ref = new ReflectionMethod($jobInstance, 'createMultiAccountDocumentResults');
         $ref->setAccessible(true);
 
         // Run twice to verify idempotency
@@ -789,7 +796,7 @@ class ParseImportJob1099BTest extends TestCase
         $ref->invoke($jobInstance, $genaiJob, $data);
 
         // Exactly one link and one lot — not doubled
-        $this->assertSame(1, TaxDocumentAccount::where('tax_document_id', $taxDoc->id)->count());
-        $this->assertSame(1, FinAccountLot::where('tax_document_id', $taxDoc->id)->count());
+        $this->assertSame(1, TaxDocumentAccount::where('document_id', $taxDoc->document_id)->count());
+        $this->assertSame(1, FinAccountLot::where('document_id', $taxDoc->document_id)->count());
     }
 }

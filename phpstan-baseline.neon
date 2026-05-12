@@ -61,33 +61,9 @@ parameters:
 			path: app/Finance/RulesEngine/Actions/NegateAmountActionHandler.php
 
 		-
-			message: '#^Relation ''actions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
-			identifier: larastan.relationExistence
-			count: 2
-			path: app/Finance/RulesEngine/TransactionRuleLoader.php
-
-		-
-			message: '#^Relation ''conditions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
-			identifier: larastan.relationExistence
-			count: 2
-			path: app/Finance/RulesEngine/TransactionRuleLoader.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinRule\:\:\$actions\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
-
-		-
-			message: '#^Access to an undefined property App\\Models\\FinanceTool\\FinRule\:\:\$conditions\.$#'
-			identifier: property.notFound
-			count: 3
-			path: app/Finance/RulesEngine/TransactionRuleProcessor.php
-
-		-
 			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
 			identifier: isset.offset
-			count: 3
+			count: 2
 			path: app/GenAiProcessor/Jobs/ParseImportJob.php
 
 		-
@@ -341,18 +317,6 @@ parameters:
 			identifier: deadCode.unreachable
 			count: 1
 			path: app/Http/Controllers/FinanceTool/FinancePayslipController.php
-
-		-
-			message: '#^Relation ''actions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
-
-		-
-			message: '#^Relation ''conditions'' is not found in App\\Models\\FinanceTool\\FinRule model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/FinanceTool/FinanceRulesApiController.php
 
 		-
 			message: '#^Unable to resolve the template type TKey in call to function collect$#'
@@ -1285,30 +1249,6 @@ parameters:
 			path: app/Models/FinanceTool/FinPayslips.php
 
 		-
-			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:actions\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinRule.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:conditions\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinRule.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:logs\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinRule.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\FinRule\:\:user\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/FinanceTool/FinRule.php
-
-		-
 			message: '#^Method App\\Models\\FinanceTool\\FinRuleAction\:\:rule\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
@@ -1367,24 +1307,6 @@ parameters:
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/FinanceTool/FinStatement.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:account\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/FinanceTool/TaxDocumentAccount.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:createLink\(\) should return static\(App\\Models\\FinanceTool\\TaxDocumentAccount\) but returns App\\Models\\FinanceTool\\TaxDocumentAccount\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Models/FinanceTool/TaxDocumentAccount.php
-
-		-
-			message: '#^Method App\\Models\\FinanceTool\\TaxDocumentAccount\:\:document\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/FinanceTool/TaxDocumentAccount.php
 
 		-
 			message: '#^Method App\\Models\\LoginAuditLog\:\:user\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'

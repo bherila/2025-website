@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance\CapitalGains;
 
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
@@ -34,6 +35,7 @@ class CapitalGainsImportNormalizer
 
         $account = $lot->account;
         $accountName = $account instanceof FinAccounts ? (string) $account->acct_name : null;
+        $taxDocument = $lot->taxDocument;
 
         return new CanonicalCapitalGainTransaction(
             id: "{$source}:{$lot->lot_id}",
@@ -54,7 +56,7 @@ class CapitalGainsImportNormalizer
             accruedMarketDiscount: $lot->accrued_market_discount !== null ? (float) $lot->accrued_market_discount : null,
             accountId: (int) $lot->acct_id,
             accountName: $accountName,
-            taxDocumentId: $lot->tax_document_id !== null ? (int) $lot->tax_document_id : null,
+            taxDocumentId: $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null,
             lotId: (int) $lot->lot_id,
             closeTransactionId: $lot->close_t_id !== null ? (int) $lot->close_t_id : null,
         );
@@ -91,7 +93,8 @@ class CapitalGainsImportNormalizer
         $isCovered = isset($transaction['is_covered']) ? (bool) $transaction['is_covered'] : null;
         $amd = is_numeric($transaction['accrued_market_discount'] ?? null) ? (float) $transaction['accrued_market_discount'] : null;
 
-        $docId = (int) $link->tax_document_id;
+        $taxDocument = $link->taxDocument;
+        $docId = $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : (int) $link->document_id;
         $acctId = $link->account_id !== null ? (int) $link->account_id : null;
         $linkAccount = $link->account;
         $acctName = $linkAccount instanceof FinAccounts

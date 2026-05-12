@@ -3,94 +3,53 @@
 namespace App\Models\FinanceTool;
 
 use App\Models\Files\FileForTaxDocument;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One row per (tax_document, account) pair.
- * A consolidated multi-account PDF produces multiple rows pointing at the same
- * parent fin_tax_documents record. Single-account PDFs produce one row each.
+ * Compatibility model for tax-form account partitions now stored in
+ * fin_document_accounts. New code should prefer FinDocumentAccount directly.
  *
- * is_reviewed and notes are per-account (review is done per account/form, not per PDF).
- *
- * @property int $id
- * @property int $tax_document_id
- * @property int|null $account_id
- * @property string $form_type
- * @property int $tax_year
- * @property string|null $ai_identifier
- * @property string|null $ai_account_name
- * @property bool $is_reviewed
- * @property string|null $notes
  * @property string|null $misc_routing
  * @property string|null $reporting_mode
- * @property bool $parsed_data_needs_review
- * @property array<int, array<string, string>>|null $parsed_data_warnings
  */
-class TaxDocumentAccount extends Model
+class TaxDocumentAccount extends FinDocumentAccount
 {
-    protected $table = 'fin_tax_document_accounts';
-
-    protected $fillable = [
-        'tax_document_id',
-        'account_id',
-        'form_type',
-        'tax_year',
-        'ai_identifier',
-        'ai_account_name',
-        'is_reviewed',
-        'notes',
-        'misc_routing',
-        'reporting_mode',
-        'parsed_data_needs_review',
-        'parsed_data_warnings',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'tax_year' => 'integer',
-            'is_reviewed' => 'boolean',
-            'parsed_data_needs_review' => 'boolean',
-            'parsed_data_warnings' => 'array',
-        ];
-    }
-
     /**
-     * Create a canonical account link row.
+     * Create a tax-form account link on the unified document-account table.
      *
-     * All code that creates fin_tax_document_accounts rows should use this factory
-     * so that column defaults and required fields are managed in one place.
+     * The first argument is the legacy fin_tax_documents primary key. Use
+     * FinDocumentAccount::createLink() when you already have a unified
+     * fin_documents id.
      */
     public static function createLink(
         int $taxDocumentId,
         ?int $accountId,
-        string $formType,
-        int $taxYear,
+        ?string $formType = null,
+        ?int $taxYear = null,
+        ?int $statementId = null,
+        ?string $accountSectionLabel = null,
+        ?string $payloadKind = null,
         bool $isReviewed = false,
         ?string $notes = null,
         ?string $aiIdentifier = null,
         ?string $aiAccountName = null,
     ): static {
-        return static::create([
-            'tax_document_id' => $taxDocumentId,
+        $taxDocument = FileForTaxDocument::query()->findOrFail($taxDocumentId);
+
+        /** @var static $link */
+        $link = static::create([
+            'document_id' => $taxDocument->document_id,
             'account_id' => $accountId,
             'form_type' => $formType,
             'tax_year' => $taxYear,
+            'payload_kind' => $payloadKind ?? ($formType === FileForTaxDocument::FORM_TYPE_1099_B
+                ? self::PAYLOAD_DISPOSITIONS
+                : null),
             'is_reviewed' => $isReviewed,
             'notes' => $notes,
             'ai_identifier' => $aiIdentifier,
             'ai_account_name' => $aiAccountName,
         ]);
-    }
 
-    public function document(): BelongsTo
-    {
-        return $this->belongsTo(FileForTaxDocument::class, 'tax_document_id');
-    }
-
-    public function account(): BelongsTo
-    {
-        return $this->belongsTo(FinAccounts::class, 'account_id', 'acct_id');
+        return $link;
     }
 }

@@ -22,20 +22,20 @@ class LotImportFromParsedDataService
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
     ) {}
 
-    public function rebuildForTaxDocument(
-        int $taxDocumentId,
+    public function rebuildForDocument(
+        int $documentId,
         LotMatcherAutoTrigger $trigger = LotMatcherAutoTrigger::ParsedDataRebuild,
     ): LotImportRebuildResult {
-        $result = $this->rebuild($taxDocumentId, dryRun: false);
+        $result = $this->rebuild($documentId, dryRun: false);
 
-        $this->lotMatcherAutoDispatchService->dispatchForTaxDocument($taxDocumentId, $trigger);
+        $this->lotMatcherAutoDispatchService->dispatchForDocument($documentId, $trigger);
 
         return $result;
     }
 
-    public function previewForTaxDocument(int $taxDocumentId): LotImportRebuildResult
+    public function previewForDocument(int $documentId): LotImportRebuildResult
     {
-        return $this->rebuild($taxDocumentId, dryRun: true);
+        return $this->rebuild($documentId, dryRun: true);
     }
 
     public function hasUsableParsedData(FileForTaxDocument $taxDocument): bool
@@ -49,13 +49,13 @@ class LotImportFromParsedDataService
     public function importTransactions(
         int $accountId,
         array $transactions,
-        int $taxDocumentId,
+        int $documentId,
         mixed $defaultWashSaleTreatment = null,
     ): LotImportRebuildResult {
         $lotIds = $this->importTransactionsToLots(
             accountId: $accountId,
             transactions: $transactions,
-            taxDocumentId: $taxDocumentId,
+            documentId: $documentId,
             defaultWashSaleTreatment: $defaultWashSaleTreatment,
             dryRun: false,
         );
@@ -68,18 +68,19 @@ class LotImportFromParsedDataService
         );
     }
 
-    private function rebuild(int $taxDocumentId, bool $dryRun): LotImportRebuildResult
+    private function rebuild(int $documentId, bool $dryRun): LotImportRebuildResult
     {
         /** @var FileForTaxDocument $taxDocument */
         $taxDocument = FileForTaxDocument::query()
             ->with(['accountLinks.account'])
-            ->findOrFail($taxDocumentId);
+            ->where('document_id', $documentId)
+            ->firstOrFail();
 
         $entries = $this->parsed1099BEntries($taxDocument);
 
         return DB::transaction(function () use ($taxDocument, $entries, $dryRun): LotImportRebuildResult {
-            $legacyTaggedLotCount = $this->legacyTaggedBrokerLotsCount((int) $taxDocument->id);
-            $deletedCount = $this->deleteExistingBrokerLots((int) $taxDocument->id, $dryRun);
+            $legacyTaggedLotCount = $this->legacyTaggedBrokerLotsCount((int) $taxDocument->document_id);
+            $deletedCount = $this->deleteExistingBrokerLots((int) $taxDocument->document_id, $dryRun);
             $insertedCount = 0;
             $warnings = $this->replacementWarnings($entries, $deletedCount, $legacyTaggedLotCount, $dryRun);
             $lotIds = [];
@@ -121,7 +122,7 @@ class LotImportFromParsedDataService
                 $importedLotIds = $this->importTransactionsToLots(
                     accountId: $accountId,
                     transactions: $transactions,
-                    taxDocumentId: (int) $taxDocument->id,
+                    documentId: (int) $taxDocument->document_id,
                     defaultWashSaleTreatment: $defaultWashSaleTreatment,
                     dryRun: $dryRun,
                 );
@@ -239,9 +240,9 @@ class LotImportFromParsedDataService
         return is_numeric($documentAccountId) ? (int) $documentAccountId : null;
     }
 
-    private function deleteExistingBrokerLots(int $taxDocumentId, bool $dryRun): int
+    private function deleteExistingBrokerLots(int $documentId, bool $dryRun): int
     {
-        $query = $this->existingBrokerLotsQuery($taxDocumentId);
+        $query = $this->existingBrokerLotsQuery($documentId);
         $deletedCount = (clone $query)->count();
 
         if (! $dryRun) {
@@ -251,9 +252,9 @@ class LotImportFromParsedDataService
         return $deletedCount;
     }
 
-    private function legacyTaggedBrokerLotsCount(int $taxDocumentId): int
+    private function legacyTaggedBrokerLotsCount(int $documentId): int
     {
-        return (clone $this->existingBrokerLotsQuery($taxDocumentId))
+        return (clone $this->existingBrokerLotsQuery($documentId))
             ->where(function (Builder $query): void {
                 $query->whereNull('source')
                     ->orWhereNotIn('source', [
@@ -267,10 +268,14 @@ class LotImportFromParsedDataService
     /**
      * @return Builder<FinAccountLot>
      */
-    private function existingBrokerLotsQuery(int $taxDocumentId): Builder
+    private function existingBrokerLotsQuery(int $documentId): Builder
     {
         return FinAccountLot::query()
-            ->where('tax_document_id', $taxDocumentId)
+            ->where('document_id', $documentId)
+            ->where(function (Builder $query): void {
+                $query->whereNull('lot_origin')
+                    ->orWhere('lot_origin', '!=', FinAccountLot::ORIGIN_STATEMENT_POSITION);
+            })
             ->where(function (Builder $query): void {
                 $query->whereIn('source', [
                     FinAccountLot::SOURCE_BROKER_1099B,
@@ -304,7 +309,7 @@ class LotImportFromParsedDataService
 
         if ($legacyTaggedLotCount > 0) {
             $warnings[] = sprintf(
-                '%d legacy/manually tagged 1099-B lot(s) are in rebuild scope for this tax document; parsed data is canonical and scoped lots are replaced before inserting rebuilt rows.',
+                '%d legacy/manually tagged 1099-B lot(s) are in rebuild scope for this document; parsed data is canonical and scoped lots are replaced before inserting rebuilt rows.',
                 $legacyTaggedLotCount,
             );
         }
@@ -336,7 +341,7 @@ class LotImportFromParsedDataService
     private function importTransactionsToLots(
         int $accountId,
         array $transactions,
-        int $taxDocumentId,
+        int $documentId,
         mixed $defaultWashSaleTreatment,
         bool $dryRun,
     ): array {
@@ -406,7 +411,8 @@ class LotImportFromParsedDataService
                 'is_short_term' => $isShortTerm,
                 'lot_source' => FinAccountLot::SOURCE_1099B,
                 'source' => $this->sourceForTransaction($tx),
-                'tax_document_id' => $taxDocumentId,
+                'document_id' => $documentId,
+                'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
                 'form_8949_box' => $form8949Box,
                 'is_covered' => $isCovered,
                 'accrued_market_discount' => $accruedMarketDiscount,

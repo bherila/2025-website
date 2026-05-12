@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -38,12 +39,12 @@ class FinLotReconciliationLinkFactory extends Factory
         };
 
         return [
-            'tax_document_id' => fn (): int => $resolveTaxDocument()->id,
+            'document_id' => fn (): int => (int) $resolveTaxDocument()->document_id,
             'broker_lot_id' => fn (array $attributes): int => $this->createBrokerLot(
                 $resolveAccount(),
-                is_numeric($attributes['tax_document_id'] ?? null)
-                    ? (int) $attributes['tax_document_id']
-                    : $resolveTaxDocument()->id,
+                is_numeric($attributes['document_id'] ?? null)
+                    ? (int) $attributes['document_id']
+                    : (int) $resolveTaxDocument()->document_id,
             )->lot_id,
             'account_lot_id' => fn (): int => $this->createAccountLot($resolveAccount())->lot_id,
             'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
@@ -78,13 +79,15 @@ class FinLotReconciliationLinkFactory extends Factory
 
     private function createTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        $storedFilename = fake()->uuid().'.pdf';
+
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
             'original_filename' => fake()->unique()->slug().'.pdf',
-            'stored_filename' => fake()->uuid().'.pdf',
-            's3_path' => 'tax_docs/'.$userId.'/'.fake()->uuid().'.pdf',
+            'stored_filename' => $storedFilename,
+            's3_path' => 'tax_docs/'.$userId.'/'.$storedFilename,
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
             'file_hash' => hash('sha256', fake()->uuid()),
@@ -96,10 +99,11 @@ class FinLotReconciliationLinkFactory extends Factory
     /**
      * @param  array<string, mixed>  $overrides
      */
-    private function createBrokerLot(FinAccounts $account, int $taxDocumentId, array $overrides = []): FinAccountLot
+    private function createBrokerLot(FinAccounts $account, int $documentId, array $overrides = []): FinAccountLot
     {
         return $this->createLot($account, array_merge([
-            'tax_document_id' => $taxDocumentId,
+            'document_id' => $documentId,
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
             'lot_source' => '1099b',
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ], $overrides));

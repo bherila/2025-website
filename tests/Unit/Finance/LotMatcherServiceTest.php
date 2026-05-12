@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -19,11 +20,11 @@ class LotMatcherServiceTest extends TestCase
         $brokerLot = $this->makeBrokerLot($account, $document);
         $accountLot = $this->makeAccountLot($account);
 
-        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->document_id);
 
         $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
         $this->assertDatabaseHas('fin_lot_reconciliation_links', [
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -227,6 +228,28 @@ class LotMatcherServiceTest extends TestCase
         ]);
     }
 
+    public function test_statement_position_lots_for_document_are_not_matched_as_broker_lots(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $this->makeLot($account, [
+            'document_id' => $document->document_id,
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
+            'lot_source' => 'import',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'sale_date' => null,
+            'proceeds' => null,
+        ]);
+
+        $result = app(LotMatcherService::class)->runMatcherForDocument((int) $document->id);
+
+        $this->assertSame(1, $result->counts[FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+        $this->assertSame(0, $result->counts[FinLotReconciliationLink::STATE_BROKER_ONLY]);
+        $this->assertSame(0, $result->counts[FinLotReconciliationLink::STATE_ACCOUNT_ONLY]);
+        $this->assertSame(1, FinLotReconciliationLink::query()->count());
+    }
+
     public function test_matcher_is_idempotent_without_link_churn(): void
     {
         [$document, $account] = $this->documentAndAccount();
@@ -381,7 +404,7 @@ class LotMatcherServiceTest extends TestCase
 
     private function makeTaxDocument(int $userId): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -402,7 +425,8 @@ class LotMatcherServiceTest extends TestCase
     private function makeBrokerLot(FinAccounts $account, FileForTaxDocument $document, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
             'lot_source' => FinAccountLot::SOURCE_1099B,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ], $overrides));
@@ -414,7 +438,7 @@ class LotMatcherServiceTest extends TestCase
     private function makeAccountLot(FinAccounts $account, array $overrides = []): FinAccountLot
     {
         return $this->makeLot($account, array_merge([
-            'tax_document_id' => null,
+            'document_id' => null,
             'lot_source' => 'analyzer',
             'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ], $overrides));

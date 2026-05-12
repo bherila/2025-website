@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -26,7 +27,7 @@ class AdminTaxNormalizationControllerTest extends TestCase
 
     private function createTaxDocument(int $userId, array $overrides = []): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        return app(DocumentIngestionService::class)->createTaxFormDetail(array_merge([
             'user_id' => $userId,
             'tax_year' => 2024,
             'form_type' => '1099_div',
@@ -35,7 +36,7 @@ class AdminTaxNormalizationControllerTest extends TestCase
             's3_path' => "tax_docs/{$userId}/2024.01.01 abc12 test-1099div.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 102400,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => false,
             'parsed_data_needs_review' => false,
@@ -44,14 +45,25 @@ class AdminTaxNormalizationControllerTest extends TestCase
 
     private function createAccountLink(FileForTaxDocument $doc, ?int $accountId, array $overrides = []): TaxDocumentAccount
     {
-        return TaxDocumentAccount::create(array_merge([
-            'tax_document_id' => $doc->id,
-            'account_id' => $accountId,
-            'form_type' => $doc->form_type,
-            'tax_year' => $doc->tax_year,
+        $attributes = array_merge([
             'is_reviewed' => false,
             'parsed_data_needs_review' => false,
-        ], $overrides));
+        ], $overrides);
+
+        $link = TaxDocumentAccount::createLink(
+            $doc->id,
+            $accountId,
+            (string) $doc->form_type,
+            (int) $doc->tax_year,
+            isReviewed: (bool) $attributes['is_reviewed'],
+        );
+        unset($attributes['tax_document_id'], $attributes['account_id'], $attributes['form_type'], $attributes['tax_year'], $attributes['is_reviewed']);
+
+        if ($attributes !== []) {
+            $link->update($attributes);
+        }
+
+        return $link->fresh() ?? $link;
     }
 
     // ─── auth / authorization ────────────────────────────────────────────────

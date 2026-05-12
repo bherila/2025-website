@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -43,7 +44,7 @@ class TaxDocumentControllerTest extends TestCase
 
     private function createTaxDocument(int $userId, array $overrides = []): FileForTaxDocument
     {
-        return FileForTaxDocument::create(array_merge([
+        $attributes = array_merge([
             'user_id' => $userId,
             'tax_year' => 2024,
             'form_type' => 'w2',
@@ -52,10 +53,13 @@ class TaxDocumentControllerTest extends TestCase
             's3_path' => "tax_docs/{$userId}/2024.01.01 abc12 w2-2024.pdf",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 102400,
-            'file_hash' => str_repeat('a', 64),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => false,
-        ], $overrides));
+        ], $overrides);
+
+        $attributes['file_hash'] ??= hash('sha256', fake()->uuid());
+
+        return app(DocumentIngestionService::class)->createTaxFormDetail($attributes);
     }
 
     public function test_unauthenticated_user_cannot_access_tax_documents(): void
@@ -412,7 +416,7 @@ class TaxDocumentControllerTest extends TestCase
         // Verify a genai job was created and linked
         $this->assertDatabaseHas('genai_import_jobs', [
             'user_id' => $user->id,
-            'job_type' => 'tax_document',
+            'job_type' => 'document_extract',
         ]);
     }
 
@@ -559,7 +563,7 @@ class TaxDocumentControllerTest extends TestCase
 
         $response->assertStatus(201);
         // account_id is stored on the join table, not the parent row.
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
+        $this->assertDatabaseHas('fin_document_accounts', [
             'form_type' => '1099_int',
             'account_id' => $account->acct_id,
         ]);
@@ -653,9 +657,10 @@ class TaxDocumentControllerTest extends TestCase
 
         $response->assertStatus(201);
         $docId = $response->json('id');
+        $doc = FileForTaxDocument::findOrFail($docId);
 
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $docId,
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $doc->document_id,
             'account_id' => $account->acct_id,
             'form_type' => '1099_int',
             'tax_year' => 2024,
@@ -677,12 +682,7 @@ class TaxDocumentControllerTest extends TestCase
             'form_type' => '1099_int',
             'account_id' => $account->acct_id,
         ]);
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_int',
-            'tax_year' => 2024,
-        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_int', 2024);
 
         // Filter by $account — should find it
         $response = $this->actingAs($user)->getJson("/api/finance/tax-documents?account_id={$account->acct_id}");
@@ -705,19 +705,13 @@ class TaxDocumentControllerTest extends TestCase
             'account_id' => $account->acct_id,
             'is_reviewed' => false,
         ]);
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_div',
-            'tax_year' => 2024,
-            'is_reviewed' => false,
-        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_div', 2024);
 
         $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}/mark-reviewed");
         $response->assertOk();
 
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
-            'tax_document_id' => $doc->id,
+        $this->assertDatabaseHas('fin_document_accounts', [
+            'document_id' => $doc->document_id,
             'is_reviewed' => 1,
         ]);
     }
@@ -732,13 +726,7 @@ class TaxDocumentControllerTest extends TestCase
             'account_id' => null,
             'is_reviewed' => true,
         ]);
-        $link = TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_b',
-            'tax_year' => 2024,
-            'is_reviewed' => true,
-        ]);
+        $link = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024, isReviewed: true);
 
         $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
             'reporting_mode' => 'form_8949_summary',
@@ -747,7 +735,7 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('reporting_mode', 'form_8949_summary');
 
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
+        $this->assertDatabaseHas('fin_document_accounts', [
             'id' => $link->id,
             'reporting_mode' => 'form_8949_summary',
         ]);
@@ -762,12 +750,7 @@ class TaxDocumentControllerTest extends TestCase
             'form_type' => 'broker_1099',
             'account_id' => null,
         ]);
-        $link = TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_misc',
-            'tax_year' => 2024,
-        ]);
+        $link = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_misc', 2024);
 
         $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
             'misc_routing' => 'sch_1_8h',
@@ -776,7 +759,7 @@ class TaxDocumentControllerTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('misc_routing', 'sch_1_8h');
 
-        $this->assertDatabaseHas('fin_tax_document_accounts', [
+        $this->assertDatabaseHas('fin_document_accounts', [
             'id' => $link->id,
             'misc_routing' => 'sch_1_8h',
         ]);
@@ -791,12 +774,7 @@ class TaxDocumentControllerTest extends TestCase
             'form_type' => 'broker_1099',
             'account_id' => null,
         ]);
-        $link = TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_b',
-            'tax_year' => 2024,
-        ]);
+        $link = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_b', 2024);
 
         $response = $this->actingAs($user)->patchJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}", [
             'reporting_mode' => 'not_valid',
@@ -815,12 +793,7 @@ class TaxDocumentControllerTest extends TestCase
             'account_id' => $account->acct_id,
             's3_path' => '',
         ]);
-        $link = TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_int',
-            'tax_year' => 2024,
-        ]);
+        $link = TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_int', 2024);
 
         $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}");
         $response->assertOk();
@@ -840,25 +813,15 @@ class TaxDocumentControllerTest extends TestCase
             'account_id' => null,
             's3_path' => '',
         ]);
-        $link1 = TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account1->acct_id,
-            'form_type' => '1099_div',
-            'tax_year' => 2024,
-        ]);
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account2->acct_id,
-            'form_type' => '1099_int',
-            'tax_year' => 2024,
-        ]);
+        $link1 = TaxDocumentAccount::createLink($doc->id, $account1->acct_id, '1099_div', 2024);
+        TaxDocumentAccount::createLink($doc->id, $account2->acct_id, '1099_int', 2024);
 
         // Remove link1 — parent should survive (link2 still exists)
         $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link1->id}");
         $response->assertOk();
 
         $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id]);
-        $this->assertDatabaseMissing('fin_tax_document_accounts', ['id' => $link1->id]);
+        $this->assertDatabaseMissing('fin_document_accounts', ['id' => $link1->id]);
     }
 
     public function test_confirm_account_links_replaces_existing_links(): void
@@ -868,12 +831,7 @@ class TaxDocumentControllerTest extends TestCase
         $account2 = $this->createFinAccount($user->id, 'Account 2');
 
         $doc = $this->createTaxDocument($user->id, ['form_type' => 'broker_1099', 'account_id' => null]);
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => null,
-            'form_type' => '1099_div',
-            'tax_year' => 2024,
-        ]);
+        TaxDocumentAccount::createLink($doc->id, null, '1099_div', 2024);
 
         $response = $this->actingAs($user)->postJson("/api/finance/tax-documents/{$doc->id}/accounts", [
             'links' => [
@@ -884,20 +842,18 @@ class TaxDocumentControllerTest extends TestCase
 
         $response->assertOk();
 
-        $this->assertDatabaseCount('fin_tax_document_accounts', 2);
-        $this->assertDatabaseHas('fin_tax_document_accounts', ['account_id' => $account1->acct_id, 'form_type' => '1099_div']);
-        $this->assertDatabaseHas('fin_tax_document_accounts', ['account_id' => $account2->acct_id, 'form_type' => '1099_int']);
+        $this->assertDatabaseCount('fin_document_accounts', 2);
+        $this->assertDatabaseHas('fin_document_accounts', ['account_id' => $account1->acct_id, 'form_type' => '1099_div']);
+        $this->assertDatabaseHas('fin_document_accounts', ['account_id' => $account2->acct_id, 'form_type' => '1099_int']);
     }
 
     public function test_backfill_seeds_join_table_for_pre_migration_documents(): void
     {
-        // Simulate a document that existed before the join table but was backfilled.
+        // Simulate a document that existed before the unified account table but was backfilled.
         $user = $this->createUser();
         $account = $this->createFinAccount($user->id);
 
-        // Create directly (bypasses store endpoint) to simulate pre-migration data.
-        $doc = FileForTaxDocument::create([
-            'user_id' => $user->id,
+        $doc = $this->createTaxDocument($user->id, [
             'tax_year' => 2023,
             'form_type' => '1099_int',
             'account_id' => $account->acct_id,
@@ -910,12 +866,7 @@ class TaxDocumentControllerTest extends TestCase
         ]);
 
         // Manually insert a backfill row (the migration would have done this).
-        TaxDocumentAccount::create([
-            'tax_document_id' => $doc->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_int',
-            'tax_year' => 2023,
-        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, '1099_int', 2023);
 
         // The index endpoint should find it when filtering by account_id.
         $response = $this->actingAs($user)->getJson("/api/finance/tax-documents?account_id={$account->acct_id}");
@@ -1191,7 +1142,7 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertFalse((bool) $doc->fresh()->is_reviewed);
         $this->assertFalse((bool) $divLink->fresh()->is_reviewed);
         $this->assertFalse((bool) $brokerLink->fresh()->is_reviewed);
-        $this->assertDatabaseCount('fin_tax_document_accounts', 2);
+        $this->assertDatabaseCount('fin_document_accounts', 2);
     }
 
     public function test_convert_broker_format_rejects_non_broker_documents(): void
@@ -1274,8 +1225,9 @@ class TaxDocumentControllerTest extends TestCase
 
         $job = GenAiImportJob::latest('id')->first();
         $this->assertNotNull($job);
-        $this->assertSame('tax_form_multi_account_import', $job->job_type);
-        $this->assertSame($doc->id, $job->getContextArray()['tax_document_id']);
+        $this->assertSame('document_extract', $job->job_type);
+        $this->assertSame($doc->document_id, $job->getContextArray()['document_id']);
+        $this->assertSame('tax_form', $job->getContextArray()['document_kind']);
         Queue::assertPushed(ParseImportJob::class);
     }
 
@@ -1310,10 +1262,11 @@ class TaxDocumentControllerTest extends TestCase
 
         $job = GenAiImportJob::latest('id')->first();
         $this->assertNotNull($job);
-        $this->assertSame('tax_form_multi_account_import', $job->job_type);
+        $this->assertSame('document_extract', $job->job_type);
         $this->assertSame('text/plain', $job->mime_type);
         $this->assertSame('parsed_data_repair', $job->getContextArray()['input_kind']);
-        $this->assertSame($doc->id, $job->getContextArray()['tax_document_id']);
+        $this->assertSame($doc->document_id, $job->getContextArray()['document_id']);
+        $this->assertSame('tax_form', $job->getContextArray()['document_kind']);
         Storage::disk('s3')->assertExists($job->s3_path);
         $sourceText = Storage::disk('s3')->get($job->s3_path);
         $this->assertStringContainsString('div_1a_total_ordinary', $sourceText);

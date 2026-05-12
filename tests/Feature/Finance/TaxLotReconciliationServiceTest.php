@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\LotMatcher;
 use App\Services\Finance\TaxLotReconciliationService;
 use Tests\TestCase;
@@ -26,7 +27,7 @@ class TaxLotReconciliationServiceTest extends TestCase
 
     private function makeTaxDocument(int $userId, string $filename = 'broker-1099.pdf'): FileForTaxDocument
     {
-        return FileForTaxDocument::create([
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -35,7 +36,7 @@ class TaxLotReconciliationServiceTest extends TestCase
             's3_path' => "tax_docs/{$userId}/{$filename}",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('a', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);
@@ -49,7 +50,7 @@ class TaxLotReconciliationServiceTest extends TestCase
         $quantity = (float) ($overrides['quantity'] ?? 10);
         $costBasis = (float) ($overrides['cost_basis'] ?? 1000);
 
-        return FinAccountLot::create(array_merge([
+        $attributes = array_merge([
             'acct_id' => $account->acct_id,
             'symbol' => 'AAPL',
             'description' => 'Apple Inc.',
@@ -62,7 +63,21 @@ class TaxLotReconciliationServiceTest extends TestCase
             'realized_gain_loss' => 250,
             'is_short_term' => false,
             'lot_source' => 'analyzer',
-        ], $overrides));
+        ], $overrides);
+
+        if (array_key_exists('tax_document_id', $attributes)) {
+            $taxDocumentId = $attributes['tax_document_id'];
+            unset($attributes['tax_document_id']);
+
+            if ($taxDocumentId !== null) {
+                $taxDocument = FileForTaxDocument::query()->findOrFail((int) $taxDocumentId);
+                $attributes['document_id'] = (int) $taxDocument->document_id;
+                $attributes['source'] ??= FinAccountLot::SOURCE_BROKER_1099B;
+                $attributes['lot_origin'] ??= FinAccountLot::ORIGIN_1099B_DISPOSITION;
+            }
+        }
+
+        return FinAccountLot::create($attributes);
     }
 
     public function test_lot_matcher_reuses_existing_sell_transaction_dedupe_shape(): void
@@ -300,14 +315,7 @@ class TaxLotReconciliationServiceTest extends TestCase
         $this->makeLot($account, ['symbol' => 'NVDA', 'lot_source' => 'analyzer']);
         $this->makeLot($account, ['symbol' => 'NVDA', 'lot_source' => 'manual']);
 
-        TaxDocumentAccount::create([
-            'tax_document_id' => $taxDocument->id,
-            'account_id' => null,
-            'form_type' => '1099_b',
-            'tax_year' => 2025,
-            'ai_identifier' => '1234',
-            'ai_account_name' => 'Unmatched Brokerage',
-        ]);
+        TaxDocumentAccount::createLink($taxDocument->id, null, '1099_b', 2025, aiIdentifier: '1234', aiAccountName: 'Unmatched Brokerage');
 
         $result = app(TaxLotReconciliationService::class)->reconcile($user->id, 2025);
 

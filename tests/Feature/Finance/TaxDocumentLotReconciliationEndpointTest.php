@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
@@ -37,7 +38,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         $account = $this->makeAccount($user->id);
         $document = $this->makeBrokerDocument($user->id, $account);
         $this->makeLot($account, $document);
-        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->id), '2026-05-10T17:00:00.000000Z');
+        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->document_id), '2026-05-10T17:00:00.000000Z');
 
         $this->actingAs($user)
             ->getJson("/api/finance/tax-documents/{$document->id}/lot-reconciliation")
@@ -58,7 +59,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         $brokerLot = $this->makeLot($account, $document);
         $accountLot = $this->makeAccountLot($account);
         $link = FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
@@ -75,7 +76,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
                 'notes' => null,
             ],
         ]);
-        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->id), '2026-05-10T17:00:00.000000Z');
+        Cache::forever(LotMatcherService::lastMatchedAtCacheKey((int) $document->document_id), '2026-05-10T17:00:00.000000Z');
 
         $this->actingAs($user)
             ->getJson("/api/finance/tax-documents/{$document->id}/lot-reconciliation-links")
@@ -117,7 +118,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         $brokerLot = $this->makeLot($account, $document);
         $accountLot = $this->makeAccountLot($account, ['cost_basis' => 1100, 'realized_gain_loss' => 150]);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
@@ -155,7 +156,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         ]);
         $accountLot = $this->makeAccountLot($account);
         FinLotReconciliationLink::create([
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'broker_lot_id' => $brokerLot->lot_id,
             'account_lot_id' => $accountLot->lot_id,
             'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
@@ -216,7 +217,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
         string $identifier = '1234',
         string $accountName = 'Brokerage',
     ): FileForTaxDocument {
-        $document = FileForTaxDocument::create([
+        $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
             'form_type' => 'broker_1099',
@@ -225,7 +226,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             's3_path' => "tax_docs/{$userId}/{$filename}",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => str_repeat('c', 64),
+            'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
             'parsed_data' => [[
@@ -279,7 +280,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
             'realized_gain_loss' => 250,
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
-            'tax_document_id' => $document->id,
+            'document_id' => $document->document_id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));
