@@ -28,7 +28,7 @@ class FeeAnalyticsService
     /**
      * @return array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}
      */
-    public function actualFeesForAccount(int|FinAccounts $account, int $year): array
+    public function actualFeesForAccount(int|FinAccounts $account, int $year, bool $includeLineItems = true): array
     {
         $resolvedAccount = $account instanceof FinAccounts
             ? $account
@@ -41,7 +41,7 @@ class FeeAnalyticsService
         $accountId = $resolvedAccount instanceof FinAccounts ? (int) $resolvedAccount->acct_id : $account;
         [$start, $end] = $this->yearBounds($year);
 
-        return $this->actualFeesForPeriod($accountId, $start, $end, true);
+        return $this->actualFeesForPeriod($accountId, $start, $end, $includeLineItems);
     }
 
     public function expectedFeesForAccount(FinAccounts $account, int $year): float
@@ -118,6 +118,7 @@ class FeeAnalyticsService
             ->orderBy('statement_closing_date')
             ->orderBy('statement_id')
             ->get(['acct_id', 'balance', 'statement_closing_date', 'statement_id']);
+        $statementsByAccount = $this->groupStatementsByAccount($statements);
         $lastBalances = FinAccounts::query()
             ->whereIn('acct_id', $accountIds)
             ->pluck('acct_last_balance', 'acct_id')
@@ -131,10 +132,11 @@ class FeeAnalyticsService
             $netReturn = 0.0;
 
             foreach ($accountIds as $accountId) {
-                $startingBalance = $this->statementBalanceOnOrBeforeFromCollection($statements, $accountId, $start->subDay())
-                    ?? $this->statementBalanceOnOrAfterFromCollection($statements, $accountId, $start)
+                $accountStatements = $statementsByAccount[$accountId] ?? [];
+                $startingBalance = $this->balanceOnOrBefore($accountStatements, $start->subDay())
+                    ?? $this->balanceOnOrAfter($accountStatements, $start)
                     ?? (float) ($lastBalances[$accountId] ?? 0.0);
-                $endingBalance = $this->statementBalanceOnOrBeforeFromCollection($statements, $accountId, $end)
+                $endingBalance = $this->balanceOnOrBefore($accountStatements, $end)
                     ?? $startingBalance;
                 $accountCashFlows = $cashFlows[$accountId][$monthKey] ?? ['deposits' => 0.0, 'withdrawals' => 0.0];
                 $netReturn = MoneyMath::add(
@@ -566,39 +568,57 @@ class FeeAnalyticsService
     }
 
     /**
+     * Pre-group ascending-by-date statements by account so per-month lookups
+     * don't rescan the full collection.
+     *
      * @param  Collection<int, FinStatement>  $statements
+     * @return array<int, array<int, array{date:CarbonImmutable,balance:float}>>
      */
-    private function statementBalanceOnOrBeforeFromCollection(Collection $statements, int $accountId, CarbonImmutable $date): ?float
+    private function groupStatementsByAccount(Collection $statements): array
+    {
+        $byAccount = [];
+
+        foreach ($statements as $statement) {
+            $date = $this->carbonFromMixed($statement->statement_closing_date)?->startOfDay();
+            if (! $date instanceof CarbonImmutable) {
+                continue;
+            }
+
+            $byAccount[(int) $statement->acct_id][] = [
+                'date' => $date,
+                'balance' => (float) $statement->balance,
+            ];
+        }
+
+        return $byAccount;
+    }
+
+    /**
+     * @param  array<int, array{date:CarbonImmutable,balance:float}>  $statements
+     */
+    private function balanceOnOrBefore(array $statements, CarbonImmutable $date): ?float
     {
         $balance = null;
 
         foreach ($statements as $statement) {
-            if ((int) $statement->acct_id !== $accountId) {
-                continue;
+            if ($statement['date']->greaterThan($date)) {
+                break;
             }
 
-            $statementDate = $this->carbonFromMixed($statement->statement_closing_date)?->startOfDay();
-            if ($statementDate instanceof CarbonImmutable && $statementDate->lessThanOrEqualTo($date)) {
-                $balance = (float) $statement->balance;
-            }
+            $balance = $statement['balance'];
         }
 
         return $balance;
     }
 
     /**
-     * @param  Collection<int, FinStatement>  $statements
+     * @param  array<int, array{date:CarbonImmutable,balance:float}>  $statements
      */
-    private function statementBalanceOnOrAfterFromCollection(Collection $statements, int $accountId, CarbonImmutable $date): ?float
+    private function balanceOnOrAfter(array $statements, CarbonImmutable $date): ?float
     {
         foreach ($statements as $statement) {
-            if ((int) $statement->acct_id !== $accountId) {
-                continue;
-            }
-
-            $statementDate = $this->carbonFromMixed($statement->statement_closing_date)?->startOfDay();
-            if ($statementDate instanceof CarbonImmutable && $statementDate->greaterThanOrEqualTo($date)) {
-                return (float) $statement->balance;
+            if ($statement['date']->greaterThanOrEqualTo($date)) {
+                return $statement['balance'];
             }
         }
 
@@ -622,12 +642,10 @@ class FeeAnalyticsService
             return ['schE' => 0.0, 'irc67g' => 0.0, 'has_unclassified_13zz' => false];
         }
 
-        // Keep in sync with resources/js/lib/finance/k1RoutingNotes.ts.
+        // Keep in sync with resources/js/lib/finance/k1RoutingNotes.ts — only
+        // Box 13 K is routed to §67(g); Box 11 has no K-code fee mapping.
         $codes = $data['codes'];
-        $irc67g = MoneyMath::sum([
-            $this->sumK1CodeValues($codes, '11', 'K', 'value'),
-            $this->sumK1CodeValues($codes, '13', 'K', 'value'),
-        ]);
+        $irc67g = $this->sumK1CodeValues($codes, '13', 'K', 'value');
         $schE = $this->sumK1CodeValues($codes, '13', 'L', 'value');
         $hasUnclassified13zz = false;
 

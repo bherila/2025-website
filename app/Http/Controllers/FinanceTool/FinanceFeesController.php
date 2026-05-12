@@ -99,7 +99,7 @@ class FinanceFeesController extends Controller
         bool $includeMonthlyFeeDrag = true,
         bool $includeReconciliation = true,
     ): array {
-        $actual = $fees->actualFeesForAccount($account, $year);
+        $actual = $fees->actualFeesForAccount($account, $year, $includeLineItems);
         $expected = $fees->expectedFeesForAccount($account, $year);
         $hasExpectation = $fees->accountHasExpectedFees($account);
         $delta = MoneyMath::subtract($actual['total'], $expected);
