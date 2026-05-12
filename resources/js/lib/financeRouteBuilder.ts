@@ -143,6 +143,13 @@ export function summaryUrl(accountId: number, options: RouteOptions = {}): strin
 }
 
 /**
+ * Build URL for fees page
+ */
+export function feesUrl(accountId: number, options: RouteOptions = {}): string {
+  return `/finance/account/${accountId}/fees${buildQueryString(options.year)}`
+}
+
+/**
  * Build URL for import transactions page
  */
 export function importUrl(accountId: number | 'all'): string {
@@ -198,7 +205,7 @@ export function goToTransaction(accountId: number, transactionId: number, year?:
  */
 export function navigateToTab(
   accountId: number,
-  tab: 'transactions' | 'duplicates' | 'linker' | 'statements' | 'lots' | 'summary' | 'import' | 'maintenance'
+  tab: 'transactions' | 'duplicates' | 'linker' | 'statements' | 'lots' | 'summary' | 'fees' | 'import' | 'maintenance'
 ): void {
   const year = getEffectiveYear(accountId)
 
@@ -220,6 +227,9 @@ export function navigateToTab(
       break
     case 'summary':
       window.location.href = summaryUrl(accountId, { year })
+      break
+    case 'fees':
+      window.location.href = feesUrl(accountId, { year })
       break
     case 'import':
       window.location.href = importUrl(accountId)
@@ -252,6 +262,8 @@ export function getTabUrl(
       return lotsUrl(accountId)
     case 'summary':
       return summaryUrl(accountId, options)
+    case 'fees':
+      return feesUrl(accountId, options)
     case 'import':
       return importUrl(accountId)
     case 'maintenance':

@@ -438,6 +438,9 @@ class FinanceApiController extends Controller
             'isDebt' => 'boolean',
             'isRetirement' => 'boolean',
             'acctNumber' => 'nullable|string|max:255',
+            'expectedFeePct' => 'nullable|numeric|min:0|max:999.9999',
+            'expectedFeeFlat' => 'nullable|numeric|min:0',
+            'expectedFeeNotes' => 'nullable|string|max:255',
         ]);
 
         $uid = Auth::id();
@@ -453,6 +456,18 @@ class FinanceApiController extends Controller
 
         if ($request->has('acctNumber')) {
             $updates['acct_number'] = $request->acctNumber ?: null;
+        }
+
+        if ($request->has('expectedFeePct')) {
+            $updates['expected_fee_pct'] = $request->input('expectedFeePct');
+        }
+
+        if ($request->has('expectedFeeFlat')) {
+            $updates['expected_fee_flat'] = $request->input('expectedFeeFlat');
+        }
+
+        if ($request->has('expectedFeeNotes')) {
+            $updates['expected_fee_notes'] = $request->input('expectedFeeNotes') ?: null;
         }
 
         $account->update($updates);

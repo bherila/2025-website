@@ -19,6 +19,12 @@ class MoneyMathTest extends TestCase
         $this->assertSame(62740.16, MoneyMath::subtract('100673.07', '37932.91'));
     }
 
+    public function test_multiply_and_divide_round_to_integer_cents(): void
+    {
+        $this->assertSame(60.45, MoneyMath::multiply('120.00', 0.5037659));
+        $this->assertSame(33.33, MoneyMath::divide('100.00', 3));
+    }
+
     public function test_allocate_ratio_round_trips_to_original_amount(): void
     {
         foreach (['0.01', '0.05', '1000.01', '-1000.01'] as $amount) {
