@@ -50,6 +50,18 @@ composer test                                                          # PHPUnit
 php -l path/to/file.php
 ```
 
+### Running PHPUnit and Jest concurrently
+
+The two test suites are independent (different processes, different DBs). Run them in parallel during iteration to cut wall time without adding total work:
+
+```bash
+( php artisan test --compact & pnpm test --silent & wait )
+```
+
+This is wall-time only — total CPU is unchanged. Prefer it for iteration loops; serial runs are fine for final pre-commit verification.
+
+**Do not use `php artisan test --parallel`.** It forks N worker processes that each re-run all migrations against their own SQLite `:memory:` DB; on this repo the per-worker migration cost outweighs the parallelism savings on CPU. Wall time drops, but total work grows. Stick with the default serial runner.
+
 ## Linting & Formatting
 
 ```bash
