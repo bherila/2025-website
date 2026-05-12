@@ -2,9 +2,12 @@
 
 namespace App\Support;
 
+/**
+ * @phpstan-type LabelSpec array{label_width: float|int, label_height: float|int, columns: int, rows: int, top_margin: float|int, left_margin: float|int, h_pitch: float|int, v_pitch: float|int, paper: string}
+ */
 class AveryLabelSpec
 {
-    /** @var array<string, mixed> */
+    /** @var LabelSpec */
     private array $spec;
 
     public function __construct(public string $sheetNumber)
@@ -14,12 +17,16 @@ class AveryLabelSpec
             throw new \InvalidArgumentException('Unsupported Avery sheet number.');
         }
 
+        /** @var LabelSpec $spec */
         $this->spec = $spec;
     }
 
+    /**
+     * @return array<string, LabelSpec>
+     */
     public static function options(): array
     {
-        /** @var array<string, array<string, mixed>> $specs */
+        /** @var array<string, LabelSpec> $specs */
         $specs = config('avery-labels', []);
 
         return $specs;

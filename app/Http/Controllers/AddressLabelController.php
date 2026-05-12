@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AddressLabelCalibrationRequest;
+use App\Http\Requests\GenerateAddressLabelsRequest;
 use App\Support\AddressLabelParser;
 use App\Support\AveryLabelSpec;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
 use TCPDF;
@@ -23,35 +24,17 @@ class AddressLabelController extends Controller
         ]);
     }
 
-    public function generate(Request $request): Response|RedirectResponse
+    public function generate(GenerateAddressLabelsRequest $request): Response|RedirectResponse
     {
-        $validated = $request->validate([
-            'sheet_number' => ['required', 'string', 'in:'.implode(',', array_keys(AveryLabelSpec::options()))],
-            'addresses' => ['required', 'string'],
-            'parser_mode' => ['nullable', 'string', 'in:auto,delimited,blocks'],
-            'font_size' => ['nullable', 'numeric', 'min:7', 'max:14'],
-            'vertical_align' => ['nullable', 'string', 'in:top,center'],
-            'bold_first_line' => ['nullable', 'boolean'],
-            'skip_count' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'copies' => ['nullable', 'integer', 'min:1', 'max:500'],
-            'download' => ['nullable', 'boolean'],
-        ]);
-
-        $mode = $validated['parser_mode'] ?? 'auto';
-        if ($mode === 'delimited') {
-            $mode = 'delimited';
-        }
-
-        $rows = $this->parser->parse($validated['addresses'], $mode === 'delimited' ? 'delimited' : $mode);
+        $rows = $this->parser->parse($request->addresses(), $request->parserMode());
 
         if (count($rows) === 0) {
             return redirect()->back()->withErrors(['addresses' => 'No address rows were provided.'])->withInput();
         }
 
-        $spec = new AveryLabelSpec($validated['sheet_number']);
-        $labelsPerPage = $spec->labelsPerPage();
-        $skipCount = min((int) ($validated['skip_count'] ?? 0), max(0, $labelsPerPage - 1));
-        $rows = $this->applyCopies($rows, (int) ($validated['copies'] ?? 1));
+        $spec = new AveryLabelSpec($request->sheetNumber());
+        $skipCount = $request->skipCount($spec->labelsPerPage());
+        $rows = $this->applyCopies($rows, $request->copies());
 
         if (count($rows) > 500) {
             return redirect()->back()->withErrors(['addresses' => 'Maximum 500 label rows are allowed.'])->withInput();
@@ -60,45 +43,45 @@ class AddressLabelController extends Controller
         $pdfBytes = $this->buildLabelsPdf(
             $rows,
             $spec,
-            (float) ($validated['font_size'] ?? 11),
-            ($validated['vertical_align'] ?? 'top') === 'center',
-            (bool) ($validated['bold_first_line'] ?? false),
+            $request->fontSize(),
+            $request->isVerticallyCentered(),
+            $request->shouldBoldFirstLine(),
             $skipCount
         );
 
-        $disposition = ! empty($validated['download']) ? 'attachment' : 'inline';
+        $disposition = $request->shouldDownload() ? 'attachment' : 'inline';
 
         return response($pdfBytes, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => $disposition.'; filename="address-labels-'.$validated['sheet_number'].'.pdf"',
+            'Content-Disposition' => $disposition.'; filename="address-labels-'.$request->sheetNumber().'.pdf"',
         ]);
     }
 
-    public function preview(Request $request): View|RedirectResponse
+    public function preview(GenerateAddressLabelsRequest $request): View|RedirectResponse
     {
-        $spec = new AveryLabelSpec($request->string('sheet_number', '48163')->toString());
-        $rows = $this->parser->parse($request->string('addresses', '')->toString(), $request->string('parser_mode', 'auto')->toString());
+        $spec = new AveryLabelSpec($request->sheetNumber());
+        $rows = $this->parser->parse($request->addresses(), $request->parserMode());
 
         if (count($rows) === 0) {
             return redirect()->back()->withErrors(['addresses' => 'No address rows were provided.'])->withInput();
         }
 
-        $rows = $this->applyCopies($rows, max(1, $request->integer('copies', 1)));
-        $skipCount = min($request->integer('skip_count', 0), max(0, $spec->labelsPerPage() - 1));
+        $rows = $this->applyCopies($rows, $request->copies());
+        $skipCount = $request->skipCount($spec->labelsPerPage());
         $paddedRows = array_merge(array_fill(0, $skipCount, []), $rows);
 
         return view('tools.address-labels-preview', [
             'rows' => $paddedRows,
             'spec' => $spec,
-            'fontSize' => $request->integer('font_size', 11),
-            'center' => $request->string('vertical_align', 'top')->toString() === 'center',
-            'boldFirstLine' => $request->boolean('bold_first_line'),
+            'fontSize' => $request->fontSize(),
+            'center' => $request->isVerticallyCentered(),
+            'boldFirstLine' => $request->shouldBoldFirstLine(),
         ]);
     }
 
-    public function calibration(Request $request): Response
+    public function calibration(AddressLabelCalibrationRequest $request): Response
     {
-        $spec = new AveryLabelSpec($request->string('sheet_number', '48163')->toString());
+        $spec = new AveryLabelSpec($request->sheetNumber());
         $pdf = new TCPDF('P', 'in', 'LETTER', true, 'UTF-8', false);
         $pdf->SetPrintHeader(false);
         $pdf->SetPrintFooter(false);
@@ -118,6 +101,10 @@ class AddressLabelController extends Controller
         return response($pdf->Output('calibration.pdf', 'S'), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="label-calibration.pdf"']);
     }
 
+    /**
+     * @param  array<int, array<int, string>>  $rows
+     * @return array<int, array<int, string>>
+     */
     private function applyCopies(array $rows, int $copies): array
     {
         if ($copies <= 1 || count($rows) === 0) {
@@ -127,6 +114,9 @@ class AddressLabelController extends Controller
         return array_merge(array_fill(0, $copies, $rows[0]), array_slice($rows, 1));
     }
 
+    /**
+     * @param  array<int, array<int, string>>  $rows
+     */
     private function buildLabelsPdf(array $rows, AveryLabelSpec $spec, float $baseFontSize, bool $center, bool $boldFirstLine, int $skipCount): string
     {
         $pdf = new TCPDF('P', 'in', 'LETTER', true, 'UTF-8', false);

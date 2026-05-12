@@ -12,8 +12,7 @@ class AddressLabelParserTest extends TestCase
         $parser = new AddressLabelParser;
         $rows = $parser->parse("\"Acme, Inc.\",\"Attn: Jane\nSuite 10\",Austin", 'delimited');
 
-        $this->assertSame('Acme, Inc.', $rows[0][0]);
-        $this->assertSame("Attn: Jane\nSuite 10", $rows[0][1]);
+        $this->assertSame(['Acme, Inc.', 'Attn: Jane', 'Suite 10', 'Austin'], $rows[0]);
     }
 
     public function test_tsv_preserves_empty_middle_cell(): void
