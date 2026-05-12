@@ -71,7 +71,36 @@ class AddressLabelControllerTest extends TestCase
             ->assertOk()
             ->assertSee('Jane Doe')
             ->assertSee('John Doe')
-            ->assertSee('flex flex-col justify-center', false);
+            ->assertSee('font-bold', false)
+            ->assertSee('padding-top', false);
+    }
+
+    public function test_preview_repeats_first_label_for_copies(): void
+    {
+        $response = $this->post('/tools/address-labels/preview', [
+            'sheet_number' => '48163',
+            'addresses' => "Jane Doe\n123 Main\n\nJohn Doe\n456 Oak",
+            'parser_mode' => 'blocks',
+            'copies' => 2,
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(2, substr_count($response->getContent(), 'Jane Doe'));
+        $this->assertSame(1, substr_count($response->getContent(), 'John Doe'));
+    }
+
+    public function test_multi_page_pdf_generates_for_more_rows_than_fit_on_first_sheet(): void
+    {
+        $rows = implode("\n", array_map(static fn (int $i): string => "Person {$i}\t{$i} Main", range(1, 25)));
+
+        $response = $this->post('/tools/address-labels/pdf', [
+            'sheet_number' => '48163',
+            'addresses' => $rows,
+            'parser_mode' => 'delimited',
+        ]);
+
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
     public function test_preview_rejects_input_exceeding_row_cap(): void

@@ -25,6 +25,7 @@ export default defineConfig({
         'resources/js/user/update-password.tsx',
         'resources/js/payslip.tsx',
         'resources/js/payslip-entry.tsx',
+        'resources/js/address-labels/index.tsx',
         'resources/js/components/rsu/rsu.tsx',
         'resources/js/components/rsu/manage-awards.tsx',
         'resources/js/components/rsu/add-grant.tsx',

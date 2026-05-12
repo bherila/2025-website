@@ -5,17 +5,17 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AddressLabelCalibrationRequest;
 use App\Http\Requests\GenerateAddressLabelsRequest;
 use App\Support\AddressLabelParser;
+use App\Support\AveryLabelRenderer;
 use App\Support\AveryLabelSpec;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
-use TCPDF;
 
 class AddressLabelController extends Controller
 {
     private const int MAX_ROWS = 500;
 
-    public function __construct(private AddressLabelParser $parser) {}
+    public function __construct(private AddressLabelParser $parser, private AveryLabelRenderer $renderer) {}
 
     public function index(): View
     {
@@ -34,7 +34,7 @@ class AddressLabelController extends Controller
             return $rows;
         }
 
-        $pdfBytes = $this->buildLabelsPdf(
+        $pdfBytes = $this->renderer->labelsPdf(
             $rows,
             $spec,
             $request->fontSize(),
@@ -74,20 +74,9 @@ class AddressLabelController extends Controller
     public function calibration(AddressLabelCalibrationRequest $request): Response
     {
         $spec = new AveryLabelSpec($request->sheetNumber());
-        $pdf = $this->makePdf($spec);
-        $pdf->AddPage();
-        $pdf->SetDrawColor(180, 0, 0);
+        $pdfBytes = $this->renderer->calibrationPdf($spec);
 
-        for ($r = 0; $r < $spec->rows(); $r++) {
-            for ($c = 0; $c < $spec->columns(); $c++) {
-                $x = $spec->leftMarginInches() + ($c * $spec->horizontalPitchInches());
-                $y = $spec->topMarginInches() + ($r * $spec->verticalPitchInches());
-                $pdf->Line($x - 0.05, $y, $x + 0.05, $y);
-                $pdf->Line($x, $y - 0.05, $x, $y + 0.05);
-            }
-        }
-
-        return response($pdf->Output('calibration.pdf', 'S'), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="label-calibration.pdf"']);
+        return response($pdfBytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="label-calibration.pdf"']);
     }
 
     /**
@@ -115,17 +104,9 @@ class AddressLabelController extends Controller
         return redirect()->back()->withErrors(['addresses' => $message])->withInput();
     }
 
-    private function makePdf(AveryLabelSpec $spec): TCPDF
-    {
-        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
-        $pdf->SetPrintHeader(false);
-        $pdf->SetPrintFooter(false);
-        $pdf->SetMargins(0, 0, 0);
-
-        return $pdf;
-    }
-
     /**
+     * Repeats only the first parsed label, then appends any remaining input rows.
+     *
      * @param  array<int, array<int, string>>  $rows
      * @return array<int, array<int, string>>
      */
@@ -136,41 +117,5 @@ class AddressLabelController extends Controller
         }
 
         return array_merge(array_fill(0, $copies, $rows[0]), array_slice($rows, 1));
-    }
-
-    /**
-     * @param  array<int, array<int, string>>  $rows
-     */
-    private function buildLabelsPdf(array $rows, AveryLabelSpec $spec, float $baseFontSize, bool $center, bool $boldFirstLine, int $skipCount): string
-    {
-        $pdf = $this->makePdf($spec);
-
-        $labels = array_merge(array_fill(0, $skipCount, []), $rows);
-        $chunks = array_chunk($labels, $spec->labelsPerPage());
-
-        foreach ($chunks as $pageRows) {
-            $pdf->AddPage();
-            for ($r = 0; $r < $spec->rows(); $r++) {
-                for ($c = 0; $c < $spec->columns(); $c++) {
-                    $index = ($r * $spec->columns()) + $c;
-                    $lines = $pageRows[$index] ?? [];
-                    $x = $spec->leftMarginInches() + ($c * $spec->horizontalPitchInches());
-                    $y = $spec->topMarginInches() + ($r * $spec->verticalPitchInches());
-
-                    $fontSize = count($lines) > 5 ? max(7, $baseFontSize - 2) : $baseFontSize;
-                    $lineHeight = ($fontSize / 72) * 1.4;
-                    $blockHeight = count($lines) * $lineHeight;
-                    $startY = $center ? $y + max(0.08, ($spec->labelHeightInches() - $blockHeight) / 2) : $y + 0.08;
-
-                    foreach ($lines as $lineIndex => $line) {
-                        $pdf->SetFont('helvetica', ($boldFirstLine && $lineIndex === 0) ? 'B' : '', $fontSize);
-                        $pdf->SetXY($x + 0.08, $startY + ($lineIndex * $lineHeight));
-                        $pdf->Cell($spec->labelWidthInches() - 0.16, $lineHeight, $line, 0, 1, 'L', false, '', 1);
-                    }
-                }
-            }
-        }
-
-        return $pdf->Output('labels.pdf', 'S');
     }
 }

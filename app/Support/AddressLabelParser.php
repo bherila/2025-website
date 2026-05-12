@@ -26,7 +26,7 @@ class AddressLabelParser
      */
     private function parseDelimited(string $input): array
     {
-        $delimiter = substr_count($input, "\t") > substr_count($input, ',') ? "\t" : ',';
+        $delimiter = substr_count($input, "\t") >= substr_count($input, ',') && str_contains($input, "\t") ? "\t" : ',';
         $rows = [];
         $handle = fopen('php://temp', 'r+');
         if ($handle === false) {
