@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminGenAiJobsWebController;
 use App\Http\Controllers\AdminTaxNormalizationWebController;
+use App\Http\Controllers\AddressLabelController;
 use App\Http\Controllers\BingoController;
 use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
@@ -127,6 +128,9 @@ Route::get('/tools/bingo', [BingoController::class, 'index']);
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
+
+Route::get('/tools/address-labels', [AddressLabelController::class, 'index']);
+Route::post('/tools/address-labels/pdf', [AddressLabelController::class, 'generate']);
 
 Route::get('/financial-planning', function () {
     return view('financial-planning.index');

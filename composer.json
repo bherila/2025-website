@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "barryvdh/laravel-dompdf": "^3.1",
         "bherila/genai-laravel": "@dev",
         "erusev/parsedown": "^1.7",
         "helgesverre/toon": "^3.1",
