@@ -16,8 +16,20 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
+import {
+  currentTaxYear,
+  type FeeBreakdown,
+  type FeeConstants,
+  type FeeLineItem,
+  type FeesAccount,
+  type FeeStatus,
+  type K1ReconciliationRow,
+  type MonthlyFeeDragPoint,
+  type ReconciliationStatus,
+  statusClassName,
+  statusLabel,
+} from '@/lib/finance/feeTypes'
 import {
   getEffectiveYear,
   YEAR_CHANGED_EVENT,
@@ -36,53 +48,6 @@ const expectedFeePayloadSchema = z.object({
 })
 
 type ExpectedFeePayload = z.infer<typeof expectedFeePayloadSchema>
-type FeeStatus = 'under' | 'on_target' | 'over'
-type ReconciliationStatus = 'match' | 'mismatch' | 'unclassified'
-
-interface FeeBreakdown {
-  fee_schE: number
-  fee_irc67g: number
-  untagged: number
-}
-
-interface FeeLineItem extends AccountLineItem {
-  fee_amount: number
-  tax_characteristic: string | null
-}
-
-interface MonthlyFeeDragPoint {
-  month: string
-  gross_return: number
-  net_return: number
-  fees: number
-}
-
-interface K1ReconciliationRow {
-  entity_name: string
-  k1_fees_schE: number
-  k1_fees_irc67g: number
-  statement_fees_schE: number
-  statement_fees_irc67g: number
-  delta_schE: number
-  delta_irc67g: number
-  status: ReconciliationStatus
-  tax_document_id: number | null
-  account_id: number
-}
-
-interface FeesAccount {
-  acct_id: number
-  acct_name: string
-  acct_last_balance: number
-  expected_fee_pct: number | null
-  expected_fee_flat: number | null
-  expected_fee_notes: string | null
-}
-
-interface FeeConstants {
-  mismatch_threshold_usd: number
-  on_target_tolerance: number
-}
 
 export interface FeesTabData {
   year: number
@@ -119,10 +84,6 @@ function parseNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function currentTaxYear(): number {
-  return new Date().getFullYear()
-}
-
 function effectiveNumericYear(accountId: number): number {
   const year = getEffectiveYear(accountId)
   return year === 'all' ? currentTaxYear() : year
@@ -142,19 +103,6 @@ export function feeStatusFromAmounts(
   if (actual > currency(expected).add(toleranceAmount).value) return 'over'
 
   return 'on_target'
-}
-
-function statusLabel(status: FeeStatus | null): string {
-  if (status === 'under') return 'Under'
-  if (status === 'over') return 'Over'
-  if (status === 'on_target') return 'On-target'
-  return ''
-}
-
-function statusClassName(status: FeeStatus | null): string {
-  if (status === 'under') return 'border-sky-600 text-sky-700 dark:text-sky-300'
-  if (status === 'over') return 'border-red-600 text-red-700 dark:text-red-300'
-  return 'border-emerald-600 text-emerald-700 dark:text-emerald-300'
 }
 
 function reconciliationLabel(status: ReconciliationStatus): string {

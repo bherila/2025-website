@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { FeeDragLineChart } from '@/components/finance/FeesTab'
+import ReconciliationTile from '@/components/finance/ReconciliationTile'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,41 +15,17 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+import {
+  type AccountFeeSummary,
+  currentTaxYear,
+  type FeeBreakdown,
+  type MonthlyFeeDragPoint,
+  type ReconciliationSummary,
+  statusClassName,
+  statusLabel,
+} from '@/lib/finance/feeTypes'
 import { formatCurrency } from '@/lib/formatCurrency'
 import { cn } from '@/lib/utils'
-
-interface FeeBreakdown {
-  fee_schE: number
-  fee_irc67g: number
-  untagged: number
-}
-
-interface MonthlyFeeDragPoint {
-  month: string
-  gross_return: number
-  net_return: number
-  fees: number
-}
-
-interface AccountFeeSummary {
-  acct_id: number
-  acct_name: string
-  balance: number
-  expected_fees: number
-  has_expectation: boolean
-  actual_fees: number
-  delta: number
-  status: 'under' | 'on_target' | 'over' | null
-  pct_of_balance: number | null
-  fees_url: string
-}
-
-interface ReconciliationSummary {
-  matched: number
-  mismatched: number
-  unclassified: number
-  unlinked: number
-}
 
 interface AllAccountsFeesData {
   year: number
@@ -61,10 +38,6 @@ interface AllAccountsFeesData {
   reconciliation_summary: ReconciliationSummary
 }
 
-function currentTaxYear(): number {
-  return new Date().getFullYear()
-}
-
 function initialTaxYear(): number {
   if (typeof window === 'undefined') return currentTaxYear()
 
@@ -72,20 +45,6 @@ function initialTaxYear(): number {
   if (Number.isInteger(queryYear) && queryYear >= 1900 && queryYear <= 2100) return queryYear
 
   return currentTaxYear()
-}
-
-function statusLabel(status: AccountFeeSummary['status']): string {
-  if (status === 'under') return 'Under'
-  if (status === 'over') return 'Over'
-  if (status === 'on_target') return 'On-target'
-  return '-'
-}
-
-function statusClassName(status: AccountFeeSummary['status']): string {
-  if (status === 'under') return 'border-sky-600 text-sky-700 dark:text-sky-300'
-  if (status === 'over') return 'border-red-600 text-red-700 dark:text-red-300'
-  if (status === 'on_target') return 'border-emerald-600 text-emerald-700 dark:text-emerald-300'
-  return 'border-muted-foreground text-muted-foreground'
 }
 
 export default function AllAccountsFeesTab() {
@@ -265,31 +224,32 @@ export default function AllAccountsFeesTab() {
           <CardTitle>Reconciliation Summary</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-4">
-          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              Matched
-            </div>
-            <div className="text-2xl font-semibold">{data.reconciliation_summary.matched}</div>
-          </a>
-          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-              Mismatched
-            </div>
-            <div className="text-2xl font-semibold">{data.reconciliation_summary.mismatched}</div>
-          </a>
-          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              Unclassified
-            </div>
-            <div className="text-2xl font-semibold">{data.reconciliation_summary.unclassified}</div>
-          </a>
-          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/documents">
-            <div className="text-sm text-muted-foreground">Unlinked K-1s</div>
-            <div className="text-2xl font-semibold">{data.reconciliation_summary.unlinked}</div>
-          </a>
+          <ReconciliationTile
+            href="/finance/account/all/fees"
+            label="Matched"
+            count={data.reconciliation_summary.matched}
+            icon={CheckCircle2}
+            iconClassName="h-4 w-4 text-emerald-600"
+          />
+          <ReconciliationTile
+            href="/finance/account/all/fees"
+            label="Mismatched"
+            count={data.reconciliation_summary.mismatched}
+            icon={AlertTriangle}
+            iconClassName="h-4 w-4 text-red-600"
+          />
+          <ReconciliationTile
+            href="/finance/account/all/fees"
+            label="Unclassified"
+            count={data.reconciliation_summary.unclassified}
+            icon={AlertTriangle}
+            iconClassName="h-4 w-4 text-amber-600"
+          />
+          <ReconciliationTile
+            href="/finance/documents"
+            label="Unlinked K-1s"
+            count={data.reconciliation_summary.unlinked}
+          />
         </CardContent>
       </Card>
     </div>
