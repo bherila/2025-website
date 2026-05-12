@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Finance;
 
+use App\Services\Tax\PureTaxMath\FederalBrackets;
+use App\Services\Tax\PureTaxMath\FilingStatus;
 use App\Support\Finance\FederalIncomeTax;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
@@ -38,6 +40,18 @@ class FederalIncomeTaxTest extends TestCase
         );
     }
 
+    public function test_modern_year_ordinary_tax_matches_pure_tax_math(): void
+    {
+        $this->assertSame(
+            FederalBrackets::taxOnOrdinary(2025, FilingStatus::Single, 50000.0),
+            FederalIncomeTax::ordinaryTax(50000.0, 2025, false),
+        );
+        $this->assertSame(
+            FederalBrackets::taxOnOrdinary(2026, FilingStatus::MarriedFilingJointly, 150000.0),
+            FederalIncomeTax::ordinaryTax(150000.0, 2026, true),
+        );
+    }
+
     public function test_unsupported_year_uses_nearest_configured_table(): void
     {
         $this->assertSame(
@@ -60,8 +74,8 @@ class FederalIncomeTaxTest extends TestCase
             ]);
 
         $this->assertSame(
-            FederalIncomeTax::ordinaryTax(50000.0, 2026, false),
-            FederalIncomeTax::ordinaryTax(50000.0, 2030, false),
+            FederalIncomeTax::regularTax(50000.0, 2026, false, 10000.0),
+            FederalIncomeTax::regularTax(50000.0, 2030, false, 10000.0),
         );
     }
 }

@@ -24,6 +24,12 @@ const CALCULATORS: CalculatorCard[] = [
     href: '/financial-planning/rent-vs-buy',
     shipped: true,
   },
+  {
+    title: 'Roth Conversion Planner',
+    description: 'Project Roth conversions, RMDs, Social Security timing, IRMAA, NIIT, and ending estate value.',
+    href: '/financial-planning/roth-conversion',
+    shipped: true,
+  },
 ]
 
 export default function FinancialPlanningPage(): ReactElement {
