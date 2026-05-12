@@ -187,10 +187,7 @@ export function FeeDragLineChart({ series }: FeeDragLineChartProps) {
             borderRadius: '6px',
             color: '#ffffff',
           }}
-          formatter={(value, name) => {
-            const label = name === 'gross_return' ? 'Gross return' : name === 'net_return' ? 'Net of fees' : 'Fees'
-            return [formatCurrency(Number(value)), label]
-          }}
+          formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
           labelFormatter={(label) => String(label)}
         />
         <Line type="monotone" dataKey="gross_return" name="Gross return" stroke="#0f766e" strokeWidth={2} dot={false} />

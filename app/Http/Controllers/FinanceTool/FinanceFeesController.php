@@ -155,6 +155,7 @@ class FinanceFeesController extends Controller
             ->where('user_id', Auth::id())
             ->where('tax_year', $year)
             ->where('form_type', 'k1')
+            ->whereNull('account_id')
             ->whereDoesntHave('accountLinks')
             ->count();
     }
