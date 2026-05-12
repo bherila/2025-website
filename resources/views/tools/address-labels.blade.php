@@ -68,10 +68,12 @@
   const stats=document.getElementById('stats');
   const calibrationLink=document.getElementById('calibration-link');
   if(!textarea||!sheet||!parserMode||!skipCount||!copies||!stats||!calibrationLink){return;}
+  function readStorage(){try{return localStorage.getItem(key);}catch(_){return null;}}
+  function writeStorage(value){try{localStorage.setItem(key,value);}catch(_){}}
   if(textarea.value.trim()===''){
-    textarea.value=localStorage.getItem(key)||'';
+    textarea.value=readStorage()||'';
   }
-  textarea.addEventListener('input',()=>{localStorage.setItem(key,textarea.value); updateStats();});
+  textarea.addEventListener('input',()=>{writeStorage(textarea.value); updateStats();});
   [sheet,parserMode,skipCount,copies].forEach((element)=>element.addEventListener('change',updateStats));
   function updateStats(){
     const rowCount=estimateRows();

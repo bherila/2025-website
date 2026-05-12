@@ -11,13 +11,11 @@ class AddressLabelControllerTest extends TestCase
 
     public function test_public_tools_page_is_accessible(): void
     {
-        $this->withoutVite();
         $this->get('/tools/address-labels')->assertOk()->assertSee('Address Label PDF Generator');
     }
 
     public function test_empty_input_redirects_back_with_errors(): void
     {
-        $this->withoutVite();
         $this->from('/tools/address-labels')->post('/tools/address-labels/pdf', [
             'sheet_number' => '48163',
             'addresses' => '',
@@ -61,8 +59,6 @@ class AddressLabelControllerTest extends TestCase
 
     public function test_preview_renders_selected_layout_options(): void
     {
-        $this->withoutVite();
-
         $this->post('/tools/address-labels/preview', [
             'sheet_number' => '48163',
             'addresses' => "Jane Doe\n123 Main\n\nJohn Doe\n456 Oak",
@@ -76,6 +72,19 @@ class AddressLabelControllerTest extends TestCase
             ->assertSee('Jane Doe')
             ->assertSee('John Doe')
             ->assertSee('flex flex-col justify-center', false);
+    }
+
+    public function test_preview_rejects_input_exceeding_row_cap(): void
+    {
+        $rows = implode("\n", array_map(static fn (int $i): string => "Person {$i}\t{$i} Main", range(1, 501)));
+
+        $this->from('/tools/address-labels')->post('/tools/address-labels/preview', [
+            'sheet_number' => '48163',
+            'addresses' => $rows,
+            'parser_mode' => 'delimited',
+        ])
+            ->assertRedirect('/tools/address-labels')
+            ->assertSessionHasErrors('addresses');
     }
 
     public function test_invalid_sheet_number_redirects_with_errors(): void

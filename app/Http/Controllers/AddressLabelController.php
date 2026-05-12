@@ -13,6 +13,8 @@ use TCPDF;
 
 class AddressLabelController extends Controller
 {
+    private const int MAX_ROWS = 500;
+
     public function __construct(private AddressLabelParser $parser) {}
 
     public function index(): View
@@ -36,8 +38,8 @@ class AddressLabelController extends Controller
         $skipCount = $request->skipCount($spec->labelsPerPage());
         $rows = $this->applyCopies($rows, $request->copies());
 
-        if (count($rows) > 500) {
-            return redirect()->back()->withErrors(['addresses' => 'Maximum 500 label rows are allowed.'])->withInput();
+        if (count($rows) > self::MAX_ROWS) {
+            return redirect()->back()->withErrors(['addresses' => 'Maximum '.self::MAX_ROWS.' label rows are allowed.'])->withInput();
         }
 
         $pdfBytes = $this->buildLabelsPdf(
@@ -67,6 +69,11 @@ class AddressLabelController extends Controller
         }
 
         $rows = $this->applyCopies($rows, $request->copies());
+
+        if (count($rows) > self::MAX_ROWS) {
+            return redirect()->back()->withErrors(['addresses' => 'Maximum '.self::MAX_ROWS.' label rows are allowed.'])->withInput();
+        }
+
         $skipCount = $request->skipCount($spec->labelsPerPage());
         $paddedRows = array_merge(array_fill(0, $skipCount, []), $rows);
 
@@ -82,7 +89,7 @@ class AddressLabelController extends Controller
     public function calibration(AddressLabelCalibrationRequest $request): Response
     {
         $spec = new AveryLabelSpec($request->sheetNumber());
-        $pdf = new TCPDF('P', 'in', 'LETTER', true, 'UTF-8', false);
+        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
         $pdf->SetPrintHeader(false);
         $pdf->SetPrintFooter(false);
         $pdf->SetMargins(0, 0, 0);
@@ -119,7 +126,7 @@ class AddressLabelController extends Controller
      */
     private function buildLabelsPdf(array $rows, AveryLabelSpec $spec, float $baseFontSize, bool $center, bool $boldFirstLine, int $skipCount): string
     {
-        $pdf = new TCPDF('P', 'in', 'LETTER', true, 'UTF-8', false);
+        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
         $pdf->SetPrintHeader(false);
         $pdf->SetPrintFooter(false);
         $pdf->SetMargins(0, 0, 0);
