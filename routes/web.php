@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AddressLabelController;
 use App\Http\Controllers\AdminGenAiJobsWebController;
 use App\Http\Controllers\AdminTaxNormalizationWebController;
 use App\Http\Controllers\BingoController;
@@ -131,6 +132,11 @@ Route::get('/tools/bingo', [BingoController::class, 'index']);
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
+
+Route::get('/tools/address-labels', [AddressLabelController::class, 'index'])->name('tools.address-labels.index');
+Route::post('/tools/address-labels/pdf', [AddressLabelController::class, 'generate'])->name('tools.address-labels.pdf');
+Route::post('/tools/address-labels/preview', [AddressLabelController::class, 'preview'])->name('tools.address-labels.preview');
+Route::get('/tools/address-labels/calibration', [AddressLabelController::class, 'calibration'])->name('tools.address-labels.calibration');
 
 Route::get('/financial-planning', function () {
     return view('financial-planning.index');
