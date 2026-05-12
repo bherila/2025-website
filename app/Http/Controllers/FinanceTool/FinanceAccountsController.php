@@ -42,6 +42,11 @@ class FinanceAccountsController extends Controller
         return view('finance.account-all-lots', ['availableYears' => $years]);
     }
 
+    public function showAllFees(): View
+    {
+        return view('finance.account-all-fees');
+    }
+
     public function showAllImportPage(): View
     {
         // Multi-account import page - doesn't need to validate a specific account
@@ -67,6 +72,14 @@ class FinanceAccountsController extends Controller
         $accountName = $account->acct_name;
 
         return view('finance.summary', compact('account_id', 'accountName'));
+    }
+
+    public function fees(Request $request, int $account_id): View
+    {
+        $account = $this->resolveOwnedAccount($account_id);
+        $accountName = $account->acct_name;
+
+        return view('finance.fees', compact('account_id', 'accountName'));
     }
 
     public function statements(Request $request, int $account_id): View

@@ -60,6 +60,7 @@ const ACCOUNT_TABS: { value: string; label: string; disabledForAll: boolean }[] 
   { value: 'statements', label: 'Statements', disabledForAll: true },
   { value: 'lots', label: 'Lots', disabledForAll: false },
   { value: 'summary', label: 'Summary', disabledForAll: true },
+  { value: 'fees', label: 'Fees', disabledForAll: false },
 ]
 
 export interface FinanceNavbarProps {

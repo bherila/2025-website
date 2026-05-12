@@ -26,6 +26,7 @@ use App\Http\Controllers\FinanceTool\EmploymentEntityYearController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceDocumentController;
 use App\Http\Controllers\FinanceTool\FinanceEmploymentEntityController;
+use App\Http\Controllers\FinanceTool\FinanceFeesController;
 use App\Http\Controllers\FinanceTool\FinanceLotsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\FinancePayslipImportController;
@@ -77,6 +78,7 @@ Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::c
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts
 Route::middleware(['web', 'auth'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth'])->get('/finance/all/fees', [FinanceFeesController::class, 'all']);
 Route::middleware(['web', 'auth'])->get('/finance/all/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
@@ -156,6 +158,7 @@ Route::middleware(['web', 'auth'])->get('/finance/transactions/{transaction_id}/
 Route::middleware(['web', 'auth'])->post('/finance/transactions/link', [FinanceTransactionLinkingApiController::class, 'linkTransactions']);
 Route::middleware(['web', 'auth'])->post('/finance/transactions/{transaction_id}/unlink', [FinanceTransactionLinkingApiController::class, 'unlinkTransaction']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/linkable-pairs', [FinanceTransactionLinkingApiController::class, 'findLinkablePairs']);
+Route::middleware(['web', 'auth'])->get('/finance/{account_id}/fees', [FinanceFeesController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/balance-timeseries', [FinanceApiController::class, 'getBalanceTimeseries']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/summary', [FinanceApiController::class, 'getSummary']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/balance-timeseries', [StatementController::class, 'addFinAccountStatement']);

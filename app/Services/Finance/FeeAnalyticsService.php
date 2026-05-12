@@ -1,0 +1,585 @@
+<?php
+
+namespace App\Services\Finance;
+
+use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
+use App\Models\FinanceTool\FinStatement;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+
+class FeeAnalyticsService
+{
+    public const float MISMATCH_THRESHOLD_USD = 1.00;
+
+    public const float ON_TARGET_TOLERANCE = 0.10;
+
+    private const array FEE_CHARACTERISTICS = ['fee_schE', 'fee_irc67g'];
+
+    // Keep in sync with resources/js/lib/finance/transactionTypes.ts.
+    private const array CASH_FLOW_TRANSACTION_TYPES = ['Transfer', 'Deposit', 'Withdrawal'];
+
+    /**
+     * @return array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}
+     */
+    public function actualFeesForAccount(int $accountId, int $year): array
+    {
+        $account = FinAccounts::query()->where('acct_id', $accountId)->first();
+        if ($account instanceof FinAccounts && $this->accountPeriodForYear($account, $year) === null) {
+            return $this->emptyActualFees();
+        }
+
+        [$start, $end] = $this->yearBounds($year);
+
+        return $this->actualFeesForPeriod($accountId, $start, $end, true);
+    }
+
+    public function expectedFeesForAccount(FinAccounts $account, int $year): float
+    {
+        if (! $this->accountHasExpectedFees($account)) {
+            return 0.0;
+        }
+
+        $period = $this->accountPeriodForYear($account, $year);
+        if ($period === null) {
+            return 0.0;
+        }
+
+        [$start, $end, $periodDays] = $period;
+        $yearsInPeriod = $periodDays / 365.25;
+        $averageBalance = $this->avgBalanceForPeriod((int) $account->acct_id, $start, $end);
+        $percentage = (float) ($account->expected_fee_pct ?? 0);
+        $flat = (float) ($account->expected_fee_flat ?? 0);
+
+        return MoneyMath::round(($averageBalance * ($percentage / 100) * $yearsInPeriod) + ($flat * $yearsInPeriod));
+    }
+
+    /**
+     * @return array<int, array{month:string,gross_return:float,net_return:float,fees:float}>
+     */
+    public function monthlyFeeDragSeries(int $accountId, int $year): array
+    {
+        $series = [];
+
+        for ($month = 1; $month <= 12; $month++) {
+            $start = CarbonImmutable::create($year, $month, 1)->startOfDay();
+            $end = $start->endOfMonth();
+            $fees = $this->actualFeesForPeriod($accountId, $start, $end, false)['total'];
+            $cashFlows = $this->cashFlowsForPeriod($accountId, $start, $end);
+            $startingBalance = $this->balanceAtPeriodStart($accountId, $start);
+            $endingBalance = $this->balanceAtPeriodEnd($accountId, $end) ?? $startingBalance;
+            $netReturn = MoneyMath::round(($endingBalance - $startingBalance) + $cashFlows['withdrawals'] - $cashFlows['deposits']);
+
+            $series[] = [
+                'month' => $start->format('Y-m'),
+                'gross_return' => MoneyMath::add($netReturn, $fees),
+                'net_return' => $netReturn,
+                'fees' => $fees,
+            ];
+        }
+
+        return $series;
+    }
+
+    /**
+     * @return array<int, array{entity_name:string,k1_fees_schE:float,k1_fees_irc67g:float,statement_fees_schE:float,statement_fees_irc67g:float,delta_schE:float,delta_irc67g:float,status:string,tax_document_id:int|null,account_id:int}>
+     */
+    public function reconcileK1Fees(int $accountId, int $year): array
+    {
+        $actual = $this->actualFeesForAccount($accountId, $year);
+        $statementSchE = $actual['by_characteristic']['fee_schE'];
+        $statementIrc67g = $actual['by_characteristic']['fee_irc67g'];
+
+        $documents = FileForTaxDocument::query()
+            ->with(['accountLinks', 'employmentEntity'])
+            ->where('form_type', 'k1')
+            ->where('tax_year', $year)
+            ->where(function (Builder $query) use ($accountId, $year): void {
+                $query
+                    ->where('account_id', $accountId)
+                    ->orWhereHas('accountLinks', function (Builder $linkQuery) use ($accountId, $year): void {
+                        $linkQuery
+                            ->where('account_id', $accountId)
+                            ->where('form_type', 'k1')
+                            ->where('tax_year', $year);
+                    });
+            })
+            ->orderBy('id')
+            ->get();
+
+        $rows = [];
+
+        foreach ($documents as $document) {
+            $k1Fees = $this->k1FeeBuckets($document);
+            $deltaSchE = MoneyMath::subtract($statementSchE, $k1Fees['schE']);
+            $deltaIrc67g = MoneyMath::subtract($statementIrc67g, $k1Fees['irc67g']);
+            $status = $this->reconciliationStatus($deltaSchE, $deltaIrc67g, $k1Fees['has_unclassified_13zz']);
+
+            $rows[] = [
+                'entity_name' => $this->k1EntityName($document),
+                'k1_fees_schE' => $k1Fees['schE'],
+                'k1_fees_irc67g' => $k1Fees['irc67g'],
+                'statement_fees_schE' => $statementSchE,
+                'statement_fees_irc67g' => $statementIrc67g,
+                'delta_schE' => $deltaSchE,
+                'delta_irc67g' => $deltaIrc67g,
+                'status' => $status,
+                'tax_document_id' => (int) $document->id,
+                'account_id' => $accountId,
+            ];
+        }
+
+        return $rows;
+    }
+
+    public function feeAmountForLineItem(FinAccountLineItems $row): float
+    {
+        if ($this->isFeeType($row->t_type) || $this->lineItemFeeTags($row)->isNotEmpty()) {
+            return MoneyMath::round(abs((float) ($row->t_amt ?? 0)));
+        }
+
+        return MoneyMath::round(abs((float) ($row->t_fee ?? 0)));
+    }
+
+    public function accountHasExpectedFees(FinAccounts $account): bool
+    {
+        return $account->expected_fee_pct !== null
+            || $account->expected_fee_flat !== null
+            || $account->expected_fee_notes !== null;
+    }
+
+    public function deltaStatus(float $actual, float $expected, bool $hasExpectation): ?string
+    {
+        if (! $hasExpectation) {
+            return null;
+        }
+
+        if ($expected === 0.0) {
+            return $actual === 0.0 ? 'on_target' : 'over';
+        }
+
+        $tolerance = abs($expected) * self::ON_TARGET_TOLERANCE;
+        if ($actual < $expected - $tolerance) {
+            return 'under';
+        }
+
+        if ($actual > $expected + $tolerance) {
+            return 'over';
+        }
+
+        return 'on_target';
+    }
+
+    /**
+     * @return array{0:CarbonImmutable,1:CarbonImmutable}
+     */
+    private function yearBounds(int $year): array
+    {
+        return [
+            CarbonImmutable::create($year, 1, 1)->startOfDay(),
+            CarbonImmutable::create($year, 12, 31)->startOfDay(),
+        ];
+    }
+
+    /**
+     * @return array{0:CarbonImmutable,1:CarbonImmutable,2:int}|null
+     */
+    private function accountPeriodForYear(FinAccounts $account, int $year): ?array
+    {
+        [$yearStart, $yearEnd] = $this->yearBounds($year);
+        $openedAt = $this->accountOpenedAt($account) ?? $yearStart;
+        $closedAt = $this->carbonFromMixed($account->when_closed)?->startOfDay();
+        $periodStart = $openedAt->greaterThan($yearStart) ? $openedAt : $yearStart;
+        $periodEnd = $closedAt instanceof CarbonImmutable && $closedAt->lessThan($yearEnd) ? $closedAt : $yearEnd;
+
+        if ($periodEnd->lessThan($periodStart)) {
+            return null;
+        }
+
+        return [$periodStart, $periodEnd, (int) $periodStart->diffInDays($periodEnd) + 1];
+    }
+
+    private function accountOpenedAt(FinAccounts $account): ?CarbonImmutable
+    {
+        $whenOpened = $this->carbonFromMixed($account->getAttribute('when_opened'));
+        if ($whenOpened instanceof CarbonImmutable) {
+            return $whenOpened->startOfDay();
+        }
+
+        $firstTransactionDate = FinAccountLineItems::query()
+            ->where('t_account', $account->acct_id)
+            ->whereNotNull('t_date')
+            ->min('t_date');
+
+        if ($firstTransactionDate !== null) {
+            return CarbonImmutable::parse((string) $firstTransactionDate)->startOfDay();
+        }
+
+        $firstStatementDate = FinStatement::query()
+            ->where('acct_id', $account->acct_id)
+            ->whereNotNull('statement_closing_date')
+            ->min('statement_closing_date');
+
+        return $firstStatementDate !== null ? CarbonImmutable::parse((string) $firstStatementDate)->startOfDay() : null;
+    }
+
+    private function carbonFromMixed(mixed $value): ?CarbonImmutable
+    {
+        if ($value instanceof CarbonImmutable) {
+            return $value;
+        }
+
+        if ($value instanceof CarbonInterface) {
+            return CarbonImmutable::instance($value);
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            return CarbonImmutable::parse($value);
+        }
+
+        return null;
+    }
+
+    private function avgBalanceForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): float
+    {
+        $statements = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereNotNull('statement_closing_date')
+            ->whereBetween('statement_closing_date', [$start->toDateString(), $end->toDateString()])
+            ->orderBy('statement_closing_date')
+            ->orderBy('statement_id')
+            ->get(['balance']);
+
+        if ($statements->count() >= 2) {
+            $balances = $statements
+                ->map(fn (FinStatement $statement): float => (float) $statement->balance)
+                ->all();
+
+            return MoneyMath::round(array_sum($balances) / count($balances));
+        }
+
+        $openingBalance = $this->statementBalanceOnOrBefore($accountId, $start->subDay())
+            ?? $this->statementBalanceOnOrAfter($accountId, $start)
+            ?? $this->accountLastBalance($accountId);
+        $closingBalance = $this->statementBalanceOnOrBefore($accountId, $end)
+            ?? $openingBalance;
+
+        return MoneyMath::round(($openingBalance + $closingBalance) / 2);
+    }
+
+    /**
+     * @return array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}
+     */
+    private function actualFeesForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end, bool $includeLineItems): array
+    {
+        $totals = ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0];
+        $lineItems = [];
+
+        foreach ($this->feeLineItemsForPeriod($accountId, $start, $end) as $row) {
+            $feeAmount = $this->feeAmountForLineItem($row);
+            if ($feeAmount <= 0.0) {
+                continue;
+            }
+
+            $bucket = $this->bucketForLineItem($row);
+            $totals[$bucket] = MoneyMath::add($totals[$bucket], $feeAmount);
+
+            if ($includeLineItems) {
+                $lineItems[] = $this->lineItemPayload($row, $feeAmount, $bucket);
+            }
+        }
+
+        return [
+            'total' => MoneyMath::sum(array_values($totals)),
+            'by_characteristic' => $totals,
+            'line_items' => $lineItems,
+        ];
+    }
+
+    /**
+     * @return Collection<int, FinAccountLineItems>
+     */
+    private function feeLineItemsForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): Collection
+    {
+        return FinAccountLineItems::query()
+            ->with('tags')
+            ->where('t_account', $accountId)
+            ->whereBetween('t_date', [$start->toDateString(), $end->toDateString()])
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereRaw("LOWER(COALESCE(t_type, '')) LIKE ?", ['%fee%'])
+                    ->orWhereRaw('ABS(COALESCE(t_fee, 0)) > 0.000001')
+                    ->orWhereHas('tags', function (Builder $tagQuery): void {
+                        $tagQuery->whereIn('tax_characteristic', self::FEE_CHARACTERISTICS);
+                    });
+            })
+            ->orderBy('t_date')
+            ->orderBy('t_id')
+            ->get();
+    }
+
+    private function bucketForLineItem(FinAccountLineItems $row): string
+    {
+        $characteristics = $this->lineItemFeeTags($row)
+            ->pluck('tax_characteristic')
+            ->filter()
+            ->values()
+            ->all();
+
+        foreach (self::FEE_CHARACTERISTICS as $characteristic) {
+            if (in_array($characteristic, $characteristics, true)) {
+                return $characteristic;
+            }
+        }
+
+        return 'untagged';
+    }
+
+    /**
+     * @return Collection<int, FinAccountTag>
+     */
+    private function lineItemFeeTags(FinAccountLineItems $row): Collection
+    {
+        $tags = $row->relationLoaded('tags') ? $row->tags : $row->tags()->get();
+
+        return $tags->filter(
+            static fn (FinAccountTag $tag): bool => in_array((string) $tag->tax_characteristic, self::FEE_CHARACTERISTICS, true),
+        )->values();
+    }
+
+    private function isFeeType(mixed $type): bool
+    {
+        return is_string($type) && str_contains(strtolower($type), 'fee');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function lineItemPayload(FinAccountLineItems $row, float $feeAmount, string $bucket): array
+    {
+        return [
+            't_id' => (int) $row->t_id,
+            't_account' => (int) $row->t_account,
+            't_date' => $row->t_date,
+            't_type' => $row->t_type,
+            't_description' => $row->t_description,
+            't_amt' => $row->t_amt !== null ? (float) $row->t_amt : null,
+            't_fee' => $row->t_fee !== null ? (float) $row->t_fee : null,
+            'fee_amount' => $feeAmount,
+            'tax_characteristic' => $bucket === 'untagged' ? null : $bucket,
+            'tags' => $row->tags->map(static fn (FinAccountTag $tag): array => [
+                'tag_id' => (int) $tag->tag_id,
+                'tag_userid' => (string) $tag->tag_userid,
+                'tag_label' => (string) $tag->tag_label,
+                'tag_color' => (string) $tag->tag_color,
+                'tax_characteristic' => $tag->tax_characteristic,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * @return array{deposits:float,withdrawals:float}
+     */
+    private function cashFlowsForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $deposits = 0.0;
+        $withdrawals = 0.0;
+
+        $rows = FinAccountLineItems::query()
+            ->where('t_account', $accountId)
+            ->whereBetween('t_date', [$start->toDateString(), $end->toDateString()])
+            ->whereIn('t_type', self::CASH_FLOW_TRANSACTION_TYPES)
+            ->get(['t_type', 't_amt']);
+
+        foreach ($rows as $row) {
+            $amount = (float) ($row->t_amt ?? 0);
+            if ($row->t_type === 'Deposit') {
+                $deposits = MoneyMath::add($deposits, abs($amount));
+            } elseif ($row->t_type === 'Withdrawal') {
+                $withdrawals = MoneyMath::add($withdrawals, abs($amount));
+            } elseif ($row->t_type === 'Transfer' && $amount >= 0) {
+                $deposits = MoneyMath::add($deposits, $amount);
+            } elseif ($row->t_type === 'Transfer') {
+                $withdrawals = MoneyMath::add($withdrawals, abs($amount));
+            }
+        }
+
+        return ['deposits' => $deposits, 'withdrawals' => $withdrawals];
+    }
+
+    private function balanceAtPeriodStart(int $accountId, CarbonImmutable $start): float
+    {
+        return $this->statementBalanceOnOrBefore($accountId, $start->subDay())
+            ?? $this->statementBalanceOnOrAfter($accountId, $start)
+            ?? $this->accountLastBalance($accountId);
+    }
+
+    private function balanceAtPeriodEnd(int $accountId, CarbonImmutable $end): ?float
+    {
+        return $this->statementBalanceOnOrBefore($accountId, $end);
+    }
+
+    private function statementBalanceOnOrBefore(int $accountId, CarbonImmutable $date): ?float
+    {
+        $statement = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereNotNull('statement_closing_date')
+            ->where('statement_closing_date', '<=', $date->toDateString())
+            ->orderByDesc('statement_closing_date')
+            ->orderByDesc('statement_id')
+            ->first(['balance']);
+
+        return $statement instanceof FinStatement ? (float) $statement->balance : null;
+    }
+
+    private function statementBalanceOnOrAfter(int $accountId, CarbonImmutable $date): ?float
+    {
+        $statement = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereNotNull('statement_closing_date')
+            ->where('statement_closing_date', '>=', $date->toDateString())
+            ->orderBy('statement_closing_date')
+            ->orderBy('statement_id')
+            ->first(['balance']);
+
+        return $statement instanceof FinStatement ? (float) $statement->balance : null;
+    }
+
+    private function accountLastBalance(int $accountId): float
+    {
+        $account = FinAccounts::query()->where('acct_id', $accountId)->first(['acct_last_balance']);
+
+        return $account instanceof FinAccounts ? (float) $account->acct_last_balance : 0.0;
+    }
+
+    /**
+     * @return array{schE:float,irc67g:float,has_unclassified_13zz:bool}
+     */
+    private function k1FeeBuckets(FileForTaxDocument $document): array
+    {
+        $data = $document->parsed_data;
+        if (! is_array($data) || ! is_array($data['codes'] ?? null)) {
+            return ['schE' => 0.0, 'irc67g' => 0.0, 'has_unclassified_13zz' => false];
+        }
+
+        // Keep in sync with resources/js/lib/finance/k1RoutingNotes.ts.
+        $codes = $data['codes'];
+        $irc67g = MoneyMath::sum([
+            $this->sumK1CodeValues($codes, '11', 'K', 'value'),
+            $this->sumK1CodeValues($codes, '13', 'K', 'value'),
+        ]);
+        $schE = $this->sumK1CodeValues($codes, '13', 'L', 'value');
+        $hasUnclassified13zz = false;
+
+        foreach ($this->k1CodeItems($codes, '13', 'ZZ') as $item) {
+            if (array_key_exists('fee_subtotal', $item)) {
+                $schE = MoneyMath::add($schE, abs($this->parseMoney($item['fee_subtotal']) ?? 0.0));
+            } else {
+                $hasUnclassified13zz = true;
+            }
+        }
+
+        return [
+            'schE' => MoneyMath::round($schE),
+            'irc67g' => MoneyMath::round($irc67g),
+            'has_unclassified_13zz' => $hasUnclassified13zz,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $codes
+     */
+    private function sumK1CodeValues(array $codes, string $box, string $code, string $field): float
+    {
+        $values = [];
+
+        foreach ($this->k1CodeItems($codes, $box, $code) as $item) {
+            $values[] = abs($this->parseMoney($item[$field] ?? null) ?? 0.0);
+        }
+
+        return MoneyMath::sum($values);
+    }
+
+    /**
+     * @param  array<string, mixed>  $codes
+     * @return array<int, array<string, mixed>>
+     */
+    private function k1CodeItems(array $codes, string $box, string $code): array
+    {
+        $items = is_array($codes[$box] ?? null) ? $codes[$box] : [];
+
+        return array_values(array_filter($items, static function (mixed $item) use ($code): bool {
+            return is_array($item) && strtoupper((string) ($item['code'] ?? '')) === $code;
+        }));
+    }
+
+    private function parseMoney(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $isParenthetical = str_starts_with($raw, '(') && str_ends_with($raw, ')');
+        $normalized = preg_replace('/[,$\s()]/', '', $raw);
+        if ($normalized === null || $normalized === '' || ! is_numeric($normalized)) {
+            return null;
+        }
+
+        $amount = (float) $normalized;
+
+        return $isParenthetical ? -abs($amount) : $amount;
+    }
+
+    private function reconciliationStatus(float $deltaSchE, float $deltaIrc67g, bool $hasUnclassified13zz): string
+    {
+        if ($hasUnclassified13zz) {
+            return 'unclassified';
+        }
+
+        if (abs($deltaSchE) > self::MISMATCH_THRESHOLD_USD || abs($deltaIrc67g) > self::MISMATCH_THRESHOLD_USD) {
+            return 'mismatch';
+        }
+
+        return 'match';
+    }
+
+    private function k1EntityName(FileForTaxDocument $document): string
+    {
+        $data = $document->parsed_data;
+        $name = is_array($data) ? ($data['fields']['B']['value'] ?? null) : null;
+        if (is_string($name) && trim($name) !== '') {
+            return trim(explode("\n", $name)[0]);
+        }
+
+        if (trim($document->original_filename) !== '') {
+            return $document->original_filename;
+        }
+
+        return "K-1 #{$document->id}";
+    }
+
+    /**
+     * @return array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}
+     */
+    private function emptyActualFees(): array
+    {
+        return [
+            'total' => 0.0,
+            'by_characteristic' => ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0],
+            'line_items' => [],
+        ];
+    }
+}

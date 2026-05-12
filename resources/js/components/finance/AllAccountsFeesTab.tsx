@@ -1,0 +1,250 @@
+'use client'
+
+import currency from 'currency.js'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+
+import { FeeDragLineChart } from '@/components/finance/FeesTab'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { fetchWrapper } from '@/fetchWrapper'
+import { formatCurrency } from '@/lib/formatCurrency'
+import { cn } from '@/lib/utils'
+
+interface FeeBreakdown {
+  fee_schE: number
+  fee_irc67g: number
+  untagged: number
+}
+
+interface MonthlyFeeDragPoint {
+  month: string
+  gross_return: number
+  net_return: number
+  fees: number
+}
+
+interface AccountFeeSummary {
+  acct_id: number
+  acct_name: string
+  balance: number
+  expected_fees: number
+  has_expectation: boolean
+  actual_fees: number
+  delta: number
+  status: 'under' | 'on_target' | 'over' | null
+  pct_of_balance: number | null
+  fees_url: string
+}
+
+interface ReconciliationSummary {
+  matched: number
+  mismatched: number
+  unclassified: number
+  unlinked: number
+}
+
+interface AllAccountsFeesData {
+  year: number
+  totals: {
+    total: number
+    by_characteristic: FeeBreakdown
+  }
+  accounts: AccountFeeSummary[]
+  monthly_fee_drag: MonthlyFeeDragPoint[]
+  reconciliation_summary: ReconciliationSummary
+}
+
+function currentTaxYear(): number {
+  return new Date().getFullYear()
+}
+
+function statusLabel(status: AccountFeeSummary['status']): string {
+  if (status === 'under') return 'Under'
+  if (status === 'over') return 'Over'
+  if (status === 'on_target') return 'On-target'
+  return '-'
+}
+
+function statusClassName(status: AccountFeeSummary['status']): string {
+  if (status === 'under') return 'border-sky-600 text-sky-700 dark:text-sky-300'
+  if (status === 'over') return 'border-red-600 text-red-700 dark:text-red-300'
+  if (status === 'on_target') return 'border-emerald-600 text-emerald-700 dark:text-emerald-300'
+  return 'border-muted-foreground text-muted-foreground'
+}
+
+export default function AllAccountsFeesTab() {
+  const [year] = useState(currentTaxYear())
+  const [data, setData] = useState<AllAccountsFeesData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const loadFees = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const result = await fetchWrapper.get(`/api/finance/all/fees?year=${year}`) as AllAccountsFeesData
+      setData(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [year])
+
+  useEffect(() => {
+    loadFees()
+  }, [loadFees])
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Spinner size="large" />
+        <span className="ml-2">Loading fees...</span>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="p-4">
+        <Alert variant="destructive">
+          <AlertDescription>{error ?? 'Unable to load fees.'}</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Fees</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(data.totals.total)}</div>
+            <div className="text-sm text-muted-foreground">{data.year}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Schedule E</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">
+            {formatCurrency(data.totals.by_characteristic.fee_schE)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Personal</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">
+            {formatCurrency(data.totals.by_characteristic.fee_irc67g)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Untagged</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">
+            {formatCurrency(data.totals.by_characteristic.untagged)}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Per-Account Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                <TableHead className="text-end">Balance</TableHead>
+                <TableHead className="text-end">Expected</TableHead>
+                <TableHead className="text-end">Actual</TableHead>
+                <TableHead className="text-end">Delta</TableHead>
+                <TableHead className="text-end">% of Balance</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.accounts.map((account) => (
+                <TableRow key={account.acct_id}>
+                  <TableCell>
+                    <a className="font-medium text-primary underline-offset-4 hover:underline" href={account.fees_url}>
+                      {account.acct_name}
+                    </a>
+                  </TableCell>
+                  <TableCell className="text-end">{formatCurrency(account.balance)}</TableCell>
+                  <TableCell className="text-end">{account.has_expectation ? formatCurrency(account.expected_fees) : '-'}</TableCell>
+                  <TableCell className="text-end">{formatCurrency(account.actual_fees)}</TableCell>
+                  <TableCell className="text-end">{account.has_expectation ? formatCurrency(currency(account.actual_fees).subtract(account.expected_fees).value) : '-'}</TableCell>
+                  <TableCell className="text-end">{account.pct_of_balance === null ? '-' : `${account.pct_of_balance.toFixed(2)}%`}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={cn('rounded-md', statusClassName(account.status))}>
+                      {statusLabel(account.status)}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Aggregate Fee Drag</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FeeDragLineChart series={data.monthly_fee_drag} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reconciliation Summary</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-4">
+          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              Matched
+            </div>
+            <div className="text-2xl font-semibold">{data.reconciliation_summary.matched}</div>
+          </a>
+          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              Mismatched
+            </div>
+            <div className="text-2xl font-semibold">{data.reconciliation_summary.mismatched}</div>
+          </a>
+          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/account/all/fees">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Unclassified
+            </div>
+            <div className="text-2xl font-semibold">{data.reconciliation_summary.unclassified}</div>
+          </a>
+          <a className="rounded-md border p-3 hover:bg-accent" href="/finance/documents">
+            <div className="text-sm text-muted-foreground">Unlinked K-1s</div>
+            <div className="text-2xl font-semibold">{data.reconciliation_summary.unlinked}</div>
+          </a>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

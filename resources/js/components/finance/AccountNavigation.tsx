@@ -61,6 +61,7 @@ const TAB_ITEMS = [
   { value: 'statements', title: 'Statements', showYearSelector: true },
   { value: 'lots', title: 'Lots', showYearSelector: false },
   { value: 'summary', title: 'Summary', showYearSelector: true },
+  { value: 'fees', title: 'Fees', showYearSelector: true },
 ]
 
 export default function AccountNavigation({

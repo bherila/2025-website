@@ -22,6 +22,9 @@ class FinAccounts extends Model
         'acct_last_balance_date',
         'acct_is_debt',
         'acct_is_retirement',
+        'expected_fee_pct',
+        'expected_fee_flat',
+        'expected_fee_notes',
         'acct_sort_order',
         'when_closed',
     ];
@@ -32,6 +35,8 @@ class FinAccounts extends Model
             'acct_last_balance_date' => 'datetime',
             'acct_is_debt' => 'boolean',
             'acct_is_retirement' => 'boolean',
+            'expected_fee_pct' => 'decimal:4',
+            'expected_fee_flat' => 'decimal:2',
             'when_closed' => 'datetime',
         ];
     }

@@ -1,8 +1,10 @@
 import { createRoot } from 'react-dom/client'
 
 import AccountNavigation from '@/components/finance/AccountNavigation'
+import AllAccountsFeesTab from '@/components/finance/AllAccountsFeesTab'
 import AllAccountsLotsPage from '@/components/finance/AllAccountsLotsPage'
 import DuplicatesPage from '@/components/finance/DuplicatesPage'
+import FeesTab from '@/components/finance/FeesTab'
 import FinanceAccountLotsPage from '@/components/finance/FinanceAccountLotsPage'
 import FinanceAccountsPage from '@/components/finance/FinanceAccountsPage'
 import FinanceConfigPage from '@/components/finance/FinanceConfigPage'
@@ -76,10 +78,22 @@ document.addEventListener('DOMContentLoaded', () => {
     root.render(<AllAccountsLotsPage initialAvailableYears={initialAvailableYears} />)
   }
 
+  const allFeesDiv = document.getElementById('AllAccountsFeesTab')
+  if (allFeesDiv) {
+    const root = createRoot(allFeesDiv)
+    root.render(<AllAccountsFeesTab />)
+  }
+
   const summaryDiv = document.getElementById('AccountSummaryClient')
   if (summaryDiv) {
     const root = createRoot(summaryDiv)
     root.render(<SummaryClient id={parseInt(summaryDiv.dataset.accountId!)} />)
+  }
+
+  const feesDiv = document.getElementById('FeesTab')
+  if (feesDiv) {
+    const root = createRoot(feesDiv)
+    root.render(<FeesTab accountId={parseInt(feesDiv.dataset.accountId!)} />)
   }
 
   const accountsDiv = document.getElementById('FinanceAccountsPage')
