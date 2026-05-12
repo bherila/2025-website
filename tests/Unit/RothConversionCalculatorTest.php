@@ -275,11 +275,26 @@ class RothConversionCalculatorTest extends TestCase
 
         $years = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'];
         $survivorYear = $years[2];
+        $rmdYear = $years[3];
+        $singleYear = $years[4];
 
+        $this->assertSame([
+            'married_filing_jointly',
+            'married_filing_jointly',
+            'qualifying_surviving_spouse',
+            'qualifying_surviving_spouse',
+            'single',
+        ], array_slice(array_column($years, 'filingStatus'), 0, 5));
         $this->assertSame('qualifying_surviving_spouse', $survivorYear['filingStatus']);
         $this->assertGreaterThan(0.0, $survivorYear['beginningBalances']['traditionalPrimary']);
         $this->assertSame(0.0, $survivorYear['beginningBalances']['traditionalSpouse']);
         $this->assertSame(10000.0, $survivorYear['rothConversion']);
+        $this->assertGreaterThan(0.0, $rmdYear['rmd']);
+        $this->assertSame($rmdYear['rmd'], $rmdYear['ordinaryIncomeStack']['rmdPrimary']);
+        $this->assertSame(0.0, $rmdYear['ordinaryIncomeStack']['rmdSpouse']);
+        $this->assertGreaterThan(0.0, $singleYear['rmd']);
+        $this->assertSame($singleYear['rmd'], $singleYear['ordinaryIncomeStack']['rmdPrimary']);
+        $this->assertSame(0.0, $singleYear['ordinaryIncomeStack']['rmdSpouse']);
     }
 
     /**
