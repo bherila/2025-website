@@ -43,5 +43,8 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+
+        <!-- Disable GenAi retry backoff in tests; RetryStrategy uses real usleep() -->
+        <env name="GENAI_RETRY_MAX_ATTEMPTS" value="1"/>
     </php>
 </phpunit>
