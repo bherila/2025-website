@@ -97,6 +97,10 @@ return new class extends Migration
 
     private function createDocumentsTable(): void
     {
+        if (Schema::hasTable('fin_documents')) {
+            return;
+        }
+
         Schema::create('fin_documents', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('user_id');
@@ -133,6 +137,10 @@ return new class extends Migration
 
     private function addDocumentIdToTaxDocuments(): void
     {
+        if (Schema::hasColumn('fin_tax_documents', 'document_id')) {
+            return;
+        }
+
         Schema::table('fin_tax_documents', function (Blueprint $table): void {
             $table->unsignedBigInteger('document_id')->nullable()->after('id');
             $table->foreign('document_id', 'fin_tax_docs_doc_fk')->references('id')->on('fin_documents')->cascadeOnDelete();
@@ -143,6 +151,7 @@ return new class extends Migration
     private function backfillTaxDocuments(): void
     {
         DB::table('fin_tax_documents')
+            ->whereNull('document_id')
             ->orderBy('id')
             ->chunkById(250, function ($taxDocuments): void {
                 foreach ($taxDocuments as $taxDocument) {
@@ -183,41 +192,52 @@ return new class extends Migration
         }
 
         Schema::table('fin_document_accounts', function (Blueprint $table): void {
-            $table->unsignedBigInteger('document_id')->nullable()->after('id');
-            $table->unsignedBigInteger('statement_id')->nullable()->after('account_id');
-            $table->string('account_section_label')->nullable()->after('tax_year');
-            $table->string('payload_kind', 64)->nullable()->after('account_section_label');
-            $table->index('document_id', 'fin_doc_accts_doc_idx');
-            $table->index('statement_id', 'fin_doc_accts_stmt_idx');
-            $table->index('payload_kind', 'fin_doc_accts_payload_idx');
+            if (! Schema::hasColumn('fin_document_accounts', 'document_id')) {
+                $table->unsignedBigInteger('document_id')->nullable()->after('id');
+                $table->index('document_id', 'fin_doc_accts_doc_idx');
+            }
+            if (! Schema::hasColumn('fin_document_accounts', 'statement_id')) {
+                $table->unsignedBigInteger('statement_id')->nullable()->after('account_id');
+                $table->index('statement_id', 'fin_doc_accts_stmt_idx');
+            }
+            if (! Schema::hasColumn('fin_document_accounts', 'account_section_label')) {
+                $table->string('account_section_label')->nullable()->after('tax_year');
+            }
+            if (! Schema::hasColumn('fin_document_accounts', 'payload_kind')) {
+                $table->string('payload_kind', 64)->nullable()->after('account_section_label');
+                $table->index('payload_kind', 'fin_doc_accts_payload_idx');
+            }
         });
 
-        DB::table('fin_document_accounts')
-            ->orderBy('id')
-            ->chunkById(250, function ($links): void {
-                foreach ($links as $link) {
-                    $documentId = DB::table('fin_tax_documents')
-                        ->where('id', $link->tax_document_id)
-                        ->value('document_id');
+        if (Schema::hasColumn('fin_document_accounts', 'tax_document_id')) {
+            DB::table('fin_document_accounts')
+                ->whereNull('document_id')
+                ->orderBy('id')
+                ->chunkById(250, function ($links): void {
+                    foreach ($links as $link) {
+                        $documentId = DB::table('fin_tax_documents')
+                            ->where('id', $link->tax_document_id)
+                            ->value('document_id');
 
-                    DB::table('fin_document_accounts')
-                        ->where('id', $link->id)
-                        ->update([
-                            'document_id' => $documentId,
-                            'payload_kind' => $link->form_type === FileForTaxDocument::FORM_TYPE_1099_B
-                                ? FinDocumentAccount::PAYLOAD_DISPOSITIONS
-                                : null,
-                        ]);
-                }
+                        DB::table('fin_document_accounts')
+                            ->where('id', $link->id)
+                            ->update([
+                                'document_id' => $documentId,
+                                'payload_kind' => $link->form_type === FileForTaxDocument::FORM_TYPE_1099_B
+                                    ? FinDocumentAccount::PAYLOAD_DISPOSITIONS
+                                    : null,
+                            ]);
+                    }
+                });
+
+            Schema::table('fin_document_accounts', function (Blueprint $table): void {
+                $this->dropForeignIfNotSqlite($table, 'fin_tax_document_accounts_tax_document_id_foreign', ['tax_document_id']);
+                $this->dropIndexIfPossible($table, 'fin_tax_document_accounts_tax_document_id_index');
+                $table->dropColumn('tax_document_id');
+                $table->foreign('document_id', 'fin_doc_accts_doc_fk')->references('id')->on('fin_documents')->cascadeOnDelete();
+                $table->foreign('statement_id', 'fin_doc_accts_stmt_fk')->references('statement_id')->on('fin_statements')->nullOnDelete();
             });
-
-        Schema::table('fin_document_accounts', function (Blueprint $table): void {
-            $this->dropForeignIfNotSqlite($table, 'fin_tax_document_accounts_tax_document_id_foreign', ['tax_document_id']);
-            $this->dropIndexIfPossible($table, 'fin_tax_document_accounts_tax_document_id_index');
-            $table->dropColumn('tax_document_id');
-            $table->foreign('document_id', 'fin_doc_accts_doc_fk')->references('id')->on('fin_documents')->cascadeOnDelete();
-            $table->foreign('statement_id', 'fin_doc_accts_stmt_fk')->references('statement_id')->on('fin_statements')->nullOnDelete();
-        });
+        }
 
         Schema::table('fin_document_accounts', function (Blueprint $table): void {
             $table->string('form_type', 50)->nullable()->change();
@@ -227,6 +247,10 @@ return new class extends Migration
 
     private function addStatementDocumentId(): void
     {
+        if (Schema::hasColumn('fin_statements', 'document_id')) {
+            return;
+        }
+
         Schema::table('fin_statements', function (Blueprint $table): void {
             $table->unsignedBigInteger('document_id')->nullable()->after('statement_id');
             $table->foreign('document_id', 'fin_statements_doc_fk')->references('id')->on('fin_documents')->nullOnDelete();
@@ -244,6 +268,7 @@ return new class extends Migration
 
         DB::table('fin_statements')
             ->join('fin_accounts', 'fin_accounts.acct_id', '=', 'fin_statements.acct_id')
+            ->whereNull('fin_statements.document_id')
             ->select('fin_statements.*', 'fin_accounts.acct_owner', 'fin_accounts.acct_name')
             ->orderBy('fin_statements.statement_id')
             ->chunkById(250, function ($statements) use ($filesByStatement, $now): void {
@@ -292,11 +317,19 @@ return new class extends Migration
     private function retargetLotDocuments(): void
     {
         Schema::table('fin_account_lots', function (Blueprint $table): void {
-            $table->unsignedBigInteger('document_id')->nullable()->after('close_t_id');
-            $table->string('lot_origin', 32)->nullable()->after('document_id');
-            $table->index('document_id', 'fin_lots_doc_idx');
-            $table->index('lot_origin', 'fin_lots_origin_idx');
+            if (! Schema::hasColumn('fin_account_lots', 'document_id')) {
+                $table->unsignedBigInteger('document_id')->nullable()->after('close_t_id');
+                $table->index('document_id', 'fin_lots_doc_idx');
+            }
+            if (! Schema::hasColumn('fin_account_lots', 'lot_origin')) {
+                $table->string('lot_origin', 32)->nullable()->after('document_id');
+                $table->index('lot_origin', 'fin_lots_origin_idx');
+            }
         });
+
+        if (! Schema::hasColumn('fin_account_lots', 'tax_document_id')) {
+            return;
+        }
 
         DB::statement(
             'UPDATE fin_account_lots
@@ -346,10 +379,16 @@ return new class extends Migration
 
     private function retargetReconciliationDocuments(): void
     {
-        Schema::table('fin_lot_reconciliation_links', function (Blueprint $table): void {
-            $table->unsignedBigInteger('document_id')->nullable()->after('id');
-            $table->index('document_id', 'fin_lot_recon_doc_idx');
-        });
+        if (! Schema::hasColumn('fin_lot_reconciliation_links', 'document_id')) {
+            Schema::table('fin_lot_reconciliation_links', function (Blueprint $table): void {
+                $table->unsignedBigInteger('document_id')->nullable()->after('id');
+                $table->index('document_id', 'fin_lot_recon_doc_idx');
+            });
+        }
+
+        if (! Schema::hasColumn('fin_lot_reconciliation_links', 'tax_document_id')) {
+            return;
+        }
 
         DB::table('fin_lot_reconciliation_links')
             ->whereNotNull('tax_document_id')

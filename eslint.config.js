@@ -1,5 +1,5 @@
 import js from "@eslint/js";
-import react from "eslint-plugin-react";
+import eslintReact from "@eslint-react/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import unusedImports from "eslint-plugin-unused-imports";
@@ -36,26 +36,25 @@ export default tseslint.config(
       },
     },
     plugins: {
-      react,
+      "@eslint-react": eslintReact,
       "react-hooks": reactHooks,
       "unused-imports": unusedImports,
       "simple-import-sort": simpleImportSort,
     },
-    settings: {
-      react: {
-        version: "detect",
-      },
-    },
+    settings: eslintReact.configs["recommended-typescript"].settings,
     rules: {
-      ...react.configs.recommended.rules,
-      ...react.configs["jsx-runtime"].rules,
+      ...eslintReact.configs["recommended-typescript"].rules,
       ...reactHooks.configs.recommended.rules,
-      "react/prop-types": "off",
-      "react/no-unescaped-entities": "off",
+      "@eslint-react/dom-no-flush-sync": "off",
+      "@eslint-react/no-create-ref": "off",
+      "@eslint-react/no-nested-component-definitions": "off",
+      "@eslint-react/unsupported-syntax": "off",
       "unused-imports/no-unused-imports": "error",
       "unused-imports/no-unused-vars": "off",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
       "@typescript-eslint/no-unused-vars": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-require-imports": "off",
@@ -80,6 +79,8 @@ export default tseslint.config(
       "unused-imports/no-unused-imports": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
     },
   }
 );

@@ -105,7 +105,7 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
                       setWhenClosed(date || null)
                       setIsClosed(true)
                     }}
-                    initialFocus
+                    autoFocus
                   />
                 </PopoverContent>
               </Popover>
