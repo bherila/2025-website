@@ -28,18 +28,10 @@ class AddressLabelController extends Controller
 
     public function generate(GenerateAddressLabelsRequest $request): Response|RedirectResponse
     {
-        $rows = $this->parser->parse($request->addresses(), $request->parserMode());
-
-        if (count($rows) === 0) {
-            return redirect()->back()->withErrors(['addresses' => 'No address rows were provided.'])->withInput();
-        }
-
         $spec = new AveryLabelSpec($request->sheetNumber());
-        $skipCount = $request->skipCount($spec->labelsPerPage());
-        $rows = $this->applyCopies($rows, $request->copies());
-
-        if (count($rows) > self::MAX_ROWS) {
-            return redirect()->back()->withErrors(['addresses' => 'Maximum '.self::MAX_ROWS.' label rows are allowed.'])->withInput();
+        $rows = $this->parseAndApplyCopies($request);
+        if ($rows instanceof RedirectResponse) {
+            return $rows;
         }
 
         $pdfBytes = $this->buildLabelsPdf(
@@ -48,7 +40,7 @@ class AddressLabelController extends Controller
             $request->fontSize(),
             $request->isVerticallyCentered(),
             $request->shouldBoldFirstLine(),
-            $skipCount
+            $request->skipCount($spec->labelsPerPage()),
         );
 
         $disposition = $request->shouldDownload() ? 'attachment' : 'inline';
@@ -62,16 +54,9 @@ class AddressLabelController extends Controller
     public function preview(GenerateAddressLabelsRequest $request): View|RedirectResponse
     {
         $spec = new AveryLabelSpec($request->sheetNumber());
-        $rows = $this->parser->parse($request->addresses(), $request->parserMode());
-
-        if (count($rows) === 0) {
-            return redirect()->back()->withErrors(['addresses' => 'No address rows were provided.'])->withInput();
-        }
-
-        $rows = $this->applyCopies($rows, $request->copies());
-
-        if (count($rows) > self::MAX_ROWS) {
-            return redirect()->back()->withErrors(['addresses' => 'Maximum '.self::MAX_ROWS.' label rows are allowed.'])->withInput();
+        $rows = $this->parseAndApplyCopies($request);
+        if ($rows instanceof RedirectResponse) {
+            return $rows;
         }
 
         $skipCount = $request->skipCount($spec->labelsPerPage());
@@ -89,10 +74,7 @@ class AddressLabelController extends Controller
     public function calibration(AddressLabelCalibrationRequest $request): Response
     {
         $spec = new AveryLabelSpec($request->sheetNumber());
-        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
-        $pdf->SetPrintHeader(false);
-        $pdf->SetPrintFooter(false);
-        $pdf->SetMargins(0, 0, 0);
+        $pdf = $this->makePdf($spec);
         $pdf->AddPage();
         $pdf->SetDrawColor(180, 0, 0);
 
@@ -106,6 +88,41 @@ class AddressLabelController extends Controller
         }
 
         return response($pdf->Output('calibration.pdf', 'S'), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="label-calibration.pdf"']);
+    }
+
+    /**
+     * @return array<int, array<int, string>>|RedirectResponse
+     */
+    private function parseAndApplyCopies(GenerateAddressLabelsRequest $request): array|RedirectResponse
+    {
+        $rows = $this->parser->parse($request->addresses(), $request->parserMode());
+
+        if (count($rows) === 0) {
+            return $this->backWithAddressError('No address rows were provided.');
+        }
+
+        $rows = $this->applyCopies($rows, $request->copies());
+
+        if (count($rows) > self::MAX_ROWS) {
+            return $this->backWithAddressError('Maximum '.self::MAX_ROWS.' label rows are allowed.');
+        }
+
+        return $rows;
+    }
+
+    private function backWithAddressError(string $message): RedirectResponse
+    {
+        return redirect()->back()->withErrors(['addresses' => $message])->withInput();
+    }
+
+    private function makePdf(AveryLabelSpec $spec): TCPDF
+    {
+        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
+        $pdf->SetPrintHeader(false);
+        $pdf->SetPrintFooter(false);
+        $pdf->SetMargins(0, 0, 0);
+
+        return $pdf;
     }
 
     /**
@@ -126,10 +143,7 @@ class AddressLabelController extends Controller
      */
     private function buildLabelsPdf(array $rows, AveryLabelSpec $spec, float $baseFontSize, bool $center, bool $boldFirstLine, int $skipCount): string
     {
-        $pdf = new TCPDF('P', 'in', strtoupper($spec->paper()), true, 'UTF-8', false);
-        $pdf->SetPrintHeader(false);
-        $pdf->SetPrintFooter(false);
-        $pdf->SetMargins(0, 0, 0);
+        $pdf = $this->makePdf($spec);
 
         $labels = array_merge(array_fill(0, $skipCount, []), $rows);
         $chunks = array_chunk($labels, $spec->labelsPerPage());
