@@ -18,8 +18,19 @@ interface RothConversionPageProps {
   initialData: RothConversionInitialData
 }
 
-function currentQueryString(): string {
-  return window.location.search.startsWith('?') ? window.location.search.slice(1) : window.location.search
+function urlStatePathname(): string {
+  return window.location.pathname.replace(/\/s\/[^/]+$/, '')
+}
+
+function replaceUrlWithInputs(inputs: RothConversionInputs, pathname = window.location.pathname): string {
+  const queryString = serializeRothConversionUrlState(inputs)
+  const nextUrl = `${pathname}${queryString ? `?${queryString}` : ''}`
+
+  if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
+    window.history.replaceState(null, '', nextUrl)
+  }
+
+  return window.location.href
 }
 
 function initialInputs(initialData: RothConversionInitialData): RothConversionInputs {
@@ -39,7 +50,8 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
   const [loading, setLoading] = useState(initialData.projection === null)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const shareUrl = savedScenario?.shareUrl ?? window.location.href
+  const [urlOnlyShareUrl, setUrlOnlyShareUrl] = useState(window.location.href)
+  const shareUrl = savedScenario?.shareUrl ?? urlOnlyShareUrl
   const isSharedView = savedScenario !== null
   const saveLabel = useMemo(() => {
     if (savedScenario && canEdit) {
@@ -54,13 +66,8 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
   }, [canEdit, savedScenario])
 
   useEffect(() => {
-    const queryString = serializeRothConversionUrlState(inputs)
-
     if (!isSharedView || !canEdit) {
-      const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`
-      if (currentQueryString() !== queryString) {
-        window.history.replaceState(null, '', nextUrl)
-      }
+      setUrlOnlyShareUrl(replaceUrlWithInputs(inputs))
     }
   }, [canEdit, inputs, isSharedView])
 
@@ -95,6 +102,14 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
 
   async function handleSave(): Promise<void> {
     if (!initialData.authenticated) {
+      if (savedScenario && !canEdit) {
+        setSavedScenario(null)
+        setCanEdit(false)
+        setUrlOnlyShareUrl(replaceUrlWithInputs(inputs, urlStatePathname()))
+        setStatus('Forked to URL state. Edits update this link.')
+        return
+      }
+
       setStatus('Log in to save a short-code link.')
       return
     }
