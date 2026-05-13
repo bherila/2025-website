@@ -1,5 +1,5 @@
 import { AlertTriangle, BarChart3, ChevronRight, Copy, GitFork, LineChart, type LucideIcon, PiggyBank, Save, Table2, Users } from 'lucide-react'
-import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { type ReactElement, useEffect, useId, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,7 @@ import { MillerColumnShell, type MillerColumnShellColumn } from '@/components/ui
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
-import { ageFromBirthYear, findMeta, normalizeRothConversionInputs } from './inputUtils'
+import { findMeta, normalizeRothConversionInputs, reconcileLegacyBirthYears } from './inputUtils'
 import { computeRothConversion, saveRothConversionScenario, updateRothConversionScenario } from './rothConversionApi'
 import {
   ROTH_CONVERSION_FORM_SECTIONS,
@@ -129,10 +129,11 @@ function replaceUrlWithInputs(inputs: RothConversionInputs, pathname = window.lo
 
 function initialInputs(initialData: RothConversionInitialData): RothConversionInputs {
   const base = initialData.inputs ?? DEFAULT_ROTH_CONVERSION_INPUTS
-
-  return window.location.search
+  const resolved = window.location.search
     ? parseRothConversionUrlState(window.location.search, base)
     : base
+
+  return reconcileLegacyBirthYears(resolved)
 }
 
 function getSelectedScenario(
@@ -144,13 +145,6 @@ function getSelectedScenario(
   }
 
   return projection.scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? getPreferredScenario(projection)
-}
-
-function hasLegacyCurrentAgePair(inputs: RothConversionInputs): boolean {
-  return (
-    inputs.people.primaryCurrentAge !== ageFromBirthYear(inputs.currentYear, inputs.people.primaryBirthYear)
-    || inputs.people.spouseCurrentAge !== ageFromBirthYear(inputs.currentYear, inputs.people.spouseBirthYear)
-  )
 }
 
 function ProjectionEmptyState({ loading }: { loading: boolean }): ReactElement {
@@ -208,13 +202,7 @@ function renderColumnLauncher(
 export default function RothConversionPage({ initialData }: RothConversionPageProps): ReactElement {
   const scenarioSelectId = useId()
   const [inputs, setInputs] = useState<RothConversionInputs>(() => initialInputs(initialData))
-  const [preserveLegacyCurrentAges, setPreserveLegacyCurrentAges] = useState(
-    () => initialData.scenario !== null && !window.location.search && hasLegacyCurrentAgePair(initialData.inputs ?? DEFAULT_ROTH_CONVERSION_INPUTS),
-  )
-  const normalizedInputs = useMemo(
-    () => normalizeRothConversionInputs(inputs, { preserveCurrentAges: preserveLegacyCurrentAges }),
-    [inputs, preserveLegacyCurrentAges],
-  )
+  const normalizedInputs = useMemo(() => normalizeRothConversionInputs(inputs), [inputs])
   const [projection, setProjection] = useState<RothConversionProjection | null>(initialData.projection)
   const [savedScenario, setSavedScenario] = useState<RothConversionScenarioMeta | null>(initialData.scenario)
   const [title, setTitle] = useState(initialData.scenario?.title ?? 'Roth conversion plan')
@@ -242,11 +230,6 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
 
     return 'Save'
   }, [canEdit, savedScenario])
-
-  const handleInputsChange = useCallback((nextInputs: RothConversionInputs): void => {
-    setPreserveLegacyCurrentAges(false)
-    setInputs(nextInputs)
-  }, [])
 
   useEffect(() => {
     if (!isSharedView || !canEdit) {
@@ -345,7 +328,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <RothConversionFormSection section={column.id} inputs={inputs} onChange={handleInputsChange} />,
+        children: <RothConversionFormSection section={column.id} inputs={inputs} onChange={setInputs} />,
       }
     }
 

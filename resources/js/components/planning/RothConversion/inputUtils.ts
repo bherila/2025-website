@@ -29,12 +29,33 @@ export function deriveRothConversionAges(inputs: RothConversionInputs): RothConv
   }
 }
 
-interface NormalizeRothConversionInputsOptions {
-  preserveCurrentAges?: boolean
+/**
+ * Legacy scenarios stored `primaryCurrentAge` as canonical and let `primaryBirthYear` drift.
+ * Backfill the birth year from the saved age so display and compute agree under the new
+ * birth-year-canonical model.
+ */
+export function reconcileLegacyBirthYears(inputs: RothConversionInputs): RothConversionInputs {
+  const primaryDerived = ageFromBirthYear(inputs.currentYear, inputs.people.primaryBirthYear)
+  const spouseDerived = ageFromBirthYear(inputs.currentYear, inputs.people.spouseBirthYear)
+  const primaryMatches = primaryDerived === inputs.people.primaryCurrentAge
+  const spouseMatches = spouseDerived === inputs.people.spouseCurrentAge
+
+  if (primaryMatches && spouseMatches) {
+    return inputs
+  }
+
+  return {
+    ...inputs,
+    people: {
+      ...inputs.people,
+      primaryBirthYear: primaryMatches ? inputs.people.primaryBirthYear : inputs.currentYear - inputs.people.primaryCurrentAge,
+      spouseBirthYear: spouseMatches ? inputs.people.spouseBirthYear : inputs.currentYear - inputs.people.spouseCurrentAge,
+    },
+  }
 }
 
-export function normalizeRothConversionInputs(inputs: RothConversionInputs, options: NormalizeRothConversionInputsOptions = {}): RothConversionInputs {
-  const derived = options.preserveCurrentAges ? inputs : deriveRothConversionAges(inputs)
+export function normalizeRothConversionInputs(inputs: RothConversionInputs): RothConversionInputs {
+  const derived = deriveRothConversionAges(inputs)
 
   if (isMarriedFilingStatus(derived.filingStatus)) {
     return derived
