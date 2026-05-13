@@ -16,7 +16,18 @@ jest.mock('../rothConversionApi', () => ({
 
 jest.mock('../RothConversionForm', () => ({
   __esModule: true,
-  default: function MockRothConversionForm({
+  ROTH_CONVERSION_FORM_SECTIONS: [
+    {
+      id: 'people',
+      label: 'People and Filing Status',
+      shortLabel: 'People',
+      description: 'People inputs',
+      icon: function MockIcon(): ReactElement {
+        return <svg aria-hidden="true" />
+      },
+    },
+  ],
+  RothConversionFormSection: function MockRothConversionFormSection({
     inputs,
     onChange,
   }: {
@@ -30,6 +41,7 @@ jest.mock('../RothConversionForm', () => ({
           ...inputs,
           people: {
             ...inputs.people,
+            primaryBirthYear: inputs.currentYear - (inputs.people.primaryCurrentAge + 1),
             primaryCurrentAge: inputs.people.primaryCurrentAge + 1,
           },
         })}
@@ -40,16 +52,69 @@ jest.mock('../RothConversionForm', () => ({
   },
 }))
 
-jest.mock('../RothConversionResults', () => ({
-  __esModule: true,
-  default: function MockRothConversionResults(): ReactElement {
-    return <div data-testid="roth-conversion-results" />
+jest.mock('../RothConversionResultViews', () => ({
+  formatProjectionMoney: (value: number): string => `$${value}`,
+  getLifetimeTax: (scenario: RothConversionProjection['scenarios'][number]): number => scenario.summary.lifetimeFederalTax,
+  getPreferredScenario: (projection: RothConversionProjection): RothConversionProjection['scenarios'][number] => projection.scenarios[0]!,
+  ProjectionBalances: function MockProjectionBalances(): ReactElement {
+    return <div data-testid="projection-balances" />
+  },
+  ProjectionCompare: function MockProjectionCompare(): ReactElement {
+    return <div data-testid="projection-compare" />
+  },
+  ProjectionOverview: function MockProjectionOverview(): ReactElement {
+    return <div data-testid="projection-overview" />
+  },
+  ProjectionSocialSecurity: function MockProjectionSocialSecurity(): ReactElement {
+    return <div data-testid="projection-social-security" />
+  },
+  ProjectionTaxDetail: function MockProjectionTaxDetail(): ReactElement {
+    return <div data-testid="projection-tax-detail" />
+  },
+  ProjectionYears: function MockProjectionYears(): ReactElement {
+    return <div data-testid="projection-years" />
   },
 }))
 
 const mockCompute = computeRothConversion as jest.MockedFunction<typeof computeRothConversion>
 const mockSave = saveRothConversionScenario as jest.MockedFunction<typeof saveRothConversionScenario>
 const mockUpdate = updateRothConversionScenario as jest.MockedFunction<typeof updateRothConversionScenario>
+
+function projection(): RothConversionProjection {
+  return {
+    inputs: DEFAULT_ROTH_CONVERSION_INPUTS,
+    scenarios: [
+      {
+        id: 'base',
+        name: 'Convert to top of 24%',
+        strategy: {},
+        summary: {
+          lifetimeFederalTax: 100,
+          lifetimeStateTax: 0,
+          lifetimeNiit: 0,
+          lifetimeIrmaa: 0,
+          lifetimeSocialSecurity: 0,
+          presentValueLifetimeTax: 0,
+          presentValueSocialSecurity: 0,
+          finalEstateValue: 200,
+          presentValueFinalEstate: 0,
+          irmaaHitYears: 0,
+          cashShortfallTaxApproximationYears: 0,
+          unfundedCashShortfall: 0,
+        },
+        years: [],
+        socialSecurityBreakeven: [],
+      },
+    ],
+    warnings: [],
+    reference: {
+      rmdRates: [],
+      socialSecurityTaxation: [],
+      irmaaTiers: [],
+      conversionWindows: [],
+    },
+  }
+}
 
 function sharedInitialData(overrides: Partial<RothConversionInitialData> = {}): RothConversionInitialData {
   return {
@@ -64,6 +129,7 @@ function sharedInitialData(overrides: Partial<RothConversionInitialData> = {}): 
       ...DEFAULT_ROTH_CONVERSION_INPUTS,
       people: {
         ...DEFAULT_ROTH_CONVERSION_INPUTS.people,
+        primaryBirthYear: DEFAULT_ROTH_CONVERSION_INPUTS.currentYear - 61,
         primaryCurrentAge: 61,
       },
     },
@@ -77,7 +143,7 @@ function sharedInitialData(overrides: Partial<RothConversionInitialData> = {}): 
 describe('RothConversionPage', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockCompute.mockResolvedValue({} as RothConversionProjection)
+    mockCompute.mockResolvedValue(projection())
     window.history.replaceState(null, '', '/financial-planning/roth-conversion/s/abc1234')
   })
 
@@ -89,13 +155,14 @@ describe('RothConversionPage', () => {
     expect(mockSave).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/financial-planning/roth-conversion')
-    expect(window.location.search).toBe('?age=61')
+    expect(window.location.search).toBe(`?birth=${DEFAULT_ROTH_CONVERSION_INPUTS.currentYear - 61}`)
     expect(screen.getByText('Forked to URL state. Edits update this link.')).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: /people/i }))
     fireEvent.click(screen.getByRole('button', { name: /bump primary age/i }))
 
     await waitFor(() => {
-      expect(window.location.search).toBe('?age=62')
+      expect(window.location.search).toBe(`?birth=${DEFAULT_ROTH_CONVERSION_INPUTS.currentYear - 62}`)
     })
     expect(mockSave).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
@@ -106,7 +173,7 @@ describe('RothConversionPage', () => {
       id: 491,
       shortCode: 'forked1',
       shareUrl: 'http://localhost/financial-planning/roth-conversion/s/forked1',
-      projection: {} as RothConversionProjection,
+      projection: projection(),
     })
 
     render(<RothConversionPage initialData={sharedInitialData({ authenticated: true })} />)

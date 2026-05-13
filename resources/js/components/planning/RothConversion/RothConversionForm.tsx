@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { Calculator, Landmark, PiggyBank, SlidersHorizontal, Users } from 'lucide-react'
+import { Calculator, Landmark, type LucideIcon, PiggyBank, SlidersHorizontal, Users } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type ReactElement, useEffect, useId, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,20 +7,28 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
+import { ageFromBirthYear, deriveRothConversionAges, isMarriedFilingStatus } from './inputUtils'
 import type { FilingStatus, RothConversionInputs, RothConversionStrategy } from './types'
+
+export type RothConversionFormSectionId = 'people' | 'income' | 'balances' | 'strategy' | 'assumptions'
+
+export interface RothConversionFormSectionMeta {
+  id: RothConversionFormSectionId
+  label: string
+  shortLabel: string
+  description: string
+  icon: LucideIcon
+}
 
 interface RothConversionFormProps {
   inputs: RothConversionInputs
   onChange: (inputs: RothConversionInputs) => void
+}
+
+interface RothConversionFormSectionProps extends RothConversionFormProps {
+  section: RothConversionFormSectionId
 }
 
 interface NumberFieldProps {
@@ -38,11 +46,57 @@ interface MoneyFieldProps {
   onChange: (value: number) => void
 }
 
+interface SelectFieldProps {
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  className?: string
+  onChange: (value: string) => void
+}
+
 const filingStatuses: { value: FilingStatus; label: string }[] = [
   { value: 'single', label: 'Single' },
   { value: 'married_filing_jointly', label: 'Married filing jointly' },
   { value: 'head_of_household', label: 'Head of household' },
   { value: 'qualifying_surviving_spouse', label: 'Qualifying surviving spouse' },
+]
+
+export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
+  {
+    id: 'people',
+    label: 'People and Filing Status',
+    shortLabel: 'People',
+    description: 'Birth years, projection window, and survivor transition.',
+    icon: Users,
+  },
+  {
+    id: 'income',
+    label: 'Income and Social Security',
+    shortLabel: 'Income',
+    description: 'Recurring income, retirement ages, and claiming ages.',
+    icon: Landmark,
+  },
+  {
+    id: 'balances',
+    label: 'Balances',
+    shortLabel: 'Balances',
+    description: 'Current account balances used by the projection.',
+    icon: PiggyBank,
+  },
+  {
+    id: 'strategy',
+    label: 'Conversion Strategy',
+    shortLabel: 'Strategy',
+    description: 'Conversion mode, bracket target, and harvesting rules.',
+    icon: Calculator,
+  },
+  {
+    id: 'assumptions',
+    label: 'Growth and Tax Assumptions',
+    shortLabel: 'Assumptions',
+    description: 'Growth, inflation, state tax, and IRMAA lookback assumptions.',
+    icon: SlidersHorizontal,
+  },
 ]
 
 function parseNumber(raw: string): number {
@@ -144,190 +198,215 @@ function MoneyField({ label, value, className, onChange }: MoneyFieldProps): Rea
   )
 }
 
-export default function RothConversionForm({ inputs, onChange }: RothConversionFormProps): ReactElement {
+function SelectField({ label, value, options, className, onChange }: SelectFieldProps): ReactElement {
+  const inputId = useId()
+
+  return (
+    <div className={cn('grid gap-2', className)}>
+      <Label htmlFor={inputId}>{label}</Label>
+      <select
+        id={inputId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function DerivedAge({ label, age }: { label: string; age: number }): ReactElement {
+  return (
+    <div className="grid gap-2">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/30 px-3 text-sm text-muted-foreground">
+        {age} years old
+      </div>
+    </div>
+  )
+}
+
+function getSectionMeta(section: RothConversionFormSectionId): RothConversionFormSectionMeta {
+  return ROTH_CONVERSION_FORM_SECTIONS.find((candidate) => candidate.id === section)!
+}
+
+export function RothConversionFormSection({ section, inputs, onChange }: RothConversionFormSectionProps): ReactElement {
+  const meta = getSectionMeta(section)
+  const married = isMarriedFilingStatus(inputs.filingStatus)
+  const primaryAge = ageFromBirthYear(inputs.currentYear, inputs.people.primaryBirthYear)
+  const spouseAge = ageFromBirthYear(inputs.currentYear, inputs.people.spouseBirthYear)
+  const Icon = meta.icon
+
+  function commit(nextInputs: RothConversionInputs): void {
+    onChange(deriveRothConversionAges(nextInputs))
+  }
+
   function update<K extends keyof RothConversionInputs>(key: K, value: RothConversionInputs[K]): void {
-    onChange({ ...inputs, [key]: value })
+    commit({ ...inputs, [key]: value })
   }
 
   function updatePeople<K extends keyof RothConversionInputs['people']>(key: K, value: RothConversionInputs['people'][K]): void {
-    onChange({ ...inputs, people: { ...inputs.people, [key]: value } })
+    commit({ ...inputs, people: { ...inputs.people, [key]: value } })
   }
 
   function updateIncome<K extends keyof RothConversionInputs['income']>(key: K, value: RothConversionInputs['income'][K]): void {
-    onChange({ ...inputs, income: { ...inputs.income, [key]: value } })
+    commit({ ...inputs, income: { ...inputs.income, [key]: value } })
   }
 
   function updateSocialSecurity<K extends keyof RothConversionInputs['socialSecurity']>(key: K, value: RothConversionInputs['socialSecurity'][K]): void {
-    onChange({ ...inputs, socialSecurity: { ...inputs.socialSecurity, [key]: value } })
+    commit({ ...inputs, socialSecurity: { ...inputs.socialSecurity, [key]: value } })
   }
 
   function updateBalances<K extends keyof RothConversionInputs['balances']>(key: K, value: RothConversionInputs['balances'][K]): void {
-    onChange({ ...inputs, balances: { ...inputs.balances, [key]: value } })
+    commit({ ...inputs, balances: { ...inputs.balances, [key]: value } })
   }
 
   function updateStrategy<K extends keyof RothConversionStrategy>(key: K, value: RothConversionStrategy[K]): void {
-    onChange({ ...inputs, strategy: { ...inputs.strategy, [key]: value } })
+    commit({ ...inputs, strategy: { ...inputs.strategy, [key]: value } })
   }
 
   function updateAssumption<K extends keyof RothConversionInputs['assumptions']>(key: K, value: RothConversionInputs['assumptions'][K]): void {
-    onChange({ ...inputs, assumptions: { ...inputs.assumptions, [key]: value } })
+    commit({ ...inputs, assumptions: { ...inputs.assumptions, [key]: value } })
   }
 
   return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Icon className="size-4" />
+          {meta.shortLabel}
+        </CardTitle>
+        <CardDescription>{meta.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        {section === 'people' && (
+          <>
+            <SelectField
+              label="Filing status"
+              value={inputs.filingStatus}
+              options={filingStatuses}
+              className="sm:col-span-2"
+              onChange={(value) => update('filingStatus', value as FilingStatus)}
+            />
+            <NumberField label="Primary birth year" value={inputs.people.primaryBirthYear} onChange={(value) => updatePeople('primaryBirthYear', value)} />
+            <DerivedAge label="Primary current age" age={primaryAge} />
+            <NumberField label="Projection end age" value={inputs.people.primaryEndAge} onChange={(value) => updatePeople('primaryEndAge', value)} />
+            {married && (
+              <>
+                <NumberField label="Spouse birth year" value={inputs.people.spouseBirthYear} onChange={(value) => updatePeople('spouseBirthYear', value)} />
+                <DerivedAge label="Spouse current age" age={spouseAge} />
+                <NumberField label="Spouse end age" value={inputs.people.spouseEndAge} onChange={(value) => updatePeople('spouseEndAge', value)} />
+                <NumberField
+                  label="First death age"
+                  value={inputs.people.firstDeathAge ?? 0}
+                  onChange={(value) => updatePeople('firstDeathAge', value > 0 ? value : null)}
+                />
+              </>
+            )}
+          </>
+        )}
+
+        {section === 'income' && (
+          <>
+            <MoneyField label="Primary wages" value={inputs.income.wagesPrimary} onChange={(value) => updateIncome('wagesPrimary', value)} />
+            {married && <MoneyField label="Spouse wages" value={inputs.income.wagesSpouse} onChange={(value) => updateIncome('wagesSpouse', value)} />}
+            <NumberField label="Primary retirement age" value={inputs.income.retirementAgePrimary} onChange={(value) => updateIncome('retirementAgePrimary', value)} />
+            {married && <NumberField label="Spouse retirement age" value={inputs.income.retirementAgeSpouse} onChange={(value) => updateIncome('retirementAgeSpouse', value)} />}
+            <MoneyField label="Interest income" value={inputs.income.interest} onChange={(value) => updateIncome('interest', value)} />
+            <MoneyField label="Tax-exempt interest" value={inputs.income.taxExemptInterest} onChange={(value) => updateIncome('taxExemptInterest', value)} />
+            <MoneyField label="Other ordinary income" value={inputs.income.otherOrdinary} onChange={(value) => updateIncome('otherOrdinary', value)} />
+            <MoneyField label="Qualified dividends" value={inputs.income.qualifiedDividends} onChange={(value) => updateIncome('qualifiedDividends', value)} />
+            <MoneyField label="Long-term gains" value={inputs.income.longTermCapitalGains} onChange={(value) => updateIncome('longTermCapitalGains', value)} />
+            <MoneyField label="Primary PIA / mo" value={inputs.socialSecurity.piaPrimary} onChange={(value) => updateSocialSecurity('piaPrimary', value)} />
+            {married && <MoneyField label="Spouse PIA / mo" value={inputs.socialSecurity.piaSpouse} onChange={(value) => updateSocialSecurity('piaSpouse', value)} />}
+            <NumberField label="Primary claim age" value={inputs.socialSecurity.claimAgePrimary} onChange={(value) => updateSocialSecurity('claimAgePrimary', value)} />
+            {married && <NumberField label="Spouse claim age" value={inputs.socialSecurity.claimAgeSpouse} onChange={(value) => updateSocialSecurity('claimAgeSpouse', value)} />}
+          </>
+        )}
+
+        {section === 'balances' && (
+          <>
+            <MoneyField label="Traditional primary" value={inputs.balances.traditionalPrimary} onChange={(value) => updateBalances('traditionalPrimary', value)} />
+            {married && <MoneyField label="Traditional spouse" value={inputs.balances.traditionalSpouse} onChange={(value) => updateBalances('traditionalSpouse', value)} />}
+            <MoneyField label="Roth primary" value={inputs.balances.rothPrimary} onChange={(value) => updateBalances('rothPrimary', value)} />
+            {married && <MoneyField label="Roth spouse" value={inputs.balances.rothSpouse} onChange={(value) => updateBalances('rothSpouse', value)} />}
+            <MoneyField label="Taxable brokerage" value={inputs.balances.taxableBrokerage} onChange={(value) => updateBalances('taxableBrokerage', value)} />
+            <MoneyField label="Taxable basis" value={inputs.balances.taxableBasis} onChange={(value) => updateBalances('taxableBasis', value)} />
+            <MoneyField label="HSA" value={inputs.balances.hsa} onChange={(value) => updateBalances('hsa', value)} />
+            <MoneyField label="Cash" value={inputs.balances.cash} onChange={(value) => updateBalances('cash', value)} />
+          </>
+        )}
+
+        {section === 'strategy' && (
+          <>
+            <SelectField
+              label="Conversion mode"
+              value={inputs.strategy.conversionMode}
+              options={[
+                { value: 'constant', label: 'Constant dollars' },
+                { value: 'fill_bracket', label: 'Fill tax bracket' },
+                { value: 'schedule', label: 'Per-year schedule' },
+              ]}
+              className="sm:col-span-2"
+              onChange={(value) => updateStrategy('conversionMode', value as RothConversionStrategy['conversionMode'])}
+            />
+            <NumberField label="Conversion start age" value={inputs.strategy.conversionStartAge} onChange={(value) => updateStrategy('conversionStartAge', value)} />
+            <NumberField label="Conversion end age" value={inputs.strategy.conversionEndAge} onChange={(value) => updateStrategy('conversionEndAge', value)} />
+            <MoneyField label="Annual conversion" value={inputs.strategy.annualConversion} onChange={(value) => updateStrategy('annualConversion', value)} />
+            <div className="grid gap-2">
+              <SelectField
+                label="Bracket target"
+                value={String(inputs.strategy.bracketTarget)}
+                options={[
+                  { value: '12', label: '12%' },
+                  { value: '22', label: '22%' },
+                  { value: '24', label: '24%' },
+                  { value: '32', label: '32%' },
+                ]}
+                onChange={(value) => updateStrategy('bracketTarget', Number(value) as RothConversionStrategy['bracketTarget'])}
+              />
+              <p className="text-xs text-muted-foreground">Target is the highest ordinary bracket to fill after deductions and taxable Social Security.</p>
+            </div>
+            <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+              <Checkbox checked={inputs.strategy.harvestLtcg} onCheckedChange={(checked) => updateStrategy('harvestLtcg', checked === true)} />
+              <span>Harvest long-term gains to target bracket</span>
+            </label>
+            <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+              <Checkbox checked={inputs.assumptions.stateTaxesLtcg} onCheckedChange={(checked) => updateAssumption('stateTaxesLtcg', checked === true)} />
+              <span>Apply state tax to LTCG</span>
+            </label>
+          </>
+        )}
+
+        {section === 'assumptions' && (
+          <>
+            <NumberField label="Pre-retirement growth" value={inputs.assumptions.preRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('preRetirementGrowthPercent', value)} />
+            <NumberField label="Post-retirement growth" value={inputs.assumptions.postRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('postRetirementGrowthPercent', value)} />
+            <NumberField label="Cash yield" value={inputs.assumptions.cashYieldPercent} suffix="%" onChange={(value) => updateAssumption('cashYieldPercent', value)} />
+            <NumberField label="Inflation" value={inputs.assumptions.inflationPercent} suffix="%" onChange={(value) => updateAssumption('inflationPercent', value)} />
+            <NumberField label="Flat state tax" value={inputs.assumptions.stateTaxPercent} suffix="%" onChange={(value) => updateAssumption('stateTaxPercent', value)} />
+            <NumberField label="SS COLA" value={inputs.socialSecurity.colaPercent} suffix="%" onChange={(value) => updateSocialSecurity('colaPercent', value)} />
+            <NumberField label="Discount rate" value={inputs.assumptions.discountRatePercent} suffix="%" onChange={(value) => updateAssumption('discountRatePercent', value)} />
+            <MoneyField label="Prior-year MAGI" value={inputs.assumptions.priorYearMagi} onChange={(value) => updateAssumption('priorYearMagi', value)} />
+            <MoneyField label="Two-years-prior MAGI" value={inputs.assumptions.twoYearsPriorMagi} onChange={(value) => updateAssumption('twoYearsPriorMagi', value)} />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function RothConversionForm({ inputs, onChange }: RothConversionFormProps): ReactElement {
+  return (
     <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="size-4" />
-            People
-          </CardTitle>
-          <CardDescription>Filing status, ages, and survivor filing transition.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2 sm:col-span-2">
-            <Label>Filing status</Label>
-            <Select value={inputs.filingStatus} onValueChange={(value) => update('filingStatus', value as FilingStatus)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {filingStatuses.map((status) => (
-                  <SelectItem key={status.value} value={status.value}>
-                    {status.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <NumberField label="Primary current age" value={inputs.people.primaryCurrentAge} onChange={(value) => updatePeople('primaryCurrentAge', value)} />
-          <NumberField label="Projection end age" value={inputs.people.primaryEndAge} onChange={(value) => updatePeople('primaryEndAge', value)} />
-          <NumberField label="Primary birth year" value={inputs.people.primaryBirthYear} onChange={(value) => updatePeople('primaryBirthYear', value)} />
-          <NumberField label="Spouse current age" value={inputs.people.spouseCurrentAge} onChange={(value) => updatePeople('spouseCurrentAge', value)} />
-          <NumberField label="Spouse birth year" value={inputs.people.spouseBirthYear} onChange={(value) => updatePeople('spouseBirthYear', value)} />
-          <NumberField
-            label="First death age"
-            value={inputs.people.firstDeathAge ?? 0}
-            onChange={(value) => updatePeople('firstDeathAge', value > 0 ? value : null)}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Landmark className="size-4" />
-            Income and Social Security
-          </CardTitle>
-          <CardDescription>Recurring income, retirement ages, and claiming ages.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <MoneyField label="Primary wages" value={inputs.income.wagesPrimary} onChange={(value) => updateIncome('wagesPrimary', value)} />
-          <MoneyField label="Spouse wages" value={inputs.income.wagesSpouse} onChange={(value) => updateIncome('wagesSpouse', value)} />
-          <NumberField label="Primary retirement age" value={inputs.income.retirementAgePrimary} onChange={(value) => updateIncome('retirementAgePrimary', value)} />
-          <NumberField label="Spouse retirement age" value={inputs.income.retirementAgeSpouse} onChange={(value) => updateIncome('retirementAgeSpouse', value)} />
-          <MoneyField label="Interest income" value={inputs.income.interest} onChange={(value) => updateIncome('interest', value)} />
-          <MoneyField label="Tax-exempt interest" value={inputs.income.taxExemptInterest} onChange={(value) => updateIncome('taxExemptInterest', value)} />
-          <MoneyField label="Other ordinary income" value={inputs.income.otherOrdinary} onChange={(value) => updateIncome('otherOrdinary', value)} />
-          <MoneyField label="Qualified dividends" value={inputs.income.qualifiedDividends} onChange={(value) => updateIncome('qualifiedDividends', value)} />
-          <MoneyField label="Long-term gains" value={inputs.income.longTermCapitalGains} onChange={(value) => updateIncome('longTermCapitalGains', value)} />
-          <MoneyField label="Primary PIA / mo" value={inputs.socialSecurity.piaPrimary} onChange={(value) => updateSocialSecurity('piaPrimary', value)} />
-          <MoneyField label="Spouse PIA / mo" value={inputs.socialSecurity.piaSpouse} onChange={(value) => updateSocialSecurity('piaSpouse', value)} />
-          <NumberField label="Primary claim age" value={inputs.socialSecurity.claimAgePrimary} onChange={(value) => updateSocialSecurity('claimAgePrimary', value)} />
-          <NumberField label="Spouse claim age" value={inputs.socialSecurity.claimAgeSpouse} onChange={(value) => updateSocialSecurity('claimAgeSpouse', value)} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <PiggyBank className="size-4" />
-            Balances
-          </CardTitle>
-          <CardDescription>Today&apos;s balances; no account connection required.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <MoneyField label="Traditional primary" value={inputs.balances.traditionalPrimary} onChange={(value) => updateBalances('traditionalPrimary', value)} />
-          <MoneyField label="Traditional spouse" value={inputs.balances.traditionalSpouse} onChange={(value) => updateBalances('traditionalSpouse', value)} />
-          <MoneyField label="Roth primary" value={inputs.balances.rothPrimary} onChange={(value) => updateBalances('rothPrimary', value)} />
-          <MoneyField label="Roth spouse" value={inputs.balances.rothSpouse} onChange={(value) => updateBalances('rothSpouse', value)} />
-          <MoneyField label="Taxable brokerage" value={inputs.balances.taxableBrokerage} onChange={(value) => updateBalances('taxableBrokerage', value)} />
-          <MoneyField label="Taxable basis" value={inputs.balances.taxableBasis} onChange={(value) => updateBalances('taxableBasis', value)} />
-          <MoneyField label="HSA" value={inputs.balances.hsa} onChange={(value) => updateBalances('hsa', value)} />
-          <MoneyField label="Cash" value={inputs.balances.cash} onChange={(value) => updateBalances('cash', value)} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Calculator className="size-4" />
-            Strategy
-          </CardTitle>
-          <CardDescription>Conversion mode, window, bracket fill, and capital-gain harvesting.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2 sm:col-span-2">
-            <Label>Conversion mode</Label>
-            <Select value={inputs.strategy.conversionMode} onValueChange={(value) => updateStrategy('conversionMode', value as RothConversionStrategy['conversionMode'])}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="constant">Constant dollars</SelectItem>
-                <SelectItem value="fill_bracket">Fill tax bracket</SelectItem>
-                <SelectItem value="schedule">Per-year schedule</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <NumberField label="Conversion start age" value={inputs.strategy.conversionStartAge} onChange={(value) => updateStrategy('conversionStartAge', value)} />
-          <NumberField label="Conversion end age" value={inputs.strategy.conversionEndAge} onChange={(value) => updateStrategy('conversionEndAge', value)} />
-          <MoneyField label="Annual conversion" value={inputs.strategy.annualConversion} onChange={(value) => updateStrategy('annualConversion', value)} />
-          <div className="grid gap-2">
-            <Label>Bracket target</Label>
-            <Select value={String(inputs.strategy.bracketTarget)} onValueChange={(value) => updateStrategy('bracketTarget', Number(value) as RothConversionStrategy['bracketTarget'])}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="12">12%</SelectItem>
-                <SelectItem value="22">22%</SelectItem>
-                <SelectItem value="24">24%</SelectItem>
-                <SelectItem value="32">32%</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Target is the highest ordinary bracket to fill after deductions and taxable Social Security.</p>
-          </div>
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-            <Checkbox checked={inputs.strategy.harvestLtcg} onCheckedChange={(checked) => updateStrategy('harvestLtcg', checked === true)} />
-            <span>Harvest long-term gains to target bracket</span>
-          </label>
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-            <Checkbox checked={inputs.assumptions.stateTaxesLtcg} onCheckedChange={(checked) => updateAssumption('stateTaxesLtcg', checked === true)} />
-            <span>Apply state tax to LTCG</span>
-          </label>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <SlidersHorizontal className="size-4" />
-            Assumptions
-          </CardTitle>
-          <CardDescription>Nominal rates used to inflate thresholds and grow balances.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <NumberField label="Pre-retirement growth" value={inputs.assumptions.preRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('preRetirementGrowthPercent', value)} />
-          <NumberField label="Post-retirement growth" value={inputs.assumptions.postRetirementGrowthPercent} suffix="%" onChange={(value) => updateAssumption('postRetirementGrowthPercent', value)} />
-          <NumberField label="Cash yield" value={inputs.assumptions.cashYieldPercent} suffix="%" onChange={(value) => updateAssumption('cashYieldPercent', value)} />
-          <NumberField label="Inflation" value={inputs.assumptions.inflationPercent} suffix="%" onChange={(value) => updateAssumption('inflationPercent', value)} />
-          <NumberField label="Flat state tax" value={inputs.assumptions.stateTaxPercent} suffix="%" onChange={(value) => updateAssumption('stateTaxPercent', value)} />
-          <NumberField label="SS COLA" value={inputs.socialSecurity.colaPercent} suffix="%" onChange={(value) => updateSocialSecurity('colaPercent', value)} />
-          <NumberField label="Discount rate" value={inputs.assumptions.discountRatePercent} suffix="%" onChange={(value) => updateAssumption('discountRatePercent', value)} />
-          <MoneyField label="Prior-year MAGI" value={inputs.assumptions.priorYearMagi} onChange={(value) => updateAssumption('priorYearMagi', value)} />
-          <MoneyField label="Two-years-prior MAGI" value={inputs.assumptions.twoYearsPriorMagi} onChange={(value) => updateAssumption('twoYearsPriorMagi', value)} />
-        </CardContent>
-      </Card>
+      {ROTH_CONVERSION_FORM_SECTIONS.map((section) => (
+        <RothConversionFormSection key={section.id} section={section.id} inputs={inputs} onChange={onChange} />
+      ))}
     </div>
   )
 }

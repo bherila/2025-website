@@ -1,13 +1,16 @@
 import currency from 'currency.js'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
+import { isMarriedFilingStatus, normalizeRothConversionInputs } from './inputUtils'
 import type { FilingStatus, RothConversionInputs, RothConversionStrategy } from './types'
 import { rothConversionInputsSchema } from './types'
 
 const QUERY_KEYS = {
   filingStatus: 'fs',
-  primaryAge: 'age',
+  primaryBirthYear: 'birth',
+  legacyPrimaryAge: 'age',
   endAge: 'end',
+  spouseBirthYear: 'birthSp',
   retirementAge: 'retire',
   traditional: 'trad',
   traditionalSpouse: 'tradSp',
@@ -74,13 +77,19 @@ function parseBracketTarget(raw: string | null, fallback: RothConversionStrategy
 
 export function parseRothConversionUrlState(search: string, base: RothConversionInputs = DEFAULT_ROTH_CONVERSION_INPUTS): RothConversionInputs {
   const params = new URLSearchParams(search)
+  const legacyPrimaryAge = parseNumber(params.get(QUERY_KEYS.legacyPrimaryAge), base.people.primaryCurrentAge)
+  const primaryBirthYear = parseNumber(
+    params.get(QUERY_KEYS.primaryBirthYear),
+    params.has(QUERY_KEYS.legacyPrimaryAge) ? base.currentYear - legacyPrimaryAge : base.people.primaryBirthYear,
+  )
   const next: RothConversionInputs = {
     ...base,
     filingStatus: parseFilingStatus(params.get(QUERY_KEYS.filingStatus), base.filingStatus),
     people: {
       ...base.people,
-      primaryCurrentAge: parseNumber(params.get(QUERY_KEYS.primaryAge), base.people.primaryCurrentAge),
+      primaryBirthYear,
       primaryEndAge: parseNumber(params.get(QUERY_KEYS.endAge), base.people.primaryEndAge),
+      spouseBirthYear: parseNumber(params.get(QUERY_KEYS.spouseBirthYear), base.people.spouseBirthYear),
     },
     income: {
       ...base.income,
@@ -116,73 +125,77 @@ export function parseRothConversionUrlState(search: string, base: RothConversion
     },
   }
 
-  const parsed = rothConversionInputsSchema.safeParse(next)
+  const parsed = rothConversionInputsSchema.safeParse(normalizeRothConversionInputs(next))
   return parsed.success ? parsed.data : base
 }
 
 export function serializeRothConversionUrlState(inputs: RothConversionInputs): string {
   const params = new URLSearchParams()
   const defaults = DEFAULT_ROTH_CONVERSION_INPUTS
+  const normalizedInputs = normalizeRothConversionInputs(inputs)
 
-  if (inputs.filingStatus !== defaults.filingStatus) {
-    params.set(QUERY_KEYS.filingStatus, inputs.filingStatus)
+  if (normalizedInputs.filingStatus !== defaults.filingStatus) {
+    params.set(QUERY_KEYS.filingStatus, normalizedInputs.filingStatus)
   }
-  if (inputs.people.primaryCurrentAge !== defaults.people.primaryCurrentAge) {
-    params.set(QUERY_KEYS.primaryAge, String(inputs.people.primaryCurrentAge))
+  if (normalizedInputs.people.primaryBirthYear !== defaults.people.primaryBirthYear) {
+    params.set(QUERY_KEYS.primaryBirthYear, String(normalizedInputs.people.primaryBirthYear))
   }
-  if (inputs.people.primaryEndAge !== defaults.people.primaryEndAge) {
-    params.set(QUERY_KEYS.endAge, String(inputs.people.primaryEndAge))
+  if (normalizedInputs.people.primaryEndAge !== defaults.people.primaryEndAge) {
+    params.set(QUERY_KEYS.endAge, String(normalizedInputs.people.primaryEndAge))
   }
-  if (inputs.income.retirementAgePrimary !== defaults.income.retirementAgePrimary) {
-    params.set(QUERY_KEYS.retirementAge, String(inputs.income.retirementAgePrimary))
+  if (isMarriedFilingStatus(normalizedInputs.filingStatus) && normalizedInputs.people.spouseBirthYear !== defaults.people.spouseBirthYear) {
+    params.set(QUERY_KEYS.spouseBirthYear, String(normalizedInputs.people.spouseBirthYear))
   }
-  if (inputs.income.taxExemptInterest !== defaults.income.taxExemptInterest) {
-    params.set(QUERY_KEYS.taxExemptInterest, String(inputs.income.taxExemptInterest))
+  if (normalizedInputs.income.retirementAgePrimary !== defaults.income.retirementAgePrimary) {
+    params.set(QUERY_KEYS.retirementAge, String(normalizedInputs.income.retirementAgePrimary))
   }
-  if (inputs.balances.traditionalPrimary !== defaults.balances.traditionalPrimary) {
-    params.set(QUERY_KEYS.traditional, String(inputs.balances.traditionalPrimary))
+  if (normalizedInputs.income.taxExemptInterest !== defaults.income.taxExemptInterest) {
+    params.set(QUERY_KEYS.taxExemptInterest, String(normalizedInputs.income.taxExemptInterest))
   }
-  if (inputs.balances.traditionalSpouse !== defaults.balances.traditionalSpouse) {
-    params.set(QUERY_KEYS.traditionalSpouse, String(inputs.balances.traditionalSpouse))
+  if (normalizedInputs.balances.traditionalPrimary !== defaults.balances.traditionalPrimary) {
+    params.set(QUERY_KEYS.traditional, String(normalizedInputs.balances.traditionalPrimary))
   }
-  if (inputs.balances.rothPrimary !== defaults.balances.rothPrimary) {
-    params.set(QUERY_KEYS.roth, String(inputs.balances.rothPrimary))
+  if (isMarriedFilingStatus(normalizedInputs.filingStatus) && normalizedInputs.balances.traditionalSpouse !== defaults.balances.traditionalSpouse) {
+    params.set(QUERY_KEYS.traditionalSpouse, String(normalizedInputs.balances.traditionalSpouse))
   }
-  if (inputs.balances.taxableBrokerage !== defaults.balances.taxableBrokerage) {
-    params.set(QUERY_KEYS.taxable, String(inputs.balances.taxableBrokerage))
+  if (normalizedInputs.balances.rothPrimary !== defaults.balances.rothPrimary) {
+    params.set(QUERY_KEYS.roth, String(normalizedInputs.balances.rothPrimary))
   }
-  if (inputs.balances.cash !== defaults.balances.cash) {
-    params.set(QUERY_KEYS.cash, String(inputs.balances.cash))
+  if (normalizedInputs.balances.taxableBrokerage !== defaults.balances.taxableBrokerage) {
+    params.set(QUERY_KEYS.taxable, String(normalizedInputs.balances.taxableBrokerage))
   }
-  if (inputs.strategy.annualConversion !== defaults.strategy.annualConversion) {
-    params.set(QUERY_KEYS.annualConversion, String(inputs.strategy.annualConversion))
+  if (normalizedInputs.balances.cash !== defaults.balances.cash) {
+    params.set(QUERY_KEYS.cash, String(normalizedInputs.balances.cash))
   }
-  if (inputs.strategy.conversionMode !== defaults.strategy.conversionMode) {
-    params.set(QUERY_KEYS.conversionMode, inputs.strategy.conversionMode)
+  if (normalizedInputs.strategy.annualConversion !== defaults.strategy.annualConversion) {
+    params.set(QUERY_KEYS.annualConversion, String(normalizedInputs.strategy.annualConversion))
   }
-  if (inputs.strategy.bracketTarget !== defaults.strategy.bracketTarget) {
-    params.set(QUERY_KEYS.bracketTarget, String(inputs.strategy.bracketTarget))
+  if (normalizedInputs.strategy.conversionMode !== defaults.strategy.conversionMode) {
+    params.set(QUERY_KEYS.conversionMode, normalizedInputs.strategy.conversionMode)
   }
-  if (inputs.socialSecurity.claimAgePrimary !== defaults.socialSecurity.claimAgePrimary) {
-    params.set(QUERY_KEYS.claimAgePrimary, String(inputs.socialSecurity.claimAgePrimary))
+  if (normalizedInputs.strategy.bracketTarget !== defaults.strategy.bracketTarget) {
+    params.set(QUERY_KEYS.bracketTarget, String(normalizedInputs.strategy.bracketTarget))
   }
-  if (inputs.assumptions.stateTaxPercent !== defaults.assumptions.stateTaxPercent) {
-    params.set(QUERY_KEYS.stateTaxPercent, String(inputs.assumptions.stateTaxPercent))
+  if (normalizedInputs.socialSecurity.claimAgePrimary !== defaults.socialSecurity.claimAgePrimary) {
+    params.set(QUERY_KEYS.claimAgePrimary, String(normalizedInputs.socialSecurity.claimAgePrimary))
   }
-  if (inputs.assumptions.inflationPercent !== defaults.assumptions.inflationPercent) {
-    params.set(QUERY_KEYS.inflationPercent, String(inputs.assumptions.inflationPercent))
+  if (normalizedInputs.assumptions.stateTaxPercent !== defaults.assumptions.stateTaxPercent) {
+    params.set(QUERY_KEYS.stateTaxPercent, String(normalizedInputs.assumptions.stateTaxPercent))
   }
-  if (inputs.assumptions.postRetirementGrowthPercent !== defaults.assumptions.postRetirementGrowthPercent) {
-    params.set(QUERY_KEYS.growthPercent, String(inputs.assumptions.postRetirementGrowthPercent))
+  if (normalizedInputs.assumptions.inflationPercent !== defaults.assumptions.inflationPercent) {
+    params.set(QUERY_KEYS.inflationPercent, String(normalizedInputs.assumptions.inflationPercent))
   }
-  if (inputs.assumptions.cashYieldPercent !== defaults.assumptions.cashYieldPercent) {
-    params.set(QUERY_KEYS.cashYieldPercent, String(inputs.assumptions.cashYieldPercent))
+  if (normalizedInputs.assumptions.postRetirementGrowthPercent !== defaults.assumptions.postRetirementGrowthPercent) {
+    params.set(QUERY_KEYS.growthPercent, String(normalizedInputs.assumptions.postRetirementGrowthPercent))
   }
-  if (inputs.assumptions.priorYearMagi !== defaults.assumptions.priorYearMagi) {
-    params.set(QUERY_KEYS.priorYearMagi, String(inputs.assumptions.priorYearMagi))
+  if (normalizedInputs.assumptions.cashYieldPercent !== defaults.assumptions.cashYieldPercent) {
+    params.set(QUERY_KEYS.cashYieldPercent, String(normalizedInputs.assumptions.cashYieldPercent))
   }
-  if (inputs.assumptions.twoYearsPriorMagi !== defaults.assumptions.twoYearsPriorMagi) {
-    params.set(QUERY_KEYS.twoYearsPriorMagi, String(inputs.assumptions.twoYearsPriorMagi))
+  if (normalizedInputs.assumptions.priorYearMagi !== defaults.assumptions.priorYearMagi) {
+    params.set(QUERY_KEYS.priorYearMagi, String(normalizedInputs.assumptions.priorYearMagi))
+  }
+  if (normalizedInputs.assumptions.twoYearsPriorMagi !== defaults.assumptions.twoYearsPriorMagi) {
+    params.set(QUERY_KEYS.twoYearsPriorMagi, String(normalizedInputs.assumptions.twoYearsPriorMagi))
   }
 
   return params.toString()

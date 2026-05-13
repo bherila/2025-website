@@ -45,6 +45,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 70;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 70;
         $inputs['people']['primaryEndAge'] = 75;
         $inputs['people']['firstDeathAge'] = 71;
         $inputs['scenarios'] = [['name' => 'No conversion', 'strategy' => ['conversionMode' => 'constant', 'annualConversion' => 0.0]]];
@@ -61,6 +62,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 65;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 65;
         $inputs['people']['primaryEndAge'] = 66;
         $inputs['income']['wagesPrimary'] = 600000.0;
         $inputs['income']['retirementAgePrimary'] = 70;
@@ -77,6 +79,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 65;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 65;
         $inputs['people']['primaryEndAge'] = 65;
         $inputs['income']['wagesPrimary'] = 600000.0;
         $inputs['income']['retirementAgePrimary'] = 70;
@@ -106,6 +109,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $calculator = new RothConversionCalculator;
         $inputs73 = RothConversionInputs::defaults();
+        $inputs73['currentYear'] = 2026;
         $inputs73['people']['primaryCurrentAge'] = 73;
         $inputs73['people']['primaryEndAge'] = 73;
         $inputs73['people']['primaryBirthYear'] = 1953;
@@ -177,6 +181,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = $this->singleYearNoIncomeInputs();
         $inputs['people']['primaryCurrentAge'] = 67;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 67;
         $inputs['people']['primaryEndAge'] = 67;
         $inputs['socialSecurity']['piaPrimary'] = 3000.0;
         $inputs['socialSecurity']['claimAgePrimary'] = 67;

@@ -36,6 +36,7 @@ class RothConversionControllerTest extends TestCase
         $inputs = RothConversionInputs::defaults();
         $inputs['filingStatus'] = 'single';
         $inputs['people']['primaryCurrentAge'] = 60;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 60;
         $inputs['people']['primaryEndAge'] = 60;
         $inputs['income']['wagesPrimary'] = 0.0;
         $inputs['income']['wagesSpouse'] = 0.0;
@@ -69,7 +70,7 @@ class RothConversionControllerTest extends TestCase
         $this->assertStringStartsWith('Cash shortfall:', $response->json('warnings.0'));
     }
 
-    public function test_married_compute_requires_spouse_age_fields(): void
+    public function test_married_compute_requires_spouse_birth_and_end_age_fields(): void
     {
         $inputs = RothConversionInputs::defaults();
         unset($inputs['people']['spouseBirthYear'], $inputs['people']['spouseCurrentAge'], $inputs['people']['spouseEndAge']);
@@ -81,9 +82,27 @@ class RothConversionControllerTest extends TestCase
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors([
             'inputs.people.spouseBirthYear',
-            'inputs.people.spouseCurrentAge',
             'inputs.people.spouseEndAge',
         ]);
+    }
+
+    public function test_compute_derives_current_ages_from_birth_years(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        unset($inputs['people']['primaryCurrentAge'], $inputs['people']['spouseCurrentAge']);
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 64;
+        $inputs['people']['spouseBirthYear'] = $inputs['currentYear'] - 62;
+        $inputs['people']['primaryEndAge'] = 64;
+        $inputs['people']['spouseEndAge'] = 62;
+        $inputs['scenarios'] = [['name' => 'No conversion', 'strategy' => ['conversionMode' => 'constant', 'annualConversion' => 0.0]]];
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('scenarios.0.years.0.primaryAge', 64);
+        $response->assertJsonPath('scenarios.0.years.0.spouseAge', 62);
     }
 
     public function test_single_compute_allows_omitted_spouse_age_fields(): void
