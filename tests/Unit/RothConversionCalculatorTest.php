@@ -8,6 +8,21 @@ use PHPUnit\Framework\TestCase;
 
 class RothConversionCalculatorTest extends TestCase
 {
+    public function test_inputs_preserve_legacy_current_ages_when_supplied(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        $inputs['currentYear'] = 2026;
+        $inputs['people']['primaryBirthYear'] = 1968;
+        $inputs['people']['primaryCurrentAge'] = 61;
+        $inputs['people']['spouseBirthYear'] = 1970;
+        $inputs['people']['spouseCurrentAge'] = 59;
+
+        $normalized = RothConversionInputs::fromArray($inputs)->toArray();
+
+        $this->assertSame(61, $normalized['people']['primaryCurrentAge']);
+        $this->assertSame(59, $normalized['people']['spouseCurrentAge']);
+    }
+
     public function test_single_no_social_security_scenario_projects_without_ss_tax(): void
     {
         $inputs = RothConversionInputs::defaults();
@@ -45,6 +60,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 70;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 70;
         $inputs['people']['primaryEndAge'] = 75;
         $inputs['people']['firstDeathAge'] = 71;
         $inputs['scenarios'] = [['name' => 'No conversion', 'strategy' => ['conversionMode' => 'constant', 'annualConversion' => 0.0]]];
@@ -61,6 +77,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 65;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 65;
         $inputs['people']['primaryEndAge'] = 66;
         $inputs['income']['wagesPrimary'] = 600000.0;
         $inputs['income']['retirementAgePrimary'] = 70;
@@ -77,6 +94,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = RothConversionInputs::defaults();
         $inputs['people']['primaryCurrentAge'] = 65;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 65;
         $inputs['people']['primaryEndAge'] = 65;
         $inputs['income']['wagesPrimary'] = 600000.0;
         $inputs['income']['retirementAgePrimary'] = 70;
@@ -106,6 +124,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $calculator = new RothConversionCalculator;
         $inputs73 = RothConversionInputs::defaults();
+        $inputs73['currentYear'] = 2026;
         $inputs73['people']['primaryCurrentAge'] = 73;
         $inputs73['people']['primaryEndAge'] = 73;
         $inputs73['people']['primaryBirthYear'] = 1953;
@@ -177,6 +196,7 @@ class RothConversionCalculatorTest extends TestCase
     {
         $inputs = $this->singleYearNoIncomeInputs();
         $inputs['people']['primaryCurrentAge'] = 67;
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 67;
         $inputs['people']['primaryEndAge'] = 67;
         $inputs['socialSecurity']['piaPrimary'] = 3000.0;
         $inputs['socialSecurity']['claimAgePrimary'] = 67;

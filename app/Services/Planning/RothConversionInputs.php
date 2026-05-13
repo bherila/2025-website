@@ -24,6 +24,8 @@ final class RothConversionInputs
         if (is_array($values['strategy'] ?? null) && array_key_exists('perYearConversions', $values['strategy'])) {
             $merged['strategy']['perYearConversions'] = $values['strategy']['perYearConversions'];
         }
+        $merged = self::withDerivedAges($merged, $values);
+        $merged = self::withoutSpouseFactsForSingleFilers($merged);
 
         return new self($merged);
     }
@@ -226,5 +228,71 @@ final class RothConversionInputs
         }
 
         return $values;
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $sourceValues
+     * @return array<string, mixed>
+     */
+    private static function withDerivedAges(array $values, array $sourceValues): array
+    {
+        $currentYearValue = $values['currentYear'] ?? null;
+        $currentYear = is_numeric($currentYearValue) ? (int) round((float) $currentYearValue) : 0;
+
+        if (is_array($values['people'] ?? null)) {
+            $people = $values['people'];
+            $sourcePeople = is_array($sourceValues['people'] ?? null) ? $sourceValues['people'] : [];
+            $primaryBirthYearValue = $people['primaryBirthYear'] ?? null;
+            $spouseBirthYearValue = $people['spouseBirthYear'] ?? null;
+            $primaryBirthYear = is_numeric($primaryBirthYearValue) ? (int) round((float) $primaryBirthYearValue) : 0;
+            $spouseBirthYear = is_numeric($spouseBirthYearValue) ? (int) round((float) $spouseBirthYearValue) : 0;
+
+            if (! array_key_exists('primaryCurrentAge', $sourcePeople) || ! is_numeric($sourcePeople['primaryCurrentAge'])) {
+                $values['people']['primaryCurrentAge'] = self::ageFromBirthYear($currentYear, $primaryBirthYear);
+            }
+            if (! array_key_exists('spouseCurrentAge', $sourcePeople) || ! is_numeric($sourcePeople['spouseCurrentAge'])) {
+                $values['people']['spouseCurrentAge'] = self::ageFromBirthYear($currentYear, $spouseBirthYear);
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private static function withoutSpouseFactsForSingleFilers(array $values): array
+    {
+        $filingStatus = (string) ($values['filingStatus'] ?? '');
+        if (in_array($filingStatus, [
+            FilingStatus::MarriedFilingJointly->value,
+            FilingStatus::QualifyingSurvivingSpouse->value,
+        ], true)) {
+            return $values;
+        }
+
+        if (is_array($values['people'] ?? null)) {
+            $values['people']['firstDeathAge'] = null;
+        }
+        if (is_array($values['income'] ?? null)) {
+            $values['income']['wagesSpouse'] = 0.0;
+            $values['income']['selfEmploymentSpouse'] = 0.0;
+        }
+        if (is_array($values['socialSecurity'] ?? null)) {
+            $values['socialSecurity']['piaSpouse'] = 0.0;
+        }
+        if (is_array($values['balances'] ?? null)) {
+            $values['balances']['traditionalSpouse'] = 0.0;
+            $values['balances']['rothSpouse'] = 0.0;
+        }
+
+        return $values;
+    }
+
+    private static function ageFromBirthYear(int $currentYear, int $birthYear): int
+    {
+        return max(0, $currentYear - $birthYear);
     }
 }
