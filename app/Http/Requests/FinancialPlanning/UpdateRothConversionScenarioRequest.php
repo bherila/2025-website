@@ -18,6 +18,6 @@ class UpdateRothConversionScenarioRequest extends FormRequest
     {
         return array_merge([
             'title' => ['nullable', 'string', 'max:120'],
-        ], ComputeRothConversionRequest::scenarioRules($this->input('inputs.filingStatus')));
+        ], ComputeRothConversionRequest::scenarioRules($this->input('inputs.filingStatus'), $this->input('inputs.currentYear')));
     }
 }

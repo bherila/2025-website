@@ -22,6 +22,7 @@ export interface MillerColumnShellColumn {
   shortLabel: string
   wide?: boolean | undefined
   dataAttributes?: Record<`data-${string}`, string | number | boolean | undefined>
+  topAccessory?: ReactNode
   children: ReactNode
 }
 
@@ -153,6 +154,7 @@ export function MillerColumnShell({
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
               </header>
+              {column.topAccessory ? <div className="shrink-0">{column.topAccessory}</div> : null}
               <div className="min-h-0 flex-1">
                 <ScrollArea className="h-full w-full bg-card">
                   <div className="p-4">{column.children}</div>

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from '../defaults'
 import { RothConversionFormSection } from '../RothConversionForm'
@@ -33,5 +33,29 @@ describe('RothConversionFormSection', () => {
     rerender(<RothConversionFormSection section="balances" inputs={inputs} onChange={jest.fn()} />)
     expect(screen.queryByText('Traditional spouse')).not.toBeInTheDocument()
     expect(screen.queryByText('Roth spouse')).not.toBeInTheDocument()
+  })
+
+  it('emits birth year edits without deriving current ages in the form layer', () => {
+    const onChange = jest.fn()
+    const inputs = {
+      ...DEFAULT_ROTH_CONVERSION_INPUTS,
+      currentYear: 2026,
+      people: {
+        ...DEFAULT_ROTH_CONVERSION_INPUTS.people,
+        primaryBirthYear: 1968,
+        primaryCurrentAge: 58,
+      },
+    }
+
+    render(<RothConversionFormSection section="people" inputs={inputs} onChange={onChange} />)
+
+    fireEvent.change(screen.getByLabelText('Primary birth year'), { target: { value: '1970' } })
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      people: expect.objectContaining({
+        primaryBirthYear: 1970,
+        primaryCurrentAge: 58,
+      }),
+    }))
   })
 })

@@ -105,6 +105,20 @@ class RothConversionControllerTest extends TestCase
         $response->assertJsonPath('scenarios.0.years.0.spouseAge', 62);
     }
 
+    public function test_compute_rejects_birth_year_that_derives_child_age(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        unset($inputs['people']['primaryCurrentAge']);
+        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 17;
+
+        $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['inputs.people.primaryBirthYear']);
+    }
+
     public function test_single_compute_allows_omitted_spouse_age_fields(): void
     {
         $inputs = RothConversionInputs::defaults();

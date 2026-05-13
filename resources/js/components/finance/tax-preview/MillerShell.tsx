@@ -80,23 +80,23 @@ export function MillerShell({ registry, homeView }: MillerShellProps): ReactElem
       shortLabel: entry.shortLabel,
       wide: entry.wide,
       dataAttributes: { 'data-form-id': col.form },
+      topAccessory: entry.instances ? (
+        <InstanceTabs
+          instances={instances}
+          activeKey={resolvedInstanceKey}
+          onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
+          {...(entry.instances.allowCreate
+            ? {
+                onCreate: () => {
+                  const created = entry.instances!.create(state)
+                  replaceFrom(depth, { form: col.form, instance: created.key })
+                },
+              }
+            : {})}
+        />
+      ) : undefined,
       children: (
         <>
-          {entry.instances && (
-            <InstanceTabs
-              instances={instances}
-              activeKey={resolvedInstanceKey}
-              onSelect={(key: string) => replaceFrom(depth, { form: col.form, instance: key })}
-              {...(entry.instances.allowCreate
-                ? {
-                    onCreate: () => {
-                      const created = entry.instances!.create(state)
-                      replaceFrom(depth, { form: col.form, instance: created.key })
-                    },
-                  }
-                : {})}
-            />
-          )}
           {entry.instances && !activeInstance ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
               <p className="text-sm text-muted-foreground">No {entry.shortLabel} instance selected.</p>

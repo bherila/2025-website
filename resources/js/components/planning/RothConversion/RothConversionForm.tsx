@@ -7,9 +7,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-import { ageFromBirthYear, deriveRothConversionAges, isMarriedFilingStatus } from './inputUtils'
+import { ageFromBirthYear, findMeta, isMarriedFilingStatus } from './inputUtils'
 import type { FilingStatus, RothConversionInputs, RothConversionStrategy } from './types'
 
 export type RothConversionFormSectionId = 'people' | 'income' | 'balances' | 'strategy' | 'assumptions'
@@ -200,22 +201,26 @@ function MoneyField({ label, value, className, onChange }: MoneyFieldProps): Rea
 
 function SelectField({ label, value, options, className, onChange }: SelectFieldProps): ReactElement {
   const inputId = useId()
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''
 
   return (
     <div className={cn('grid gap-2', className)}>
       <Label htmlFor={inputId}>{label}</Label>
-      <select
-        id={inputId}
+      <Select
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onValueChange={onChange}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger id={inputId} className="w-full">
+          <span className="truncate">{selectedLabel}</span>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
@@ -231,19 +236,15 @@ function DerivedAge({ label, age }: { label: string; age: number }): ReactElemen
   )
 }
 
-function getSectionMeta(section: RothConversionFormSectionId): RothConversionFormSectionMeta {
-  return ROTH_CONVERSION_FORM_SECTIONS.find((candidate) => candidate.id === section)!
-}
-
 export function RothConversionFormSection({ section, inputs, onChange }: RothConversionFormSectionProps): ReactElement {
-  const meta = getSectionMeta(section)
+  const meta = findMeta(ROTH_CONVERSION_FORM_SECTIONS, section)
   const married = isMarriedFilingStatus(inputs.filingStatus)
   const primaryAge = ageFromBirthYear(inputs.currentYear, inputs.people.primaryBirthYear)
   const spouseAge = ageFromBirthYear(inputs.currentYear, inputs.people.spouseBirthYear)
   const Icon = meta.icon
 
   function commit(nextInputs: RothConversionInputs): void {
-    onChange(deriveRothConversionAges(nextInputs))
+    onChange(nextInputs)
   }
 
   function update<K extends keyof RothConversionInputs>(key: K, value: RothConversionInputs[K]): void {

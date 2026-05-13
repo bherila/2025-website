@@ -41,8 +41,7 @@ jest.mock('../RothConversionForm', () => ({
           ...inputs,
           people: {
             ...inputs.people,
-            primaryBirthYear: inputs.currentYear - (inputs.people.primaryCurrentAge + 1),
-            primaryCurrentAge: inputs.people.primaryCurrentAge + 1,
+            primaryBirthYear: inputs.people.primaryBirthYear - 1,
           },
         })}
       >

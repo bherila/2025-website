@@ -24,7 +24,7 @@ final class RothConversionInputs
         if (is_array($values['strategy'] ?? null) && array_key_exists('perYearConversions', $values['strategy'])) {
             $merged['strategy']['perYearConversions'] = $values['strategy']['perYearConversions'];
         }
-        $merged = self::withDerivedAges($merged);
+        $merged = self::withDerivedAges($merged, $values);
         $merged = self::withoutSpouseFactsForSingleFilers($merged);
 
         return new self($merged);
@@ -232,17 +232,28 @@ final class RothConversionInputs
 
     /**
      * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $sourceValues
      * @return array<string, mixed>
      */
-    private static function withDerivedAges(array $values): array
+    private static function withDerivedAges(array $values, array $sourceValues): array
     {
-        $currentYear = self::integerAt($values, 'currentYear');
+        $currentYearValue = $values['currentYear'] ?? null;
+        $currentYear = is_numeric($currentYearValue) ? (int) round((float) $currentYearValue) : 0;
 
         if (is_array($values['people'] ?? null)) {
-            $primaryBirthYear = self::integerAt($values, 'people.primaryBirthYear');
-            $spouseBirthYear = self::integerAt($values, 'people.spouseBirthYear');
-            $values['people']['primaryCurrentAge'] = self::ageFromBirthYear($currentYear, $primaryBirthYear);
-            $values['people']['spouseCurrentAge'] = self::ageFromBirthYear($currentYear, $spouseBirthYear);
+            $people = $values['people'];
+            $sourcePeople = is_array($sourceValues['people'] ?? null) ? $sourceValues['people'] : [];
+            $primaryBirthYearValue = $people['primaryBirthYear'] ?? null;
+            $spouseBirthYearValue = $people['spouseBirthYear'] ?? null;
+            $primaryBirthYear = is_numeric($primaryBirthYearValue) ? (int) round((float) $primaryBirthYearValue) : 0;
+            $spouseBirthYear = is_numeric($spouseBirthYearValue) ? (int) round((float) $spouseBirthYearValue) : 0;
+
+            if (! array_key_exists('primaryCurrentAge', $sourcePeople) || ! is_numeric($sourcePeople['primaryCurrentAge'])) {
+                $values['people']['primaryCurrentAge'] = self::ageFromBirthYear($currentYear, $primaryBirthYear);
+            }
+            if (! array_key_exists('spouseCurrentAge', $sourcePeople) || ! is_numeric($sourcePeople['spouseCurrentAge'])) {
+                $values['people']['spouseCurrentAge'] = self::ageFromBirthYear($currentYear, $spouseBirthYear);
+            }
         }
 
         return $values;
@@ -283,23 +294,5 @@ final class RothConversionInputs
     private static function ageFromBirthYear(int $currentYear, int $birthYear): int
     {
         return max(0, $currentYear - $birthYear);
-    }
-
-    /**
-     * @param  array<string, mixed>  $values
-     */
-    private static function integerAt(array $values, string $path): int
-    {
-        $value = $values;
-
-        foreach (explode('.', $path) as $segment) {
-            if (! is_array($value) || ! array_key_exists($segment, $value)) {
-                return 0;
-            }
-
-            $value = $value[$segment];
-        }
-
-        return is_numeric($value) ? (int) round((float) $value) : 0;
     }
 }

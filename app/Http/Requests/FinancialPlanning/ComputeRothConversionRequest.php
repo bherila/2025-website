@@ -17,25 +17,27 @@ class ComputeRothConversionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return self::scenarioRules($this->input('inputs.filingStatus'));
+        return self::scenarioRules($this->input('inputs.filingStatus'), $this->input('inputs.currentYear'));
     }
 
     /**
      * @return array<string, mixed>
      */
-    public static function scenarioRules(?string $filingStatus = null): array
+    public static function scenarioRules(?string $filingStatus = null, mixed $currentYearValue = null): array
     {
         $requiresSpouse = in_array($filingStatus, ['married_filing_jointly', 'qualifying_surviving_spouse'], true);
+        $currentYear = is_numeric($currentYearValue) ? (int) $currentYearValue : null;
+        $derivedAgeRule = self::derivedAgeBetweenRule($currentYear);
 
         return [
             'inputs' => ['required', 'array'],
             'inputs.currentYear' => ['required', 'integer', 'min:2024', 'max:2100'],
             'inputs.filingStatus' => ['required', 'string', Rule::in(['single', 'married_filing_jointly', 'head_of_household', 'qualifying_surviving_spouse'])],
             'inputs.people' => ['required', 'array'],
-            'inputs.people.primaryBirthYear' => ['required', 'integer', 'min:1900', 'max:2100'],
+            'inputs.people.primaryBirthYear' => ['required', 'integer', 'min:1900', 'max:2100', $derivedAgeRule],
             'inputs.people.primaryCurrentAge' => ['nullable', 'integer', 'min:18', 'max:120'],
             'inputs.people.primaryEndAge' => ['required', 'integer', 'min:18', 'max:120'],
-            'inputs.people.spouseBirthYear' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:1900', 'max:2100'],
+            'inputs.people.spouseBirthYear' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:1900', 'max:2100', $derivedAgeRule],
             'inputs.people.spouseCurrentAge' => ['nullable', 'integer', 'min:18', 'max:120'],
             'inputs.people.spouseEndAge' => [Rule::requiredIf($requiresSpouse), 'nullable', 'integer', 'min:18', 'max:120'],
             'inputs.people.firstDeathAge' => ['nullable', 'integer', 'min:18', 'max:120'],
@@ -84,5 +86,19 @@ class ComputeRothConversionRequest extends FormRequest
             'inputs.assumptions.priorYearMagi' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
             'inputs.assumptions.twoYearsPriorMagi' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
         ];
+    }
+
+    private static function derivedAgeBetweenRule(?int $currentYear): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($currentYear): void {
+            if ($currentYear === null || ! is_numeric($value)) {
+                return;
+            }
+
+            $age = $currentYear - (int) $value;
+            if ($age < 18 || $age > 120) {
+                $fail("The {$attribute} must produce a current age between 18 and 120.");
+            }
+        };
     }
 }

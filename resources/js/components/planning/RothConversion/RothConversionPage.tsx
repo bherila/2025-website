@@ -1,5 +1,5 @@
 import { AlertTriangle, BarChart3, ChevronRight, Copy, GitFork, LineChart, type LucideIcon, PiggyBank, Save, Table2, Users } from 'lucide-react'
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MillerColumnShell, type MillerColumnShellColumn } from '@/components/ui/miller-column-shell'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
-import { deriveRothConversionAges, normalizeRothConversionInputs } from './inputUtils'
+import { ageFromBirthYear, findMeta, normalizeRothConversionInputs } from './inputUtils'
 import { computeRothConversion, saveRothConversionScenario, updateRothConversionScenario } from './rothConversionApi'
 import {
   ROTH_CONVERSION_FORM_SECTIONS,
@@ -43,11 +44,17 @@ interface RothConversionResultViewMeta {
   description: string
   icon: LucideIcon
   wide?: boolean
+  render: (context: RothConversionResultViewContext) => ReactElement
 }
 
 type RothConversionColumnState =
   | { kind: 'form'; id: RothConversionFormSectionId }
   | { kind: 'result'; id: RothConversionResultViewId }
+
+interface RothConversionResultViewContext {
+  projection: RothConversionProjection
+  scenario: RothConversionScenarioProjection
+}
 
 const RESULT_VIEWS: RothConversionResultViewMeta[] = [
   {
@@ -57,6 +64,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     description: 'Summary cards, income stack, RMD rates, and conversion window.',
     icon: BarChart3,
     wide: true,
+    render: ({ projection, scenario }) => <ProjectionOverview projection={projection} scenario={scenario} />,
   },
   {
     id: 'years',
@@ -65,6 +73,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     description: 'Annual income stack used by the tax calculation.',
     icon: LineChart,
     wide: true,
+    render: ({ scenario }) => <ProjectionYears scenario={scenario} />,
   },
   {
     id: 'balances',
@@ -73,6 +82,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     description: 'Ending balances after conversions, taxes, and withdrawals.',
     icon: PiggyBank,
     wide: true,
+    render: ({ scenario }) => <ProjectionBalances scenario={scenario} />,
   },
   {
     id: 'social-security',
@@ -80,6 +90,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     shortLabel: 'Social Security',
     description: 'Claiming comparison for the selected scenario.',
     icon: Users,
+    render: ({ scenario }) => <ProjectionSocialSecurity scenario={scenario} />,
   },
   {
     id: 'tax-detail',
@@ -88,6 +99,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     description: 'IRMAA tiers and annual tax table.',
     icon: Table2,
     wide: true,
+    render: ({ projection, scenario }) => <ProjectionTaxDetail projection={projection} scenario={scenario} />,
   },
   {
     id: 'compare',
@@ -96,6 +108,7 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     description: 'Side-by-side lifetime tax and estate outcomes.',
     icon: Table2,
     wide: true,
+    render: ({ projection }) => <ProjectionCompare projection={projection} />,
   },
 ]
 
@@ -117,11 +130,9 @@ function replaceUrlWithInputs(inputs: RothConversionInputs, pathname = window.lo
 function initialInputs(initialData: RothConversionInitialData): RothConversionInputs {
   const base = initialData.inputs ?? DEFAULT_ROTH_CONVERSION_INPUTS
 
-  return deriveRothConversionAges(
-    window.location.search
-      ? parseRothConversionUrlState(window.location.search, base)
-      : base,
-  )
+  return window.location.search
+    ? parseRothConversionUrlState(window.location.search, base)
+    : base
 }
 
 function getSelectedScenario(
@@ -135,12 +146,11 @@ function getSelectedScenario(
   return projection.scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? getPreferredScenario(projection)
 }
 
-function getFormSection(id: RothConversionFormSectionId) {
-  return ROTH_CONVERSION_FORM_SECTIONS.find((section) => section.id === id)!
-}
-
-function getResultView(id: RothConversionResultViewId): RothConversionResultViewMeta {
-  return RESULT_VIEWS.find((view) => view.id === id)!
+function hasLegacyCurrentAgePair(inputs: RothConversionInputs): boolean {
+  return (
+    inputs.people.primaryCurrentAge !== ageFromBirthYear(inputs.currentYear, inputs.people.primaryBirthYear)
+    || inputs.people.spouseCurrentAge !== ageFromBirthYear(inputs.currentYear, inputs.people.spouseBirthYear)
+  )
 }
 
 function ProjectionEmptyState({ loading }: { loading: boolean }): ReactElement {
@@ -180,9 +190,31 @@ function ColumnOpenButton({
   )
 }
 
+function renderColumnLauncher(
+  meta: { id: string; shortLabel: string; description: string; icon: LucideIcon },
+  onOpen: () => void,
+): ReactElement {
+  return (
+    <ColumnOpenButton
+      key={meta.id}
+      label={meta.shortLabel}
+      description={meta.description}
+      icon={meta.icon}
+      onClick={onOpen}
+    />
+  )
+}
+
 export default function RothConversionPage({ initialData }: RothConversionPageProps): ReactElement {
+  const scenarioSelectId = useId()
   const [inputs, setInputs] = useState<RothConversionInputs>(() => initialInputs(initialData))
-  const normalizedInputs = useMemo(() => normalizeRothConversionInputs(inputs), [inputs])
+  const [preserveLegacyCurrentAges, setPreserveLegacyCurrentAges] = useState(
+    () => initialData.scenario !== null && !window.location.search && hasLegacyCurrentAgePair(initialData.inputs ?? DEFAULT_ROTH_CONVERSION_INPUTS),
+  )
+  const normalizedInputs = useMemo(
+    () => normalizeRothConversionInputs(inputs, { preserveCurrentAges: preserveLegacyCurrentAges }),
+    [inputs, preserveLegacyCurrentAges],
+  )
   const [projection, setProjection] = useState<RothConversionProjection | null>(initialData.projection)
   const [savedScenario, setSavedScenario] = useState<RothConversionScenarioMeta | null>(initialData.scenario)
   const [title, setTitle] = useState(initialData.scenario?.title ?? 'Roth conversion plan')
@@ -192,7 +224,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
   const [status, setStatus] = useState<string | null>(null)
   const [urlOnlyShareUrl, setUrlOnlyShareUrl] = useState(window.location.href)
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
-  const [activeColumns, setActiveColumns] = useState<RothConversionColumnState[]>([])
+  const [activeColumn, setActiveColumn] = useState<RothConversionColumnState | null>(null)
   const selectedScenario = useMemo(
     () => getSelectedScenario(projection, selectedScenarioId),
     [projection, selectedScenarioId],
@@ -212,7 +244,8 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
   }, [canEdit, savedScenario])
 
   const handleInputsChange = useCallback((nextInputs: RothConversionInputs): void => {
-    setInputs(deriveRothConversionAges(nextInputs))
+    setPreserveLegacyCurrentAges(false)
+    setInputs(nextInputs)
   }, [])
 
   useEffect(() => {
@@ -296,40 +329,16 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
   }
 
   function openColumn(column: RothConversionColumnState): void {
-    setActiveColumns([column])
+    setActiveColumn(column)
   }
 
-  function truncateColumns(depth: number): void {
-    setActiveColumns((previousColumns) => previousColumns.slice(0, depth))
+  function closeColumn(_depth: number): void {
+    setActiveColumn(null)
   }
 
-  function renderResultView(id: RothConversionResultViewId): ReactElement {
-    if (!projection || !selectedScenario) {
-      return <ProjectionEmptyState loading={loading} />
-    }
-
-    if (id === 'overview') {
-      return <ProjectionOverview projection={projection} scenario={selectedScenario} />
-    }
-    if (id === 'years') {
-      return <ProjectionYears scenario={selectedScenario} />
-    }
-    if (id === 'balances') {
-      return <ProjectionBalances scenario={selectedScenario} />
-    }
-    if (id === 'social-security') {
-      return <ProjectionSocialSecurity scenario={selectedScenario} />
-    }
-    if (id === 'tax-detail') {
-      return <ProjectionTaxDetail projection={projection} scenario={selectedScenario} />
-    }
-
-    return <ProjectionCompare projection={projection} />
-  }
-
-  const columns: MillerColumnShellColumn[] = activeColumns.map((column) => {
+  function toMillerColumn(column: RothConversionColumnState): MillerColumnShellColumn {
     if (column.kind === 'form') {
-      const section = getFormSection(column.id)
+      const section = findMeta(ROTH_CONVERSION_FORM_SECTIONS, column.id)
 
       return {
         key: `form:${column.id}`,
@@ -340,7 +349,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
       }
     }
 
-    const view = getResultView(column.id)
+    const view = findMeta(RESULT_VIEWS, column.id)
 
     return {
       key: `result:${column.id}`,
@@ -348,9 +357,13 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
       label: view.label,
       shortLabel: view.shortLabel,
       wide: view.wide,
-      children: renderResultView(column.id),
+      children: projection && selectedScenario
+        ? view.render({ projection, scenario: selectedScenario })
+        : <ProjectionEmptyState loading={loading} />,
     }
-  })
+  }
+
+  const columns: MillerColumnShellColumn[] = activeColumn ? [toMillerColumn(activeColumn)] : []
 
   const warnings = projection?.warnings ?? []
 
@@ -366,19 +379,23 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
 
       <section className="grid gap-3 rounded-md border border-border bg-card p-4">
         <div className="grid gap-2">
-          <Label>Scenario</Label>
+          <Label htmlFor={scenarioSelectId}>Scenario</Label>
           {projection && selectedScenario ? (
-            <select
+            <Select
               value={selectedScenario.id}
-              onChange={(event) => setSelectedScenarioId(event.target.value)}
-              className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onValueChange={setSelectedScenarioId}
             >
-              {projection.scenarios.map((scenario) => (
-                <option key={scenario.id} value={scenario.id}>
-                  {scenario.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id={scenarioSelectId} className="w-full">
+                <span className="truncate">{selectedScenario.name}</span>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+                {projection.scenarios.map((scenario) => (
+                  <SelectItem key={scenario.id} value={scenario.id}>
+                    {scenario.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <ProjectionEmptyState loading={loading} />
           )}
@@ -411,13 +428,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
         <h2 className="text-sm font-semibold text-muted-foreground">Inputs</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {ROTH_CONVERSION_FORM_SECTIONS.map((section) => (
-            <ColumnOpenButton
-              key={section.id}
-              label={section.shortLabel}
-              description={section.description}
-              icon={section.icon}
-              onClick={() => openColumn({ kind: 'form', id: section.id })}
-            />
+            renderColumnLauncher(section, () => openColumn({ kind: 'form', id: section.id }))
           ))}
         </div>
       </section>
@@ -426,13 +437,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
         <h2 className="text-sm font-semibold text-muted-foreground">Projection</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {RESULT_VIEWS.map((view) => (
-            <ColumnOpenButton
-              key={view.id}
-              label={view.shortLabel}
-              description={view.description}
-              icon={view.icon}
-              onClick={() => openColumn({ kind: 'result', id: view.id })}
-            />
+            renderColumnLauncher(view, () => openColumn({ kind: 'result', id: view.id }))
           ))}
         </div>
       </section>
@@ -464,7 +469,7 @@ export default function RothConversionPage({ initialData }: RothConversionPagePr
         </div>
       </header>
       <div className="relative min-h-0 flex-1">
-        <MillerColumnShell homeView={homeView} columns={columns} onTruncate={truncateColumns} />
+        <MillerColumnShell homeView={homeView} columns={columns} onTruncate={closeColumn} />
       </div>
     </Container>
   )

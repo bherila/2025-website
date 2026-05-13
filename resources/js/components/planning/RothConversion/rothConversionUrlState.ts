@@ -77,10 +77,13 @@ function parseBracketTarget(raw: string | null, fallback: RothConversionStrategy
 
 export function parseRothConversionUrlState(search: string, base: RothConversionInputs = DEFAULT_ROTH_CONVERSION_INPUTS): RothConversionInputs {
   const params = new URLSearchParams(search)
-  const legacyPrimaryAge = parseNumber(params.get(QUERY_KEYS.legacyPrimaryAge), base.people.primaryCurrentAge)
+  const legacyPrimaryAgeParam = params.get(QUERY_KEYS.legacyPrimaryAge)
+  const primaryBirthYearFallback = legacyPrimaryAgeParam === null
+    ? base.people.primaryBirthYear
+    : base.currentYear - parseNumber(legacyPrimaryAgeParam, base.people.primaryCurrentAge)
   const primaryBirthYear = parseNumber(
     params.get(QUERY_KEYS.primaryBirthYear),
-    params.has(QUERY_KEYS.legacyPrimaryAge) ? base.currentYear - legacyPrimaryAge : base.people.primaryBirthYear,
+    primaryBirthYearFallback,
   )
   const next: RothConversionInputs = {
     ...base,

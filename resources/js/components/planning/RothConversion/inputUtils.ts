@@ -1,5 +1,15 @@
 import type { FilingStatus, RothConversionInputs } from './types'
 
+export function findMeta<T extends { id: string }>(list: readonly T[], id: string): T {
+  const found = list.find((item) => item.id === id)
+
+  if (!found) {
+    throw new Error(`Unknown Roth conversion metadata id: ${id}`)
+  }
+
+  return found
+}
+
 export function isMarriedFilingStatus(status: FilingStatus): boolean {
   return status === 'married_filing_jointly' || status === 'qualifying_surviving_spouse'
 }
@@ -19,8 +29,12 @@ export function deriveRothConversionAges(inputs: RothConversionInputs): RothConv
   }
 }
 
-export function normalizeRothConversionInputs(inputs: RothConversionInputs): RothConversionInputs {
-  const derived = deriveRothConversionAges(inputs)
+interface NormalizeRothConversionInputsOptions {
+  preserveCurrentAges?: boolean
+}
+
+export function normalizeRothConversionInputs(inputs: RothConversionInputs, options: NormalizeRothConversionInputsOptions = {}): RothConversionInputs {
+  const derived = options.preserveCurrentAges ? inputs : deriveRothConversionAges(inputs)
 
   if (isMarriedFilingStatus(derived.filingStatus)) {
     return derived

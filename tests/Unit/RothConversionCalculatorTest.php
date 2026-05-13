@@ -8,6 +8,21 @@ use PHPUnit\Framework\TestCase;
 
 class RothConversionCalculatorTest extends TestCase
 {
+    public function test_inputs_preserve_legacy_current_ages_when_supplied(): void
+    {
+        $inputs = RothConversionInputs::defaults();
+        $inputs['currentYear'] = 2026;
+        $inputs['people']['primaryBirthYear'] = 1968;
+        $inputs['people']['primaryCurrentAge'] = 61;
+        $inputs['people']['spouseBirthYear'] = 1970;
+        $inputs['people']['spouseCurrentAge'] = 59;
+
+        $normalized = RothConversionInputs::fromArray($inputs)->toArray();
+
+        $this->assertSame(61, $normalized['people']['primaryCurrentAge']);
+        $this->assertSame(59, $normalized['people']['spouseCurrentAge']);
+    }
+
     public function test_single_no_social_security_scenario_projects_without_ss_tax(): void
     {
         $inputs = RothConversionInputs::defaults();

@@ -1,8 +1,10 @@
 import currency from 'currency.js'
 import { AlertTriangle } from 'lucide-react'
-import { type ReactElement, useMemo, useState } from 'react'
+import { type ReactElement, useId, useMemo, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import SummaryTile from '@/components/ui/summary-tile'
 import {
   Table,
@@ -39,6 +41,7 @@ function getPreferredScenario(projection: RothConversionProjection): RothConvers
 
 export default function RothConversionResults({ projection, loading }: RothConversionResultsProps): ReactElement {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const scenarioSelectId = useId()
   const selectedScenario = useMemo(() => {
     if (!projection) {
       return null
@@ -68,20 +71,24 @@ export default function RothConversionResults({ projection, loading }: RothConve
   return (
     <div className="grid gap-6">
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Scenario</span>
-          <select
+        <div className="grid gap-2">
+          <Label htmlFor={scenarioSelectId}>Scenario</Label>
+          <Select
             value={selectedScenario.id}
-            onChange={(event) => setSelectedScenarioId(event.target.value)}
-            className="border-input bg-background h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onValueChange={setSelectedScenarioId}
           >
-            {projection.scenarios.map((scenario) => (
-              <option key={scenario.id} value={scenario.id}>
-                {scenario.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id={scenarioSelectId} className="w-full">
+              <span className="truncate">{selectedScenario.name}</span>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+              {projection.scenarios.map((scenario) => (
+                <SelectItem key={scenario.id} value={scenario.id}>
+                  {scenario.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {warnings.length > 0 ? (

@@ -264,6 +264,8 @@ describe('MillerShell', () => {
         <MillerShell registry={mockRegistry} homeView={null} />
       </Wrapper>,
     )
+    expect(screen.getByRole('tablist').closest('.p-4')).toBeNull()
+    expect(screen.getByRole('tablist').parentElement).toHaveClass('shrink-0')
     expect(screen.getByRole('tab', { name: 'Passive' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'false')
   })
