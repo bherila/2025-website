@@ -3,7 +3,7 @@ import React from 'react'
 
 import { TransactionsSummaryCards } from '../TransactionsSummaryCards'
 
-// Minimal cn mock — just pass through classnames
+// Minimal cn mock: pass class names through unchanged.
 jest.mock('@/lib/utils', () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(' '),
 }))
