@@ -72,6 +72,13 @@ describe('rothConversionUrlState', () => {
         taxableBrokerage: 250_000,
         cash: 20_000,
       },
+      expenses: {
+        ...DEFAULT_ROTH_CONVERSION_INPUTS.expenses,
+        propertyTax: 12_000,
+        medicalExpense: 8_000,
+        otherNondeductible: 30_000,
+        caProp13PropertyTaxLimit: true,
+      },
       strategy: {
         ...DEFAULT_ROTH_CONVERSION_INPUTS.strategy,
         conversionMode: 'constant' as const,
@@ -106,6 +113,10 @@ describe('rothConversionUrlState', () => {
     expect(reparsed.balances.rothPrimary).toBe(inputs.balances.rothPrimary)
     expect(reparsed.balances.taxableBrokerage).toBe(inputs.balances.taxableBrokerage)
     expect(reparsed.balances.cash).toBe(inputs.balances.cash)
+    expect(reparsed.expenses.propertyTax).toBe(inputs.expenses.propertyTax)
+    expect(reparsed.expenses.medicalExpense).toBe(inputs.expenses.medicalExpense)
+    expect(reparsed.expenses.otherNondeductible).toBe(inputs.expenses.otherNondeductible)
+    expect(reparsed.expenses.caProp13PropertyTaxLimit).toBe(true)
     expect(reparsed.strategy.conversionMode).toBe(inputs.strategy.conversionMode)
     expect(reparsed.strategy.annualConversion).toBe(inputs.strategy.annualConversion)
     expect(reparsed.strategy.bracketTarget).toBe(inputs.strategy.bracketTarget)

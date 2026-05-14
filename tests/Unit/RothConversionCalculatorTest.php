@@ -213,6 +213,24 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertSame(50399.99, $year['taxableIncome']);
     }
 
+    public function test_fill_bracket_conversion_uses_itemized_expense_deductions(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['strategy']['conversionMode'] = 'fill_bracket';
+        $inputs['strategy']['bracketTarget'] = 12;
+        $inputs['strategy']['conversionStartAge'] = 60;
+        $inputs['strategy']['conversionEndAge'] = 60;
+        $inputs['expenses']['propertyTax'] = 50000.0;
+        $inputs['expenses']['medicalExpense'] = 20000.0;
+        $inputs['scenarios'] = [['name' => 'Fill 12% with itemized', 'strategy' => []]];
+
+        $year = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'][0];
+
+        $this->assertSame(103069.77, $year['rothConversion']);
+        $this->assertSame('itemized', $year['deductionBreakdown']['mode']);
+        $this->assertSame(50400.0, $year['taxableIncome']);
+    }
+
     public function test_cash_uses_cash_yield_instead_of_portfolio_growth(): void
     {
         $inputs = $this->singleYearNoIncomeInputs();
@@ -260,6 +278,46 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertGreaterThan(0.0, $year['cashShortfallWithdrawals']['total']);
         $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxApproximationYears']);
         $this->assertStringStartsWith('Cash shortfall:', $projection['warnings'][0]);
+    }
+
+    public function test_expenses_reduce_cash_and_feed_schedule_a_deductions(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['income']['wagesPrimary'] = 100000.0;
+        $inputs['income']['retirementAgePrimary'] = 61;
+        $inputs['balances']['traditionalPrimary'] = 0.0;
+        $inputs['balances']['cash'] = 100000.0;
+        $inputs['expenses']['propertyTax'] = 50000.0;
+        $inputs['expenses']['medicalExpense'] = 20000.0;
+        $inputs['expenses']['otherNondeductible'] = 10000.0;
+
+        $year = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'][0];
+
+        $this->assertSame(80000.0, $year['expenses']['total']);
+        $this->assertSame('itemized', $year['deductionBreakdown']['mode']);
+        $this->assertSame(40400.0, $year['deductionBreakdown']['saltDeduction']);
+        $this->assertSame(7500.0, $year['deductionBreakdown']['medicalExpenseFloor']);
+        $this->assertSame(12500.0, $year['deductionBreakdown']['medicalExpenseDeduction']);
+        $this->assertSame(52900.0, $year['standardOrItemizedDeduction']);
+        $this->assertSame(47100.0, $year['taxableIncome']);
+        $this->assertSame(114596.0, $year['endingBalances']['cash']);
+    }
+
+    public function test_ca_prop_13_limits_property_tax_growth_to_two_percent(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['people']['primaryEndAge'] = 62;
+        $inputs['balances']['cash'] = 100000.0;
+        $inputs['expenses']['propertyTax'] = 10000.0;
+        $inputs['expenses']['caProp13PropertyTaxLimit'] = true;
+        $inputs['assumptions']['inflationPercent'] = 6.0;
+
+        $years = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray()['scenarios'][0]['years'];
+
+        $this->assertSame([10000.0, 10200.0, 10404.0], array_map(
+            static fn (array $year): float => $year['expenses']['propertyTax'],
+            $years,
+        ));
     }
 
     public function test_tax_exempt_interest_is_added_to_magi_but_not_agi(): void

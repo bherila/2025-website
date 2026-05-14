@@ -58,4 +58,24 @@ describe('RothConversionFormSection', () => {
       }),
     }))
   })
+
+  it('edits annual expense inputs and the Prop 13 option', () => {
+    const onChange = jest.fn()
+
+    render(<RothConversionFormSection section="expenses" inputs={DEFAULT_ROTH_CONVERSION_INPUTS} onChange={onChange} />)
+
+    fireEvent.change(screen.getByLabelText('Property tax / yr'), { target: { value: '12000' } })
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      expenses: expect.objectContaining({
+        propertyTax: 12000,
+      }),
+    }))
+
+    fireEvent.click(screen.getByText('Limit property tax growth under CA Prop 13'))
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      expenses: expect.objectContaining({
+        caProp13PropertyTaxLimit: true,
+      }),
+    }))
+  })
 })

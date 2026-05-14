@@ -30,6 +30,7 @@ export default function ScenarioCompareTable({ scenarios }: ScenarioCompareTable
             <TableHead className="text-right">Federal tax</TableHead>
             <TableHead className="text-right">IRMAA</TableHead>
             <TableHead className="text-right">SS benefits</TableHead>
+            <TableHead className="text-right">Expenses</TableHead>
             <TableHead className="text-right">Final estate</TableHead>
             <TableHead className="text-right">PV estate</TableHead>
           </TableRow>
@@ -41,6 +42,7 @@ export default function ScenarioCompareTable({ scenarios }: ScenarioCompareTable
               <TableCell className="text-right">{formatMoney(scenario.summary.lifetimeFederalTax)}</TableCell>
               <TableCell className="text-right">{formatMoney(scenario.summary.lifetimeIrmaa)}</TableCell>
               <TableCell className="text-right">{formatMoney(scenario.summary.lifetimeSocialSecurity)}</TableCell>
+              <TableCell className="text-right">{formatMoney(scenario.summary.lifetimeExpenses)}</TableCell>
               <TableCell className="text-right">{formatMoney(scenario.summary.finalEstateValue)}</TableCell>
               <TableCell className="text-right">{formatMoney(scenario.summary.presentValueFinalEstate)}</TableCell>
             </TableRow>

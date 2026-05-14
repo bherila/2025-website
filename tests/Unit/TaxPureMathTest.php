@@ -6,6 +6,7 @@ use App\Services\Tax\PureTaxMath\FederalBrackets;
 use App\Services\Tax\PureTaxMath\FilingStatus;
 use App\Services\Tax\PureTaxMath\Inflation;
 use App\Services\Tax\PureTaxMath\Irmaa;
+use App\Services\Tax\PureTaxMath\ItemizedDeductions;
 use App\Services\Tax\PureTaxMath\Niit;
 use App\Services\Tax\PureTaxMath\Rmd;
 use App\Services\Tax\PureTaxMath\SocialSecurity;
@@ -59,6 +60,13 @@ class TaxPureMathTest extends TestCase
     public function test_inflation_projection_compounds_threshold(): void
     {
         $this->assertSame(11038.13, Inflation::projectThreshold(10000.0, 2026, 2030, 0.025));
+    }
+
+    public function test_itemized_deduction_math_covers_salt_medical_and_prop_13(): void
+    {
+        $this->assertSame(37400.0, ItemizedDeductions::saltCap(2026, 515000.0));
+        $this->assertSame(12500.0, ItemizedDeductions::medicalExpenseDeduction(20000.0, 100000.0));
+        $this->assertSame(0.02, ItemizedDeductions::propertyTaxGrowthRate(0.06, true));
     }
 
     public function test_unknown_filing_status_input_throws(): void

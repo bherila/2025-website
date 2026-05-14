@@ -17,6 +17,10 @@ const QUERY_KEYS = {
   roth: 'roth',
   taxable: 'taxable',
   cash: 'cash',
+  propertyTax: 'ptax',
+  medicalExpense: 'med',
+  otherNondeductible: 'exp',
+  caProp13PropertyTaxLimit: 'prop13',
   taxExemptInterest: 'tei',
   annualConversion: 'conv',
   conversionMode: 'mode',
@@ -56,6 +60,22 @@ function parseNumber(raw: string | null, fallback: number): number {
 
   const parsed = Number.parseFloat(raw)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function parseBoolean(raw: string | null, fallback: boolean): boolean {
+  if (raw === null) {
+    return fallback
+  }
+
+  if (raw === '1' || raw === 'true') {
+    return true
+  }
+
+  if (raw === '0' || raw === 'false') {
+    return false
+  }
+
+  return fallback
 }
 
 function parseFilingStatus(raw: string | null, fallback: FilingStatus): FilingStatus {
@@ -106,6 +126,13 @@ export function parseRothConversionUrlState(search: string, base: RothConversion
       rothPrimary: parseMoney(params.get(QUERY_KEYS.roth), base.balances.rothPrimary),
       taxableBrokerage: parseMoney(params.get(QUERY_KEYS.taxable), base.balances.taxableBrokerage),
       cash: parseMoney(params.get(QUERY_KEYS.cash), base.balances.cash),
+    },
+    expenses: {
+      ...base.expenses,
+      propertyTax: parseMoney(params.get(QUERY_KEYS.propertyTax), base.expenses.propertyTax),
+      medicalExpense: parseMoney(params.get(QUERY_KEYS.medicalExpense), base.expenses.medicalExpense),
+      otherNondeductible: parseMoney(params.get(QUERY_KEYS.otherNondeductible), base.expenses.otherNondeductible),
+      caProp13PropertyTaxLimit: parseBoolean(params.get(QUERY_KEYS.caProp13PropertyTaxLimit), base.expenses.caProp13PropertyTaxLimit),
     },
     socialSecurity: {
       ...base.socialSecurity,
@@ -169,6 +196,18 @@ export function serializeRothConversionUrlState(inputs: RothConversionInputs): s
   }
   if (normalizedInputs.balances.cash !== defaults.balances.cash) {
     params.set(QUERY_KEYS.cash, String(normalizedInputs.balances.cash))
+  }
+  if (normalizedInputs.expenses.propertyTax !== defaults.expenses.propertyTax) {
+    params.set(QUERY_KEYS.propertyTax, String(normalizedInputs.expenses.propertyTax))
+  }
+  if (normalizedInputs.expenses.medicalExpense !== defaults.expenses.medicalExpense) {
+    params.set(QUERY_KEYS.medicalExpense, String(normalizedInputs.expenses.medicalExpense))
+  }
+  if (normalizedInputs.expenses.otherNondeductible !== defaults.expenses.otherNondeductible) {
+    params.set(QUERY_KEYS.otherNondeductible, String(normalizedInputs.expenses.otherNondeductible))
+  }
+  if (normalizedInputs.expenses.caProp13PropertyTaxLimit !== defaults.expenses.caProp13PropertyTaxLimit) {
+    params.set(QUERY_KEYS.caProp13PropertyTaxLimit, normalizedInputs.expenses.caProp13PropertyTaxLimit ? '1' : '0')
   }
   if (normalizedInputs.strategy.annualConversion !== defaults.strategy.annualConversion) {
     params.set(QUERY_KEYS.annualConversion, String(normalizedInputs.strategy.annualConversion))

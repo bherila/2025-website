@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { Calculator, Landmark, type LucideIcon, PiggyBank, SlidersHorizontal, Users } from 'lucide-react'
+import { Calculator, Landmark, type LucideIcon, PiggyBank, Receipt, SlidersHorizontal, Users } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type ReactElement, useEffect, useId, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { ageFromBirthYear, findMeta, isMarriedFilingStatus } from './inputUtils'
 import type { FilingStatus, RothConversionInputs, RothConversionStrategy } from './types'
 
-export type RothConversionFormSectionId = 'people' | 'income' | 'balances' | 'strategy' | 'assumptions'
+export type RothConversionFormSectionId = 'people' | 'income' | 'expenses' | 'balances' | 'strategy' | 'assumptions'
 
 export interface RothConversionFormSectionMeta {
   id: RothConversionFormSectionId
@@ -76,6 +76,13 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Income',
     description: 'Recurring income, retirement ages, and claiming ages.',
     icon: Landmark,
+  },
+  {
+    id: 'expenses',
+    label: 'Expenses',
+    shortLabel: 'Expenses',
+    description: 'Annual spending needs and Schedule A expense inputs.',
+    icon: Receipt,
   },
   {
     id: 'balances',
@@ -267,6 +274,10 @@ export function RothConversionFormSection({ section, inputs, onChange }: RothCon
     commit({ ...inputs, balances: { ...inputs.balances, [key]: value } })
   }
 
+  function updateExpenses<K extends keyof RothConversionInputs['expenses']>(key: K, value: RothConversionInputs['expenses'][K]): void {
+    commit({ ...inputs, expenses: { ...inputs.expenses, [key]: value } })
+  }
+
   function updateStrategy<K extends keyof RothConversionStrategy>(key: K, value: RothConversionStrategy[K]): void {
     commit({ ...inputs, strategy: { ...inputs.strategy, [key]: value } })
   }
@@ -327,6 +338,18 @@ export function RothConversionFormSection({ section, inputs, onChange }: RothCon
             {married && <MoneyField label="Spouse PIA / mo" value={inputs.socialSecurity.piaSpouse} onChange={(value) => updateSocialSecurity('piaSpouse', value)} />}
             <NumberField label="Primary claim age" value={inputs.socialSecurity.claimAgePrimary} onChange={(value) => updateSocialSecurity('claimAgePrimary', value)} />
             {married && <NumberField label="Spouse claim age" value={inputs.socialSecurity.claimAgeSpouse} onChange={(value) => updateSocialSecurity('claimAgeSpouse', value)} />}
+          </>
+        )}
+
+        {section === 'expenses' && (
+          <>
+            <MoneyField label="Property tax / yr" value={inputs.expenses.propertyTax} onChange={(value) => updateExpenses('propertyTax', value)} />
+            <MoneyField label="Medical expenses / yr" value={inputs.expenses.medicalExpense} onChange={(value) => updateExpenses('medicalExpense', value)} />
+            <MoneyField label="Other nondeductible expenses / yr" value={inputs.expenses.otherNondeductible} onChange={(value) => updateExpenses('otherNondeductible', value)} />
+            <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground sm:col-span-2">
+              <Checkbox checked={inputs.expenses.caProp13PropertyTaxLimit} onCheckedChange={(checked) => updateExpenses('caProp13PropertyTaxLimit', checked === true)} />
+              <span>Limit property tax growth under CA Prop 13</span>
+            </label>
           </>
         )}
 

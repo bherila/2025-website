@@ -39,7 +39,7 @@ export function getLifetimeTax(scenario: RothConversionScenarioProjection): numb
 
 export function ProjectionSummaryTiles({ scenario }: { scenario: RothConversionScenarioProjection }): ReactElement {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <SummaryTile title="Lifetime tax" kind="blue">
         {formatProjectionMoney(getLifetimeTax(scenario))}
       </SummaryTile>
@@ -48,6 +48,9 @@ export function ProjectionSummaryTiles({ scenario }: { scenario: RothConversionS
       </SummaryTile>
       <SummaryTile title="SS benefits" kind="green">
         {formatProjectionMoney(scenario.summary.lifetimeSocialSecurity)}
+      </SummaryTile>
+      <SummaryTile title="Expenses" kind="yellow">
+        {formatProjectionMoney(scenario.summary.lifetimeExpenses)}
       </SummaryTile>
       <SummaryTile title="Final estate">{formatProjectionMoney(scenario.summary.finalEstateValue)}</SummaryTile>
     </div>
@@ -187,6 +190,8 @@ export function ProjectionTaxDetail({
                   <TableHead className="text-right">NIIT</TableHead>
                   <TableHead className="text-right">IRMAA</TableHead>
                   <TableHead className="text-right">Total tax</TableHead>
+                  <TableHead className="text-right">Expenses</TableHead>
+                  <TableHead className="text-right">Deduction</TableHead>
                   <TableHead className="text-right">RMD</TableHead>
                   <TableHead className="text-right">Conversion</TableHead>
                 </TableRow>
@@ -202,6 +207,8 @@ export function ProjectionTaxDetail({
                     <TableCell className="text-right">{formatProjectionMoney(year.niit)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.irmaa)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.totalTax)}</TableCell>
+                    <TableCell className="text-right">{formatProjectionMoney(year.expenses.total)}</TableCell>
+                    <TableCell className="text-right">{formatProjectionMoney(year.standardOrItemizedDeduction)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.rmd)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.rothConversion)}</TableCell>
                   </TableRow>

@@ -73,6 +73,12 @@ export const rothConversionInputsSchema = z.object({
     taxableBasis: z.number(),
     cash: z.number(),
   }),
+  expenses: z.object({
+    propertyTax: z.number(),
+    medicalExpense: z.number(),
+    otherNondeductible: z.number(),
+    caProp13PropertyTaxLimit: z.boolean(),
+  }),
   strategy: rothConversionStrategySchema,
   scenarios: z.array(rothConversionScenarioInputSchema).max(3),
   assumptions: z.object({
@@ -133,8 +139,10 @@ export interface RothConversionSummary {
   lifetimeNiit: number
   lifetimeIrmaa: number
   lifetimeSocialSecurity: number
+  lifetimeExpenses: number
   presentValueLifetimeTax: number
   presentValueSocialSecurity: number
+  presentValueLifetimeExpenses: number
   finalEstateValue: number
   presentValueFinalEstate: number
   irmaaHitYears: number
@@ -155,6 +163,8 @@ export interface RothConversionYear {
   grossSocialSecurity: number
   taxableSocialSecurity: number
   standardOrItemizedDeduction: number
+  deductionBreakdown: RothConversionDeductionBreakdown
+  expenses: RothConversionExpenses
   agi: number
   magi: number
   taxableIncome: number
@@ -168,6 +178,25 @@ export interface RothConversionYear {
   rothConversion: number
   cashShortfallWithdrawals: RothConversionCashShortfallWithdrawals
   estateValue: number
+}
+
+export interface RothConversionExpenses {
+  propertyTax: number
+  medicalExpense: number
+  otherNondeductible: number
+  total: number
+}
+
+export interface RothConversionDeductionBreakdown {
+  mode: 'standard' | 'itemized' | 'custom'
+  standardDeduction: number
+  customDeduction: number
+  itemizedDeduction: number
+  saltCap: number
+  saltDeduction: number
+  medicalExpenseFloor: number
+  medicalExpenseDeduction: number
+  deductionUsed: number
 }
 
 export interface RothConversionBalances {

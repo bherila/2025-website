@@ -82,6 +82,12 @@ final class RothConversionInputs
                 'taxableBasis' => 320000.0,
                 'cash' => 90000.0,
             ],
+            'expenses' => [
+                'propertyTax' => 0.0,
+                'medicalExpense' => 0.0,
+                'otherNondeductible' => 0.0,
+                'caProp13PropertyTaxLimit' => false,
+            ],
             'strategy' => [
                 'name' => 'Convert to top of 24%',
                 'conversionMode' => 'fill_bracket',
