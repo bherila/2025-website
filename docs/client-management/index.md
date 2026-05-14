@@ -7,6 +7,7 @@ Admin-only feature for managing client companies, their users, agreements, time 
 - **[Overview](overview.md)** — architecture, schema, models, controllers, routes, and workflows.
 - **[Setup](setup.md)** — one-time bootstrap: migrations to run, how to mark the first admin, how to test the feature end-to-end.
 - **[Billing](billing.md)** — cadence-aware retainer / rollover logic, recurring items, interim overage invoices, invoice lifecycle, payments, milestones, catch-up rule.
+- **[CLI](cli.md)** — admin Artisan commands for invoice listing, manual payments, and time-entry creation.
 - **[Stripe billing](stripe-billing.md)** — online invoice payments, saved payment methods, payment cap, and webhook behavior.
 - **[Deferred billing](deferred-billing.md)** — (new) per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists.
 - **[Overpayment credits](overpayment-credits.md)** — (new) any overpaid amount carries forward as a credit on the next invoice(s) and never expires.

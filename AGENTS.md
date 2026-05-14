@@ -164,6 +164,10 @@ try {
 
 See `docs/finance/cli.md` for discovery commands, input format preferences (TOON recommended), key command list, and configuration.
 
+## Client Management CLI (`client-management:*` Artisan Commands)
+
+Run `php artisan list client-management` and `php artisan help client-management:<command>` before using these rarely-used admin commands. See `docs/client-management/cli.md` only if more context is needed.
+
 ---
 
 <laravel-boost-guidelines>
