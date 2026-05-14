@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [
@@ -55,7 +55,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/') || id === 'pdfjs-dist',
+      external: (id) => /\.test\.[tj]sx?$/.test(id) || id.includes('/__tests__/'),
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {

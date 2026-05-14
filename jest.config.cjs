@@ -1,4 +1,3 @@
-/** @type {import('@jest/types').Config.InitialOptions} */
 const config = {
   testEnvironment: 'jsdom',
   testMatch: ['<rootDir>/resources/js/**/*.test.ts?(x)', '<rootDir>/tests-ts/**/*.test.ts?(x)'],
@@ -6,7 +5,6 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
     '^@toon-format/toon$': '<rootDir>/resources/js/__mocks__/toon.ts',
-    '^pdfjs-dist$': '<rootDir>/resources/js/__mocks__/pdfjs-dist.ts',
     '\\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
   },
   transformIgnorePatterns: [

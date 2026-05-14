@@ -1,12 +1,12 @@
 import currency from 'currency.js'
-import _ from 'lodash'
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { groupBy, maxValue, minValue } from '@/lib/arrayUtils'
 import type { IAward } from '@/types/finance'
 
 export function RsuByAward(props: { rsu: IAward[] }) {
   const { rsu } = props
-  const grouped = _.groupBy(rsu, (r) => r.award_id)
+  const grouped = groupBy(rsu, (r) => r.award_id)
   const now = new Date().toISOString().slice(0, 10)
   return (
     <Table>
@@ -27,8 +27,8 @@ export function RsuByAward(props: { rsu: IAward[] }) {
           const lRSU = grouped[k]
           if (!lRSU) return null
 
-          const minDate = _.min(lRSU.map((x) => x.vest_date))
-          const maxDate = _.max(lRSU.map((x) => x.vest_date))
+          const minDate = minValue(lRSU.map((x) => x.vest_date))
+          const maxDate = maxValue(lRSU.map((x) => x.vest_date))
           let totalVested = 0
           let totalUnvested = 0
           let total = 0

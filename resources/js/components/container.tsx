@@ -1,5 +1,6 @@
-import cn from 'classnames'
 import * as React from 'react'
+
+import { cn } from '@/lib/utils'
 
 export default function Container(props: {
   className?: string

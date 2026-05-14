@@ -1,13 +1,13 @@
 import currency from 'currency.js'
-import _ from 'lodash'
 
 import { vestStyle } from '@/components/rsu/vestStyle'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { groupBy } from '@/lib/arrayUtils'
 import type { IAward } from '@/types/finance'
 
 export function RsuByVestDate(props: { rsu: IAward[] }) {
   const { rsu } = props
-  const grouped = _.groupBy(rsu, (r) => r.vest_date)
+  const grouped = groupBy(rsu, (r) => r.vest_date)
   const now = new Date().toISOString().slice(0, 10)
   return (
     <Table>

@@ -1,16 +1,16 @@
 'use client'
 
 import currency from 'currency.js'
-import _ from 'lodash'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer,Tooltip, XAxis, YAxis } from 'recharts'
 
+import { groupBy } from '@/lib/arrayUtils'
 import type { IAward } from '@/types/finance'
 
 const colors = ['#D32F2F', '#FF8F00', '#FFD600', '#388E3C', '#1976D2', '#7B1FA2']
 
 export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode?: 'shares' | 'value' }) {
   const award_ids = new Set<string>()
-  const vests = _.groupBy(rsu, 'vest_date')
+  const vests = groupBy(rsu, (vest) => vest.vest_date)
   const dataSource = []
 
   // Find the most recent vest price for fallback

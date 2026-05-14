@@ -1,7 +1,6 @@
 'use client'
 
 import currency from 'currency.js'
-import _ from 'lodash'
 import { Edit } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
@@ -10,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { updatePayslipEstimatedStatus } from '@/lib/api'
+import { sortBy } from '@/lib/arrayUtils'
 
 import type { fin_payslip } from './payslipDbCols'
 
@@ -168,7 +168,7 @@ export function PayslipTable({ data, onRowEdited }: Props) {
     }
   }
 
-  const sorted = _.orderBy(data, 'pay_date', 'asc')
+  const sorted = sortBy(data, (row) => row.pay_date)
 
   return (
     <div className="overflow-x-auto">
