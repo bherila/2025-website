@@ -9,7 +9,7 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
-use App\Models\ClientManagement\ClientInvoiceStripePayment;
+use App\Services\ClientManagement\ClientInvoiceOperationsService;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,8 +20,10 @@ class ClientInvoiceApiController extends Controller
 {
     protected ClientInvoicingService $invoicingService;
 
-    public function __construct(ClientInvoicingService $invoicingService)
-    {
+    public function __construct(
+        ClientInvoicingService $invoicingService,
+        private readonly ClientInvoiceOperationsService $invoiceOperationsService
+    ) {
         $this->invoicingService = $invoicingService;
     }
 
@@ -32,40 +34,9 @@ class ClientInvoiceApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        $invoices = ClientInvoice::where('client_company_id', $company->id)
-            ->with(['agreement', 'lineItems', 'stripePayments'])
-            ->orderBy('period_start', 'desc')
-            ->get()
-            ->map(function ($invoice) {
-                $latestStripeFailure = $invoice->stripePayments
-                    ->filter(fn (ClientInvoiceStripePayment $stripePayment): bool => $stripePayment->failure_reason !== null || in_array($stripePayment->status, ['failed', 'canceled'], true))
-                    ->sortByDesc('updated_at')
-                    ->first();
-
-                return [
-                    'id' => $invoice->client_invoice_id,
-                    'invoice_number' => $invoice->invoice_number,
-                    'period_start' => $invoice->period_start->toDateString(),
-                    'period_end' => $invoice->period_end->toDateString(),
-                    'invoice_total' => $invoice->invoice_total,
-                    'status' => $invoice->status,
-                    'invoice_kind' => $invoice->invoiceKindValue(),
-                    'cycle_start' => $invoice->cycle_start?->toDateString(),
-                    'cycle_end' => $invoice->cycle_end?->toDateString(),
-                    'agreement_id' => $invoice->client_agreement_id,
-                    'client_agreement_id' => $invoice->client_agreement_id,
-                    'issue_date' => $invoice->issue_date?->toDateString(),
-                    'due_date' => $invoice->due_date?->toDateString(),
-                    'paid_date' => $invoice->paid_date?->toDateString(),
-                    'hours_worked' => $invoice->hours_worked,
-                    'retainer_hours_included' => $invoice->retainer_hours_included,
-                    'unused_hours_balance' => $invoice->unused_hours_balance,
-                    'hours_billed_at_rate' => $invoice->hours_billed_at_rate,
-                    'rollover_hours_used' => $invoice->rollover_hours_used,
-                    'stripe_payment_status' => $latestStripeFailure?->status,
-                    'stripe_failure_reason' => $latestStripeFailure?->failure_reason,
-                ];
-            });
+        $invoices = $this->invoiceOperationsService->summarizeInvoices(
+            $this->invoiceOperationsService->listInvoices($company)
+        );
 
         return response()->json($invoices);
     }
@@ -520,15 +491,7 @@ class ClientInvoiceApiController extends Controller
         // Overpayments are permitted — the excess carries forward as a credit
         // applied to the next invoice(s). See docs/client-management/overpayment-credits.md.
 
-        $payment = $invoice->payments()->create($request->all());
-
-        // Update invoice status if fully paid (or overpaid).
-        $invoiceFresh = $invoice->fresh(['payments']);
-        if ($invoiceFresh->remaining_balance <= 0) {
-            // Set paid_date to the latest payment date
-            $latestPaymentDate = $invoiceFresh->payments()->max('payment_date');
-            $invoice->markPaid($latestPaymentDate);
-        }
+        $payment = $this->invoiceOperationsService->addPayment($invoice, $request->all());
 
         return response()->json([
             'message' => 'Payment added successfully.',
@@ -553,25 +516,11 @@ class ClientInvoiceApiController extends Controller
 
         // Overpayments are permitted on update as well (see addPayment() for rationale).
 
-        $payment->update($request->all());
-
-        // Update invoice status
-        $invoiceFresh = $invoice->fresh(['payments']);
-        if ($invoiceFresh->remaining_balance <= 0) {
-            if ($invoice->status !== 'paid') {
-                // Set paid_date to the latest payment date
-                $latestPaymentDate = $invoiceFresh->payments()->max('payment_date');
-                $invoice->markPaid($latestPaymentDate);
-            }
-        } else {
-            if ($invoice->status === 'paid') {
-                $invoice->update(['status' => 'issued', 'paid_date' => null]);
-            }
-        }
+        $payment = $this->invoiceOperationsService->updatePayment($invoice, $payment, $request->all());
 
         return response()->json([
             'message' => 'Payment updated successfully.',
-            'payment' => $payment->fresh(),
+            'payment' => $payment,
             'invoice' => $invoice->fresh(['payments']),
         ]);
     }
@@ -583,12 +532,7 @@ class ClientInvoiceApiController extends Controller
             abort(404);
         }
 
-        $payment->delete();
-
-        // Update invoice status if it was previously paid
-        if ($invoice->status === 'paid' && $invoice->fresh()->remaining_balance > 0) {
-            $invoice->update(['status' => 'issued', 'paid_date' => null]);
-        }
+        $this->invoiceOperationsService->deletePayment($invoice, $payment);
 
         return response()->json([
             'message' => 'Payment deleted successfully.',

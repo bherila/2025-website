@@ -6,6 +6,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientTimeEntry;
+use App\Services\ClientManagement\ClientTimeEntryService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use ReflectionMethod;
@@ -15,7 +16,7 @@ class ClientPortalMonthlyBalancesTest extends TestCase
 {
     public function test_pre_agreement_hours_applied_to_first_active_month(): void
     {
-        $controller = new ClientPortalApiController;
+        $controller = new ClientPortalApiController(app(ClientTimeEntryService::class));
 
         // Stub company that returns an active agreement starting 2026-01-01
         $company = new class extends ClientCompany

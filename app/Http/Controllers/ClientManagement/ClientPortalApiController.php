@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\ClientManagement;
 
+use App\Exceptions\ClientManagement\ClientManagementActionException;
 use App\Http\Controllers\Controller;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
@@ -9,7 +10,7 @@ use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
-use App\Services\ClientManagement\ClientInvoicingService;
+use App\Services\ClientManagement\ClientTimeEntryService;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\RolloverCalculator;
 use Illuminate\Http\JsonResponse;
@@ -17,10 +18,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
 
 class ClientPortalApiController extends Controller
 {
+    public function __construct(private readonly ClientTimeEntryService $timeEntryService) {}
+
     /**
      * Get company data by slug.
      *
@@ -508,77 +510,22 @@ class ClientPortalApiController extends Controller
             $validated['is_deferred_billing'] = false;
         }
 
-        if (isset($validated['project_id'])) {
-            // Verify project belongs to this company
-            ClientProject::where('id', $validated['project_id'])
-                ->where('client_company_id', $company->id)
-                ->firstOrFail();
+        /** @var User $actor */
+        $actor = Auth::user();
+
+        try {
+            $entry = $isUpdate
+                ? $this->timeEntryService->update($company, (int) $entryId, $validated, $actor)
+                : $this->timeEntryService->create($company, $validated, $actor);
+        } catch (ClientManagementActionException $e) {
+            if ($e->statusCode() === 422 && str_starts_with($e->getMessage(), 'Invalid time format')) {
+                return response()->json(['errors' => ['time' => [$e->getMessage()]]], 422);
+            }
+
+            return response()->json(['error' => $e->getMessage()], $e->statusCode());
         }
 
-        if (isset($validated['time'])) {
-            // Parse time string to minutes
-            $minutes = ClientTimeEntry::parseTimeToMinutes($validated['time']);
-
-            if ($minutes <= 0) {
-                return response()->json(['errors' => ['time' => ['Invalid time format. Use h:mm or decimal hours.']]], 422);
-            }
-            $validated['minutes_worked'] = $minutes;
-            unset($validated['time']);
-        }
-
-        // Check if date_worked falls within an issued invoice period
-        $dateWorked = $validated['date_worked'] ?? null;
-        if ($dateWorked) {
-            $issuedInvoice = ClientInvoice::where('client_company_id', $company->id)
-                ->whereIn('status', ['issued', 'paid'])
-                ->where('period_start', '<=', $dateWorked)
-                ->where('period_end', '>=', $dateWorked)
-                ->first();
-
-            if ($issuedInvoice) {
-                return response()->json([
-                    'error' => 'Cannot add time entries to periods covered by issued invoices. The period '.
-                        $issuedInvoice->period_start->format('M j, Y').' - '.
-                        $issuedInvoice->period_end->format('M j, Y').
-                        ' is already invoiced.',
-                ], 403);
-            }
-        }
-
-        if ($isUpdate) {
-            $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
-            // Block edits to entries on issued/paid invoices
-            if ($entry->isOnIssuedInvoice()) {
-                return response()->json(['error' => 'Cannot update time entries on issued invoices.'], 403);
-            }
-            // If on a draft invoice, unlink so regeneration can re-assign it
-            if ($entry->isLinkedToInvoice()) {
-                $entry->update(['client_invoice_line_id' => null]);
-            }
-            $entry->update($validated);
-        } else {
-            $entry = ClientTimeEntry::create([
-                'project_id' => $validated['project_id'],
-                'client_company_id' => $company->id,
-                'task_id' => $validated['task_id'] ?? null,
-                'name' => $validated['name'] ?? null,
-                'minutes_worked' => $validated['minutes_worked'],
-                'date_worked' => $validated['date_worked'],
-                'user_id' => $validated['user_id'] ?? Auth::id(),
-                'creator_user_id' => Auth::id(),
-                'is_billable' => $validated['is_billable'] ?? true,
-                'is_deferred_billing' => $validated['is_deferred_billing'] ?? false,
-                'job_type' => $validated['job_type'] ?? 'Software Development',
-            ]);
-        }
-
-        // Regenerate draft invoices that cover the affected period
-        $this->regenerateDraftInvoicesForDate($company, $entry->date_worked);
-
-        return response()->json(
-            $entry->load(['user:id,name,email', 'project:id,name,slug', 'task:id,name']),
-            $isUpdate ? 200 : 201
-        );
+        return response()->json($entry, $isUpdate ? 200 : 201);
     }
 
     /**
@@ -592,59 +539,12 @@ class ClientPortalApiController extends Controller
 
         Gate::authorize('ClientCompanyMember', $company->id);
 
-        $entry = ClientTimeEntry::where('client_company_id', $company->id)->findOrFail($entryId);
-        // Block deletion of entries on issued/paid invoices
-        if ($entry->isOnIssuedInvoice()) {
-            return response()->json(['error' => 'Cannot delete time entries on issued invoices.'], 403);
+        try {
+            $this->timeEntryService->delete($company, $entryId);
+        } catch (ClientManagementActionException $e) {
+            return response()->json(['error' => $e->getMessage()], $e->statusCode());
         }
-        // If on a draft invoice, unlink first
-        if ($entry->isLinkedToInvoice()) {
-            $entry->update(['client_invoice_line_id' => null]);
-        }
-        $dateWorked = $entry->date_worked;
-        $entry->delete();
-
-        // Regenerate draft invoices that cover the affected period
-        $this->regenerateDraftInvoicesForDate($company, $dateWorked);
 
         return response()->json(['success' => true]);
-    }
-
-    /**
-     * Regenerate all draft invoices for the company.
-     *
-     * Because prior-month billing cascades balances across periods, editing a
-     * time entry in month M can affect the invoice covering M (period M) as well
-     * as any subsequent drafts whose starting balances depend on M's outcome.
-     * We therefore regenerate every draft invoice, ordered chronologically so
-     * that each one sees updated balances from earlier periods.
-     */
-    protected function regenerateDraftInvoicesForDate(ClientCompany $company, mixed $date): void
-    {
-        $draftInvoices = ClientInvoice::where('client_company_id', $company->id)
-            ->where('status', 'draft')
-            ->orderBy('period_start')
-            ->get();
-
-        if ($draftInvoices->isEmpty()) {
-            return;
-        }
-
-        $invoicingService = app(ClientInvoicingService::class);
-
-        foreach ($draftInvoices as $invoice) {
-            try {
-                $invoicingService->generateInvoice(
-                    $company,
-                    $invoice->period_start,
-                    $invoice->period_end
-                );
-            } catch (\Exception $e) {
-                Log::warning('Failed to regenerate draft invoice on time entry change', [
-                    'invoice_id' => $invoice->client_invoice_id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
     }
 }
