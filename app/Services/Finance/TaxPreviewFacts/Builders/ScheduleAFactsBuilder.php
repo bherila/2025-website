@@ -11,26 +11,11 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use App\Services\Tax\PureTaxMath\ItemizedDeductions;
 use App\Support\Finance\FederalStandardDeduction;
 
 class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
 {
-    /**
-     * OBBBA SALT phase-down rules for years with published parameters.
-     *
-     * The cap is reduced by `rate` of MAGI above `threshold`, but never below `floor`.
-     * Keep this table explicit so unpublished years do not silently use placeholder values.
-     *
-     * 2026 parameters are published in IRS Publication 505 (2026) and the 2026 Form 1040-ES
-     * correction: $40,400 cap, $505,000 MAGI threshold, and $10,000 floor.
-     *
-     * @var array<int, array{base: float, threshold: float, floor: float, rate: float}>
-     */
-    private const array SALT_CAP_RULES = [
-        2025 => ['base' => 40000.0, 'threshold' => 500000.0, 'floor' => 10000.0, 'rate' => 0.30],
-        2026 => ['base' => 40400.0, 'threshold' => 505000.0, 'floor' => 10000.0, 'rate' => 0.30],
-    ];
-
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $w2Docs
@@ -56,7 +41,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $selectedLine5aTotal = $line5aSelection['amount'];
         $saltPaidBeforeCap = $this->sumMoney([$selectedLine5aTotal, $realEstateTaxTotal]);
         $saltCap = $this->saltCap($year, $magi);
-        $saltDeduction = min($saltCap, $saltPaidBeforeCap);
+        $saltDeduction = ItemizedDeductions::saltDeduction($realEstateTaxTotal, $year, $magi, $selectedLine5aTotal);
         $mortgageInterestTotal = $this->sumSources($mortgageInterestSources);
         $investmentInterestTotal = $form4952->deductibleInvestmentInterestExpense;
         $grossInvestmentInterestTotal = $form4952->totalInvestmentInterestExpense;
@@ -228,23 +213,12 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
 
     private function saltCap(int $year, ?float $magi = null): float
     {
-        if (! array_key_exists($year, self::SALT_CAP_RULES)) {
-            return 10000.0;
-        }
-
-        $rule = self::SALT_CAP_RULES[$year];
-        if ($magi === null) {
-            return $rule['base'];
-        }
-
-        $excess = max(0.0, $this->subtractMoney($magi, $rule['threshold']));
-
-        return $this->roundMoney(max($rule['floor'], $this->subtractMoney($rule['base'], $excess * $rule['rate'])));
+        return ItemizedDeductions::saltCap($year, $magi);
     }
 
     private function hasSaltPhaseDown(int $year): bool
     {
-        return array_key_exists($year, self::SALT_CAP_RULES);
+        return ItemizedDeductions::hasSaltPhaseDown($year);
     }
 
     private function standardDeduction(int $year, bool $marriedFilingJointly): float

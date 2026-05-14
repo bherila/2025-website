@@ -44,6 +44,12 @@ export const DEFAULT_ROTH_CONVERSION_INPUTS: RothConversionInputs = {
     taxableBasis: 320_000,
     cash: 90_000,
   },
+  expenses: {
+    propertyTax: 0,
+    medicalExpense: 0,
+    otherNondeductible: 0,
+    caProp13PropertyTaxLimit: false,
+  },
   strategy: {
     name: 'Convert to top of 24%',
     conversionMode: 'fill_bracket',

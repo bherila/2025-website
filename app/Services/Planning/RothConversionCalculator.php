@@ -6,6 +6,7 @@ use App\Services\Finance\MoneyMath;
 use App\Services\Tax\PureTaxMath\FederalBrackets;
 use App\Services\Tax\PureTaxMath\FilingStatus;
 use App\Services\Tax\PureTaxMath\Irmaa;
+use App\Services\Tax\PureTaxMath\ItemizedDeductions;
 use App\Services\Tax\PureTaxMath\Niit;
 use App\Services\Tax\PureTaxMath\Rmd;
 use App\Services\Tax\PureTaxMath\SocialSecurity;
@@ -91,8 +92,10 @@ final class RothConversionCalculator
             'lifetimeNiit' => 0.0,
             'lifetimeIrmaa' => 0.0,
             'lifetimeSocialSecurity' => 0.0,
+            'lifetimeExpenses' => 0.0,
             'presentValueLifetimeTax' => 0.0,
             'presentValueSocialSecurity' => 0.0,
+            'presentValueLifetimeExpenses' => 0.0,
             'finalEstateValue' => 0.0,
             'presentValueFinalEstate' => 0.0,
             'irmaaHitYears' => 0,
@@ -128,6 +131,7 @@ final class RothConversionCalculator
             $otherOrdinary = $this->inflate($inputs->number('income.otherOrdinary'), $inflationRate, $yearIndex);
             $qualifiedDividends = $this->inflate($inputs->number('income.qualifiedDividends'), $inflationRate, $yearIndex);
             $recurringLtcg = $this->inflate($inputs->number('income.longTermCapitalGains'), $inflationRate, $yearIndex);
+            $expenses = $this->projectedExpenses($inputs, $inflationRate, $yearIndex);
 
             $rmds = $this->requiredMinimumDistributions($balances['traditionalPrimary'], $balances['traditionalSpouse'], $primaryAge, $spouseAge, $primaryBirthYear, $spouseBirthYear, $spouseAlive);
             $rmd = $rmds['total'];
@@ -142,12 +146,15 @@ final class RothConversionCalculator
                 $wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd,
             ];
             $conversion = $this->rothConversionAmount(
+                $inputs,
                 $strategy,
                 $traditionalAvailable,
                 $calendarYear,
                 $primaryAge,
                 $status,
                 $inflationRate,
+                $yearIndex,
+                $expenses,
                 $ordinaryBeforeConversionComponents,
                 $grossSocialSecurity,
                 $taxExemptInterest,
@@ -164,16 +171,20 @@ final class RothConversionCalculator
             $otherIncomeForSs = MoneyMath::sum([$wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd, $conversion, $qualifiedDividends, $recurringLtcg]);
             $taxableSocialSecurity = SocialSecurity::taxablePortion($status, $grossSocialSecurity, $otherIncomeForSs, $taxExemptInterest);
             $ordinaryBeforeDeduction = MoneyMath::sum([$wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd, $conversion, $taxableSocialSecurity]);
-            $deduction = $inputs->value('assumptions.deductionMode') === 'custom'
-                ? $this->inflate($inputs->number('assumptions.customDeduction'), $inflationRate, $yearIndex)
-                : StandardDeduction::amount($calendarYear, $status, $inflationRate);
+            $basePreferentialIncome = MoneyMath::sum([$qualifiedDividends, $recurringLtcg]);
+            $deductionForHarvest = function (float $candidateHarvest) use ($inputs, $calendarYear, $status, $inflationRate, $yearIndex, $ordinaryBeforeDeduction, $basePreferentialIncome, $taxExemptInterest, $expenses): float {
+                $candidateAgi = MoneyMath::sum([$ordinaryBeforeDeduction, $basePreferentialIncome, $candidateHarvest]);
+                $candidateMagi = MoneyMath::sum([$candidateAgi, $taxExemptInterest]);
 
-            $ordinaryAfterDeduction = max(0.0, $ordinaryBeforeDeduction - $deduction);
-            $harvestedLtcg = $this->harvestedLongTermGains($strategy, $calendarYear, $status, $ordinaryAfterDeduction, $recurringLtcg + $qualifiedDividends, $balances, $inflationRate);
+                return $this->deductionBreakdown($inputs, $calendarYear, $status, $inflationRate, $yearIndex, $candidateAgi, $candidateMagi, $expenses)['deductionUsed'];
+            };
+            $harvestedLtcg = $this->harvestedLongTermGains($strategy, $calendarYear, $status, $ordinaryBeforeDeduction, $basePreferentialIncome, $balances, $inflationRate, $deductionForHarvest);
             $longTermGains = MoneyMath::sum([$recurringLtcg, $harvestedLtcg]);
             $preferentialIncome = MoneyMath::sum([$qualifiedDividends, $longTermGains]);
             $agi = MoneyMath::sum([$ordinaryBeforeDeduction, $preferentialIncome]);
             $magi = MoneyMath::sum([$agi, $taxExemptInterest]);
+            $deductionBreakdown = $this->deductionBreakdown($inputs, $calendarYear, $status, $inflationRate, $yearIndex, $agi, $magi, $expenses);
+            $deduction = $deductionBreakdown['deductionUsed'];
             $taxableIncome = $this->money(max(0.0, $agi - $deduction));
             $federalTax = FederalBrackets::taxOnCombined($calendarYear, $status, $taxableIncome, $preferentialIncome, $inflationRate);
             $niit = Niit::tax($status, $magi, MoneyMath::sum([$interest, $qualifiedDividends, $longTermGains]));
@@ -184,7 +195,7 @@ final class RothConversionCalculator
             $irmaa = $primaryAge >= 65 ? $irmaaTier->annualSurcharge() : 0.0;
             $totalTax = MoneyMath::sum([$federalTax, $niit, $stateTax, $irmaa]);
 
-            $balances['cash'] = $this->money($balances['cash'] + $wagesPrimary + $wagesSpouse + $selfEmployment + $interest + $taxExemptInterest + $otherOrdinary + $grossSocialSecurity - $totalTax);
+            $balances['cash'] = $this->money($balances['cash'] + $wagesPrimary + $wagesSpouse + $selfEmployment + $interest + $taxExemptInterest + $otherOrdinary + $grossSocialSecurity - $totalTax - $expenses['total']);
             $cashCover = $this->coverNegativeCash($balances);
             $balances = $cashCover['balances'];
             $cashShortfallWithdrawals = $cashCover['withdrawals'];
@@ -197,8 +208,10 @@ final class RothConversionCalculator
             $summary['lifetimeNiit'] = MoneyMath::sum([$summary['lifetimeNiit'], $niit]);
             $summary['lifetimeIrmaa'] = MoneyMath::sum([$summary['lifetimeIrmaa'], $irmaa]);
             $summary['lifetimeSocialSecurity'] = MoneyMath::sum([$summary['lifetimeSocialSecurity'], $grossSocialSecurity]);
+            $summary['lifetimeExpenses'] = MoneyMath::sum([$summary['lifetimeExpenses'], $expenses['total']]);
             $summary['presentValueLifetimeTax'] = MoneyMath::sum([$summary['presentValueLifetimeTax'], $totalTax / $discountFactor]);
             $summary['presentValueSocialSecurity'] = MoneyMath::sum([$summary['presentValueSocialSecurity'], $grossSocialSecurity / $discountFactor]);
+            $summary['presentValueLifetimeExpenses'] = MoneyMath::sum([$summary['presentValueLifetimeExpenses'], $expenses['total'] / $discountFactor]);
             $summary['irmaaHitYears'] += $irmaa > 0.0 ? 1 : 0;
             $summary['finalEstateValue'] = $estateValue;
             $summary['presentValueFinalEstate'] = $estateValue / $discountFactor;
@@ -233,6 +246,8 @@ final class RothConversionCalculator
                 'grossSocialSecurity' => $grossSocialSecurity,
                 'taxableSocialSecurity' => $taxableSocialSecurity,
                 'standardOrItemizedDeduction' => $deduction,
+                'deductionBreakdown' => $deductionBreakdown,
+                'expenses' => $expenses,
                 'agi' => $agi,
                 'magi' => $magi,
                 'taxableIncome' => $taxableIncome,
@@ -271,6 +286,67 @@ final class RothConversionCalculator
         $balances['cash'] = $this->money($balances['cash'] * (1.0 + $cashYieldRate));
 
         return $balances;
+    }
+
+    /**
+     * @return array{propertyTax: float, medicalExpense: float, otherNondeductible: float, total: float}
+     */
+    private function projectedExpenses(RothConversionInputs $inputs, float $inflationRate, int $yearIndex): array
+    {
+        $propertyTaxRate = ItemizedDeductions::propertyTaxGrowthRate($inflationRate, $inputs->bool('expenses.caProp13PropertyTaxLimit'));
+        $propertyTax = $this->inflate($inputs->number('expenses.propertyTax'), $propertyTaxRate, $yearIndex);
+        $medicalExpense = $this->inflate($inputs->number('expenses.medicalExpense'), $inflationRate, $yearIndex);
+        $otherNondeductible = $this->inflate($inputs->number('expenses.otherNondeductible'), $inflationRate, $yearIndex);
+
+        return [
+            'propertyTax' => $propertyTax,
+            'medicalExpense' => $medicalExpense,
+            'otherNondeductible' => $otherNondeductible,
+            'total' => MoneyMath::sum([$propertyTax, $medicalExpense, $otherNondeductible]),
+        ];
+    }
+
+    /**
+     * @param  array{propertyTax: float, medicalExpense: float, otherNondeductible: float, total: float}  $expenses
+     * @return array{mode: string, standardDeduction: float, customDeduction: float, itemizedDeduction: float, saltCap: float, saltDeduction: float, medicalExpenseFloor: float, medicalExpenseDeduction: float, deductionUsed: float}
+     */
+    private function deductionBreakdown(RothConversionInputs $inputs, int $calendarYear, FilingStatus $status, float $inflationRate, int $yearIndex, float $agi, float $magi, array $expenses): array
+    {
+        $standardDeduction = StandardDeduction::amount($calendarYear, $status, $inflationRate);
+        $customDeduction = $this->inflate($inputs->number('assumptions.customDeduction'), $inflationRate, $yearIndex);
+        $saltCap = ItemizedDeductions::saltCap($calendarYear, $magi);
+        $saltDeduction = ItemizedDeductions::saltDeduction($expenses['propertyTax'], $calendarYear, $magi);
+        $medicalExpenseFloor = ItemizedDeductions::medicalExpenseFloor($agi);
+        $medicalExpenseDeduction = ItemizedDeductions::medicalExpenseDeduction($expenses['medicalExpense'], $agi);
+        $itemizedDeduction = MoneyMath::sum([$saltDeduction, $medicalExpenseDeduction]);
+
+        if ($inputs->value('assumptions.deductionMode') === 'custom') {
+            return [
+                'mode' => 'custom',
+                'standardDeduction' => $standardDeduction,
+                'customDeduction' => $customDeduction,
+                'itemizedDeduction' => $itemizedDeduction,
+                'saltCap' => $saltCap,
+                'saltDeduction' => $saltDeduction,
+                'medicalExpenseFloor' => $medicalExpenseFloor,
+                'medicalExpenseDeduction' => $medicalExpenseDeduction,
+                'deductionUsed' => $customDeduction,
+            ];
+        }
+
+        $usesItemized = $itemizedDeduction > $standardDeduction;
+
+        return [
+            'mode' => $usesItemized ? 'itemized' : 'standard',
+            'standardDeduction' => $standardDeduction,
+            'customDeduction' => $customDeduction,
+            'itemizedDeduction' => $itemizedDeduction,
+            'saltCap' => $saltCap,
+            'saltDeduction' => $saltDeduction,
+            'medicalExpenseFloor' => $medicalExpenseFloor,
+            'medicalExpenseDeduction' => $medicalExpenseDeduction,
+            'deductionUsed' => $usesItemized ? $itemizedDeduction : $standardDeduction,
+        ];
     }
 
     /**
@@ -366,9 +442,10 @@ final class RothConversionCalculator
 
     /**
      * @param  array<string, mixed>  $strategy
+     * @param  array{propertyTax: float, medicalExpense: float, otherNondeductible: float, total: float}  $expenses
      * @param  array<int, float>  $ordinaryBeforeConversionComponents
      */
-    private function rothConversionAmount(array $strategy, float $traditionalBalance, int $year, int $primaryAge, FilingStatus $status, float $inflationRate, array $ordinaryBeforeConversionComponents, float $grossSocialSecurity, float $taxExemptInterest, float $preferentialIncomeForSocialSecurity): float
+    private function rothConversionAmount(RothConversionInputs $inputs, array $strategy, float $traditionalBalance, int $year, int $primaryAge, FilingStatus $status, float $inflationRate, int $yearIndex, array $expenses, array $ordinaryBeforeConversionComponents, float $grossSocialSecurity, float $taxExemptInterest, float $preferentialIncomeForSocialSecurity): float
     {
         if ($traditionalBalance <= 0.0) {
             return 0.0;
@@ -389,13 +466,11 @@ final class RothConversionCalculator
         if ($mode === 'fill_bracket') {
             $targetRate = ((float) ($strategy['bracketTarget'] ?? 24)) / 100.0;
             $ceiling = FederalBrackets::ordinaryBracketCeiling($year, $status, $targetRate, $inflationRate);
-            $deduction = StandardDeduction::amount($year, $status, $inflationRate);
             $ordinaryBeforeConversion = MoneyMath::sum($ordinaryBeforeConversionComponents);
-            $targetOrdinaryIncome = $ceiling + $deduction;
-            $high = min($traditionalBalance, max(0.0, $targetOrdinaryIncome - $ordinaryBeforeConversion));
+            $high = $traditionalBalance;
             $low = 0.0;
 
-            for ($iteration = 0; $iteration < 24; $iteration++) {
+            for ($iteration = 0; $iteration < 32; $iteration++) {
                 $candidate = ($low + $high) / 2.0;
                 $taxableSocialSecurity = SocialSecurity::taxablePortion(
                     $status,
@@ -403,9 +478,13 @@ final class RothConversionCalculator
                     $ordinaryBeforeConversion + $candidate + $preferentialIncomeForSocialSecurity,
                     $taxExemptInterest,
                 );
-                $ordinaryIncome = $ordinaryBeforeConversion + $candidate + $taxableSocialSecurity;
+                $ordinaryIncome = MoneyMath::sum([$ordinaryBeforeConversion, $candidate, $taxableSocialSecurity]);
+                $candidateAgi = MoneyMath::sum([$ordinaryIncome, $preferentialIncomeForSocialSecurity]);
+                $candidateMagi = MoneyMath::sum([$candidateAgi, $taxExemptInterest]);
+                $deduction = $this->deductionBreakdown($inputs, $year, $status, $inflationRate, $yearIndex, $candidateAgi, $candidateMagi, $expenses)['deductionUsed'];
+                $taxableOrdinaryIncome = max(0.0, $ordinaryIncome - $deduction);
 
-                if ($ordinaryIncome <= $targetOrdinaryIncome + 0.005) {
+                if ($taxableOrdinaryIncome <= $ceiling + 0.005) {
                     $low = $candidate;
                 } else {
                     $high = $candidate;
@@ -423,8 +502,9 @@ final class RothConversionCalculator
      *
      * @param  array<string, mixed>  $strategy
      * @param  array<string, float>  $balances
+     * @param  callable(float): float  $deductionForCandidate
      */
-    private function harvestedLongTermGains(array $strategy, int $year, FilingStatus $status, float $ordinaryAfterDeduction, float $existingPreferentialIncome, array &$balances, float $inflationRate): float
+    private function harvestedLongTermGains(array $strategy, int $year, FilingStatus $status, float $ordinaryBeforeDeduction, float $existingPreferentialIncome, array &$balances, float $inflationRate, callable $deductionForCandidate): float
     {
         if (($strategy['harvestLtcg'] ?? false) !== true || $balances['taxable'] <= $balances['taxableBasis']) {
             return 0.0;
@@ -435,9 +515,24 @@ final class RothConversionCalculator
             ? FederalBrackets::capitalGainZeroRateCeiling($year, $status, $inflationRate)
             : FederalBrackets::capitalGainFifteenRateCeiling($year, $status, $inflationRate);
 
-        $availableRoom = max(0.0, $targetCeiling - $ordinaryAfterDeduction - $existingPreferentialIncome);
         $unrealizedGain = max(0.0, $balances['taxable'] - $balances['taxableBasis']);
-        $harvest = $this->money(min($availableRoom, $unrealizedGain));
+        $low = 0.0;
+        $high = $unrealizedGain;
+
+        for ($iteration = 0; $iteration < 24; $iteration++) {
+            $candidate = ($low + $high) / 2.0;
+            $deduction = $deductionForCandidate($candidate);
+            $ordinaryAfterDeduction = max(0.0, $ordinaryBeforeDeduction - $deduction);
+            $stackPosition = MoneyMath::sum([$ordinaryAfterDeduction, $existingPreferentialIncome, $candidate]);
+
+            if ($stackPosition <= $targetCeiling + 0.005) {
+                $low = $candidate;
+            } else {
+                $high = $candidate;
+            }
+        }
+
+        $harvest = $this->money($low);
 
         $balances['taxableBasis'] = $this->money($balances['taxableBasis'] + $harvest);
 
