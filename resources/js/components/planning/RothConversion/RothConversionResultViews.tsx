@@ -207,7 +207,7 @@ export function ProjectionTaxDetail({
                     <TableCell className="text-right">{formatProjectionMoney(year.niit)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.irmaa)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.totalTax)}</TableCell>
-                    <TableCell className="text-right">{formatProjectionMoney(year.expenses.total)}</TableCell>
+                    <TableCell className="text-right">{formatProjectionMoney(year.expenses?.total)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.standardOrItemizedDeduction)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.rmd)}</TableCell>
                     <TableCell className="text-right">{formatProjectionMoney(year.rothConversion)}</TableCell>
