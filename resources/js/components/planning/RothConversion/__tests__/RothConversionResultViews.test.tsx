@@ -33,6 +33,7 @@ function scenarioWithLegacyYear(): RothConversionScenarioProjection {
       presentValueFinalEstate: 0,
       irmaaHitYears: 0,
       cashShortfallTaxApproximationYears: 0,
+      cashShortfallTaxRecomputedYears: 0,
       unfundedCashShortfall: 0,
     },
     years: [
@@ -52,6 +53,34 @@ function scenarioWithLegacyYear(): RothConversionScenarioProjection {
       } as RothConversionScenarioProjection['years'][number],
     ],
     socialSecurityBreakeven: [],
+  }
+}
+
+function scenarioWithCashShortfall(): RothConversionScenarioProjection {
+  const scenario = scenarioWithLegacyYear()
+
+  return {
+    ...scenario,
+    years: [
+      {
+        ...scenario.years[0],
+        cashShortfallWithdrawals: {
+          shortfall: 33170,
+          taxable: 35859.46,
+          taxableBasisRecovered: 17929.74,
+          taxableRealizedGain: 17929.74,
+          roth: 0,
+          traditional: 0,
+          traditionalOrdinaryIncome: 0,
+          total: 35859.46,
+          estimatedAdditionalFederalTax: 2689.46,
+          estimatedAdditionalStateTax: 0,
+          estimatedAdditionalNiit: 0,
+          estimatedAdditionalTax: 2689.46,
+          unfunded: 0,
+        },
+      } as RothConversionScenarioProjection['years'][number],
+    ],
   }
 }
 
@@ -77,5 +106,17 @@ describe('ProjectionTaxDetail', () => {
 
     expect(screen.getByTestId('irmaa-tier-chart')).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '$0' })).toBeInTheDocument()
+  })
+
+  it('renders cash shortfall withdrawal tax details', () => {
+    const scenario = scenarioWithCashShortfall()
+
+    render(<ProjectionTaxDetail projection={projectionWithScenario(scenario)} scenario={scenario} />)
+
+    expect(screen.getByText('Cash shortfall withdrawals')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '$33,170' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Taxable $35,859' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '$17,930' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '$2,689' })).toBeInTheDocument()
   })
 })

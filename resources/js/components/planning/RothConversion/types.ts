@@ -147,6 +147,7 @@ export interface RothConversionSummary {
   presentValueFinalEstate: number
   irmaaHitYears: number
   cashShortfallTaxApproximationYears: number
+  cashShortfallTaxRecomputedYears: number
   unfundedCashShortfall: number
 }
 
@@ -219,6 +220,7 @@ export interface RothConversionOrdinaryStack {
   rmdPrimary: number
   rmdSpouse: number
   rothConversion: number
+  cashShortfallTraditionalWithdrawal: number
   taxableSocialSecurity: number
 }
 
@@ -226,6 +228,7 @@ export interface RothConversionCapitalGainStack {
   qualifiedDividends: number
   recurringLongTermGains: number
   harvestedLongTermGains: number
+  cashShortfallRealizedGains: number
 }
 
 export interface RothConversionIrmaaTier {
@@ -238,10 +241,18 @@ export interface RothConversionIrmaaTier {
 }
 
 export interface RothConversionCashShortfallWithdrawals {
+  shortfall: number
   taxable: number
+  taxableBasisRecovered: number
+  taxableRealizedGain: number
   roth: number
   traditional: number
+  traditionalOrdinaryIncome: number
   total: number
+  estimatedAdditionalFederalTax: number
+  estimatedAdditionalStateTax: number
+  estimatedAdditionalNiit: number
+  estimatedAdditionalTax: number
   unfunded: number
 }
 

@@ -100,6 +100,7 @@ final class RothConversionCalculator
             'presentValueFinalEstate' => 0.0,
             'irmaaHitYears' => 0,
             'cashShortfallTaxApproximationYears' => 0,
+            'cashShortfallTaxRecomputedYears' => 0,
             'unfundedCashShortfall' => 0.0,
         ];
 
@@ -181,24 +182,46 @@ final class RothConversionCalculator
             $harvestedLtcg = $this->harvestedLongTermGains($strategy, $calendarYear, $status, $ordinaryBeforeDeduction, $basePreferentialIncome, $balances, $inflationRate, $deductionForHarvest);
             $longTermGains = MoneyMath::sum([$recurringLtcg, $harvestedLtcg]);
             $preferentialIncome = MoneyMath::sum([$qualifiedDividends, $longTermGains]);
-            $agi = MoneyMath::sum([$ordinaryBeforeDeduction, $preferentialIncome]);
-            $magi = MoneyMath::sum([$agi, $taxExemptInterest]);
-            $deductionBreakdown = $this->deductionBreakdown($inputs, $calendarYear, $status, $inflationRate, $yearIndex, $agi, $magi, $expenses);
-            $deduction = $deductionBreakdown['deductionUsed'];
-            $taxableIncome = $this->money(max(0.0, $agi - $deduction));
-            $federalTax = FederalBrackets::taxOnCombined($calendarYear, $status, $taxableIncome, $preferentialIncome, $inflationRate);
-            $niit = Niit::tax($status, $magi, MoneyMath::sum([$interest, $qualifiedDividends, $longTermGains]));
-            $stateTaxBase = MoneyMath::sum([$ordinaryBeforeDeduction, $inputs->bool('assumptions.stateTaxesLtcg') ? $longTermGains : 0.0]);
-            $stateTax = $this->money($stateTaxBase * $stateRate);
             $irmaaLookbackMagi = $magiHistory[$calendarYear - 2] ?? 0.0;
             $irmaaTier = Irmaa::tierFor($calendarYear, $status, $irmaaLookbackMagi, $inflationRate);
             $irmaa = $primaryAge >= 65 ? $irmaaTier->annualSurcharge() : 0.0;
-            $totalTax = MoneyMath::sum([$federalTax, $niit, $stateTax, $irmaa]);
+            $ordinaryWithoutSocialSecurity = MoneyMath::sum([$wagesPrimary, $wagesSpouse, $selfEmployment, $interest, $otherOrdinary, $rmd, $conversion]);
+            $taxContext = [
+                'inputs' => $inputs,
+                'calendarYear' => $calendarYear,
+                'status' => $status,
+                'inflationRate' => $inflationRate,
+                'yearIndex' => $yearIndex,
+                'expenses' => $expenses,
+                'ordinaryWithoutSocialSecurity' => $ordinaryWithoutSocialSecurity,
+                'grossSocialSecurity' => $grossSocialSecurity,
+                'taxExemptInterest' => $taxExemptInterest,
+                'qualifiedDividends' => $qualifiedDividends,
+                'longTermGains' => $longTermGains,
+                'interest' => $interest,
+                'stateTaxRate' => $stateRate,
+                'irmaa' => $irmaa,
+            ];
+            $baseTax = $this->taxForShortfallAdditions($taxContext, 0.0, 0.0);
 
-            $balances['cash'] = $this->money($balances['cash'] + $wagesPrimary + $wagesSpouse + $selfEmployment + $interest + $taxExemptInterest + $otherOrdinary + $grossSocialSecurity - $totalTax - $expenses['total']);
-            $cashCover = $this->coverNegativeCash($balances);
+            $balances['cash'] = $this->money($balances['cash'] + $wagesPrimary + $wagesSpouse + $selfEmployment + $interest + $taxExemptInterest + $otherOrdinary + $grossSocialSecurity - $baseTax['totalTax'] - $expenses['total']);
+            $cashCover = $this->coverNegativeCash($balances, $taxContext, $baseTax);
             $balances = $cashCover['balances'];
             $cashShortfallWithdrawals = $cashCover['withdrawals'];
+            $tax = $cashCover['tax'];
+            $taxableSocialSecurity = $tax['taxableSocialSecurity'];
+            $ordinaryBeforeDeduction = $tax['ordinaryBeforeDeduction'];
+            $preferentialIncome = $tax['preferentialIncome'];
+            $longTermGains = $tax['longTermGains'];
+            $agi = $tax['agi'];
+            $magi = $tax['magi'];
+            $deductionBreakdown = $tax['deductionBreakdown'];
+            $deduction = $deductionBreakdown['deductionUsed'];
+            $taxableIncome = $tax['taxableIncome'];
+            $federalTax = $tax['federalTax'];
+            $niit = $tax['niit'];
+            $stateTax = $tax['stateTax'];
+            $totalTax = $tax['totalTax'];
             $magiHistory[$calendarYear] = $magi;
 
             $discountFactor = $this->discountFactor($discountRate, $yearIndex);
@@ -215,7 +238,8 @@ final class RothConversionCalculator
             $summary['irmaaHitYears'] += $irmaa > 0.0 ? 1 : 0;
             $summary['finalEstateValue'] = $estateValue;
             $summary['presentValueFinalEstate'] = $estateValue / $discountFactor;
-            $summary['cashShortfallTaxApproximationYears'] += $cashShortfallWithdrawals['taxable'] > 0.0 || $cashShortfallWithdrawals['traditional'] > 0.0 ? 1 : 0;
+            $summary['cashShortfallTaxApproximationYears'] += $cashShortfallWithdrawals['estimatedAdditionalTax'] > 0.0 ? 1 : 0;
+            $summary['cashShortfallTaxRecomputedYears'] += $cashShortfallWithdrawals['estimatedAdditionalTax'] > 0.0 ? 1 : 0;
             $summary['unfundedCashShortfall'] = MoneyMath::sum([$summary['unfundedCashShortfall'], $cashShortfallWithdrawals['unfunded']]);
 
             $rows[] = [
@@ -236,12 +260,14 @@ final class RothConversionCalculator
                     'rmdPrimary' => $rmds['primary'],
                     'rmdSpouse' => $rmds['spouse'],
                     'rothConversion' => $conversion,
+                    'cashShortfallTraditionalWithdrawal' => $cashShortfallWithdrawals['traditionalOrdinaryIncome'],
                     'taxableSocialSecurity' => $taxableSocialSecurity,
                 ],
                 'capitalGainStack' => [
                     'qualifiedDividends' => $qualifiedDividends,
                     'recurringLongTermGains' => $recurringLtcg,
                     'harvestedLongTermGains' => $harvestedLtcg,
+                    'cashShortfallRealizedGains' => $cashShortfallWithdrawals['taxableRealizedGain'],
                 ],
                 'grossSocialSecurity' => $grossSocialSecurity,
                 'taxableSocialSecurity' => $taxableSocialSecurity,
@@ -351,45 +377,215 @@ final class RothConversionCalculator
 
     /**
      * @param  array<string, float>  $balances
-     * @return array{balances: array<string, float>, withdrawals: array{taxable: float, roth: float, traditional: float, total: float, unfunded: float}}
+     * @param  array<string, mixed>  $taxContext
+     * @param  array<string, mixed>  $baseTax
+     * @return array{balances: array<string, float>, withdrawals: array<string, float>, tax: array<string, mixed>}
      */
-    private function coverNegativeCash(array $balances): array
+    private function coverNegativeCash(array $balances, array $taxContext, array $baseTax): array
     {
-        $withdrawals = [
-            'taxable' => 0.0,
-            'roth' => 0.0,
-            'traditional' => 0.0,
-            'total' => 0.0,
-            'unfunded' => 0.0,
-        ];
+        $withdrawals = $this->emptyCashShortfallWithdrawals();
 
         if ($balances['cash'] >= 0.0) {
-            return ['balances' => $balances, 'withdrawals' => $withdrawals];
+            return ['balances' => $balances, 'withdrawals' => $withdrawals, 'tax' => $baseTax];
         }
 
-        $shortfall = abs($balances['cash']);
-        foreach (['taxable', 'roth', 'traditionalPrimary', 'traditionalSpouse'] as $source) {
-            if ($shortfall <= 0.0) {
+        $shortfall = $this->money(abs($balances['cash']));
+        $withdrawals['shortfall'] = $shortfall;
+        $additionalOrdinaryIncome = 0.0;
+        $additionalLongTermGains = 0.0;
+        $tax = $baseTax;
+
+        for ($iteration = 0; $iteration < 80; $iteration++) {
+            $additionalTax = $this->money(max(0.0, (float) $tax['totalTax'] - (float) $baseTax['totalTax']));
+            $targetWithdrawal = $this->money($shortfall + $additionalTax);
+            $remainingNeed = $this->money($targetWithdrawal - $withdrawals['total']);
+
+            if ($remainingNeed <= 0.005) {
                 break;
             }
 
-            $withdrawal = min($balances[$source], $shortfall);
-            if ($source === 'taxable' && $balances['taxable'] > 0.0) {
-                $basisReduction = min($balances['taxableBasis'], $withdrawal * ($balances['taxableBasis'] / $balances['taxable']));
-                $balances['taxableBasis'] = $this->money($balances['taxableBasis'] - $basisReduction);
+            $source = $this->bestCashShortfallWithdrawalSource($balances, $remainingNeed, $taxContext, $tax, $additionalOrdinaryIncome, $additionalLongTermGains);
+            if ($source === null) {
+                break;
             }
 
-            $balances[$source] = $this->money($balances[$source] - $withdrawal);
-            $shortfall = $this->money($shortfall - $withdrawal);
-            $withdrawalKey = str_starts_with($source, 'traditional') ? 'traditional' : $source;
-            $withdrawals[$withdrawalKey] = MoneyMath::sum([$withdrawals[$withdrawalKey], $withdrawal]);
-            $withdrawals['total'] = MoneyMath::sum([$withdrawals['total'], $withdrawal]);
+            $amount = $this->money(min($source['available'], $remainingNeed));
+            if ($amount <= 0.0) {
+                break;
+            }
+
+            if ($source['source'] === 'taxable') {
+                $taxableBeforeWithdrawal = $balances['taxable'];
+                $basisReduction = $taxableBeforeWithdrawal > 0.0
+                    ? min($balances['taxableBasis'], $amount * ($balances['taxableBasis'] / $taxableBeforeWithdrawal))
+                    : 0.0;
+                $realizedGain = $this->money(max(0.0, $amount - $basisReduction));
+                $balances['taxable'] = $this->money($balances['taxable'] - $amount);
+                $balances['taxableBasis'] = $this->money($balances['taxableBasis'] - $basisReduction);
+                $additionalLongTermGains = MoneyMath::sum([$additionalLongTermGains, $realizedGain]);
+                $withdrawals['taxable'] = MoneyMath::sum([$withdrawals['taxable'], $amount]);
+                $withdrawals['taxableBasisRecovered'] = MoneyMath::sum([$withdrawals['taxableBasisRecovered'], $basisReduction]);
+                $withdrawals['taxableRealizedGain'] = MoneyMath::sum([$withdrawals['taxableRealizedGain'], $realizedGain]);
+            } elseif ($source['source'] === 'roth') {
+                $balances['roth'] = $this->money($balances['roth'] - $amount);
+                $withdrawals['roth'] = MoneyMath::sum([$withdrawals['roth'], $amount]);
+            } else {
+                $balances = $this->withdrawFromTraditionalBuckets($balances, $amount);
+                $additionalOrdinaryIncome = MoneyMath::sum([$additionalOrdinaryIncome, $amount]);
+                $withdrawals['traditional'] = MoneyMath::sum([$withdrawals['traditional'], $amount]);
+                $withdrawals['traditionalOrdinaryIncome'] = MoneyMath::sum([$withdrawals['traditionalOrdinaryIncome'], $amount]);
+            }
+
+            $withdrawals['total'] = MoneyMath::sum([$withdrawals['total'], $amount]);
+            $tax = $this->taxForShortfallAdditions($taxContext, $additionalOrdinaryIncome, $additionalLongTermGains);
         }
 
-        $balances['cash'] = $shortfall > 0.0 ? -$shortfall : 0.0;
-        $withdrawals['unfunded'] = max(0.0, $shortfall);
+        $additionalFederalTax = $this->money(max(0.0, (float) $tax['federalTax'] - (float) $baseTax['federalTax']));
+        $additionalStateTax = $this->money(max(0.0, (float) $tax['stateTax'] - (float) $baseTax['stateTax']));
+        $additionalNiit = $this->money(max(0.0, (float) $tax['niit'] - (float) $baseTax['niit']));
+        $additionalTax = $this->money(max(0.0, (float) $tax['totalTax'] - (float) $baseTax['totalTax']));
+        $coveredNeed = $this->money($shortfall + $additionalTax);
+        $unfunded = $this->money(max(0.0, $coveredNeed - $withdrawals['total']));
 
-        return ['balances' => $balances, 'withdrawals' => array_map(fn (float $value): float => $this->money($value), $withdrawals)];
+        $balances['cash'] = $unfunded > 0.0 ? -$unfunded : 0.0;
+        $withdrawals['estimatedAdditionalFederalTax'] = $additionalFederalTax;
+        $withdrawals['estimatedAdditionalStateTax'] = $additionalStateTax;
+        $withdrawals['estimatedAdditionalNiit'] = $additionalNiit;
+        $withdrawals['estimatedAdditionalTax'] = $additionalTax;
+        $withdrawals['unfunded'] = $unfunded;
+
+        return [
+            'balances' => $balances,
+            'withdrawals' => array_map(fn (float $value): float => $this->money($value), $withdrawals),
+            'tax' => $tax,
+        ];
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function emptyCashShortfallWithdrawals(): array
+    {
+        return [
+            'shortfall' => 0.0,
+            'taxable' => 0.0,
+            'taxableBasisRecovered' => 0.0,
+            'taxableRealizedGain' => 0.0,
+            'roth' => 0.0,
+            'traditional' => 0.0,
+            'traditionalOrdinaryIncome' => 0.0,
+            'total' => 0.0,
+            'estimatedAdditionalFederalTax' => 0.0,
+            'estimatedAdditionalStateTax' => 0.0,
+            'estimatedAdditionalNiit' => 0.0,
+            'estimatedAdditionalTax' => 0.0,
+            'unfunded' => 0.0,
+        ];
+    }
+
+    /**
+     * @param  array<string, float>  $balances
+     * @param  array<string, mixed>  $taxContext
+     * @param  array<string, mixed>  $currentTax
+     * @return array{source: string, available: float}|null
+     */
+    private function bestCashShortfallWithdrawalSource(array $balances, float $remainingNeed, array $taxContext, array $currentTax, float $additionalOrdinaryIncome, float $additionalLongTermGains): ?array
+    {
+        $sources = [
+            ['source' => 'taxable', 'available' => $balances['taxable']],
+            ['source' => 'roth', 'available' => $balances['roth']],
+            ['source' => 'traditional', 'available' => $this->traditionalBalance($balances)],
+        ];
+        $best = null;
+
+        foreach ($sources as $source) {
+            $available = $this->money(max(0.0, $source['available']));
+            if ($available <= 0.0) {
+                continue;
+            }
+
+            $amount = $this->money(min($available, $remainingNeed));
+            $ordinaryIncome = 0.0;
+            $longTermGain = 0.0;
+
+            if ($source['source'] === 'traditional') {
+                $ordinaryIncome = $amount;
+            } elseif ($source['source'] === 'taxable' && $balances['taxable'] > 0.0) {
+                $unrealizedGainRatio = max(0.0, ($balances['taxable'] - $balances['taxableBasis']) / $balances['taxable']);
+                $longTermGain = $this->money($amount * $unrealizedGainRatio);
+            }
+
+            $candidateTax = $this->taxForShortfallAdditions(
+                $taxContext,
+                MoneyMath::sum([$additionalOrdinaryIncome, $ordinaryIncome]),
+                MoneyMath::sum([$additionalLongTermGains, $longTermGain]),
+            );
+            $incrementalTax = $this->money(max(0.0, (float) $candidateTax['totalTax'] - (float) $currentTax['totalTax']));
+            $taxCostRatio = $amount > 0.0 ? $incrementalTax / $amount : PHP_FLOAT_MAX;
+
+            if ($best === null || $taxCostRatio < $best['taxCostRatio'] - 0.000001) {
+                $best = [
+                    'source' => $source['source'],
+                    'available' => $available,
+                    'taxCostRatio' => $taxCostRatio,
+                ];
+            }
+        }
+
+        if ($best === null) {
+            return null;
+        }
+
+        return [
+            'source' => $best['source'],
+            'available' => $best['available'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function taxForShortfallAdditions(array $context, float $additionalOrdinaryIncome, float $additionalLongTermGains): array
+    {
+        $inputs = $context['inputs'];
+        $status = $context['status'];
+        $expenses = $context['expenses'];
+
+        if (! $inputs instanceof RothConversionInputs || ! $status instanceof FilingStatus || ! is_array($expenses)) {
+            throw new \LogicException('Invalid Roth conversion tax context.');
+        }
+
+        $ordinaryWithoutSocialSecurity = MoneyMath::sum([(float) $context['ordinaryWithoutSocialSecurity'], $additionalOrdinaryIncome]);
+        $longTermGains = MoneyMath::sum([(float) $context['longTermGains'], $additionalLongTermGains]);
+        $preferentialIncome = MoneyMath::sum([(float) $context['qualifiedDividends'], $longTermGains]);
+        $otherIncomeForSocialSecurity = MoneyMath::sum([$ordinaryWithoutSocialSecurity, $preferentialIncome]);
+        $taxableSocialSecurity = SocialSecurity::taxablePortion($status, (float) $context['grossSocialSecurity'], $otherIncomeForSocialSecurity, (float) $context['taxExemptInterest']);
+        $ordinaryBeforeDeduction = MoneyMath::sum([$ordinaryWithoutSocialSecurity, $taxableSocialSecurity]);
+        $agi = MoneyMath::sum([$ordinaryBeforeDeduction, $preferentialIncome]);
+        $magi = MoneyMath::sum([$agi, (float) $context['taxExemptInterest']]);
+        $deductionBreakdown = $this->deductionBreakdown($inputs, (int) $context['calendarYear'], $status, (float) $context['inflationRate'], (int) $context['yearIndex'], $agi, $magi, $expenses);
+        $taxableIncome = $this->money(max(0.0, $agi - $deductionBreakdown['deductionUsed']));
+        $federalTax = FederalBrackets::taxOnCombined((int) $context['calendarYear'], $status, $taxableIncome, $preferentialIncome, (float) $context['inflationRate']);
+        $niit = Niit::tax($status, $magi, MoneyMath::sum([(float) $context['interest'], (float) $context['qualifiedDividends'], $longTermGains]));
+        $stateTaxBase = MoneyMath::sum([$ordinaryBeforeDeduction, $inputs->bool('assumptions.stateTaxesLtcg') ? $longTermGains : 0.0]);
+        $stateTax = $this->money($stateTaxBase * (float) $context['stateTaxRate']);
+        $totalTax = MoneyMath::sum([$federalTax, $niit, $stateTax, (float) $context['irmaa']]);
+
+        return [
+            'taxableSocialSecurity' => $taxableSocialSecurity,
+            'ordinaryBeforeDeduction' => $ordinaryBeforeDeduction,
+            'preferentialIncome' => $preferentialIncome,
+            'longTermGains' => $longTermGains,
+            'agi' => $agi,
+            'magi' => $magi,
+            'deductionBreakdown' => $deductionBreakdown,
+            'taxableIncome' => $taxableIncome,
+            'federalTax' => $federalTax,
+            'niit' => $niit,
+            'stateTax' => $stateTax,
+            'totalTax' => $totalTax,
+        ];
     }
 
     private function growthRateForAge(RothConversionInputs $inputs, int $primaryAge): float
@@ -696,9 +892,9 @@ final class RothConversionCalculator
 
         foreach ($scenarios as $scenario) {
             $summary = is_array($scenario['summary'] ?? null) ? $scenario['summary'] : [];
-            if (($summary['cashShortfallTaxApproximationYears'] ?? 0) > 0) {
+            if (($summary['unfundedCashShortfall'] ?? 0.0) > 0.0) {
                 $name = (string) ($scenario['name'] ?? 'Scenario');
-                $warnings[] = "{$name}: Cash shortfall withdrawals from taxable or pre-tax accounts reduce balances, but this v1 projection does not recompute additional realized-gain or ordinary-income tax in that same year. Review rows with cash shortfall withdrawals before relying on lifetime-tax totals.";
+                $warnings[] = "{$name}: Some projected cash shortfalls could not be fully covered by taxable, Roth, or pre-tax balances.";
             }
         }
 

@@ -101,6 +101,7 @@ function projection(): RothConversionProjection {
           presentValueFinalEstate: 0,
           irmaaHitYears: 0,
           cashShortfallTaxApproximationYears: 0,
+          cashShortfallTaxRecomputedYears: 0,
           unfundedCashShortfall: 0,
         },
         years: [],
