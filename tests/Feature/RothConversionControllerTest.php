@@ -31,16 +31,17 @@ class RothConversionControllerTest extends TestCase
         $this->assertGreaterThan(20, count($response->json('scenarios.0.years')));
     }
 
-    public function test_compute_endpoint_surfaces_scenario_prefixed_cash_shortfall_warning(): void
+    public function test_compute_endpoint_returns_tax_aware_cash_shortfall_withdrawals(): void
     {
         $inputs = RothConversionInputs::defaults();
+        $inputs['currentYear'] = 2026;
         $inputs['filingStatus'] = 'single';
         $inputs['people']['primaryCurrentAge'] = 60;
-        $inputs['people']['primaryBirthYear'] = $inputs['currentYear'] - 60;
+        $inputs['people']['primaryBirthYear'] = 1966;
         $inputs['people']['primaryEndAge'] = 60;
-        $inputs['income']['wagesPrimary'] = 0.0;
+        $inputs['income']['wagesPrimary'] = 100000.0;
         $inputs['income']['wagesSpouse'] = 0.0;
-        $inputs['income']['retirementAgePrimary'] = 60;
+        $inputs['income']['retirementAgePrimary'] = 61;
         $inputs['income']['retirementAgeSpouse'] = 60;
         $inputs['income']['selfEmploymentPrimary'] = 0.0;
         $inputs['income']['selfEmploymentSpouse'] = 0.0;
@@ -51,14 +52,27 @@ class RothConversionControllerTest extends TestCase
         $inputs['income']['otherOrdinary'] = 0.0;
         $inputs['socialSecurity']['piaPrimary'] = 0.0;
         $inputs['socialSecurity']['piaSpouse'] = 0.0;
+        $inputs['balances']['traditionalPrimary'] = 100000.0;
+        $inputs['balances']['traditionalSpouse'] = 0.0;
+        $inputs['balances']['rothPrimary'] = 0.0;
+        $inputs['balances']['rothSpouse'] = 0.0;
+        $inputs['balances']['hsa'] = 0.0;
         $inputs['balances']['cash'] = 0.0;
-        $inputs['balances']['taxableBrokerage'] = 50000.0;
-        $inputs['balances']['taxableBasis'] = 25000.0;
+        $inputs['balances']['taxableBrokerage'] = 200000.0;
+        $inputs['balances']['taxableBasis'] = 100000.0;
+        $inputs['expenses']['propertyTax'] = 0.0;
+        $inputs['expenses']['medicalExpense'] = 0.0;
+        $inputs['expenses']['otherNondeductible'] = 120000.0;
         $inputs['strategy']['conversionMode'] = 'constant';
-        $inputs['strategy']['annualConversion'] = 100000.0;
+        $inputs['strategy']['annualConversion'] = 0.0;
         $inputs['strategy']['conversionStartAge'] = 60;
         $inputs['strategy']['conversionEndAge'] = 60;
         $inputs['strategy']['harvestLtcg'] = false;
+        $inputs['assumptions']['preRetirementGrowthPercent'] = 0.0;
+        $inputs['assumptions']['postRetirementGrowthPercent'] = 0.0;
+        $inputs['assumptions']['cashYieldPercent'] = 0.0;
+        $inputs['assumptions']['inflationPercent'] = 0.0;
+        $inputs['assumptions']['stateTaxPercent'] = 0.0;
         $inputs['scenarios'] = [['name' => 'Cash shortfall', 'strategy' => []]];
 
         $response = $this->postJson('/api/financial-planning/roth-conversion/compute', [
@@ -67,7 +81,12 @@ class RothConversionControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('scenarios.0.summary.cashShortfallTaxApproximationYears', 1);
-        $this->assertStringStartsWith('Cash shortfall:', $response->json('warnings.0'));
+        $response->assertJsonPath('scenarios.0.summary.cashShortfallTaxRecomputedYears', 1);
+        $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.shortfall', 33170);
+        $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.taxable', 35859.46);
+        $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.taxableRealizedGain', 17929.74);
+        $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.estimatedAdditionalTax', 2689.46);
+        $response->assertJsonPath('warnings', []);
     }
 
     public function test_married_compute_requires_spouse_birth_and_end_age_fields(): void

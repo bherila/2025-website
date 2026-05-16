@@ -20,7 +20,7 @@ import RmdRateChart from './charts/RmdRateChart'
 import SsBreakevenChart from './charts/SsBreakevenChart'
 import SsTaxationStepChart from './charts/SsTaxationStepChart'
 import ScenarioCompareTable from './ScenarioCompareTable'
-import type { RothConversionProjection, RothConversionScenarioProjection } from './types'
+import type { RothConversionCashShortfallWithdrawals, RothConversionProjection, RothConversionScenarioProjection } from './types'
 
 export function formatProjectionMoney(value: number | undefined): string {
   return currency(value ?? 0, { precision: 0 }).format()
@@ -35,6 +35,18 @@ export function getLifetimeTax(scenario: RothConversionScenarioProjection): numb
     .add(scenario.summary.lifetimeStateTax)
     .add(scenario.summary.lifetimeNiit)
     .value
+}
+
+function formatShortfallSources(withdrawals: RothConversionCashShortfallWithdrawals | undefined): string {
+  const sources = [
+    ['Taxable', withdrawals?.taxable ?? 0],
+    ['Roth', withdrawals?.roth ?? 0],
+    ['Pre-tax', withdrawals?.traditional ?? 0],
+  ]
+    .filter(([, amount]) => Number(amount) > 0)
+    .map(([label, amount]) => `${label} ${formatProjectionMoney(Number(amount))}`)
+
+  return sources.length > 0 ? sources.join(' + ') : '$0'
 }
 
 export function ProjectionSummaryTiles({ scenario }: { scenario: RothConversionScenarioProjection }): ReactElement {
@@ -159,6 +171,7 @@ export function ProjectionTaxDetail({
   scenario: RothConversionScenarioProjection
 }): ReactElement {
   const finalYear = scenario.years.at(-1)
+  const shortfallYears = scenario.years.filter((year) => (year.cashShortfallWithdrawals?.shortfall ?? year.cashShortfallWithdrawals?.total ?? 0) > 0)
 
   return (
     <div className="grid gap-6">
@@ -169,6 +182,49 @@ export function ProjectionTaxDetail({
         </CardHeader>
         <CardContent className="h-[340px]">
           <IrmaaTierChart tiers={projection.reference.irmaaTiers} years={scenario.years} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cash shortfall withdrawals</CardTitle>
+          <CardDescription>Recommended account pulls and same-year tax impact for years where spending exceeds available cash.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {shortfallYears.length > 0 ? (
+            <div className="max-h-[360px] overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Age</TableHead>
+                    <TableHead className="text-right">Shortfall</TableHead>
+                    <TableHead>Pull from</TableHead>
+                    <TableHead className="text-right">Realized gain</TableHead>
+                    <TableHead className="text-right">Ordinary income</TableHead>
+                    <TableHead className="text-right">Tax cost</TableHead>
+                    <TableHead className="text-right">Unfunded</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shortfallYears.map((year) => (
+                    <TableRow key={year.calendarYear}>
+                      <TableCell>{year.primaryAge}</TableCell>
+                      <TableCell className="text-right">{formatProjectionMoney(year.cashShortfallWithdrawals?.shortfall ?? year.cashShortfallWithdrawals?.total)}</TableCell>
+                      <TableCell>{formatShortfallSources(year.cashShortfallWithdrawals)}</TableCell>
+                      <TableCell className="text-right">{formatProjectionMoney(year.cashShortfallWithdrawals?.taxableRealizedGain)}</TableCell>
+                      <TableCell className="text-right">{formatProjectionMoney(year.cashShortfallWithdrawals?.traditionalOrdinaryIncome)}</TableCell>
+                      <TableCell className="text-right">{formatProjectionMoney(year.cashShortfallWithdrawals?.estimatedAdditionalTax)}</TableCell>
+                      <TableCell className="text-right">{formatProjectionMoney(year.cashShortfallWithdrawals?.unfunded)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              No projected cash shortfalls for this scenario.
+            </div>
+          )}
         </CardContent>
       </Card>
 

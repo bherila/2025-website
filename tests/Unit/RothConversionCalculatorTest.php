@@ -258,14 +258,18 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertSame(49450.0, $year['capitalGainStack']['harvestedLongTermGains']);
     }
 
-    public function test_cash_shortfall_withdrawals_are_reported_with_tax_approximation_warning(): void
+    public function test_cash_shortfall_withdrawals_use_taxable_average_basis_and_recompute_tax(): void
     {
         $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['income']['wagesPrimary'] = 100000.0;
+        $inputs['income']['retirementAgePrimary'] = 61;
         $inputs['balances']['cash'] = 0.0;
-        $inputs['balances']['taxableBrokerage'] = 50000.0;
-        $inputs['balances']['taxableBasis'] = 25000.0;
+        $inputs['balances']['traditionalPrimary'] = 100000.0;
+        $inputs['balances']['taxableBrokerage'] = 200000.0;
+        $inputs['balances']['taxableBasis'] = 100000.0;
+        $inputs['expenses']['otherNondeductible'] = 120000.0;
         $inputs['strategy']['conversionMode'] = 'constant';
-        $inputs['strategy']['annualConversion'] = 100000.0;
+        $inputs['strategy']['annualConversion'] = 0.0;
         $inputs['strategy']['conversionStartAge'] = 60;
         $inputs['strategy']['conversionEndAge'] = 60;
         $inputs['strategy']['harvestLtcg'] = false;
@@ -274,10 +278,46 @@ class RothConversionCalculatorTest extends TestCase
         $projection = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray();
         $year = $projection['scenarios'][0]['years'][0];
 
-        $this->assertGreaterThan(0.0, $year['cashShortfallWithdrawals']['taxable']);
-        $this->assertGreaterThan(0.0, $year['cashShortfallWithdrawals']['total']);
+        $this->assertSame(33170.0, $year['cashShortfallWithdrawals']['shortfall']);
+        $this->assertSame(35859.46, $year['cashShortfallWithdrawals']['taxable']);
+        $this->assertSame(17929.74, $year['cashShortfallWithdrawals']['taxableBasisRecovered']);
+        $this->assertSame(17929.74, $year['cashShortfallWithdrawals']['taxableRealizedGain']);
+        $this->assertSame(0.0, $year['cashShortfallWithdrawals']['traditional']);
+        $this->assertSame(2689.46, $year['cashShortfallWithdrawals']['estimatedAdditionalFederalTax']);
+        $this->assertSame(2689.46, $year['cashShortfallWithdrawals']['estimatedAdditionalTax']);
+        $this->assertSame(15859.46, $year['totalTax']);
+        $this->assertSame(17929.74, $year['capitalGainStack']['cashShortfallRealizedGains']);
         $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxApproximationYears']);
-        $this->assertStringStartsWith('Cash shortfall:', $projection['warnings'][0]);
+        $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxRecomputedYears']);
+        $this->assertSame([], $projection['warnings']);
+    }
+
+    public function test_cash_shortfall_pre_tax_withdrawals_gross_up_ordinary_income_tax(): void
+    {
+        $inputs = $this->singleYearNoIncomeInputs();
+        $inputs['income']['wagesPrimary'] = 100000.0;
+        $inputs['income']['retirementAgePrimary'] = 61;
+        $inputs['balances']['cash'] = 0.0;
+        $inputs['balances']['traditionalPrimary'] = 200000.0;
+        $inputs['expenses']['otherNondeductible'] = 120000.0;
+        $inputs['strategy']['conversionMode'] = 'constant';
+        $inputs['strategy']['annualConversion'] = 0.0;
+        $inputs['strategy']['conversionStartAge'] = 60;
+        $inputs['strategy']['conversionEndAge'] = 60;
+        $inputs['strategy']['harvestLtcg'] = false;
+        $inputs['scenarios'] = [['name' => 'Cash shortfall', 'strategy' => []]];
+
+        $projection = (new RothConversionCalculator)->project(RothConversionInputs::fromArray($inputs))->toArray();
+        $year = $projection['scenarios'][0]['years'][0];
+
+        $this->assertSame(33170.0, $year['cashShortfallWithdrawals']['shortfall']);
+        $this->assertSame(43071.05, $year['cashShortfallWithdrawals']['traditional']);
+        $this->assertSame(43071.05, $year['cashShortfallWithdrawals']['traditionalOrdinaryIncome']);
+        $this->assertSame(9901.05, $year['cashShortfallWithdrawals']['estimatedAdditionalFederalTax']);
+        $this->assertSame(9901.05, $year['cashShortfallWithdrawals']['estimatedAdditionalTax']);
+        $this->assertSame(23071.05, $year['totalTax']);
+        $this->assertSame(43071.05, $year['ordinaryIncomeStack']['cashShortfallTraditionalWithdrawal']);
+        $this->assertSame([], $projection['warnings']);
     }
 
     public function test_expenses_reduce_cash_and_feed_schedule_a_deductions(): void
