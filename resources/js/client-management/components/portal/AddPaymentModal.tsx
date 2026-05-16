@@ -1,3 +1,4 @@
+import currency from "currency.js"
 import { useEffect, useState } from "react"
 
 import type { ClientInvoicePayment } from "@/client-management/types"
@@ -30,6 +31,11 @@ export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmoun
     const [paymentMethod, setPaymentMethod] = useState<string>('Credit Card')
     const [notes, setNotes] = useState('')
     const [isSaving, setIsSaving] = useState(false)
+    const enteredAmount = Number(amount)
+    const overpaymentLabel =
+        remainingBalance !== undefined && Number.isFinite(enteredAmount) && enteredAmount > remainingBalance
+            ? currency(enteredAmount).subtract(remainingBalance).format()
+            : null
 
     useEffect(() => {
         if (isOpen) {
@@ -85,18 +91,12 @@ export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmoun
                         </Label>
                         <Input id="amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="col-span-3" />
                     </div>
-                    {(() => {
-                        if (remainingBalance === undefined) return null
-                        const entered = parseFloat(amount || '0')
-                        if (!Number.isFinite(entered) || entered <= remainingBalance) return null
-                        const overpay = (entered - remainingBalance).toFixed(2)
-                        return (
-                            <div className="col-span-4 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                                This creates an overpayment of <strong>${overpay}</strong>. The excess will be
-                                applied as a credit on the next invoice and rolls forward until used up.
-                            </div>
-                        )
-                    })()}
+                    {overpaymentLabel && (
+                        <div className="col-span-4 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                            This creates an overpayment of <strong>{overpaymentLabel}</strong>. The excess will be
+                            applied as a credit on the next invoice and rolls forward until used up.
+                        </div>
+                    )}
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="payment-date" className="text-right">
                             Date

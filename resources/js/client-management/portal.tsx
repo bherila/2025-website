@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const companyId = serverData.companyId
     // Prefer full Invoice objects, but accept lightweight list items from the server
     const parsedInvoices_full = InvoiceSchema.array().safeParse(serverData.invoices ?? [])
-    let initialInvoices: any[] | undefined = undefined
+    let initialInvoices: any[] | undefined
 
     if (parsedInvoices_full.success) {
       initialInvoices = parsedInvoices_full.data

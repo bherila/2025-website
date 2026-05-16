@@ -96,6 +96,97 @@ function renderAmt(n: number | null): string {
   return fmtAmt(n)
 }
 
+function renderBox11ItemsLine(box11Items: K1CodeItem[], onOpenCodes: (box: string) => void): ReactNode {
+  if (box11Items.length === 0) {
+    return null
+  }
+
+  const total = box11Items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+  const uniqueCodes = [...new Set(box11Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+  const firstCode = uniqueCodes[0] ?? ''
+  const label = uniqueCodes.length === 1
+    ? (BOX11_CODES[firstCode] ?? `Other income (code ${firstCode})`)
+    : `Other income (${uniqueCodes.length} codes)`
+
+  return (
+    <LineItem
+      boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
+      label={label}
+      value={total}
+      onDetails={() => onOpenCodes('11')}
+    />
+  )
+}
+
+function renderBox13ItemsLine(
+  box13Items: K1CodeItem[],
+  data: FK1StructuredData,
+  onOpenCodes: (box: string) => void,
+): ReactNode {
+  if (box13Items.length === 0) {
+    return null
+  }
+
+  const total = box13Items.reduce((acc, item) => {
+    const v = parseFieldVal(item.value)
+    return v !== null ? acc.add(-Math.abs(v)) : acc
+  }, currency(0)).value
+  const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+  const firstCode = uniqueCodes[0] ?? ''
+  const hasCodeL = box13Items.some(i => i.code.toUpperCase() === 'L')
+  const label = uniqueCodes.length === 1
+    ? (BOX13_CODES[firstCode] ?? `Other deductions (code ${firstCode})`)
+    : `Other deductions (${uniqueCodes.length} codes)`
+
+  return (
+    <>
+      <LineItem
+        boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
+        label={label}
+        value={total}
+        onDetails={() => onOpenCodes('13')}
+      />
+      {hasCodeL && (
+        <SubLine text="Box 13L → Form 4952, I, line 1 → Sch A line 16. Do NOT enter on Form 8582." />
+      )}
+      {hasCodeL && data.k3?.sections.some(s => s.sectionId === 'part2_section2') && (
+        <SubLine text="← K-3 Part II, Line 42 provides allocable portfolio interest expense detail" />
+      )}
+    </>
+  )
+}
+
+function renderBox20ItemsLine(box20Items: K1CodeItem[], onOpenCodes: (box: string) => void): ReactNode {
+  if (box20Items.length === 0) {
+    return null
+  }
+
+  const uniqueCodes = [...new Set(box20Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+  const firstCode = uniqueCodes[0] ?? ''
+  const allStmt = box20Items.every((i) => i.value === 'STMT')
+  const total = allStmt ? null : box20Items.reduce((acc, item) => {
+    const v = item.value === 'STMT' ? null : parseFieldVal(item.value)
+    return v !== null ? acc.add(v) : acc
+  }, currency(0)).value
+  const label = uniqueCodes.length === 1
+    ? (BOX20_LABELS[firstCode] ?? `Other information (code ${firstCode})`)
+    : `Supplemental information (${uniqueCodes.length} codes)`
+  const singleRouting = uniqueCodes.length === 1 ? BOX20_ROUTING[firstCode] : undefined
+
+  return (
+    <>
+      <LineItem
+        boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
+        label={label}
+        value={total}
+        raw={allStmt ? 'STMT' : undefined}
+        onDetails={() => onOpenCodes('20')}
+      />
+      {singleRouting && <SubLine text={singleRouting} />}
+    </>
+  )
+}
+
 // ── Entity / Partner info (collapsible) ───────────────────────────────────────
 
 function K1Field({
@@ -390,22 +481,7 @@ function IncomeItemsBlock({
             </div>
           )
         })}
-        {box11Items.length > 0 && (() => {
-          const total = box11Items.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
-          const uniqueCodes = [...new Set(box11Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
-          const firstCode = uniqueCodes[0] ?? ''
-          const label = uniqueCodes.length === 1
-            ? (BOX11_CODES[firstCode] ?? `Other income (code ${firstCode})`)
-            : `Other income (${uniqueCodes.length} codes)`
-          return (
-            <LineItem
-              boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
-              label={label}
-              value={total}
-              onDetails={() => onOpenCodes('11')}
-            />
-          )
-        })()}
+        {renderBox11ItemsLine(box11Items, onOpenCodes)}
         {hasBox123 && <PassiveClassificationHint data={data} />}
         <TotalLine label="Subtotal gross income items" value={subtotal} />
       </div>
@@ -455,34 +531,7 @@ function DeductionItemsBlock({
     <div className="border border-border rounded-lg overflow-hidden">
       <SectionHeader title="Deduction Items — Part III" />
       <div className="divide-y divide-dashed divide-border/50">
-        {box13Items.length > 0 && (() => {
-          const total = box13Items.reduce((acc, item) => {
-            const v = parseFieldVal(item.value)
-            return v !== null ? acc.add(-Math.abs(v)) : acc
-          }, currency(0)).value
-          const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
-          const firstCode = uniqueCodes[0] ?? ''
-          const hasCodeL = box13Items.some(i => i.code.toUpperCase() === 'L')
-          const label = uniqueCodes.length === 1
-            ? (BOX13_CODES[firstCode] ?? `Other deductions (code ${firstCode})`)
-            : `Other deductions (${uniqueCodes.length} codes)`
-          return (
-            <>
-              <LineItem
-                boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
-                label={label}
-                value={total}
-                onDetails={() => onOpenCodes('13')}
-              />
-              {hasCodeL && (
-                <SubLine text="Box 13L → Form 4952, I, line 1 → Sch A line 16. Do NOT enter on Form 8582." />
-              )}
-              {hasCodeL && data.k3?.sections.some(s => s.sectionId === 'part2_section2') && (
-                <SubLine text="← K-3 Part II, Line 42 provides allocable portfolio interest expense detail" />
-              )}
-            </>
-          )
-        })()}
+        {renderBox13ItemsLine(box13Items, data, onOpenCodes)}
         {box12Val !== null && box12Val !== 0 && (
           <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
         )}
@@ -692,31 +741,7 @@ function SupplementalBlock({
     <div className="border border-border rounded-lg overflow-hidden">
       <SectionHeader title="Box 20 Supplemental" />
       <div className="divide-y divide-dashed divide-border/50">
-        {box20Items.length > 0 && (() => {
-          const uniqueCodes = [...new Set(box20Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
-          const firstCode = uniqueCodes[0] ?? ''
-          const allStmt = box20Items.every((i) => i.value === 'STMT')
-          const total = allStmt ? null : box20Items.reduce((acc, item) => {
-            const v = item.value === 'STMT' ? null : parseFieldVal(item.value)
-            return v !== null ? acc.add(v) : acc
-          }, currency(0)).value
-          const label = uniqueCodes.length === 1
-            ? (BOX20_LABELS[firstCode] ?? `Other information (code ${firstCode})`)
-            : `Supplemental information (${uniqueCodes.length} codes)`
-          const singleRouting = uniqueCodes.length === 1 ? BOX20_ROUTING[firstCode] : undefined
-          return (
-            <>
-              <LineItem
-                boxRef={uniqueCodes.length === 1 ? `20${firstCode}` : 'Box 20'}
-                label={label}
-                value={total}
-                raw={allStmt ? 'STMT' : undefined}
-                onDetails={() => onOpenCodes('20')}
-              />
-              {singleRouting && <SubLine text={singleRouting} />}
-            </>
-          )
-        })()}
+        {renderBox20ItemsLine(box20Items, onOpenCodes)}
       </div>
     </div>
   )
