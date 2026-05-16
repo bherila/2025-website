@@ -287,7 +287,6 @@ class RothConversionCalculatorTest extends TestCase
         $this->assertSame(2689.46, $year['cashShortfallWithdrawals']['estimatedAdditionalTax']);
         $this->assertSame(15859.46, $year['totalTax']);
         $this->assertSame(17929.74, $year['capitalGainStack']['cashShortfallRealizedGains']);
-        $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxApproximationYears']);
         $this->assertSame(1, $projection['scenarios'][0]['summary']['cashShortfallTaxRecomputedYears']);
         $this->assertSame([], $projection['warnings']);
     }

@@ -146,7 +146,6 @@ export interface RothConversionSummary {
   finalEstateValue: number
   presentValueFinalEstate: number
   irmaaHitYears: number
-  cashShortfallTaxApproximationYears: number
   cashShortfallTaxRecomputedYears: number
   unfundedCashShortfall: number
 }
