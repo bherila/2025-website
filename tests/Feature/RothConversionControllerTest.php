@@ -80,7 +80,6 @@ class RothConversionControllerTest extends TestCase
         ]);
 
         $response->assertOk();
-        $response->assertJsonPath('scenarios.0.summary.cashShortfallTaxApproximationYears', 1);
         $response->assertJsonPath('scenarios.0.summary.cashShortfallTaxRecomputedYears', 1);
         $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.shortfall', 33170);
         $response->assertJsonPath('scenarios.0.years.0.cashShortfallWithdrawals.taxable', 35859.46);

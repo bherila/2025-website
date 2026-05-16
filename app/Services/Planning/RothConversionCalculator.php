@@ -99,7 +99,6 @@ final class RothConversionCalculator
             'finalEstateValue' => 0.0,
             'presentValueFinalEstate' => 0.0,
             'irmaaHitYears' => 0,
-            'cashShortfallTaxApproximationYears' => 0,
             'cashShortfallTaxRecomputedYears' => 0,
             'unfundedCashShortfall' => 0.0,
         ];
@@ -238,7 +237,6 @@ final class RothConversionCalculator
             $summary['irmaaHitYears'] += $irmaa > 0.0 ? 1 : 0;
             $summary['finalEstateValue'] = $estateValue;
             $summary['presentValueFinalEstate'] = $estateValue / $discountFactor;
-            $summary['cashShortfallTaxApproximationYears'] += $cashShortfallWithdrawals['estimatedAdditionalTax'] > 0.0 ? 1 : 0;
             $summary['cashShortfallTaxRecomputedYears'] += $cashShortfallWithdrawals['estimatedAdditionalTax'] > 0.0 ? 1 : 0;
             $summary['unfundedCashShortfall'] = MoneyMath::sum([$summary['unfundedCashShortfall'], $cashShortfallWithdrawals['unfunded']]);
 
@@ -394,27 +392,33 @@ final class RothConversionCalculator
         $additionalOrdinaryIncome = 0.0;
         $additionalLongTermGains = 0.0;
         $tax = $baseTax;
+        $maxIterations = 80;
+        $converged = false;
 
-        for ($iteration = 0; $iteration < 80; $iteration++) {
+        for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
             $additionalTax = $this->money(max(0.0, (float) $tax['totalTax'] - (float) $baseTax['totalTax']));
             $targetWithdrawal = $this->money($shortfall + $additionalTax);
             $remainingNeed = $this->money($targetWithdrawal - $withdrawals['total']);
 
             if ($remainingNeed <= 0.005) {
+                $converged = true;
                 break;
             }
 
             $source = $this->bestCashShortfallWithdrawalSource($balances, $remainingNeed, $taxContext, $tax, $additionalOrdinaryIncome, $additionalLongTermGains);
             if ($source === null) {
+                $converged = true;
                 break;
             }
 
             $amount = $this->money(min($source['available'], $remainingNeed));
             if ($amount <= 0.0) {
+                $converged = true;
                 break;
             }
 
             if ($source['source'] === 'taxable') {
+                // Average-basis is intentional here: planner-level approximation, not FIFO/specific-ID.
                 $taxableBeforeWithdrawal = $balances['taxable'];
                 $basisReduction = $taxableBeforeWithdrawal > 0.0
                     ? min($balances['taxableBasis'], $amount * ($balances['taxableBasis'] / $taxableBeforeWithdrawal))
@@ -438,6 +442,10 @@ final class RothConversionCalculator
 
             $withdrawals['total'] = MoneyMath::sum([$withdrawals['total'], $amount]);
             $tax = $this->taxForShortfallAdditions($taxContext, $additionalOrdinaryIncome, $additionalLongTermGains);
+        }
+
+        if (! $converged) {
+            throw new \LogicException(sprintf('Roth cash-shortfall withdrawal solver failed to converge within %d iterations.', $maxIterations));
         }
 
         $additionalFederalTax = $this->money(max(0.0, (float) $tax['federalTax'] - (float) $baseTax['federalTax']));
