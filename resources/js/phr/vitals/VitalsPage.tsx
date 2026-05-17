@@ -1,13 +1,10 @@
 import { HeartPulse, Plus } from 'lucide-react'
 import type { ComponentProps, FormEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
-import PatientList from '@/phr/patients/PatientList'
-import { usePhrPatients } from '@/phr/patients/usePhrPatients'
-import PhrShell from '@/phr/PhrShell'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrVital,
@@ -17,7 +14,21 @@ import {
   PhrVitalsResponseSchema,
 } from '@/phr/types'
 
-const emptyVitalForm: PhrVitalFormData = {
+interface LabeledInputProps extends Omit<ComponentProps<typeof Input>, 'onChange'> {
+  label: string
+  onChange: (value: string) => void
+}
+
+function LabeledInput({ label, onChange, ...props }: LabeledInputProps) {
+  return (
+    <label className="grid gap-1 text-sm font-medium text-foreground">
+      {label}
+      <Input {...props} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  )
+}
+
+const emptyForm: PhrVitalFormData = {
   vital_name: '',
   vital_date: '',
   observed_at: '',
@@ -30,130 +41,225 @@ const emptyVitalForm: PhrVitalFormData = {
   notes: '',
 }
 
-export default function VitalsPage({ patientId: _patientId }: { patientId: number }) {
-  const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
-  const [recordsBusy, setRecordsBusy] = useState(false)
-  const [recordsError, setRecordsError] = useState<string | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [vitals, setVitals] = useState<PhrVital[]>([])
-  const [form, setForm] = useState<PhrVitalFormData>(emptyVitalForm)
+interface AddVitalFormProps {
+  patientId: number
+  onAdded: (vital: PhrVital) => void
+}
 
-  useEffect(() => {
-    if (selectedPatientId === null) {
-      setVitals([])
-      return
-    }
+function AddVitalForm({ patientId, onAdded }: AddVitalFormProps) {
+  const [form, setForm] = useState<PhrVitalFormData>(emptyForm)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
-    void (async () => {
-      setRecordsBusy(true)
-      setRecordsError(null)
-      try {
-        const rawVitals = await fetchWrapper.get(`/api/phr/patients/${selectedPatientId}/vitals`)
-        setVitals(PhrVitalsResponseSchema.parse(rawVitals).vitals)
-      } catch (caught) {
-        setRecordsError(errorMessage(caught))
-      } finally {
-        setRecordsBusy(false)
-      }
-    })()
-  }, [selectedPatientId])
-
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    if (!selectedPatient) {
-      return
-    }
-
-    setFormError(null)
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault()
+    setError(null)
     const parsed = PhrVitalFormSchema.safeParse(form)
     if (!parsed.success) {
-      setFormError(parsed.error.issues[0]?.message ?? 'Invalid vital.')
+      setError(parsed.error.issues[0]?.message ?? 'Invalid input.')
       return
     }
-
-    setRecordsBusy(true)
+    setBusy(true)
     try {
-      const rawResponse: unknown = await fetchWrapper.post(`/api/phr/patients/${selectedPatient.id}/vitals`, numericPayload(parsed.data, [
-        'value_numeric',
-        'value_numeric_secondary',
-      ]))
-      const response = PhrVitalResponseSchema.parse(rawResponse)
-      setVitals((current) => [response.vital, ...current])
-      setForm(emptyVitalForm)
-    } catch (caught) {
-      setFormError(errorMessage(caught))
+      const raw: unknown = await fetchWrapper.post(
+        `/api/phr/patients/${patientId}/vitals`,
+        numericPayload(parsed.data, ['value_numeric', 'value_numeric_secondary']),
+      )
+      onAdded(PhrVitalResponseSchema.parse(raw).vital)
+      setForm(emptyForm)
+      setOpen(false)
+    } catch (err) {
+      setError(errorMessage(err))
     } finally {
-      setRecordsBusy(false)
+      setBusy(false)
     }
   }
 
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Add Vital
+      </Button>
+    )
+  }
+
   return (
-    <PhrShell activeTab="vitals" patientId={selectedPatientId} busy={busy || recordsBusy} error={error ?? recordsError}>
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <PatientList patients={patients} selectedPatientId={selectedPatientId} onSelect={setSelectedPatientId} />
-        <section className="rounded-md border border-border bg-card p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <HeartPulse className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Vitals</h2>
-          </div>
-
-          {!selectedPatient ? <p className="text-sm text-muted-foreground">Select a profile to manage vitals.</p> : null}
-
-          {selectedPatient?.can_manage ? (
-            <form className="mb-4 grid gap-3 rounded-md border border-border bg-background p-3" onSubmit={(event) => void submit(event)}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <LabeledInput label="Name" value={form.vital_name} onChange={(value) => setForm({ ...form, vital_name: value })} required />
-                <LabeledInput label="Date" type="date" value={form.vital_date ?? ''} onChange={(value) => setForm({ ...form, vital_date: value })} />
-                <LabeledInput label="Observed" type="datetime-local" value={form.observed_at ?? ''} onChange={(value) => setForm({ ...form, observed_at: value })} />
-                <LabeledInput label="Value" value={form.vital_value ?? ''} onChange={(value) => setForm({ ...form, vital_value: value })} />
-                <LabeledInput label="Numeric" inputMode="decimal" value={form.value_numeric ?? ''} onChange={(value) => setForm({ ...form, value_numeric: value })} />
-                <LabeledInput label="Secondary" inputMode="decimal" value={form.value_numeric_secondary ?? ''} onChange={(value) => setForm({ ...form, value_numeric_secondary: value })} />
-                <LabeledInput label="Unit" value={form.unit ?? ''} onChange={(value) => setForm({ ...form, unit: value })} />
-                <LabeledInput label="Secondary Unit" value={form.secondary_unit ?? ''} onChange={(value) => setForm({ ...form, secondary_unit: value })} />
-              </div>
-              {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-              <Button type="submit" size="sm">
-                <Plus className="size-4" />
-                Add Vital
-              </Button>
-            </form>
-          ) : null}
-
-          {vitals.length === 0 ? (
-            <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">No vitals.</p>
-          ) : (
-            <div className="grid gap-2">
-              {vitals.map((vital) => (
-                <div key={vital.id} className="rounded-md border border-border bg-background p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-medium text-foreground">{vital.vital_name ?? 'Vital'}</p>
-                      <p className="mt-1 break-words text-xs text-muted-foreground">
-                        {[vital.observed_at, vital.vital_date].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                    <p className="max-w-40 break-words text-right text-sm font-semibold text-foreground">{[vital.vital_value, vital.unit].filter(Boolean).join(' ')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </PhrShell>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold text-card-foreground">Add Vital</h3>
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Vital Name *" value={form.vital_name} onChange={(v) => setForm({ ...form, vital_name: v })} required />
+          <LabeledInput label="Date" type="date" value={form.vital_date ?? ''} onChange={(v) => setForm({ ...form, vital_date: v })} />
+          <LabeledInput label="Observed At" type="datetime-local" value={form.observed_at ?? ''} onChange={(v) => setForm({ ...form, observed_at: v })} />
+          <LabeledInput label="Value" value={form.vital_value ?? ''} onChange={(v) => setForm({ ...form, vital_value: v })} />
+          <LabeledInput label="Numeric (systolic / primary)" inputMode="decimal" value={form.value_numeric ?? ''} onChange={(v) => setForm({ ...form, value_numeric: v })} />
+          <LabeledInput label="Secondary numeric (diastolic)" inputMode="decimal" value={form.value_numeric_secondary ?? ''} onChange={(v) => setForm({ ...form, value_numeric_secondary: v })} />
+          <LabeledInput label="Unit" value={form.unit ?? ''} onChange={(v) => setForm({ ...form, unit: v })} />
+          <LabeledInput label="Body Site" value={form.body_site ?? ''} onChange={(v) => setForm({ ...form, body_site: v })} />
+        </div>
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        <div className="mt-4 flex gap-2">
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? 'Adding…' : 'Add'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </div>
   )
 }
 
-interface LabeledInputProps extends Omit<ComponentProps<typeof Input>, 'onChange'> {
-  label: string
-  onChange: (value: string) => void
+function vitalDate(v: PhrVital): string {
+  return (v.observed_at ?? v.vital_date ?? '').slice(0, 10)
 }
 
-function LabeledInput({ label, onChange, ...props }: LabeledInputProps) {
+function displayValue(v: PhrVital): string {
+  if (v.value_numeric !== null && v.value_numeric_secondary !== null) {
+    return `${v.value_numeric}/${v.value_numeric_secondary}`
+  }
+  if (v.vital_value) {
+    return v.vital_value
+  }
+  if (v.value_numeric !== null) {
+    return String(v.value_numeric)
+  }
+  return '—'
+}
+
+export default function VitalsPage({ patientId }: { patientId: number }) {
+  const [vitals, setVitals] = useState<PhrVital[]>([])
+  const [canManage, setCanManage] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+
+  const load = useCallback(async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const [rawVitals, rawPatient] = await Promise.all([
+        fetchWrapper.get(`/api/phr/patients/${patientId}/vitals`),
+        fetchWrapper.get(`/api/phr/patients/${patientId}`),
+      ])
+      setVitals(PhrVitalsResponseSchema.parse(rawVitals).vitals)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = (rawPatient as any)?.patient
+      setCanManage(Boolean(p?.can_manage))
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }, [patientId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const filtered = useMemo(() => {
+    let list = vitals
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter((v) => v.vital_name?.toLowerCase().includes(q))
+    }
+    return [...list].sort((a, b) => {
+      const da = vitalDate(a)
+      const db = vitalDate(b)
+      return sortDir === 'desc' ? db.localeCompare(da) : da.localeCompare(db)
+    })
+  }, [vitals, search, sortDir])
+
+  const vitalNames = useMemo(
+    () => Array.from(new Set(vitals.map((v) => v.vital_name).filter(Boolean))).sort(),
+    [vitals],
+  )
+
   return (
-    <label className="grid gap-1 text-sm font-medium text-foreground">
-      {label}
-      <Input {...props} onChange={(event) => onChange(event.target.value)} />
-    </label>
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
+            <HeartPulse className="size-6 text-primary" />
+            Vitals
+          </h1>
+          {vitals.length > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {vitals.length} reading{vitals.length === 1 ? '' : 's'}
+              {vitalNames.length > 0 && (
+                <span className="ml-2">· {vitalNames.slice(0, 5).join(', ')}</span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {canManage && (
+        <div className="mb-6">
+          <AddVitalForm patientId={patientId} onAdded={(v) => setVitals((prev) => [v, ...prev])} />
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Input
+          placeholder="Filter by vital name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+        >
+          Date {sortDir === 'desc' ? '↓' : '↑'}
+        </Button>
+      </div>
+
+      {busy && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {!busy && filtered.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+          {vitals.length === 0 ? 'No vitals recorded.' : 'No vitals match the current filter.'}
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Vital</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Value</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Unit</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Body Site</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((v) => (
+                <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-3 py-2 font-medium text-foreground">{v.vital_name ?? '—'}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-foreground">{displayValue(v)}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{v.unit ?? (v.secondary_unit ?? '—')}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{v.body_site ?? '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{vitalDate(v) || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }
