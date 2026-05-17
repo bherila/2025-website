@@ -12,58 +12,38 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $patient_id
  * @property int $user_id
- * @property string|null $test_name
- * @property Carbon|null $collection_datetime
- * @property Carbon|null $result_datetime
- * @property string|null $result_status
- * @property string|null $ordering_provider
- * @property string|null $resulting_lab
- * @property string|null $analyte
- * @property string|null $value
+ * @property string|null $vital_name
+ * @property Carbon|null $vital_date
+ * @property Carbon|null $observed_at
+ * @property string|null $vital_value
  * @property string|null $value_numeric
+ * @property string|null $value_numeric_secondary
  * @property string|null $unit
- * @property string|null $range_min
- * @property string|null $range_max
- * @property string|null $range_unit
- * @property string|null $reference_range_text
- * @property string|null $normal_value
- * @property string|null $abnormal_flag
- * @property string|null $message_from_provider
- * @property string|null $result_comment
- * @property string|null $lab_director
+ * @property string|null $secondary_unit
+ * @property string|null $body_site
  * @property string|null $source
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-class PhrLabResult extends Model
+class PhrPatientVital extends Model
 {
     use SerializesDatesAsLocal;
 
-    protected $table = 'phr_lab_results';
+    protected $table = 'phr_patient_vitals';
 
     protected $fillable = [
         'patient_id',
         'user_id',
-        'test_name',
-        'collection_datetime',
-        'result_datetime',
-        'result_status',
-        'ordering_provider',
-        'resulting_lab',
-        'analyte',
-        'value',
+        'vital_name',
+        'vital_date',
+        'observed_at',
+        'vital_value',
         'value_numeric',
+        'value_numeric_secondary',
         'unit',
-        'range_min',
-        'range_max',
-        'range_unit',
-        'reference_range_text',
-        'normal_value',
-        'abnormal_flag',
-        'message_from_provider',
-        'result_comment',
-        'lab_director',
+        'secondary_unit',
+        'body_site',
         'source',
         'notes',
     ];
@@ -73,11 +53,10 @@ class PhrLabResult extends Model
         return [
             'patient_id' => 'integer',
             'user_id' => 'integer',
-            'collection_datetime' => 'datetime',
-            'result_datetime' => 'datetime',
+            'vital_date' => 'date',
+            'observed_at' => 'datetime',
             'value_numeric' => 'decimal:10',
-            'range_min' => 'decimal:10',
-            'range_max' => 'decimal:10',
+            'value_numeric_secondary' => 'decimal:10',
         ];
     }
 
@@ -94,8 +73,8 @@ class PhrLabResult extends Model
     }
 
     /**
-     * @param  Builder<PhrLabResult>  $query
-     * @return Builder<PhrLabResult>
+     * @param  Builder<PhrPatientVital>  $query
+     * @return Builder<PhrPatientVital>
      */
     public function scopeForPatient(Builder $query, int $patientId): Builder
     {
@@ -103,8 +82,8 @@ class PhrLabResult extends Model
     }
 
     /**
-     * @param  Builder<PhrLabResult>  $query
-     * @return Builder<PhrLabResult>
+     * @param  Builder<PhrPatientVital>  $query
+     * @return Builder<PhrPatientVital>
      */
     public function scopeOwnedBy(Builder $query, int $userId): Builder
     {

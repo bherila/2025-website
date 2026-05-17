@@ -15,6 +15,7 @@ use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\PHR\PageController as PHRPageController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
@@ -94,6 +95,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/tools/license-manager', function () {
         return view('tools.license-manager');
     });
+    Route::get('/phr', [PHRPageController::class, 'index'])->name('phr.index');
 
     // User Management Routes (Admin only)
     Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');
