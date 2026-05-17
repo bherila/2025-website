@@ -37,8 +37,8 @@ function Tile({ icon, title, href, children }: TileProps) {
   )
 }
 
-function recentAbnormal(labs: PhrLabResult[]): PhrLabResult[] {
-  return labs.filter((l) => l.abnormal_flag && l.abnormal_flag !== 'N').slice(0, 5)
+function abnormalLabs(labs: PhrLabResult[]): PhrLabResult[] {
+  return labs.filter((l) => l.abnormal_flag && l.abnormal_flag !== 'N')
 }
 
 function mostRecentDate(studies: PhrDicomStudy[]): string | null {
@@ -94,7 +94,7 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
     )
   }
 
-  const abnormalLabs = recentAbnormal(labs)
+  const allAbnormalLabs = abnormalLabs(labs)
   const recentStudyDate = mostRecentDate(studies)
 
   const vitalNames = Array.from(new Set(vitals.map((v) => v.vital_name).filter(Boolean)))
@@ -111,11 +111,11 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
         )}
       </div>
 
-      {abnormalLabs.length > 0 && (
+      {allAbnormalLabs.length > 0 && (
         <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-400/50 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
           <AlertTriangle className="size-4 shrink-0" />
           <span>
-            {abnormalLabs.length} abnormal lab result{abnormalLabs.length === 1 ? '' : 's'} — check the{' '}
+            {allAbnormalLabs.length} abnormal lab result{allAbnormalLabs.length === 1 ? '' : 's'} — check the{' '}
             <a href={patientTabUrl('labs', patientId)} className="underline">
               Labs tab
             </a>
@@ -131,9 +131,9 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
           ) : (
             <>
               <span className="font-medium text-foreground">{labs.length}</span> result{labs.length === 1 ? '' : 's'}
-              {abnormalLabs.length > 0 && (
+              {allAbnormalLabs.length > 0 && (
                 <span className="ml-2 font-medium text-yellow-700 dark:text-yellow-400">
-                  ({abnormalLabs.length} abnormal)
+                  ({allAbnormalLabs.length} abnormal)
                 </span>
               )}
               {recentLabs[0]?.collection_datetime && (
