@@ -117,15 +117,21 @@ function vitalDate(v: PhrVital): string {
   return (v.observed_at ?? v.vital_date ?? '').slice(0, 10)
 }
 
+function trimNumeric(s: string | null | undefined): string {
+  if (!s) return ''
+  const n = parseFloat(s)
+  return isNaN(n) ? s : String(n)
+}
+
 function displayValue(v: PhrVital): string {
   if (v.value_numeric !== null && v.value_numeric_secondary !== null) {
-    return `${v.value_numeric}/${v.value_numeric_secondary}`
+    return `${trimNumeric(v.value_numeric)}/${trimNumeric(v.value_numeric_secondary)}`
   }
   if (v.vital_value) {
     return v.vital_value
   }
   if (v.value_numeric !== null) {
-    return String(v.value_numeric)
+    return trimNumeric(v.value_numeric)
   }
   return '—'
 }
