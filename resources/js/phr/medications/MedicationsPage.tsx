@@ -97,7 +97,9 @@ function medicationFormFromMedication(medication: PhrMedication): MedicationForm
   const status = resolveMedicationStatus(medication.status)
 
   if (!status) {
-    console.warn(`Unexpected medication status "${medication.status}" for medication ${medication.id}`)
+    console.warn(
+      `Unexpected medication status "${medication.status}" for medication ${medication.id}; using "active" in the edit form until the data is corrected.`,
+    )
   }
 
   return {
@@ -215,7 +217,7 @@ function MedicationFormFields({ form, onChange }: MedicationFormFieldsProps) {
         Status
         <select
           value={form.status}
-          onChange={(event) => onChange({ ...form, status: resolveMedicationStatus(event.target.value) ?? 'active' })}
+          onChange={(event) => onChange({ ...form, status: event.target.value as MedicationStatus })}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
         >
           {STATUS_OPTIONS.map((option) => (
