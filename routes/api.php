@@ -284,6 +284,7 @@ Route::middleware(['web', 'auth'])
         Route::delete('/patients/{patient}/office-visits/{visit}', [PHROfficeVisitController::class, 'destroy'])->whereNumber(['patient', 'visit'])->name('patients.office-visits.destroy');
         Route::get('/patients/{patient}/medications', [PHRMedicationController::class, 'index'])->whereNumber('patient')->name('patients.medications.index');
         Route::post('/patients/{patient}/medications', [PHRMedicationController::class, 'store'])->whereNumber('patient')->name('patients.medications.store');
+        Route::get('/patients/{patient}/medications/{medication}', [PHRMedicationController::class, 'show'])->whereNumber(['patient', 'medication'])->name('patients.medications.show');
         Route::patch('/patients/{patient}/medications/{medication}', [PHRMedicationController::class, 'update'])->whereNumber(['patient', 'medication'])->name('patients.medications.update');
         Route::delete('/patients/{patient}/medications/{medication}', [PHRMedicationController::class, 'destroy'])->whereNumber(['patient', 'medication'])->name('patients.medications.destroy');
         Route::get('/patients/{patient}/conditions', [PHRConditionController::class, 'index'])->whereNumber('patient')->name('patients.conditions.index');
