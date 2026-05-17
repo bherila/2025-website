@@ -96,6 +96,20 @@ Route::middleware('auth')->group(function () {
         return view('tools.license-manager');
     });
     Route::get('/phr', [PHRPageController::class, 'index'])->name('phr.index');
+    Route::get('/phr/patients', [PHRPageController::class, 'patients'])->name('phr.patients');
+    Route::get('/phr/patients/manage', [PHRPageController::class, 'patientsManage'])->name('phr.patients-manage');
+    Route::get('/phr/summary', [PHRPageController::class, 'summary'])->name('phr.summary');
+    Route::get('/phr/labs', [PHRPageController::class, 'labs'])->name('phr.labs');
+    Route::get('/phr/vitals', [PHRPageController::class, 'vitals'])->name('phr.vitals');
+    Route::get('/phr/imaging', [PHRPageController::class, 'imaging'])->name('phr.imaging');
+    Route::get('/phr/office-visits', [PHRPageController::class, 'officeVisits'])->name('phr.office-visits');
+    Route::get('/phr/medications', [PHRPageController::class, 'medications'])->name('phr.medications');
+    Route::get('/phr/conditions', [PHRPageController::class, 'conditions'])->name('phr.conditions');
+    Route::get('/phr/procedures', [PHRPageController::class, 'procedures'])->name('phr.procedures');
+    Route::get('/phr/immunizations', [PHRPageController::class, 'immunizations'])->name('phr.immunizations');
+    Route::get('/phr/allergies', [PHRPageController::class, 'allergies'])->name('phr.allergies');
+    Route::get('/phr/documents', [PHRPageController::class, 'documents'])->name('phr.documents');
+    Route::get('/phr/access', [PHRPageController::class, 'access'])->name('phr.access');
 
     // User Management Routes (Admin only)
     Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');

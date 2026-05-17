@@ -18,8 +18,35 @@ class PhrSectionTest extends TestCase
     {
         $response = $this->actingAs($this->createUser())->get('/phr');
 
-        $response->assertOk();
-        $response->assertSee('phr-root');
+        $response->assertRedirect('/phr/patients');
+    }
+
+    public function test_authenticated_user_can_open_all_phr_tab_pages(): void
+    {
+        $user = $this->createUser();
+
+        $routes = [
+            '/phr/patients' => 'phr-patients-root',
+            '/phr/patients/manage' => 'phr-patients-manage-root',
+            '/phr/summary' => 'phr-summary-root',
+            '/phr/labs' => 'phr-labs-root',
+            '/phr/vitals' => 'phr-vitals-root',
+            '/phr/imaging' => 'phr-imaging-root',
+            '/phr/office-visits' => 'phr-office-visits-root',
+            '/phr/medications' => 'phr-medications-root',
+            '/phr/conditions' => 'phr-conditions-root',
+            '/phr/procedures' => 'phr-procedures-root',
+            '/phr/immunizations' => 'phr-immunizations-root',
+            '/phr/allergies' => 'phr-allergies-root',
+            '/phr/documents' => 'phr-documents-root',
+            '/phr/access' => 'phr-access-root',
+        ];
+
+        foreach ($routes as $route => $rootId) {
+            $this->actingAs($user)->get($route)
+                ->assertOk()
+                ->assertSee($rootId);
+        }
     }
 
     public function test_patient_api_supports_owner_manager_viewer_and_unshared_access(): void
