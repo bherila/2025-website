@@ -5,8 +5,8 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { patientTabUrl } from '@/lib/phrRouteBuilder'
 import { errorMessage } from '@/phr/shared'
 import {
-  type PhrDicomStudy,
   PhrDicomStudiesResponseSchema,
+  type PhrDicomStudy,
   type PhrLabResult,
   PhrLabResultsResponseSchema,
   type PhrPatient,
