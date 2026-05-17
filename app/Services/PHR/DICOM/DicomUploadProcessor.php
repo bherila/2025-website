@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
 class DicomUploadProcessor
@@ -103,6 +104,10 @@ class DicomUploadProcessor
 
         return DB::transaction(function () use ($upload, $patient, $file, $relativePath): array {
             $locked = PhrDicomUpload::query()->lockForUpdate()->findOrFail($upload->id);
+            if ($locked->status !== PhrDicomUpload::STATUS_PENDING) {
+                throw new HttpException(409, 'Upload session is no longer accepting files.');
+            }
+
             $manifest = $locked->manifest_json ?? [];
             $skippedFiles = $locked->skipped_files_json ?? [];
 
@@ -177,6 +182,14 @@ class DicomUploadProcessor
      */
     public function failUpload(PhrDicomUpload $upload, string $reason): void
     {
+        $failureAttributes = [
+            'status' => PhrDicomUpload::STATUS_FAILED,
+            'error_message' => Str::limit($reason, 1000),
+        ];
+
+        $upload->update($failureAttributes);
+        $upload->refresh();
+
         $disk = $this->disk();
 
         try {
@@ -205,10 +218,7 @@ class DicomUploadProcessor
             ->whereDoesntHave('instances')
             ->delete();
 
-        $upload->update([
-            'status' => PhrDicomUpload::STATUS_FAILED,
-            'error_message' => Str::limit($reason, 1000),
-        ]);
+        $upload->update($failureAttributes);
     }
 
     public function disk(): Filesystem

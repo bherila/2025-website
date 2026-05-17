@@ -27,7 +27,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
 
 const UPLOAD_CONCURRENCY = 4
 
-type UploadPhase = 'confirm' | 'uploading' | 'done' | 'aborting'
+type UploadPhase = 'confirm' | 'uploading' | 'done' | 'aborting' | 'failed'
 
 interface FileFailure {
   path: string
@@ -112,15 +112,18 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
 
   async function startUpload(): Promise<void> {
     setPhase('uploading')
+    setError(null)
+    let uploadId: number | null = null
 
     try {
       const openResponse = await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads`, rootName ? { root_name: rootName } : {})
       const { upload } = PhrDicomUploadResponseSchema.parse(openResponse)
-      const uploadId = upload.id
+      const currentUploadId = upload.id
+      uploadId = currentUploadId
 
       controllerRef.current = new UploadController({
         patientId,
-        uploadId,
+        uploadId: currentUploadId,
         files: queuedFiles,
         concurrency: UPLOAD_CONCURRENCY,
         onFileBytesProgress: (bytes) => setBytesSent((prev) => prev + bytes),
@@ -134,16 +137,30 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
       await controllerRef.current.run()
 
       if (controllerRef.current.aborted) {
-        await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${uploadId}/cancel`, {}).catch(() => {})
+        await cancelUploadSession(patientId, currentUploadId)
       } else {
-        await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${uploadId}/finalize`, {})
+        try {
+          await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${currentUploadId}/finalize`, {})
+        } catch (caught) {
+          const message = errorMessage(caught)
+          setError(message)
+          setSummary((prev) => appendFailure(prev, 'Finalize upload', message))
+          await cancelUploadSession(patientId, currentUploadId)
+          setPhase('failed')
+          return
+        }
       }
 
       setPhase('done')
       await loadStudies()
     } catch (caught) {
-      setError(errorMessage(caught))
-      setPhase('done')
+      const message = errorMessage(caught)
+      setError(message)
+      setSummary((prev) => appendFailure(prev, 'Upload session', message))
+      if (uploadId !== null) {
+        await cancelUploadSession(patientId, uploadId)
+      }
+      setPhase('failed')
     } finally {
       controllerRef.current = null
     }
@@ -251,11 +268,13 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
               {phase === 'uploading' && 'Uploading…'}
               {phase === 'aborting' && 'Cancelling…'}
               {phase === 'done' && (summary.errored > 0 ? 'Upload finished with errors' : 'Upload complete')}
+              {phase === 'failed' && 'Upload failed'}
             </DialogTitle>
             <DialogDescription>
               {phase === 'confirm' && `${totalFiles} file${totalFiles === 1 ? '' : 's'} · ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
               {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}`}
               {phase === 'done' && `Stored ${summary.stored} · Skipped ${summary.skipped}${summary.errored > 0 ? ` · Errored ${summary.errored}` : ''}`}
+              {phase === 'failed' && `The upload session was cancelled. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
             </DialogDescription>
           </DialogHeader>
 
@@ -269,7 +288,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
             </div>
           )}
 
-          {phase === 'done' && summary.failures.length > 0 && (
+          {(phase === 'done' || phase === 'failed') && summary.failures.length > 0 && (
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-xs">
               <p className="mb-1 flex items-center gap-1 font-medium text-foreground">
                 <AlertCircle className="size-3" />
@@ -319,9 +338,9 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
                 Cancelling…
               </Button>
             )}
-            {phase === 'done' && (
+            {(phase === 'done' || phase === 'failed') && (
               <Button type="button" onClick={closeDialog}>
-                Done
+                {phase === 'failed' ? 'Close' : 'Done'}
               </Button>
             )}
           </DialogFooter>
@@ -473,6 +492,18 @@ function applyOutcomeToSummary(summary: UploadSummary, outcome: FileOutcome): Up
       ? [...summary.failures, { path: outcome.relativePath, reason: outcome.skippedReason }]
       : summary.failures,
   }
+}
+
+function appendFailure(summary: UploadSummary, path: string, reason: string): UploadSummary {
+  return {
+    ...summary,
+    errored: summary.errored + 1,
+    failures: [...summary.failures, { path, reason }],
+  }
+}
+
+async function cancelUploadSession(patientId: number, uploadId: number): Promise<void> {
+  await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${uploadId}/cancel`, {}).catch(() => {})
 }
 
 function formatBytes(bytes: number): string {

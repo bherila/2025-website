@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class PhrDicomTest extends TestCase
@@ -150,6 +151,40 @@ class PhrDicomTest extends TestCase
         $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
         $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
         $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+    }
+
+    public function test_failed_session_rejects_stale_file_request_without_storing(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $staleUpload = PhrDicomUpload::query()->findOrFail($uploadId);
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/cancel")
+            ->assertOk()
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_FAILED);
+
+        try {
+            app(DicomUploadProcessor::class)->processSingleFile(
+                $staleUpload,
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
+                'IM0001',
+            );
+
+            $this->fail('Expected stale file processing to be rejected.');
+        } catch (HttpException $error) {
+            $this->assertSame(409, $error->getStatusCode());
+            $this->assertSame('Upload session is no longer accepting files.', $error->getMessage());
+        }
+
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+        $this->assertSame([], Storage::disk(DicomUploadProcessor::DISK)->allFiles());
     }
 
     public function test_relative_paths_with_traversal_segments_are_sanitized(): void
