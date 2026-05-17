@@ -358,6 +358,14 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
     onViewAll: handleViewAll,
     onPageSizeChange: handlePageSizeChange,
   }
+  const virtualItems = useVirtualScroll ? virtualizer.getVirtualItems() : []
+  const firstVirtualItem = virtualItems[0]
+  const lastVirtualItem = virtualItems[virtualItems.length - 1]
+  const topPadding = firstVirtualItem?.start ?? 0
+  const bottomPadding = lastVirtualItem ? virtualizer.getTotalSize() - lastVirtualItem.end : 0
+  const tableRows = useVirtualScroll
+    ? virtualItems.map(virtualRow => ({ row: sortedData[virtualRow.index], index: virtualRow.index }))
+    : paginatedData.map((row, i) => ({ row, index: i }))
 
   const tdClass = "py-2 px-2 border-b border-table-border align-top"
 
@@ -465,10 +473,10 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
           </thead>
           
           <tbody className="[&_tr:last-child]:border-0">
-            {useVirtualScroll && virtualizer.getVirtualItems().length > 0 && (
-              <tr style={{ height: `${virtualizer.getVirtualItems()[0]!.start}px` }} aria-hidden />
+            {useVirtualScroll && topPadding > 0 && (
+              <tr style={{ height: `${topPadding}px` }} aria-hidden />
             )}
-            {(useVirtualScroll ? virtualizer.getVirtualItems().map(virtualRow => ({ virtualRow, row: sortedData[virtualRow.index], index: virtualRow.index })) : paginatedData.map((row, i) => ({ virtualRow: null, row, index: i }))).map((item) => {
+            {tableRows.map((item) => {
               const { row, index: i } = item
               if (!row) return null
               const rowId = row.t_id ?? -i
@@ -622,12 +630,9 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                 </tr>
               )
             })}
-            {useVirtualScroll && virtualizer.getVirtualItems().length > 0 && (() => {
-              const items = virtualizer.getVirtualItems()
-              const last = items[items.length - 1]!
-              const bottomPad = virtualizer.getTotalSize() - last.end
-              return bottomPad > 0 ? <tr style={{ height: `${bottomPad}px` }} aria-hidden /> : null
-            })()}
+            {useVirtualScroll && bottomPadding > 0 && (
+              <tr style={{ height: `${bottomPadding}px` }} aria-hidden />
+            )}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">

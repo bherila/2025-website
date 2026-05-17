@@ -75,14 +75,21 @@ export async function updatePayslipEstimatedStatus(
     body: JSON.stringify({ ps_is_estimated }),
   })
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await response.text()
+    let parsedError: unknown
     try {
-        const error = JSON.parse(errorText);
-        throw new Error(error.message || 'Failed to update payslip estimated status');
-    } catch (e) {
-        console.error('Failed to parse error response as JSON:', errorText);
-        throw new Error('Failed to update payslip estimated status and received a non-JSON response.');
+      parsedError = JSON.parse(errorText)
+    } catch (parseError) {
+      console.error('Failed to parse error response as JSON:', errorText)
+      throw new Error('Failed to update payslip estimated status and received a non-JSON response.', {
+        cause: parseError,
+      })
     }
+
+    const message = parsedError && typeof parsedError === 'object' && 'message' in parsedError
+      ? String(parsedError.message)
+      : 'Failed to update payslip estimated status'
+    throw new Error(message)
   }
 }
 
@@ -115,4 +122,3 @@ export async function importPayslips(files: File[], employmentEntityId?: number 
 
   return { success: true, message: data.message };
 }
-

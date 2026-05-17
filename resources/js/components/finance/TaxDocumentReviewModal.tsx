@@ -497,10 +497,12 @@ function Standard1099ReviewPanel({
 
 /** Returns the list of addable fields for the given form type, excluding fields already in data. */
 function getAddableFields(formType: string | undefined, data: Record<string, unknown>): FormFieldDef[] {
-  let fields: FormFieldDef[] = []
-  if (formType === '1099_int' || formType === '1099_int_c') fields = F1099_INT_FIELDS
-  else if (formType === '1099_div' || formType === '1099_div_c') fields = F1099_DIV_FIELDS
-  else return []
+  const fields: FormFieldDef[] =
+    formType === '1099_int' || formType === '1099_int_c'
+      ? F1099_INT_FIELDS
+      : formType === '1099_div' || formType === '1099_div_c'
+        ? F1099_DIV_FIELDS
+        : []
 
   return fields.filter(f => {
     const v = data[f.key]

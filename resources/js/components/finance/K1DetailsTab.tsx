@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1'
 import { BOX11_CODES, BOX13_CODES } from '@/components/finance/k1/k1-codes'
@@ -19,6 +19,60 @@ import type { TaxDocument } from '@/types/finance/tax-document'
 
 function codeSum(items: K1CodeItem[]): number {
   return sumMoneyValues(items.map((i) => i.value))
+}
+
+function renderBox11NonZZLine(box11NonZZ: K1CodeItem[], onDetails: () => void): ReactNode {
+  if (box11NonZZ.length === 0) {
+    return null
+  }
+
+  const total = box11NonZZ.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+  const uniqueCodes = [...new Set(box11NonZZ.map((i) => i.code))].filter((c): c is string => Boolean(c))
+  const firstCode = uniqueCodes[0] ?? ''
+  const label = uniqueCodes.length === 1
+    ? (BOX11_CODES[firstCode] ?? `Other income — code ${firstCode}`)
+    : `Other income (${uniqueCodes.length} codes)`
+
+  return (
+    <FormLine
+      boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
+      label={label}
+      value={total}
+      onDetails={onDetails}
+    />
+  )
+}
+
+function renderBox13ItemsLine(box13Items: K1CodeItem[], hasSuspended: boolean, onDetails: () => void): ReactNode {
+  if (box13Items.length === 0) {
+    return null
+  }
+
+  const total = box13Items.reduce((acc, item) => {
+    const v = parseFieldVal(item.value)
+    return v !== null ? acc.add(-Math.abs(v)) : acc
+  }, currency(0)).value
+  const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
+  const firstCode = uniqueCodes[0] ?? ''
+  const label = uniqueCodes.length === 1
+    ? (BOX13_CODES[firstCode] ?? `Deduction — code ${firstCode}`)
+    : `Other deductions (${uniqueCodes.length} codes)`
+
+  return (
+    <FormLine
+      boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
+      label={
+        hasSuspended ? (
+          <span className="flex items-center gap-1.5">
+            {label}
+            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-400 text-amber-600">§67(g) suspended</Badge>
+          </span>
+        ) : label
+      }
+      value={total}
+      onDetails={onDetails}
+    />
+  )
 }
 
 // ── K-3 Part II table ─────────────────────────────────────────────────────────
@@ -176,6 +230,8 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
   const netIncome =
     box5 + box6a + box7 + box8 + box9a + box9b + box9c + box10 +
     codeSum(box11Items) + codeSum(box13Items) + codeSum(data.codes['12'] ?? [])
+  const box11NonZZLine = renderBox11NonZZLine(box11NonZZ, () => setCodesModal({ box: '11' }))
+  const box13ItemsLine = renderBox13ItemsLine(box13Items, box13Suspended.length > 0, () => setCodesModal({ box: '13' }))
 
   return (
     <div className="border rounded-lg overflow-hidden space-y-0">
@@ -211,22 +267,7 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
           {box9b !== 0 && <FormLine boxRef="Box 9b" label="Collectibles (28%) gain (loss)" value={box9b} />}
           {box9c !== 0 && <FormLine boxRef="Box 9c" label="Unrecaptured §1250 gain" value={box9c} />}
           {box10 !== 0 && <FormLine boxRef="Box 10" label="Net §1231 gain (loss)" value={box10} />}
-          {box11NonZZ.length > 0 && (() => {
-            const total = box11NonZZ.reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
-            const uniqueCodes = [...new Set(box11NonZZ.map((i) => i.code))].filter((c): c is string => Boolean(c))
-            const firstCode = uniqueCodes[0] ?? ''
-            const label = uniqueCodes.length === 1
-              ? (BOX11_CODES[firstCode] ?? `Other income — code ${firstCode}`)
-              : `Other income (${uniqueCodes.length} codes)`
-            return (
-              <FormLine
-                boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
-                label={label}
-                value={total}
-                onDetails={() => setCodesModal({ box: '11' })}
-              />
-            )
-          })()}
+          {box11NonZZLine}
           {box5 === 0 && box6a === 0 && box7 === 0 && box8 === 0 && box9a === 0 && box10 === 0 && box11NonZZ.length === 0 && (
             <FormLine label="No income items" raw="—" />
           )}
@@ -257,33 +298,7 @@ function K1Card({ doc, data }: { doc: TaxDocument; data: FK1StructuredData }) {
         {/* Deduction items */}
         {(box13Items.length > 0 || box21 !== 0) && (
           <FormBlock title="Deductions &amp; Credits">
-            {box13Items.length > 0 && (() => {
-              const total = box13Items.reduce((acc, item) => {
-                const v = parseFieldVal(item.value)
-                return v !== null ? acc.add(-Math.abs(v)) : acc
-              }, currency(0)).value
-              const uniqueCodes = [...new Set(box13Items.map((i) => i.code))].filter((c): c is string => Boolean(c))
-              const firstCode = uniqueCodes[0] ?? ''
-              const hasSuspended = box13Suspended.length > 0
-              const label = uniqueCodes.length === 1
-                ? (BOX13_CODES[firstCode] ?? `Deduction — code ${firstCode}`)
-                : `Other deductions (${uniqueCodes.length} codes)`
-              return (
-                <FormLine
-                  boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
-                  label={
-                    hasSuspended ? (
-                      <span className="flex items-center gap-1.5">
-                        {label}
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-400 text-amber-600">§67(g) suspended</Badge>
-                      </span>
-                    ) : label
-                  }
-                  value={total}
-                  onDetails={() => setCodesModal({ box: '13' })}
-                />
-              )
-            })()}
+            {box13ItemsLine}
             {box21 !== 0 && <FormLine boxRef="Box 21" label="Foreign taxes paid / accrued" value={box21} />}
           </FormBlock>
         )}
