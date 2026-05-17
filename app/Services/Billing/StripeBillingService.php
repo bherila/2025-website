@@ -52,6 +52,9 @@ class StripeBillingService
         return (bool) $company->stripe_billing_enabled;
     }
 
+    /**
+     * Ensures clientCompany and payments are loaded for eligibility checks.
+     */
     public function assertInvoiceIsStripeEligible(ClientInvoice $invoice): void
     {
         $invoice->loadMissing('clientCompany', 'payments');

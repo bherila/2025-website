@@ -147,7 +147,7 @@ export default function InvoicePayPanel({
   const invoiceTotal = currency(invoice.invoice_total)
   const remainingBalance = currency(invoice.remaining_balance)
   const isStripeEligible = stripeBillingEnabled && invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue <= stripeMaxAmountCents
-  const isManualOnly = stripeBillingEnabled && invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue > stripeMaxAmountCents
+  const isManualOnly = invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue > stripeMaxAmountCents
   const latestFailure = useMemo(() => {
     return [...(invoice.stripe_payments ?? [])]
       .filter((payment) => payment.failure_reason || ['failed', 'canceled', 'requires_payment_method'].includes(payment.status))

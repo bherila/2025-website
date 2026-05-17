@@ -17,11 +17,13 @@ class ClientPaymentMethodApiController extends Controller
     {
         Gate::authorize('ClientCompanyMember', $company->id);
 
+        $stripeBillingEnabled = $billing->companyAllowsStripeBilling($company);
+
         return response()->json([
-            'stripe_billing_enabled' => $billing->companyAllowsStripeBilling($company),
+            'stripe_billing_enabled' => $stripeBillingEnabled,
             'payment_methods' => array_map(
                 fn (ClientCompanyPaymentMethod $paymentMethod): array => $paymentMethod->toPortalArray(),
-                $billing->companyAllowsStripeBilling($company) ? $billing->listSavedMethods($company) : [],
+                $stripeBillingEnabled ? $billing->listSavedMethods($company) : [],
             ),
         ]);
     }
