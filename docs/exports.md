@@ -65,9 +65,17 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 - **Format:** JSON API response with parsed import results (transactions, payslip rows, etc.).
 - **Current watermark:** none (metadata-only: `job_id`, `status`, `original_filename`, `error_message`).
 
+### 8. PHR DICOM original study ZIP
+
+- **Endpoint:** `GET /api/phr/patients/{patient}/dicom/studies/{study}/download`
+- **Controller:** `app/Http/Controllers/PHR/DICOM/DicomFileController.php` (`downloadStudy()`)
+- **Client:** `resources/js/phr/index.tsx`
+- **Contents:** Original retained DICOM files and `DICOMDIR` for a patient imaging study, with original relative paths preserved inside the ZIP.
+- **Current watermark:** none; pass-through medical imaging data is zipped without modifying source files.
+
 ## Client-side exports (browser-generated)
 
-### 8. Transactions CSV / JSON
+### 9. Transactions CSV / JSON
 
 - **Module:** `resources/js/components/finance/transactionTable/transactionExport.ts`
 - **Filenames:** `transactions_{accountId}_{selectedYear}.csv|json`
@@ -75,7 +83,7 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 - **Trigger:** Export buttons in the transactions table.
 - **Current watermark:** none.
 
-### 9. TXF (Tax eXchange Format) lot sales
+### 10. TXF (Tax eXchange Format) lot sales
 
 - **Module:** `resources/js/lib/finance/txfExport.ts`
 - **Trigger:** `LotAnalyzer.tsx` → `downloadTxf()`
@@ -83,19 +91,19 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 - **Format:** TXF v042 with reference numbers 321 (short-term) / 323 (long-term); includes wash-sale adjustments.
 - **Current watermark:** header carries `V042` + software name + export date, but no user identity.
 
-### 10. Stacked balance chart TSV (clipboard)
+### 11. Stacked balance chart TSV (clipboard)
 
 - **Module:** `resources/js/components/finance/StackedBalanceChart.tsx` (`generateTSV()`)
 - **Format:** TSV copied to clipboard, suitable for pasting into a spreadsheet.
 - **Current watermark:** none.
 
-### 11. MCP API key clipboard copy
+### 12. MCP API key clipboard copy
 
 - **Module:** `resources/js/user/mcp-api-key.tsx`
 - **Format:** plaintext API key via `navigator.clipboard.writeText()`.
 - **Current watermark:** not applicable (secret token, must not be altered) — but copy events should still be audited.
 
-### 12. Payslip prompt / schema clipboard copy
+### 13. Payslip prompt / schema clipboard copy
 
 - **Modules:** `resources/js/components/payslip/PayslipJsonModal.tsx`, `resources/js/components/finance/ManualJsonAttachModal.tsx`
 - **Format:** plaintext prompt + JSON schema.
@@ -112,11 +120,12 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 | 5 | Client portal files | mixed | server (passthrough) | none |
 | 6 | Invoice view | HTML (print) | server | none |
 | 7 | GenAI import results | JSON | server API | metadata only |
-| 8 | Transactions | CSV / JSON | browser | none |
-| 9 | Lot sales | TXF | browser | filename + V042 header |
-| 10 | Balance chart | TSV (clipboard) | browser | none |
-| 11 | MCP API key | text (clipboard) | browser | n/a (secret) |
-| 12 | Payslip schema | text (clipboard) | browser | none |
+| 8 | PHR DICOM study originals | ZIP | server (proxied R2) | none |
+| 9 | Transactions | CSV / JSON | browser | none |
+| 10 | Lot sales | TXF | browser | filename + V042 header |
+| 11 | Balance chart | TSV (clipboard) | browser | none |
+| 12 | MCP API key | text (clipboard) | browser | n/a (secret) |
+| 13 | Payslip schema | text (clipboard) | browser | none |
 
 ## Adding a new export
 

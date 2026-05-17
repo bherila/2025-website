@@ -100,6 +100,20 @@ class User extends Authenticatable
         return $this->hasMany(UserAiConfiguration::class);
     }
 
+    /** @return HasMany<PhrPatient, $this> */
+    public function ownedPhrPatients(): HasMany
+    {
+        return $this->hasMany(PhrPatient::class, 'owner_user_id');
+    }
+
+    /** @return BelongsToMany<PhrPatient, $this> */
+    public function accessiblePhrPatients(): BelongsToMany
+    {
+        return $this->belongsToMany(PhrPatient::class, 'phr_patient_user_access', 'user_id', 'patient_id')
+            ->withPivot(['access_level', 'granted_by_user_id', 'granted_at'])
+            ->withTimestamps();
+    }
+
     public function activeAiConfiguration(): ?UserAiConfiguration
     {
         /** @var UserAiConfiguration|null */

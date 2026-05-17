@@ -12,3 +12,6 @@ Artisan::command('inspire', function () {
 Schedule::command('genai:run-queue')->everyMinute()->withoutOverlapping(30);
 Schedule::command('genai:process-scheduled')->everyMinute()->withoutOverlapping(5);
 Schedule::command('genai:requeue-stale')->everyFiveMinutes()->withoutOverlapping(5);
+
+// PHR DICOM storage cleanup: reclaim stuck pending uploads + orphan objects.
+Schedule::command('phr:dicom:gc')->hourly()->withoutOverlapping(30);

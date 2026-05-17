@@ -1,0 +1,100 @@
+name: OHIF Dist
+
+# Build the static OHIF Viewer bundle and deploy it to public/ohif/ on the
+# server. Independent of the main CI deploy so OHIF upgrades don't piggyback
+# on every app deploy — and so we don't have to commit ~20 MB of OHIF build
+# artifacts to this repo.
+#
+# The main CI rsync excludes the `ohif` directory so app deploys don't
+# clobber the OHIF dist that lives at ~/bwh-php/public/ohif/ on the server.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'OHIF Viewers release tag (e.g. v3.12.0)'
+        required: true
+        default: 'v3.12.0'
+  # Re-run automatically if the patcher script or workflow itself changes,
+  # since both affect what the deployed bundle looks like.
+  push:
+    branches: [main]
+    paths:
+      - '.github/ohif/**'
+      - '.github/workflows/ohif-dist.yml'
+
+concurrency:
+  group: ohif-dist
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # When triggered by push, no input is available; fall back to a pinned tag.
+      OHIF_TAG: ${{ github.event.inputs.tag || 'v3.12.0' }}
+
+    steps:
+      - name: Checkout bwh-php (for patcher script)
+        uses: actions/checkout@v4
+        with:
+          path: bwh-php
+          sparse-checkout: |
+            .github/ohif
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout OHIF Viewers ${{ env.OHIF_TAG }}
+        uses: actions/checkout@v4
+        with:
+          repository: OHIF/Viewers
+          ref: ${{ env.OHIF_TAG }}
+          path: Viewers
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: Viewers/yarn.lock
+
+      - name: Patch OHIF config for /ohif/ subpath + dicomjson default
+        run: node bwh-php/.github/ohif/patch-config.mjs Viewers
+
+      - name: Yarn install
+        working-directory: Viewers
+        run: yarn install --frozen-lockfile
+
+      - name: Yarn build (PUBLIC_URL=/ohif/)
+        working-directory: Viewers
+        env:
+          PUBLIC_URL: /ohif/
+        run: yarn run build
+
+      - name: Sanity check build output
+        run: |
+          test -f Viewers/platform/app/dist/index.html
+          test -d Viewers/platform/app/dist/assets
+          du -sh Viewers/platform/app/dist
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Ensure remote target directory exists
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+            "mkdir -p ~/bwh-php/public/ohif"
+
+      - name: Deploy OHIF dist to public/ohif/
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" rsync -av --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            Viewers/platform/app/dist/ \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/bwh-php/public/ohif/
+
+      - name: Summarize
+        run: |
+          echo "Deployed OHIF ${OHIF_TAG} to /ohif/ on ${{ secrets.SSH_HOST }}." >> "$GITHUB_STEP_SUMMARY"

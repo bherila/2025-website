@@ -19,6 +19,8 @@ class NavbarFinancialPlanningTest extends TestCase
 
         $financialPlanning = $this->navItemByLabel($navItems, 'Financial Planning');
         $this->assertSame('dropdown', $financialPlanning['type']);
+        $tools = $this->navItemByLabel($navItems, 'Tools');
+        $this->assertNotContains('/phr', array_column($tools['items'], 'href'));
         $this->assertSame([
             '/financial-planning',
             '/financial-planning/retirement-contribution-calculator',
@@ -47,6 +49,9 @@ class NavbarFinancialPlanningTest extends TestCase
         $this->assertSame('dropdown', $financialPlanning['type']);
         $this->assertContains('/finance/tax-preview', array_column($finance['items'], 'href'));
         $this->assertContains('/financial-planning/rent-vs-buy', array_column($financialPlanning['items'], 'href'));
+
+        $tools = $this->navItemByLabel($navItems, 'Tools');
+        $this->assertContains('/phr', array_column($tools['items'], 'href'));
     }
 
     /**

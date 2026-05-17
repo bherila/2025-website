@@ -35,6 +35,7 @@
       // Build Tools submenu (admin sub-items filtered server-side)
       $__toolsItems = array_values(array_filter([
         ['type' => 'group', 'label' => 'Utilities'],
+        $__isAuthenticated ? ['type' => 'link', 'label' => 'PHR', 'href' => '/phr'] : null,
         ['type' => 'link', 'label' => 'License Manager', 'href' => '/tools/license-manager'],
         ['type' => 'link', 'label' => 'Bingo Card Generator', 'href' => '/tools/bingo'],
         ['type' => 'link', 'label' => 'Capital Loss Carryover Worksheet', 'href' => '/tools/irs-f461'],
