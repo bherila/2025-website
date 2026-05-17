@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/navigation-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
-import { patientTabUrl, type PhrPatientTab, type PhrSection,phrSectionUrl } from '@/lib/phrRouteBuilder'
+import type { PhrPatientTab, PhrSection } from '@/lib/phrRouteBuilder'
+import { patientTabUrl, phrSectionUrl } from '@/lib/phrRouteBuilder'
 import { cn } from '@/lib/utils'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
 
