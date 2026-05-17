@@ -30,7 +30,7 @@ const emptyLabForm: PhrLabResultFormData = {
   notes: '',
 }
 
-export default function LabsPage() {
+export default function LabsPage({ patientId: _patientId }: { patientId: number }) {
   const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
   const [recordsBusy, setRecordsBusy] = useState(false)
   const [recordsError, setRecordsError] = useState<string | null>(null)

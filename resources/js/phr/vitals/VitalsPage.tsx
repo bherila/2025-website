@@ -30,7 +30,7 @@ const emptyVitalForm: PhrVitalFormData = {
   notes: '',
 }
 
-export default function VitalsPage() {
+export default function VitalsPage({ patientId: _patientId }: { patientId: number }) {
   const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
   const [recordsBusy, setRecordsBusy] = useState(false)
   const [recordsError, setRecordsError] = useState<string | null>(null)

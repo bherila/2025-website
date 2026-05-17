@@ -10,7 +10,7 @@ import PhrShell from '@/phr/PhrShell'
 import { errorMessage } from '@/phr/shared'
 import { type PhrAccessGrant, PhrAccessResponseSchema } from '@/phr/types'
 
-export default function AccessPage() {
+export default function AccessPage({ patientId: _patientId }: { patientId: number }) {
   const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId, upsertPatient, reloadPatients } = usePhrPatients()
   const [submitBusy, setSubmitBusy] = useState(false)
   const [email, setEmail] = useState('')

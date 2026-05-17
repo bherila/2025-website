@@ -27,7 +27,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
   directory: '',
 }
 
-export default function ImagingPage() {
+export default function ImagingPage({ patientId: _patientId }: { patientId: number }) {
   const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [recordsBusy, setRecordsBusy] = useState(false)
