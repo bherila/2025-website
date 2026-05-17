@@ -1,4 +1,4 @@
-import { Download, FlaskConical, HeartPulse, Images, Plus, RefreshCcw, Share2, UploadCloud, UserRound, UsersRound } from 'lucide-react'
+import { Download, ExternalLink, FlaskConical, HeartPulse, Images, Plus, RefreshCcw, Share2, UploadCloud, UserRound, UsersRound } from 'lucide-react'
 import type { ComponentProps, FormEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -623,6 +623,10 @@ function ImagingPanel({ selectedPatient, studies, onUploadComplete, onRefresh, s
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => openInOhifViewer(selectedPatient.id, study.id)}>
+                    <ExternalLink className="size-4" />
+                    Viewer
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => downloadStudyZip(selectedPatient.id, study.id)}>
                     <Download className="size-4" />
                     ZIP
@@ -854,6 +858,16 @@ function isAuxiliaryUploadPath(path: string): boolean {
 
 function downloadStudyZip(patientId: number, studyId: number): void {
   window.open(`/api/phr/patients/${patientId}/dicom/studies/${studyId}/download`, '_blank', 'noopener,noreferrer')
+}
+
+// OHIF lives at /ohif/ on the server (deployed by .github/workflows/ohif-dist.yml).
+// The dicomjson data source pulls the manifest from our viewer-json endpoint;
+// each instance URL in that manifest points back at the authenticated proxy
+// route, so the user's session cookie carries auth through both fetches.
+function openInOhifViewer(patientId: number, studyId: number): void {
+  const manifestUrl = `/api/phr/patients/${patientId}/dicom/studies/${studyId}/viewer-json`
+  const viewerUrl = `/ohif/viewer?datasources=dicomjson&url=${encodeURIComponent(manifestUrl)}`
+  window.open(viewerUrl, '_blank', 'noopener,noreferrer')
 }
 
 function errorMessage(caught: unknown): string {

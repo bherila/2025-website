@@ -91,12 +91,26 @@ The current parser extracts core Part 10 metadata immediately during upload and 
 
 ## Viewer Integration
 
-Viewer integration is intentionally left as a separate decision. The current scaffolding exposes an authenticated metadata endpoint at:
+The PHR UI's "Viewer" button on each study opens the OHIF Viewer in a new tab pointed at the patient's authenticated `viewer-json` manifest:
+
+```text
+/ohif/viewer?datasources=dicomjson&url=<encoded-manifest-url>
+```
+
+where the manifest URL is:
 
 ```text
 /api/phr/patients/{patient}/dicom/studies/{study}/viewer-json
 ```
 
-The payload groups study, series, and instance metadata and includes authenticated same-origin raw DICOM URLs under `/api/phr/patients/{patient}/dicom/instances/{instance}/file`. That keeps the storage layer private and avoids CORS while leaving room to adapt the same parsed data for OHIF, a pnpm-installed React viewer, or another DICOM viewer.
+OHIF loads the manifest with the browser's session cookie, then fetches each instance from the URLs the manifest contains (`/api/phr/patients/{patient}/dicom/instances/{instance}/file`). Both endpoints are protected by the existing `web` + `auth` middleware, so the storage layer stays private and there's no CORS plumbing. ZIP downloads of the originals are still served by `/api/phr/patients/{patient}/dicom/studies/{study}/download`.
 
-Study ZIP downloads are served by `/api/phr/patients/{patient}/dicom/studies/{study}/download`. The ZIP includes the original DICOM instance files for that study and any retained `DICOMDIR` file from the same upload.
+### OHIF deployment
+
+OHIF is **not** committed to this repo. It lives at `~/bwh-php/public/ohif/` on the server and is deployed by a separate, manually-triggered workflow at `.github/workflows/ohif-dist.yml`:
+
+1. Run **Actions → OHIF Dist → Run workflow** in GitHub and supply a tag (default `v3.12.0`).
+2. The workflow checks out OHIF at that tag, patches `platform/app/public/config/default.js` via `.github/ohif/patch-config.mjs` to set `routerBasename: '/ohif/'` and `defaultDataSourceName: 'dicomjson'`, runs `PUBLIC_URL=/ohif/ yarn build`, and rsyncs the resulting `platform/app/dist/` to `~/bwh-php/public/ohif/` with `--delete`.
+3. The main app deploy in `.github/workflows/ci.yml` rsyncs `public/` with `--exclude='ohif'`, so app deploys never clobber the viewer.
+
+The workflow also re-runs on pushes to `.github/ohif/**` so iterations on the patcher script redeploy automatically. For everything else (OHIF version bumps), trigger it by hand.
