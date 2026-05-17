@@ -54,7 +54,9 @@ class PageController extends Controller
 
     public function patientTab(Request $request, int $patient, string $tab): View
     {
-        $userId = (int) $request->user()?->id;
+        $user = $request->user();
+        abort_unless($user !== null, 403);
+        $userId = (int) $user->id;
         $resolvedPatient = $this->accessiblePatient($patient, $userId);
         $tabLabel = self::TAB_LABELS[$tab] ?? 'PHR';
 

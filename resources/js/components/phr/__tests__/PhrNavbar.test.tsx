@@ -1,8 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 describe('PhrNavbar', () => {
+  let fetchSpy: jest.SpiedFunction<typeof fetch>
+
   beforeEach(() => {
-    ;(window as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation((url: string) => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
       if (url.includes('/api/phr/patients')) {
         const payload = {
           patients: [
@@ -41,17 +45,18 @@ describe('PhrNavbar', () => {
           ],
         }
 
-        return Promise.resolve({
+        return {
           ok: true,
           text: async () => JSON.stringify(payload),
-        })
+        } as Response
       }
 
-      return Promise.resolve({ ok: true, text: async () => '{}' })
+      return { ok: true, text: async () => '{}' } as Response
     })
   })
 
   afterEach(() => {
+    fetchSpy.mockRestore()
     jest.clearAllMocks()
   })
 

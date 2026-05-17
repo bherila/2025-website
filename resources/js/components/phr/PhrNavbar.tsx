@@ -117,8 +117,11 @@ export default function PhrNavbar({ patientId, activeTab, activeSection, childre
           {patientId !== undefined && (
             <Combobox
               onValueChange={(value) => {
-                if (value) {
-                  handlePatientSelect(value as PhrPatient)
+                if (typeof value === 'number') {
+                  const selectedPatient = patients.find((patient) => patient.id === value)
+                  if (selectedPatient) {
+                    handlePatientSelect(selectedPatient)
+                  }
                 }
               }}
               open={isComboboxOpen}
@@ -140,7 +143,7 @@ export default function PhrNavbar({ patientId, activeTab, activeSection, childre
                   {filteredPatients.map((patient) => (
                     <ComboboxItem
                       key={patient.id}
-                      value={patient}
+                      value={patient.id}
                       className={cn(patient.id === patientId && 'bg-accent font-medium')}
                     >
                       {patient.display_name || `Patient ${patient.id}`}
