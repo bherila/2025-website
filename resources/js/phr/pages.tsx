@@ -16,6 +16,7 @@ const ImmunizationsPage = lazy(() => import('@/phr/immunizations/ImmunizationsPa
 const MedicationsPage = lazy(() => import('@/phr/medications/MedicationsPage'))
 const OfficeVisitsPage = lazy(() => import('@/phr/office-visits/OfficeVisitsPage'))
 const ProceduresPage = lazy(() => import('@/phr/procedures/ProceduresPage'))
+const SummaryPage = lazy(() => import('@/phr/summary/SummaryPage'))
 
 const LOADING = <div className="px-4 py-8 text-sm text-muted-foreground">Loading…</div>
 
@@ -103,6 +104,12 @@ function PageContent({
       return (
         <Suspense fallback={LOADING}>
           <ProceduresPage patientId={patientId} />
+        </Suspense>
+      )
+    case 'summary':
+      return (
+        <Suspense fallback={LOADING}>
+          <SummaryPage patientId={patientId} />
         </Suspense>
       )
     default:
