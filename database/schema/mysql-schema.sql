@@ -58,6 +58,30 @@ CREATE TABLE `cache_locks` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_agreement_recurring_items`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_agreement_recurring_items` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_agreement_id` bigint(20) unsigned NOT NULL,
+  `description` varchar(255) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `charge_cadence` varchar(20) NOT NULL COMMENT 'One of: monthly, quarterly, semi_annual, annual, one_time',
+  `anchor_month` tinyint(4) DEFAULT NULL COMMENT '1-12. Anchors the incidence month for non-monthly cadences',
+  `anchor_day` tinyint(4) DEFAULT 1 COMMENT '1-28 (clamped). Day of month for the incidence',
+  `start_date` date NOT NULL,
+  `end_date` date DEFAULT NULL,
+  `is_taxable` tinyint(1) NOT NULL DEFAULT 0,
+  `is_summarized` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'When true, multiple incidences collapse into a summary line on display',
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `car_items_agreement_dates_idx` (`client_agreement_id`,`start_date`,`end_date`),
+  CONSTRAINT `client_agreement_recurring_items_client_agreement_id_foreign` FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_agreements`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -78,6 +102,10 @@ CREATE TABLE `client_agreements` (
   `hourly_rate` decimal(10,2) NOT NULL DEFAULT 0.00,
   `monthly_retainer_fee` decimal(10,2) NOT NULL DEFAULT 0.00,
   `is_visible_to_client` tinyint(1) NOT NULL DEFAULT 0,
+  `billing_cadence` varchar(20) NOT NULL DEFAULT 'monthly' COMMENT 'One of: monthly, quarterly, annual',
+  `bill_overage_interim` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'When true and cadence is not monthly, emit interim overage invoices at month boundaries',
+  `first_cycle_proration` varchar(30) NOT NULL DEFAULT 'prorate_hours' COMMENT 'One of: prorate_hours, full_period, align_next_cycle',
+  `initial_rollover_hours` decimal(8,4) NOT NULL DEFAULT 0.0000 COMMENT 'Rollover hours carried into this agreement from a transition',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
@@ -111,6 +139,69 @@ CREATE TABLE `client_companies` (
   UNIQUE KEY `client_companies_slug_unique` (`slug`),
   KEY `client_companies_is_active_index` (`is_active`),
   KEY `client_companies_company_name_index` (`company_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_company_activity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_company_activity` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `actor_user_id` bigint(20) unsigned DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `subject_type` varchar(255) DEFAULT NULL,
+  `subject_id` bigint(20) unsigned DEFAULT NULL,
+  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`payload`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_company_activity_actor_user_id_foreign` (`actor_user_id`),
+  KEY `client_company_activity_subject_type_subject_id_index` (`subject_type`,`subject_id`),
+  KEY `client_company_activity_client_company_id_created_at_index` (`client_company_id`,`created_at`),
+  CONSTRAINT `client_company_activity_actor_user_id_foreign` FOREIGN KEY (`actor_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `client_company_activity_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_company_payment_methods`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_company_payment_methods` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `stripe_payment_method_id` varchar(255) NOT NULL,
+  `type` varchar(32) NOT NULL,
+  `brand` varchar(255) DEFAULT NULL,
+  `last4` varchar(4) DEFAULT NULL,
+  `exp_month` smallint(5) unsigned DEFAULT NULL,
+  `exp_year` smallint(5) unsigned DEFAULT NULL,
+  `bank_name` varchar(255) DEFAULT NULL,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_company_payment_methods_stripe_payment_method_id_unique` (`stripe_payment_method_id`),
+  KEY `client_company_payment_methods_client_company_id_type_index` (`client_company_id`,`type`),
+  KEY `ccpm_company_default_idx` (`client_company_id`,`is_default`),
+  CONSTRAINT `client_company_payment_methods_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_company_stripe_customers`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_company_stripe_customers` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_company_id` bigint(20) unsigned NOT NULL,
+  `stripe_customer_id` varchar(255) NOT NULL,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_company_stripe_customers_client_company_id_unique` (`client_company_id`),
+  UNIQUE KEY `client_company_stripe_customers_stripe_customer_id_unique` (`stripe_customer_id`),
+  KEY `client_company_stripe_customers_created_by_foreign` (`created_by`),
+  CONSTRAINT `client_company_stripe_customers_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `client_company_stripe_customers_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_company_user`;
@@ -180,13 +271,16 @@ CREATE TABLE `client_invoice_lines` (
   `hours` decimal(10,4) DEFAULT NULL,
   `line_date` date DEFAULT NULL,
   `sort_order` int(11) NOT NULL DEFAULT 0,
+  `client_agreement_recurring_item_id` bigint(20) unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`client_invoice_line_id`),
   KEY `client_invoice_lines_client_invoice_id_index` (`client_invoice_id`),
   KEY `client_invoice_lines_client_agreement_id_foreign` (`client_agreement_id`),
+  KEY `client_invoice_lines_client_agreement_recurring_item_id_foreign` (`client_agreement_recurring_item_id`),
   CONSTRAINT `client_invoice_lines_client_agreement_id_foreign` FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`),
+  CONSTRAINT `client_invoice_lines_client_agreement_recurring_item_id_foreign` FOREIGN KEY (`client_agreement_recurring_item_id`) REFERENCES `client_agreement_recurring_items` (`id`) ON DELETE SET NULL,
   CONSTRAINT `client_invoice_lines_client_invoice_id_foreign` FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -200,12 +294,55 @@ CREATE TABLE `client_invoice_payments` (
   `payment_date` date NOT NULL,
   `payment_method` varchar(255) NOT NULL,
   `notes` text DEFAULT NULL,
+  `client_invoice_stripe_payment_id` bigint(20) unsigned DEFAULT NULL,
+  `stripe_payment_intent_id` varchar(255) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`client_invoice_payment_id`),
   KEY `client_invoice_payments_client_invoice_id_foreign` (`client_invoice_id`),
+  KEY `cip_stripe_payment_fk` (`client_invoice_stripe_payment_id`),
+  KEY `client_invoice_payments_stripe_payment_intent_id_index` (`stripe_payment_intent_id`),
+  CONSTRAINT `cip_stripe_payment_fk` FOREIGN KEY (`client_invoice_stripe_payment_id`) REFERENCES `client_invoice_stripe_payments` (`id`) ON DELETE SET NULL,
   CONSTRAINT `client_invoice_payments_client_invoice_id_foreign` FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_invoice_stripe_events`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_invoice_stripe_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `stripe_event_id` varchar(255) NOT NULL,
+  `type` varchar(255) NOT NULL,
+  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`payload`)),
+  `processed_at` timestamp NULL DEFAULT NULL,
+  `error` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_invoice_stripe_events_stripe_event_id_unique` (`stripe_event_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `client_invoice_stripe_payments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `client_invoice_stripe_payments` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `client_invoice_id` bigint(20) unsigned NOT NULL,
+  `stripe_payment_intent_id` varchar(255) NOT NULL,
+  `stripe_customer_id` varchar(255) NOT NULL,
+  `stripe_payment_method_id` varchar(255) DEFAULT NULL,
+  `amount` int(10) unsigned NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `failure_reason` text DEFAULT NULL,
+  `last_event_id` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `client_invoice_stripe_payments_stripe_payment_intent_id_unique` (`stripe_payment_intent_id`),
+  KEY `client_invoice_stripe_payments_client_invoice_id_status_index` (`client_invoice_id`,`status`),
+  KEY `client_invoice_stripe_payments_stripe_customer_id_index` (`stripe_customer_id`),
+  CONSTRAINT `client_invoice_stripe_payments_client_invoice_id_foreign` FOREIGN KEY (`client_invoice_id`) REFERENCES `client_invoices` (`client_invoice_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_invoices`;
@@ -232,6 +369,9 @@ CREATE TABLE `client_invoices` (
   `hours_billed_at_rate` decimal(10,4) NOT NULL DEFAULT 0.0000,
   `status` enum('draft','issued','paid','void') NOT NULL DEFAULT 'draft',
   `notes` text DEFAULT NULL,
+  `invoice_kind` varchar(30) NOT NULL DEFAULT 'cadence_period' COMMENT 'One of: cadence_period, interim_overage, terminal',
+  `cycle_start` date DEFAULT NULL COMMENT 'First day of the cadence cycle this invoice belongs to',
+  `cycle_end` date DEFAULT NULL COMMENT 'Last day of the cadence cycle this invoice belongs to',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
@@ -240,6 +380,7 @@ CREATE TABLE `client_invoices` (
   KEY `client_invoices_client_agreement_id_index` (`client_agreement_id`),
   KEY `client_invoices_issue_date_index` (`issue_date`),
   KEY `client_invoices_status_index` (`status`),
+  KEY `client_invoices_cycle_index` (`client_company_id`,`cycle_start`,`cycle_end`,`invoice_kind`),
   CONSTRAINT `client_invoices_client_agreement_id_foreign` FOREIGN KEY (`client_agreement_id`) REFERENCES `client_agreements` (`id`) ON DELETE SET NULL,
   CONSTRAINT `client_invoices_client_company_id_foreign` FOREIGN KEY (`client_company_id`) REFERENCES `client_companies` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -490,6 +631,24 @@ CREATE TABLE `files_for_tasks` (
   CONSTRAINT `files_for_tasks_uploaded_by_user_id_foreign` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_account_line_item_deletions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_account_line_item_deletions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `t_id` bigint(20) unsigned NOT NULL,
+  `t_account` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `deleted_at` timestamp(6) NOT NULL DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6),
+  `created_at` timestamp(6) NULL DEFAULT NULL,
+  `updated_at` timestamp(6) NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `failid_t_id_unique` (`t_id`),
+  KEY `failid_account_deleted_at_idx` (`t_account`,`deleted_at`),
+  KEY `failid_user_deleted_at_idx` (`user_id`,`deleted_at`),
+  CONSTRAINT `fin_account_line_item_deletions_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_line_item_links`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -559,6 +718,8 @@ CREATE TABLE `fin_account_line_items` (
   `listing_exch` varchar(50) DEFAULT NULL,
   `multiplier` int(11) DEFAULT NULL,
   `when_added` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp(6) NULL DEFAULT NULL,
+  `updated_at` timestamp(6) NULL DEFAULT NULL,
   `t_harvested_amount` decimal(13,4) DEFAULT NULL,
   `t_is_not_duplicate` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'When true, this transaction has been verified as not a duplicate',
   `t_date_posted` varchar(10) DEFAULT NULL,
@@ -566,6 +727,8 @@ CREATE TABLE `fin_account_line_items` (
   PRIMARY KEY (`t_id`),
   KEY `fin_account_line_items_t_account_index` (`t_account`),
   KEY `fin_account_line_items_statement_id_index` (`statement_id`),
+  KEY `faili_account_updated_at_idx` (`t_account`,`updated_at`),
+  KEY `faili_updated_at_idx` (`updated_at`),
   CONSTRAINT `fin_account_line_items_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -577,6 +740,7 @@ CREATE TABLE `fin_account_lots` (
   `acct_id` bigint(20) unsigned NOT NULL,
   `symbol` varchar(50) NOT NULL,
   `description` varchar(255) DEFAULT NULL,
+  `cusip` varchar(20) DEFAULT NULL,
   `quantity` decimal(18,8) NOT NULL,
   `purchase_date` date NOT NULL,
   `cost_basis` decimal(18,4) NOT NULL,
@@ -586,10 +750,19 @@ CREATE TABLE `fin_account_lots` (
   `realized_gain_loss` decimal(18,4) DEFAULT NULL,
   `is_short_term` tinyint(1) DEFAULT NULL COMMENT 'sale_date - purchase_date <= 1 year',
   `lot_source` varchar(50) DEFAULT NULL COMMENT 'import, manual, etc.',
+  `source` varchar(32) NOT NULL DEFAULT 'account_derived',
   `statement_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Statement this lot was imported from',
   `open_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that opened this lot (buy)',
   `close_t_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Transaction that closed this lot (sell)',
-  `tax_document_id` bigint(20) unsigned DEFAULT NULL,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
+  `lot_origin` varchar(32) DEFAULT NULL,
+  `form_8949_box` varchar(1) DEFAULT NULL,
+  `is_covered` tinyint(1) DEFAULT NULL,
+  `accrued_market_discount` decimal(18,4) DEFAULT NULL,
+  `wash_sale_disallowed` decimal(18,4) DEFAULT NULL,
+  `superseded_by_lot_id` bigint(20) unsigned DEFAULT NULL,
+  `reconciliation_status` varchar(32) DEFAULT NULL,
+  `reconciliation_notes` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`lot_id`),
@@ -599,12 +772,18 @@ CREATE TABLE `fin_account_lots` (
   KEY `fin_account_lots_sale_date_index` (`sale_date`),
   KEY `fin_account_lots_open_t_id_index` (`open_t_id`),
   KEY `fin_account_lots_close_t_id_index` (`close_t_id`),
-  KEY `fin_account_lots_tax_document_id_index` (`tax_document_id`),
+  KEY `fin_account_lots_superseded_by_lot_id_index` (`superseded_by_lot_id`),
+  KEY `fin_account_lots_reconciliation_status_index` (`reconciliation_status`),
+  KEY `fin_account_lots_cusip_index` (`cusip`),
+  KEY `fin_account_lots_source_idx` (`source`),
+  KEY `fin_lots_doc_idx` (`document_id`),
+  KEY `fin_lots_origin_idx` (`lot_origin`),
   CONSTRAINT `fin_account_lots_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE CASCADE,
   CONSTRAINT `fin_account_lots_close_t_id_foreign` FOREIGN KEY (`close_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_account_lots_open_t_id_foreign` FOREIGN KEY (`open_t_id`) REFERENCES `fin_account_line_items` (`t_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_account_lots_statement_id_foreign` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL,
-  CONSTRAINT `fin_account_lots_tax_document_id_foreign` FOREIGN KEY (`tax_document_id`) REFERENCES `fin_tax_documents` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fin_account_lots_superseded_by_lot_id_foreign` FOREIGN KEY (`superseded_by_lot_id`) REFERENCES `fin_account_lots` (`lot_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_lots_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_account_tag`;
@@ -615,7 +794,7 @@ CREATE TABLE `fin_account_tag` (
   `tag_userid` varchar(50) NOT NULL,
   `tag_color` varchar(20) NOT NULL,
   `tag_label` varchar(50) NOT NULL,
-  `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp','us_government_interest') DEFAULT NULL,
+  `tax_characteristic` enum('business_income','business_returns','sce_advertising','sce_car_truck','sce_commissions_fees','sce_contract_labor','sce_depletion','sce_depreciation','sce_employee_benefits','sce_insurance','sce_interest_mortgage','sce_interest_other','sce_legal_professional','sce_office_expenses','sce_pension','sce_rent_vehicles','sce_rent_property','sce_repairs_maintenance','sce_supplies','sce_taxes_licenses','sce_travel','sce_meals','sce_utilities','sce_wages','sce_other','scho_rent','scho_mortgage_interest','scho_real_estate_taxes','scho_insurance','scho_utilities','scho_repairs_maintenance','scho_security','scho_depreciation','scho_cleaning','scho_hoa','scho_casualty_losses','interest','ordinary_dividend','qualified_dividend','other_ordinary_income','w2_wages','w2_other_comp','us_government_interest','fee_irc67g','fee_schE') DEFAULT NULL,
   `employment_entity_id` bigint(20) unsigned DEFAULT NULL,
   `when_added` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`tag_id`),
@@ -637,11 +816,86 @@ CREATE TABLE `fin_accounts` (
   `acct_sort_order` int(11) NOT NULL DEFAULT 0,
   `acct_is_debt` tinyint(1) NOT NULL DEFAULT 0,
   `acct_is_retirement` tinyint(1) NOT NULL DEFAULT 0,
+  `expected_fee_pct` decimal(7,4) DEFAULT NULL,
+  `expected_fee_flat` decimal(13,2) DEFAULT NULL,
+  `expected_fee_notes` varchar(255) DEFAULT NULL,
   `when_closed` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`acct_id`),
   UNIQUE KEY `fin_accounts_acct_owner_acct_name_unique` (`acct_owner`,`acct_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_document_accounts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_document_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
+  `account_id` bigint(20) unsigned DEFAULT NULL,
+  `statement_id` bigint(20) unsigned DEFAULT NULL,
+  `form_type` varchar(50) DEFAULT NULL,
+  `tax_year` int(11) DEFAULT NULL,
+  `account_section_label` varchar(255) DEFAULT NULL,
+  `payload_kind` varchar(64) DEFAULT NULL,
+  `ai_identifier` varchar(100) DEFAULT NULL,
+  `ai_account_name` varchar(255) DEFAULT NULL,
+  `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
+  `notes` text DEFAULT NULL,
+  `misc_routing` varchar(20) DEFAULT NULL,
+  `reporting_mode` varchar(32) DEFAULT NULL,
+  `parsed_data_needs_review` tinyint(1) NOT NULL DEFAULT 0,
+  `parsed_data_warnings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data_warnings`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_tax_document_accounts_account_id_index` (`account_id`),
+  KEY `fin_tax_document_accounts_account_id_tax_year_index` (`account_id`,`tax_year`),
+  KEY `fin_doc_accts_doc_idx` (`document_id`),
+  KEY `fin_doc_accts_stmt_idx` (`statement_id`),
+  KEY `fin_doc_accts_payload_idx` (`payload_kind`),
+  CONSTRAINT `fin_doc_accts_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_doc_accts_stmt_fk` FOREIGN KEY (`statement_id`) REFERENCES `fin_statements` (`statement_id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_document_accounts_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_documents` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `document_kind` varchar(32) NOT NULL,
+  `tax_year` int(11) DEFAULT NULL,
+  `period_start` date DEFAULT NULL,
+  `period_end` date DEFAULT NULL,
+  `original_filename` varchar(255) DEFAULT NULL,
+  `stored_filename` varchar(255) DEFAULT NULL,
+  `s3_path` varchar(255) DEFAULT NULL,
+  `mime_type` varchar(255) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned DEFAULT NULL,
+  `file_hash` varchar(255) DEFAULT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `genai_job_id` bigint(20) unsigned DEFAULT NULL,
+  `genai_status` varchar(32) DEFAULT NULL,
+  `parsed_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data`)),
+  `parsed_data_needs_review` tinyint(1) NOT NULL DEFAULT 0,
+  `parsed_data_warnings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data_warnings`)),
+  `notes` text DEFAULT NULL,
+  `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
+  `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_docs_user_kind_hash_unique` (`user_id`,`document_kind`,`file_hash`),
+  KEY `fin_docs_uploader_fk` (`uploaded_by_user_id`),
+  KEY `fin_docs_genai_fk` (`genai_job_id`),
+  KEY `fin_docs_user_kind_idx` (`user_id`,`document_kind`),
+  KEY `fin_docs_user_year_idx` (`user_id`,`tax_year`),
+  KEY `fin_docs_genai_status_idx` (`genai_status`),
+  CONSTRAINT `fin_docs_genai_fk` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_docs_uploader_fk` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_docs_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_employment_entity`;
@@ -667,6 +921,29 @@ CREATE TABLE `fin_employment_entity` (
   CONSTRAINT `fin_employment_entity_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_employment_entity_year`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_employment_entity_year` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `employment_entity_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `accounting_method` varchar(20) NOT NULL DEFAULT 'cash',
+  `materially_participated` tinyint(1) NOT NULL DEFAULT 1,
+  `made_payments_requiring_1099` tinyint(1) NOT NULL DEFAULT 0,
+  `filed_required_1099s` tinyint(1) DEFAULT NULL,
+  `started_or_acquired_this_year` tinyint(1) NOT NULL DEFAULT 0,
+  `principal_product_service` text DEFAULT NULL,
+  `business_code` varchar(6) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_entity_year_unique` (`employment_entity_id`,`tax_year`),
+  KEY `fin_employment_entity_year_tax_year_index` (`tax_year`),
+  CONSTRAINT `fin_employment_entity_year_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_equity_awards`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -681,6 +958,60 @@ CREATE TABLE `fin_equity_awards` (
   `vest_price` decimal(10,2) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `fin_equity_awards_grant_date_award_id_vest_date_symbol_unique` (`grant_date`,`award_id`,`vest_date`,`symbol`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_form_8829_inputs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_form_8829_inputs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `employment_entity_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `method` varchar(20) NOT NULL DEFAULT 'regular',
+  `office_sqft` decimal(10,2) DEFAULT NULL,
+  `home_sqft` decimal(10,2) DEFAULT NULL,
+  `months_used` tinyint(3) unsigned NOT NULL DEFAULT 12,
+  `prior_year_op_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `prior_year_op_carryover_ca` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `prior_year_depreciation_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `prior_year_depreciation_carryover_ca` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_form_8829_entity_year_unique` (`user_id`,`employment_entity_id`,`tax_year`),
+  KEY `fin_form_8829_inputs_employment_entity_id_foreign` (`employment_entity_id`),
+  KEY `fin_form_8829_inputs_user_id_tax_year_index` (`user_id`,`tax_year`),
+  CONSTRAINT `fin_form_8829_inputs_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fin_form_8829_inputs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_lot_reconciliation_links`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_lot_reconciliation_links` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
+  `broker_lot_id` bigint(20) unsigned DEFAULT NULL,
+  `account_lot_id` bigint(20) unsigned DEFAULT NULL,
+  `state` varchar(32) NOT NULL,
+  `match_reason` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`match_reason`)),
+  `accepted_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `accepted_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_lot_recon_lot_pair_unique` (`broker_lot_id`,`account_lot_id`),
+  KEY `fin_lot_recon_broker_lot_idx` (`broker_lot_id`),
+  KEY `fin_lot_recon_account_lot_idx` (`account_lot_id`),
+  KEY `fin_lot_recon_state_idx` (`state`),
+  KEY `fin_lot_recon_accepted_by_idx` (`accepted_by_user_id`),
+  KEY `fin_lot_recon_doc_idx` (`document_id`),
+  CONSTRAINT `flrl_accepted_user_fk` FOREIGN KEY (`accepted_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `flrl_account_lot_fk` FOREIGN KEY (`account_lot_id`) REFERENCES `fin_account_lots` (`lot_id`) ON DELETE SET NULL,
+  CONSTRAINT `flrl_broker_lot_fk` FOREIGN KEY (`broker_lot_id`) REFERENCES `fin_account_lots` (`lot_id`) ON DELETE CASCADE,
+  CONSTRAINT `flrl_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_pal_carryforwards`;
@@ -804,6 +1135,24 @@ CREATE TABLE `fin_payslip_uploads` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_planning_roth_scenarios`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_planning_roth_scenarios` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `short_code` varchar(10) NOT NULL,
+  `title` varchar(120) DEFAULT NULL,
+  `inputs_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`inputs_json`)),
+  `computed_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`computed_json`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fprs_short_code_unique` (`short_code`),
+  KEY `fprs_user_idx` (`user_id`),
+  CONSTRAINT `fprs_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_rule_actions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -874,6 +1223,23 @@ CREATE TABLE `fin_rules` (
   PRIMARY KEY (`id`),
   KEY `fin_rules_user_id_index` (`user_id`),
   CONSTRAINT `fin_rules_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_schedule_d_carryover_inputs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_schedule_d_carryover_inputs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `short_term_loss_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `long_term_loss_carryover` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `fin_sch_d_carry_user_year_unique` (`user_id`,`tax_year`),
+  CONSTRAINT `fin_schedule_d_carryover_inputs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_statement_cash_report`;
@@ -1010,6 +1376,7 @@ DROP TABLE IF EXISTS `fin_statements`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_statements` (
   `statement_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
   `acct_id` bigint(20) unsigned NOT NULL,
   `balance` varchar(20) NOT NULL,
   `cost_basis` decimal(15,4) NOT NULL DEFAULT 0.0000,
@@ -1020,31 +1387,10 @@ CREATE TABLE `fin_statements` (
   PRIMARY KEY (`statement_id`),
   KEY `fin_account_balance_snapshot_acct_id_index` (`acct_id`),
   KEY `fin_statements_genai_job_id_foreign` (`genai_job_id`),
+  KEY `fin_statements_doc_idx` (`document_id`),
   CONSTRAINT `fin_account_balance_snapshot_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`),
+  CONSTRAINT `fin_statements_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fin_statements_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `fin_tax_document_accounts`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `fin_tax_document_accounts` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `tax_document_id` bigint(20) unsigned NOT NULL,
-  `account_id` bigint(20) unsigned DEFAULT NULL,
-  `form_type` varchar(50) NOT NULL,
-  `tax_year` int(11) NOT NULL,
-  `ai_identifier` varchar(100) DEFAULT NULL,
-  `ai_account_name` varchar(255) DEFAULT NULL,
-  `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
-  `notes` text DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fin_tax_document_accounts_tax_document_id_index` (`tax_document_id`),
-  KEY `fin_tax_document_accounts_account_id_index` (`account_id`),
-  KEY `fin_tax_document_accounts_account_id_tax_year_index` (`account_id`,`tax_year`),
-  CONSTRAINT `fin_tax_document_accounts_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
-  CONSTRAINT `fin_tax_document_accounts_tax_document_id_foreign` FOREIGN KEY (`tax_document_id`) REFERENCES `fin_tax_documents` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_tax_documents`;
@@ -1052,6 +1398,7 @@ DROP TABLE IF EXISTS `fin_tax_documents`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fin_tax_documents` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
   `tax_year` int(11) NOT NULL,
   `form_type` varchar(50) NOT NULL,
@@ -1068,7 +1415,10 @@ CREATE TABLE `fin_tax_documents` (
   `genai_job_id` bigint(20) unsigned DEFAULT NULL,
   `genai_status` varchar(32) DEFAULT NULL,
   `parsed_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data`)),
+  `parsed_data_needs_review` tinyint(1) NOT NULL DEFAULT 0,
+  `parsed_data_warnings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`parsed_data_warnings`)),
   `is_reviewed` tinyint(1) NOT NULL DEFAULT 0,
+  `misc_routing` varchar(20) DEFAULT NULL,
   `download_history` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`download_history`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1079,10 +1429,36 @@ CREATE TABLE `fin_tax_documents` (
   KEY `fin_tax_documents_account_id_index` (`account_id`),
   KEY `fin_tax_documents_form_type_index` (`form_type`),
   KEY `fin_tax_documents_genai_job_id_index` (`genai_job_id`),
+  KEY `fin_tax_docs_doc_idx` (`document_id`),
+  CONSTRAINT `fin_tax_docs_doc_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fin_tax_documents_account_id_foreign` FOREIGN KEY (`account_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
   CONSTRAINT `fin_tax_documents_employment_entity_id_foreign` FOREIGN KEY (`employment_entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fin_tax_documents_genai_job_id_foreign` FOREIGN KEY (`genai_job_id`) REFERENCES `genai_import_jobs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fin_tax_documents_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `fin_tax_line_adjustments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `fin_tax_line_adjustments` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `tax_year` smallint(5) unsigned NOT NULL,
+  `form` varchar(40) NOT NULL,
+  `entity_id` bigint(20) unsigned DEFAULT NULL,
+  `line_ref` varchar(40) NOT NULL,
+  `kind` varchar(40) NOT NULL,
+  `amount` decimal(14,2) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'open',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fin_tax_line_adjustments_entity_id_foreign` (`entity_id`),
+  KEY `fin_tax_line_adjustments_lookup` (`user_id`,`tax_year`,`form`,`line_ref`),
+  KEY `fin_tax_line_adjustments_entity_lookup` (`user_id`,`tax_year`,`form`,`entity_id`),
+  CONSTRAINT `fin_tax_line_adjustments_entity_id_foreign` FOREIGN KEY (`entity_id`) REFERENCES `fin_employment_entity` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fin_tax_line_adjustments_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `fin_transaction_non_duplicate_pairs`;
@@ -1149,6 +1525,9 @@ DROP TABLE IF EXISTS `genai_import_jobs`;
 CREATE TABLE `genai_import_jobs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
+  `ai_configuration_id` bigint(20) unsigned DEFAULT NULL,
+  `ai_provider` varchar(32) DEFAULT NULL,
+  `ai_model` varchar(255) DEFAULT NULL,
   `acct_id` bigint(20) unsigned DEFAULT NULL,
   `job_type` varchar(64) NOT NULL,
   `file_hash` varchar(64) NOT NULL,
@@ -1163,6 +1542,8 @@ CREATE TABLE `genai_import_jobs` (
   `retry_count` tinyint(3) unsigned NOT NULL DEFAULT 0,
   `scheduled_for` date DEFAULT NULL,
   `parsed_at` timestamp NULL DEFAULT NULL,
+  `input_tokens` int(10) unsigned DEFAULT NULL,
+  `output_tokens` int(10) unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -1170,7 +1551,10 @@ CREATE TABLE `genai_import_jobs` (
   KEY `genai_import_jobs_user_id_status_index` (`user_id`,`status`),
   KEY `genai_import_jobs_file_hash_index` (`file_hash`),
   KEY `genai_import_jobs_scheduled_for_status_index` (`scheduled_for`,`status`),
+  KEY `genai_import_jobs_ai_configuration_id_index` (`ai_configuration_id`),
+  KEY `genai_import_jobs_ai_configuration_id_created_at_index` (`ai_configuration_id`,`created_at`),
   CONSTRAINT `genai_import_jobs_acct_id_foreign` FOREIGN KEY (`acct_id`) REFERENCES `fin_accounts` (`acct_id`) ON DELETE SET NULL,
+  CONSTRAINT `genai_import_jobs_ai_configuration_id_foreign` FOREIGN KEY (`ai_configuration_id`) REFERENCES `user_ai_configurations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `genai_import_jobs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1431,6 +1815,29 @@ CREATE TABLE `twoFactor` (
   CONSTRAINT `twoFactor_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `user_ai_configurations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_ai_configurations` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `provider` enum('gemini','anthropic','bedrock') NOT NULL,
+  `api_key` text NOT NULL,
+  `region` varchar(64) DEFAULT NULL,
+  `session_token` text DEFAULT NULL,
+  `model` varchar(255) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 0,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `api_key_invalid_at` timestamp NULL DEFAULT NULL,
+  `api_key_invalid_reason` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_ai_configurations_user_id_foreign` (`user_id`),
+  CONSTRAINT `user_ai_configurations_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `users`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1627,7 +2034,7 @@ CREATE TABLE `webauthn_credentials` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 --
--- WARNING: can't read the INFORMATION_SCHEMA.libraries table. It's most probably an old server 5.5.5-10.6.25-MariaDB.
+-- WARNING: can't read the INFORMATION_SCHEMA.libraries table. It's most probably an old server 5.5.5-10.6.26-MariaDB.
 --
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -1735,3 +2142,33 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (102,'2026_04_19_22
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (103,'2026_04_19_223420_create_fin_user_tax_states_table',63);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (104,'2026_04_19_223421_create_fin_user_deductions_table',64);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (105,'2026_04_20_033435_create_fin_pal_carryforwards_table',64);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (106,'2026_04_24_070803_add_misc_routing_to_fin_tax_documents',65);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (107,'2026_04_25_062100_add_misc_routing_to_fin_tax_document_accounts',66);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (108,'2026_04_27_065237_create_user_ai_configurations_table',67);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (109,'2026_04_27_091813_add_expires_at_to_user_ai_configurations_table',68);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (110,'2026_04_27_091813_add_token_usage_to_genai_import_jobs_table',68);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (111,'2026_04_30_155528_add_reconciliation_fields_to_fin_account_lots',69);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (112,'2026_05_02_065036_add_invalid_api_key_fields_to_user_ai_configurations_table',70);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (113,'2026_05_02_223255_add_ai_metadata_to_genai_import_jobs_table',71);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (114,'2026_05_03_001500_add_form8949_export_fields_to_fin_account_lots_table',72);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (115,'2026_05_03_024157_add_cusip_to_fin_account_lots_table',73);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (116,'2026_05_03_092133_add_parsed_data_review_flags_to_tax_documents',74);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (117,'2026_05_03_164637_add_investment_management_fee_tax_characteristics_to_fin_account_tag',75);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (118,'2026_05_03_171340_add_sync_timestamps_and_tombstones_to_fin_account_line_items',76);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (119,'2026_05_04_040510_add_reporting_mode_to_fin_tax_document_accounts_table',77);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (120,'2026_05_08_060626_create_fin_employment_entity_year_table',78);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (121,'2026_05_08_060626_create_fin_form_8829_inputs_table',78);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (122,'2026_05_08_060626_create_fin_tax_line_adjustments_table',78);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (123,'2026_05_08_074313_add_billing_cadence_to_client_management_tables',79);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (124,'2026_05_08_195453_create_client_company_activities_table',79);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (125,'2026_05_09_033615_create_client_company_stripe_customers_table',80);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (126,'2026_05_09_033618_create_client_company_payment_methods_table',80);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (127,'2026_05_09_033621_create_client_invoice_stripe_payments_table',80);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (128,'2026_05_09_033624_create_client_invoice_stripe_events_table',80);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (129,'2026_05_09_033627_add_stripe_backrefs_to_client_invoice_payments_table',80);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (130,'2026_05_09_223311_create_schedule_d_carryover_inputs_table',81);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (131,'2026_05_10_200602_add_source_to_fin_account_lots_table',82);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (132,'2026_05_10_200603_create_fin_lot_reconciliation_links_table',82);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (133,'2026_05_11_071226_create_fin_planning_roth_scenarios_table',83);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (134,'2026_05_11_071310_create_fin_documents_unified_import_tables',84);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (135,'2026_05_12_060422_add_expected_fee_fields_to_fin_accounts_table',85);
