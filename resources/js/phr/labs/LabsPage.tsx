@@ -25,7 +25,7 @@ const FLAG_CLASS: Record<string, string> = {
 }
 
 function flagClass(flag: string | null | undefined): string {
-  return flag ? (FLAG_CLASS[flag.toUpperCase()] ?? 'text-orange-600 dark:text-orange-400') : ''
+  return flag ? (FLAG_CLASS[flag.toUpperCase()] ?? '') : ''
 }
 
 const emptyForm: PhrLabResultFormData = {
