@@ -24,8 +24,8 @@ class StoreDicomUploadRequest extends FormRequest
     {
         return [
             'root_name' => ['nullable', 'string', 'max:255'],
-            'files' => ['required', 'array', 'min:1', 'max:2000'],
-            'files.*' => ['required', 'file', 'max:102400'],
+            'files' => ['required', 'array', 'min:1', 'max:500'],
+            'files.*' => ['required', 'file', 'max:51200'],
             'relative_paths' => ['nullable', 'array'],
             'relative_paths.*' => ['nullable', 'string', 'max:1024'],
         ];
@@ -38,7 +38,8 @@ class StoreDicomUploadRequest extends FormRequest
     {
         return [
             'files.required' => 'Select at least one DICOM file or DICOM directory.',
-            'files.*.max' => 'Each DICOM file must be 100 MB or smaller.',
+            'files.max' => 'A single upload may contain at most 500 files; split large studies across multiple uploads.',
+            'files.*.max' => 'Each DICOM file must be 50 MB or smaller.',
         ];
     }
 }

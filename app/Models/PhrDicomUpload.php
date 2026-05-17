@@ -35,6 +35,8 @@ class PhrDicomUpload extends Model
 {
     use SerializesDatesAsLocal;
 
+    public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSED = 'processed';
 
     public const STATUS_FAILED = 'failed';

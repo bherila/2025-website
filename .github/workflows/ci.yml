@@ -166,7 +166,7 @@ jobs:
 
       - name: Deploy with rsync
         run: |
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" rsync -av --delete --exclude='.env' \
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" rsync -av --delete --exclude='.env' --exclude='phr-dicom' \
             -e "ssh -o StrictHostKeyChecking=no" \
             app \
             bootstrap \

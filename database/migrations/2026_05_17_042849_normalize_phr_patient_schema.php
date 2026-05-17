@@ -5,6 +5,18 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Normalize the pre-PHR-domain lab and vital tables into the patient/access model.
+ *
+ * Project-specific assumption: any legacy `phr_lab_results` / `phr_patient_vitals`
+ * rows on this deployment are attached to `users.id = 1` (the original site owner)
+ * because the legacy `user_id` column stored opaque auth strings that don't map
+ * back to Laravel's integer primary key. The migration creates a single
+ * "Legacy PHR Patient" profile owned by user 1 and attaches every legacy row to
+ * it. This is safe here because the only legacy rows in existence belong to that
+ * user; do NOT copy this migration into another project without auditing the
+ * data first.
+ */
 return new class extends Migration
 {
     public function up(): void

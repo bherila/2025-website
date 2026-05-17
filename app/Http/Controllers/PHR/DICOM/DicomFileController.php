@@ -7,17 +7,18 @@ use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Models\PhrDicomFile;
 use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomStudy;
+use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use ZipArchive;
+use ZipStream\ZipStream;
 
 class DicomFileController extends Controller
 {
     use ResolvesPHRPatientAccess;
+
+    public function __construct(private readonly DicomUploadProcessor $uploadProcessor) {}
 
     public function proxyInstanceFile(Request $request, int $patient, int $instance): StreamedResponse
     {
@@ -28,7 +29,7 @@ class DicomFileController extends Controller
             ->with(['file'])
             ->findOrFail($instance);
 
-        $stream = Storage::disk('s3')->readStream($resolvedInstance->file->r2_key);
+        $stream = $this->uploadProcessor->disk()->readStream($resolvedInstance->file->r2_key);
         abort_if(! is_resource($stream), 404);
 
         return response()->stream(function () use ($stream): void {
@@ -42,7 +43,7 @@ class DicomFileController extends Controller
         ]);
     }
 
-    public function downloadStudy(Request $request, int $patient, int $study): BinaryFileResponse
+    public function downloadStudy(Request $request, int $patient, int $study): StreamedResponse
     {
         $userId = (int) $request->user()?->id;
         $resolvedPatient = $this->accessiblePatient($patient, $userId);
@@ -54,22 +55,34 @@ class DicomFileController extends Controller
         $files = $this->studyFiles($resolvedStudy);
         abort_if($files->isEmpty(), 404);
 
-        $zipPath = tempnam(storage_path('app'), 'phr-dicom-');
-        abort_if($zipPath === false, 500);
+        $filename = $this->zipFilename($resolvedStudy);
 
-        $zip = new ZipArchive;
-        abort_if($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true, 500);
+        return response()->stream(function () use ($files, $filename): void {
+            $disk = $this->uploadProcessor->disk();
+            $zip = new ZipStream(outputName: $filename, sendHttpHeaders: false);
 
-        foreach ($files as $file) {
-            $contents = Storage::disk('s3')->get($file->r2_key);
-            $zip->addFromString($this->zipPath($file->original_relative_path), $contents);
-        }
+            foreach ($files as $file) {
+                $stream = $disk->readStream($file->r2_key);
+                if (! is_resource($stream)) {
+                    continue;
+                }
 
-        $zip->close();
+                try {
+                    $zip->addFileFromStream($this->zipPath($file->original_relative_path), $stream);
+                } finally {
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
+                }
+            }
 
-        return response()
-            ->download($zipPath, $this->zipFilename($resolvedStudy), ['Content-Type' => 'application/zip'])
-            ->deleteFileAfterSend(true);
+            $zip->finish();
+        }, 200, [
+            'Content-Type' => 'application/zip',
+            'Content-Disposition' => 'attachment; filename="'.$this->safeDownloadName($filename).'"',
+            'Cache-Control' => 'private, no-store',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     /**

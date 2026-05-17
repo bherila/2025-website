@@ -8,10 +8,13 @@ use App\Models\PhrDicomSeries;
 use App\Models\PhrDicomStudy;
 use App\Models\PhrDicomUpload;
 use App\Models\PhrPatient;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class DicomUploadProcessor
 {
@@ -47,6 +50,8 @@ class DicomUploadProcessor
         'xml',
     ];
 
+    public const DISK = 'phr_dicom';
+
     public function __construct(private readonly DicomMetadataParser $metadataParser) {}
 
     /**
@@ -55,19 +60,19 @@ class DicomUploadProcessor
      */
     public function process(PhrPatient $patient, int $uploadedByUserId, array $files, array $relativePaths, ?string $rootName): PhrDicomUpload
     {
-        $r2Prefix = sprintf('phr/dicom/patients/%d/uploads/%s', $patient->id, Str::uuid()->toString());
+        $storagePrefix = sprintf('phr/dicom/patients/%d/uploads/%s', $patient->id, Str::uuid()->toString());
 
         $upload = PhrDicomUpload::create([
             'patient_id' => $patient->id,
             'uploaded_by_user_id' => $uploadedByUserId,
-            'status' => PhrDicomUpload::STATUS_PROCESSED,
+            'status' => PhrDicomUpload::STATUS_PENDING,
             'original_root_name' => $rootName,
             'total_files' => count($files),
             'stored_files' => 0,
             'skipped_files' => 0,
             'total_bytes' => 0,
             'stored_bytes' => 0,
-            'r2_prefix' => $r2Prefix,
+            'r2_prefix' => $storagePrefix,
             'manifest_json' => [
                 'stored_paths' => [],
                 'dicomdir_paths' => [],
@@ -78,6 +83,62 @@ class DicomUploadProcessor
             'skipped_files_json' => [],
         ]);
 
+        try {
+            return $this->processFiles($patient, $upload, $files, $relativePaths, $storagePrefix);
+        } catch (Throwable $caught) {
+            $this->failUpload($upload, $caught->getMessage());
+            throw $caught;
+        }
+    }
+
+    /**
+     * Mark an upload as failed and reclaim everything it persisted.
+     *
+     * Used by:
+     * - the rollback path in process() when a file in the loop throws
+     * - the phr:dicom:gc artisan command when a pending upload times out
+     *
+     * Cleanup is best-effort: storage and DB errors are logged but the upload
+     * row is still transitioned to STATUS_FAILED so the caller can surface it.
+     */
+    public function failUpload(PhrDicomUpload $upload, string $reason): void
+    {
+        $disk = $this->disk();
+
+        try {
+            $disk->deleteDirectory($upload->r2_prefix);
+        } catch (Throwable $cleanupError) {
+            Log::warning('phr.dicom.cleanup_delete_prefix_failed', [
+                'upload_id' => $upload->id,
+                'prefix' => $upload->r2_prefix,
+                'error' => $cleanupError->getMessage(),
+            ]);
+        }
+
+        // phr_dicom_instances and phr_dicom_files cascade on upload delete in
+        // the schema, but we keep the upload row around for audit, so cascade
+        // child rows explicitly. phr_dicom_studies stays put (its FK to
+        // uploads is nullOnDelete) because re-uploads may have linked it.
+        PhrDicomInstance::query()->where('upload_id', $upload->id)->delete();
+        PhrDicomFile::query()->where('upload_id', $upload->id)->delete();
+
+        $upload->update([
+            'status' => PhrDicomUpload::STATUS_FAILED,
+            'error_message' => Str::limit($reason, 1000),
+        ]);
+    }
+
+    public function disk(): Filesystem
+    {
+        return Storage::disk(self::DISK);
+    }
+
+    /**
+     * @param  list<UploadedFile>  $files
+     * @param  list<string|null>  $relativePaths
+     */
+    private function processFiles(PhrPatient $patient, PhrDicomUpload $upload, array $files, array $relativePaths, string $storagePrefix): PhrDicomUpload
+    {
         $manifest = $upload->manifest_json ?? [];
         $skippedFiles = [];
         $storedFiles = 0;
@@ -120,15 +181,15 @@ class DicomUploadProcessor
                 throw new RuntimeException("Unable to hash DICOM file [{$relativePath}].");
             }
 
-            $r2Key = $this->r2Key($r2Prefix, $relativePath);
-            $this->storeFile($realPath, $r2Key);
+            $storageKey = $this->storageKey($storagePrefix, $relativePath);
+            $this->storeFile($realPath, $storageKey);
 
             $fileKind = $this->isDicomdirPath($relativePath) ? PhrDicomFile::KIND_DICOMDIR : PhrDicomFile::KIND_DICOM;
             $dicomFile = PhrDicomFile::create([
                 'patient_id' => $patient->id,
                 'upload_id' => $upload->id,
                 'file_kind' => $fileKind,
-                'r2_key' => $r2Key,
+                'r2_key' => $storageKey,
                 'original_relative_path' => $relativePath,
                 'original_path_hash' => hash('sha256', $relativePath),
                 'original_filename' => basename($relativePath),
@@ -155,6 +216,7 @@ class DicomUploadProcessor
         }
 
         $upload->update([
+            'status' => PhrDicomUpload::STATUS_PROCESSED,
             'total_files' => count($files),
             'stored_files' => $storedFiles,
             'skipped_files' => count($skippedFiles),
@@ -183,20 +245,27 @@ class DicomUploadProcessor
             ->where('study_instance_uid', $studyUid)
             ->first();
 
+        // upload_id is set only on the original creation; re-uploads of the
+        // same study_instance_uid must not overwrite the originating upload.
+        $studyAttributes = [
+            'study_date' => $normalized['study_date'],
+            'study_time' => $normalized['study_time'],
+            'accession_number' => $normalized['accession_number'],
+            'description' => $normalized['study_description'],
+            'modalities' => $this->mergeModalities($existingStudy?->modalities, $modality),
+            'metadata_json' => $metadata,
+        ];
+
+        if ($existingStudy === null) {
+            $studyAttributes['upload_id'] = $upload->id;
+        }
+
         $study = PhrDicomStudy::updateOrCreate(
             [
                 'patient_id' => $patient->id,
                 'study_instance_uid' => $studyUid,
             ],
-            [
-                'upload_id' => $upload->id,
-                'study_date' => $normalized['study_date'],
-                'study_time' => $normalized['study_time'],
-                'accession_number' => $normalized['accession_number'],
-                'description' => $normalized['study_description'],
-                'modalities' => $this->mergeModalities($existingStudy?->modalities, $modality),
-                'metadata_json' => $metadata,
-            ],
+            $studyAttributes,
         );
 
         $series = PhrDicomSeries::updateOrCreate(
@@ -235,7 +304,7 @@ class DicomUploadProcessor
         );
     }
 
-    private function storeFile(string $realPath, string $r2Key): void
+    private function storeFile(string $realPath, string $storageKey): void
     {
         $stream = fopen($realPath, 'rb');
         if ($stream === false) {
@@ -243,8 +312,8 @@ class DicomUploadProcessor
         }
 
         try {
-            if (! Storage::disk('s3')->put($r2Key, $stream)) {
-                throw new RuntimeException("Unable to store DICOM object [{$r2Key}].");
+            if (! Storage::disk(self::DISK)->put($storageKey, $stream)) {
+                throw new RuntimeException("Unable to store DICOM object [{$storageKey}].");
             }
         } finally {
             fclose($stream);
@@ -305,9 +374,9 @@ class DicomUploadProcessor
         return strtoupper(basename($relativePath)) === 'DICOMDIR';
     }
 
-    private function r2Key(string $r2Prefix, string $relativePath): string
+    private function storageKey(string $storagePrefix, string $relativePath): string
     {
-        return $r2Prefix.'/'.$relativePath;
+        return $storagePrefix.'/'.$relativePath;
     }
 
     /**

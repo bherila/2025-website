@@ -60,6 +60,19 @@ return [
             'report' => false,
         ],
 
+        // PHR DICOM object storage. Currently a local directory so we don't
+        // pay R2 round trips for the small volume we have today. The path is
+        // env-overridable so prod can point at a directory outside the deploy
+        // tree (the CI rsync uses --delete on `storage`, see ci.yml). To move
+        // to S3/R2 later: change driver to 's3' and add the usual AWS_*
+        // settings — the application code only references the disk by name.
+        'phr_dicom' => [
+            'driver' => 'local',
+            'root' => env('PHR_DICOM_DISK_ROOT', storage_path('app/private/phr-dicom')),
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

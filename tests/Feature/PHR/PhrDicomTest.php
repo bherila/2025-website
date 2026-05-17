@@ -7,6 +7,8 @@ use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomSeries;
 use App\Models\PhrDicomStudy;
 use App\Models\PhrDicomUpload;
+use App\Models\User;
+use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -28,28 +30,16 @@ class PhrDicomTest extends TestCase
 
     public function test_manager_can_upload_directory_and_viewer_can_read_metadata_and_download_study(): void
     {
-        Storage::fake('s3');
+        $this->fakeDicomDisk();
 
         $owner = $this->createUser();
         $manager = $this->createUser();
         $viewer = $this->createUser();
         $other = $this->createUser();
 
-        $patientResponse = $this->actingAs($owner)->postJson('/api/phr/patients', [
-            'display_name' => 'Primary',
-            'relationship' => 'self',
-        ]);
-        $patientId = (int) $patientResponse->json('patient.id');
-
-        $this->actingAs($owner)->postJson("/api/phr/patients/{$patientId}/access", [
-            'email' => $manager->email,
-            'access_level' => 'manager',
-        ])->assertCreated();
-
-        $this->actingAs($owner)->postJson("/api/phr/patients/{$patientId}/access", [
-            'email' => $viewer->email,
-            'access_level' => 'viewer',
-        ])->assertCreated();
+        $patientId = $this->createPatientFor($owner);
+        $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
+        $this->grantPatientAccess($owner, $patientId, $viewer, 'viewer');
 
         $uploadResponse = $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
             'files' => [
@@ -69,6 +59,7 @@ class PhrDicomTest extends TestCase
             ->assertJsonPath('upload.total_files', 3)
             ->assertJsonPath('upload.stored_files', 2)
             ->assertJsonPath('upload.skipped_files', 1)
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_PROCESSED)
             ->assertJsonPath('upload.original_root_name', 'CARDIAC_CT');
 
         $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
@@ -81,7 +72,7 @@ class PhrDicomTest extends TestCase
         $this->assertSame('CARDIAC_CT/ST0001/SE0001/IM0001', $instance->file->original_relative_path);
         $this->assertSame(1, $upload->skipped_files);
         $this->assertSame(2, PhrDicomFile::query()->where('patient_id', $patientId)->count());
-        Storage::disk('s3')->assertExists($instance->file->r2_key);
+        Storage::disk(DicomUploadProcessor::DISK)->assertExists($instance->file->r2_key);
 
         $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/dicom/studies")
             ->assertOk()
@@ -99,7 +90,7 @@ class PhrDicomTest extends TestCase
 
         $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/download")
             ->assertOk()
-            ->assertDownload();
+            ->assertHeader('Content-Type', 'application/zip');
 
         $this->actingAs($viewer)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
             'files' => [
@@ -112,6 +103,90 @@ class PhrDicomTest extends TestCase
 
         $this->actingAs($other)->getJson("/api/phr/patients/{$patientId}/dicom/studies")->assertNotFound();
         $this->actingAs($other)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")->assertNotFound();
+    }
+
+    public function test_relative_paths_with_traversal_segments_are_sanitized(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $manager = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
+
+        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
+            'files' => [
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
+            ],
+            // Both '..' segments and absolute-style leading slashes must be stripped.
+            'relative_paths' => ['../../../etc/passwd/IM0001'],
+        ])->assertCreated()->assertJsonPath('upload.stored_files', 1);
+
+        $file = PhrDicomFile::query()->where('patient_id', $patientId)->sole();
+
+        // Sanitizer must have stripped all '..' segments — the stored path
+        // stays inside the upload's prefix and the relative path no longer
+        // contains traversal markers.
+        $this->assertStringNotContainsString('..', $file->original_relative_path);
+        $this->assertStringNotContainsString('..', $file->r2_key);
+        $this->assertStringStartsWith('phr/dicom/patients/', $file->r2_key);
+        $this->assertSame('etc/passwd/IM0001', $file->original_relative_path);
+    }
+
+    public function test_reupload_of_same_study_preserves_original_upload_id(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $manager = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
+
+        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
+            'files' => [UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes())],
+            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0001'],
+        ])->assertCreated();
+
+        $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
+        $originalUploadId = (int) $study->upload_id;
+        $this->assertNotSame(0, $originalUploadId);
+
+        // Re-upload a second instance for the same study/series. The study
+        // should pick up the new instance but its upload_id must NOT change.
+        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
+            'files' => [UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
+                'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.1.1.2',
+            ]))],
+            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0002'],
+        ])->assertCreated();
+
+        $this->assertSame(2, PhrDicomUpload::query()->where('patient_id', $patientId)->count());
+        $study->refresh();
+        $this->assertSame($originalUploadId, (int) $study->upload_id);
+        $this->assertSame(2, PhrDicomInstance::query()->where('study_id', $study->id)->count());
+    }
+
+    private function fakeDicomDisk(): void
+    {
+        Storage::fake(DicomUploadProcessor::DISK);
+    }
+
+    private function createPatientFor(User $owner): int
+    {
+        $response = $this->actingAs($owner)->postJson('/api/phr/patients', [
+            'display_name' => 'Primary',
+            'relationship' => 'self',
+        ])->assertCreated();
+
+        return (int) $response->json('patient.id');
+    }
+
+    private function grantPatientAccess(User $owner, int $patientId, User $grantee, string $level): void
+    {
+        $this->actingAs($owner)->postJson("/api/phr/patients/{$patientId}/access", [
+            'email' => $grantee->email,
+            'access_level' => $level,
+        ])->assertCreated();
     }
 
     /**

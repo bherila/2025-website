@@ -17,7 +17,7 @@ The legacy schema dumps already contained `phr_lab_results` and `phr_patient_vit
 
 PHR database tables use the lowercase `phr_` prefix. Keep future PHR tables on that prefix to make the domain portable and easy to identify in schema dumps.
 
-The normalized schema is applied by `2026_05_17_042848_normalize_phr_patient_schema.php`:
+The normalized schema is applied by `2026_05_17_042849_normalize_phr_patient_schema.php`:
 
 - `phr_patients` stores patient profiles. `owner_user_id` references `users.id`.
 - `phr_patient_user_access` grants per-patient access to other users. `access_level` is currently `owner`, `manager`, or `viewer`.
@@ -60,13 +60,32 @@ PHR imaging is patient-scoped and uses the same `owner` / `manager` / `viewer` a
 
 Upload endpoints accept multi-file form uploads under `/api/phr/patients/{patient}/dicom/uploads`. The browser UI uses directory selection (`webkitdirectory`) so a user can choose a DICOM CD/export folder containing `DICOMDIR` plus nested image files. Client and server filters skip auxiliary files such as viewer executables, autorun files, icons, setup assets, HTML, PDFs, and common image previews. Server parsing remains authoritative: a file is only stored when it parses as DICOM or `DICOMDIR`.
 
-Raw objects are stored on the configured `s3` disk. For Cloudflare R2, keep using the Laravel S3 disk with the R2 endpoint in `AWS_S3_ENDPOINT`, bucket in `AWS_BUCKET`, and path-style behavior as needed. Object keys follow:
+Raw objects are stored on the dedicated `phr_dicom` filesystem disk (see `config/filesystems.php`). For now this disk is a `local` driver rooted at `storage/app/private/phr-dicom`, overridable to a path outside the deploy tree via the `PHR_DICOM_DISK_ROOT` env var — the CI rsync uses `--delete` against `storage/`, so prod should always point this somewhere stable. To migrate to S3/R2 later, change the disk's `driver` to `s3` and provide `AWS_*` env vars; all application code references the disk by name so no code change is required. Object keys follow:
 
 ```text
 phr/dicom/patients/{patient_id}/uploads/{upload_uuid}/{original_relative_path}
 ```
 
-The database stores the original relative path separately from the R2 key. This is intentional: ZIP export can reconstruct the source directory layout even if the R2 storage prefix changes later.
+The database stores the original relative path separately from the storage key (the `phr_dicom_files.r2_key` column — the column name predates the disk rename and is kept to avoid a churny migration). The split is intentional: ZIP export reconstructs the source directory layout even if the storage prefix or driver changes later.
+
+### Upload lifecycle and garbage collection
+
+Uploads run through `DicomUploadProcessor::process()` in three states:
+
+1. `STATUS_PENDING` — row inserted, file loop in progress.
+2. `STATUS_PROCESSED` — file loop completed successfully; the row is the API response.
+3. `STATUS_FAILED` — an exception was thrown mid-loop. `DicomUploadProcessor::failUpload()` deletes the storage prefix and cascades `phr_dicom_files`/`phr_dicom_instances` rows, then writes the error message onto the upload row for audit.
+
+`phr:dicom:gc` is scheduled hourly (see `routes/console.php`). It uses the same `failUpload()` helper to reclaim any upload stuck in `STATUS_PENDING` past `--pending-hours` (default 6), and walks the disk listing to delete storage objects that no longer correspond to a `phr_dicom_files` row. Pass `--dry-run` to preview without deleting.
+
+### Parser limits
+
+`DicomMetadataParser` is intentionally bounded so a malformed or huge file can't tie up the request:
+
+- It reads only the first 4 MiB of each file (`MAX_PARSE_BYTES`). Pixel data lives after metadata in Part 10 layout, so this is fine in practice — but a file whose metadata is unusually large will lose tail tags.
+- It stops after parsing 2,500 elements per file (the `parsed < 2500` ceiling). Same caveat.
+
+If you encounter a study that didn't surface expected metadata, the limits above are the first thing to check before suspecting the parser logic itself.
 
 The current parser extracts core Part 10 metadata immediately during upload and avoids queue work for the normal small-study case. Parsed fields include study/series/SOP UIDs, modality, dates/times, accession, descriptions, image dimensions, frame count, transfer syntax, and common web-viewer metadata. If later studies are too large for request-time processing, add a queued fallback while preserving the synchronous path for ordinary uploads.
 
@@ -78,6 +97,6 @@ Viewer integration is intentionally left as a separate decision. The current sca
 /api/phr/patients/{patient}/dicom/studies/{study}/viewer-json
 ```
 
-The payload groups study, series, and instance metadata and includes authenticated same-origin raw DICOM URLs under `/api/phr/patients/{patient}/dicom/instances/{instance}/file`. That keeps R2 private and avoids CORS while leaving room to adapt the same parsed data for OHIF, a pnpm-installed React viewer, or another DICOM viewer.
+The payload groups study, series, and instance metadata and includes authenticated same-origin raw DICOM URLs under `/api/phr/patients/{patient}/dicom/instances/{instance}/file`. That keeps the storage layer private and avoids CORS while leaving room to adapt the same parsed data for OHIF, a pnpm-installed React viewer, or another DICOM viewer.
 
 Study ZIP downloads are served by `/api/phr/patients/{patient}/dicom/studies/{study}/download`. The ZIP includes the original DICOM instance files for that study and any retained `DICOMDIR` file from the same upload.

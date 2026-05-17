@@ -112,7 +112,7 @@ class PhrSchemaTest extends TestCase
             'vital_value' => '120/80',
         ]);
 
-        $normalizeMigration = include database_path('migrations/2026_05_17_042848_normalize_phr_patient_schema.php');
+        $normalizeMigration = include database_path('migrations/2026_05_17_042849_normalize_phr_patient_schema.php');
         $normalizeMigration->up();
 
         $patient = PhrPatient::where('owner_user_id', 1)->where('display_name', 'Legacy PHR Patient')->sole();
