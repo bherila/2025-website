@@ -64,6 +64,7 @@ interface ClientPortalInvoicePageProps {
     companyId: number;
     invoiceId: number;
     initialInvoice?: Invoice | null;
+    stripeBillingEnabled?: boolean;
     stripePublishableKey?: string | null;
     stripeMaxAmountCents?: number;
 }
@@ -74,6 +75,7 @@ export default function ClientPortalInvoicePage({
     companyId,
     invoiceId,
     initialInvoice = null,
+    stripeBillingEnabled = true,
     stripePublishableKey = null,
     stripeMaxAmountCents = 100000,
 }: ClientPortalInvoicePageProps) {
@@ -345,7 +347,7 @@ export default function ClientPortalInvoicePage({
                                 ? 'PARTIALLY PAID'
                                 : invoice.status.toUpperCase()}
                         </Badge>
-                        {isAdmin && invoice.status === 'issued' && (
+                        {isAdmin && stripeBillingEnabled && invoice.status === 'issued' && (
                             <Button
                                 type="button"
                                 variant="outline"
@@ -364,6 +366,7 @@ export default function ClientPortalInvoicePage({
                     <InvoicePayPanel
                         invoice={invoice}
                         companyId={companyId}
+                        stripeBillingEnabled={stripeBillingEnabled}
                         stripePublishableKey={stripePublishableKey}
                         stripeMaxAmountCents={stripeMaxAmountCents}
                         onPaymentUpdated={() => fetchInvoice(true)}

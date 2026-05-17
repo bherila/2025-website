@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClientManagement\UpdateClientCompanyRequest;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientAgreementRecurringItem;
 use App\Models\ClientManagement\ClientCompany;
@@ -144,6 +145,7 @@ class ClientCompanyApiController extends Controller
             'default_hourly_rate' => $company->default_hourly_rate,
             'additional_notes' => $company->additional_notes,
             'is_active' => (bool) $company->is_active,
+            'stripe_billing_enabled' => (bool) $company->stripe_billing_enabled,
             'last_activity' => $this->serializeDateForJson($company->last_activity),
             'created_at' => $this->serializeDateForJson($company->created_at),
             'users' => $this->serializeUsersForIndex($company),
@@ -235,20 +237,11 @@ class ClientCompanyApiController extends Controller
     /**
      * Update a client company.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(UpdateClientCompanyRequest $request, int $id): JsonResponse
     {
         Gate::authorize('Admin');
 
-        $validatedData = $request->validate([
-            'company_name' => 'required|string|max:255',
-            'slug' => 'nullable|string|max:255',
-            'address' => 'nullable|string',
-            'website' => 'nullable|url',
-            'phone_number' => 'nullable|string|max:255',
-            'default_hourly_rate' => 'nullable|numeric|min:0',
-            'additional_notes' => 'nullable|string',
-            'is_active' => 'required|boolean',
-        ]);
+        $validatedData = $request->validated();
 
         $company = ClientCompany::findOrFail($id);
 
@@ -319,6 +312,7 @@ class ClientCompanyApiController extends Controller
             'default_hourly_rate' => $company->default_hourly_rate,
             'additional_notes' => $company->additional_notes,
             'is_active' => (bool) $company->is_active,
+            'stripe_billing_enabled' => (bool) $company->stripe_billing_enabled,
             'last_activity' => $this->serializeDateForJson($company->last_activity),
             'created_at' => $this->serializeDateForJson($company->created_at),
             'updated_at' => $this->serializeDateForJson($company->updated_at),

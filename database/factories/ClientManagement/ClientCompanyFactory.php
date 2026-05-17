@@ -31,6 +31,7 @@ class ClientCompanyFactory extends Factory
             'default_hourly_rate' => fake()->randomElement([100, 125, 150, 175, 200, 250]),
             'additional_notes' => fake()->paragraph(),
             'is_active' => true,
+            'stripe_billing_enabled' => true,
         ];
     }
 }

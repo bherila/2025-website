@@ -43,6 +43,7 @@ function createCompany(overrides: Partial<ClientCompany> = {}): ClientCompany {
     default_hourly_rate: '125.00',
     additional_notes: 'Initial notes',
     is_active: true,
+    stripe_billing_enabled: true,
     last_activity: '2026-05-01 00:00:00',
     created_at: '2026-05-01 00:00:00',
     users: [
@@ -91,6 +92,7 @@ describe('ClientManagementShowPage', () => {
     fireEvent.change(screen.getByLabelText('Additional Notes'), {
       target: { value: 'Updated notes' },
     })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Stripe invoice payments' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -99,6 +101,7 @@ describe('ClientManagementShowPage', () => {
         expect.objectContaining({
           company_name: 'Renamed Consulting',
           additional_notes: 'Updated notes',
+          stripe_billing_enabled: false,
         })
       )
     })

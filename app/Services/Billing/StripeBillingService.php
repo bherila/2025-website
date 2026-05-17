@@ -47,8 +47,22 @@ class StripeBillingService
         return max(0, (int) round(((float) $invoice->remaining_balance) * 100));
     }
 
+    public function companyAllowsStripeBilling(ClientCompany $company): bool
+    {
+        return (bool) $company->stripe_billing_enabled;
+    }
+
+    /**
+     * Ensures clientCompany and payments are loaded for eligibility checks.
+     */
     public function assertInvoiceIsStripeEligible(ClientInvoice $invoice): void
     {
+        $invoice->loadMissing('clientCompany', 'payments');
+
+        if (! $invoice->clientCompany || ! $this->companyAllowsStripeBilling($invoice->clientCompany)) {
+            throw new RuntimeException('Stripe billing is disabled for this client company.');
+        }
+
         if ($invoice->status !== 'issued') {
             throw new RuntimeException('Only issued invoices can be paid with Stripe.');
         }
@@ -92,6 +106,10 @@ class StripeBillingService
      */
     public function createSetupIntent(ClientCompany $company, User $user): array
     {
+        if (! $this->companyAllowsStripeBilling($company)) {
+            throw new RuntimeException('Stripe billing is disabled for this client company.');
+        }
+
         $customer = $this->ensureCustomer($company, $user);
 
         $params = [

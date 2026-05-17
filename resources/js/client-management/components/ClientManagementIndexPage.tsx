@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { AlertCircle, ChevronDown, ChevronUp, Clock, DollarSign, ExternalLink, FileText, Package, Plus, TrendingUp, Wrench } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronUp, Clock, CreditCard, DollarSign, ExternalLink, FileText, Package, Plus, Search, TrendingUp, Users, Wrench } from 'lucide-react'
 import { useCallback,useEffect,useState } from 'react'
 
 import { CadenceBadge } from '@/client-management/components/admin/ClientBadges'
@@ -82,6 +82,11 @@ export default function ClientManagementIndexPage() {
   })
   const activeCompanies = filteredCompanies.filter(c => c.is_active)
   const inactiveCompanies = filteredCompanies.filter(c => !c.is_active)
+  const totalBalanceDue = activeCompanies.reduce(
+    (total, company) => total.add(company.total_balance_due ?? 0),
+    currency(0)
+  )
+  const stripeDisabledCompanies = activeCompanies.filter(company => company.stripe_billing_enabled === false).length
 
   if (loading) {
     return (
@@ -104,9 +109,9 @@ export default function ClientManagementIndexPage() {
 
   return (
     <div className="container mx-auto p-8 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">Client Management</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => openInviteModal()}>
             <Plus className="mr-2 h-4 w-4" />
             Invite People
@@ -131,30 +136,73 @@ export default function ClientManagementIndexPage() {
         </Alert>
       )}
 
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
+        <div className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Users className="h-4 w-4" />
+            Active clients
+          </div>
+          <div className="mt-2 text-2xl font-semibold">{activeCompanies.length}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <DollarSign className="h-4 w-4" />
+            Open balance
+          </div>
+          <div className="mt-2 text-2xl font-semibold">{totalBalanceDue.format()}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4" />
+            Need attention
+          </div>
+          <div className="mt-2 text-2xl font-semibold">{activeCompanies.filter(company => company.needs_attention).length}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CreditCard className="h-4 w-4" />
+            Stripe disabled
+          </div>
+          <div className="mt-2 text-2xl font-semibold">{stripeDisabledCompanies}</div>
+        </div>
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Input
-          className="max-w-sm"
-          placeholder="Search clients"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search clients"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
         <Button
           variant={needsAttentionOnly ? 'default' : 'outline'}
           onClick={() => setNeedsAttentionOnly(!needsAttentionOnly)}
         >
           Needs attention
         </Button>
+        <div className="text-sm text-muted-foreground">
+          {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+        </div>
       </div>
 
       <div className="space-y-4">
         {activeCompanies.map(company => (
           <Card key={company.id}>
             <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <CardTitle className="text-xl">{company.company_name}</CardTitle>
                     <CadenceBadge value={company.current_billing_cadence} />
+                    <Badge
+                      variant="outline"
+                      className={company.stripe_billing_enabled === false ? 'border-amber-300 text-amber-700' : 'text-muted-foreground'}
+                    >
+                      {company.stripe_billing_enabled === false ? 'Stripe Off' : 'Stripe On'}
+                    </Badge>
                   </div>
                   <div className="mt-2 space-y-1">
                     <div className="text-sm text-muted-foreground">
@@ -199,7 +247,7 @@ export default function ClientManagementIndexPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 sm:justify-end">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -297,6 +345,12 @@ export default function ClientManagementIndexPage() {
             </CardContent>
           </Card>
         ))}
+
+        {activeCompanies.length === 0 && (
+          <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            No active companies match the current filters.
+          </div>
+        )}
       </div>
 
       {inactiveCompanies.length > 0 && (
@@ -315,10 +369,18 @@ export default function ClientManagementIndexPage() {
               {inactiveCompanies.map(company => (
                 <Card key={company.id} className="opacity-60">
                   <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex-1">
                         <CardTitle className="text-xl">{company.company_name}</CardTitle>
-                        <Badge variant="outline" className="mt-2">Inactive</Badge>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge variant="outline">Inactive</Badge>
+                          <Badge
+                            variant="outline"
+                            className={company.stripe_billing_enabled === false ? 'border-amber-300 text-amber-700' : 'text-muted-foreground'}
+                          >
+                            {company.stripe_billing_enabled === false ? 'Stripe Off' : 'Stripe On'}
+                          </Badge>
+                        </div>
                       </div>
                       <Button 
                         variant="outline" 

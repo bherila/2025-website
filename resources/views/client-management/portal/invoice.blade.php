@@ -9,6 +9,7 @@
   'companyName' => $company->company_name,
   'companyId' => $company->id,
   'invoice' => $invoice ?? null,
+  'stripeBillingEnabled' => $stripeBillingEnabled ?? true,
   'stripePublishableKey' => $stripePublishableKey ?? null,
   'stripeMaxAmountCents' => $stripeMaxAmountCents ?? 100000,
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}

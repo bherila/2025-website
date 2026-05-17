@@ -5,10 +5,17 @@ interface ClientPortalBillingPageProps {
   slug: string
   companyName: string
   companyId: number
+  stripeBillingEnabled: boolean
   stripePublishableKey: string | null
 }
 
-export default function ClientPortalBillingPage({ slug, companyName, companyId, stripePublishableKey }: ClientPortalBillingPageProps) {
+export default function ClientPortalBillingPage({
+  slug,
+  companyName,
+  companyId,
+  stripeBillingEnabled,
+  stripePublishableKey,
+}: ClientPortalBillingPageProps) {
   return (
     <>
       <ClientPortalNav slug={slug} companyName={companyName} companyId={companyId} currentPage="billing" />
@@ -20,13 +27,28 @@ export default function ClientPortalBillingPage({ slug, companyName, companyId, 
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-          <SavedPaymentMethodsCard companyId={companyId} publishableKey={stripePublishableKey} />
+          {stripeBillingEnabled ? (
+            <SavedPaymentMethodsCard companyId={companyId} publishableKey={stripePublishableKey} />
+          ) : (
+            <section className="rounded-lg border border-amber-300 bg-amber-50 p-6 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+              <h2 className="text-base font-semibold">Online Payments Disabled</h2>
+              <p className="mt-3 text-sm text-amber-900/80 dark:text-amber-200/80">
+                Stripe payment methods are not available for this client company right now.
+              </p>
+            </section>
+          )}
 
           <section className="rounded-lg border border-border bg-card p-6 text-card-foreground">
             <h2 className="text-base font-semibold">Online Payments</h2>
             <div className="mt-3 flex flex-col gap-3 text-sm text-muted-foreground">
-              <p>Issued invoices up to $1,000 can be paid online by card or US bank account.</p>
-              <p>Invoices above that limit stay on manual payment instructions.</p>
+              {stripeBillingEnabled ? (
+                <>
+                  <p>Issued invoices up to $1,000 can be paid online by card or US bank account.</p>
+                  <p>Invoices above that limit stay on manual payment instructions.</p>
+                </>
+              ) : (
+                <p>Invoices for this company currently use manual payment instructions.</p>
+              )}
             </div>
           </section>
         </div>

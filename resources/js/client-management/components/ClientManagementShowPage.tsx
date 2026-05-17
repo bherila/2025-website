@@ -42,6 +42,7 @@ interface CompanyFormData {
   default_hourly_rate: string
   additional_notes: string
   is_active: boolean
+  stripe_billing_enabled: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,6 +85,7 @@ function companyToFormData(company: ClientCompany): CompanyFormData {
     default_hourly_rate: company.default_hourly_rate || '',
     additional_notes: company.additional_notes || '',
     is_active: company.is_active ?? true,
+    stripe_billing_enabled: company.stripe_billing_enabled ?? true,
   }
 }
 
@@ -108,7 +110,8 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
     phone_number: '',
     default_hourly_rate: '',
     additional_notes: '',
-    is_active: true
+    is_active: true,
+    stripe_billing_enabled: true
   })
 
   useEffect(() => {
@@ -319,8 +322,8 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="company_name">Company Name *</Label>
                   <Input
                     id="company_name"
@@ -330,7 +333,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                   />
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="slug">Slug (URL identifier)</Label>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">/client/portal/</span>
@@ -352,7 +355,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                   )}
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="address">Address</Label>
                   <Textarea
                     id="address"
@@ -402,7 +405,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                       id="is_active"
                       checked={formData.is_active}
                       onCheckedChange={(checked) => 
-                        setFormData({ ...formData, is_active: checked as boolean })
+                        setFormData({ ...formData, is_active: checked === true })
                       }
                     />
                     <Label htmlFor="is_active" className="font-normal cursor-pointer">
@@ -411,7 +414,29 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
                   </div>
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
+                  <Label>Stripe Billing</Label>
+                  <div className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <Checkbox
+                      id="stripe_billing_enabled"
+                      checked={formData.stripe_billing_enabled}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, stripe_billing_enabled: checked === true })
+                      }
+                      className="mt-1"
+                    />
+                    <div className="grid gap-1">
+                      <Label htmlFor="stripe_billing_enabled" className="font-normal cursor-pointer">
+                        Enable Stripe invoice payments
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Hide Stripe payment options on this client's invoices when disabled.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="additional_notes">Additional Notes</Label>
                   <Textarea
                     id="additional_notes"

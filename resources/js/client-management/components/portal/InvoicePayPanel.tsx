@@ -15,6 +15,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 interface InvoicePayPanelProps {
   invoice: Invoice
   companyId: number
+  stripeBillingEnabled: boolean
   stripePublishableKey: string | null
   stripeMaxAmountCents: number
   onPaymentUpdated: () => void
@@ -126,6 +127,7 @@ function NewPaymentForm({ onCancel, onComplete }: NewPaymentFormProps) {
 export default function InvoicePayPanel({
   invoice,
   companyId,
+  stripeBillingEnabled,
   stripePublishableKey,
   stripeMaxAmountCents,
   onPaymentUpdated,
@@ -144,7 +146,7 @@ export default function InvoicePayPanel({
 
   const invoiceTotal = currency(invoice.invoice_total)
   const remainingBalance = currency(invoice.remaining_balance)
-  const isStripeEligible = invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue <= stripeMaxAmountCents
+  const isStripeEligible = stripeBillingEnabled && invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue <= stripeMaxAmountCents
   const isManualOnly = invoice.status === 'issued' && remainingBalance.intValue > 0 && invoiceTotal.intValue > stripeMaxAmountCents
   const latestFailure = useMemo(() => {
     return [...(invoice.stripe_payments ?? [])]
@@ -305,7 +307,7 @@ export default function InvoicePayPanel({
     setNewPaymentClientSecret(response.client_secret)
   }
 
-  if (remainingBalance.intValue <= 0 || invoice.status === 'paid') {
+  if (!stripeBillingEnabled || remainingBalance.intValue <= 0 || invoice.status === 'paid') {
     return null
   }
 

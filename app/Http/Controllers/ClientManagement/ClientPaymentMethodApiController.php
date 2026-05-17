@@ -17,10 +17,13 @@ class ClientPaymentMethodApiController extends Controller
     {
         Gate::authorize('ClientCompanyMember', $company->id);
 
+        $stripeBillingEnabled = $billing->companyAllowsStripeBilling($company);
+
         return response()->json([
+            'stripe_billing_enabled' => $stripeBillingEnabled,
             'payment_methods' => array_map(
                 fn (ClientCompanyPaymentMethod $paymentMethod): array => $paymentMethod->toPortalArray(),
-                $billing->listSavedMethods($company),
+                $stripeBillingEnabled ? $billing->listSavedMethods($company) : [],
             ),
         ]);
     }
@@ -31,6 +34,7 @@ class ClientPaymentMethodApiController extends Controller
         StripeBillingService $billing,
     ): JsonResponse {
         Gate::authorize('ClientCompanyMember', $company->id);
+        abort_unless($billing->companyAllowsStripeBilling($company), 422, 'Stripe billing is disabled for this client company.');
 
         $user = $request->user();
         abort_unless($user instanceof User, 401);

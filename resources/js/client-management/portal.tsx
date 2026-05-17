@@ -271,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
       slug={serverData.slug}
       companyName={serverData.companyName}
       companyId={serverData.companyId}
+      stripeBillingEnabled={serverData.stripeBillingEnabled ?? true}
       stripePublishableKey={serverData.stripePublishableKey ?? null}
     />)
   }
@@ -376,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
       companyId={companyId}
       invoiceId={invoiceId}
       initialInvoice={initialInvoice}
+      stripeBillingEnabled={serverData.stripeBillingEnabled ?? true}
       stripePublishableKey={serverData.stripePublishableKey ?? null}
       stripeMaxAmountCents={serverData.stripeMaxAmountCents ?? 100000}
     />)

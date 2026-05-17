@@ -45,7 +45,11 @@ class CreateInvoicePaymentIntentRequest extends FormRequest
                 return;
             }
 
-            $invoice->loadMissing('payments');
+            $invoice->loadMissing('clientCompany', 'payments');
+
+            if (! $invoice->clientCompany?->stripe_billing_enabled) {
+                $validator->errors()->add('invoice', 'Stripe billing is disabled for this client company.');
+            }
 
             if ($invoice->status !== 'issued') {
                 $validator->errors()->add('invoice', 'Only issued invoices can be paid online.');

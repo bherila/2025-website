@@ -26,6 +26,7 @@ export interface ClientCompany {
   default_hourly_rate?: string | null
   additional_notes?: string | null
   is_active?: boolean
+  stripe_billing_enabled?: boolean
   last_activity?: string | null
   created_at: string
   users: User[]
