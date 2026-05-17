@@ -73,6 +73,20 @@ return [
             'report' => false,
         ],
 
+        'phr_documents' => [
+            'driver' => 'local',
+            'root' => env('PHR_DOCUMENTS_DISK_ROOT', storage_path('app/private/phr-documents')),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'phr_exports' => [
+            'driver' => 'local',
+            'root' => env('PHR_EXPORTS_DISK_ROOT', storage_path('app/private/phr-exports')),
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

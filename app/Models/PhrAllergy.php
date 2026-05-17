@@ -11,6 +11,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $patient_id
  * @property int $user_id
+ * @property string|null $import_source
+ * @property string|null $external_id
  * @property string $substance
  * @property string|null $rxnorm_code
  * @property string|null $snomed_code
@@ -32,6 +34,8 @@ class PhrAllergy extends Model
     protected $fillable = [
         'patient_id',
         'user_id',
+        'import_source',
+        'external_id',
         'substance',
         'rxnorm_code',
         'snomed_code',

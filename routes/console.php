@@ -15,3 +15,4 @@ Schedule::command('genai:requeue-stale')->everyFiveMinutes()->withoutOverlapping
 
 // PHR DICOM storage cleanup: reclaim stuck pending uploads + orphan objects.
 Schedule::command('phr:dicom:gc')->hourly()->withoutOverlapping(30);
+Schedule::command('phr:exports:purge')->daily()->withoutOverlapping(30);

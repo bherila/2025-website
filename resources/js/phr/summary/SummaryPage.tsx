@@ -1,12 +1,16 @@
-import { AlertTriangle, FlaskConical, HeartPulse, ImageIcon, Pill, Stethoscope, Users } from 'lucide-react'
+import { AlertTriangle, Download, FlaskConical, HeartPulse, ImageIcon, Pill, RefreshCw, Stethoscope, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
 import { patientTabUrl } from '@/lib/phrRouteBuilder'
 import { errorMessage } from '@/phr/shared'
 import {
   PhrDicomStudiesResponseSchema,
   type PhrDicomStudy,
+  type PhrExport,
+  PhrExportResponseSchema,
+  PhrExportsResponseSchema,
   type PhrLabResult,
   PhrLabResultsResponseSchema,
   type PhrPatient,
@@ -49,11 +53,21 @@ function mostRecentDate(studies: PhrDicomStudy[]): string | null {
   return dates.sort().reverse()[0] ?? null
 }
 
+const EXPORT_FORMATS = [
+  { value: 'zip', label: 'ZIP' },
+  { value: 'fhir', label: 'FHIR' },
+  { value: 'ccda', label: 'CCDA' },
+  { value: 'pdf', label: 'PDF' },
+]
+
 export default function SummaryPage({ patientId }: { patientId: number }) {
   const [patient, setPatient] = useState<PhrPatient | null>(null)
   const [labs, setLabs] = useState<PhrLabResult[]>([])
   const [vitals, setVitals] = useState<PhrVital[]>([])
   const [studies, setStudies] = useState<PhrDicomStudy[]>([])
+  const [exports, setExports] = useState<PhrExport[]>([])
+  const [exportFormats, setExportFormats] = useState<string[]>(['zip'])
+  const [exportBusy, setExportBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -81,6 +95,48 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  const loadExports = useCallback(async () => {
+    if (!patient?.can_share) return
+    try {
+      const raw = await fetchWrapper.get(`/api/phr/patients/${patientId}/exports`)
+      setExports(PhrExportsResponseSchema.parse(raw).exports)
+    } catch {
+      setExports([])
+    }
+  }, [patient?.can_share, patientId])
+
+  useEffect(() => {
+    void loadExports()
+  }, [loadExports])
+
+  async function generateExport(): Promise<void> {
+    setExportBusy(true)
+    setError(null)
+    try {
+      const raw = await fetchWrapper.post(`/api/phr/patients/${patientId}/exports`, { formats: exportFormats })
+      const created = PhrExportResponseSchema.parse(raw).export
+      setExports((current) => [created, ...current])
+      window.setTimeout(() => void loadExports(), 1500)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  function toggleExportFormat(format: string): void {
+    setExportFormats((current) => {
+      if (format === 'zip') {
+        return ['zip']
+      }
+      const withoutZip = current.filter((item) => item !== 'zip')
+      const next = withoutZip.includes(format)
+        ? withoutZip.filter((item) => item !== format)
+        : [...withoutZip, format]
+      return next.length === 0 ? ['zip'] : next
+    })
+  }
 
   if (busy) {
     return <p className="text-sm text-muted-foreground">Loading…</p>
@@ -121,6 +177,55 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
             </a>
             .
           </span>
+        </div>
+      )}
+
+      {patient?.can_share && (
+        <div className="mb-6 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-card-foreground">Export Record</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Generate portable FHIR, CCDA, PDF, and ZIP files.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {EXPORT_FORMATS.map((format) => (
+                <label key={format.value} className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={exportFormats.includes(format.value)}
+                    onChange={() => toggleExportFormat(format.value)}
+                  />
+                  {format.label}
+                </label>
+              ))}
+              <Button size="sm" onClick={() => void generateExport()} disabled={exportBusy}>
+                <Download className="size-4" />
+                {exportBusy ? 'Generating...' : 'Generate'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void loadExports()}>
+                <RefreshCw className="size-4" />
+              </Button>
+            </div>
+          </div>
+          {exports.length > 0 && (
+            <div className="mt-3 divide-y divide-border rounded-md border border-border">
+              {exports.slice(0, 3).map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium text-foreground">{item.filename ?? `Export ${item.id}`}</span>
+                    <span className="ml-2 text-muted-foreground">{item.status}</span>
+                    {item.error_message && <span className="ml-2 text-destructive">{item.error_message}</span>}
+                  </div>
+                  {item.download_url ? (
+                    <a className="inline-flex items-center gap-1 text-primary hover:underline" href={item.download_url}>
+                      <Download className="size-4" />
+                      Download
+                    </a>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

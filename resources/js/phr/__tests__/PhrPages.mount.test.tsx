@@ -57,6 +57,8 @@ beforeEach(() => {
     if (url === '/api/phr/patients') return { patients: [patient] }
     if (url.includes('/lab-results')) return { lab_results: [] }
     if (url.includes('/vitals')) return { vitals: [] }
+    if (url.includes('/documents')) return { documents: [] }
+    if (url.includes('/exports')) return { exports: [] }
     if (url.includes('/dicom/studies')) return { studies: [] }
     if (url.includes('/access')) return { access_grants: [] }
     return {}

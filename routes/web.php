@@ -16,6 +16,8 @@ use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PHR\PageController as PHRPageController;
+use App\Http\Controllers\PHR\PhrDocumentController;
+use App\Http\Controllers\PHR\PhrExportController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
@@ -186,3 +188,12 @@ Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.
 Route::get('/projects', function () {
     return view('projects');
 })->name('projects');
+
+Route::middleware(['auth', 'signed'])->group(function (): void {
+    Route::get('/phr/documents/{document}/download', [PhrDocumentController::class, 'download'])
+        ->whereNumber('document')
+        ->name('phr.documents.download');
+    Route::get('/phr/exports/{export}/download', [PhrExportController::class, 'download'])
+        ->whereNumber('export')
+        ->name('phr.exports.download');
+});

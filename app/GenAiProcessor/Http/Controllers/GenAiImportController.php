@@ -7,6 +7,8 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Models\FinanceTool\FinAccounts;
 use App\Services\FileStorageService;
+use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Services\PHR\Import\PhrStructuredDataImporter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -25,6 +27,7 @@ class GenAiImportController extends Controller
     public function __construct(
         private FileStorageService $fileService,
         private GenAiJobDispatcherService $dispatcher,
+        private PhrPatientAccessService $phrAccessService,
     ) {}
 
     /**
@@ -97,6 +100,19 @@ class GenAiImportController extends Controller
             $this->dispatcher->validateContext($jobType, $context);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        if (PhrStructuredDataImporter::isPhrJobType($jobType)) {
+            $patientId = (int) ($context['patient_id'] ?? 0);
+            if ($patientId <= 0) {
+                return response()->json(['error' => 'context.patient_id is required for PHR imports.'], 422);
+            }
+
+            try {
+                $this->phrAccessService->writeablePatient($patientId, (int) $user->id);
+            } catch (\Throwable) {
+                return response()->json(['error' => 'Patient not found or write access denied.'], 403);
+            }
         }
 
         // Validate acct_id ownership if provided

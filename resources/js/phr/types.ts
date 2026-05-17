@@ -163,6 +163,52 @@ export const PhrAccessResponseSchema = z.object({
   patient: PhrPatientSchema,
 })
 
+export const PhrDocumentSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  title: nullableString,
+  document_type: z.string(),
+  original_filename: nullableString,
+  mime_type: nullableString,
+  file_size_bytes: z.number(),
+  summary: nullableString,
+  source: nullableString,
+  imported_at: nullableString,
+  created_at: nullableString,
+  download_url: nullableString,
+})
+
+export type PhrDocument = z.infer<typeof PhrDocumentSchema>
+
+export const PhrDocumentsResponseSchema = z.object({
+  documents: z.array(PhrDocumentSchema),
+})
+
+export const PhrExportSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  formats: z.array(z.string()),
+  format: z.string(),
+  status: z.string(),
+  filename: nullableString,
+  file_size_bytes: z.number().nullable(),
+  error_message: nullableString,
+  generated_at: nullableString,
+  expires_at: nullableString,
+  created_at: nullableString,
+  download_url: nullableString,
+})
+
+export type PhrExport = z.infer<typeof PhrExportSchema>
+
+export const PhrExportsResponseSchema = z.object({
+  exports: z.array(PhrExportSchema),
+})
+
+export const PhrExportResponseSchema = z.object({
+  export: PhrExportSchema,
+})
+
 export const PhrPatientFormSchema = z.object({
   display_name: z.string().trim().min(1).max(255),
   relationship: z.string().trim().max(50).optional(),

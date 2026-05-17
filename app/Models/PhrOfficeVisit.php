@@ -11,6 +11,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $patient_id
  * @property int $user_id
+ * @property string|null $import_source
+ * @property string|null $external_id
  * @property Carbon|null $visit_date
  * @property Carbon|null $visit_started_at
  * @property Carbon|null $visit_ended_at
@@ -36,6 +38,8 @@ class PhrOfficeVisit extends Model
     protected $fillable = [
         'patient_id',
         'user_id',
+        'import_source',
+        'external_id',
         'visit_date',
         'visit_started_at',
         'visit_ended_at',

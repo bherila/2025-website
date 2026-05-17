@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { fetchWrapper } from '@/fetchWrapper'
 import type {
   GenAiImportJobData,
   GenAiImportResultData,
@@ -33,28 +34,10 @@ export function useGenAiJobPolling(jobId: number | null): {
     if (!jobId) return
 
     try {
-      const res = await fetch(`/api/genai/import/jobs/${jobId}`, {
-        credentials: 'same-origin',
-      })
-
-      if (!res.ok) {
-        consecutiveErrorsRef.current++
-        if (res.status >= 500) {
-          // Exponential backoff on server errors
-          backoffRef.current = Math.min(
-            backoffRef.current * 2,
-            MAX_BACKOFF_MS,
-          )
-        }
-        const data = await res.json().catch(() => ({}))
-        setError(data.error || `Request failed with status ${res.status}`)
-        return
-      }
-
       consecutiveErrorsRef.current = 0
       backoffRef.current = POLL_INTERVAL_MS
 
-      const data: GenAiImportJobData = await res.json()
+      const data = await fetchWrapper.get(`/api/genai/import/jobs/${jobId}`) as GenAiImportJobData
       setJob(data)
       setStatus(data.status)
       statusRef.current = data.status

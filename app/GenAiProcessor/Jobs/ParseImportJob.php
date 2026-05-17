@@ -15,6 +15,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\GenAiFileHelper;
+use App\Services\PHR\Import\PhrStructuredDataImporter;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
@@ -322,6 +323,11 @@ class ParseImportJob implements ShouldQueue
             case 'document_extract':
                 $this->createDocumentResults($job, $data);
                 break;
+            default:
+                if (PhrStructuredDataImporter::isPhrJobType($job->job_type)) {
+                    $this->createPhrResults($job, $data);
+                }
+                break;
         }
     }
 
@@ -372,6 +378,42 @@ class ParseImportJob implements ShouldQueue
                 'status' => 'pending_review',
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function createPhrResults(GenAiImportJob $job, array $data): void
+    {
+        $records = $this->phrRecords($data);
+
+        foreach ($records as $index => $record) {
+            GenAiImportResult::create([
+                'job_id' => $job->id,
+                'result_index' => $index,
+                'result_json' => json_encode($record),
+                'status' => 'pending_review',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $data
+     * @return array<int, mixed>
+     */
+    private function phrRecords(array $data): array
+    {
+        if (array_is_list($data)) {
+            return $data;
+        }
+
+        foreach (['records', 'lab_results', 'vitals', 'office_visits', 'medications', 'immunizations', 'conditions', 'procedures', 'allergies'] as $key) {
+            if (isset($data[$key]) && is_array($data[$key])) {
+                return array_is_list($data[$key]) ? $data[$key] : [$data[$key]];
+            }
+        }
+
+        return [$data];
     }
 
     /**
