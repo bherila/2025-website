@@ -26,6 +26,7 @@ export default defineConfig({
         'resources/js/payslip.tsx',
         'resources/js/payslip-entry.tsx',
         'resources/js/phr/index.tsx',
+        'resources/js/phr/pages.tsx',
         'resources/js/address-labels/index.tsx',
         'resources/js/components/rsu/rsu.tsx',
         'resources/js/components/rsu/manage-awards.tsx',
