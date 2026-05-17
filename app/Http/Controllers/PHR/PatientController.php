@@ -5,10 +5,12 @@ namespace App\Http\Controllers\PHR;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StorePatientRequest;
+use App\Http\Requests\PHR\UpdatePatientRequest;
 use App\Models\PhrPatient;
 use App\Models\PhrPatientUserAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 
 class PatientController extends Controller
@@ -64,5 +66,27 @@ class PatientController extends Controller
         $resolvedPatient = $this->accessiblePatient($patient, $userId);
 
         return response()->json(['patient' => $this->patientPayload($resolvedPatient, $userId)]);
+    }
+
+    public function update(UpdatePatientRequest $request, int $patient): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $this->ensurePatientManager($resolvedPatient, $userId);
+
+        $resolvedPatient->update($request->validated());
+
+        return response()->json(['patient' => $this->patientPayload($resolvedPatient, $userId)]);
+    }
+
+    public function destroy(Request $request, int $patient): Response
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $this->ensurePatientOwner($resolvedPatient, $userId);
+
+        $resolvedPatient->delete();
+
+        return response()->noContent();
     }
 }
