@@ -1,13 +1,10 @@
 import { FlaskConical, Plus } from 'lucide-react'
 import type { ComponentProps, FormEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
-import PatientList from '@/phr/patients/PatientList'
-import { usePhrPatients } from '@/phr/patients/usePhrPatients'
-import PhrShell from '@/phr/PhrShell'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrLabResult,
@@ -17,7 +14,21 @@ import {
   PhrLabResultsResponseSchema,
 } from '@/phr/types'
 
-const emptyLabForm: PhrLabResultFormData = {
+const FLAG_CLASS: Record<string, string> = {
+  H: 'text-orange-600 dark:text-orange-400',
+  HH: 'text-red-600 dark:text-red-400 font-bold',
+  L: 'text-blue-600 dark:text-blue-400',
+  LL: 'text-red-600 dark:text-red-400 font-bold',
+  A: 'text-orange-600 dark:text-orange-400',
+  AA: 'text-red-600 dark:text-red-400 font-bold',
+  C: 'text-red-600 dark:text-red-400 font-bold',
+}
+
+function flagClass(flag: string | null | undefined): string {
+  return flag ? (FLAG_CLASS[flag.toUpperCase()] ?? 'text-orange-600 dark:text-orange-400') : ''
+}
+
+const emptyForm: PhrLabResultFormData = {
   test_name: '',
   analyte: '',
   value: '',
@@ -30,122 +41,6 @@ const emptyLabForm: PhrLabResultFormData = {
   notes: '',
 }
 
-export default function LabsPage({ patientId: _patientId }: { patientId: number }) {
-  const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
-  const [recordsBusy, setRecordsBusy] = useState(false)
-  const [recordsError, setRecordsError] = useState<string | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [labResults, setLabResults] = useState<PhrLabResult[]>([])
-  const [form, setForm] = useState<PhrLabResultFormData>(emptyLabForm)
-
-  useEffect(() => {
-    if (selectedPatientId === null) {
-      setLabResults([])
-      return
-    }
-
-    void (async () => {
-      setRecordsBusy(true)
-      setRecordsError(null)
-      try {
-        const rawLabs = await fetchWrapper.get(`/api/phr/patients/${selectedPatientId}/lab-results`)
-        setLabResults(PhrLabResultsResponseSchema.parse(rawLabs).lab_results)
-      } catch (caught) {
-        setRecordsError(errorMessage(caught))
-      } finally {
-        setRecordsBusy(false)
-      }
-    })()
-  }, [selectedPatientId])
-
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    if (!selectedPatient) {
-      return
-    }
-
-    setFormError(null)
-    const parsed = PhrLabResultFormSchema.safeParse(form)
-    if (!parsed.success) {
-      setFormError(parsed.error.issues[0]?.message ?? 'Invalid lab result.')
-      return
-    }
-
-    setRecordsBusy(true)
-    try {
-      const rawResponse: unknown = await fetchWrapper.post(`/api/phr/patients/${selectedPatient.id}/lab-results`, numericPayload(parsed.data, [
-        'value_numeric',
-        'range_min',
-        'range_max',
-      ]))
-      const response = PhrLabResultResponseSchema.parse(rawResponse)
-      setLabResults((current) => [response.lab_result, ...current])
-      setForm(emptyLabForm)
-    } catch (caught) {
-      setFormError(errorMessage(caught))
-    } finally {
-      setRecordsBusy(false)
-    }
-  }
-
-  return (
-    <PhrShell activeTab="labs" patientId={selectedPatientId} busy={busy || recordsBusy} error={error ?? recordsError}>
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <PatientList patients={patients} selectedPatientId={selectedPatientId} onSelect={setSelectedPatientId} />
-        <section className="rounded-md border border-border bg-card p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <FlaskConical className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Labs</h2>
-          </div>
-
-          {!selectedPatient ? <p className="text-sm text-muted-foreground">Select a profile to manage labs.</p> : null}
-
-          {selectedPatient?.can_manage ? (
-            <form className="mb-4 grid gap-3 rounded-md border border-border bg-background p-3" onSubmit={(event) => void submit(event)}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <LabeledInput label="Panel" value={form.test_name ?? ''} onChange={(value) => setForm({ ...form, test_name: value })} />
-                <LabeledInput label="Analyte" value={form.analyte} onChange={(value) => setForm({ ...form, analyte: value })} required />
-                <LabeledInput label="Value" value={form.value ?? ''} onChange={(value) => setForm({ ...form, value })} />
-                <LabeledInput label="Numeric" inputMode="decimal" value={form.value_numeric ?? ''} onChange={(value) => setForm({ ...form, value_numeric: value })} />
-                <LabeledInput label="Unit" value={form.unit ?? ''} onChange={(value) => setForm({ ...form, unit: value })} />
-                <LabeledInput label="Result Date" type="datetime-local" value={form.result_datetime ?? ''} onChange={(value) => setForm({ ...form, result_datetime: value })} />
-                <LabeledInput label="Range Min" inputMode="decimal" value={form.range_min ?? ''} onChange={(value) => setForm({ ...form, range_min: value })} />
-                <LabeledInput label="Range Max" inputMode="decimal" value={form.range_max ?? ''} onChange={(value) => setForm({ ...form, range_max: value })} />
-              </div>
-              <LabeledInput label="Flag" value={form.abnormal_flag ?? ''} onChange={(value) => setForm({ ...form, abnormal_flag: value })} />
-              {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-              <Button type="submit" size="sm">
-                <Plus className="size-4" />
-                Add Lab
-              </Button>
-            </form>
-          ) : null}
-
-          {labResults.length === 0 ? (
-            <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">No lab results.</p>
-          ) : (
-            <div className="grid gap-2">
-              {labResults.map((labResult) => (
-                <div key={labResult.id} className="rounded-md border border-border bg-background p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-medium text-foreground">{labResult.analyte ?? 'Lab result'}</p>
-                      <p className="mt-1 break-words text-xs text-muted-foreground">
-                        {[labResult.test_name, labResult.result_datetime].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                    <p className="max-w-40 break-words text-right text-sm font-semibold text-foreground">{[labResult.value, labResult.unit].filter(Boolean).join(' ')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </PhrShell>
-  )
-}
-
 interface LabeledInputProps extends Omit<ComponentProps<typeof Input>, 'onChange'> {
   label: string
   onChange: (value: string) => void
@@ -155,7 +50,257 @@ function LabeledInput({ label, onChange, ...props }: LabeledInputProps) {
   return (
     <label className="grid gap-1 text-sm font-medium text-foreground">
       {label}
-      <Input {...props} onChange={(event) => onChange(event.target.value)} />
+      <Input {...props} onChange={(e) => onChange(e.target.value)} />
     </label>
+  )
+}
+
+interface AddLabFormProps {
+  patientId: number
+  onAdded: (result: PhrLabResult) => void
+}
+
+function AddLabForm({ patientId, onAdded }: AddLabFormProps) {
+  const [form, setForm] = useState<PhrLabResultFormData>(emptyForm)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault()
+    setError(null)
+    const parsed = PhrLabResultFormSchema.safeParse(form)
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Invalid input.')
+      return
+    }
+    setBusy(true)
+    try {
+      const raw: unknown = await fetchWrapper.post(
+        `/api/phr/patients/${patientId}/lab-results`,
+        numericPayload(parsed.data, ['value_numeric', 'range_min', 'range_max']),
+      )
+      onAdded(PhrLabResultResponseSchema.parse(raw).lab_result)
+      setForm(emptyForm)
+      setOpen(false)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Add Lab Result
+      </Button>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold text-card-foreground">Add Lab Result</h3>
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Panel / Test Name" value={form.test_name ?? ''} onChange={(v) => setForm({ ...form, test_name: v })} />
+          <LabeledInput label="Analyte *" value={form.analyte} onChange={(v) => setForm({ ...form, analyte: v })} required />
+          <LabeledInput label="Value" value={form.value ?? ''} onChange={(v) => setForm({ ...form, value: v })} />
+          <LabeledInput label="Value (Numeric)" inputMode="decimal" value={form.value_numeric ?? ''} onChange={(v) => setForm({ ...form, value_numeric: v })} />
+          <LabeledInput label="Unit" value={form.unit ?? ''} onChange={(v) => setForm({ ...form, unit: v })} />
+          <LabeledInput label="Result Date/Time" type="datetime-local" value={form.result_datetime ?? ''} onChange={(v) => setForm({ ...form, result_datetime: v })} />
+          <LabeledInput label="Range Min" inputMode="decimal" value={form.range_min ?? ''} onChange={(v) => setForm({ ...form, range_min: v })} />
+          <LabeledInput label="Range Max" inputMode="decimal" value={form.range_max ?? ''} onChange={(v) => setForm({ ...form, range_max: v })} />
+          <LabeledInput label="Abnormal Flag (H/L/HH/LL/C)" value={form.abnormal_flag ?? ''} onChange={(v) => setForm({ ...form, abnormal_flag: v })} />
+        </div>
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        <div className="mt-4 flex gap-2">
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? 'Adding…' : 'Add'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function referenceRange(result: PhrLabResult): string | null {
+  if (result.range_min !== null && result.range_max !== null) {
+    return `${result.range_min}–${result.range_max}${result.range_unit ? ` ${result.range_unit}` : ''}`
+  }
+  return result.reference_range_text
+}
+
+export default function LabsPage({ patientId }: { patientId: number }) {
+  const [results, setResults] = useState<PhrLabResult[]>([])
+  const [canManage, setCanManage] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [flagFilter, setFlagFilter] = useState<'all' | 'abnormal'>('all')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+
+  const load = useCallback(async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const [rawLabs, rawPatient] = await Promise.all([
+        fetchWrapper.get(`/api/phr/patients/${patientId}/lab-results`),
+        fetchWrapper.get(`/api/phr/patients/${patientId}`),
+      ])
+      setResults(PhrLabResultsResponseSchema.parse(rawLabs).lab_results)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = (rawPatient as any)?.patient
+      setCanManage(Boolean(p?.can_manage))
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }, [patientId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const filtered = useMemo(() => {
+    let list = results
+    if (flagFilter === 'abnormal') {
+      list = list.filter((r) => r.abnormal_flag && r.abnormal_flag !== 'N')
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(
+        (r) =>
+          r.analyte?.toLowerCase().includes(q) ||
+          r.test_name?.toLowerCase().includes(q),
+      )
+    }
+    list = [...list].sort((a, b) => {
+      const da = a.result_datetime ?? a.collection_datetime ?? ''
+      const db = b.result_datetime ?? b.collection_datetime ?? ''
+      return sortDir === 'desc' ? db.localeCompare(da) : da.localeCompare(db)
+    })
+    return list
+  }, [results, search, flagFilter, sortDir])
+
+  const abnormalCount = useMemo(
+    () => results.filter((r) => r.abnormal_flag && r.abnormal_flag !== 'N').length,
+    [results],
+  )
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
+            <FlaskConical className="size-6 text-primary" />
+            Labs
+          </h1>
+          {results.length > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {results.length} result{results.length === 1 ? '' : 's'}
+              {abnormalCount > 0 && (
+                <span className="ml-2 text-orange-600 dark:text-orange-400">
+                  · {abnormalCount} abnormal
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {canManage && (
+        <div className="mb-6">
+          <AddLabForm patientId={patientId} onAdded={(r) => setResults((prev) => [r, ...prev])} />
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Input
+          placeholder="Search analyte or panel…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            variant={flagFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFlagFilter('all')}
+          >
+            All
+          </Button>
+          <Button
+            variant={flagFilter === 'abnormal' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFlagFilter('abnormal')}
+          >
+            Abnormal only
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+        >
+          Date {sortDir === 'desc' ? '↓' : '↑'}
+        </Button>
+      </div>
+
+      {busy && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {!busy && filtered.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+          {results.length === 0 ? 'No lab results recorded.' : 'No results match the current filter.'}
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Analyte</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Panel</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Value</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Range</th>
+                <th className="px-3 py-2 text-center font-medium text-muted-foreground">Flag</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-3 py-2 font-medium text-foreground">{r.analyte ?? '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.test_name ?? '—'}</td>
+                  <td className={`px-3 py-2 text-right ${flagClass(r.abnormal_flag)}`}>
+                    {r.value ?? r.value_numeric ?? '—'}
+                    {r.unit && <span className="ml-1 text-xs text-muted-foreground">{r.unit}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{referenceRange(r) ?? '—'}</td>
+                  <td className={`px-3 py-2 text-center font-semibold ${flagClass(r.abnormal_flag)}`}>
+                    {r.abnormal_flag && r.abnormal_flag !== 'N' ? r.abnormal_flag : ''}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {(r.result_datetime ?? r.collection_datetime ?? '').slice(0, 10) || '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }
