@@ -28,7 +28,7 @@ class StoreMedicationRequest extends FormRequest
             'frequency' => ['nullable', 'string', 'max:100'],
             'started_on' => ['nullable', 'date'],
             'ended_on' => ['nullable', 'date'],
-            'status' => ['nullable', 'string', 'max:50'],
+            'status' => ['sometimes', 'string', 'max:50'],
             'prescriber_name' => ['nullable', 'string', 'max:255'],
             'reason_for_use' => ['nullable', 'string', 'max:10000'],
         ];

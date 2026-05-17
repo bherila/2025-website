@@ -38,7 +38,7 @@ class OfficeVisitController extends Controller
 
         $visit = PhrOfficeVisit::create([
             'patient_id' => $resolvedPatient->id,
-            'user_id' => $userId,
+            'user_id' => $resolvedPatient->owner_user_id,
             ...$request->validated(),
         ]);
 
