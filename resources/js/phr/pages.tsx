@@ -5,6 +5,7 @@ import PhrNavbar from '@/components/phr/PhrNavbar'
 import type { PhrPatientTab, PhrSection } from '@/lib/phrRouteBuilder'
 
 const PatientsPage = lazy(() => import('@/phr/patients/PatientsPage'))
+const ManagePatientsPage = lazy(() => import('@/phr/patients-manage/PatientsManagePage'))
 const LabsPage = lazy(() => import('@/phr/labs/LabsPage'))
 const VitalsPage = lazy(() => import('@/phr/vitals/VitalsPage'))
 const ImagingPage = lazy(() => import('@/phr/imaging/ImagingPage'))
@@ -33,6 +34,14 @@ function PageContent({
     return (
       <Suspense fallback={LOADING}>
         <PatientsPage />
+      </Suspense>
+    )
+  }
+
+  if (section === 'manage-patients') {
+    return (
+      <Suspense fallback={LOADING}>
+        <ManagePatientsPage />
       </Suspense>
     )
   }
