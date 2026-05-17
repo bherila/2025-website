@@ -1,12 +1,9 @@
 import { Download, ExternalLink, Images, RefreshCcw, UploadCloud } from 'lucide-react'
 import type { FormEvent } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
-import PatientList from '@/phr/patients/PatientList'
-import { usePhrPatients } from '@/phr/patients/usePhrPatients'
-import PhrShell from '@/phr/PhrShell'
 import { errorMessage } from '@/phr/shared'
 import {
   PhrDicomStudiesResponseSchema,
@@ -27,11 +24,11 @@ const directoryInputAttributes: DirectoryInputAttributes = {
   directory: '',
 }
 
-export default function ImagingPage({ patientId: _patientId }: { patientId: number }) {
-  const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
+export default function ImagingPage({ patientId }: { patientId: number }) {
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [recordsBusy, setRecordsBusy] = useState(false)
-  const [recordsError, setRecordsError] = useState<string | null>(null)
+  const [canManage, setCanManage] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<FileWithRelativePath[]>([])
   const [uploadResult, setUploadResult] = useState<PhrDicomUpload | null>(null)
   const [studies, setStudies] = useState<PhrDicomStudy[]>([])
@@ -44,28 +41,28 @@ export default function ImagingPage({ patientId: _patientId }: { patientId: numb
 
   const clientSkippedCount = selectedFiles.length - acceptedFiles.length
 
-  async function loadStudies(patientId: number): Promise<void> {
-    setRecordsBusy(true)
-    setRecordsError(null)
-
+  const loadStudies = useCallback(async () => {
+    setBusy(true)
+    setError(null)
     try {
-      const rawStudies = await fetchWrapper.get(`/api/phr/patients/${patientId}/dicom/studies`)
+      const [rawStudies, rawPatient] = await Promise.all([
+        fetchWrapper.get(`/api/phr/patients/${patientId}/dicom/studies`),
+        fetchWrapper.get(`/api/phr/patients/${patientId}`),
+      ])
       setStudies(PhrDicomStudiesResponseSchema.parse(rawStudies).studies)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = (rawPatient as any)?.patient
+      setCanManage(Boolean(p?.can_manage))
     } catch (caught) {
-      setRecordsError(errorMessage(caught))
+      setError(errorMessage(caught))
     } finally {
-      setRecordsBusy(false)
+      setBusy(false)
     }
-  }
+  }, [patientId])
 
   useEffect(() => {
-    if (selectedPatientId === null) {
-      setStudies([])
-      return
-    }
-
-    void loadStudies(selectedPatientId)
-  }, [selectedPatientId])
+    void loadStudies()
+  }, [loadStudies])
 
   function selectFiles(files: FileList | null): void {
     setUploadError(null)
@@ -76,7 +73,7 @@ export default function ImagingPage({ patientId: _patientId }: { patientId: numb
   async function upload(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
 
-    if (!selectedPatient || acceptedFiles.length === 0) {
+    if (acceptedFiles.length === 0) {
       setUploadError('Select a DICOM directory or files to upload.')
       return
     }
@@ -92,114 +89,117 @@ export default function ImagingPage({ patientId: _patientId }: { patientId: numb
       formData.append('relative_paths[]', relativeFilePath(file))
     })
 
-    setRecordsBusy(true)
+    setBusy(true)
     setUploadError(null)
 
     try {
-      const rawResponse: unknown = await fetchWrapper.post(`/api/phr/patients/${selectedPatient.id}/dicom/uploads`, formData)
+      const rawResponse: unknown = await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads`, formData)
       const response = PhrDicomUploadResponseSchema.parse(rawResponse)
       setUploadResult(response.upload)
       setSelectedFiles([])
       if (inputRef.current) {
         inputRef.current.value = ''
       }
-      await loadStudies(selectedPatient.id)
+      await loadStudies()
     } catch (caught) {
       setUploadError(errorMessage(caught))
     } finally {
-      setRecordsBusy(false)
+      setBusy(false)
     }
   }
 
   return (
-    <PhrShell activeTab="imaging" patientId={selectedPatientId} busy={busy || recordsBusy} error={error ?? recordsError}>
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <PatientList patients={patients} selectedPatientId={selectedPatientId} onSelect={setSelectedPatientId} />
-
-        <section className="rounded-md border border-border bg-card p-4">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
-              <Images className="size-4 text-primary" />
-              <h2 className="text-sm font-semibold text-card-foreground">Imaging</h2>
-            </div>
-            <Button type="button" variant="outline" size="sm" disabled={!selectedPatientId} onClick={() => selectedPatientId !== null && void loadStudies(selectedPatientId)}>
-              <RefreshCcw className="size-4" />
-              Refresh
-            </Button>
-          </div>
-
-          {!selectedPatient ? <p className="mb-4 text-sm text-muted-foreground">Select a profile to view imaging studies.</p> : null}
-
-          {selectedPatient?.can_manage ? (
-            <form className="mb-4 grid gap-3 rounded-md border border-border bg-background p-3" onSubmit={(event) => void upload(event)}>
-              <input
-                ref={inputRef}
-                type="file"
-                className="hidden"
-                multiple
-                onChange={(event) => selectFiles(event.target.files)}
-                {...directoryInputAttributes}
-              />
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0 text-sm">
-                  <p className="font-medium text-foreground">
-                    {selectedFiles.length === 0 ? 'No imaging files selected' : `${acceptedFiles.length} DICOM candidate${acceptedFiles.length === 1 ? '' : 's'} selected`}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {clientSkippedCount > 0 ? `${clientSkippedCount} auxiliary file${clientSkippedCount === 1 ? '' : 's'} skipped before upload` : 'Directory uploads preserve DICOM relative paths'}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-                    <UploadCloud className="size-4" />
-                    Choose Folder
-                  </Button>
-                  <Button type="submit" size="sm" disabled={acceptedFiles.length === 0}>
-                    <UploadCloud className="size-4" />
-                    Upload
-                  </Button>
-                </div>
-              </div>
-              {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
-              {uploadResult ? (
-                <p className="text-sm text-muted-foreground">
-                  Stored {uploadResult.stored_files} of {uploadResult.total_files} file{uploadResult.total_files === 1 ? '' : 's'}.
-                </p>
-              ) : null}
-            </form>
-          ) : null}
-
-          {studies.length === 0 ? (
-            <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">No imaging studies.</p>
-          ) : (
-            <div className="grid gap-2">
-              {studies.map((study) => (
-                <div key={study.id} className="rounded-md border border-border bg-background p-3">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-medium text-foreground">{study.description || 'DICOM Study'}</p>
-                      <p className="mt-1 break-words text-xs text-muted-foreground">
-                        {[study.study_date, study.modalities, `${study.series_count} series`, `${study.instance_count} images`].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => openInOhifViewer(selectedPatientId ?? 0, study.id)}>
-                        <ExternalLink className="size-4" />
-                        Viewer
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => downloadStudyZip(selectedPatientId ?? 0, study.id)}>
-                        <Download className="size-4" />
-                        ZIP
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
+          <Images className="size-6 text-primary" />
+          Imaging
+        </h1>
+        <Button type="button" variant="outline" size="sm" onClick={() => void loadStudies()} disabled={busy}>
+          <RefreshCcw className="size-4" />
+          Refresh
+        </Button>
       </div>
-    </PhrShell>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {canManage && (
+        <form className="mb-6 rounded-lg border border-border bg-card p-4" onSubmit={(event) => void upload(event)}>
+          <h2 className="mb-3 text-sm font-semibold text-card-foreground">Upload DICOM</h2>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(event) => selectFiles(event.target.files)}
+            {...directoryInputAttributes}
+          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 text-sm">
+              <p className="font-medium text-foreground">
+                {selectedFiles.length === 0 ? 'No imaging files selected' : `${acceptedFiles.length} DICOM candidate${acceptedFiles.length === 1 ? '' : 's'} selected`}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {clientSkippedCount > 0 ? `${clientSkippedCount} auxiliary file${clientSkippedCount === 1 ? '' : 's'} skipped before upload` : 'Directory uploads preserve DICOM relative paths'}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+                <UploadCloud className="size-4" />
+                Choose Folder
+              </Button>
+              <Button type="submit" size="sm" disabled={acceptedFiles.length === 0 || busy}>
+                <UploadCloud className="size-4" />
+                Upload
+              </Button>
+            </div>
+          </div>
+          {uploadError && <p className="mt-2 text-sm text-destructive">{uploadError}</p>}
+          {uploadResult && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Stored {uploadResult.stored_files} of {uploadResult.total_files} file{uploadResult.total_files === 1 ? '' : 's'}.
+            </p>
+          )}
+        </form>
+      )}
+
+      {busy && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {!busy && studies.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+          No imaging studies.
+        </div>
+      )}
+
+      {studies.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {studies.map((study) => (
+            <div key={study.id} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="break-words font-medium text-card-foreground">{study.description || 'DICOM Study'}</p>
+                <p className="mt-1 break-words text-xs text-muted-foreground">
+                  {[study.study_date, study.modalities, `${study.series_count} series`, `${study.instance_count} images`].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => openInOhifViewer(patientId, study.id)}>
+                  <ExternalLink className="size-4" />
+                  Viewer
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => downloadStudyZip(patientId, study.id)}>
+                  <Download className="size-4" />
+                  ZIP
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
