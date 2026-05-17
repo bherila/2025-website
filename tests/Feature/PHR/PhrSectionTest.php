@@ -16,8 +16,6 @@ class PhrSectionTest extends TestCase
 
     public function test_authenticated_user_can_open_phr_page(): void
     {
-        $this->withoutVite();
-
         $response = $this->actingAs($this->createUser())->get('/phr');
 
         $response->assertOk();

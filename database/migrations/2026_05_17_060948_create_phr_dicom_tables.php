@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('patient_id');
             $table->unsignedBigInteger('uploaded_by_user_id');
-            $table->string('status', 32)->default('processed');
+            $table->string('status', 32)->default('pending');
             $table->string('original_root_name')->nullable();
             $table->unsignedInteger('total_files')->default(0);
             $table->unsignedInteger('stored_files')->default(0);

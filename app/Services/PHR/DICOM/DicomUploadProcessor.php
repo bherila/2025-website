@@ -117,10 +117,19 @@ class DicomUploadProcessor
 
         // phr_dicom_instances and phr_dicom_files cascade on upload delete in
         // the schema, but we keep the upload row around for audit, so cascade
-        // child rows explicitly. phr_dicom_studies stays put (its FK to
-        // uploads is nullOnDelete) because re-uploads may have linked it.
+        // child rows explicitly. Empty studies/series created by this failed
+        // upload are also removed so users do not see phantom imaging rows.
         PhrDicomInstance::query()->where('upload_id', $upload->id)->delete();
         PhrDicomFile::query()->where('upload_id', $upload->id)->delete();
+        PhrDicomSeries::query()
+            ->where('patient_id', $upload->patient_id)
+            ->whereDoesntHave('instances')
+            ->delete();
+        PhrDicomStudy::query()
+            ->where('patient_id', $upload->patient_id)
+            ->where('upload_id', $upload->id)
+            ->whereDoesntHave('instances')
+            ->delete();
 
         $upload->update([
             'status' => PhrDicomUpload::STATUS_FAILED,
@@ -144,9 +153,13 @@ class DicomUploadProcessor
         $storedFiles = 0;
         $storedBytes = 0;
         $totalBytes = 0;
+        $relativePathCounts = [];
 
         foreach ($files as $index => $file) {
-            $relativePath = $this->sanitizeRelativePath($relativePaths[$index] ?? $file->getClientOriginalName());
+            $relativePath = $this->uniqueRelativePath(
+                $this->sanitizeRelativePath($relativePaths[$index] ?? null, $file->getClientOriginalName(), $index),
+                $relativePathCounts,
+            );
             $fileSize = (int) $file->getSize();
             $totalBytes += $fileSize;
 
@@ -172,6 +185,12 @@ class DicomUploadProcessor
             $parsed = $this->metadataParser->parse($realPath);
             if (! $parsed['is_dicom']) {
                 $skippedFiles[] = $this->skipEntry($relativePath, 'not_dicom');
+
+                continue;
+            }
+
+            if ($parsed['is_image_instance'] && $this->hasImageInstance($patient->id, $parsed['normalized'])) {
+                $skippedFiles[] = $this->skipEntry($relativePath, 'duplicate_sop_instance');
 
                 continue;
             }
@@ -240,6 +259,10 @@ class DicomUploadProcessor
         $sopUid = (string) $normalized['sop_instance_uid'];
         $modality = $this->nullableString($normalized['modality'] ?? null);
 
+        if ($this->hasImageInstance($patient->id, $normalized)) {
+            return;
+        }
+
         $existingStudy = PhrDicomStudy::query()
             ->where('patient_id', $patient->id)
             ->where('study_instance_uid', $studyUid)
@@ -283,25 +306,21 @@ class DicomUploadProcessor
             ],
         );
 
-        PhrDicomInstance::updateOrCreate(
-            [
-                'patient_id' => $patient->id,
-                'sop_instance_uid' => $sopUid,
-            ],
-            [
-                'study_id' => $study->id,
-                'series_id' => $series->id,
-                'upload_id' => $upload->id,
-                'file_id' => $file->id,
-                'sop_class_uid' => $normalized['sop_class_uid'],
-                'instance_number' => $normalized['instance_number'],
-                'transfer_syntax_uid' => $normalized['transfer_syntax_uid'],
-                'rows' => $normalized['rows'],
-                'columns' => $normalized['columns'],
-                'number_of_frames' => $normalized['number_of_frames'],
-                'metadata_json' => $metadata,
-            ],
-        );
+        PhrDicomInstance::create([
+            'patient_id' => $patient->id,
+            'study_id' => $study->id,
+            'series_id' => $series->id,
+            'upload_id' => $upload->id,
+            'file_id' => $file->id,
+            'sop_instance_uid' => $sopUid,
+            'sop_class_uid' => $normalized['sop_class_uid'],
+            'instance_number' => $normalized['instance_number'],
+            'transfer_syntax_uid' => $normalized['transfer_syntax_uid'],
+            'rows' => $normalized['rows'],
+            'columns' => $normalized['columns'],
+            'number_of_frames' => $normalized['number_of_frames'],
+            'metadata_json' => $metadata,
+        ]);
     }
 
     private function storeFile(string $realPath, string $storageKey): void
@@ -320,7 +339,64 @@ class DicomUploadProcessor
         }
     }
 
-    private function sanitizeRelativePath(?string $path): string
+    /**
+     * @param  array<string, mixed>  $normalized
+     */
+    private function hasImageInstance(int $patientId, array $normalized): bool
+    {
+        $sopInstanceUid = $this->nullableString($normalized['sop_instance_uid'] ?? null);
+
+        return $sopInstanceUid !== null
+            && PhrDicomInstance::query()
+                ->where('patient_id', $patientId)
+                ->where('sop_instance_uid', $sopInstanceUid)
+                ->exists();
+    }
+
+    private function sanitizeRelativePath(?string $path, ?string $fallbackName, int $index): string
+    {
+        $relativePath = $this->sanitizePathParts($path);
+        if ($relativePath === '') {
+            $fallbackPath = $this->sanitizePathParts($fallbackName);
+            $relativePath = $fallbackPath === '' ? 'dicom-file-'.($index + 1) : $fallbackPath;
+        }
+
+        if (strlen($relativePath) <= 1000) {
+            return $relativePath;
+        }
+
+        return hash('sha256', $relativePath).'/'.substr(basename($relativePath), 0, 180);
+    }
+
+    /**
+     * @param  array<string, int>  $relativePathCounts
+     */
+    private function uniqueRelativePath(string $relativePath, array &$relativePathCounts): string
+    {
+        $count = ($relativePathCounts[$relativePath] ?? 0) + 1;
+        $relativePathCounts[$relativePath] = $count;
+
+        if ($count === 1) {
+            return $relativePath;
+        }
+
+        $directory = trim(dirname($relativePath), '.');
+        $filename = basename($relativePath);
+        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $basename = $extension === ''
+            ? $filename
+            : substr($filename, 0, -(strlen($extension) + 1));
+
+        $deduplicated = $extension === ''
+            ? sprintf('%s-%d', $basename, $count)
+            : sprintf('%s-%d.%s', $basename, $count, $extension);
+
+        return $directory === '' || $directory === '/'
+            ? $deduplicated
+            : $directory.'/'.$deduplicated;
+    }
+
+    private function sanitizePathParts(?string $path): string
     {
         $rawPath = trim(str_replace('\\', '/', (string) $path));
         $parts = [];
@@ -329,27 +405,14 @@ class DicomUploadProcessor
             $part = preg_replace('/[\x00-\x1F\x7F]/', '', $part) ?? '';
             $part = trim(str_replace([':', '*', '?', '"', '<', '>', '|'], '_', $part));
 
-            if ($part === '' || $part === '.') {
-                continue;
-            }
-
-            if ($part === '..') {
+            if ($part === '' || $part === '.' || $part === '..') {
                 continue;
             }
 
             $parts[] = $part;
         }
 
-        $relativePath = implode('/', $parts);
-        if ($relativePath === '') {
-            $relativePath = 'dicom-file';
-        }
-
-        if (strlen($relativePath) <= 1000) {
-            return $relativePath;
-        }
-
-        return hash('sha256', $relativePath).'/'.substr(basename($relativePath), 0, 180);
+        return implode('/', $parts);
     }
 
     private function isAuxiliaryFile(string $relativePath): bool

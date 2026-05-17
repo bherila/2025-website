@@ -90,26 +90,30 @@ class PhrDicomGarbageCollect extends Command
             return 0;
         }
 
-        $known = PhrDicomFile::query()->pluck('r2_key')->all();
-        $knownSet = array_flip($known);
-
         $count = 0;
-        foreach ($keys as $key) {
-            if (isset($knownSet[$key])) {
-                continue;
-            }
+        foreach (array_chunk($keys, 500) as $keyBatch) {
+            $knownSet = array_flip(PhrDicomFile::query()
+                ->whereIn('r2_key', $keyBatch)
+                ->pluck('r2_key')
+                ->all());
 
-            $this->line("  Orphan object: {$key}");
-            $count++;
+            foreach ($keyBatch as $key) {
+                if (isset($knownSet[$key])) {
+                    continue;
+                }
 
-            if ($dryRun) {
-                continue;
-            }
+                $this->line("  Orphan object: {$key}");
+                $count++;
 
-            try {
-                $disk->delete($key);
-            } catch (Throwable $error) {
-                $this->error("    Failed to delete [{$key}]: ".$error->getMessage());
+                if ($dryRun) {
+                    continue;
+                }
+
+                try {
+                    $disk->delete($key);
+                } catch (Throwable $error) {
+                    $this->error("    Failed to delete [{$key}]: ".$error->getMessage());
+                }
             }
         }
 

@@ -58,7 +58,7 @@ PHR imaging is patient-scoped and uses the same `owner` / `manager` / `viewer` a
 - Viewers can list studies, read viewer-ready metadata, proxy raw DICOM files, and download original study files if they have access to that patient.
 - Unshared users should receive a 404 for patient-scoped imaging endpoints.
 
-Upload endpoints accept multi-file form uploads under `/api/phr/patients/{patient}/dicom/uploads`. The browser UI uses directory selection (`webkitdirectory`) so a user can choose a DICOM CD/export folder containing `DICOMDIR` plus nested image files. Client and server filters skip auxiliary files such as viewer executables, autorun files, icons, setup assets, HTML, PDFs, and common image previews. Server parsing remains authoritative: a file is only stored when it parses as DICOM or `DICOMDIR`.
+Upload endpoints accept multi-file form uploads under `/api/phr/patients/{patient}/dicom/uploads`. The browser UI uses directory selection (`webkitdirectory`) so a user can choose a DICOM CD/export folder containing `DICOMDIR` plus nested image files. Client and server filters skip auxiliary files such as viewer executables, autorun files, icons, setup assets, HTML, PDFs, and common image previews. Server parsing remains authoritative: a file is only stored when it parses as DICOM or `DICOMDIR`; image instances with a SOP Instance UID already stored for the patient are skipped rather than re-pointing the existing instance row.
 
 Raw objects are stored on the dedicated `phr_dicom` filesystem disk (see `config/filesystems.php`). For now this disk is a `local` driver rooted at `storage/app/private/phr-dicom`, overridable to a path outside the deploy tree via the `PHR_DICOM_DISK_ROOT` env var — the CI rsync uses `--delete` against `storage/`, so prod should always point this somewhere stable. To migrate to S3/R2 later, change the disk's `driver` to `s3` and provide `AWS_*` env vars; all application code references the disk by name so no code change is required. Object keys follow:
 
@@ -74,9 +74,9 @@ Uploads run through `DicomUploadProcessor::process()` in three states:
 
 1. `STATUS_PENDING` — row inserted, file loop in progress.
 2. `STATUS_PROCESSED` — file loop completed successfully; the row is the API response.
-3. `STATUS_FAILED` — an exception was thrown mid-loop. `DicomUploadProcessor::failUpload()` deletes the storage prefix and cascades `phr_dicom_files`/`phr_dicom_instances` rows, then writes the error message onto the upload row for audit.
+3. `STATUS_FAILED` — an exception was thrown mid-loop. `DicomUploadProcessor::failUpload()` deletes the storage prefix, deletes rows created by the failed upload, removes any empty study/series shells that upload created, then writes the error message onto the upload row for audit.
 
-`phr:dicom:gc` is scheduled hourly (see `routes/console.php`). It uses the same `failUpload()` helper to reclaim any upload stuck in `STATUS_PENDING` past `--pending-hours` (default 6), and walks the disk listing to delete storage objects that no longer correspond to a `phr_dicom_files` row. Pass `--dry-run` to preview without deleting.
+`phr:dicom:gc` is scheduled hourly (see `routes/console.php`). It uses the same `failUpload()` helper to reclaim any upload stuck in `STATUS_PENDING` past `--pending-hours` (default 6), and walks the disk listing to delete storage objects that no longer correspond to a `phr_dicom_files` row. Database key checks run in batches so the command does not load every stored DICOM key into memory at once. Pass `--dry-run` to preview without deleting.
 
 ### Parser limits
 

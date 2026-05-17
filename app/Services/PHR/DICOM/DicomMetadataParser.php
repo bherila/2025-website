@@ -220,9 +220,6 @@ class DicomMetadataParser
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    /**
      * @param  array<string, mixed>  $metadata
      * @return array<string, mixed>
      */

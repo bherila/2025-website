@@ -7,11 +7,14 @@ use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomSeries;
 use App\Models\PhrDicomStudy;
 use App\Models\PhrDicomUpload;
+use App\Models\PhrPatient;
 use App\Models\User;
+use App\Services\PHR\DICOM\DicomMetadataParser;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Tests\TestCase;
 
 class PhrDicomTest extends TestCase
@@ -26,6 +29,20 @@ class PhrDicomTest extends TestCase
         $this->assertTrue(Schema::hasColumn('phr_dicom_files', 'original_relative_path'));
         $this->assertTrue(Schema::hasColumn('phr_dicom_instances', 'transfer_syntax_uid'));
         $this->assertTrue(Schema::hasIndex('phr_dicom_studies', 'phr_dicom_studies_patient_uid_unique'));
+    }
+
+    public function test_upload_status_defaults_to_pending(): void
+    {
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $upload = PhrDicomUpload::create([
+            'patient_id' => $patientId,
+            'uploaded_by_user_id' => $owner->id,
+            'r2_prefix' => 'phr/dicom/patients/'.$patientId.'/uploads/manual',
+        ]);
+
+        $this->assertSame(PhrDicomUpload::STATUS_PENDING, $upload->refresh()->status);
     }
 
     public function test_manager_can_upload_directory_and_viewer_can_read_metadata_and_download_study(): void
@@ -166,6 +183,111 @@ class PhrDicomTest extends TestCase
         $this->assertSame(2, PhrDicomInstance::query()->where('study_id', $study->id)->count());
     }
 
+    public function test_blank_relative_paths_fall_back_to_unique_original_filenames(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $manager = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
+
+        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
+            'files' => [
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes([
+                    'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.blank.2',
+                ])),
+            ],
+            'relative_paths' => [null, '   '],
+        ])->assertCreated()->assertJsonPath('upload.stored_files', 2);
+
+        $paths = PhrDicomFile::query()
+            ->where('patient_id', $patientId)
+            ->orderBy('id')
+            ->pluck('original_relative_path')
+            ->all();
+
+        $this->assertSame(['IM0001', 'IM0001-2'], $paths);
+    }
+
+    public function test_failed_upload_removes_created_empty_studies_and_series(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $patient = PhrPatient::query()->findOrFail($patientId);
+        $processor = $this->processorThatThrowsOnParseCall(2);
+
+        try {
+            $processor->process($patient, $owner->id, [
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
+                UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
+                    'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.failure.2',
+                ])),
+            ], [
+                'CARDIAC_CT/ST0001/SE0001/IM0001',
+                'CARDIAC_CT/ST0001/SE0001/IM0002',
+            ], 'CARDIAC_CT');
+
+            $this->fail('Expected DICOM parsing to fail.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('Forced parser failure.', $error->getMessage());
+        }
+
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomSeries::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(PhrDicomUpload::STATUS_FAILED, PhrDicomUpload::query()->where('patient_id', $patientId)->sole()->status);
+        $this->assertSame([], Storage::disk(DicomUploadProcessor::DISK)->allFiles());
+    }
+
+    public function test_failed_duplicate_reupload_does_not_delete_existing_instance(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $this->actingAs($owner)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
+            'files' => [UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes())],
+            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0001'],
+        ])->assertCreated();
+
+        $instance = PhrDicomInstance::query()->where('patient_id', $patientId)->sole();
+        $originalUploadId = $instance->upload_id;
+        $originalFileId = $instance->file_id;
+        $patient = PhrPatient::query()->findOrFail($patientId);
+        $processor = $this->processorThatThrowsOnParseCall(2);
+
+        try {
+            $processor->process($patient, $owner->id, [
+                UploadedFile::fake()->createWithContent('IM0001-DUPLICATE', $this->dicomBytes()),
+                UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
+                    'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.failure.2',
+                ])),
+            ], [
+                'CARDIAC_CT/ST0001/SE0001/IM0001-DUPLICATE',
+                'CARDIAC_CT/ST0001/SE0001/IM0002',
+            ], 'CARDIAC_CT');
+
+            $this->fail('Expected DICOM parsing to fail.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('Forced parser failure.', $error->getMessage());
+        }
+
+        $instance->refresh();
+
+        $this->assertSame($originalUploadId, $instance->upload_id);
+        $this->assertSame($originalFileId, $instance->file_id);
+        $this->assertSame(1, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(1, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(1, PhrDicomUpload::query()->where('patient_id', $patientId)->where('status', PhrDicomUpload::STATUS_PROCESSED)->count());
+        $this->assertSame(1, PhrDicomUpload::query()->where('patient_id', $patientId)->where('status', PhrDicomUpload::STATUS_FAILED)->count());
+    }
+
     private function fakeDicomDisk(): void
     {
         Storage::fake(DicomUploadProcessor::DISK);
@@ -187,6 +309,38 @@ class PhrDicomTest extends TestCase
             'email' => $grantee->email,
             'access_level' => $level,
         ])->assertCreated();
+    }
+
+    private function processorThatThrowsOnParseCall(int $throwOnParseCall): DicomUploadProcessor
+    {
+        $parser = new class($throwOnParseCall) extends DicomMetadataParser
+        {
+            private int $parseCalls = 0;
+
+            public function __construct(private readonly int $throwOnParseCall) {}
+
+            /**
+             * @return array{
+             *     is_dicom: bool,
+             *     has_preamble: bool,
+             *     metadata: array<string, mixed>,
+             *     normalized: array<string, mixed>,
+             *     is_image_instance: bool
+             * }
+             */
+            public function parse(string $path): array
+            {
+                $this->parseCalls++;
+
+                if ($this->parseCalls === $this->throwOnParseCall) {
+                    throw new RuntimeException('Forced parser failure.');
+                }
+
+                return parent::parse($path);
+            }
+        };
+
+        return new DicomUploadProcessor($parser);
     }
 
     /**
