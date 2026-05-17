@@ -202,3 +202,167 @@ export const PhrVitalFormSchema = z.object({
 })
 
 export type PhrVitalFormData = z.infer<typeof PhrVitalFormSchema>
+
+// ── Office Visits ──────────────────────────────────────────────────────────────
+
+export const PhrOfficeVisitSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  visit_date: nullableString,
+  visit_started_at: nullableString,
+  visit_ended_at: nullableString,
+  visit_type: nullableString,
+  provider_name: nullableString,
+  provider_specialty: nullableString,
+  facility_name: nullableString,
+  chief_complaint: nullableString,
+  assessment: nullableString,
+  plan: nullableString,
+  subjective: nullableString,
+  objective: nullableString,
+  icd10_codes: z.array(z.record(z.string(), z.string())).nullable(),
+  cpt_codes: z.array(z.record(z.string(), z.string())).nullable(),
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrOfficeVisit = z.infer<typeof PhrOfficeVisitSchema>
+
+export const PhrOfficeVisitsResponseSchema = z.object({
+  office_visits: z.array(PhrOfficeVisitSchema),
+})
+
+// ── Medications ───────────────────────────────────────────────────────────────
+
+export const PhrMedicationSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  name: z.string(),
+  rxnorm_code: nullableString,
+  dose: nullableString,
+  dose_unit: nullableString,
+  route: nullableString,
+  frequency: nullableString,
+  started_on: nullableString,
+  ended_on: nullableString,
+  status: z.string(),
+  prescriber_name: nullableString,
+  reason_for_use: nullableString,
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrMedication = z.infer<typeof PhrMedicationSchema>
+
+export const PhrMedicationsResponseSchema = z.object({
+  medications: z.array(PhrMedicationSchema),
+})
+
+// ── Conditions ────────────────────────────────────────────────────────────────
+
+export const PhrConditionSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  name: z.string(),
+  icd10_code: nullableString,
+  snomed_code: nullableString,
+  onset_date: nullableString,
+  abated_date: nullableString,
+  clinical_status: z.string(),
+  verification_status: z.string(),
+  severity: nullableString,
+  notes: nullableString,
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrCondition = z.infer<typeof PhrConditionSchema>
+
+export const PhrConditionsResponseSchema = z.object({
+  conditions: z.array(PhrConditionSchema),
+})
+
+// ── Procedures ────────────────────────────────────────────────────────────────
+
+export const PhrProcedureSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  name: z.string(),
+  cpt_code: nullableString,
+  snomed_code: nullableString,
+  performed_at: nullableString,
+  performed_on: nullableString,
+  performer_name: nullableString,
+  performer_specialty: nullableString,
+  facility_name: nullableString,
+  status: z.string(),
+  reason: nullableString,
+  outcome: nullableString,
+  notes: nullableString,
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrProcedure = z.infer<typeof PhrProcedureSchema>
+
+export const PhrProceduresResponseSchema = z.object({
+  procedures: z.array(PhrProcedureSchema),
+})
+
+// ── Immunizations ─────────────────────────────────────────────────────────────
+
+export const PhrImmunizationSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  vaccine_name: z.string(),
+  cvx_code: nullableString,
+  manufacturer: nullableString,
+  lot_number: nullableString,
+  administered_on: nullableString,
+  dose_number: z.number().nullable(),
+  series_doses: z.number().nullable(),
+  site: nullableString,
+  route: nullableString,
+  administered_by: nullableString,
+  facility_name: nullableString,
+  notes: nullableString,
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrImmunization = z.infer<typeof PhrImmunizationSchema>
+
+export const PhrImmunizationsResponseSchema = z.object({
+  immunizations: z.array(PhrImmunizationSchema),
+})
+
+// ── Allergies ─────────────────────────────────────────────────────────────────
+
+export const PhrAllergySchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  user_id: z.number(),
+  substance: z.string(),
+  rxnorm_code: nullableString,
+  snomed_code: nullableString,
+  category: nullableString,
+  criticality: nullableString,
+  clinical_status: z.string(),
+  verification_status: z.string(),
+  reaction: nullableString,
+  severity: nullableString,
+  notes: nullableString,
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrAllergy = z.infer<typeof PhrAllergySchema>
+
+export const PhrAllergiesResponseSchema = z.object({
+  allergies: z.array(PhrAllergySchema),
+})
