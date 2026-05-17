@@ -68,7 +68,19 @@ beforeEach(() => {
       return {
         patient: {
           id: 42,
+          owner_user_id: 7,
+          display_name: 'Primary',
+          relationship: 'self',
+          birth_date: null,
+          sex_at_birth: null,
+          notes: null,
+          archived_at: null,
+          created_at: null,
+          updated_at: null,
+          access_level: 'owner',
           can_manage: true,
+          can_share: true,
+          access_grants: [],
         },
       }
     }

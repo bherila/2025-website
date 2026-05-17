@@ -11,6 +11,7 @@ import {
   type PhrMedication,
   PhrMedicationResponseSchema,
   PhrMedicationsResponseSchema,
+  PhrPatientResponseSchema,
 } from '@/phr/types'
 
 type MedicationStatus = 'active' | 'completed' | 'discontinued' | 'on_hold'
@@ -476,7 +477,7 @@ export default function MedicationsPage({ patientId }: { patientId: number }) {
         fetchWrapper.get(`/api/phr/patients/${patientId}`),
       ])
       setMedications(PhrMedicationsResponseSchema.parse(rawMedications).medications)
-      setCanManage(Boolean((rawPatient as { patient?: { can_manage?: boolean } })?.patient?.can_manage))
+      setCanManage(PhrPatientResponseSchema.parse(rawPatient).patient.can_manage)
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -506,11 +507,11 @@ export default function MedicationsPage({ patientId }: { patientId: number }) {
     [filteredMedications],
   )
 
-  const updateMedication = useCallback((updatedMedication: PhrMedication) => {
+  function updateMedication(updatedMedication: PhrMedication): void {
     setMedications((current) => current.map((medication) => (
       medication.id === updatedMedication.id ? updatedMedication : medication
     )))
-  }, [])
+  }
 
   function startEdit(medication: PhrMedication): void {
     setDeletingId(null)
