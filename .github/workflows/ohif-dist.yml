@@ -33,6 +33,7 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: prod
     env:
       # When triggered by push, no input is available; fall back to a pinned tag.
       OHIF_TAG: ${{ github.event.inputs.tag || 'v3.12.0' }}
