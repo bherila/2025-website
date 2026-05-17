@@ -3,11 +3,30 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PageController extends Controller
 {
+    use ResolvesPHRPatientAccess;
+
+    private const TAB_LABELS = [
+        'summary' => 'Summary',
+        'labs' => 'Labs',
+        'vitals' => 'Vitals',
+        'imaging' => 'Imaging',
+        'office-visits' => 'Office Visits',
+        'medications' => 'Medications',
+        'conditions' => 'Conditions',
+        'procedures' => 'Procedures',
+        'immunizations' => 'Immunizations',
+        'allergies' => 'Allergies',
+        'documents' => 'Documents',
+        'access' => 'Access',
+    ];
+
     public function index(): RedirectResponse
     {
         return redirect('/phr/patients');
@@ -18,68 +37,34 @@ class PageController extends Controller
         return view('phr.patients');
     }
 
-    public function patientsManage(): View
+    public function managePatients(): View
     {
-        return view('phr.patients-manage');
+        return view('phr.manage');
     }
 
-    public function summary(): View
+    public function imports(): View
     {
-        return view('phr.summary');
+        return view('phr.imports');
     }
 
-    public function labs(): View
+    public function config(): View
     {
-        return view('phr.labs');
+        return view('phr.config');
     }
 
-    public function vitals(): View
+    public function patientTab(Request $request, int $patient, string $tab): View
     {
-        return view('phr.vitals');
-    }
+        $user = $request->user();
+        abort_unless($user !== null, 403);
+        $userId = (int) $user->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $tabLabel = self::TAB_LABELS[$tab] ?? 'PHR';
 
-    public function imaging(): View
-    {
-        return view('phr.imaging');
-    }
-
-    public function officeVisits(): View
-    {
-        return view('phr.office-visits');
-    }
-
-    public function medications(): View
-    {
-        return view('phr.medications');
-    }
-
-    public function conditions(): View
-    {
-        return view('phr.conditions');
-    }
-
-    public function procedures(): View
-    {
-        return view('phr.procedures');
-    }
-
-    public function immunizations(): View
-    {
-        return view('phr.immunizations');
-    }
-
-    public function allergies(): View
-    {
-        return view('phr.allergies');
-    }
-
-    public function documents(): View
-    {
-        return view('phr.documents');
-    }
-
-    public function access(): View
-    {
-        return view('phr.access');
+        return view('phr.patient-tab', [
+            'patientId' => $resolvedPatient->id,
+            'tab' => $tab,
+            'tabLabel' => $tabLabel,
+            'canManage' => $this->canManagePatient($resolvedPatient, $userId),
+        ]);
     }
 }

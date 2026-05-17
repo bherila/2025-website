@@ -131,6 +131,7 @@ CREATE TABLE `client_companies` (
   `default_hourly_rate` decimal(8,2) DEFAULT NULL,
   `additional_notes` text DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `stripe_billing_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `last_activity` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1660,29 +1661,194 @@ CREATE TABLE `password_reset_tokens` (
   PRIMARY KEY (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_dicom_files`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_dicom_files` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `upload_id` bigint(20) unsigned NOT NULL,
+  `file_kind` varchar(32) NOT NULL,
+  `r2_key` varchar(1024) NOT NULL,
+  `original_relative_path` varchar(1024) NOT NULL,
+  `original_path_hash` char(64) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `mime_type` varchar(128) DEFAULT NULL,
+  `file_size_bytes` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `sha256` char(64) NOT NULL,
+  `metadata_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata_json`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `phr_dicom_files_upload_path_unique` (`upload_id`,`original_path_hash`),
+  KEY `phr_dicom_files_patient_sha_idx` (`patient_id`,`sha256`),
+  CONSTRAINT `phr_dicom_files_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_files_upload_fk` FOREIGN KEY (`upload_id`) REFERENCES `phr_dicom_uploads` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_dicom_instances`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_dicom_instances` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `study_id` bigint(20) unsigned NOT NULL,
+  `series_id` bigint(20) unsigned NOT NULL,
+  `upload_id` bigint(20) unsigned NOT NULL,
+  `file_id` bigint(20) unsigned NOT NULL,
+  `sop_instance_uid` varchar(128) NOT NULL,
+  `sop_class_uid` varchar(128) DEFAULT NULL,
+  `instance_number` int(11) DEFAULT NULL,
+  `transfer_syntax_uid` varchar(128) DEFAULT NULL,
+  `rows` int(11) DEFAULT NULL,
+  `columns` int(11) DEFAULT NULL,
+  `number_of_frames` int(11) DEFAULT NULL,
+  `metadata_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata_json`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `phr_dicom_instances_patient_sop_unique` (`patient_id`,`sop_instance_uid`),
+  KEY `phr_dicom_instances_study_fk` (`study_id`),
+  KEY `phr_dicom_instances_upload_fk` (`upload_id`),
+  KEY `phr_dicom_instances_file_fk` (`file_id`),
+  KEY `phr_dicom_instances_series_num_idx` (`series_id`,`instance_number`),
+  CONSTRAINT `phr_dicom_instances_file_fk` FOREIGN KEY (`file_id`) REFERENCES `phr_dicom_files` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_instances_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_instances_series_fk` FOREIGN KEY (`series_id`) REFERENCES `phr_dicom_series` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_instances_study_fk` FOREIGN KEY (`study_id`) REFERENCES `phr_dicom_studies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_instances_upload_fk` FOREIGN KEY (`upload_id`) REFERENCES `phr_dicom_uploads` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_dicom_series`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_dicom_series` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `study_id` bigint(20) unsigned NOT NULL,
+  `series_instance_uid` varchar(128) NOT NULL,
+  `modality` varchar(16) DEFAULT NULL,
+  `series_number` int(11) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `body_part` varchar(100) DEFAULT NULL,
+  `metadata_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata_json`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `phr_dicom_series_study_uid_unique` (`study_id`,`series_instance_uid`),
+  KEY `phr_dicom_series_patient_modality_idx` (`patient_id`,`modality`),
+  CONSTRAINT `phr_dicom_series_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_series_study_fk` FOREIGN KEY (`study_id`) REFERENCES `phr_dicom_studies` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_dicom_studies`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_dicom_studies` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `upload_id` bigint(20) unsigned DEFAULT NULL,
+  `study_instance_uid` varchar(128) NOT NULL,
+  `study_date` date DEFAULT NULL,
+  `study_time` varchar(32) DEFAULT NULL,
+  `accession_number` varchar(128) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `modalities` varchar(255) DEFAULT NULL,
+  `metadata_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata_json`)),
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `phr_dicom_studies_patient_uid_unique` (`patient_id`,`study_instance_uid`),
+  KEY `phr_dicom_studies_upload_fk` (`upload_id`),
+  KEY `phr_dicom_studies_patient_date_idx` (`patient_id`,`study_date`),
+  CONSTRAINT `phr_dicom_studies_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_studies_upload_fk` FOREIGN KEY (`upload_id`) REFERENCES `phr_dicom_uploads` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_dicom_uploads`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_dicom_uploads` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `uploaded_by_user_id` bigint(20) unsigned NOT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `original_root_name` varchar(255) DEFAULT NULL,
+  `total_files` int(10) unsigned NOT NULL DEFAULT 0,
+  `stored_files` int(10) unsigned NOT NULL DEFAULT 0,
+  `skipped_files` int(10) unsigned NOT NULL DEFAULT 0,
+  `total_bytes` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `stored_bytes` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `r2_prefix` varchar(512) NOT NULL,
+  `manifest_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`manifest_json`)),
+  `skipped_files_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`skipped_files_json`)),
+  `error_message` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `phr_dicom_uploads_patient_created_idx` (`patient_id`,`created_at`),
+  KEY `phr_dicom_uploads_user_idx` (`uploaded_by_user_id`),
+  CONSTRAINT `phr_dicom_uploads_patient_fk` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_dicom_uploads_user_fk` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `phr_lab_results`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `phr_lab_results` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` varchar(255) DEFAULT NULL,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
   `test_name` varchar(255) DEFAULT NULL,
-  `collection_datetime` timestamp NULL DEFAULT NULL,
-  `result_datetime` timestamp NULL DEFAULT NULL,
+  `collection_datetime` datetime DEFAULT NULL,
+  `result_datetime` datetime DEFAULT NULL,
   `result_status` varchar(50) DEFAULT NULL,
   `ordering_provider` varchar(100) DEFAULT NULL,
   `resulting_lab` varchar(100) DEFAULT NULL,
   `analyte` varchar(100) DEFAULT NULL,
-  `value` varchar(20) DEFAULT NULL,
-  `unit` varchar(20) DEFAULT NULL,
-  `range_min` decimal(10,2) DEFAULT NULL,
-  `range_max` decimal(10,2) DEFAULT NULL,
-  `range_unit` varchar(20) DEFAULT NULL,
-  `normal_value` varchar(50) DEFAULT NULL,
+  `value` varchar(255) DEFAULT NULL,
+  `value_numeric` decimal(18,10) DEFAULT NULL,
+  `unit` varchar(50) DEFAULT NULL,
+  `range_min` decimal(18,10) DEFAULT NULL,
+  `range_max` decimal(18,10) DEFAULT NULL,
+  `range_unit` varchar(50) DEFAULT NULL,
+  `reference_range_text` varchar(255) DEFAULT NULL,
+  `normal_value` varchar(100) DEFAULT NULL,
+  `abnormal_flag` varchar(50) DEFAULT NULL,
   `message_from_provider` mediumtext DEFAULT NULL,
   `result_comment` mediumtext DEFAULT NULL,
   `lab_director` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `source` varchar(100) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `phr_labs_patient_result_dt_idx` (`patient_id`,`result_datetime`),
+  KEY `phr_labs_user_result_dt_idx` (`user_id`,`result_datetime`),
+  KEY `phr_labs_patient_analyte_idx` (`patient_id`,`analyte`),
+  CONSTRAINT `phr_lab_results_new_patient_id_foreign` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_lab_results_new_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_patient_user_access`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_patient_user_access` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `access_level` varchar(32) NOT NULL DEFAULT 'viewer',
+  `granted_by_user_id` bigint(20) unsigned DEFAULT NULL,
+  `granted_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `phr_patient_access_patient_user_unique` (`patient_id`,`user_id`),
+  KEY `phr_patient_user_access_granted_by_user_id_foreign` (`granted_by_user_id`),
+  KEY `phr_patient_access_user_level_idx` (`user_id`,`access_level`),
+  CONSTRAINT `phr_patient_user_access_granted_by_user_id_foreign` FOREIGN KEY (`granted_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `phr_patient_user_access_patient_id_foreign` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_patient_user_access_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `phr_patient_vitals`;
@@ -1690,11 +1856,47 @@ DROP TABLE IF EXISTS `phr_patient_vitals`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `phr_patient_vitals` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` varchar(50) DEFAULT NULL,
+  `patient_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
   `vital_name` varchar(255) DEFAULT NULL,
   `vital_date` date DEFAULT NULL,
+  `observed_at` datetime DEFAULT NULL,
   `vital_value` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `value_numeric` decimal(18,10) DEFAULT NULL,
+  `value_numeric_secondary` decimal(18,10) DEFAULT NULL,
+  `unit` varchar(50) DEFAULT NULL,
+  `secondary_unit` varchar(50) DEFAULT NULL,
+  `body_site` varchar(100) DEFAULT NULL,
+  `source` varchar(100) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `phr_vitals_patient_date_idx` (`patient_id`,`vital_date`),
+  KEY `phr_vitals_user_date_idx` (`user_id`,`vital_date`),
+  KEY `phr_vitals_patient_name_idx` (`patient_id`,`vital_name`),
+  CONSTRAINT `phr_patient_vitals_new_patient_id_foreign` FOREIGN KEY (`patient_id`) REFERENCES `phr_patients` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `phr_patient_vitals_new_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `phr_patients`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `phr_patients` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `owner_user_id` bigint(20) unsigned NOT NULL,
+  `display_name` varchar(255) DEFAULT NULL,
+  `relationship` varchar(50) DEFAULT NULL,
+  `birth_date` date DEFAULT NULL,
+  `sex_at_birth` varchar(50) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `phr_patients_owner_name_idx` (`owner_user_id`,`display_name`),
+  KEY `phr_patients_archived_idx` (`archived_at`),
+  CONSTRAINT `phr_patients_owner_user_id_foreign` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `product_keys`;
@@ -2172,3 +2374,7 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (132,'2026_05_10_20
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (133,'2026_05_11_071226_create_fin_planning_roth_scenarios_table',83);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (134,'2026_05_11_071310_create_fin_documents_unified_import_tables',84);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (135,'2026_05_12_060422_add_expected_fee_fields_to_fin_accounts_table',85);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (136,'2026_05_17_042848_create_missing_phr_tables_if_needed',86);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (137,'2026_05_17_042849_normalize_phr_patient_schema',87);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (138,'2026_05_17_060948_create_phr_dicom_tables',87);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (139,'2026_05_17_065354_add_stripe_billing_enabled_to_client_companies_table',87);

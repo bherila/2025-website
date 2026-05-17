@@ -97,19 +97,25 @@ Route::middleware('auth')->group(function () {
     });
     Route::get('/phr', [PHRPageController::class, 'index'])->name('phr.index');
     Route::get('/phr/patients', [PHRPageController::class, 'patients'])->name('phr.patients');
-    Route::get('/phr/patients/manage', [PHRPageController::class, 'patientsManage'])->name('phr.patients-manage');
-    Route::get('/phr/summary', [PHRPageController::class, 'summary'])->name('phr.summary');
-    Route::get('/phr/labs', [PHRPageController::class, 'labs'])->name('phr.labs');
-    Route::get('/phr/vitals', [PHRPageController::class, 'vitals'])->name('phr.vitals');
-    Route::get('/phr/imaging', [PHRPageController::class, 'imaging'])->name('phr.imaging');
-    Route::get('/phr/office-visits', [PHRPageController::class, 'officeVisits'])->name('phr.office-visits');
-    Route::get('/phr/medications', [PHRPageController::class, 'medications'])->name('phr.medications');
-    Route::get('/phr/conditions', [PHRPageController::class, 'conditions'])->name('phr.conditions');
-    Route::get('/phr/procedures', [PHRPageController::class, 'procedures'])->name('phr.procedures');
-    Route::get('/phr/immunizations', [PHRPageController::class, 'immunizations'])->name('phr.immunizations');
-    Route::get('/phr/allergies', [PHRPageController::class, 'allergies'])->name('phr.allergies');
-    Route::get('/phr/documents', [PHRPageController::class, 'documents'])->name('phr.documents');
-    Route::get('/phr/access', [PHRPageController::class, 'access'])->name('phr.access');
+    Route::get('/phr/patients/manage', [PHRPageController::class, 'managePatients'])->name('phr.patients.manage');
+    Route::get('/phr/imports', [PHRPageController::class, 'imports'])->name('phr.imports');
+    Route::get('/phr/config', [PHRPageController::class, 'config'])->name('phr.config');
+    Route::get('/phr/patient/{patient}/{tab}', [PHRPageController::class, 'patientTab'])
+        ->whereNumber('patient')
+        ->whereIn('tab', [
+            'summary',
+            'labs',
+            'vitals',
+            'imaging',
+            'office-visits',
+            'medications',
+            'conditions',
+            'procedures',
+            'immunizations',
+            'allergies',
+            'documents',
+            'access',
+        ])->name('phr.patient.tab');
 
     // User Management Routes (Admin only)
     Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');
