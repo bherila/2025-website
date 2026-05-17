@@ -8,7 +8,7 @@ import PhrShell from '@/phr/PhrShell'
 import { errorMessage } from '@/phr/shared'
 import { type PhrLabResult, PhrLabResultsResponseSchema, type PhrVital, PhrVitalsResponseSchema } from '@/phr/types'
 
-export default function SummaryPage() {
+export default function SummaryPage({ patientId: _patientId }: { patientId?: number }) {
   const { patients, selectedPatientId, selectedPatient, busy, error, setSelectedPatientId } = usePhrPatients()
   const [recordsBusy, setRecordsBusy] = useState(false)
   const [recordError, setRecordError] = useState<string | null>(null)

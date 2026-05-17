@@ -4,13 +4,7 @@
 
 @section('content')
   <div id="PhrNavbar" data-patient-id="{{ $patientId }}" data-active-tab="{{ $tab }}"></div>
-  <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-    <h1 class="text-2xl font-semibold text-foreground">{{ $tabLabel }}</h1>
-    <p class="mt-2 text-sm text-muted-foreground">Coming soon.</p>
-    @if (!$canManage)
-      <p class="mt-1 text-sm text-muted-foreground">Read-only access.</p>
-    @endif
-  </div>
+  <div id="phr-page-content" class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8" data-patient-id="{{ $patientId }}" data-tab="{{ $tab }}" data-can-manage="{{ $canManage ? 'true' : 'false' }}"></div>
 @endsection
 
 @push('scripts')

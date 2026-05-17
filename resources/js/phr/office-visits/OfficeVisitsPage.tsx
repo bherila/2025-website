@@ -1,14 +1,8 @@
-import PhrShell from '@/phr/PhrShell'
-import { readPatientIdFromQuery } from '@/phr/shared'
-
-export default function OfficeVisitsPage() {
-  const patientId = readPatientIdFromQuery()
-
+export default function OfficeVisitsPage({ patientId }: { patientId: number }) {
   return (
-    <PhrShell activeTab="office-visits" patientId={patientId}>
-      <section className="rounded-md border border-border bg-card p-6">
-        <p className="text-sm text-muted-foreground">Office Visits — coming soon.</p>
-      </section>
-    </PhrShell>
+    <div className="py-8 text-sm text-muted-foreground">
+      {/* Patient-scoped content for patient {patientId} — coming soon */}
+      Coming soon.
+    </div>
   )
 }

@@ -8,6 +8,7 @@ class PhrNavigationTest extends TestCase
 {
     public function test_patients_page_renders_for_authenticated_user(): void
     {
+        $this->withoutVite();
         $response = $this->actingAs($this->createUser())->get('/phr/patients');
 
         $response->assertOk();
@@ -17,6 +18,7 @@ class PhrNavigationTest extends TestCase
 
     public function test_patient_labs_tab_renders_for_authorized_user(): void
     {
+        $this->withoutVite();
         $owner = $this->createUser();
         $patientResponse = $this->actingAs($owner)->postJson('/api/phr/patients', [
             'display_name' => 'Primary',
