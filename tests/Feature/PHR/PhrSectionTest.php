@@ -18,8 +18,7 @@ class PhrSectionTest extends TestCase
     {
         $response = $this->actingAs($this->createUser())->get('/phr');
 
-        $response->assertOk();
-        $response->assertSee('phr-root');
+        $response->assertRedirect('/phr/patients');
     }
 
     public function test_patient_api_supports_owner_manager_viewer_and_unshared_access(): void
