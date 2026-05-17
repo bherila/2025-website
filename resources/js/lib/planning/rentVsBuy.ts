@@ -348,17 +348,15 @@ export function computeRentVsBuy(inputs: RentVsBuyInputs): RentVsBuyResults {
     let annualRentCashOutflow = 0
 
     for (let month = 0; month < MONTHS_PER_YEAR; month += 1) {
-      let interestPayment = 0
-      let principalPayment = 0
       let mortgagePayment = 0
 
       if (remainingBalance > 0 && monthlyMortgagePayment > 0) {
-        interestPayment = roundMoney(multiplyMoney(remainingBalance, mortgageRate / MONTHS_PER_YEAR))
+        const interestPayment = roundMoney(multiplyMoney(remainingBalance, mortgageRate / MONTHS_PER_YEAR))
         annualDeductibleMortgageInterest = roundMoney(addMoney(
           annualDeductibleMortgageInterest,
           getDeductibleMortgageInterest(interestPayment, remainingBalance),
         ))
-        principalPayment = roundMoney(subtractMoney(monthlyMortgagePayment, interestPayment))
+        let principalPayment = roundMoney(subtractMoney(monthlyMortgagePayment, interestPayment))
 
         if (principalPayment > remainingBalance) {
           principalPayment = remainingBalance

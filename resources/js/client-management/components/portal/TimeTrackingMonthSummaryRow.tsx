@@ -41,6 +41,24 @@ export default function TimeTrackingMonthSummaryRow({
 }: TimeTrackingMonthSummaryRowProps) {
   // For invoice page, show breakdown if available
   const isInvoicePage = displayMode === 'invoice_page' || (carriedInHours !== undefined || currentMonthHours !== undefined);
+  let resolvedFinalBalance = finalBalance;
+
+  if (resolvedFinalBalance === undefined) {
+    if (remainingPool !== undefined || negativeBalance !== undefined) {
+      resolvedFinalBalance = (remainingPool || 0) - (negativeBalance || 0);
+    } else if (displayMode === 'invoice_page' && (startingUnusedHours !== undefined || startingNegativeHours !== undefined)) {
+      resolvedFinalBalance = (startingUnusedHours || 0) - (startingNegativeHours || 0);
+    }
+  }
+
+  const nextMonthBalance = startingUnusedHours !== undefined || startingNegativeHours !== undefined
+    ? (startingUnusedHours || 0) - (startingNegativeHours || 0)
+    : undefined;
+  const showNextMonthBalance = typeof nextMonthBalance === 'number'
+    && (
+      (displayMode === 'invoice_page' && nextMonthBalance !== resolvedFinalBalance)
+      || displayMode === 'time_page'
+    );
   
   return (
     <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3 text-xs text-muted-foreground">
@@ -122,76 +140,29 @@ export default function TimeTrackingMonthSummaryRow({
       )}
 
       {/* Month-end balance: prefer explicit finalBalance prop, otherwise derive from remainingPool/negativeBalance */}
-      {(() => {
-        let fb = finalBalance;
-        
-        if (fb === undefined) {
-          if (remainingPool !== undefined || negativeBalance !== undefined) {
-            fb = (remainingPool || 0) - (negativeBalance || 0);
-          } else if (displayMode === 'invoice_page' && (startingUnusedHours !== undefined || startingNegativeHours !== undefined)) {
-            fb = (startingUnusedHours || 0) - (startingNegativeHours || 0);
-          }
-        }
-
-        if (typeof fb === 'number') {
-          const results = [];
-
-          // Show Remaining Balance tile for invoice page even when zero (display 0:00)
-          if (fb >= 0) {
-            results.push(
-              <SummaryTile key="remaining" title="Remaining Balance" kind="green" size="small">
-                {formatHours(fb)}
-              </SummaryTile>
-            )
-          } else {
-            // Negative balance (carried forward)
-            results.push(
-              <SummaryTile key="negative" title="Negative Balance (Carried Forward)" kind="red" size="small">
-                {formatHours(Math.abs(fb))}
-              </SummaryTile>
-            )
-          }
-
-          // On invoice page, if we have starting balances for the NEXT month that differ from the work period end state, show them as well
-          // On time page, show next month balance when available from invoice data
-          if (startingUnusedHours !== undefined || startingNegativeHours !== undefined) {
-            const nextFb = (startingUnusedHours || 0) - (startingNegativeHours || 0);
-            if (displayMode === 'invoice_page' && nextFb !== fb) {
-              if (nextFb >= 0) {
-                results.push(
-                  <SummaryTile key="next-remaining" title="Next Month Start Balance" kind="green" size="small">
-                    {formatHours(nextFb)}
-                  </SummaryTile>
-                );
-              } else {
-                results.push(
-                  <SummaryTile key="next-negative" title="Next Month Start Overage" kind="red" size="small">
-                    {formatHours(Math.abs(nextFb))}
-                  </SummaryTile>
-                );
-              }
-            } else if (displayMode === 'time_page') {
-              if (nextFb >= 0) {
-                results.push(
-                  <SummaryTile key="next-remaining" title="Next Month Start Balance" kind="green" size="small">
-                    {formatHours(nextFb)}
-                  </SummaryTile>
-                );
-              } else {
-                results.push(
-                  <SummaryTile key="next-negative" title="Next Month Start Overage" kind="red" size="small">
-                    {formatHours(Math.abs(nextFb))}
-                  </SummaryTile>
-                );
-              }
-            }
-          }
-
-          return <>{results}</>;
-        }
-
-        return null
-      })()}
+      {typeof resolvedFinalBalance === 'number' && (
+        <>
+          {resolvedFinalBalance >= 0 ? (
+            <SummaryTile title="Remaining Balance" kind="green" size="small">
+              {formatHours(resolvedFinalBalance)}
+            </SummaryTile>
+          ) : (
+            <SummaryTile title="Negative Balance (Carried Forward)" kind="red" size="small">
+              {formatHours(Math.abs(resolvedFinalBalance))}
+            </SummaryTile>
+          )}
+          {showNextMonthBalance && nextMonthBalance >= 0 && (
+            <SummaryTile title="Next Month Start Balance" kind="green" size="small">
+              {formatHours(nextMonthBalance)}
+            </SummaryTile>
+          )}
+          {showNextMonthBalance && nextMonthBalance < 0 && (
+            <SummaryTile title="Next Month Start Overage" kind="red" size="small">
+              {formatHours(Math.abs(nextMonthBalance))}
+            </SummaryTile>
+          )}
+        </>
+      )}
     </div>
   )
 }

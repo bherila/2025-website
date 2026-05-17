@@ -1,7 +1,7 @@
 'use client'
 import currency from 'currency.js'
 import { Edit } from 'lucide-react'
-import { createRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ export default function EditBalanceDisplay({ acct_id, defaultBalance, onUpdate }
   const [balance, setBalance] = useState(defaultBalance)
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const inputRef = createRef<HTMLInputElement>()
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleClick = () => {
     setIsEditing(true)

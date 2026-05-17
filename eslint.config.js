@@ -14,6 +14,7 @@ export default tseslint.config(
       "**/public/**",
       "**/storage/**",
       "**/bootstrap/cache/**",
+      "training_data/**",
       "postcss.config.js",
       "vite.config.ts",
       "tailwind.config.ts",
@@ -45,16 +46,10 @@ export default tseslint.config(
     rules: {
       ...eslintReact.configs["recommended-typescript"].rules,
       ...reactHooks.configs.recommended.rules,
-      "@eslint-react/dom-no-flush-sync": "off",
-      "@eslint-react/no-create-ref": "off",
-      "@eslint-react/no-nested-component-definitions": "off",
-      "@eslint-react/unsupported-syntax": "off",
       "unused-imports/no-unused-imports": "error",
       "unused-imports/no-unused-vars": "off",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
-      "no-useless-assignment": "off",
-      "preserve-caught-error": "off",
       "@typescript-eslint/no-unused-vars": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-require-imports": "off",
@@ -79,8 +74,6 @@ export default tseslint.config(
       "unused-imports/no-unused-imports": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
-      "no-useless-assignment": "off",
-      "preserve-caught-error": "off",
     },
   }
 );
