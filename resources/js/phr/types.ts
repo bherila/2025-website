@@ -250,11 +250,16 @@ export const PhrMedicationSchema = z.object({
   status: z.string(),
   prescriber_name: nullableString,
   reason_for_use: nullableString,
+  raw_text: nullableString,
   created_at: nullableString,
   updated_at: nullableString,
 })
 
 export type PhrMedication = z.infer<typeof PhrMedicationSchema>
+
+export const PhrMedicationResponseSchema = z.object({
+  medication: PhrMedicationSchema,
+})
 
 export const PhrMedicationsResponseSchema = z.object({
   medications: z.array(PhrMedicationSchema),

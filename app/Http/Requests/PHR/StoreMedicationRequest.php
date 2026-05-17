@@ -3,6 +3,7 @@
 namespace App\Http\Requests\PHR;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreMedicationRequest extends FormRequest
 {
@@ -28,9 +29,10 @@ class StoreMedicationRequest extends FormRequest
             'frequency' => ['nullable', 'string', 'max:100'],
             'started_on' => ['nullable', 'date'],
             'ended_on' => ['nullable', 'date'],
-            'status' => ['sometimes', 'string', 'max:50'],
+            'status' => ['sometimes', 'string', Rule::in(['active', 'completed', 'discontinued', 'on_hold'])],
             'prescriber_name' => ['nullable', 'string', 'max:255'],
             'reason_for_use' => ['nullable', 'string', 'max:10000'],
+            'raw_text' => ['nullable', 'string'],
         ];
     }
 }

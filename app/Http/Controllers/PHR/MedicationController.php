@@ -46,6 +46,18 @@ class MedicationController extends Controller
         return response()->json(['medication' => $this->payload($medication)], 201);
     }
 
+    public function show(Request $request, int $patient, int $medication): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+
+        $resolved = PhrMedication::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->findOrFail($medication);
+
+        return response()->json(['medication' => $this->payload($resolved)]);
+    }
+
     public function update(StoreMedicationRequest $request, int $patient, int $medication): JsonResponse
     {
         $userId = (int) $request->user()?->id;
@@ -94,6 +106,7 @@ class MedicationController extends Controller
             'status' => $m->status,
             'prescriber_name' => $m->prescriber_name,
             'reason_for_use' => $m->reason_for_use,
+            'raw_text' => $m->raw_text,
             'created_at' => $m->created_at?->toDateTimeString(),
             'updated_at' => $m->updated_at?->toDateTimeString(),
         ];

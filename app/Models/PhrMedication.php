@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Traits\SerializesDatesAsLocal;
+use Database\Factories\PhrMedicationFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -28,6 +30,9 @@ use Illuminate\Support\Carbon;
  */
 class PhrMedication extends Model
 {
+    /** @use HasFactory<PhrMedicationFactory> */
+    use HasFactory;
+
     use SerializesDatesAsLocal;
 
     protected $fillable = [
