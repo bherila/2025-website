@@ -1,4 +1,4 @@
-import { type PhrTabKey,phrTabs } from '@/phr/navigation'
+import { type PhrTabKey, phrTabs } from '@/phr/navigation'
 
 interface PhrNavbarProps {
   activeTab: PhrTabKey
