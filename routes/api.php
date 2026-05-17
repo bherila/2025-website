@@ -53,6 +53,9 @@ use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
 use App\Http\Controllers\PasskeyController;
+use App\Http\Controllers\PHR\DICOM\DicomFileController as PHRDicomFileController;
+use App\Http\Controllers\PHR\DICOM\DicomStudyController as PHRDicomStudyController;
+use App\Http\Controllers\PHR\DICOM\DicomUploadController as PHRDicomUploadController;
 use App\Http\Controllers\PHR\LabResultController as PHRLabResultController;
 use App\Http\Controllers\PHR\PatientAccessController as PHRPatientAccessController;
 use App\Http\Controllers\PHR\PatientController as PHRPatientController;
@@ -267,6 +270,11 @@ Route::middleware(['web', 'auth'])
         Route::post('/patients/{patient}/vitals', [PHRVitalController::class, 'store'])->whereNumber('patient')->name('patients.vitals.store');
         Route::post('/patients/{patient}/access', [PHRPatientAccessController::class, 'store'])->whereNumber('patient')->name('patients.access.store');
         Route::delete('/patients/{patient}/access/{access}', [PHRPatientAccessController::class, 'destroy'])->whereNumber(['patient', 'access'])->name('patients.access.destroy');
+        Route::get('/patients/{patient}/dicom/studies', [PHRDicomStudyController::class, 'index'])->whereNumber('patient')->name('patients.dicom.studies.index');
+        Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'store'])->whereNumber('patient')->name('patients.dicom.uploads.store');
+        Route::get('/patients/{patient}/dicom/studies/{study}/viewer-json', [PHRDicomStudyController::class, 'viewerJson'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.viewer-json');
+        Route::get('/patients/{patient}/dicom/studies/{study}/download', [PHRDicomFileController::class, 'downloadStudy'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.download');
+        Route::get('/patients/{patient}/dicom/instances/{instance}/file', [PHRDicomFileController::class, 'proxyInstanceFile'])->whereNumber(['patient', 'instance'])->name('patients.dicom.instances.file');
     });
 
 // Login audit log routes

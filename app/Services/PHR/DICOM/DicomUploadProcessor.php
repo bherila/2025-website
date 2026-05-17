@@ -1,0 +1,360 @@
+<?php
+
+namespace App\Services\PHR\DICOM;
+
+use App\Models\PhrDicomFile;
+use App\Models\PhrDicomInstance;
+use App\Models\PhrDicomSeries;
+use App\Models\PhrDicomStudy;
+use App\Models\PhrDicomUpload;
+use App\Models\PhrPatient;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use RuntimeException;
+
+class DicomUploadProcessor
+{
+    /**
+     * @var array<int, string>
+     */
+    private const AUXILIARY_EXTENSIONS = [
+        'bat',
+        'bmp',
+        'cmd',
+        'com',
+        'css',
+        'dll',
+        'doc',
+        'docx',
+        'exe',
+        'gif',
+        'htm',
+        'html',
+        'ico',
+        'inf',
+        'ini',
+        'jpg',
+        'jpeg',
+        'js',
+        'lnk',
+        'msi',
+        'pdf',
+        'png',
+        'rtf',
+        'txt',
+        'url',
+        'xml',
+    ];
+
+    public function __construct(private readonly DicomMetadataParser $metadataParser) {}
+
+    /**
+     * @param  list<UploadedFile>  $files
+     * @param  list<string|null>  $relativePaths
+     */
+    public function process(PhrPatient $patient, int $uploadedByUserId, array $files, array $relativePaths, ?string $rootName): PhrDicomUpload
+    {
+        $r2Prefix = sprintf('phr/dicom/patients/%d/uploads/%s', $patient->id, Str::uuid()->toString());
+
+        $upload = PhrDicomUpload::create([
+            'patient_id' => $patient->id,
+            'uploaded_by_user_id' => $uploadedByUserId,
+            'status' => PhrDicomUpload::STATUS_PROCESSED,
+            'original_root_name' => $rootName,
+            'total_files' => count($files),
+            'stored_files' => 0,
+            'skipped_files' => 0,
+            'total_bytes' => 0,
+            'stored_bytes' => 0,
+            'r2_prefix' => $r2Prefix,
+            'manifest_json' => [
+                'stored_paths' => [],
+                'dicomdir_paths' => [],
+                'study_uids' => [],
+                'series_uids' => [],
+                'instance_uids' => [],
+            ],
+            'skipped_files_json' => [],
+        ]);
+
+        $manifest = $upload->manifest_json ?? [];
+        $skippedFiles = [];
+        $storedFiles = 0;
+        $storedBytes = 0;
+        $totalBytes = 0;
+
+        foreach ($files as $index => $file) {
+            $relativePath = $this->sanitizeRelativePath($relativePaths[$index] ?? $file->getClientOriginalName());
+            $fileSize = (int) $file->getSize();
+            $totalBytes += $fileSize;
+
+            if (! $file->isValid()) {
+                $skippedFiles[] = $this->skipEntry($relativePath, 'upload_error');
+
+                continue;
+            }
+
+            if ($this->isAuxiliaryFile($relativePath)) {
+                $skippedFiles[] = $this->skipEntry($relativePath, 'auxiliary_file');
+
+                continue;
+            }
+
+            $realPath = $file->getRealPath();
+            if ($realPath === false) {
+                $skippedFiles[] = $this->skipEntry($relativePath, 'missing_temp_file');
+
+                continue;
+            }
+
+            $parsed = $this->metadataParser->parse($realPath);
+            if (! $parsed['is_dicom']) {
+                $skippedFiles[] = $this->skipEntry($relativePath, 'not_dicom');
+
+                continue;
+            }
+
+            $sha256 = hash_file('sha256', $realPath);
+            if ($sha256 === false) {
+                throw new RuntimeException("Unable to hash DICOM file [{$relativePath}].");
+            }
+
+            $r2Key = $this->r2Key($r2Prefix, $relativePath);
+            $this->storeFile($realPath, $r2Key);
+
+            $fileKind = $this->isDicomdirPath($relativePath) ? PhrDicomFile::KIND_DICOMDIR : PhrDicomFile::KIND_DICOM;
+            $dicomFile = PhrDicomFile::create([
+                'patient_id' => $patient->id,
+                'upload_id' => $upload->id,
+                'file_kind' => $fileKind,
+                'r2_key' => $r2Key,
+                'original_relative_path' => $relativePath,
+                'original_path_hash' => hash('sha256', $relativePath),
+                'original_filename' => basename($relativePath),
+                'mime_type' => $file->getClientMimeType() ?: 'application/dicom',
+                'file_size_bytes' => $fileSize,
+                'sha256' => $sha256,
+                'metadata_json' => $parsed['metadata'],
+            ]);
+
+            $storedFiles++;
+            $storedBytes += $fileSize;
+            $manifest['stored_paths'][] = $relativePath;
+
+            if ($fileKind === PhrDicomFile::KIND_DICOMDIR) {
+                $manifest['dicomdir_paths'][] = $relativePath;
+            }
+
+            if ($parsed['is_image_instance']) {
+                $this->upsertImageInstance($patient, $upload, $dicomFile, $parsed['metadata'], $parsed['normalized']);
+                $manifest['study_uids'][] = $parsed['normalized']['study_instance_uid'];
+                $manifest['series_uids'][] = $parsed['normalized']['series_instance_uid'];
+                $manifest['instance_uids'][] = $parsed['normalized']['sop_instance_uid'];
+            }
+        }
+
+        $upload->update([
+            'total_files' => count($files),
+            'stored_files' => $storedFiles,
+            'skipped_files' => count($skippedFiles),
+            'total_bytes' => $totalBytes,
+            'stored_bytes' => $storedBytes,
+            'manifest_json' => $this->uniqueManifest($manifest),
+            'skipped_files_json' => $skippedFiles,
+        ]);
+
+        return $upload->refresh()->load(['files.instance', 'studies.series.instances.file']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  $normalized
+     */
+    private function upsertImageInstance(PhrPatient $patient, PhrDicomUpload $upload, PhrDicomFile $file, array $metadata, array $normalized): void
+    {
+        $studyUid = (string) $normalized['study_instance_uid'];
+        $seriesUid = (string) $normalized['series_instance_uid'];
+        $sopUid = (string) $normalized['sop_instance_uid'];
+        $modality = $this->nullableString($normalized['modality'] ?? null);
+
+        $existingStudy = PhrDicomStudy::query()
+            ->where('patient_id', $patient->id)
+            ->where('study_instance_uid', $studyUid)
+            ->first();
+
+        $study = PhrDicomStudy::updateOrCreate(
+            [
+                'patient_id' => $patient->id,
+                'study_instance_uid' => $studyUid,
+            ],
+            [
+                'upload_id' => $upload->id,
+                'study_date' => $normalized['study_date'],
+                'study_time' => $normalized['study_time'],
+                'accession_number' => $normalized['accession_number'],
+                'description' => $normalized['study_description'],
+                'modalities' => $this->mergeModalities($existingStudy?->modalities, $modality),
+                'metadata_json' => $metadata,
+            ],
+        );
+
+        $series = PhrDicomSeries::updateOrCreate(
+            [
+                'study_id' => $study->id,
+                'series_instance_uid' => $seriesUid,
+            ],
+            [
+                'patient_id' => $patient->id,
+                'modality' => $modality,
+                'series_number' => $normalized['series_number'],
+                'description' => $normalized['series_description'],
+                'body_part' => $normalized['body_part'],
+                'metadata_json' => $metadata,
+            ],
+        );
+
+        PhrDicomInstance::updateOrCreate(
+            [
+                'patient_id' => $patient->id,
+                'sop_instance_uid' => $sopUid,
+            ],
+            [
+                'study_id' => $study->id,
+                'series_id' => $series->id,
+                'upload_id' => $upload->id,
+                'file_id' => $file->id,
+                'sop_class_uid' => $normalized['sop_class_uid'],
+                'instance_number' => $normalized['instance_number'],
+                'transfer_syntax_uid' => $normalized['transfer_syntax_uid'],
+                'rows' => $normalized['rows'],
+                'columns' => $normalized['columns'],
+                'number_of_frames' => $normalized['number_of_frames'],
+                'metadata_json' => $metadata,
+            ],
+        );
+    }
+
+    private function storeFile(string $realPath, string $r2Key): void
+    {
+        $stream = fopen($realPath, 'rb');
+        if ($stream === false) {
+            throw new RuntimeException("Unable to open DICOM file [{$realPath}].");
+        }
+
+        try {
+            if (! Storage::disk('s3')->put($r2Key, $stream)) {
+                throw new RuntimeException("Unable to store DICOM object [{$r2Key}].");
+            }
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    private function sanitizeRelativePath(?string $path): string
+    {
+        $rawPath = trim(str_replace('\\', '/', (string) $path));
+        $parts = [];
+
+        foreach (explode('/', $rawPath) as $part) {
+            $part = preg_replace('/[\x00-\x1F\x7F]/', '', $part) ?? '';
+            $part = trim(str_replace([':', '*', '?', '"', '<', '>', '|'], '_', $part));
+
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+
+            if ($part === '..') {
+                continue;
+            }
+
+            $parts[] = $part;
+        }
+
+        $relativePath = implode('/', $parts);
+        if ($relativePath === '') {
+            $relativePath = 'dicom-file';
+        }
+
+        if (strlen($relativePath) <= 1000) {
+            return $relativePath;
+        }
+
+        return hash('sha256', $relativePath).'/'.substr(basename($relativePath), 0, 180);
+    }
+
+    private function isAuxiliaryFile(string $relativePath): bool
+    {
+        if ($this->isDicomdirPath($relativePath)) {
+            return false;
+        }
+
+        $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
+        if ($extension !== '' && in_array($extension, self::AUXILIARY_EXTENSIONS, true)) {
+            return true;
+        }
+
+        $segments = array_map('strtolower', explode('/', $relativePath));
+
+        return count(array_intersect($segments, ['autorun', 'cdsetup', 'icons', 'setup', 'viewer'])) > 0
+            && ! in_array($extension, ['', 'dcm', 'dicom'], true);
+    }
+
+    private function isDicomdirPath(string $relativePath): bool
+    {
+        return strtoupper(basename($relativePath)) === 'DICOMDIR';
+    }
+
+    private function r2Key(string $r2Prefix, string $relativePath): string
+    {
+        return $r2Prefix.'/'.$relativePath;
+    }
+
+    /**
+     * @return array{path: string, reason: string}
+     */
+    private function skipEntry(string $path, string $reason): array
+    {
+        return [
+            'path' => $path,
+            'reason' => $reason,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function uniqueManifest(array $manifest): array
+    {
+        foreach (['stored_paths', 'dicomdir_paths', 'study_uids', 'series_uids', 'instance_uids'] as $key) {
+            $manifest[$key] = array_values(array_unique(array_filter($manifest[$key] ?? [])));
+        }
+
+        return $manifest;
+    }
+
+    private function mergeModalities(?string $existingModalities, ?string $modality): ?string
+    {
+        $modalities = array_filter(explode('\\', (string) $existingModalities));
+
+        if ($modality !== null) {
+            $modalities[] = $modality;
+        }
+
+        $unique = array_values(array_unique($modalities));
+
+        return $unique === [] ? null : implode('\\', $unique);
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+}

@@ -23,6 +23,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Collection<int, PhrPatientUserAccess> $accessGrants
+ * @property-read Collection<int, PhrDicomStudy> $dicomStudies
+ * @property-read Collection<int, PhrDicomUpload> $dicomUploads
  */
 class PhrPatient extends Model
 {
@@ -77,6 +79,18 @@ class PhrPatient extends Model
     public function vitals(): HasMany
     {
         return $this->hasMany(PhrPatientVital::class, 'patient_id');
+    }
+
+    /** @return HasMany<PhrDicomStudy, $this> */
+    public function dicomStudies(): HasMany
+    {
+        return $this->hasMany(PhrDicomStudy::class, 'patient_id');
+    }
+
+    /** @return HasMany<PhrDicomUpload, $this> */
+    public function dicomUploads(): HasMany
+    {
+        return $this->hasMany(PhrDicomUpload::class, 'patient_id');
     }
 
     /**

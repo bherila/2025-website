@@ -84,6 +84,48 @@ export const PhrVitalSchema = z.object({
 
 export type PhrVital = z.infer<typeof PhrVitalSchema>
 
+export const PhrDicomStudySchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  upload_id: z.number().nullable(),
+  study_instance_uid: z.string(),
+  study_date: nullableString,
+  study_time: nullableString,
+  accession_number: nullableString,
+  description: nullableString,
+  modalities: nullableString,
+  series_count: z.number(),
+  instance_count: z.number(),
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrDicomStudy = z.infer<typeof PhrDicomStudySchema>
+
+export const PhrDicomSkippedFileSchema = z.object({
+  path: z.string(),
+  reason: z.string(),
+})
+
+export const PhrDicomUploadSchema = z.object({
+  id: z.number(),
+  patient_id: z.number(),
+  uploaded_by_user_id: z.number(),
+  status: z.string(),
+  original_root_name: nullableString,
+  total_files: z.number(),
+  stored_files: z.number(),
+  skipped_files: z.number(),
+  total_bytes: z.number(),
+  stored_bytes: z.number(),
+  manifest_json: z.record(z.string(), z.unknown()).nullable(),
+  skipped_files_json: z.array(PhrDicomSkippedFileSchema).nullable(),
+  created_at: nullableString,
+  updated_at: nullableString,
+})
+
+export type PhrDicomUpload = z.infer<typeof PhrDicomUploadSchema>
+
 export const PhrPatientListResponseSchema = z.object({
   patients: z.array(PhrPatientSchema),
 })
@@ -106,6 +148,14 @@ export const PhrVitalsResponseSchema = z.object({
 
 export const PhrVitalResponseSchema = z.object({
   vital: PhrVitalSchema,
+})
+
+export const PhrDicomStudiesResponseSchema = z.object({
+  studies: z.array(PhrDicomStudySchema),
+})
+
+export const PhrDicomUploadResponseSchema = z.object({
+  upload: PhrDicomUploadSchema,
 })
 
 export const PhrAccessResponseSchema = z.object({
