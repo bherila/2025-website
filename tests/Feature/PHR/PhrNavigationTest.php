@@ -52,4 +52,20 @@ class PhrNavigationTest extends TestCase
 
         $response->assertRedirect('/phr/patients');
     }
+
+    public function test_patient_summary_tab_renders_for_authorized_user(): void
+    {
+        $this->withoutVite();
+        $owner = $this->createUser();
+        $patientId = (int) $this->actingAs($owner)->postJson('/api/phr/patients', [
+            'display_name' => 'Primary',
+            'relationship' => 'self',
+        ])->json('patient.id');
+
+        $response = $this->actingAs($owner)->get("/phr/patient/{$patientId}/summary");
+
+        $response->assertOk();
+        $response->assertViewIs('phr.patient-tab');
+        $response->assertSee('data-active-tab="summary"', false);
+    }
 }
