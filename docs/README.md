@@ -13,7 +13,6 @@ Start here when you need project documentation. Keep durable architecture and wo
 | User management | [user-management.md](user-management.md) |
 | GenAI import pipeline | [genai-import.md](genai-import.md) |
 | Public financial planning calculators | [financial-planning.md](financial-planning.md) |
-| Personal health records | [phr.md](phr.md) |
 
 ## Domain Areas
 
@@ -21,6 +20,7 @@ Start here when you need project documentation. Keep durable architecture and wo
 |------|------------|
 | Finance | [finance/README.md](finance/README.md) |
 | Client management | [client-management/index.md](client-management/index.md) |
+| Personal health records | [phr/index.md](phr/index.md) |
 
 ## Maintenance Notes
 
