@@ -158,7 +158,7 @@ export default function AccessPage({ patientId }: { patientId: number }) {
             </div>
           )}
 
-          {sharedGrants.length === 0 ? (
+          {sharedGrants.length === 0 && patient?.can_share ? (
             <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
               Not shared with anyone else.
             </div>
