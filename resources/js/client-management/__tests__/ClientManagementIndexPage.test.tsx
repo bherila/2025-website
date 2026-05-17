@@ -32,6 +32,7 @@ describe('ClientManagementIndexPage', () => {
         company_name: 'Acme Consulting',
         slug: 'acme-consulting',
         is_active: true,
+        stripe_billing_enabled: false,
         created_at: '2026-05-01 00:00:00',
         users: [],
         agreements: [],
@@ -50,6 +51,7 @@ describe('ClientManagementIndexPage', () => {
 
     expect(await screen.findByText('Acme Consulting')).toBeInTheDocument()
     expect(screen.getByText('Quarterly')).toBeInTheDocument()
+    expect(screen.getByText('Stripe Off')).toBeInTheDocument()
     expect(screen.getByText('$375.00 balance due')).toBeInTheDocument()
     expect(screen.getByText('1.50 uninvoiced hours')).toBeInTheDocument()
     expect(mockGet).toHaveBeenCalledWith('/api/client/mgmt/companies')
@@ -62,6 +64,7 @@ describe('ClientManagementIndexPage', () => {
         company_name: 'Acme Consulting',
         slug: 'acme-consulting',
         is_active: true,
+        stripe_billing_enabled: true,
         created_at: '2026-05-01 00:00:00',
         users: [],
         agreements: [],
@@ -72,6 +75,7 @@ describe('ClientManagementIndexPage', () => {
         company_name: 'Quiet Books',
         slug: 'quiet-books',
         is_active: true,
+        stripe_billing_enabled: true,
         created_at: '2026-05-01 00:00:00',
         users: [],
         agreements: [],
@@ -101,6 +105,7 @@ describe('ClientManagementIndexPage', () => {
           company_name: 'Recovered Co',
           slug: 'recovered-co',
           is_active: true,
+          stripe_billing_enabled: true,
           created_at: '2026-05-01 00:00:00',
           users: [],
           agreements: [],

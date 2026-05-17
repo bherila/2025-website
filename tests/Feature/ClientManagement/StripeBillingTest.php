@@ -103,6 +103,23 @@ class StripeBillingTest extends TestCase
             ->assertJsonValidationErrors('invoice');
     }
 
+    public function test_payment_intent_rejects_when_company_stripe_billing_is_disabled(): void
+    {
+        $this->company->update(['stripe_billing_enabled' => false]);
+        $invoice = $this->createInvoice(['invoice_total' => 500.00]);
+
+        $response = $this->actingAs($this->client)->postJson("/api/client/portal/invoices/{$invoice->client_invoice_id}/pay-intent", [
+            'save_payment_method' => false,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors('invoice');
+
+        $this->assertDatabaseMissing('client_invoice_stripe_payments', [
+            'client_invoice_id' => $invoice->client_invoice_id,
+        ]);
+    }
+
     public function test_payment_intent_requires_company_membership(): void
     {
         $invoice = $this->createInvoice();
@@ -132,6 +149,27 @@ class StripeBillingTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(1, 'payment_methods')
             ->assertJsonPath('payment_methods.0.last4', '4242');
+    }
+
+    public function test_disabled_stripe_billing_hides_saved_methods_and_blocks_setup(): void
+    {
+        $this->company->update(['stripe_billing_enabled' => false]);
+        ClientCompanyPaymentMethod::factory()->create([
+            'client_company_id' => $this->company->id,
+            'stripe_payment_method_id' => 'pm_hidden',
+            'last4' => '4242',
+        ]);
+
+        $this->actingAs($this->client)
+            ->getJson("/api/client/portal/companies/{$this->company->id}/payment-methods")
+            ->assertOk()
+            ->assertJsonPath('stripe_billing_enabled', false)
+            ->assertJsonCount(0, 'payment_methods');
+
+        $this->actingAs($this->client)
+            ->postJson("/api/client/portal/companies/{$this->company->id}/payment-methods/setup")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Stripe billing is disabled for this client company.');
     }
 
     public function test_stripe_webhook_marks_invoice_paid_idempotently(): void

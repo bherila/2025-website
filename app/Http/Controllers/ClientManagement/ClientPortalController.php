@@ -157,7 +157,8 @@ class ClientPortalController extends Controller
         return view('client-management.portal.billing', [
             'company' => $company,
             'slug' => $slug,
-            'stripePublishableKey' => config('services.stripe.publishable_key'),
+            'stripeBillingEnabled' => (bool) $company->stripe_billing_enabled,
+            'stripePublishableKey' => $company->stripe_billing_enabled ? config('services.stripe.publishable_key') : null,
         ]);
     }
 
@@ -221,7 +222,8 @@ class ClientPortalController extends Controller
             'invoice' => $invoicePayload,
             'slug' => $slug,
             'invoiceId' => $invoice->client_invoice_id,
-            'stripePublishableKey' => config('services.stripe.publishable_key'),
+            'stripeBillingEnabled' => (bool) $company->stripe_billing_enabled,
+            'stripePublishableKey' => $company->stripe_billing_enabled ? config('services.stripe.publishable_key') : null,
             'stripeMaxAmountCents' => config('client-management.stripe.max_amount_cents', 100000),
         ]);
     }

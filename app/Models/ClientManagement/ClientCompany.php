@@ -27,11 +27,13 @@ class ClientCompany extends Model
         'default_hourly_rate',
         'additional_notes',
         'is_active',
+        'stripe_billing_enabled',
         'last_activity',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'stripe_billing_enabled' => 'boolean',
         'last_activity' => 'datetime',
         'default_hourly_rate' => 'decimal:2',
     ];

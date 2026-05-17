@@ -66,6 +66,7 @@ describe('InvoicePayPanel', () => {
       <InvoicePayPanel
         invoice={makeInvoice()}
         companyId={20}
+        stripeBillingEnabled={true}
         stripePublishableKey="pk_test_local"
         stripeMaxAmountCents={100000}
         onPaymentUpdated={() => undefined}
@@ -84,6 +85,7 @@ describe('InvoicePayPanel', () => {
       <InvoicePayPanel
         invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
         companyId={20}
+        stripeBillingEnabled={true}
         stripePublishableKey="pk_test_local"
         stripeMaxAmountCents={100000}
         onPaymentUpdated={() => undefined}
@@ -101,6 +103,7 @@ describe('InvoicePayPanel', () => {
       <InvoicePayPanel
         invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
         companyId={20}
+        stripeBillingEnabled={true}
         stripePublishableKey="pk_test_local"
         stripeMaxAmountCents={100000}
         onPaymentUpdated={() => undefined}
@@ -132,6 +135,7 @@ describe('InvoicePayPanel', () => {
       <InvoicePayPanel
         invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
         companyId={20}
+        stripeBillingEnabled={true}
         stripePublishableKey="pk_test_local"
         stripeMaxAmountCents={100000}
         onPaymentUpdated={() => undefined}
@@ -165,6 +169,7 @@ describe('InvoicePayPanel', () => {
       <InvoicePayPanel
         invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
         companyId={20}
+        stripeBillingEnabled={true}
         stripePublishableKey="pk_test_local"
         stripeMaxAmountCents={100000}
         onPaymentUpdated={onPaymentUpdated}
@@ -174,5 +179,21 @@ describe('InvoicePayPanel', () => {
     await waitFor(() => expect(onPaymentUpdated).toHaveBeenCalled())
     expect(window.location.search).not.toContain('payment_intent')
     expect(await screen.findByText('Payment is processing.')).toBeInTheDocument()
+  })
+
+  it('hides all invoice payment options when company Stripe billing is disabled', () => {
+    render(
+      <InvoicePayPanel
+        invoice={makeInvoice({ invoice_total: '500.00', remaining_balance: '500.00' })}
+        companyId={20}
+        stripeBillingEnabled={false}
+        stripePublishableKey="pk_test_local"
+        stripeMaxAmountCents={100000}
+        onPaymentUpdated={() => undefined}
+      />
+    )
+
+    expect(screen.queryByText('Pay This Invoice')).not.toBeInTheDocument()
+    expect(screen.queryByText('Manual Payment Required')).not.toBeInTheDocument()
   })
 })

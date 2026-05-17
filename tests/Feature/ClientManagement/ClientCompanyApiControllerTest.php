@@ -124,6 +124,7 @@ class ClientCompanyApiControllerTest extends TestCase
                     'company_name',
                     'slug',
                     'is_active',
+                    'stripe_billing_enabled',
                     'created_at',
                     'users' => [
                         [
@@ -158,6 +159,7 @@ class ClientCompanyApiControllerTest extends TestCase
         $companyPayload = $payload[0];
 
         $this->assertSame('Acme Consulting', $companyPayload['company_name']);
+        $this->assertTrue($companyPayload['stripe_billing_enabled']);
         $this->assertSame('Client User', $companyPayload['users'][0]['name']);
         $this->assertArrayNotHasKey('password', $companyPayload['users'][0]);
         $this->assertEquals(375, $companyPayload['total_balance_due']);
@@ -192,6 +194,7 @@ class ClientCompanyApiControllerTest extends TestCase
         $company = ClientCompany::factory()->create([
             'company_name' => 'Acme Consulting',
             'slug' => 'acme-consulting',
+            'stripe_billing_enabled' => false,
         ]);
         $company->users()->attach($clientUser->id);
 
@@ -208,6 +211,7 @@ class ClientCompanyApiControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonPath('company_name', 'Acme Consulting')
+            ->assertJsonPath('stripe_billing_enabled', false)
             ->assertJsonPath('users.0.email', 'client@example.com')
             ->assertJsonCount(1, 'agreements')
             ->assertJsonPath('agreements.0.monthly_retainer_hours', '10.00')
@@ -249,6 +253,7 @@ class ClientCompanyApiControllerTest extends TestCase
                 'default_hourly_rate' => 150,
                 'additional_notes' => 'Updated notes',
                 'is_active' => true,
+                'stripe_billing_enabled' => false,
             ]);
 
         $response
@@ -256,6 +261,7 @@ class ClientCompanyApiControllerTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('company.company_name', 'Renamed Consulting')
             ->assertJsonPath('company.slug', 'renamed-consulting')
+            ->assertJsonPath('company.stripe_billing_enabled', false)
             ->assertJsonPath('company.users.0.email', 'client@example.com')
             ->assertJsonCount(1, 'company.agreements')
             ->assertJsonPath('company.agreements.0.monthly_retainer_hours', '10.00')
@@ -268,6 +274,7 @@ class ClientCompanyApiControllerTest extends TestCase
             'id' => $company->id,
             'company_name' => 'Renamed Consulting',
             'slug' => 'renamed-consulting',
+            'stripe_billing_enabled' => false,
         ]);
         $this->assertNotNull($company->fresh()->last_activity);
     }
