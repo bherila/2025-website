@@ -69,7 +69,7 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 
 - **Endpoint:** `GET /api/phr/patients/{patient}/dicom/studies/{study}/download`
 - **Controller:** `app/Http/Controllers/PHR/DICOM/DicomFileController.php` (`downloadStudy()`)
-- **Client:** `resources/js/phr/index.tsx`
+- **Client:** `resources/js/phr/imaging/index.tsx`
 - **Contents:** Original retained DICOM files and `DICOMDIR` for a patient imaging study, with original relative paths preserved inside the ZIP.
 - **Current watermark:** none; pass-through medical imaging data is zipped without modifying source files.
 

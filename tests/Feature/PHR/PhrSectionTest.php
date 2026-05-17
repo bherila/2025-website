@@ -21,6 +21,38 @@ class PhrSectionTest extends TestCase
         $response->assertRedirect('/phr/patients');
     }
 
+    public function test_authenticated_user_can_open_phr_section_pages(): void
+    {
+        $this->withoutVite();
+        $user = $this->createUser();
+
+        $this->actingAs($user)->get('/phr/patients')->assertOk();
+        $this->actingAs($user)->get('/phr/patients/manage')->assertOk();
+        $this->actingAs($user)->get('/phr/imports')->assertOk();
+        $this->actingAs($user)->get('/phr/config')->assertOk();
+    }
+
+    public function test_patient_tab_pages_require_patient_access(): void
+    {
+        $this->withoutVite();
+        $owner = $this->createUser();
+        $other = $this->createUser();
+
+        $patientResponse = $this->actingAs($owner)->postJson('/api/phr/patients', [
+            'display_name' => 'Test Patient',
+            'relationship' => 'self',
+        ]);
+        $patientResponse->assertCreated();
+        $patientId = (int) $patientResponse->json('patient.id');
+
+        $tabs = ['summary', 'labs', 'vitals', 'imaging', 'office-visits', 'medications', 'conditions', 'procedures', 'immunizations', 'allergies', 'documents', 'access'];
+
+        foreach ($tabs as $tab) {
+            $this->actingAs($owner)->get("/phr/patient/{$patientId}/{$tab}")->assertOk();
+            $this->actingAs($other)->get("/phr/patient/{$patientId}/{$tab}")->assertNotFound();
+        }
+    }
+
     public function test_patient_api_supports_owner_manager_viewer_and_unshared_access(): void
     {
         $owner = $this->createUser();
