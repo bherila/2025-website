@@ -158,6 +158,20 @@ export const PhrDicomUploadResponseSchema = z.object({
   upload: PhrDicomUploadSchema,
 })
 
+export const PhrDicomUploadFileResultSchema = z.object({
+  stored: z.boolean(),
+  skipped_reason: z.string().nullable(),
+  relative_path: z.string(),
+  study_id: z.number().nullable(),
+})
+
+export type PhrDicomUploadFileResult = z.infer<typeof PhrDicomUploadFileResultSchema>
+
+export const PhrDicomUploadFileResponseSchema = z.object({
+  result: PhrDicomUploadFileResultSchema,
+  upload: PhrDicomUploadSchema,
+})
+
 export const PhrAccessResponseSchema = z.object({
   access: PhrAccessGrantSchema,
   patient: PhrPatientSchema,

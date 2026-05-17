@@ -14,7 +14,9 @@ use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Testing\TestResponse;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class PhrDicomTest extends TestCase
@@ -58,21 +60,20 @@ class PhrDicomTest extends TestCase
         $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
         $this->grantPatientAccess($owner, $patientId, $viewer, 'viewer');
 
-        $uploadResponse = $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [
-                UploadedFile::fake()->createWithContent('DICOMDIR', $this->dicomdirBytes()),
-                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
-                UploadedFile::fake()->createWithContent('SETUP.EXE', 'not a dicom file'),
-            ],
-            'relative_paths' => [
-                'CARDIAC_CT/DICOMDIR',
-                'CARDIAC_CT/ST0001/SE0001/IM0001',
-                'CARDIAC_CT/VIEWER/SETUP.EXE',
-            ],
-        ]);
+        $uploadId = $this->openUpload($manager, $patientId, 'CARDIAC_CT');
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('DICOMDIR', $this->dicomdirBytes()), 'CARDIAC_CT/DICOMDIR')
+            ->assertOk()
+            ->assertJsonPath('result.stored', true);
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'CARDIAC_CT/ST0001/SE0001/IM0001')
+            ->assertOk()
+            ->assertJsonPath('result.stored', true);
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('SETUP.EXE', 'not a dicom file'), 'CARDIAC_CT/VIEWER/SETUP.EXE')
+            ->assertOk()
+            ->assertJsonPath('result.stored', false)
+            ->assertJsonPath('result.skipped_reason', 'auxiliary_file');
 
-        $uploadResponse
-            ->assertCreated()
+        $this->finalizeUpload($manager, $patientId, $uploadId)
+            ->assertOk()
             ->assertJsonPath('upload.total_files', 3)
             ->assertJsonPath('upload.stored_files', 2)
             ->assertJsonPath('upload.skipped_files', 1)
@@ -109,17 +110,81 @@ class PhrDicomTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'application/zip');
 
-        $this->actingAs($viewer)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [
-                UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
-                    'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.2.2',
-                ])),
-            ],
-            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0002'],
-        ])->assertForbidden();
+        $this->actingAs($viewer)->postJson("/api/phr/patients/{$patientId}/dicom/uploads", [])
+            ->assertForbidden();
 
         $this->actingAs($other)->getJson("/api/phr/patients/{$patientId}/dicom/studies")->assertNotFound();
         $this->actingAs($other)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")->assertNotFound();
+    }
+
+    public function test_finalized_session_rejects_additional_files(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'IM0001')->assertOk();
+        $this->finalizeUpload($owner, $patientId, $uploadId)->assertOk();
+
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
+            'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.late.1',
+        ])), 'IM0002')->assertStatus(409);
+    }
+
+    public function test_cancel_marks_session_failed_and_removes_stored_files(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'IM0001')->assertOk();
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/cancel")
+            ->assertOk()
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_FAILED);
+
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+    }
+
+    public function test_failed_session_rejects_stale_file_request_without_storing(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $staleUpload = PhrDicomUpload::query()->findOrFail($uploadId);
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/cancel")
+            ->assertOk()
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_FAILED);
+
+        try {
+            app(DicomUploadProcessor::class)->processSingleFile(
+                $staleUpload,
+                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
+                'IM0001',
+            );
+
+            $this->fail('Expected stale file processing to be rejected.');
+        } catch (HttpException $error) {
+            $this->assertSame(409, $error->getStatusCode());
+            $this->assertSame('Upload session is no longer accepting files.', $error->getMessage());
+        }
+
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+        $this->assertSame([], Storage::disk(DicomUploadProcessor::DISK)->allFiles());
     }
 
     public function test_relative_paths_with_traversal_segments_are_sanitized(): void
@@ -131,13 +196,14 @@ class PhrDicomTest extends TestCase
         $patientId = $this->createPatientFor($owner);
         $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
 
-        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [
-                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
-            ],
-            // Both '..' segments and absolute-style leading slashes must be stripped.
-            'relative_paths' => ['../../../etc/passwd/IM0001'],
-        ])->assertCreated()->assertJsonPath('upload.stored_files', 1);
+        $uploadId = $this->openUpload($manager, $patientId, null);
+        // Both '..' segments and absolute-style leading slashes must be stripped.
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), '../../../etc/passwd/IM0001')
+            ->assertOk()
+            ->assertJsonPath('result.stored', true);
+        $this->finalizeUpload($manager, $patientId, $uploadId)
+            ->assertOk()
+            ->assertJsonPath('upload.stored_files', 1);
 
         $file = PhrDicomFile::query()->where('patient_id', $patientId)->sole();
 
@@ -159,10 +225,9 @@ class PhrDicomTest extends TestCase
         $patientId = $this->createPatientFor($owner);
         $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
 
-        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes())],
-            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0001'],
-        ])->assertCreated();
+        $firstId = $this->openUpload($manager, $patientId, null);
+        $this->postFile($manager, $patientId, $firstId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'CARDIAC_CT/ST0001/SE0001/IM0001')->assertOk();
+        $this->finalizeUpload($manager, $patientId, $firstId)->assertOk();
 
         $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
         $originalUploadId = (int) $study->upload_id;
@@ -170,12 +235,11 @@ class PhrDicomTest extends TestCase
 
         // Re-upload a second instance for the same study/series. The study
         // should pick up the new instance but its upload_id must NOT change.
-        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
-                'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.1.1.2',
-            ]))],
-            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0002'],
-        ])->assertCreated();
+        $secondId = $this->openUpload($manager, $patientId, null);
+        $this->postFile($manager, $patientId, $secondId, UploadedFile::fake()->createWithContent('IM0002', $this->dicomBytes([
+            'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.1.1.2',
+        ])), 'CARDIAC_CT/ST0001/SE0001/IM0002')->assertOk();
+        $this->finalizeUpload($manager, $patientId, $secondId)->assertOk();
 
         $this->assertSame(2, PhrDicomUpload::query()->where('patient_id', $patientId)->count());
         $study->refresh();
@@ -192,15 +256,14 @@ class PhrDicomTest extends TestCase
         $patientId = $this->createPatientFor($owner);
         $this->grantPatientAccess($owner, $patientId, $manager, 'manager');
 
-        $this->actingAs($manager)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [
-                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()),
-                UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes([
-                    'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.blank.2',
-                ])),
-            ],
-            'relative_paths' => [null, '   '],
-        ])->assertCreated()->assertJsonPath('upload.stored_files', 2);
+        $uploadId = $this->openUpload($manager, $patientId, null);
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), null)->assertOk();
+        $this->postFile($manager, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes([
+            'sop_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.blank.2',
+        ])), '   ')->assertOk();
+        $this->finalizeUpload($manager, $patientId, $uploadId)
+            ->assertOk()
+            ->assertJsonPath('upload.stored_files', 2);
 
         $paths = PhrDicomFile::query()
             ->where('patient_id', $patientId)
@@ -251,10 +314,9 @@ class PhrDicomTest extends TestCase
         $owner = $this->createUser();
         $patientId = $this->createPatientFor($owner);
 
-        $this->actingAs($owner)->post("/api/phr/patients/{$patientId}/dicom/uploads", [
-            'files' => [UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes())],
-            'relative_paths' => ['CARDIAC_CT/ST0001/SE0001/IM0001'],
-        ])->assertCreated();
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'CARDIAC_CT/ST0001/SE0001/IM0001')->assertOk();
+        $this->finalizeUpload($owner, $patientId, $uploadId)->assertOk();
 
         $instance = PhrDicomInstance::query()->where('patient_id', $patientId)->sole();
         $originalUploadId = $instance->upload_id;
@@ -291,6 +353,33 @@ class PhrDicomTest extends TestCase
     private function fakeDicomDisk(): void
     {
         Storage::fake(DicomUploadProcessor::DISK);
+    }
+
+    private function openUpload(User $actor, int $patientId, ?string $rootName): int
+    {
+        $payload = $rootName === null ? [] : ['root_name' => $rootName];
+        $response = $this->actingAs($actor)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads", $payload)
+            ->assertCreated();
+
+        return (int) $response->json('upload.id');
+    }
+
+    private function postFile(User $actor, int $patientId, int $uploadId, UploadedFile $file, ?string $relativePath): TestResponse
+    {
+        $payload = ['file' => $file];
+        if ($relativePath !== null) {
+            $payload['relative_path'] = $relativePath;
+        }
+
+        return $this->actingAs($actor)
+            ->post("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/files", $payload);
+    }
+
+    private function finalizeUpload(User $actor, int $patientId, int $uploadId): TestResponse
+    {
+        return $this->actingAs($actor)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/finalize");
     }
 
     private function createPatientFor(User $owner): int

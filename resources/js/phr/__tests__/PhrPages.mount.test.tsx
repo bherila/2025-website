@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import AccessPage from '@/phr/access/AccessPage'
 import AllergiesPage from '@/phr/allergies/AllergiesPage'
@@ -55,6 +55,7 @@ beforeEach(() => {
   const patient = makePatient()
   mockGet.mockImplementation(async (url: string) => {
     if (url === '/api/phr/patients') return { patients: [patient] }
+    if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient }
     if (url.includes('/lab-results')) return { lab_results: [] }
     if (url.includes('/vitals')) return { vitals: [] }
     if (url.includes('/dicom/studies')) return { studies: [] }
@@ -92,6 +93,48 @@ describe('PHR page mounts', () => {
     expect(document.body).toBeTruthy()
   })
 
+  it('keeps imaging upload dialog failed when finalize fails', async () => {
+    const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
+
+    mockPost.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
+        return { upload: makeDicomUpload('pending') }
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`) {
+        throw new Error('Finalize failed.')
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`) {
+        return { upload: makeDicomUpload('failed') }
+      }
+      return { patient: makePatient() }
+    })
+
+    try {
+      const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload dicom/i })).toBeInTheDocument())
+
+      const input = container.querySelector('input[type="file"]')
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Expected DICOM file input to render.')
+      }
+
+      const file = new File(['dicom'], 'IM0001', { type: 'application/dicom' })
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
+
+      fireEvent.change(input, { target: { files: [file] } })
+      fireEvent.click(await screen.findByRole('button', { name: /upload 1 file/i }))
+
+      await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
+      expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()
+      expect(screen.getAllByText(/Finalize failed\./).length).toBeGreaterThan(0)
+      expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`, {})
+    } finally {
+      globalThis.XMLHttpRequest = originalXmlHttpRequest
+    }
+  })
+
   it('mounts access page without crash', () => {
     render(<AccessPage patientId={PATIENT_ID} />)
     expect(document.body).toBeTruthy()
@@ -108,3 +151,74 @@ describe('PHR page mounts', () => {
     expect(document.body).toBeTruthy()
   })
 })
+
+function makeDicomUpload(status: string) {
+  return {
+    id: 501,
+    patient_id: PATIENT_ID,
+    uploaded_by_user_id: 2,
+    status,
+    original_root_name: 'CARDIAC_CT',
+    total_files: 1,
+    stored_files: status === 'pending' ? 0 : 1,
+    skipped_files: 0,
+    total_bytes: 5,
+    stored_bytes: status === 'pending' ? 0 : 5,
+    manifest_json: null,
+    skipped_files_json: [],
+    created_at: null,
+    updated_at: null,
+  }
+}
+
+class MockUploadXMLHttpRequest {
+  upload = new MockUploadEventTarget()
+
+  status = 200
+
+  statusText = 'OK'
+
+  responseText = JSON.stringify({
+    result: {
+      stored: true,
+      skipped_reason: null,
+      relative_path: 'CARDIAC_CT/IM0001',
+      study_id: 7001,
+    },
+    upload: makeDicomUpload('pending'),
+  })
+
+  withCredentials = false
+
+  private readonly listeners = new MockUploadEventTarget()
+
+  open(): void {}
+
+  setRequestHeader(): void {}
+
+  addEventListener(type: string, listener: () => void): void {
+    this.listeners.addEventListener(type, listener)
+  }
+
+  send(): void {
+    queueMicrotask(() => this.listeners.dispatch('load'))
+  }
+
+  abort(): void {
+    this.listeners.dispatch('abort')
+  }
+}
+
+class MockUploadEventTarget {
+  private readonly listeners = new Map<string, Array<(event?: ProgressEvent) => void>>()
+
+  addEventListener(type: string, listener: (event?: ProgressEvent) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener])
+  }
+
+  dispatch(type: string): void {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener()
+    }
+  }
+}

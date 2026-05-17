@@ -303,7 +303,10 @@ Route::middleware(['web', 'auth'])
         Route::patch('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'update'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.update');
         Route::delete('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'destroy'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.destroy');
         Route::get('/patients/{patient}/dicom/studies', [PHRDicomStudyController::class, 'index'])->whereNumber('patient')->name('patients.dicom.studies.index');
-        Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'store'])->whereNumber('patient')->name('patients.dicom.uploads.store');
+        Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'open'])->whereNumber('patient')->name('patients.dicom.uploads.open');
+        Route::post('/patients/{patient}/dicom/uploads/{upload}/files', [PHRDicomUploadController::class, 'storeFile'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.files.store');
+        Route::post('/patients/{patient}/dicom/uploads/{upload}/finalize', [PHRDicomUploadController::class, 'finalize'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.finalize');
+        Route::post('/patients/{patient}/dicom/uploads/{upload}/cancel', [PHRDicomUploadController::class, 'cancel'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.cancel');
         Route::get('/patients/{patient}/dicom/studies/{study}/viewer-json', [PHRDicomStudyController::class, 'viewerJson'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.viewer-json');
         Route::get('/patients/{patient}/dicom/studies/{study}/download', [PHRDicomFileController::class, 'downloadStudy'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.download');
         Route::get('/patients/{patient}/dicom/instances/{instance}/file', [PHRDicomFileController::class, 'proxyInstanceFile'])->whereNumber(['patient', 'instance'])->name('patients.dicom.instances.file');
