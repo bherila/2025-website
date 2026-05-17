@@ -19,19 +19,18 @@ class PhrMedicationFactory extends Factory
      */
     public function definition(): array
     {
-        $patient = PhrPatient::query()->first();
-
-        if (! $patient instanceof PhrPatient) {
-            $owner = User::factory()->create();
-            $patient = PhrPatient::query()->create([
-                'owner_user_id' => $owner->id,
-                'display_name' => fake()->name(),
-            ]);
-        }
-
         return [
-            'patient_id' => $patient->id,
-            'user_id' => $patient->owner_user_id,
+            'patient_id' => function (): int {
+                $owner = User::factory()->create();
+
+                return PhrPatient::query()->create([
+                    'owner_user_id' => $owner->id,
+                    'display_name' => fake()->name(),
+                ])->id;
+            },
+            'user_id' => fn (array $attributes): int => PhrPatient::query()
+                ->findOrFail($attributes['patient_id'])
+                ->owner_user_id,
             'name' => fake()->randomElement(['Metformin', 'Aspirin', 'Lisinopril']),
             'rxnorm_code' => (string) fake()->numberBetween(100000, 999999),
             'dose' => (string) fake()->numberBetween(1, 1000),

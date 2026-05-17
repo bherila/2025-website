@@ -94,6 +94,12 @@ const EMPTY_FORM: MedicationFormState = {
 }
 
 function medicationFormFromMedication(medication: PhrMedication): MedicationFormState {
+  const status = resolveMedicationStatus(medication.status)
+
+  if (!status) {
+    console.warn(`Unexpected medication status "${medication.status}" for medication ${medication.id}`)
+  }
+
   return {
     name: medication.name,
     dose: medication.dose ?? '',
@@ -102,14 +108,14 @@ function medicationFormFromMedication(medication: PhrMedication): MedicationForm
     frequency: medication.frequency ?? '',
     startedOn: medication.started_on ?? '',
     endedOn: medication.ended_on ?? '',
-    status: toMedicationStatus(medication.status),
+    status: status ?? 'active',
     prescriberName: medication.prescriber_name ?? '',
     reasonForUse: medication.reason_for_use ?? '',
   }
 }
 
-function toMedicationStatus(value: string): MedicationStatus {
-  return STATUS_OPTIONS.find((option) => option.value === value)?.value ?? 'active'
+function resolveMedicationStatus(value: string): MedicationStatus | null {
+  return STATUS_OPTIONS.find((option) => option.value === value)?.value ?? null
 }
 
 function medicationPayload(form: MedicationFormState): Record<string, unknown> {
@@ -209,7 +215,7 @@ function MedicationFormFields({ form, onChange }: MedicationFormFieldsProps) {
         Status
         <select
           value={form.status}
-          onChange={(event) => onChange({ ...form, status: toMedicationStatus(event.target.value) })}
+          onChange={(event) => onChange({ ...form, status: resolveMedicationStatus(event.target.value) ?? 'active' })}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
         >
           {STATUS_OPTIONS.map((option) => (
@@ -343,6 +349,7 @@ function MedicationTable({
                 const isSaving = isMutating(`save:${medication.id}`)
                 const isDeletingBusy = isMutating(`delete:${medication.id}`)
                 const isEndingNow = isMutating(`end:${medication.id}`)
+                const resolvedStatus = resolveMedicationStatus(medication.status)
 
                 return (
                   <Fragment key={medication.id}>
@@ -357,7 +364,7 @@ function MedicationTable({
                       <td className="px-4 py-3 text-muted-foreground">{medication.prescriber_name ?? '—'}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[toMedicationStatus(medication.status)]}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${resolvedStatus ? STATUS_CLASS[resolvedStatus] : 'bg-muted text-muted-foreground'}`}
                         >
                           {medication.status}
                         </span>
