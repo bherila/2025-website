@@ -153,11 +153,19 @@ class PhrClinicalDataTest extends TestCase
         $condId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/conditions", [
             'name' => 'Hypertension',
             'clinical_status' => 'active',
-        ])->assertCreated()->json('condition.id');
+            'raw_text' => 'HTN on problem list',
+        ])->assertCreated()->assertJsonPath('condition.raw_text', 'HTN on problem list')->json('condition.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/conditions/{$condId}")
+            ->assertOk()
+            ->assertJsonPath('condition.name', 'Hypertension');
 
         $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/conditions/{$condId}", [
             'clinical_status' => 'resolved',
-        ])->assertOk()->assertJsonPath('condition.clinical_status', 'resolved');
+            'abated_date' => '2026-05-18',
+        ])->assertOk()
+            ->assertJsonPath('condition.clinical_status', 'resolved')
+            ->assertJsonPath('condition.abated_date', '2026-05-18');
 
         $this->actingAs($manager)->deleteJson("/api/phr/patients/{$patientId}/conditions/{$condId}")->assertNoContent();
     }
@@ -195,7 +203,12 @@ class PhrClinicalDataTest extends TestCase
         $procId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/procedures", [
             'name' => 'Colonoscopy',
             'status' => 'completed',
-        ])->assertCreated()->json('procedure.id');
+            'raw_text' => 'Colonoscopy completed',
+        ])->assertCreated()->assertJsonPath('procedure.raw_text', 'Colonoscopy completed')->json('procedure.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/procedures/{$procId}")
+            ->assertOk()
+            ->assertJsonPath('procedure.name', 'Colonoscopy');
 
         $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/procedures/{$procId}", [
             'outcome' => 'Normal findings',
@@ -238,7 +251,12 @@ class PhrClinicalDataTest extends TestCase
             'vaccine_name' => 'Hepatitis B',
             'dose_number' => 1,
             'series_doses' => 3,
-        ])->assertCreated()->json('immunization.id');
+            'raw_text' => 'Hep B dose 1',
+        ])->assertCreated()->assertJsonPath('immunization.raw_text', 'Hep B dose 1')->json('immunization.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/immunizations/{$immunId}")
+            ->assertOk()
+            ->assertJsonPath('immunization.vaccine_name', 'Hepatitis B');
 
         $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/immunizations/{$immunId}", [
             'dose_number' => 2,
@@ -281,7 +299,12 @@ class PhrClinicalDataTest extends TestCase
         $allergyId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/allergies", [
             'substance' => 'Sulfa',
             'clinical_status' => 'active',
-        ])->assertCreated()->json('allergy.id');
+            'raw_text' => 'Sulfa allergy',
+        ])->assertCreated()->assertJsonPath('allergy.raw_text', 'Sulfa allergy')->json('allergy.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/allergies/{$allergyId}")
+            ->assertOk()
+            ->assertJsonPath('allergy.substance', 'Sulfa');
 
         $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/allergies/{$allergyId}", [
             'clinical_status' => 'inactive',
@@ -298,5 +321,59 @@ class PhrClinicalDataTest extends TestCase
         foreach (['office-visits', 'medications', 'conditions', 'procedures', 'immunizations', 'allergies'] as $endpoint) {
             $this->actingAs($other)->getJson("/api/phr/patients/{$patientId}/{$endpoint}")->assertNotFound();
         }
+    }
+
+    public function test_viewer_can_read_but_cannot_modify_clinical_records(): void
+    {
+        ['manager' => $manager, 'viewer' => $viewer, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $conditionId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/conditions", [
+            'name' => 'Asthma',
+            'clinical_status' => 'active',
+        ])->assertCreated()->json('condition.id');
+
+        $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/conditions")
+            ->assertOk()
+            ->assertJsonCount(1, 'conditions');
+
+        $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/conditions/{$conditionId}")
+            ->assertOk()
+            ->assertJsonPath('condition.name', 'Asthma');
+
+        $this->actingAs($viewer)->patchJson("/api/phr/patients/{$patientId}/conditions/{$conditionId}", [
+            'clinical_status' => 'resolved',
+        ])->assertForbidden();
+
+        $this->actingAs($viewer)->deleteJson("/api/phr/patients/{$patientId}/conditions/{$conditionId}")
+            ->assertForbidden();
+    }
+
+    public function test_clinical_record_requests_reject_invalid_enum_values(): void
+    {
+        ['manager' => $manager, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/conditions", [
+            'name' => 'Hypertension',
+            'clinical_status' => 'bogus',
+            'verification_status' => 'bogus',
+            'severity' => 'bogus',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['clinical_status', 'verification_status', 'severity']);
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/procedures", [
+            'name' => 'Biopsy',
+            'status' => 'planned',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/allergies", [
+            'substance' => 'Penicillin',
+            'category' => 'drug',
+            'criticality' => 'unknown',
+            'clinical_status' => 'active',
+            'verification_status' => 'suspected',
+            'severity' => 'fatal',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['category', 'criticality', 'verification_status', 'severity']);
     }
 }

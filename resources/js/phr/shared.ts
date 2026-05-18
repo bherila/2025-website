@@ -1,3 +1,5 @@
+import type { ZodError } from 'zod'
+
 export interface ApiError {
   message?: string
 }
@@ -18,6 +20,10 @@ export function compactPayload<T extends Record<string, unknown>>(data: T): Reco
   return Object.fromEntries(
     Object.entries(data).map(([key, value]) => [key, value === '' ? null : value])
   )
+}
+
+export function zodErrorMessage(caught: ZodError): string {
+  return caught.issues[0]?.message ?? 'Please check the form values.'
 }
 
 export function numericPayload<T extends Record<string, unknown>>(data: T, numericKeys: string[]): Record<string, unknown> {

@@ -46,6 +46,18 @@ class ProcedureController extends Controller
         return response()->json(['procedure' => $this->payload($procedure)], 201);
     }
 
+    public function show(Request $request, int $patient, int $procedure): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+
+        $resolved = PhrProcedure::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->findOrFail($procedure);
+
+        return response()->json(['procedure' => $this->payload($resolved)]);
+    }
+
     public function update(StoreProcedureRequest $request, int $patient, int $procedure): JsonResponse
     {
         $userId = (int) $request->user()?->id;
@@ -95,6 +107,7 @@ class ProcedureController extends Controller
             'reason' => $p->reason,
             'outcome' => $p->outcome,
             'notes' => $p->notes,
+            'raw_text' => $p->raw_text,
             'created_at' => $p->created_at?->toDateTimeString(),
             'updated_at' => $p->updated_at?->toDateTimeString(),
         ];

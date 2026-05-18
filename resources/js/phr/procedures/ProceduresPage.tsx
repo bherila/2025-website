@@ -1,71 +1,235 @@
-import { Plus,Scissors } from 'lucide-react'
-import type { FormEvent } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { Info, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
+import type { FormEvent, ReactElement } from 'react'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { fetchWrapper } from '@/fetchWrapper'
-import { compactPayload, errorMessage } from '@/phr/shared'
-import { type PhrProcedure, PhrProceduresResponseSchema } from '@/phr/types'
+import { Textarea } from '@/components/ui/textarea'
+import { useClinicalCrud } from '@/phr/clinical/crud'
+import { compactPayload, zodErrorMessage } from '@/phr/shared'
+import {
+  type PhrProcedure,
+  type PhrProcedureFormData,
+  PhrProcedureFormSchema,
+  PhrProcedureResponseSchema,
+  PhrProceduresResponseSchema,
+} from '@/phr/types'
+
+const SELECT_CLASS = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm'
 
 const STATUS_CLASS: Record<string, string> = {
-  completed: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300',
-  planned: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
+  preparation: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
   in_progress: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300',
+  completed: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300',
   cancelled: 'bg-muted text-muted-foreground',
+  entered_in_error: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300',
+}
+
+const STATUS_OPTIONS = [
+  { value: 'completed', label: 'Completed' },
+  { value: 'preparation', label: 'Preparation' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'entered_in_error', label: 'Entered in Error' },
+] as const
+
+const EMPTY_FORM: PhrProcedureFormData = {
+  name: '',
+  cpt_code: '',
+  snomed_code: '',
+  performed_at: '',
+  performed_on: '',
+  performer_name: '',
+  performer_specialty: '',
+  facility_name: '',
+  status: 'completed',
+  reason: '',
+  outcome: '',
+  notes: '',
+}
+
+interface ProcedureFormFieldsProps {
+  form: PhrProcedureFormData
+  onChange: (form: PhrProcedureFormData) => void
 }
 
 interface AddFormProps {
-  patientId: number
-  onAdded: (p: PhrProcedure) => void
+  busy: boolean
+  onSubmit: (form: PhrProcedureFormData) => Promise<boolean>
 }
 
-function AddForm({ patientId, onAdded }: AddFormProps) {
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [performedOn, setPerformedOn] = useState('')
-  const [performerName, setPerformerName] = useState('')
-  const [cptCode, setCptCode] = useState('')
+function procedureFormFromRecord(procedure: PhrProcedure): PhrProcedureFormData {
+  return {
+    name: procedure.name,
+    cpt_code: procedure.cpt_code ?? '',
+    snomed_code: procedure.snomed_code ?? '',
+    performed_at: toDatetimeLocal(procedure.performed_at),
+    performed_on: procedure.performed_on ?? '',
+    performer_name: procedure.performer_name ?? '',
+    performer_specialty: procedure.performer_specialty ?? '',
+    facility_name: procedure.facility_name ?? '',
+    status: PhrProcedureFormSchema.shape.status.safeParse(procedure.status).success
+      ? procedure.status as PhrProcedureFormData['status']
+      : 'completed',
+    reason: procedure.reason ?? '',
+    outcome: procedure.outcome ?? '',
+    notes: procedure.notes ?? '',
+  }
+}
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault()
-    if (!name.trim()) { setError('Name is required.'); return }
-    setBusy(true)
-    setError(null)
-    try {
-      const raw: unknown = await fetchWrapper.post(
-        `/api/phr/patients/${patientId}/procedures`,
-        compactPayload({ name, performed_on: performedOn, performer_name: performerName, cpt_code: cptCode, status: 'completed' }),
-      )
-       
-      onAdded((raw as any)?.procedure as PhrProcedure)
-      setName(''); setPerformedOn(''); setPerformerName(''); setCptCode('')
+function procedurePayload(form: PhrProcedureFormData): Record<string, unknown> {
+  return compactPayload(form)
+}
+
+function sortProcedures(procedures: PhrProcedure[]): PhrProcedure[] {
+  return [...procedures].sort((left, right) => {
+    const leftDate = left.performed_at ?? left.performed_on ?? ''
+    const rightDate = right.performed_at ?? right.performed_on ?? ''
+    const dateCompare = rightDate.localeCompare(leftDate)
+    if (dateCompare !== 0) {
+      return dateCompare
+    }
+
+    return right.id - left.id
+  })
+}
+
+function toDatetimeLocal(value: string | null): string {
+  return value ? value.replace(' ', 'T').slice(0, 16) : ''
+}
+
+function labelize(value: string): string {
+  return value.replaceAll('_', ' ')
+}
+
+function displayProcedureDate(procedure: PhrProcedure): string {
+  if (procedure.performed_at) {
+    return procedure.performed_at.slice(0, 16)
+  }
+
+  return procedure.performed_on ?? 'Date not recorded'
+}
+
+function statusBadge(status: string): ReactElement {
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status] ?? 'bg-muted text-muted-foreground'}`}>
+      {labelize(status)}
+    </span>
+  )
+}
+
+function codeChip(label: string, value: string | null): ReactElement | null {
+  if (!value) {
+    return null
+  }
+
+  return (
+    <span
+      title={`${label}: ${value}`}
+      className="inline-flex rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground"
+    >
+      {label} {value}
+    </span>
+  )
+}
+
+function ProcedureFormFields({ form, onChange }: ProcedureFormFieldsProps) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <label className="grid gap-1 text-sm font-medium md:col-span-2">
+        Name *
+        <Input value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} required />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Performed At
+        <Input
+          type="datetime-local"
+          value={form.performed_at}
+          onChange={(event) => onChange({ ...form, performed_at: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Performed On
+        <Input type="date" value={form.performed_on} onChange={(event) => onChange({ ...form, performed_on: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        CPT Code
+        <Input value={form.cpt_code} onChange={(event) => onChange({ ...form, cpt_code: event.target.value })} placeholder="99213" />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        SNOMED Code
+        <Input value={form.snomed_code} onChange={(event) => onChange({ ...form, snomed_code: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Performer
+        <Input value={form.performer_name} onChange={(event) => onChange({ ...form, performer_name: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Specialty
+        <Input value={form.performer_specialty} onChange={(event) => onChange({ ...form, performer_specialty: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Facility
+        <Input value={form.facility_name} onChange={(event) => onChange({ ...form, facility_name: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Status
+        <select
+          value={form.status}
+          onChange={(event) => onChange({ ...form, status: event.target.value as PhrProcedureFormData['status'] })}
+          className={SELECT_CLASS}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm font-medium md:col-span-2">
+        Reason
+        <Textarea value={form.reason} onChange={(event) => onChange({ ...form, reason: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium md:col-span-2">
+        Outcome
+        <Textarea value={form.outcome} onChange={(event) => onChange({ ...form, outcome: event.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm font-medium md:col-span-2">
+        Notes
+        <Textarea value={form.notes} onChange={(event) => onChange({ ...form, notes: event.target.value })} />
+      </label>
+    </div>
+  )
+}
+
+function AddForm({ busy, onSubmit }: AddFormProps) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState<PhrProcedureFormData>(EMPTY_FORM)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    const added = await onSubmit(form)
+    if (added) {
+      setForm(EMPTY_FORM)
       setOpen(false)
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setBusy(false)
     }
   }
 
   if (!open) {
-    return <Button size="sm" variant="outline" onClick={() => setOpen(true)}><Plus className="size-4" />Add Procedure</Button>
+    return (
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Add Procedure
+      </Button>
+    )
   }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="mb-3 text-sm font-semibold">Add Procedure</h3>
-      <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm font-medium sm:col-span-2">Name * <Input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-        <label className="grid gap-1 text-sm font-medium">Date Performed <Input type="date" value={performedOn} onChange={(e) => setPerformedOn(e.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-medium">CPT Code <Input value={cptCode} onChange={(e) => setCptCode(e.target.value)} placeholder="99213" /></label>
-        <label className="grid gap-1 text-sm font-medium sm:col-span-2">Performer <Input value={performerName} onChange={(e) => setPerformerName(e.target.value)} /></label>
-        {error && <p className="text-sm text-destructive sm:col-span-2">{error}</p>}
-        <div className="flex gap-2 sm:col-span-2">
-          <Button type="submit" size="sm" disabled={busy}>{busy ? 'Adding…' : 'Add'}</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+      <h2 className="mb-3 text-sm font-semibold text-card-foreground">Add Procedure</h2>
+      <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
+        <ProcedureFormFields form={form} onChange={setForm} />
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={busy}>{busy ? 'Adding...' : 'Add'}</Button>
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
         </div>
       </form>
     </div>
@@ -73,54 +237,179 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
 }
 
 export default function ProceduresPage({ patientId }: { patientId: number }) {
-  const [procedures, setProcedures] = useState<PhrProcedure[]>([])
-  const [canManage, setCanManage] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const endpoint = `/api/phr/patients/${patientId}/procedures`
+  const crud = useClinicalCrud<PhrProcedure, PhrProcedureFormData>({
+    patientId,
+    endpoint,
+    emptyForm: EMPTY_FORM,
+    formFromRecord: procedureFormFromRecord,
+    parseItem: (raw) => PhrProcedureResponseSchema.parse(raw).procedure,
+    parseList: (raw) => PhrProceduresResponseSchema.parse(raw).procedures,
+    payloadFromForm: procedurePayload,
+    sortRecords: sortProcedures,
+  })
 
-  const load = useCallback(async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const [rawProcedures, rawPatient] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/procedures`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-      setProcedures(PhrProceduresResponseSchema.parse(rawProcedures).procedures)
-       
-      setCanManage(Boolean((rawPatient as any)?.patient?.can_manage))
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setBusy(false)
+  async function addProcedure(form: PhrProcedureFormData): Promise<boolean> {
+    const parsed = PhrProcedureFormSchema.safeParse(form)
+    if (!parsed.success) {
+      crud.setError(zodErrorMessage(parsed.error))
+      return false
     }
-  }, [patientId])
 
-  useEffect(() => { void load() }, [load])
+    return (await crud.addRecord(parsed.data)) !== null
+  }
+
+  async function saveProcedure(procedureId: number): Promise<void> {
+    const parsed = PhrProcedureFormSchema.safeParse(crud.editForm)
+    if (!parsed.success) {
+      crud.setError(zodErrorMessage(parsed.error))
+      return
+    }
+
+    const updated = await crud.patchRecord(procedureId, procedurePayload(parsed.data))
+    if (updated) {
+      crud.cancelEdit()
+    }
+  }
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-2">
-        <Scissors className="size-6 text-primary" />
-        <h1 className="text-2xl font-semibold text-foreground">Procedures</h1>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
+            <Scissors className="size-6 text-primary" />
+            Procedures
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">Timeline of procedures, operations, and office procedures.</p>
+        </div>
       </div>
-      {error && <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
-      {canManage && <div className="mb-6"><AddForm patientId={patientId} onAdded={(p) => setProcedures((prev) => [p, ...prev])} /></div>}
-      {busy && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {!busy && procedures.length === 0 && <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">No procedures recorded.</div>}
-      <div className="flex flex-col gap-2">
-        {procedures.map((p) => (
-          <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
-            <div className="min-w-0">
-              <p className="font-medium text-card-foreground">{p.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {[p.cpt_code, p.performed_on, p.performer_name].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[p.status] ?? STATUS_CLASS.completed}`}>{p.status}</span>
+
+      {crud.error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {crud.error}
+        </div>
+      )}
+
+      {crud.canManage && (
+        <div className="mb-6 grid gap-3">
+          <div className="flex flex-wrap items-start gap-2">
+            <AddForm busy={crud.isMutating('add')} onSubmit={addProcedure} />
           </div>
-        ))}
-      </div>
+          <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            Procedures are typically imported through CCDA or FHIR record imports. Use Documents for source files that need review.
+          </div>
+        </div>
+      )}
+
+      {crud.busy && <p className="text-sm text-muted-foreground">Loading...</p>}
+
+      {!crud.busy && crud.records.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+          No procedures recorded.
+        </div>
+      )}
+
+      {!crud.busy && crud.records.length > 0 && (
+        <ol className="relative space-y-4 border-l border-border pl-5">
+          {crud.records.map((procedure) => {
+            const isEditing = crud.editingId === procedure.id
+            const isDeleting = crud.deletingId === procedure.id
+            const isSaving = crud.isMutating(`save:${procedure.id}`)
+            const isDeletingBusy = crud.isMutating(`delete:${procedure.id}`)
+
+            return (
+              <li key={procedure.id} className="relative">
+                <span className="absolute -left-[1.65rem] top-4 size-3 rounded-full border-2 border-background bg-primary" />
+                <div className="rounded-lg border border-border bg-card">
+                  <div className="grid gap-3 px-4 py-3 md:grid-cols-[150px_minmax(0,1fr)_auto] md:items-start">
+                    <div className="text-sm font-medium text-muted-foreground">{displayProcedureDate(procedure)}</div>
+                    <div className="min-w-0">
+                      <div className="font-medium text-card-foreground">{procedure.name}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {codeChip('CPT', procedure.cpt_code)}
+                        {codeChip('SNOMED', procedure.snomed_code)}
+                        {statusBadge(procedure.status)}
+                      </div>
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        {[
+                          procedure.performer_name,
+                          procedure.performer_specialty,
+                          procedure.facility_name,
+                        ].filter(Boolean).join(' · ') || 'No performer or facility recorded'}
+                      </div>
+                      {(procedure.reason || procedure.outcome || procedure.notes) && (
+                        <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                          {procedure.reason && <p><span className="font-medium text-foreground">Reason:</span> {procedure.reason}</p>}
+                          {procedure.outcome && <p><span className="font-medium text-foreground">Outcome:</span> {procedure.outcome}</p>}
+                          {procedure.notes && <p>{procedure.notes}</p>}
+                        </div>
+                      )}
+                    </div>
+                    {crud.canManage && (
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          title="Edit procedure"
+                          disabled={isSaving || isDeletingBusy}
+                          onClick={() => crud.startEdit(procedure)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          title="Delete procedure"
+                          disabled={isSaving || isDeletingBusy}
+                          onClick={() => crud.startDelete(procedure.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {isEditing && (
+                    <div className="border-t border-border bg-muted/20 px-4 py-4">
+                      <form
+                        className="space-y-3"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          void saveProcedure(procedure.id)
+                        }}
+                      >
+                        <ProcedureFormFields form={crud.editForm} onChange={crud.setEditForm} />
+                        <div className="flex gap-2">
+                          <Button type="submit" size="sm" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>
+                          <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={crud.cancelEdit}>Cancel</Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                  {isDeleting && (
+                    <div className="border-t border-border bg-destructive/5 px-4 py-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-foreground">
+                          Delete <strong>{procedure.name}</strong>? This cannot be undone.
+                        </p>
+                        <div className="flex gap-2">
+                          <Button variant="destructive" size="sm" disabled={isDeletingBusy} onClick={() => void crud.deleteRecord(procedure.id)}>
+                            {isDeletingBusy ? 'Deleting...' : 'Delete'}
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" disabled={isDeletingBusy} onClick={crud.cancelDelete}>Cancel</Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      )}
     </div>
   )
 }

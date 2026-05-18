@@ -19,12 +19,14 @@ const PATIENT_ID = 101
 
 const mockGet = jest.fn()
 const mockPost = jest.fn()
+const mockPatch = jest.fn()
 const mockDelete = jest.fn()
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
+    patch: (...args: unknown[]) => mockPatch(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
   },
 }))
@@ -51,6 +53,7 @@ function makePatient() {
 beforeEach(() => {
   mockGet.mockClear()
   mockPost.mockClear()
+  mockPatch.mockClear()
   mockDelete.mockClear()
   const patient = makePatient()
   mockGet.mockImplementation(async (url: string) => {
@@ -62,9 +65,14 @@ beforeEach(() => {
     if (url.includes('/exports')) return { exports: [] }
     if (url.includes('/dicom/studies')) return { studies: [] }
     if (url.includes('/access')) return { access_grants: [] }
+    if (url.includes('/conditions')) return { conditions: [] }
+    if (url.includes('/procedures')) return { procedures: [] }
+    if (url.includes('/immunizations')) return { immunizations: [] }
+    if (url.includes('/allergies')) return { allergies: [] }
     return {}
   })
   mockPost.mockResolvedValue({ patient })
+  mockPatch.mockResolvedValue({ patient })
   mockDelete.mockResolvedValue({})
 })
 
@@ -151,6 +159,40 @@ describe('PHR page mounts', () => {
     render(<OfficeVisitsPage patientId={PATIENT_ID} />)
     render(<ProceduresPage patientId={PATIENT_ID} />)
     expect(document.body).toBeTruthy()
+  })
+
+  it('renders condition actions including GenAI import handoff', async () => {
+    render(<ConditionsPage patientId={PATIENT_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /add condition/i })).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /import via genai/i })).toHaveAttribute(
+      'href',
+      `/phr/patient/${PATIENT_ID}/documents?job_type=phr_problem_list`,
+    )
+  })
+
+  it('renders procedure manual entry with import guidance', async () => {
+    render(<ProceduresPage patientId={PATIENT_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /add procedure/i })).toBeInTheDocument())
+    expect(screen.getByText(/CCDA or FHIR record imports/i)).toBeInTheDocument()
+  })
+
+  it('renders immunization actions including GenAI import handoff', async () => {
+    render(<ImmunizationsPage patientId={PATIENT_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /add immunization/i })).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /import via genai/i })).toHaveAttribute(
+      'href',
+      `/phr/patient/${PATIENT_ID}/documents?job_type=phr_immunization`,
+    )
+  })
+
+  it('renders allergy manual entry with import guidance', async () => {
+    render(<AllergiesPage patientId={PATIENT_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /add allergy/i })).toBeInTheDocument())
+    expect(screen.getByText(/extracted as part of office-visit review/i)).toBeInTheDocument()
   })
 })
 

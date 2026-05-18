@@ -2,6 +2,38 @@ import { z } from 'zod'
 
 const nullableString = z.string().nullable()
 
+export const PhrConditionClinicalStatusSchema = z.enum([
+  'active',
+  'recurrence',
+  'relapse',
+  'inactive',
+  'remission',
+  'resolved',
+])
+
+export const PhrConditionVerificationStatusSchema = z.enum([
+  'unconfirmed',
+  'provisional',
+  'differential',
+  'confirmed',
+  'refuted',
+  'entered_in_error',
+])
+
+export const PhrProcedureStatusSchema = z.enum([
+  'preparation',
+  'in_progress',
+  'completed',
+  'cancelled',
+  'entered_in_error',
+])
+
+export const PhrAllergyCategorySchema = z.enum(['food', 'medication', 'environment', 'biologic'])
+export const PhrAllergyCriticalitySchema = z.enum(['low', 'high', 'unable_to_assess'])
+export const PhrAllergyClinicalStatusSchema = z.enum(['active', 'inactive', 'resolved'])
+export const PhrAllergyVerificationStatusSchema = z.enum(['unconfirmed', 'confirmed', 'refuted', 'entered_in_error'])
+export const PhrSeveritySchema = z.enum(['mild', 'moderate', 'severe'])
+
 export const PhrAccessGrantSchema = z.object({
   id: z.number(),
   user_id: z.number(),
@@ -340,15 +372,34 @@ export const PhrConditionSchema = z.object({
   verification_status: z.string(),
   severity: nullableString,
   notes: nullableString,
+  raw_text: nullableString,
   created_at: nullableString,
   updated_at: nullableString,
 })
 
 export type PhrCondition = z.infer<typeof PhrConditionSchema>
 
+export const PhrConditionResponseSchema = z.object({
+  condition: PhrConditionSchema,
+})
+
 export const PhrConditionsResponseSchema = z.object({
   conditions: z.array(PhrConditionSchema),
 })
+
+export const PhrConditionFormSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  icd10_code: z.string().trim().max(20),
+  snomed_code: z.string().trim().max(50),
+  onset_date: z.string().trim(),
+  abated_date: z.string().trim(),
+  clinical_status: PhrConditionClinicalStatusSchema,
+  verification_status: PhrConditionVerificationStatusSchema,
+  severity: PhrSeveritySchema.or(z.literal('')),
+  notes: z.string().trim().max(10000),
+})
+
+export type PhrConditionFormData = z.infer<typeof PhrConditionFormSchema>
 
 // ── Procedures ────────────────────────────────────────────────────────────────
 
@@ -368,15 +419,37 @@ export const PhrProcedureSchema = z.object({
   reason: nullableString,
   outcome: nullableString,
   notes: nullableString,
+  raw_text: nullableString,
   created_at: nullableString,
   updated_at: nullableString,
 })
 
 export type PhrProcedure = z.infer<typeof PhrProcedureSchema>
 
+export const PhrProcedureResponseSchema = z.object({
+  procedure: PhrProcedureSchema,
+})
+
 export const PhrProceduresResponseSchema = z.object({
   procedures: z.array(PhrProcedureSchema),
 })
+
+export const PhrProcedureFormSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  cpt_code: z.string().trim().max(20),
+  snomed_code: z.string().trim().max(50),
+  performed_at: z.string().trim(),
+  performed_on: z.string().trim(),
+  performer_name: z.string().trim().max(255),
+  performer_specialty: z.string().trim().max(100),
+  facility_name: z.string().trim().max(255),
+  status: PhrProcedureStatusSchema,
+  reason: z.string().trim().max(10000),
+  outcome: z.string().trim().max(10000),
+  notes: z.string().trim().max(10000),
+})
+
+export type PhrProcedureFormData = z.infer<typeof PhrProcedureFormSchema>
 
 // ── Immunizations ─────────────────────────────────────────────────────────────
 
@@ -396,15 +469,37 @@ export const PhrImmunizationSchema = z.object({
   administered_by: nullableString,
   facility_name: nullableString,
   notes: nullableString,
+  raw_text: nullableString,
   created_at: nullableString,
   updated_at: nullableString,
 })
 
 export type PhrImmunization = z.infer<typeof PhrImmunizationSchema>
 
+export const PhrImmunizationResponseSchema = z.object({
+  immunization: PhrImmunizationSchema,
+})
+
 export const PhrImmunizationsResponseSchema = z.object({
   immunizations: z.array(PhrImmunizationSchema),
 })
+
+export const PhrImmunizationFormSchema = z.object({
+  vaccine_name: z.string().trim().min(1).max(255),
+  cvx_code: z.string().trim().max(20),
+  manufacturer: z.string().trim().max(100),
+  lot_number: z.string().trim().max(100),
+  administered_on: z.string().trim(),
+  dose_number: z.string().trim(),
+  series_doses: z.string().trim(),
+  site: z.string().trim().max(100),
+  route: z.string().trim().max(100),
+  administered_by: z.string().trim().max(255),
+  facility_name: z.string().trim().max(255),
+  notes: z.string().trim().max(10000),
+})
+
+export type PhrImmunizationFormData = z.infer<typeof PhrImmunizationFormSchema>
 
 // ── Allergies ─────────────────────────────────────────────────────────────────
 
@@ -422,12 +517,32 @@ export const PhrAllergySchema = z.object({
   reaction: nullableString,
   severity: nullableString,
   notes: nullableString,
+  raw_text: nullableString,
   created_at: nullableString,
   updated_at: nullableString,
 })
 
 export type PhrAllergy = z.infer<typeof PhrAllergySchema>
 
+export const PhrAllergyResponseSchema = z.object({
+  allergy: PhrAllergySchema,
+})
+
 export const PhrAllergiesResponseSchema = z.object({
   allergies: z.array(PhrAllergySchema),
 })
+
+export const PhrAllergyFormSchema = z.object({
+  substance: z.string().trim().min(1).max(255),
+  rxnorm_code: z.string().trim().max(50),
+  snomed_code: z.string().trim().max(50),
+  category: PhrAllergyCategorySchema.or(z.literal('')),
+  criticality: PhrAllergyCriticalitySchema.or(z.literal('')),
+  clinical_status: PhrAllergyClinicalStatusSchema,
+  verification_status: PhrAllergyVerificationStatusSchema,
+  reaction: z.string().trim().max(255),
+  severity: PhrSeveritySchema.or(z.literal('')),
+  notes: z.string().trim().max(10000),
+})
+
+export type PhrAllergyFormData = z.infer<typeof PhrAllergyFormSchema>
