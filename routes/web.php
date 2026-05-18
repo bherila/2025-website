@@ -97,6 +97,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/tools/license-manager', function () {
         return view('tools.license-manager');
     });
+    Route::get('/tools/class-action-tracker', function () {
+        return view('tools.class-action-tracker');
+    })->name('tools.class-action-tracker');
     Route::get('/phr', [PHRPageController::class, 'index'])->name('phr.index');
     Route::get('/phr/patients', [PHRPageController::class, 'patients'])->name('phr.patients');
     Route::get('/phr/patients/manage', [PHRPageController::class, 'managePatients'])->name('phr.patients.manage');
