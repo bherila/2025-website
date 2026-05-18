@@ -212,23 +212,49 @@ export const PhrAccessResponseSchema = z.object({
 export const PhrDocumentSchema = z.object({
   id: z.number(),
   patient_id: z.number(),
+  user_id: z.number(),
+  uploaded_by_user_id: z.number().nullable(),
+  genai_job_id: z.number().nullable(),
   title: nullableString,
-  document_type: z.string(),
+  document_type: z.enum(['lab_report', 'office_visit_note', 'discharge_summary', 'imaging_report', 'prescription', 'insurance', 'consent', 'other']),
+  observed_at: nullableString,
   original_filename: nullableString,
   mime_type: nullableString,
+  byte_size: z.number(),
+  file_hash: nullableString,
   file_size_bytes: z.number(),
   summary: nullableString,
-  source: nullableString,
+  source: z.enum(['manual_upload', 'genai_import', 'fhir_import', 'ccda_import', 'mychart_zip']).nullable(),
+  tags: z.array(z.string()),
   imported_at: nullableString,
   created_at: nullableString,
+  updated_at: nullableString,
+  file_url: z.string(),
   download_url: nullableString,
+  linked_rows: z.array(z.object({
+    type: z.string(),
+    id: z.number(),
+    label: z.string(),
+    href: z.string(),
+  })),
 })
 
 export type PhrDocument = z.infer<typeof PhrDocumentSchema>
 
 export const PhrDocumentsResponseSchema = z.object({
   documents: z.array(PhrDocumentSchema),
+  can_manage: z.boolean().default(false),
 })
+
+export const PhrDocumentMetadataFormSchema = z.object({
+  title: z.string().trim().max(255).optional(),
+  document_type: z.enum(['lab_report', 'office_visit_note', 'discharge_summary', 'imaging_report', 'prescription', 'insurance', 'consent', 'other']),
+  observed_at: z.string().trim().optional(),
+  summary: z.string().trim().max(20000).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).max(30),
+})
+
+export type PhrDocumentMetadataFormData = z.infer<typeof PhrDocumentMetadataFormSchema>
 
 export const PhrExportSchema = z.object({
   id: z.number(),

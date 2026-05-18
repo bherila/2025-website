@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string|null $import_source
  * @property string|null $external_id
+ * @property int|null $source_document_id
  * @property string $substance
  * @property string|null $rxnorm_code
  * @property string|null $snomed_code
@@ -36,6 +37,7 @@ class PhrAllergy extends Model
         'user_id',
         'import_source',
         'external_id',
+        'source_document_id',
         'substance',
         'rxnorm_code',
         'snomed_code',
@@ -54,6 +56,7 @@ class PhrAllergy extends Model
         return [
             'patient_id' => 'integer',
             'user_id' => 'integer',
+            'source_document_id' => 'integer',
         ];
     }
 
@@ -67,5 +70,11 @@ class PhrAllergy extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** @return BelongsTo<PhrDocument, $this> */
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(PhrDocument::class, 'source_document_id');
     }
 }

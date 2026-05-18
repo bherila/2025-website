@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string|null $import_source
  * @property string|null $external_id
+ * @property int|null $source_document_id
  * @property string $name
  * @property string|null $icd10_code
  * @property string|null $snomed_code
@@ -35,6 +36,7 @@ class PhrCondition extends Model
         'user_id',
         'import_source',
         'external_id',
+        'source_document_id',
         'name',
         'icd10_code',
         'snomed_code',
@@ -52,6 +54,7 @@ class PhrCondition extends Model
         return [
             'patient_id' => 'integer',
             'user_id' => 'integer',
+            'source_document_id' => 'integer',
             'onset_date' => 'date',
             'abated_date' => 'date',
         ];
@@ -67,5 +70,11 @@ class PhrCondition extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** @return BelongsTo<PhrDocument, $this> */
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(PhrDocument::class, 'source_document_id');
     }
 }

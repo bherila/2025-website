@@ -50,7 +50,7 @@ class PhrStructuredDataImporter
 
     /**
      * @param  array<array-key, mixed>  $payload
-     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null}  $options
+     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null, source_document_id?: int|null}  $options
      */
     public function importPayload(PhrPatient $patient, int $actorUserId, string $jobType, array $payload, array $options = []): PhrImportResult
     {
@@ -127,16 +127,19 @@ class PhrStructuredDataImporter
             'user_id' => $patient->owner_user_id,
             'uploaded_by_user_id' => $actorUserId,
             'title' => $attributes['title'] ?? pathinfo($filename, PATHINFO_FILENAME),
-            'document_type' => $attributes['document_type'] ?? 'general',
+            'document_type' => $this->normalizeDocumentType($attributes['document_type'] ?? null),
             'original_filename' => $filename,
             'storage_disk' => 'phr_documents',
             'storage_path' => $storagePath,
             'mime_type' => $attributes['mime_type'] ?? $this->mimeType($path),
+            'byte_size' => filesize($path) ?: 0,
+            'file_hash' => $sha256,
             'file_size_bytes' => filesize($path) ?: 0,
             'sha256' => $sha256,
             'extracted_text' => $attributes['extracted_text'] ?? null,
             'summary' => $attributes['summary'] ?? null,
-            'source' => $attributes['source'] ?? 'cli',
+            'source' => $this->normalizeDocumentSource($attributes['source'] ?? $attributes['import_source'] ?? null),
+            'tags' => $attributes['tags'] ?? null,
             'import_source' => $attributes['import_source'] ?? null,
             'external_id' => $attributes['external_id'] ?? null,
             'imported_at' => now(),
@@ -169,16 +172,20 @@ class PhrStructuredDataImporter
             'uploaded_by_user_id' => $actorUserId,
             'genai_job_id' => $job->id,
             'title' => $this->string($payload['title'] ?? null) ?? pathinfo($filename, PATHINFO_FILENAME),
-            'document_type' => $this->string($payload['document_type'] ?? null) ?? 'general',
+            'document_type' => $this->normalizeDocumentType($payload['document_type'] ?? null),
+            'observed_at' => $this->dateTime($payload['observed_at'] ?? null),
             'original_filename' => $filename,
             'storage_disk' => 'phr_documents',
             'storage_path' => $storagePath,
             'mime_type' => $job->mime_type,
+            'byte_size' => $job->file_size_bytes,
+            'file_hash' => $job->file_hash,
             'file_size_bytes' => $job->file_size_bytes,
             'sha256' => $job->file_hash,
             'extracted_text' => $this->string($payload['extracted_text'] ?? $payload['text'] ?? null),
             'summary' => $this->string($payload['summary'] ?? null),
-            'source' => 'genai',
+            'source' => 'genai_import',
+            'tags' => $this->tags($payload['tags'] ?? null),
             'import_source' => 'genai',
             'external_id' => 'genai-job-'.$job->id,
             'imported_at' => now(),
@@ -187,7 +194,25 @@ class PhrStructuredDataImporter
 
     /**
      * @param  array<string, mixed>  $payload
-     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null}  $options
+     */
+    public function updateDocumentFromGenAiResult(PhrDocument $document, GenAiImportJob $job, array $payload): PhrDocument
+    {
+        $document->update([
+            'genai_job_id' => $job->id,
+            'title' => $this->string($payload['title'] ?? null) ?? $document->title,
+            'document_type' => $this->normalizeDocumentType($payload['document_type'] ?? $document->document_type),
+            'observed_at' => $this->dateTime($payload['observed_at'] ?? null) ?? $document->observed_at,
+            'extracted_text' => $this->string($payload['extracted_text'] ?? $payload['text'] ?? null) ?? $document->extracted_text,
+            'summary' => $this->string($payload['summary'] ?? null) ?? $document->summary,
+            'tags' => $this->tags($payload['tags'] ?? null) ?? $document->tags,
+        ]);
+
+        return $document->refresh();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null, source_document_id?: int|null}  $options
      */
     private function createOrUpdateDocument(PhrPatient $patient, int $actorUserId, array $payload, array $options): PhrDocument
     {
@@ -197,16 +222,20 @@ class PhrStructuredDataImporter
             'uploaded_by_user_id' => $actorUserId,
             'genai_job_id' => $options['genai_job_id'] ?? null,
             'title' => $this->string($payload['title'] ?? null),
-            'document_type' => $this->string($payload['document_type'] ?? null) ?? 'general',
+            'document_type' => $this->normalizeDocumentType($payload['document_type'] ?? null),
+            'observed_at' => $this->dateTime($payload['observed_at'] ?? null),
             'original_filename' => $this->string($payload['original_filename'] ?? null),
             'storage_disk' => $this->string($payload['storage_disk'] ?? null) ?? 'phr_documents',
             'storage_path' => $this->string($payload['storage_path'] ?? null),
             'mime_type' => $this->string($payload['mime_type'] ?? null),
-            'file_size_bytes' => (int) ($payload['file_size_bytes'] ?? 0),
-            'sha256' => $this->string($payload['sha256'] ?? null),
+            'byte_size' => (int) ($payload['byte_size'] ?? $payload['file_size_bytes'] ?? 0),
+            'file_hash' => $this->string($payload['file_hash'] ?? $payload['sha256'] ?? null),
+            'file_size_bytes' => (int) ($payload['file_size_bytes'] ?? $payload['byte_size'] ?? 0),
+            'sha256' => $this->string($payload['sha256'] ?? $payload['file_hash'] ?? null),
             'extracted_text' => $this->string($payload['extracted_text'] ?? $payload['text'] ?? null),
             'summary' => $this->string($payload['summary'] ?? null),
-            'source' => $this->string($payload['source'] ?? null) ?? ($options['source'] ?? null),
+            'source' => $this->normalizeDocumentSource($payload['source'] ?? $options['source'] ?? $options['import_source'] ?? null),
+            'tags' => $this->tags($payload['tags'] ?? null),
             'import_source' => $options['import_source'] ?? $this->string($payload['import_source'] ?? null),
             'external_id' => $this->externalId($payload, $options),
             'imported_at' => now(),
@@ -253,7 +282,7 @@ class PhrStructuredDataImporter
 
     /**
      * @param  array<string, mixed>  $record
-     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null}  $options
+     * @param  array{import_source?: string, source?: string, external_id?: string|null, genai_job_id?: int|null, source_document_id?: int|null}  $options
      * @return array<string, mixed>
      */
     private function attributesFor(PhrPatient $patient, int $actorUserId, string $jobType, array $record, array $options): array
@@ -263,6 +292,7 @@ class PhrStructuredDataImporter
             'user_id' => $patient->owner_user_id,
             'import_source' => $options['import_source'] ?? $this->string($record['import_source'] ?? null),
             'external_id' => $this->externalId($record, $options),
+            'source_document_id' => $options['source_document_id'] ?? null,
         ];
 
         return match ($jobType) {
@@ -590,6 +620,52 @@ class PhrStructuredDataImporter
         }
 
         return $codes === [] ? null : $codes;
+    }
+
+    /**
+     * @return array<int, string>|null
+     */
+    private function tags(mixed $value): ?array
+    {
+        if (is_string($value)) {
+            $value = explode(',', $value);
+        }
+
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $tags = [];
+        foreach ($value as $tag) {
+            $tagText = $this->string($tag);
+            if ($tagText === null) {
+                continue;
+            }
+
+            $tags[strtolower($tagText)] = $tagText;
+        }
+
+        return $tags === [] ? null : array_values($tags);
+    }
+
+    private function normalizeDocumentSource(mixed $source): string
+    {
+        $value = $this->string($source);
+
+        return match ($value) {
+            'genai', 'genai_import' => 'genai_import',
+            'fhir', 'fhir_import' => 'fhir_import',
+            'ccda', 'ccda_import' => 'ccda_import',
+            'mychart', 'mychart_zip' => 'mychart_zip',
+            default => 'manual_upload',
+        };
+    }
+
+    private function normalizeDocumentType(mixed $type): string
+    {
+        $value = $this->string($type);
+
+        return in_array($value, PhrDocument::DOCUMENT_TYPES, true) ? $value : 'other';
     }
 
     private function documentStoragePath(int $patientId, string $filename): string

@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string|null $import_source
  * @property string|null $external_id
+ * @property int|null $source_document_id
  * @property Carbon|null $visit_date
  * @property Carbon|null $visit_started_at
  * @property Carbon|null $visit_ended_at
@@ -40,6 +41,7 @@ class PhrOfficeVisit extends Model
         'user_id',
         'import_source',
         'external_id',
+        'source_document_id',
         'visit_date',
         'visit_started_at',
         'visit_ended_at',
@@ -62,6 +64,7 @@ class PhrOfficeVisit extends Model
         return [
             'patient_id' => 'integer',
             'user_id' => 'integer',
+            'source_document_id' => 'integer',
             'visit_date' => 'date',
             'visit_started_at' => 'datetime',
             'visit_ended_at' => 'datetime',
@@ -80,5 +83,11 @@ class PhrOfficeVisit extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** @return BelongsTo<PhrDocument, $this> */
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(PhrDocument::class, 'source_document_id');
     }
 }

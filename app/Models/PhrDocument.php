@@ -6,6 +6,7 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -16,24 +17,49 @@ use Illuminate\Support\Carbon;
  * @property int|null $genai_job_id
  * @property string|null $title
  * @property string $document_type
+ * @property Carbon|null $observed_at
  * @property string|null $original_filename
  * @property string $storage_disk
  * @property string|null $storage_path
  * @property string|null $mime_type
+ * @property int $byte_size
+ * @property string|null $file_hash
  * @property int $file_size_bytes
  * @property string|null $sha256
  * @property string|null $extracted_text
  * @property string|null $summary
  * @property string|null $source
+ * @property array<int, string>|null $tags
  * @property string|null $import_source
  * @property string|null $external_id
  * @property Carbon|null $imported_at
+ * @property Carbon|null $deleted_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 class PhrDocument extends Model
 {
     use SerializesDatesAsLocal;
+    use SoftDeletes;
+
+    public const array DOCUMENT_TYPES = [
+        'lab_report',
+        'office_visit_note',
+        'discharge_summary',
+        'imaging_report',
+        'prescription',
+        'insurance',
+        'consent',
+        'other',
+    ];
+
+    public const array SOURCES = [
+        'manual_upload',
+        'genai_import',
+        'fhir_import',
+        'ccda_import',
+        'mychart_zip',
+    ];
 
     protected $fillable = [
         'patient_id',
@@ -42,15 +68,19 @@ class PhrDocument extends Model
         'genai_job_id',
         'title',
         'document_type',
+        'observed_at',
         'original_filename',
         'storage_disk',
         'storage_path',
         'mime_type',
+        'byte_size',
+        'file_hash',
         'file_size_bytes',
         'sha256',
         'extracted_text',
         'summary',
         'source',
+        'tags',
         'import_source',
         'external_id',
         'imported_at',
@@ -63,8 +93,12 @@ class PhrDocument extends Model
             'user_id' => 'integer',
             'uploaded_by_user_id' => 'integer',
             'genai_job_id' => 'integer',
+            'observed_at' => 'datetime',
+            'byte_size' => 'integer',
             'file_size_bytes' => 'integer',
+            'tags' => 'array',
             'imported_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 
@@ -90,5 +124,17 @@ class PhrDocument extends Model
     public function genAiJob(): BelongsTo
     {
         return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
+    }
+
+    public function displayByteSize(): int
+    {
+        $byteSize = (int) ($this->byte_size ?? 0);
+
+        return $byteSize > 0 ? $byteSize : (int) ($this->file_size_bytes ?? 0);
+    }
+
+    public function displayFileHash(): ?string
+    {
+        return $this->file_hash ?: $this->sha256;
     }
 }
