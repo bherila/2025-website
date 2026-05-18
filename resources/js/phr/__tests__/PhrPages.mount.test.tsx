@@ -105,6 +105,7 @@ describe('PHR page mounts', () => {
 
   it('keeps imaging upload dialog failed when finalize fails', async () => {
     const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    MockUploadXMLHttpRequest.reset()
     globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
 
     mockPost.mockImplementation(async (url: string) => {
@@ -136,9 +137,64 @@ describe('PHR page mounts', () => {
       fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
+      expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders).toMatchObject({
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      })
       expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()
       expect(screen.getAllByText(/Finalize failed\./).length).toBeGreaterThan(0)
       expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`, {})
+    } finally {
+      globalThis.XMLHttpRequest = originalXmlHttpRequest
+    }
+  })
+
+  it('cancels imaging upload sessions instead of finalizing unexpected HTML responses', async () => {
+    const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    MockUploadXMLHttpRequest.reset()
+    MockUploadXMLHttpRequest.responseText = '<!DOCTYPE html><html lang="en"><head><title>Redirected</title></head></html>'
+    globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
+
+    const finalizeUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`
+    const cancelUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`
+
+    mockPost.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
+        return { upload: makeDicomUpload('pending') }
+      }
+      if (url === finalizeUrl) {
+        throw new Error('Finalize should not be called.')
+      }
+      if (url === cancelUrl) {
+        return { upload: makeDicomUpload('failed') }
+      }
+      return { patient: makePatient() }
+    })
+
+    try {
+      const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload dicom/i })).toBeInTheDocument())
+
+      const input = container.querySelector('input[type="file"]')
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Expected DICOM file input to render.')
+      }
+
+      const file = new File(['dicom'], 'IM0001', { type: 'application/dicom' })
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
+
+      fireEvent.change(input, { target: { files: [file] } })
+
+      await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
+      expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders).toMatchObject({
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      })
+      expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()
+      expect(screen.getAllByText(/Unexpected server response/).length).toBeGreaterThan(0)
+      expect(mockPost).toHaveBeenCalledWith(cancelUrl, {})
+      expect(mockPost).not.toHaveBeenCalledWith(finalizeUrl, {})
     } finally {
       globalThis.XMLHttpRequest = originalXmlHttpRequest
     }
@@ -215,13 +271,13 @@ function makeDicomUpload(status: string) {
 }
 
 class MockUploadXMLHttpRequest {
-  upload = new MockUploadEventTarget()
+  static instances: MockUploadXMLHttpRequest[] = []
 
-  status = 200
+  static status = 200
 
-  statusText = 'OK'
+  static statusText = 'OK'
 
-  responseText = JSON.stringify({
+  static responseText = JSON.stringify({
     result: {
       stored: true,
       skipped_reason: null,
@@ -231,13 +287,44 @@ class MockUploadXMLHttpRequest {
     upload: makeDicomUpload('pending'),
   })
 
+  static reset(): void {
+    MockUploadXMLHttpRequest.instances = []
+    MockUploadXMLHttpRequest.status = 200
+    MockUploadXMLHttpRequest.statusText = 'OK'
+    MockUploadXMLHttpRequest.responseText = JSON.stringify({
+      result: {
+        stored: true,
+        skipped_reason: null,
+        relative_path: 'CARDIAC_CT/IM0001',
+        study_id: 7001,
+      },
+      upload: makeDicomUpload('pending'),
+    })
+  }
+
+  upload = new MockUploadEventTarget()
+
+  status = MockUploadXMLHttpRequest.status
+
+  statusText = MockUploadXMLHttpRequest.statusText
+
+  responseText = MockUploadXMLHttpRequest.responseText
+
   withCredentials = false
+
+  readonly requestHeaders: Record<string, string> = {}
 
   private readonly listeners = new MockUploadEventTarget()
 
+  constructor() {
+    MockUploadXMLHttpRequest.instances.push(this)
+  }
+
   open(): void {}
 
-  setRequestHeader(): void {}
+  setRequestHeader(name: string, value: string): void {
+    this.requestHeaders[name] = value
+  }
 
   addEventListener(type: string, listener: () => void): void {
     this.listeners.addEventListener(type, listener)
