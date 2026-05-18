@@ -571,6 +571,7 @@ function Thumbnail({ document }: ThumbnailProps) {
         src={`${document.file_url}#toolbar=0&navpanes=0&page=1`}
         className="size-full bg-background"
         tabIndex={-1}
+        sandbox=""
       />
     )
   }
@@ -601,6 +602,7 @@ function DocumentPreview({ document }: DocumentPreviewProps) {
         title="Document viewer"
         src={document.file_url}
         className="h-[520px] w-full rounded-md border border-border bg-background"
+        sandbox=""
       />
     )
   }

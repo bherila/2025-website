@@ -61,11 +61,17 @@ class PhrDocumentsTest extends TestCase
         $patient = $this->createPatient($owner);
         $document = $this->createStoredDocument($patient, $owner, 'source/lab.pdf', '%PDF-1.4 lab');
 
-        $this->actingAs($owner)
+        $response = $this->actingAs($owner)
             ->get("/api/phr/patients/{$patient->id}/documents/{$document->id}/file")
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'inline; filename="lab.pdf"');
+            ->assertHeader('Content-Disposition', 'inline; filename="lab.pdf"')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $csp = $response->headers->get('Content-Security-Policy');
+        $this->assertIsString($csp);
+        $this->assertStringContainsString('sandbox', $csp);
+        $this->assertStringContainsString("default-src 'none'", $csp);
 
         $this->actingAs($other)
             ->get("/api/phr/patients/{$patient->id}/documents/{$document->id}/file")
