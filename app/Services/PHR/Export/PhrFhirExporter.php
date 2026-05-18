@@ -324,8 +324,8 @@ class PhrFhirExporter
                     'contentType' => $document->mime_type,
                     'title' => $document->original_filename ?? $document->title,
                     'url' => $document->storage_path ? 'documents/'.$document->id.'-'.$this->safeFilename($document->original_filename ?? ('document-'.$document->id)) : null,
-                    'size' => $document->file_size_bytes,
-                    'hash' => $document->sha256,
+                    'size' => $document->byte_size,
+                    'hash' => $document->file_hash,
                 ],
             ]],
         ];

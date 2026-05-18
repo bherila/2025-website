@@ -3,72 +3,85 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PHR\Concerns\HandlesClinicalResourceRequests;
 use App\Http\Requests\PHR\StoreVitalRequest;
+use App\Http\Resources\PHR\VitalResource;
 use App\Models\PhrPatientVital;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class VitalController extends Controller
 {
+    /** @use HandlesClinicalResourceRequests<PhrPatientVital> */
+    use HandlesClinicalResourceRequests;
+
     public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $vitals = PhrPatientVital::query()
-            ->forPatient((int) $resolvedPatient->id)
-            ->orderByDesc('observed_at')
-            ->orderByDesc('vital_date')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (PhrPatientVital $vital): array => $this->vitalPayload($vital))
-            ->values();
-
-        return response()->json([
-            'vitals' => $vitals,
-            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
-        ]);
+        return $this->indexClinicalResource($request, $patient);
     }
 
     public function store(StoreVitalRequest $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
+        return $this->storeClinicalResource($request, $patient);
+    }
 
-        $vital = PhrPatientVital::create([
-            'patient_id' => $resolvedPatient->id,
-            'user_id' => $resolvedPatient->owner_user_id,
-            ...$request->validated(),
-        ]);
+    public function show(Request $request, int $patient, int $vital): JsonResponse
+    {
+        return $this->showClinicalResource($request, $patient, $vital);
+    }
 
-        return response()->json(['vital' => $this->vitalPayload($vital)], 201);
+    public function update(StoreVitalRequest $request, int $patient, int $vital): JsonResponse
+    {
+        return $this->updateClinicalResource($request, $patient, $vital);
+    }
+
+    public function destroy(Request $request, int $patient, int $vital): Response
+    {
+        return $this->destroyClinicalResource($request, $patient, $vital);
+    }
+
+    protected function accessService(): PhrPatientAccessService
+    {
+        return $this->accessService;
     }
 
     /**
-     * @return array<string, mixed>
+     * @return class-string<PhrPatientVital>
      */
-    private function vitalPayload(PhrPatientVital $vital): array
+    protected function modelClass(): string
     {
-        return [
-            'id' => $vital->id,
-            'patient_id' => $vital->patient_id,
-            'user_id' => $vital->user_id,
-            'vital_name' => $vital->vital_name,
-            'vital_date' => $vital->vital_date?->toDateString(),
-            'observed_at' => $vital->observed_at?->toDateTimeString(),
-            'vital_value' => $vital->vital_value,
-            'value_numeric' => $vital->value_numeric,
-            'value_numeric_secondary' => $vital->value_numeric_secondary,
-            'unit' => $vital->unit,
-            'secondary_unit' => $vital->secondary_unit,
-            'body_site' => $vital->body_site,
-            'source' => $vital->source,
-            'notes' => $vital->notes,
-            'created_at' => $vital->created_at?->toDateTimeString(),
-            'updated_at' => $vital->updated_at?->toDateTimeString(),
-        ];
+        return PhrPatientVital::class;
+    }
+
+    protected function resourceClass(): string
+    {
+        return VitalResource::class;
+    }
+
+    protected function collectionKey(): string
+    {
+        return 'vitals';
+    }
+
+    protected function resourceKey(): string
+    {
+        return 'vital';
+    }
+
+    /**
+     * @param  Builder<PhrPatientVital>  $query
+     * @return Builder<PhrPatientVital>
+     */
+    protected function indexQuery(Builder $query): Builder
+    {
+        return $query
+            ->orderByDesc('observed_at')
+            ->orderByDesc('vital_date')
+            ->orderByDesc('id');
     }
 }

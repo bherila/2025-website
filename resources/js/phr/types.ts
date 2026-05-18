@@ -224,7 +224,6 @@ export const PhrDocumentSchema = z.object({
   mime_type: nullableString,
   byte_size: z.number(),
   file_hash: nullableString,
-  file_size_bytes: z.number(),
   summary: nullableString,
   source: z.enum(['manual_upload', 'genai_import', 'fhir_import', 'ccda_import', 'mychart_zip']).nullable(),
   tags: z.array(z.string()),

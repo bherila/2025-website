@@ -174,8 +174,6 @@ class PhrDocumentsTest extends TestCase
             'mime_type' => 'application/pdf',
             'byte_size' => strlen($contents),
             'file_hash' => $hash,
-            'file_size_bytes' => strlen($contents),
-            'sha256' => $hash,
             'source' => 'manual_upload',
             'tags' => ['labs'],
         ]);

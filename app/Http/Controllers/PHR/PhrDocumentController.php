@@ -119,8 +119,6 @@ class PhrDocumentController extends Controller
             'mime_type' => $file->getClientMimeType() ?: $file->getMimeType(),
             'byte_size' => $byteSize,
             'file_hash' => $hash,
-            'file_size_bytes' => $byteSize,
-            'sha256' => $hash,
             'summary' => $request->validated('summary'),
             'source' => 'manual_upload',
             'tags' => $this->cleanTags($request->validated('tags', [])),
@@ -195,11 +193,11 @@ class PhrDocumentController extends Controller
         $job = GenAiImportJob::query()->create([
             'user_id' => $userId,
             'job_type' => 'phr_document',
-            'file_hash' => $resolvedDocument->displayFileHash() ?? hash('sha256', $s3Key),
+            'file_hash' => $resolvedDocument->file_hash ?? hash('sha256', $s3Key),
             'original_filename' => $resolvedDocument->original_filename ?? 'document',
             's3_path' => $s3Key,
             'mime_type' => $resolvedDocument->mime_type,
-            'file_size_bytes' => $resolvedDocument->displayByteSize(),
+            'file_size_bytes' => $resolvedDocument->byte_size,
             'context_json' => json_encode([
                 'patient_id' => $resolvedPatient->id,
                 'document_id' => $resolvedDocument->id,
@@ -265,7 +263,7 @@ class PhrDocumentController extends Controller
             fclose($stream);
         }, 200, [
             'Content-Type' => $document->mime_type ?: 'application/octet-stream',
-            'Content-Length' => (string) $document->displayByteSize(),
+            'Content-Length' => (string) $document->byte_size,
             'Content-Disposition' => "{$disposition}; filename=\"{$filename}\"",
             'Cache-Control' => 'private, no-store',
             'Content-Security-Policy' => "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'",
@@ -289,9 +287,8 @@ class PhrDocumentController extends Controller
             'observed_at' => $document->observed_at?->toDateTimeString(),
             'original_filename' => $document->original_filename,
             'mime_type' => $document->mime_type,
-            'byte_size' => $document->displayByteSize(),
-            'file_hash' => $document->displayFileHash(),
-            'file_size_bytes' => $document->displayByteSize(),
+            'byte_size' => $document->byte_size,
+            'file_hash' => $document->file_hash,
             'summary' => $document->summary,
             'source' => $document->source,
             'tags' => $document->tags ?? [],

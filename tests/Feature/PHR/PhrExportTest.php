@@ -53,7 +53,8 @@ class PhrExportTest extends TestCase
             'storage_disk' => 'phr_documents',
             'storage_path' => 'source/lab.pdf',
             'mime_type' => 'application/pdf',
-            'file_size_bytes' => strlen('%PDF-1.4 test'),
+            'byte_size' => strlen('%PDF-1.4 test'),
+            'file_hash' => hash('sha256', '%PDF-1.4 test'),
         ]);
 
         $response = $this->actingAs($owner)->postJson("/api/phr/patients/{$patient->id}/exports", [

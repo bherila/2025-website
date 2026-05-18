@@ -29,6 +29,62 @@ class PhrClinicalDataTest extends TestCase
         return compact('owner', 'manager', 'viewer', 'patientId');
     }
 
+    // ── Lab Results ───────────────────────────────────────────────────────────
+
+    public function test_manager_can_create_show_update_and_delete_lab_result(): void
+    {
+        ['manager' => $manager, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $labResultId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/lab-results", [
+            'test_name' => 'CBC',
+            'analyte' => 'Hemoglobin',
+            'value' => '13.2',
+            'unit' => 'g/dL',
+        ])->assertCreated()
+            ->assertJsonPath('lab_result.analyte', 'Hemoglobin')
+            ->json('lab_result.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/lab-results/{$labResultId}")
+            ->assertOk()
+            ->assertJsonPath('lab_result.test_name', 'CBC');
+
+        $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/lab-results/{$labResultId}", [
+            'analyte' => 'Hemoglobin',
+            'value' => '14.1',
+        ])->assertOk()
+            ->assertJsonPath('lab_result.value', '14.1');
+
+        $this->actingAs($manager)->deleteJson("/api/phr/patients/{$patientId}/lab-results/{$labResultId}")->assertNoContent();
+    }
+
+    // ── Vitals ────────────────────────────────────────────────────────────────
+
+    public function test_manager_can_create_show_update_and_delete_vital(): void
+    {
+        ['manager' => $manager, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $vitalId = (int) $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/vitals", [
+            'vital_name' => 'Heart Rate',
+            'vital_value' => '72',
+            'unit' => 'bpm',
+        ])->assertCreated()
+            ->assertJsonPath('vital.vital_name', 'Heart Rate')
+            ->json('vital.id');
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/vitals/{$vitalId}")
+            ->assertOk()
+            ->assertJsonPath('vital.unit', 'bpm');
+
+        $this->actingAs($manager)->patchJson("/api/phr/patients/{$patientId}/vitals/{$vitalId}", [
+            'vital_name' => 'Heart Rate',
+            'vital_value' => '75',
+            'unit' => 'bpm',
+        ])->assertOk()
+            ->assertJsonPath('vital.vital_value', '75');
+
+        $this->actingAs($manager)->deleteJson("/api/phr/patients/{$patientId}/vitals/{$vitalId}")->assertNoContent();
+    }
+
     // ── Office Visits ──────────────────────────────────────────────────────────
 
     public function test_manager_can_create_and_list_office_visits(): void
@@ -318,7 +374,7 @@ class PhrClinicalDataTest extends TestCase
         ['patientId' => $patientId] = $this->createPatientWithAccess();
         $other = $this->createUser();
 
-        foreach (['office-visits', 'medications', 'conditions', 'procedures', 'immunizations', 'allergies'] as $endpoint) {
+        foreach (['lab-results', 'vitals', 'office-visits', 'medications', 'conditions', 'procedures', 'immunizations', 'allergies'] as $endpoint) {
             $this->actingAs($other)->getJson("/api/phr/patients/{$patientId}/{$endpoint}")->assertNotFound();
         }
     }
