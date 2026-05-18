@@ -268,6 +268,8 @@ class PhrDocumentController extends Controller
             'Content-Length' => (string) $document->displayByteSize(),
             'Content-Disposition' => "{$disposition}; filename=\"{$filename}\"",
             'Cache-Control' => 'private, no-store',
+            'Content-Security-Policy' => "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
