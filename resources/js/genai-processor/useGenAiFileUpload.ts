@@ -18,6 +18,18 @@ export interface GenAiUploadResult {
   deduplicated?: boolean
 }
 
+function normalizeError(err: unknown, fallback: string): Error {
+  if (err instanceof Error) {
+    return err
+  }
+
+  if (typeof err === 'string' && err.trim() !== '') {
+    return new Error(err)
+  }
+
+  return new Error(fallback)
+}
+
 export function useGenAiFileUpload(options: GenAiUploadOptions): {
   upload: (file: File) => Promise<GenAiUploadResult>
   uploading: boolean
@@ -76,9 +88,9 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
           deduplicated: result.deduplicated,
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed'
-        setError(msg)
-        throw err
+        const error = normalizeError(err, 'Upload failed')
+        setError(error.message)
+        throw error
       } finally {
         setUploading(false)
       }

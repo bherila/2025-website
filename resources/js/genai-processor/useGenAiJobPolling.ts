@@ -11,6 +11,18 @@ const POLL_INTERVAL_MS = 3000
 const MAX_BACKOFF_MS = 30000
 const ACTIVE_STATUSES: GenAiJobStatus[] = ['pending', 'processing']
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) {
+    return err.message
+  }
+
+  if (typeof err === 'string' && err.trim() !== '') {
+    return err
+  }
+
+  return fallback
+}
+
 export function useGenAiJobPolling(jobId: number | null): {
   status: GenAiJobStatus | null
   results: GenAiImportResultData[]
@@ -34,10 +46,9 @@ export function useGenAiJobPolling(jobId: number | null): {
     if (!jobId) return
 
     try {
+      const data = await fetchWrapper.get(`/api/genai/import/jobs/${jobId}`) as GenAiImportJobData
       consecutiveErrorsRef.current = 0
       backoffRef.current = POLL_INTERVAL_MS
-
-      const data = await fetchWrapper.get(`/api/genai/import/jobs/${jobId}`) as GenAiImportJobData
       setJob(data)
       setStatus(data.status)
       statusRef.current = data.status
@@ -63,7 +74,7 @@ export function useGenAiJobPolling(jobId: number | null): {
         backoffRef.current * 2,
         MAX_BACKOFF_MS,
       )
-      setError(err instanceof Error ? err.message : 'Polling failed')
+      setError(errorMessage(err, 'Polling failed'))
     }
   }, [jobId])
 

@@ -47,19 +47,35 @@ class PhrExportService
     {
         $export->update(['status' => PhrExport::STATUS_PROCESSING, 'error_message' => null]);
 
+        $tempPath = null;
         try {
             $patient = PhrPatient::query()->findOrFail($export->patient_id);
             $formats = $this->normalizeFormats($export->formats_json ?: [$export->format]);
-            [$filename, $contents] = $this->buildExport($patient, $formats);
+            [$filename, $tempPath] = $this->buildExportFile($patient, $formats);
             $storagePath = 'phr/exports/patients/'.$patient->id.'/'.Str::uuid().'/'.$filename;
 
-            Storage::disk('phr_exports')->put($storagePath, $contents);
+            $stream = fopen($tempPath, 'rb');
+            if ($stream === false) {
+                throw new \RuntimeException("Unable to read generated export at {$tempPath}");
+            }
+
+            try {
+                $stored = Storage::disk('phr_exports')->put($storagePath, $stream);
+            } finally {
+                fclose($stream);
+            }
+
+            if (! $stored) {
+                throw new \RuntimeException('Unable to store generated PHR export.');
+            }
+
+            $fileSize = filesize($tempPath);
 
             $export->update([
                 'format' => $this->singleOutputFormat($formats),
                 'filename' => $filename,
                 'storage_path' => $storagePath,
-                'file_size_bytes' => strlen($contents),
+                'file_size_bytes' => $fileSize === false ? null : $fileSize,
                 'status' => PhrExport::STATUS_READY,
                 'generated_at' => now(),
             ]);
@@ -70,6 +86,10 @@ class PhrExportService
             ]);
 
             throw $exception;
+        } finally {
+            if ($tempPath !== null && is_file($tempPath)) {
+                @unlink($tempPath);
+            }
         }
 
         return $export->refresh();
@@ -81,21 +101,26 @@ class PhrExportService
     public function generateToPath(PhrPatient $patient, array $formats, string $outPath): string
     {
         $formats = $this->normalizeFormats($formats);
-        [$filename, $contents] = $this->buildExport($patient, $formats);
-        $target = is_dir($outPath) ? rtrim($outPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$filename : $outPath;
+        [$filename, $tempPath] = $this->buildExportFile($patient, $formats);
 
-        if (file_put_contents($target, $contents) === false) {
-            throw new \RuntimeException("Unable to write export to {$target}");
+        try {
+            $target = is_dir($outPath) ? rtrim($outPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$filename : $outPath;
+
+            if (! copy($tempPath, $target)) {
+                throw new \RuntimeException("Unable to write export to {$target}");
+            }
+
+            return $target;
+        } finally {
+            @unlink($tempPath);
         }
-
-        return $target;
     }
 
     /**
      * @param  array<int, string>  $formats
      * @return array{string, string}
      */
-    private function buildExport(PhrPatient $patient, array $formats): array
+    private function buildExportFile(PhrPatient $patient, array $formats): array
     {
         $data = $this->dataService->load($patient);
         $date = now()->format('Ymd');
@@ -118,17 +143,9 @@ class PhrExportService
                 throw new \RuntimeException('Unable to create temporary export file.');
             }
 
-            try {
-                $this->archiveBuilder->writeZip($temp, $data, $artifacts);
-                $contents = file_get_contents($temp);
-                if ($contents === false) {
-                    throw new \RuntimeException('Unable to read generated export ZIP.');
-                }
+            $this->archiveBuilder->writeZip($temp, $data, $artifacts);
 
-                return [$base.'.zip', $contents];
-            } finally {
-                @unlink($temp);
-            }
+            return [$base.'.zip', $temp];
         }
 
         $format = $formats[0];
@@ -139,7 +156,18 @@ class PhrExportService
             default => throw new InvalidArgumentException("Unsupported export format: {$format}"),
         };
 
-        return [$path, array_values($artifacts)[0] ?? ''];
+        $temp = tempnam(sys_get_temp_dir(), 'phr-export-');
+        if ($temp === false) {
+            throw new \RuntimeException('Unable to create temporary export file.');
+        }
+
+        if (file_put_contents($temp, array_values($artifacts)[0] ?? '') === false) {
+            @unlink($temp);
+
+            throw new \RuntimeException('Unable to write generated export file.');
+        }
+
+        return [$path, $temp];
     }
 
     /**

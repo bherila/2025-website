@@ -14,7 +14,7 @@ class PhrImportPdfExtractionCommand extends BasePhrCommand
 {
     public function handle(PhrPatientAccessService $accessService, PhrStructuredDataImporter $importer): int
     {
-        $patient = $this->writeablePatient($accessService);
+        $patient = $this->writablePatient($accessService);
         $actorId = $this->intOptionRequired('actor');
         $type = (string) $this->option('type');
         if (! PhrStructuredDataImporter::isPhrJobType($type)) {

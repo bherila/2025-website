@@ -109,7 +109,7 @@ class GenAiImportController extends Controller
             }
 
             try {
-                $this->phrAccessService->writeablePatient($patientId, (int) $user->id);
+                $this->phrAccessService->writablePatient($patientId, (int) $user->id);
             } catch (\Throwable) {
                 return response()->json(['error' => 'Patient not found or write access denied.'], 403);
             }

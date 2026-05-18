@@ -85,7 +85,7 @@ describe('useGenAiFileUpload', () => {
   })
 
   it('should set error on request-upload failure', async () => {
-    mockPost.mockRejectedValueOnce(new Error('Storage not configured'))
+    mockPost.mockRejectedValueOnce('Storage not configured')
 
     const { result } = renderHook(() =>
       useGenAiFileUpload({ jobType: 'finance_transactions' }),

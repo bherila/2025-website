@@ -20,6 +20,7 @@ class PhrExportArchiveBuilder
             throw new \RuntimeException("Unable to create ZIP at {$targetPath}");
         }
 
+        $tempFiles = [];
         try {
             foreach ($artifacts as $path => $contents) {
                 $zip->addFromString($path, $contents);
@@ -34,7 +35,8 @@ class PhrExportArchiveBuilder
                     $zip,
                     $document->storage_disk,
                     $document->storage_path,
-                    'documents/'.$document->id.'-'.$this->safeFilename($document->original_filename ?? ('document-'.$document->id))
+                    'documents/'.$document->id.'-'.$this->safeFilename($document->original_filename ?? ('document-'.$document->id)),
+                    $tempFiles
                 );
             }
 
@@ -51,26 +53,67 @@ class PhrExportArchiveBuilder
                     $zip,
                     'phr_dicom',
                     $file->r2_key,
-                    'dicom/studies/'.$this->safePath((string) $studyUid).'/'.$this->safePath($file->original_relative_path)
+                    'dicom/studies/'.$this->safePath((string) $studyUid).'/'.$this->safePath($file->original_relative_path),
+                    $tempFiles
                 );
             }
         } finally {
             $zip->close();
+            foreach ($tempFiles as $tempFile) {
+                @unlink($tempFile);
+            }
         }
     }
 
-    private function addStorageFile(ZipArchive $zip, string $disk, string $storagePath, string $zipPath): void
+    /**
+     * @param  array<int, string>  $tempFiles
+     */
+    private function addStorageFile(ZipArchive $zip, string $disk, string $storagePath, string $zipPath, array &$tempFiles): void
     {
         if (! Storage::disk($disk)->exists($storagePath)) {
             return;
         }
 
-        $contents = Storage::disk($disk)->get($storagePath);
-        if (! is_string($contents)) {
-            return;
+        $readStream = Storage::disk($disk)->readStream($storagePath);
+        if (! is_resource($readStream)) {
+            throw new \RuntimeException("Unable to read {$storagePath} from {$disk}.");
         }
 
-        $zip->addFromString($zipPath, $contents);
+        $tempPath = tempnam(sys_get_temp_dir(), 'phr-zip-file-');
+        if ($tempPath === false) {
+            fclose($readStream);
+
+            throw new \RuntimeException('Unable to create temporary ZIP entry file.');
+        }
+
+        $writeStream = fopen($tempPath, 'wb');
+        if ($writeStream === false) {
+            fclose($readStream);
+            @unlink($tempPath);
+
+            throw new \RuntimeException('Unable to open temporary ZIP entry file.');
+        }
+
+        try {
+            $copied = stream_copy_to_stream($readStream, $writeStream);
+        } finally {
+            fclose($readStream);
+            fclose($writeStream);
+        }
+
+        if ($copied === false) {
+            @unlink($tempPath);
+
+            throw new \RuntimeException("Unable to stream {$storagePath} from {$disk}.");
+        }
+
+        if (! $zip->addFile($tempPath, $zipPath)) {
+            @unlink($tempPath);
+
+            throw new \RuntimeException("Unable to add {$zipPath} to ZIP.");
+        }
+
+        $tempFiles[] = $tempPath;
     }
 
     private function safeFilename(string $filename): string

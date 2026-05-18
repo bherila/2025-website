@@ -29,9 +29,9 @@ abstract class BasePhrCommand extends Command
         return $value;
     }
 
-    protected function writeablePatient(PhrPatientAccessService $accessService): PhrPatient
+    protected function writablePatient(PhrPatientAccessService $accessService): PhrPatient
     {
-        return $accessService->writeablePatient(
+        return $accessService->writablePatient(
             $this->intOptionRequired('patient'),
             $this->intOptionRequired('actor'),
         );

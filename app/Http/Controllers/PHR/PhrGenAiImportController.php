@@ -23,7 +23,7 @@ class PhrGenAiImportController extends Controller
     {
         $userId = (int) $request->user()?->id;
         $patients = $this->accessService
-            ->writeablePatientsQuery($userId)
+            ->writablePatientsQuery($userId)
             ->orderBy('display_name')
             ->get(['id', 'display_name', 'relationship']);
 
@@ -44,7 +44,7 @@ class PhrGenAiImportController extends Controller
         $patientId = (int) ($context['patient_id'] ?? 0);
         abort_unless($patientId > 0, 422, 'PHR GenAI job is missing patient context.');
 
-        $patient = $this->accessService->writeablePatient($patientId, $userId);
+        $patient = $this->accessService->writablePatient($patientId, $userId);
         $genAiResult = GenAiImportResult::query()
             ->where('id', $result)
             ->where('job_id', $genAiJob->id)

@@ -17,7 +17,7 @@ class PhrGenAiEnqueueCommand extends BasePhrCommand
 {
     public function handle(PhrPatientAccessService $accessService): int
     {
-        $patient = $this->writeablePatient($accessService);
+        $patient = $this->writablePatient($accessService);
         $actorId = $this->intOptionRequired('actor');
         $file = $this->fileOptionRequired('file');
         $type = (string) $this->option('type');
@@ -28,13 +28,27 @@ class PhrGenAiEnqueueCommand extends BasePhrCommand
         }
 
         $filename = basename($file);
+        $contents = file_get_contents($file);
+        if ($contents === false) {
+            $this->error("Unable to read {$file}.");
+
+            return self::FAILURE;
+        }
+
+        $fileHash = hash_file('sha256', $file);
+        if ($fileHash === false) {
+            $this->error("Unable to hash {$file}.");
+
+            return self::FAILURE;
+        }
+
         $s3Key = 'genai-import/'.$actorId.'/'.Str::uuid().'/'.preg_replace('/[^\w.\-]/', '_', $filename);
-        Storage::disk('s3')->put($s3Key, file_get_contents($file));
+        Storage::disk('s3')->put($s3Key, $contents);
 
         $job = GenAiImportJob::create([
             'user_id' => $actorId,
             'job_type' => $type,
-            'file_hash' => hash_file('sha256', $file),
+            'file_hash' => $fileHash,
             'original_filename' => $filename,
             's3_path' => $s3Key,
             'mime_type' => mime_content_type($file) ?: 'application/pdf',

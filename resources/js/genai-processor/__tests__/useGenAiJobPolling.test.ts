@@ -69,7 +69,7 @@ describe('useGenAiJobPolling', () => {
   })
 
   it('should set error on fetch failure', async () => {
-    mockGet.mockRejectedValue(new Error('Job not found'))
+    mockGet.mockRejectedValue('Job not found')
 
     const { result } = renderHook(() => useGenAiJobPolling(42))
 

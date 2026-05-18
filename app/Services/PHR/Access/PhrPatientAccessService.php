@@ -17,7 +17,7 @@ class PhrPatientAccessService
             ->findOrFail($patientId);
     }
 
-    public function writeablePatient(int $patientId, int $userId): PhrPatient
+    public function writablePatient(int $patientId, int $userId): PhrPatient
     {
         $patient = $this->accessiblePatient($patientId, $userId);
         $this->ensureCanWrite($patient, $userId);
@@ -69,7 +69,7 @@ class PhrPatientAccessService
     /**
      * @return Builder<PhrPatient>
      */
-    public function writeablePatientsQuery(int $userId): Builder
+    public function writablePatientsQuery(int $userId): Builder
     {
         return PhrPatient::query()
             ->where(function (Builder $query) use ($userId): void {

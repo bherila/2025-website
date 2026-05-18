@@ -13,7 +13,7 @@ class PhrImportMyChartZipCommand extends BasePhrCommand
 {
     public function handle(PhrPatientAccessService $accessService, PhrMyChartZipImporter $importer): int
     {
-        $patient = $this->writeablePatient($accessService);
+        $patient = $this->writablePatient($accessService);
         $result = $importer->importFile($this->fileOptionRequired('file'), $patient, $this->intOptionRequired('actor'));
         $this->lineImportResult($result);
 
