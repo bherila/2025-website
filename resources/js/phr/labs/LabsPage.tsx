@@ -148,14 +148,10 @@ export default function LabsPage({ patientId }: { patientId: number }) {
     setBusy(true)
     setError(null)
     try {
-      const [rawLabs, rawPatient] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/lab-results`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-      setResults(PhrLabResultsResponseSchema.parse(rawLabs).lab_results)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = (rawPatient as any)?.patient
-      setCanManage(Boolean(p?.can_manage))
+      const rawLabs = await fetchWrapper.get(`/api/phr/patients/${patientId}/lab-results`)
+      const parsed = PhrLabResultsResponseSchema.parse(rawLabs)
+      setResults(parsed.lab_results)
+      setCanManage(parsed.can_manage)
     } catch (err) {
       setError(errorMessage(err))
     } finally {

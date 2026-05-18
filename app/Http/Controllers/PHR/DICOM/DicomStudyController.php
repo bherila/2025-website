@@ -3,21 +3,21 @@
 namespace App\Http\Controllers\PHR\DICOM;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomSeries;
 use App\Models\PhrDicomStudy;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DicomStudyController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $studies = PhrDicomStudy::query()
             ->forPatient((int) $resolvedPatient->id)
@@ -34,7 +34,7 @@ class DicomStudyController extends Controller
     public function viewerJson(Request $request, int $patient, int $study): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
         $resolvedStudy = PhrDicomStudy::query()
             ->forPatient((int) $resolvedPatient->id)
             ->with(['series.instances.file'])

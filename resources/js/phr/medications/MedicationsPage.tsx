@@ -1,17 +1,16 @@
 import { ChevronDown, ChevronRight, Pencil, Pill, Plus, Trash2 } from 'lucide-react'
 import type { FormEvent } from 'react'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { fetchWrapper } from '@/fetchWrapper'
-import { compactPayload, errorMessage } from '@/phr/shared'
+import { useClinicalCrud } from '@/phr/clinical/crud'
+import { compactPayload } from '@/phr/shared'
 import {
   type PhrMedication,
   PhrMedicationResponseSchema,
   PhrMedicationsResponseSchema,
-  PhrPatientResponseSchema,
 } from '@/phr/types'
 
 type MedicationStatus = 'active' | 'completed' | 'discontinued' | 'on_hold'
@@ -37,8 +36,8 @@ interface MedicationFormFieldsProps {
 }
 
 interface AddFormProps {
-  patientId: number
-  onAdded: (medication: PhrMedication) => void
+  busy: boolean
+  onSubmit: (form: MedicationFormState) => Promise<boolean>
 }
 
 interface MedicationTableProps {
@@ -245,33 +244,16 @@ function MedicationFormFields({ form, onChange }: MedicationFormFieldsProps) {
   )
 }
 
-function AddForm({ patientId, onAdded }: AddFormProps) {
+function AddForm({ busy, onSubmit }: AddFormProps) {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<MedicationFormState>(EMPTY_FORM)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    if (!form.name.trim()) {
-      setError('Name is required.')
-      return
-    }
-
-    setBusy(true)
-    setError(null)
-    try {
-      const raw: unknown = await fetchWrapper.post(
-        `/api/phr/patients/${patientId}/medications`,
-        medicationPayload(form),
-      )
-      onAdded(PhrMedicationResponseSchema.parse(raw).medication)
+    const added = await onSubmit(form)
+    if (added) {
       setForm(EMPTY_FORM)
       setOpen(false)
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -291,7 +273,6 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
       </div>
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
         <MedicationFormFields form={form} onChange={setForm} />
-        {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={busy}>
             {busy ? 'Adding…' : 'Add'}
@@ -466,45 +447,29 @@ function MedicationTable({
 }
 
 export default function MedicationsPage({ patientId }: { patientId: number }) {
-  const [medications, setMedications] = useState<PhrMedication[]>([])
-  const [canManage, setCanManage] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<MedicationFilter>('all')
   const [historicalOpen, setHistoricalOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<MedicationFormState>(EMPTY_FORM)
-  const [mutatingKey, setMutatingKey] = useState<string | null>(null)
+  const endpoint = `/api/phr/patients/${patientId}/medications`
 
-  const load = useCallback(async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const [rawMedications, rawPatient] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/medications`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-      setMedications(PhrMedicationsResponseSchema.parse(rawMedications).medications)
-      setCanManage(PhrPatientResponseSchema.parse(rawPatient).patient.can_manage)
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setBusy(false)
-    }
-  }, [patientId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const crud = useClinicalCrud<PhrMedication, MedicationFormState>({
+    endpoint,
+    emptyForm: EMPTY_FORM,
+    formFromRecord: medicationFormFromMedication,
+    parseItem: (raw) => PhrMedicationResponseSchema.parse(raw).medication,
+    parseList: (raw) => {
+      const parsed = PhrMedicationsResponseSchema.parse(raw)
+      return { records: parsed.medications, canManage: parsed.can_manage }
+    },
+    payloadFromForm: medicationPayload,
+  })
 
   const filteredMedications = useMemo(() => {
     if (statusFilter === 'all') {
-      return medications
+      return crud.records
     }
 
-    return medications.filter((medication) => medication.status === statusFilter)
-  }, [medications, statusFilter])
+    return crud.records.filter((medication) => medication.status === statusFilter)
+  }, [crud.records, statusFilter])
 
   const activeMedications = useMemo(
     () => filteredMedications.filter((medication) => medication.status === 'active'),
@@ -516,81 +481,30 @@ export default function MedicationsPage({ patientId }: { patientId: number }) {
     [filteredMedications],
   )
 
-  function updateMedication(updatedMedication: PhrMedication): void {
-    setMedications((current) => current.map((medication) => (
-      medication.id === updatedMedication.id ? updatedMedication : medication
-    )))
-  }
+  async function addMedication(form: MedicationFormState): Promise<boolean> {
+    if (!form.name.trim()) {
+      crud.setError('Name is required.')
+      return false
+    }
 
-  function startEdit(medication: PhrMedication): void {
-    setDeletingId(null)
-    setEditingId(medication.id)
-    setEditForm(medicationFormFromMedication(medication))
-  }
-
-  function cancelEdit(): void {
-    setEditingId(null)
-    setEditForm(EMPTY_FORM)
+    return (await crud.addRecord(form)) !== null
   }
 
   async function saveEdit(medicationId: number): Promise<void> {
-    if (!editForm.name.trim()) {
-      setError('Name is required.')
+    if (!crud.editForm.name.trim()) {
+      crud.setError('Name is required.')
       return
     }
 
-    setMutatingKey(`save:${medicationId}`)
-    setError(null)
-    try {
-      const raw: unknown = await fetchWrapper.patch(
-        `/api/phr/patients/${patientId}/medications/${medicationId}`,
-        medicationPayload(editForm),
-      )
-      updateMedication(PhrMedicationResponseSchema.parse(raw).medication)
-      cancelEdit()
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setMutatingKey(null)
-    }
-  }
-
-  async function confirmDelete(medicationId: number): Promise<void> {
-    setMutatingKey(`delete:${medicationId}`)
-    setError(null)
-    try {
-      await fetchWrapper.delete(`/api/phr/patients/${patientId}/medications/${medicationId}`, {})
-      setMedications((current) => current.filter((medication) => medication.id !== medicationId))
-      setDeletingId(null)
-      if (editingId === medicationId) {
-        cancelEdit()
-      }
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setMutatingKey(null)
-    }
+    await crud.saveEdit(medicationId)
   }
 
   async function endNow(medication: PhrMedication): Promise<void> {
-    const endedOn = todayDateString()
-    setMutatingKey(`end:${medication.id}`)
-    setError(null)
-    try {
-      const raw: unknown = await fetchWrapper.patch(
-        `/api/phr/patients/${patientId}/medications/${medication.id}`,
-        { ended_on: endedOn, status: 'discontinued' },
-      )
-      updateMedication(PhrMedicationResponseSchema.parse(raw).medication)
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setMutatingKey(null)
-    }
-  }
-
-  function isMutating(key: string): boolean {
-    return mutatingKey === key
+    await crud.patchRecord(
+      medication.id,
+      { ended_on: todayDateString(), status: 'discontinued' },
+      `end:${medication.id}`,
+    )
   }
 
   return (
@@ -622,49 +536,49 @@ export default function MedicationsPage({ patientId }: { patientId: number }) {
         </div>
       </div>
 
-      {error && (
+      {crud.error && (
         <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
+          {crud.error}
         </div>
       )}
 
-      {canManage && (
+      {crud.canManage && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
-          <AddForm patientId={patientId} onAdded={(medication) => setMedications((current) => [medication, ...current])} />
+          <AddForm busy={crud.isMutating('add')} onSubmit={addMedication} />
           <Button size="sm" variant="outline" disabled>
             Import via GenAI (blocked pending documents modal)
           </Button>
         </div>
       )}
 
-      {busy && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {crud.busy && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-      {!busy && medications.length === 0 && (
+      {!crud.busy && crud.records.length === 0 && (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           No medications recorded.
         </div>
       )}
 
-      {!busy && medications.length > 0 && (
+      {!crud.busy && crud.records.length > 0 && (
         <div className="space-y-4">
           <MedicationTable
             title="Active Medications"
             description="Currently active medications for this patient."
             medications={activeMedications}
             emptyMessage="No active medications match the current filter."
-            canManage={canManage}
-            editingId={editingId}
-            deletingId={deletingId}
-            editForm={editForm}
-            setEditForm={setEditForm}
-            onStartEdit={startEdit}
-            onCancelEdit={cancelEdit}
+            canManage={crud.canManage}
+            editingId={crud.editingId}
+            deletingId={crud.deletingId}
+            editForm={crud.editForm}
+            setEditForm={crud.setEditForm}
+            onStartEdit={crud.startEdit}
+            onCancelEdit={crud.cancelEdit}
             onSaveEdit={saveEdit}
-            onStartDelete={setDeletingId}
-            onCancelDelete={() => setDeletingId(null)}
-            onConfirmDelete={confirmDelete}
+            onStartDelete={crud.startDelete}
+            onCancelDelete={crud.cancelDelete}
+            onConfirmDelete={async (id) => { await crud.deleteRecord(id) }}
             onEndNow={endNow}
-            isMutating={isMutating}
+            isMutating={crud.isMutating}
           />
 
           <section className="rounded-lg border border-border bg-card">
@@ -692,19 +606,19 @@ export default function MedicationsPage({ patientId }: { patientId: number }) {
                   description="Previous medications retained for reference."
                   medications={historicalMedications}
                   emptyMessage="No historical medications match the current filter."
-                  canManage={canManage}
-                  editingId={editingId}
-                  deletingId={deletingId}
-                  editForm={editForm}
-                  setEditForm={setEditForm}
-                  onStartEdit={startEdit}
-                  onCancelEdit={cancelEdit}
+                  canManage={crud.canManage}
+                  editingId={crud.editingId}
+                  deletingId={crud.deletingId}
+                  editForm={crud.editForm}
+                  setEditForm={crud.setEditForm}
+                  onStartEdit={crud.startEdit}
+                  onCancelEdit={crud.cancelEdit}
                   onSaveEdit={saveEdit}
-                  onStartDelete={setDeletingId}
-                  onCancelDelete={() => setDeletingId(null)}
-                  onConfirmDelete={confirmDelete}
+                  onStartDelete={crud.startDelete}
+                  onCancelDelete={crud.cancelDelete}
+                  onConfirmDelete={async (id) => { await crud.deleteRecord(id) }}
                   onEndNow={endNow}
-                  isMutating={isMutating}
+                  isMutating={crud.isMutating}
                 />
               </div>
             )}

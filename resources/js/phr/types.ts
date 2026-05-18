@@ -168,6 +168,7 @@ export const PhrPatientResponseSchema = z.object({
 
 export const PhrLabResultsResponseSchema = z.object({
   lab_results: z.array(PhrLabResultSchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrLabResultResponseSchema = z.object({
@@ -176,6 +177,7 @@ export const PhrLabResultResponseSchema = z.object({
 
 export const PhrVitalsResponseSchema = z.object({
   vitals: z.array(PhrVitalSchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrVitalResponseSchema = z.object({
@@ -230,7 +232,6 @@ export const PhrDocumentSchema = z.object({
   created_at: nullableString,
   updated_at: nullableString,
   file_url: z.string(),
-  download_url: nullableString,
   linked_rows: z.array(z.object({
     type: z.string(),
     id: z.number(),
@@ -349,6 +350,7 @@ export type PhrOfficeVisit = z.infer<typeof PhrOfficeVisitSchema>
 
 export const PhrOfficeVisitsResponseSchema = z.object({
   office_visits: z.array(PhrOfficeVisitSchema),
+  can_manage: z.boolean().default(false),
 })
 
 // ── Medications ───────────────────────────────────────────────────────────────
@@ -381,6 +383,7 @@ export const PhrMedicationResponseSchema = z.object({
 
 export const PhrMedicationsResponseSchema = z.object({
   medications: z.array(PhrMedicationSchema),
+  can_manage: z.boolean().default(false),
 })
 
 // ── Conditions ────────────────────────────────────────────────────────────────
@@ -411,6 +414,7 @@ export const PhrConditionResponseSchema = z.object({
 
 export const PhrConditionsResponseSchema = z.object({
   conditions: z.array(PhrConditionSchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrConditionFormSchema = z.object({
@@ -458,6 +462,7 @@ export const PhrProcedureResponseSchema = z.object({
 
 export const PhrProceduresResponseSchema = z.object({
   procedures: z.array(PhrProcedureSchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrProcedureFormSchema = z.object({
@@ -508,6 +513,7 @@ export const PhrImmunizationResponseSchema = z.object({
 
 export const PhrImmunizationsResponseSchema = z.object({
   immunizations: z.array(PhrImmunizationSchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrImmunizationFormSchema = z.object({
@@ -556,6 +562,7 @@ export const PhrAllergyResponseSchema = z.object({
 
 export const PhrAllergiesResponseSchema = z.object({
   allergies: z.array(PhrAllergySchema),
+  can_manage: z.boolean().default(false),
 })
 
 export const PhrAllergyFormSchema = z.object({

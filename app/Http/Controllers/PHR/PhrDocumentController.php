@@ -299,7 +299,6 @@ class PhrDocumentController extends Controller
             'created_at' => $document->created_at?->toDateTimeString(),
             'updated_at' => $document->updated_at?->toDateTimeString(),
             'file_url' => url("/api/phr/patients/{$document->patient_id}/documents/{$document->id}/file"),
-            'download_url' => url("/api/phr/patients/{$document->patient_id}/documents/{$document->id}/file"),
             'linked_rows' => $this->linkedRows($document),
         ];
     }

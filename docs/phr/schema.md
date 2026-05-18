@@ -37,6 +37,23 @@ Use the corresponding `App\Models\Phr*` model rather than raw table access:
 - `PhrImmunization`
 - `PhrAllergy`
 
+## Documents
+
+`phr_documents` is the source-file table for non-DICOM uploads (lab PDFs, office-visit notes, discharge summaries, prescriptions, insurance, consents). The browser endpoints and storage layout are covered in [Documents browser](documents.md).
+
+Key columns:
+
+- `document_type` is a closed enum: `lab_report`, `office_visit_note`, `discharge_summary`, `imaging_report`, `prescription`, `insurance`, `consent`, `other`.
+- `source` is a closed enum: `manual_upload`, `genai_import`, `fhir_import`, `ccda_import`, `mychart_zip`.
+- `observed_at` is the document's clinical date (collection date for labs, visit date for notes), independent of upload time.
+- `byte_size` / `file_hash` are the canonical size and SHA-256 columns; `file_size_bytes` / `sha256` are legacy duplicates kept for the current release and slated for removal.
+- `tags` is a JSON array of free-form labels for filtering.
+- `deleted_at` enables soft delete via the `SoftDeletes` trait.
+
+Indexes: `(patient_id, document_type)`, `(patient_id, source)`, `(patient_id, observed_at)`.
+
+PHR clinical tables (labs, vitals, office visits, medications, conditions, procedures, immunizations, allergies) carry `source_document_id` so a row created from a GenAI'd document links back to its source. Today the documents API surfaces this via `linked_rows` for labs, vitals, and office visits only.
+
 ## DICOM tables
 
 The DICOM metadata schema is applied by `2026_05_17_060948_create_phr_dicom_tables.php`:

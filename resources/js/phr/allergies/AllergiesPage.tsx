@@ -1,11 +1,12 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Info, Pencil, Plus, Trash2 } from 'lucide-react'
-import type { FormEvent, ReactElement } from 'react'
+import type { FormEvent } from 'react'
 import { Fragment, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import { classBadge, codeChip, labelize } from '@/phr/clinical/ui'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   PhrAllergiesResponseSchema,
@@ -169,45 +170,6 @@ function allergyRiskOrder(allergy: PhrAllergy): number {
 
 function isHighRisk(allergy: PhrAllergy): boolean {
   return allergy.criticality === 'high' || allergy.severity === 'severe'
-}
-
-function labelize(value: string): string {
-  return value.replaceAll('_', ' ')
-}
-
-function statusBadge(status: string): ReactElement {
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status] ?? 'bg-muted text-muted-foreground'}`}>
-      {labelize(status)}
-    </span>
-  )
-}
-
-function criticalityBadge(criticality: string | null): ReactElement | null {
-  if (!criticality) {
-    return null
-  }
-
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${CRITICALITY_CLASS[criticality] ?? 'bg-muted text-muted-foreground'}`}>
-      {labelize(criticality)}
-    </span>
-  )
-}
-
-function codeChip(label: string, value: string | null): ReactElement | null {
-  if (!value) {
-    return null
-  }
-
-  return (
-    <span
-      title={`${label}: ${value}`}
-      className="inline-flex rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground"
-    >
-      {label} {value}
-    </span>
-  )
 }
 
 function AllergyFormFields({ form, onChange }: AllergyFormFieldsProps) {
@@ -397,7 +359,7 @@ function AllergiesTable({
                       <td className="px-4 py-3 text-muted-foreground">
                         <div>{allergy.reaction ?? 'Reaction not recorded'}</div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {criticalityBadge(allergy.criticality)}
+                          {classBadge(allergy.criticality, CRITICALITY_CLASS)}
                           {allergy.severity && (
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${allergy.severity === 'severe' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' : 'bg-muted text-muted-foreground'}`}>
                               {allergy.severity}
@@ -407,7 +369,7 @@ function AllergiesTable({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1.5">
-                          {statusBadge(allergy.clinical_status)}
+                          {classBadge(allergy.clinical_status, STATUS_CLASS)}
                           <span className="text-xs text-muted-foreground">{labelize(allergy.verification_status)}</span>
                         </div>
                       </td>
@@ -490,12 +452,14 @@ export default function AllergiesPage({ patientId }: { patientId: number }) {
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/allergies`
   const crud = useClinicalCrud<PhrAllergy, PhrAllergyFormData>({
-    patientId,
     endpoint,
     emptyForm: EMPTY_FORM,
     formFromRecord: allergyFormFromRecord,
     parseItem: (raw) => PhrAllergyResponseSchema.parse(raw).allergy,
-    parseList: (raw) => PhrAllergiesResponseSchema.parse(raw).allergies,
+    parseList: (raw) => {
+      const parsed = PhrAllergiesResponseSchema.parse(raw)
+      return { records: parsed.allergies, canManage: parsed.can_manage }
+    },
     payloadFromForm: allergyPayload,
     sortRecords: sortAllergies,
   })

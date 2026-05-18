@@ -3,21 +3,21 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StoreMedicationRequest;
 use App\Models\PhrMedication;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class MedicationController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $medications = PhrMedication::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -28,14 +28,16 @@ class MedicationController extends Controller
             ->map(fn (PhrMedication $m): array => $this->payload($m))
             ->values();
 
-        return response()->json(['medications' => $medications]);
+        return response()->json([
+            'medications' => $medications,
+            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        ]);
     }
 
     public function store(StoreMedicationRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $medication = PhrMedication::create([
             'patient_id' => $resolvedPatient->id,
@@ -49,7 +51,7 @@ class MedicationController extends Controller
     public function show(Request $request, int $patient, int $medication): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $resolved = PhrMedication::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -61,8 +63,7 @@ class MedicationController extends Controller
     public function update(StoreMedicationRequest $request, int $patient, int $medication): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $resolved = PhrMedication::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -75,8 +76,7 @@ class MedicationController extends Controller
     public function destroy(Request $request, int $patient, int $medication): Response
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         PhrMedication::query()
             ->where('patient_id', $resolvedPatient->id)

@@ -3,20 +3,20 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StoreVitalRequest;
 use App\Models\PhrPatientVital;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class VitalController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $vitals = PhrPatientVital::query()
             ->forPatient((int) $resolvedPatient->id)
@@ -27,14 +27,16 @@ class VitalController extends Controller
             ->map(fn (PhrPatientVital $vital): array => $this->vitalPayload($vital))
             ->values();
 
-        return response()->json(['vitals' => $vitals]);
+        return response()->json([
+            'vitals' => $vitals,
+            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        ]);
     }
 
     public function store(StoreVitalRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $vital = PhrPatientVital::create([
             'patient_id' => $resolvedPatient->id,

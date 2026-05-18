@@ -83,13 +83,10 @@ export default function OfficeVisitsPage({ patientId }: { patientId: number }) {
     setBusy(true)
     setError(null)
     try {
-      const [rawVisits, rawPatient] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/office-visits`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-      setVisits(PhrOfficeVisitsResponseSchema.parse(rawVisits).office_visits)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setCanManage(Boolean((rawPatient as any)?.patient?.can_manage))
+      const rawVisits = await fetchWrapper.get(`/api/phr/patients/${patientId}/office-visits`)
+      const parsed = PhrOfficeVisitsResponseSchema.parse(rawVisits)
+      setVisits(parsed.office_visits)
+      setCanManage(parsed.can_manage)
     } catch (err) {
       setError(errorMessage(err))
     } finally {

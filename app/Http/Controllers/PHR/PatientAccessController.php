@@ -3,22 +3,25 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StorePatientAccessRequest;
 use App\Models\PhrPatientUserAccess;
 use App\Models\User;
+use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Services\PHR\Access\PhrPatientPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PatientAccessController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(
+        private PhrPatientAccessService $accessService,
+        private PhrPatientPresenter $presenter,
+    ) {}
 
     public function store(StorePatientAccessRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientOwner($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->ownedPatient($patient, $userId);
 
         $validated = $request->validated();
         $targetUser = User::query()->where('email', $validated['email'])->firstOrFail();
@@ -48,15 +51,14 @@ class PatientAccessController extends Controller
                 'access_level' => $access->access_level,
                 'granted_at' => $access->granted_at?->toDateTimeString(),
             ],
-            'patient' => $this->patientPayload($resolvedPatient, $userId),
+            'patient' => $this->presenter->payload($resolvedPatient, $userId),
         ], 201);
     }
 
     public function destroy(Request $request, int $patient, int $access): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientOwner($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->ownedPatient($patient, $userId);
 
         PhrPatientUserAccess::query()
             ->where('patient_id', $resolvedPatient->id)

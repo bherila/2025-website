@@ -59,16 +59,16 @@ beforeEach(() => {
   mockGet.mockImplementation(async (url: string) => {
     if (url === '/api/phr/patients') return { patients: [patient] }
     if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient }
-    if (url.includes('/lab-results')) return { lab_results: [] }
-    if (url.includes('/vitals')) return { vitals: [] }
-    if (url.includes('/documents')) return { documents: [] }
+    if (url.includes('/lab-results')) return { lab_results: [], can_manage: true }
+    if (url.includes('/vitals')) return { vitals: [], can_manage: true }
+    if (url.includes('/documents')) return { documents: [], can_manage: true }
     if (url.includes('/exports')) return { exports: [] }
     if (url.includes('/dicom/studies')) return { studies: [] }
     if (url.includes('/access')) return { access_grants: [] }
-    if (url.includes('/conditions')) return { conditions: [] }
-    if (url.includes('/procedures')) return { procedures: [] }
-    if (url.includes('/immunizations')) return { immunizations: [] }
-    if (url.includes('/allergies')) return { allergies: [] }
+    if (url.includes('/conditions')) return { conditions: [], can_manage: true }
+    if (url.includes('/procedures')) return { procedures: [], can_manage: true }
+    if (url.includes('/immunizations')) return { immunizations: [], can_manage: true }
+    if (url.includes('/allergies')) return { allergies: [], can_manage: true }
     return {}
   })
   mockPost.mockResolvedValue({ patient })

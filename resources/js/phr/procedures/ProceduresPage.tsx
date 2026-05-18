@@ -1,11 +1,12 @@
 import { Info, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
-import type { FormEvent, ReactElement } from 'react'
+import type { FormEvent } from 'react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import { classBadge, codeChip } from '@/phr/clinical/ui'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrProcedure,
@@ -98,39 +99,12 @@ function toDatetimeLocal(value: string | null): string {
   return value ? value.replace(' ', 'T').slice(0, 16) : ''
 }
 
-function labelize(value: string): string {
-  return value.replaceAll('_', ' ')
-}
-
 function displayProcedureDate(procedure: PhrProcedure): string {
   if (procedure.performed_at) {
     return procedure.performed_at.slice(0, 16)
   }
 
   return procedure.performed_on ?? 'Date not recorded'
-}
-
-function statusBadge(status: string): ReactElement {
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status] ?? 'bg-muted text-muted-foreground'}`}>
-      {labelize(status)}
-    </span>
-  )
-}
-
-function codeChip(label: string, value: string | null): ReactElement | null {
-  if (!value) {
-    return null
-  }
-
-  return (
-    <span
-      title={`${label}: ${value}`}
-      className="inline-flex rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground"
-    >
-      {label} {value}
-    </span>
-  )
 }
 
 function ProcedureFormFields({ form, onChange }: ProcedureFormFieldsProps) {
@@ -239,12 +213,14 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
 export default function ProceduresPage({ patientId }: { patientId: number }) {
   const endpoint = `/api/phr/patients/${patientId}/procedures`
   const crud = useClinicalCrud<PhrProcedure, PhrProcedureFormData>({
-    patientId,
     endpoint,
     emptyForm: EMPTY_FORM,
     formFromRecord: procedureFormFromRecord,
     parseItem: (raw) => PhrProcedureResponseSchema.parse(raw).procedure,
-    parseList: (raw) => PhrProceduresResponseSchema.parse(raw).procedures,
+    parseList: (raw) => {
+      const parsed = PhrProceduresResponseSchema.parse(raw)
+      return { records: parsed.procedures, canManage: parsed.can_manage }
+    },
     payloadFromForm: procedurePayload,
     sortRecords: sortProcedures,
   })
@@ -329,7 +305,7 @@ export default function ProceduresPage({ patientId }: { patientId: number }) {
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {codeChip('CPT', procedure.cpt_code)}
                         {codeChip('SNOMED', procedure.snomed_code)}
-                        {statusBadge(procedure.status)}
+                        {classBadge(procedure.status, STATUS_CLASS)}
                       </div>
                       <div className="mt-2 text-sm text-muted-foreground">
                         {[

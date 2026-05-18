@@ -3,21 +3,21 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StoreAllergyRequest;
 use App\Models\PhrAllergy;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class AllergyController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $allergies = PhrAllergy::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -27,14 +27,16 @@ class AllergyController extends Controller
             ->map(fn (PhrAllergy $a): array => $this->payload($a))
             ->values();
 
-        return response()->json(['allergies' => $allergies]);
+        return response()->json([
+            'allergies' => $allergies,
+            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        ]);
     }
 
     public function store(StoreAllergyRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $allergy = PhrAllergy::create([
             'patient_id' => $resolvedPatient->id,
@@ -48,7 +50,7 @@ class AllergyController extends Controller
     public function show(Request $request, int $patient, int $allergy): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $resolved = PhrAllergy::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -60,8 +62,7 @@ class AllergyController extends Controller
     public function update(StoreAllergyRequest $request, int $patient, int $allergy): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $resolved = PhrAllergy::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -74,8 +75,7 @@ class AllergyController extends Controller
     public function destroy(Request $request, int $patient, int $allergy): Response
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         PhrAllergy::query()
             ->where('patient_id', $resolvedPatient->id)

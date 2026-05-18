@@ -3,21 +3,21 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StoreOfficeVisitRequest;
 use App\Models\PhrOfficeVisit;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class OfficeVisitController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $visits = PhrOfficeVisit::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -27,14 +27,16 @@ class OfficeVisitController extends Controller
             ->map(fn (PhrOfficeVisit $v): array => $this->payload($v))
             ->values();
 
-        return response()->json(['office_visits' => $visits]);
+        return response()->json([
+            'office_visits' => $visits,
+            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        ]);
     }
 
     public function store(StoreOfficeVisitRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $visit = PhrOfficeVisit::create([
             'patient_id' => $resolvedPatient->id,
@@ -48,7 +50,7 @@ class OfficeVisitController extends Controller
     public function show(Request $request, int $patient, int $visit): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $resolved = PhrOfficeVisit::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -60,8 +62,7 @@ class OfficeVisitController extends Controller
     public function update(StoreOfficeVisitRequest $request, int $patient, int $visit): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $resolved = PhrOfficeVisit::query()
             ->where('patient_id', $resolvedPatient->id)
@@ -74,8 +75,7 @@ class OfficeVisitController extends Controller
     public function destroy(Request $request, int $patient, int $visit): Response
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         PhrOfficeVisit::query()
             ->where('patient_id', $resolvedPatient->id)

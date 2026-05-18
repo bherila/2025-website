@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\PHR\DICOM;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\DICOM\OpenDicomUploadRequest;
 use App\Http\Requests\PHR\DICOM\StoreDicomUploadFileRequest;
 use App\Models\PhrDicomUpload;
 use App\Models\PhrPatient;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,9 +15,10 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class DicomUploadController extends Controller
 {
-    use ResolvesPHRPatientAccess;
-
-    public function __construct(private readonly DicomUploadProcessor $uploadProcessor) {}
+    public function __construct(
+        private readonly DicomUploadProcessor $uploadProcessor,
+        private readonly PhrPatientAccessService $accessService,
+    ) {}
 
     /**
      * Open a new per-file upload session. Returns the session row so the
@@ -90,10 +91,8 @@ class DicomUploadController extends Controller
     private function resolvePatient(Request $request, int $patient): PhrPatient
     {
         $userId = (int) $request->user()?->id;
-        $patientModel = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($patientModel, $userId);
 
-        return $patientModel;
+        return $this->accessService->writablePatient($patient, $userId);
     }
 
     private function resolveSession(PhrPatient $patient, int $uploadId): PhrDicomUpload
