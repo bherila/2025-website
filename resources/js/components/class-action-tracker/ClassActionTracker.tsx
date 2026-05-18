@@ -12,8 +12,19 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -223,10 +234,6 @@ function ClassActionTracker(): React.ReactElement {
   }
 
   async function deleteClaim(claim: ClassActionClaim): Promise<void> {
-    if (!window.confirm(`Delete ${claim.name}?`)) {
-      return
-    }
-
     setError(null)
 
     try {
@@ -363,9 +370,28 @@ function ClassActionTracker(): React.ReactElement {
                     <Button size="sm" variant="outline" onClick={() => openEditDialog(claim)} aria-label={`Edit ${claim.name}`}>
                       <Edit3 className="size-4" />
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => void deleteClaim(claim)} aria-label={`Delete ${claim.name}`}>
-                      <Trash2 className="size-4" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive" aria-label={`Delete ${claim.name}`}>
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete &quot;{claim.name}&quot;?</AlertDialogTitle>
+                          <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className={buttonVariants({ variant: 'destructive' })}
+                            onClick={() => void deleteClaim(claim)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </TableCell>
               </TableRow>
@@ -554,14 +580,17 @@ function PaymentCell({ claim }: { claim: ClassActionClaim }): React.ReactElement
         <CheckCircle2 className="size-4 text-emerald-600" />
         <DateOrEmpty value={claim.payment_received_on} />
       </div>
-      {claim.payment_transaction && (
+      {claim.payment_transaction && claim.payment_transaction.url && (
         <a
-          href={claim.payment_transaction.url ?? undefined}
+          href={claim.payment_transaction.url}
           className="inline-flex w-fit items-center gap-1 text-sm text-blue-700 hover:underline dark:text-blue-300"
         >
           {transactionLabel(claim.payment_transaction)}
           <ExternalLink className="size-3.5" />
         </a>
+      )}
+      {claim.payment_transaction && !claim.payment_transaction.url && (
+        <span className="text-sm text-muted-foreground">{transactionLabel(claim.payment_transaction)}</span>
       )}
     </div>
   )

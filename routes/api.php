@@ -207,8 +207,7 @@ Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}/state-data/{s
 Route::middleware(['web', 'auth'])->get('/user', [UserApiController::class, 'getUser']);
 
 Route::middleware(['web', 'auth'])
-    ->apiResource('class-action-claims', ClassActionClaimController::class)
-    ->only(['index', 'store', 'show', 'update', 'destroy']);
+    ->apiResource('class-action-claims', ClassActionClaimController::class);
 
 Route::middleware(['web', 'auth'])->get('/license-keys', [LicenseKeyController::class, 'index']);
 Route::middleware(['web', 'auth'])->put('/license-keys/{id}', [LicenseKeyController::class, 'update']);
