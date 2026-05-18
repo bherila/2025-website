@@ -6,6 +6,7 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PHR\AcceptPhrGenAiResultRequest;
+use App\Models\PhrDocument;
 use App\Services\PHR\Access\PhrPatientAccessService;
 use App\Services\PHR\Import\PhrImportResult;
 use App\Services\PHR\Import\PhrStructuredDataImporter;
@@ -55,13 +56,22 @@ class PhrGenAiImportController extends Controller
         $payload = $request->payload() ?? $genAiResult->getResultArray();
 
         if ($genAiJob->job_type === 'phr_document') {
-            $this->importer->storeGenAiDocument($patient, $userId, $genAiJob, $payload);
+            $sourceDocumentId = (int) ($context['document_id'] ?? 0);
+            if ($sourceDocumentId > 0) {
+                $document = PhrDocument::query()
+                    ->where('patient_id', $patient->id)
+                    ->findOrFail($sourceDocumentId);
+                $this->importer->updateDocumentFromGenAiResult($document, $genAiJob, $payload);
+            } else {
+                $this->importer->storeGenAiDocument($patient, $userId, $genAiJob, $payload);
+            }
             $importResult = new PhrImportResult(created: 1, documents: 1);
         } else {
             $importResult = $this->importer->importPayload($patient, $userId, $genAiJob->job_type, $payload, [
                 'import_source' => 'genai',
-                'source' => 'genai',
+                'source' => 'genai_import',
                 'genai_job_id' => $genAiJob->id,
+                'source_document_id' => (int) ($context['document_id'] ?? 0) ?: null,
             ]);
         }
 

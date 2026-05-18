@@ -461,7 +461,7 @@ PROMPT;
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
             'document_extract' => ['document_id', 'document_kind', 'tax_year', 'form_type', 'accounts', 'input_kind', 'source_form_type'],
             default => PhrStructuredDataImporter::isPhrJobType($jobType)
-                ? ['patient_id', 'file_count', 'document_type', 'filename_hint']
+                ? ['patient_id', 'file_count', 'document_id', 'document_type', 'filename_hint']
                 : throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
@@ -502,6 +502,10 @@ PROMPT;
         if (PhrStructuredDataImporter::isPhrJobType($jobType)) {
             if (! isset($context['patient_id']) || (! is_int($context['patient_id']) && ! ctype_digit((string) $context['patient_id']))) {
                 throw new \InvalidArgumentException('context.patient_id must be an integer');
+            }
+
+            if (isset($context['document_id']) && ! is_int($context['document_id']) && ! ctype_digit((string) $context['document_id'])) {
+                throw new \InvalidArgumentException('context.document_id must be an integer');
             }
         }
 

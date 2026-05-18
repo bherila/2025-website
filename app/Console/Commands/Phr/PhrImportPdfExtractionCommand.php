@@ -30,7 +30,7 @@ class PhrImportPdfExtractionCommand extends BasePhrCommand
         if (is_string($file) && trim($file) !== '') {
             $document = $importer->storeLocalDocument($patient, $actorId, $file, [
                 'source' => 'cli_pdf',
-                'document_type' => $type === 'phr_document' ? ($payload['document_type'] ?? 'general') : 'source_pdf',
+                'document_type' => $type === 'phr_document' ? ($payload['document_type'] ?? 'other') : 'other',
                 'summary' => $payload['summary'] ?? null,
                 'extracted_text' => $payload['extracted_text'] ?? $payload['text'] ?? null,
             ]);

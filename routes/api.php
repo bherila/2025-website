@@ -323,6 +323,12 @@ Route::middleware(['web', 'auth'])
         Route::get('/patients/{patient}/dicom/studies/{study}/download', [PHRDicomFileController::class, 'downloadStudy'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.download');
         Route::get('/patients/{patient}/dicom/instances/{instance}/file', [PHRDicomFileController::class, 'proxyInstanceFile'])->whereNumber(['patient', 'instance'])->name('patients.dicom.instances.file');
         Route::get('/patients/{patient}/documents', [PhrDocumentController::class, 'index'])->whereNumber('patient')->name('patients.documents.index');
+        Route::post('/patients/{patient}/documents', [PhrDocumentController::class, 'store'])->whereNumber('patient')->name('patients.documents.store');
+        Route::get('/patients/{patient}/documents/{document}', [PhrDocumentController::class, 'show'])->whereNumber(['patient', 'document'])->name('patients.documents.show');
+        Route::get('/patients/{patient}/documents/{document}/file', [PhrDocumentController::class, 'file'])->whereNumber(['patient', 'document'])->name('patients.documents.file');
+        Route::patch('/patients/{patient}/documents/{document}', [PhrDocumentController::class, 'update'])->whereNumber(['patient', 'document'])->name('patients.documents.update');
+        Route::delete('/patients/{patient}/documents/{document}', [PhrDocumentController::class, 'destroy'])->whereNumber(['patient', 'document'])->name('patients.documents.destroy');
+        Route::post('/patients/{patient}/documents/{document}/process', [PhrDocumentController::class, 'process'])->whereNumber(['patient', 'document'])->name('patients.documents.process');
         Route::get('/patients/{patient}/exports', [PhrExportController::class, 'index'])->whereNumber('patient')->name('patients.exports.index');
         Route::post('/patients/{patient}/exports', [PhrExportController::class, 'store'])->whereNumber('patient')->name('patients.exports.store');
         Route::get('/genai/writable-patients', [PhrGenAiImportController::class, 'writablePatients'])->name('genai.writable-patients');

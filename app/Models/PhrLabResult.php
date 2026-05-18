@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string|null $import_source
  * @property string|null $external_id
+ * @property int|null $source_document_id
  * @property string|null $test_name
  * @property Carbon|null $collection_datetime
  * @property Carbon|null $result_datetime
@@ -49,6 +50,7 @@ class PhrLabResult extends Model
         'user_id',
         'import_source',
         'external_id',
+        'source_document_id',
         'test_name',
         'collection_datetime',
         'result_datetime',
@@ -77,6 +79,7 @@ class PhrLabResult extends Model
         return [
             'patient_id' => 'integer',
             'user_id' => 'integer',
+            'source_document_id' => 'integer',
             'collection_datetime' => 'datetime',
             'result_datetime' => 'datetime',
             'value_numeric' => 'decimal:10',
@@ -95,6 +98,12 @@ class PhrLabResult extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** @return BelongsTo<PhrDocument, $this> */
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(PhrDocument::class, 'source_document_id');
     }
 
     /**
