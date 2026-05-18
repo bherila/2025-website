@@ -3,110 +3,84 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PHR\Concerns\HandlesClinicalResourceRequests;
 use App\Http\Requests\PHR\StoreAllergyRequest;
+use App\Http\Resources\PHR\AllergyResource;
 use App\Models\PhrAllergy;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class AllergyController extends Controller
 {
+    /** @use HandlesClinicalResourceRequests<PhrAllergy> */
+    use HandlesClinicalResourceRequests;
+
     public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $allergies = PhrAllergy::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->orderBy('clinical_status')
-            ->orderBy('substance')
-            ->get()
-            ->map(fn (PhrAllergy $a): array => $this->payload($a))
-            ->values();
-
-        return response()->json([
-            'allergies' => $allergies,
-            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
-        ]);
+        return $this->indexClinicalResource($request, $patient);
     }
 
     public function store(StoreAllergyRequest $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $allergy = PhrAllergy::create([
-            'patient_id' => $resolvedPatient->id,
-            'user_id' => $resolvedPatient->owner_user_id,
-            ...$request->validated(),
-        ]);
-
-        return response()->json(['allergy' => $this->payload($allergy)], 201);
+        return $this->storeClinicalResource($request, $patient);
     }
 
     public function show(Request $request, int $patient, int $allergy): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $resolved = PhrAllergy::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($allergy);
-
-        return response()->json(['allergy' => $this->payload($resolved)]);
+        return $this->showClinicalResource($request, $patient, $allergy);
     }
 
     public function update(StoreAllergyRequest $request, int $patient, int $allergy): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $resolved = PhrAllergy::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($allergy);
-        $resolved->update($request->validated());
-
-        return response()->json(['allergy' => $this->payload($resolved)]);
+        return $this->updateClinicalResource($request, $patient, $allergy);
     }
 
     public function destroy(Request $request, int $patient, int $allergy): Response
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
+        return $this->destroyClinicalResource($request, $patient, $allergy);
+    }
 
-        PhrAllergy::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($allergy)
-            ->delete();
-
-        return response()->noContent();
+    protected function accessService(): PhrPatientAccessService
+    {
+        return $this->accessService;
     }
 
     /**
-     * @return array<string, mixed>
+     * @return class-string<PhrAllergy>
      */
-    private function payload(PhrAllergy $a): array
+    protected function modelClass(): string
     {
-        return [
-            'id' => $a->id,
-            'patient_id' => $a->patient_id,
-            'user_id' => $a->user_id,
-            'substance' => $a->substance,
-            'rxnorm_code' => $a->rxnorm_code,
-            'snomed_code' => $a->snomed_code,
-            'category' => $a->category,
-            'criticality' => $a->criticality,
-            'clinical_status' => $a->clinical_status,
-            'verification_status' => $a->verification_status,
-            'reaction' => $a->reaction,
-            'severity' => $a->severity,
-            'notes' => $a->notes,
-            'raw_text' => $a->raw_text,
-            'created_at' => $a->created_at?->toDateTimeString(),
-            'updated_at' => $a->updated_at?->toDateTimeString(),
-        ];
+        return PhrAllergy::class;
+    }
+
+    protected function resourceClass(): string
+    {
+        return AllergyResource::class;
+    }
+
+    protected function collectionKey(): string
+    {
+        return 'allergies';
+    }
+
+    protected function resourceKey(): string
+    {
+        return 'allergy';
+    }
+
+    /**
+     * @param  Builder<PhrAllergy>  $query
+     * @return Builder<PhrAllergy>
+     */
+    protected function indexQuery(Builder $query): Builder
+    {
+        return $query
+            ->orderBy('clinical_status')
+            ->orderBy('substance');
     }
 }

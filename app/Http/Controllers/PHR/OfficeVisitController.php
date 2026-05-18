@@ -3,113 +3,84 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PHR\Concerns\HandlesClinicalResourceRequests;
 use App\Http\Requests\PHR\StoreOfficeVisitRequest;
+use App\Http\Resources\PHR\OfficeVisitResource;
 use App\Models\PhrOfficeVisit;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class OfficeVisitController extends Controller
 {
+    /** @use HandlesClinicalResourceRequests<PhrOfficeVisit> */
+    use HandlesClinicalResourceRequests;
+
     public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $visits = PhrOfficeVisit::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->orderByDesc('visit_date')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (PhrOfficeVisit $v): array => $this->payload($v))
-            ->values();
-
-        return response()->json([
-            'office_visits' => $visits,
-            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
-        ]);
+        return $this->indexClinicalResource($request, $patient);
     }
 
     public function store(StoreOfficeVisitRequest $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $visit = PhrOfficeVisit::create([
-            'patient_id' => $resolvedPatient->id,
-            'user_id' => $resolvedPatient->owner_user_id,
-            ...$request->validated(),
-        ]);
-
-        return response()->json(['office_visit' => $this->payload($visit)], 201);
+        return $this->storeClinicalResource($request, $patient);
     }
 
     public function show(Request $request, int $patient, int $visit): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $resolved = PhrOfficeVisit::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($visit);
-
-        return response()->json(['office_visit' => $this->payload($resolved)]);
+        return $this->showClinicalResource($request, $patient, $visit);
     }
 
     public function update(StoreOfficeVisitRequest $request, int $patient, int $visit): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $resolved = PhrOfficeVisit::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($visit);
-        $resolved->update($request->validated());
-
-        return response()->json(['office_visit' => $this->payload($resolved)]);
+        return $this->updateClinicalResource($request, $patient, $visit);
     }
 
     public function destroy(Request $request, int $patient, int $visit): Response
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
+        return $this->destroyClinicalResource($request, $patient, $visit);
+    }
 
-        PhrOfficeVisit::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($visit)
-            ->delete();
-
-        return response()->noContent();
+    protected function accessService(): PhrPatientAccessService
+    {
+        return $this->accessService;
     }
 
     /**
-     * @return array<string, mixed>
+     * @return class-string<PhrOfficeVisit>
      */
-    private function payload(PhrOfficeVisit $v): array
+    protected function modelClass(): string
     {
-        return [
-            'id' => $v->id,
-            'patient_id' => $v->patient_id,
-            'user_id' => $v->user_id,
-            'visit_date' => $v->visit_date?->toDateString(),
-            'visit_started_at' => $v->visit_started_at?->toDateTimeString(),
-            'visit_ended_at' => $v->visit_ended_at?->toDateTimeString(),
-            'visit_type' => $v->visit_type,
-            'provider_name' => $v->provider_name,
-            'provider_specialty' => $v->provider_specialty,
-            'facility_name' => $v->facility_name,
-            'chief_complaint' => $v->chief_complaint,
-            'assessment' => $v->assessment,
-            'plan' => $v->plan,
-            'subjective' => $v->subjective,
-            'objective' => $v->objective,
-            'icd10_codes' => $v->icd10_codes ?? [],
-            'cpt_codes' => $v->cpt_codes ?? [],
-            'created_at' => $v->created_at?->toDateTimeString(),
-            'updated_at' => $v->updated_at?->toDateTimeString(),
-        ];
+        return PhrOfficeVisit::class;
+    }
+
+    protected function resourceClass(): string
+    {
+        return OfficeVisitResource::class;
+    }
+
+    protected function collectionKey(): string
+    {
+        return 'office_visits';
+    }
+
+    protected function resourceKey(): string
+    {
+        return 'office_visit';
+    }
+
+    /**
+     * @param  Builder<PhrOfficeVisit>  $query
+     * @return Builder<PhrOfficeVisit>
+     */
+    protected function indexQuery(Builder $query): Builder
+    {
+        return $query
+            ->orderByDesc('visit_date')
+            ->orderByDesc('id');
     }
 }

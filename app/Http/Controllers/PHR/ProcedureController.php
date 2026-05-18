@@ -3,113 +3,85 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\PHR\Concerns\HandlesClinicalResourceRequests;
 use App\Http\Requests\PHR\StoreProcedureRequest;
+use App\Http\Resources\PHR\ProcedureResource;
 use App\Models\PhrProcedure;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class ProcedureController extends Controller
 {
+    /** @use HandlesClinicalResourceRequests<PhrProcedure> */
+    use HandlesClinicalResourceRequests;
+
     public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $procedures = PhrProcedure::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->orderByDesc('performed_at')
-            ->orderByDesc('performed_on')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (PhrProcedure $p): array => $this->payload($p))
-            ->values();
-
-        return response()->json([
-            'procedures' => $procedures,
-            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
-        ]);
+        return $this->indexClinicalResource($request, $patient);
     }
 
     public function store(StoreProcedureRequest $request, int $patient): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $procedure = PhrProcedure::create([
-            'patient_id' => $resolvedPatient->id,
-            'user_id' => $resolvedPatient->owner_user_id,
-            ...$request->validated(),
-        ]);
-
-        return response()->json(['procedure' => $this->payload($procedure)], 201);
+        return $this->storeClinicalResource($request, $patient);
     }
 
     public function show(Request $request, int $patient, int $procedure): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-
-        $resolved = PhrProcedure::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($procedure);
-
-        return response()->json(['procedure' => $this->payload($resolved)]);
+        return $this->showClinicalResource($request, $patient, $procedure);
     }
 
     public function update(StoreProcedureRequest $request, int $patient, int $procedure): JsonResponse
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
-
-        $resolved = PhrProcedure::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($procedure);
-        $resolved->update($request->validated());
-
-        return response()->json(['procedure' => $this->payload($resolved)]);
+        return $this->updateClinicalResource($request, $patient, $procedure);
     }
 
     public function destroy(Request $request, int $patient, int $procedure): Response
     {
-        $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
+        return $this->destroyClinicalResource($request, $patient, $procedure);
+    }
 
-        PhrProcedure::query()
-            ->where('patient_id', $resolvedPatient->id)
-            ->findOrFail($procedure)
-            ->delete();
-
-        return response()->noContent();
+    protected function accessService(): PhrPatientAccessService
+    {
+        return $this->accessService;
     }
 
     /**
-     * @return array<string, mixed>
+     * @return class-string<PhrProcedure>
      */
-    private function payload(PhrProcedure $p): array
+    protected function modelClass(): string
     {
-        return [
-            'id' => $p->id,
-            'patient_id' => $p->patient_id,
-            'user_id' => $p->user_id,
-            'name' => $p->name,
-            'cpt_code' => $p->cpt_code,
-            'snomed_code' => $p->snomed_code,
-            'performed_at' => $p->performed_at?->toDateTimeString(),
-            'performed_on' => $p->performed_on?->toDateString(),
-            'performer_name' => $p->performer_name,
-            'performer_specialty' => $p->performer_specialty,
-            'facility_name' => $p->facility_name,
-            'status' => $p->status,
-            'reason' => $p->reason,
-            'outcome' => $p->outcome,
-            'notes' => $p->notes,
-            'raw_text' => $p->raw_text,
-            'created_at' => $p->created_at?->toDateTimeString(),
-            'updated_at' => $p->updated_at?->toDateTimeString(),
-        ];
+        return PhrProcedure::class;
+    }
+
+    protected function resourceClass(): string
+    {
+        return ProcedureResource::class;
+    }
+
+    protected function collectionKey(): string
+    {
+        return 'procedures';
+    }
+
+    protected function resourceKey(): string
+    {
+        return 'procedure';
+    }
+
+    /**
+     * @param  Builder<PhrProcedure>  $query
+     * @return Builder<PhrProcedure>
+     */
+    protected function indexQuery(Builder $query): Builder
+    {
+        return $query
+            ->orderByDesc('performed_at')
+            ->orderByDesc('performed_on')
+            ->orderByDesc('id');
     }
 }

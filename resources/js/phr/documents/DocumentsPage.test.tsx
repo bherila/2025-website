@@ -33,7 +33,6 @@ function makeDocument(overrides: Partial<PhrDocument> = {}): PhrDocument {
     mime_type: 'application/pdf',
     byte_size: 12,
     file_hash: 'abc123',
-    file_size_bytes: 12,
     summary: 'CBC and metabolic panel',
     source: 'manual_upload',
     tags: ['labs', 'mychart'],

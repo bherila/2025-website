@@ -24,8 +24,6 @@ use Illuminate\Support\Carbon;
  * @property string|null $mime_type
  * @property int $byte_size
  * @property string|null $file_hash
- * @property int $file_size_bytes
- * @property string|null $sha256
  * @property string|null $extracted_text
  * @property string|null $summary
  * @property string|null $source
@@ -75,8 +73,6 @@ class PhrDocument extends Model
         'mime_type',
         'byte_size',
         'file_hash',
-        'file_size_bytes',
-        'sha256',
         'extracted_text',
         'summary',
         'source',
@@ -95,7 +91,6 @@ class PhrDocument extends Model
             'genai_job_id' => 'integer',
             'observed_at' => 'datetime',
             'byte_size' => 'integer',
-            'file_size_bytes' => 'integer',
             'tags' => 'array',
             'imported_at' => 'datetime',
             'deleted_at' => 'datetime',
@@ -124,17 +119,5 @@ class PhrDocument extends Model
     public function genAiJob(): BelongsTo
     {
         return $this->belongsTo(GenAiImportJob::class, 'genai_job_id');
-    }
-
-    public function displayByteSize(): int
-    {
-        $byteSize = (int) ($this->byte_size ?? 0);
-
-        return $byteSize > 0 ? $byteSize : (int) ($this->file_size_bytes ?? 0);
-    }
-
-    public function displayFileHash(): ?string
-    {
-        return $this->file_hash ?: $this->sha256;
     }
 }
