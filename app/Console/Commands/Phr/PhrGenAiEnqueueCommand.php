@@ -28,13 +28,6 @@ class PhrGenAiEnqueueCommand extends BasePhrCommand
         }
 
         $filename = basename($file);
-        $contents = file_get_contents($file);
-        if ($contents === false) {
-            $this->error("Unable to read {$file}.");
-
-            return self::FAILURE;
-        }
-
         $fileHash = hash_file('sha256', $file);
         if ($fileHash === false) {
             $this->error("Unable to hash {$file}.");
@@ -43,7 +36,26 @@ class PhrGenAiEnqueueCommand extends BasePhrCommand
         }
 
         $s3Key = 'genai-import/'.$actorId.'/'.Str::uuid().'/'.preg_replace('/[^\w.\-]/', '_', $filename);
-        Storage::disk('s3')->put($s3Key, $contents);
+        $stream = fopen($file, 'rb');
+        if ($stream === false) {
+            $this->error("Unable to read {$file}.");
+
+            return self::FAILURE;
+        }
+
+        try {
+            $stored = Storage::disk('s3')->put($s3Key, $stream);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        if (! $stored) {
+            $this->error("Unable to upload {$file} to S3.");
+
+            return self::FAILURE;
+        }
 
         $job = GenAiImportJob::create([
             'user_id' => $actorId,

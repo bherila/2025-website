@@ -99,12 +99,28 @@ class PhrStructuredDataImporter
 
         $filename = (string) ($attributes['original_filename'] ?? basename($path));
         $storagePath = $this->documentStoragePath((int) $patient->id, $filename);
-        $contents = file_get_contents($path);
-        if ($contents === false) {
+
+        $sha256 = hash_file('sha256', $path);
+        if ($sha256 === false) {
+            throw new RuntimeException("Unable to hash document path: {$path}");
+        }
+
+        $stream = fopen($path, 'rb');
+        if ($stream === false) {
             throw new RuntimeException("Unable to read document path: {$path}");
         }
 
-        Storage::disk('phr_documents')->put($storagePath, $contents);
+        try {
+            $stored = Storage::disk('phr_documents')->put($storagePath, $stream);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        if (! $stored) {
+            throw new RuntimeException("Unable to store document at {$storagePath}.");
+        }
 
         return PhrDocument::create([
             'patient_id' => $patient->id,
@@ -116,8 +132,8 @@ class PhrStructuredDataImporter
             'storage_disk' => 'phr_documents',
             'storage_path' => $storagePath,
             'mime_type' => $attributes['mime_type'] ?? $this->mimeType($path),
-            'file_size_bytes' => filesize($path) ?: strlen($contents),
-            'sha256' => hash('sha256', $contents),
+            'file_size_bytes' => filesize($path) ?: 0,
+            'sha256' => $sha256,
             'extracted_text' => $attributes['extracted_text'] ?? null,
             'summary' => $attributes['summary'] ?? null,
             'source' => $attributes['source'] ?? 'cli',

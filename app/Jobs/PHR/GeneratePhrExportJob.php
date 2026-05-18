@@ -14,7 +14,9 @@ class GeneratePhrExportJob implements ShouldQueue
 
     public int $timeout = 300;
 
-    public int $tries = 1;
+    public int $tries = 2;
+
+    public int $backoff = 30;
 
     public function __construct(public int $exportId)
     {
@@ -24,7 +26,11 @@ class GeneratePhrExportJob implements ShouldQueue
     public function handle(PhrExportService $exportService): void
     {
         $export = PhrExport::query()->find($this->exportId);
-        if (! $export || $export->status !== PhrExport::STATUS_PENDING) {
+        if (! $export) {
+            return;
+        }
+
+        if (! in_array($export->status, [PhrExport::STATUS_PENDING, PhrExport::STATUS_FAILED, PhrExport::STATUS_PROCESSING], true)) {
             return;
         }
 

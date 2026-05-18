@@ -201,6 +201,10 @@ class PhrCcdaImporter
     }
 
     /**
+     * Best-effort header-row skip. CCDA narrative tables vary by vendor and have no
+     * stable scope/role markers, so this matches a small set of common English labels;
+     * localized exports or non-standard headers will fall through and import as data.
+     *
      * @param  array<int, string>  $cells
      */
     private function hasNonHeaderData(array $cells): bool
