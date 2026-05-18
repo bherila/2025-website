@@ -46,6 +46,18 @@ class ConditionController extends Controller
         return response()->json(['condition' => $this->payload($condition)], 201);
     }
 
+    public function show(Request $request, int $patient, int $condition): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+
+        $resolved = PhrCondition::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->findOrFail($condition);
+
+        return response()->json(['condition' => $this->payload($resolved)]);
+    }
+
     public function update(StoreConditionRequest $request, int $patient, int $condition): JsonResponse
     {
         $userId = (int) $request->user()?->id;
@@ -92,6 +104,7 @@ class ConditionController extends Controller
             'verification_status' => $c->verification_status,
             'severity' => $c->severity,
             'notes' => $c->notes,
+            'raw_text' => $c->raw_text,
             'created_at' => $c->created_at?->toDateTimeString(),
             'updated_at' => $c->updated_at?->toDateTimeString(),
         ];

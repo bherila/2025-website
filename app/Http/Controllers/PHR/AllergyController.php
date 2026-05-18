@@ -45,6 +45,18 @@ class AllergyController extends Controller
         return response()->json(['allergy' => $this->payload($allergy)], 201);
     }
 
+    public function show(Request $request, int $patient, int $allergy): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+
+        $resolved = PhrAllergy::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->findOrFail($allergy);
+
+        return response()->json(['allergy' => $this->payload($resolved)]);
+    }
+
     public function update(StoreAllergyRequest $request, int $patient, int $allergy): JsonResponse
     {
         $userId = (int) $request->user()?->id;
@@ -92,6 +104,7 @@ class AllergyController extends Controller
             'reaction' => $a->reaction,
             'severity' => $a->severity,
             'notes' => $a->notes,
+            'raw_text' => $a->raw_text,
             'created_at' => $a->created_at?->toDateTimeString(),
             'updated_at' => $a->updated_at?->toDateTimeString(),
         ];

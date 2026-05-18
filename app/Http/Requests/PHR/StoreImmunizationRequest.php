@@ -32,6 +32,7 @@ class StoreImmunizationRequest extends FormRequest
             'administered_by' => ['nullable', 'string', 'max:255'],
             'facility_name' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:10000'],
+            'raw_text' => ['nullable', 'string'],
         ];
     }
 }

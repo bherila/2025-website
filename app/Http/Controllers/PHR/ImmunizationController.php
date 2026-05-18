@@ -45,6 +45,18 @@ class ImmunizationController extends Controller
         return response()->json(['immunization' => $this->payload($immunization)], 201);
     }
 
+    public function show(Request $request, int $patient, int $immunization): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+
+        $resolved = PhrImmunization::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->findOrFail($immunization);
+
+        return response()->json(['immunization' => $this->payload($resolved)]);
+    }
+
     public function update(StoreImmunizationRequest $request, int $patient, int $immunization): JsonResponse
     {
         $userId = (int) $request->user()?->id;
@@ -94,6 +106,7 @@ class ImmunizationController extends Controller
             'administered_by' => $i->administered_by,
             'facility_name' => $i->facility_name,
             'notes' => $i->notes,
+            'raw_text' => $i->raw_text,
             'created_at' => $i->created_at?->toDateTimeString(),
             'updated_at' => $i->updated_at?->toDateTimeString(),
         ];

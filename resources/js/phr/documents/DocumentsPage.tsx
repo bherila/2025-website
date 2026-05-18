@@ -22,6 +22,13 @@ const PHR_JOB_TYPES: Array<{ value: GenAiJobType; label: string }> = [
   { value: 'phr_document', label: 'Document Summary' },
 ]
 
+function initialJobTypeFromQuery(): GenAiJobType {
+  const value = new URLSearchParams(window.location.search).get('job_type')
+  const option = PHR_JOB_TYPES.find((type) => type.value === value)
+
+  return option?.value ?? 'phr_document'
+}
+
 function prettyJson(raw: string): string {
   try {
     return JSON.stringify(JSON.parse(raw), null, 2)
@@ -32,7 +39,7 @@ function prettyJson(raw: string): string {
 
 export default function DocumentsPage({ patientId }: { patientId: number }) {
   const [documents, setDocuments] = useState<PhrDocument[]>([])
-  const [jobType, setJobType] = useState<GenAiJobType>('phr_document')
+  const [jobType, setJobType] = useState<GenAiJobType>(() => initialJobTypeFromQuery())
   const [file, setFile] = useState<File | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
   const [editors, setEditors] = useState<Record<number, string>>({})
