@@ -1,48 +1,19 @@
 <?php
 
-namespace App\Http\Controllers\PHR\Concerns;
+namespace App\Services\PHR\Access;
 
 use App\Models\PhrPatient;
 use App\Models\PhrPatientUserAccess;
 use Illuminate\Database\Eloquent\Collection;
 
-trait ResolvesPHRPatientAccess
+class PhrPatientPresenter
 {
-    private function accessiblePatient(int $patientId, int $userId): PhrPatient
-    {
-        return PhrPatient::query()
-            ->accessibleBy($userId)
-            ->with(['accessGrants.user'])
-            ->findOrFail($patientId);
-    }
-
-    private function canManagePatient(PhrPatient $patient, int $userId): bool
-    {
-        if ((int) $patient->owner_user_id === $userId) {
-            return true;
-        }
-
-        return $patient->accessGrants
-            ->contains(fn (PhrPatientUserAccess $access): bool => (int) $access->user_id === $userId && in_array($access->access_level, [
-                PhrPatientUserAccess::LEVEL_OWNER,
-                PhrPatientUserAccess::LEVEL_MANAGER,
-            ], true));
-    }
-
-    private function ensurePatientManager(PhrPatient $patient, int $userId): void
-    {
-        abort_unless($this->canManagePatient($patient, $userId), 403);
-    }
-
-    private function ensurePatientOwner(PhrPatient $patient, int $userId): void
-    {
-        abort_unless((int) $patient->owner_user_id === $userId, 403);
-    }
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     /**
      * @return array<string, mixed>
      */
-    private function patientPayload(PhrPatient $patient, int $userId): array
+    public function payload(PhrPatient $patient, int $userId): array
     {
         $canShare = (int) $patient->owner_user_id === $userId;
         $accessLevel = $canShare
@@ -61,7 +32,7 @@ trait ResolvesPHRPatientAccess
             'created_at' => $patient->created_at?->toDateTimeString(),
             'updated_at' => $patient->updated_at?->toDateTimeString(),
             'access_level' => $accessLevel,
-            'can_manage' => $this->canManagePatient($patient, $userId),
+            'can_manage' => $this->accessService->canWrite($patient, $userId),
             'can_share' => $canShare,
             'access_grants' => $canShare
                 ? $patient->accessGrants

@@ -148,14 +148,10 @@ export default function VitalsPage({ patientId }: { patientId: number }) {
     setBusy(true)
     setError(null)
     try {
-      const [rawVitals, rawPatient] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/vitals`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-      setVitals(PhrVitalsResponseSchema.parse(rawVitals).vitals)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = (rawPatient as any)?.patient
-      setCanManage(Boolean(p?.can_manage))
+      const rawVitals = await fetchWrapper.get(`/api/phr/patients/${patientId}/vitals`)
+      const parsed = PhrVitalsResponseSchema.parse(rawVitals)
+      setVitals(parsed.vitals)
+      setCanManage(parsed.can_manage)
     } catch (err) {
       setError(errorMessage(err))
     } finally {

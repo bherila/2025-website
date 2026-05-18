@@ -3,20 +3,20 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StoreLabResultRequest;
 use App\Models\PhrLabResult;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class LabResultController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $labResults = PhrLabResult::query()
             ->forPatient((int) $resolvedPatient->id)
@@ -27,14 +27,16 @@ class LabResultController extends Controller
             ->map(fn (PhrLabResult $labResult): array => $this->labResultPayload($labResult))
             ->values();
 
-        return response()->json(['lab_results' => $labResults]);
+        return response()->json([
+            'lab_results' => $labResults,
+            'can_manage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        ]);
     }
 
     public function store(StoreLabResultRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $labResult = PhrLabResult::create([
             'patient_id' => $resolvedPatient->id,

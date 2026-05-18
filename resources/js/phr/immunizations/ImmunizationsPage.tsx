@@ -1,11 +1,12 @@
 import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
-import type { FormEvent, ReactElement } from 'react'
+import type { FormEvent } from 'react'
 import { Fragment, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import { codeChip } from '@/phr/clinical/ui'
 import { numericPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrImmunization,
@@ -82,21 +83,6 @@ function doseLabel(immunization: PhrImmunization): string {
   }
 
   return 'Dose not recorded'
-}
-
-function codeChip(label: string, value: string | null): ReactElement | null {
-  if (!value) {
-    return null
-  }
-
-  return (
-    <span
-      title={`${label}: ${value}`}
-      className="inline-flex rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground"
-    >
-      {label} {value}
-    </span>
-  )
 }
 
 function ImmunizationFormFields({ form, onChange }: ImmunizationFormFieldsProps) {
@@ -193,12 +179,14 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
 export default function ImmunizationsPage({ patientId }: { patientId: number }) {
   const endpoint = `/api/phr/patients/${patientId}/immunizations`
   const crud = useClinicalCrud<PhrImmunization, PhrImmunizationFormData>({
-    patientId,
     endpoint,
     emptyForm: EMPTY_FORM,
     formFromRecord: immunizationFormFromRecord,
     parseItem: (raw) => PhrImmunizationResponseSchema.parse(raw).immunization,
-    parseList: (raw) => PhrImmunizationsResponseSchema.parse(raw).immunizations,
+    parseList: (raw) => {
+      const parsed = PhrImmunizationsResponseSchema.parse(raw)
+      return { records: parsed.immunizations, canManage: parsed.can_manage }
+    },
     payloadFromForm: immunizationPayload,
     sortRecords: sortImmunizations,
   })

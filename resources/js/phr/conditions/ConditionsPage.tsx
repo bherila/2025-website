@@ -1,11 +1,12 @@
 import { Activity, CheckCircle2, ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
-import type { FormEvent, ReactElement } from 'react'
+import type { FormEvent } from 'react'
 import { Fragment, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import { classBadge, codeChip, labelize } from '@/phr/clinical/ui'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrCondition,
@@ -152,33 +153,6 @@ function todayDateString(): string {
   const day = String(today.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
-}
-
-function labelize(value: string): string {
-  return value.replaceAll('_', ' ')
-}
-
-function statusBadge(status: string): ReactElement {
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status] ?? 'bg-muted text-muted-foreground'}`}>
-      {labelize(status)}
-    </span>
-  )
-}
-
-function codeChip(label: string, value: string | null): ReactElement | null {
-  if (!value) {
-    return null
-  }
-
-  return (
-    <span
-      title={`${label}: ${value}`}
-      className="inline-flex rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground"
-    >
-      {label} {value}
-    </span>
-  )
 }
 
 function ConditionFormFields({ form, onChange }: ConditionFormFieldsProps) {
@@ -353,7 +327,7 @@ function ConditionsTable({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1.5">
-                          {statusBadge(condition.clinical_status)}
+                          {classBadge(condition.clinical_status, STATUS_CLASS)}
                           <span className="text-xs text-muted-foreground">{labelize(condition.verification_status)}</span>
                         </div>
                       </td>
@@ -449,12 +423,14 @@ export default function ConditionsPage({ patientId }: { patientId: number }) {
   const endpoint = `/api/phr/patients/${patientId}/conditions`
 
   const crud = useClinicalCrud<PhrCondition, PhrConditionFormData>({
-    patientId,
     endpoint,
     emptyForm: EMPTY_FORM,
     formFromRecord: conditionFormFromRecord,
     parseItem: (raw) => PhrConditionResponseSchema.parse(raw).condition,
-    parseList: (raw) => PhrConditionsResponseSchema.parse(raw).conditions,
+    parseList: (raw) => {
+      const parsed = PhrConditionsResponseSchema.parse(raw)
+      return { records: parsed.conditions, canManage: parsed.can_manage }
+    },
     payloadFromForm: conditionPayload,
     sortRecords: sortConditions,
   })

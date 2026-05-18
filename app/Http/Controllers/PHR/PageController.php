@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PageController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(private PhrPatientAccessService $accessService) {}
 
     private const TAB_LABELS = [
         'summary' => 'Summary',
@@ -57,14 +57,14 @@ class PageController extends Controller
         $user = $request->user();
         abort_unless($user !== null, 403);
         $userId = (int) $user->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
         $tabLabel = self::TAB_LABELS[$tab] ?? 'PHR';
 
         return view('phr.patient-tab', [
             'patientId' => $resolvedPatient->id,
             'tab' => $tab,
             'tabLabel' => $tabLabel,
-            'canManage' => $this->canManagePatient($resolvedPatient, $userId),
+            'canManage' => $this->accessService->canWrite($resolvedPatient, $userId),
         ]);
     }
 }

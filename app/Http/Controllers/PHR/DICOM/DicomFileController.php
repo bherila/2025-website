@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\PHR\DICOM;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Models\PhrDicomFile;
 use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomStudy;
+use App\Services\PHR\Access\PhrPatientAccessService;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -16,14 +16,15 @@ use ZipStream\ZipStream;
 
 class DicomFileController extends Controller
 {
-    use ResolvesPHRPatientAccess;
-
-    public function __construct(private readonly DicomUploadProcessor $uploadProcessor) {}
+    public function __construct(
+        private readonly DicomUploadProcessor $uploadProcessor,
+        private readonly PhrPatientAccessService $accessService,
+    ) {}
 
     public function proxyInstanceFile(Request $request, int $patient, int $instance): StreamedResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
         $resolvedInstance = PhrDicomInstance::query()
             ->where('patient_id', $resolvedPatient->id)
             ->with(['file'])
@@ -46,7 +47,7 @@ class DicomFileController extends Controller
     public function downloadStudy(Request $request, int $patient, int $study): StreamedResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
         $resolvedStudy = PhrDicomStudy::query()
             ->forPatient((int) $resolvedPatient->id)
             ->with(['instances'])

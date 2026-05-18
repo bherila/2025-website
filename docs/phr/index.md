@@ -5,8 +5,9 @@ The PHR domain stores user-owned patient profiles and patient-scoped clinical re
 ## Quick links
 
 - **[Web pages and navigation](web.md)** - `/phr/*` page routes, the dedicated PHR layout, React page mounting, and current page behavior.
-- **[Schema](schema.md)** - patient/access tables, legacy lab/vital normalization, clinical-record tables, and DICOM metadata tables.
+- **[Schema](schema.md)** - patient/access tables, legacy lab/vital normalization, clinical-record tables, documents browser, and DICOM metadata tables.
 - **[Clinical data](clinical-data.md)** - labs, vitals, office visits, medications, conditions, procedures, immunizations, allergies, and access-level behavior.
+- **[Documents browser](documents.md)** - filter/list, upload, file proxy CSP/sandbox, soft delete, and GenAI processing flow.
 - **[DICOM imaging](dicom.md)** - upload endpoint, storage disk, retained object paths, upload lifecycle, garbage collection, and parser limits.
 - **[OHIF viewer](viewer.md)** - viewer manifest flow and the separate OHIF deployment workflow.
 
@@ -25,7 +26,7 @@ PHR code is kept in dedicated namespaces and folders so the app can be split out
 
 ## Access model
 
-Patient visibility should flow through `PhrPatient::accessibleBy($userId)` or the `ResolvesPHRPatientAccess` controller concern. Do not check only `owner_user_id` for patient-scoped API or page access, because shared users need read access.
+Patient visibility flows through `PhrPatient::accessibleBy($userId)` (the Eloquent scope) and `App\Services\PHR\Access\PhrPatientAccessService`. Controllers inject the service and call `accessiblePatient($id, $userId)` for reads or `writablePatient($id, $userId)` for mutations (which throws `AuthorizationException` → 403 for viewers). The patient JSON payload comes from `PhrPatientPresenter::payload(...)`. Do not check only `owner_user_id` for patient-scoped API or page access, because shared users need read access.
 
 Access levels are:
 

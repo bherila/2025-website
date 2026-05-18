@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\PHR;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PHR\Concerns\ResolvesPHRPatientAccess;
 use App\Http\Requests\PHR\StorePatientRequest;
 use App\Http\Requests\PHR\UpdatePatientRequest;
 use App\Models\PhrPatient;
 use App\Models\PhrPatientUserAccess;
+use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Services\PHR\Access\PhrPatientPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -15,7 +16,10 @@ use Illuminate\Support\Facades\DB;
 
 class PatientController extends Controller
 {
-    use ResolvesPHRPatientAccess;
+    public function __construct(
+        private PhrPatientAccessService $accessService,
+        private PhrPatientPresenter $presenter,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -27,7 +31,7 @@ class PatientController extends Controller
             ->orderBy('owner_user_id')
             ->orderBy('display_name')
             ->get()
-            ->map(fn (PhrPatient $patient): array => $this->patientPayload($patient, $userId))
+            ->map(fn (PhrPatient $patient): array => $this->presenter->payload($patient, $userId))
             ->values();
 
         return response()->json(['patients' => $patients]);
@@ -57,33 +61,31 @@ class PatientController extends Controller
 
         $patient->load(['accessGrants.user']);
 
-        return response()->json(['patient' => $this->patientPayload($patient, $userId)], 201);
+        return response()->json(['patient' => $this->presenter->payload($patient, $userId)], 201);
     }
 
     public function show(Request $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
-        return response()->json(['patient' => $this->patientPayload($resolvedPatient, $userId)]);
+        return response()->json(['patient' => $this->presenter->payload($resolvedPatient, $userId)]);
     }
 
     public function update(UpdatePatientRequest $request, int $patient): JsonResponse
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientManager($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->writablePatient($patient, $userId);
 
         $resolvedPatient->update($request->validated());
 
-        return response()->json(['patient' => $this->patientPayload($resolvedPatient, $userId)]);
+        return response()->json(['patient' => $this->presenter->payload($resolvedPatient, $userId)]);
     }
 
     public function destroy(Request $request, int $patient): Response
     {
         $userId = (int) $request->user()?->id;
-        $resolvedPatient = $this->accessiblePatient($patient, $userId);
-        $this->ensurePatientOwner($resolvedPatient, $userId);
+        $resolvedPatient = $this->accessService->ownedPatient($patient, $userId);
 
         $resolvedPatient->delete();
 

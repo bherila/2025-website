@@ -1,21 +1,24 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
 import { errorMessage } from '@/phr/shared'
-import { PhrPatientResponseSchema } from '@/phr/types'
 
 export interface ClinicalRecordBase {
   id: number
 }
 
+export interface ClinicalListResult<TRecord> {
+  records: TRecord[]
+  canManage: boolean
+}
+
 interface UseClinicalCrudOptions<TRecord extends ClinicalRecordBase, TForm> {
-  patientId: number
   endpoint: string
   emptyForm: TForm
   formFromRecord: (record: TRecord) => TForm
   parseItem: (raw: unknown) => TRecord
-  parseList: (raw: unknown) => TRecord[]
+  parseList: (raw: unknown) => ClinicalListResult<TRecord>
   payloadFromForm: (form: TForm) => Record<string, unknown>
   sortRecords?: (records: TRecord[]) => TRecord[]
 }
@@ -44,7 +47,6 @@ export interface ClinicalCrudState<TRecord extends ClinicalRecordBase, TForm> {
 }
 
 export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
-  patientId,
   endpoint,
   emptyForm,
   formFromRecord,
@@ -62,27 +64,39 @@ export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
   const [editForm, setEditForm] = useState<TForm>(emptyForm)
   const [mutatingKey, setMutatingKey] = useState<string | null>(null)
 
+  // Stable refs for callable options so the loader's effect doesn't re-fire
+  // every render when the caller passes inline arrow functions.
+  const parseListRef = useRef(parseList)
+  const parseItemRef = useRef(parseItem)
+  const payloadFromFormRef = useRef(payloadFromForm)
+  const formFromRecordRef = useRef(formFromRecord)
+  const sortRecordsRef = useRef(sortRecords)
+  useEffect(() => {
+    parseListRef.current = parseList
+    parseItemRef.current = parseItem
+    payloadFromFormRef.current = payloadFromForm
+    formFromRecordRef.current = formFromRecord
+    sortRecordsRef.current = sortRecords
+  })
+
   const applySort = useCallback((nextRecords: TRecord[]): TRecord[] => {
-    return sortRecords ? sortRecords(nextRecords) : nextRecords
-  }, [sortRecords])
+    return sortRecordsRef.current ? sortRecordsRef.current(nextRecords) : nextRecords
+  }, [])
 
   const load = useCallback(async () => {
     setBusy(true)
     setError(null)
     try {
-      const [rawRecords, rawPatient] = await Promise.all([
-        fetchWrapper.get(endpoint),
-        fetchWrapper.get(`/api/phr/patients/${patientId}`),
-      ])
-
-      setRecords(applySort(parseList(rawRecords)))
-      setCanManage(PhrPatientResponseSchema.parse(rawPatient).patient.can_manage)
+      const rawRecords = await fetchWrapper.get(endpoint)
+      const { records: parsedRecords, canManage: parsedCanManage } = parseListRef.current(rawRecords)
+      setRecords(applySort(parsedRecords))
+      setCanManage(parsedCanManage)
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
       setBusy(false)
     }
-  }, [applySort, endpoint, parseList, patientId])
+  }, [applySort, endpoint])
 
   useEffect(() => {
     void load()
@@ -91,7 +105,7 @@ export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
   function startEdit(record: TRecord): void {
     setDeletingId(null)
     setEditingId(record.id)
-    setEditForm(formFromRecord(record))
+    setEditForm(formFromRecordRef.current(record))
   }
 
   function cancelEdit(): void {
@@ -118,8 +132,8 @@ export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
     setMutatingKey('add')
     setError(null)
     try {
-      const raw: unknown = await fetchWrapper.post(endpoint, payloadFromForm(form))
-      const addedRecord = parseItem(raw)
+      const raw: unknown = await fetchWrapper.post(endpoint, payloadFromFormRef.current(form))
+      const addedRecord = parseItemRef.current(raw)
       setRecords((current) => applySort([addedRecord, ...current]))
       return addedRecord
     } catch (caught) {
@@ -135,7 +149,7 @@ export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
     setError(null)
     try {
       const raw: unknown = await fetchWrapper.patch(`${endpoint}/${recordId}`, payload)
-      const updatedRecord = parseItem(raw)
+      const updatedRecord = parseItemRef.current(raw)
       replaceRecord(updatedRecord)
       return updatedRecord
     } catch (caught) {
@@ -147,7 +161,7 @@ export function useClinicalCrud<TRecord extends ClinicalRecordBase, TForm>({
   }
 
   async function saveEdit(recordId: number): Promise<TRecord | null> {
-    const updatedRecord = await patchRecord(recordId, payloadFromForm(editForm))
+    const updatedRecord = await patchRecord(recordId, payloadFromFormRef.current(editForm))
 
     if (updatedRecord) {
       cancelEdit()

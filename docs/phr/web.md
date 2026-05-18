@@ -62,9 +62,13 @@ The active section, active tab, and patient id are passed through `data-*` attri
 
 `access` shows the owner row and patient access grants. Owners can grant access by email and remove non-owner grants; managers and viewers see a read-only list.
 
-`office-visits`, `medications`, `conditions`, `procedures`, `immunizations`, and `allergies` are standalone clinical-data pages with manager-gated add/edit/delete controls.
+`office-visits`, `medications`, `conditions`, `procedures`, `immunizations`, and `allergies` are standalone clinical-data pages with manager-gated add/edit/delete controls. The five full-CRUD pages (medications, conditions, procedures, immunizations, allergies) share the `useClinicalCrud` hook described in [Clinical data](clinical-data.md).
 
-`documents`, `imports`, and `config` are page shells until their workflows are implemented.
+`documents` is the documents browser: filter by type/source/tag/date, grid or list view, manual upload with metadata, inline file viewer (sandboxed iframe), edit metadata, soft delete, and a per-document "Process with GenAI" action that stages the stored file to S3 and dispatches a `phr_document` GenAI job. See [Documents browser](documents.md).
+
+`imports` is a placeholder page; the import-from-export workflow runs via `php artisan phr:import:*` console commands.
+
+`config` is a page shell.
 
 ## Frontend conventions
 

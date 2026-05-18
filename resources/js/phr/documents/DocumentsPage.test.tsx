@@ -41,7 +41,6 @@ function makeDocument(overrides: Partial<PhrDocument> = {}): PhrDocument {
     created_at: '2026-01-15 10:31:00',
     updated_at: '2026-01-15 10:31:00',
     file_url: '/api/phr/patients/42/documents/10/file',
-    download_url: '/api/phr/patients/42/documents/10/file',
     linked_rows: [{ type: 'lab_result', id: 99, label: 'Hemoglobin', href: '/phr/patient/42/labs' }],
     ...overrides,
   }
