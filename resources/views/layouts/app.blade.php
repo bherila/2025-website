@@ -37,6 +37,7 @@
         ['type' => 'group', 'label' => 'Utilities'],
         $__isAuthenticated ? ['type' => 'link', 'label' => 'PHR', 'href' => '/phr'] : null,
         ['type' => 'link', 'label' => 'License Manager', 'href' => '/tools/license-manager'],
+        $__isAuthenticated ? ['type' => 'link', 'label' => 'Class Action Tracker', 'href' => '/tools/class-action-tracker'] : null,
         ['type' => 'link', 'label' => 'Bingo Card Generator', 'href' => '/tools/bingo'],
         ['type' => 'link', 'label' => 'Capital Loss Carryover Worksheet', 'href' => '/tools/irs-f461'],
         ['type' => 'link', 'label' => 'Address Label PDF Generator', 'href' => '/tools/address-labels'],

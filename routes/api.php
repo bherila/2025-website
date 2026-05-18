@@ -5,6 +5,7 @@ use App\GenAiProcessor\Http\Controllers\GenAiImportController;
 use App\Http\Controllers\AdminTaxNormalizationController;
 use App\Http\Controllers\Api\UserAiConfigurationController;
 use App\Http\Controllers\Api\UserAiModelsController;
+use App\Http\Controllers\ClassActionClaimController;
 use App\Http\Controllers\ClientManagement\ClientAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientAgreementRecurringItemApiController;
 use App\Http\Controllers\ClientManagement\ClientCompanyApiController;
@@ -204,6 +205,10 @@ Route::middleware(['web', 'auth'])->post('/payslips/{payslip_id}/state-data', [F
 Route::middleware(['web', 'auth'])->delete('/payslips/{payslip_id}/state-data/{state_data_id}', [FinancePayslipController::class, 'deleteStateData']);
 
 Route::middleware(['web', 'auth'])->get('/user', [UserApiController::class, 'getUser']);
+
+Route::middleware(['web', 'auth'])
+    ->apiResource('class-action-claims', ClassActionClaimController::class)
+    ->only(['index', 'store', 'show', 'update', 'destroy']);
 
 Route::middleware(['web', 'auth'])->get('/license-keys', [LicenseKeyController::class, 'index']);
 Route::middleware(['web', 'auth'])->put('/license-keys/{id}', [LicenseKeyController::class, 'update']);

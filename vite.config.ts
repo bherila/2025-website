@@ -37,6 +37,7 @@ export default defineConfig({
         'resources/js/financial-planning/rent-vs-buy.tsx',
         'resources/js/financial-planning/roth-conversion.tsx',
         'resources/js/license-manager.tsx',
+        'resources/js/class-action-tracker.tsx',
         'resources/js/client-management/admin.tsx',
         'resources/js/client-management/portal.tsx',
         'resources/js/user-management.tsx',
