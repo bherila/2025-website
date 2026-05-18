@@ -64,6 +64,9 @@ use App\Http\Controllers\PHR\MedicationController as PHRMedicationController;
 use App\Http\Controllers\PHR\OfficeVisitController as PHROfficeVisitController;
 use App\Http\Controllers\PHR\PatientAccessController as PHRPatientAccessController;
 use App\Http\Controllers\PHR\PatientController as PHRPatientController;
+use App\Http\Controllers\PHR\PhrDocumentController;
+use App\Http\Controllers\PHR\PhrExportController;
+use App\Http\Controllers\PHR\PhrGenAiImportController;
 use App\Http\Controllers\PHR\ProcedureController as PHRProcedureController;
 use App\Http\Controllers\PHR\VitalController as PHRVitalController;
 use App\Http\Controllers\UserApiController;
@@ -311,6 +314,11 @@ Route::middleware(['web', 'auth'])
         Route::get('/patients/{patient}/dicom/studies/{study}/viewer-json', [PHRDicomStudyController::class, 'viewerJson'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.viewer-json');
         Route::get('/patients/{patient}/dicom/studies/{study}/download', [PHRDicomFileController::class, 'downloadStudy'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.download');
         Route::get('/patients/{patient}/dicom/instances/{instance}/file', [PHRDicomFileController::class, 'proxyInstanceFile'])->whereNumber(['patient', 'instance'])->name('patients.dicom.instances.file');
+        Route::get('/patients/{patient}/documents', [PhrDocumentController::class, 'index'])->whereNumber('patient')->name('patients.documents.index');
+        Route::get('/patients/{patient}/exports', [PhrExportController::class, 'index'])->whereNumber('patient')->name('patients.exports.index');
+        Route::post('/patients/{patient}/exports', [PhrExportController::class, 'store'])->whereNumber('patient')->name('patients.exports.store');
+        Route::get('/genai/writable-patients', [PhrGenAiImportController::class, 'writablePatients'])->name('genai.writable-patients');
+        Route::post('/genai/jobs/{job}/results/{result}/accept', [PhrGenAiImportController::class, 'accept'])->whereNumber(['job', 'result'])->name('genai.results.accept');
     });
 
 // Login audit log routes

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { fetchWrapper } from '@/fetchWrapper'
 import type {
   GenAiImportJobData,
   GenAiImportResultData,
@@ -9,6 +10,18 @@ import type {
 const POLL_INTERVAL_MS = 3000
 const MAX_BACKOFF_MS = 30000
 const ACTIVE_STATUSES: GenAiJobStatus[] = ['pending', 'processing']
+
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) {
+    return err.message
+  }
+
+  if (typeof err === 'string' && err.trim() !== '') {
+    return err
+  }
+
+  return fallback
+}
 
 export function useGenAiJobPolling(jobId: number | null): {
   status: GenAiJobStatus | null
@@ -33,28 +46,9 @@ export function useGenAiJobPolling(jobId: number | null): {
     if (!jobId) return
 
     try {
-      const res = await fetch(`/api/genai/import/jobs/${jobId}`, {
-        credentials: 'same-origin',
-      })
-
-      if (!res.ok) {
-        consecutiveErrorsRef.current++
-        if (res.status >= 500) {
-          // Exponential backoff on server errors
-          backoffRef.current = Math.min(
-            backoffRef.current * 2,
-            MAX_BACKOFF_MS,
-          )
-        }
-        const data = await res.json().catch(() => ({}))
-        setError(data.error || `Request failed with status ${res.status}`)
-        return
-      }
-
+      const data = await fetchWrapper.get(`/api/genai/import/jobs/${jobId}`) as GenAiImportJobData
       consecutiveErrorsRef.current = 0
       backoffRef.current = POLL_INTERVAL_MS
-
-      const data: GenAiImportJobData = await res.json()
       setJob(data)
       setStatus(data.status)
       statusRef.current = data.status
@@ -80,7 +74,7 @@ export function useGenAiJobPolling(jobId: number | null): {
         backoffRef.current * 2,
         MAX_BACKOFF_MS,
       )
-      setError(err instanceof Error ? err.message : 'Polling failed')
+      setError(errorMessage(err, 'Polling failed'))
     }
   }, [jobId])
 

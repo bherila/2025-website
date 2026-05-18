@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, PhrPatientUserAccess> $accessGrants
  * @property-read Collection<int, PhrDicomStudy> $dicomStudies
  * @property-read Collection<int, PhrDicomUpload> $dicomUploads
+ * @property-read Collection<int, PhrDocument> $documents
+ * @property-read Collection<int, PhrExport> $exports
  */
 class PhrPatient extends Model
 {
@@ -91,6 +93,18 @@ class PhrPatient extends Model
     public function dicomUploads(): HasMany
     {
         return $this->hasMany(PhrDicomUpload::class, 'patient_id');
+    }
+
+    /** @return HasMany<PhrDocument, $this> */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(PhrDocument::class, 'patient_id');
+    }
+
+    /** @return HasMany<PhrExport, $this> */
+    public function exports(): HasMany
+    {
+        return $this->hasMany(PhrExport::class, 'patient_id');
     }
 
     /**

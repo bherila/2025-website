@@ -2,18 +2,18 @@ import { renderHook, waitFor } from '@testing-library/react'
 
 import { useGenAiJobPolling } from '@/genai-processor/useGenAiJobPolling'
 
+const mockGet = jest.fn()
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: (...args: unknown[]) => mockGet(...args),
+  },
+}))
+
 describe('useGenAiJobPolling', () => {
-  const originalFetch = globalThis.fetch
-
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    mockGet.mockReset()
   })
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch
-  })
-
-  const mockFetch = () => globalThis.fetch as jest.Mock
 
   it('should initialize with null state when no jobId', () => {
     const { result } = renderHook(() => useGenAiJobPolling(null))
@@ -35,10 +35,7 @@ describe('useGenAiJobPolling', () => {
       error_message: null,
     }
 
-    mockFetch().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockJob),
-    } as Response)
+    mockGet.mockResolvedValue(mockJob)
 
     const { result } = renderHook(() => useGenAiJobPolling(42))
 
@@ -60,10 +57,7 @@ describe('useGenAiJobPolling', () => {
       error_message: null,
     }
 
-    mockFetch().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockJob),
-    } as Response)
+    mockGet.mockResolvedValue(mockJob)
 
     const { result } = renderHook(() => useGenAiJobPolling(42))
 
@@ -75,11 +69,7 @@ describe('useGenAiJobPolling', () => {
   })
 
   it('should set error on fetch failure', async () => {
-    mockFetch().mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({ error: 'Job not found' }),
-    } as Response)
+    mockGet.mockRejectedValue('Job not found')
 
     const { result } = renderHook(() => useGenAiJobPolling(42))
 
@@ -96,10 +86,7 @@ describe('useGenAiJobPolling', () => {
       error_message: 'Gemini API error',
     }
 
-    mockFetch().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockJob),
-    } as Response)
+    mockGet.mockResolvedValue(mockJob)
 
     const { result } = renderHook(() => useGenAiJobPolling(42))
 

@@ -7,12 +7,14 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\Prompts\FinanceTransactionsPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\MultiAccountTaxImportPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\Phr\PhrPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PromptTemplate;
 use App\GenAiProcessor\Services\Prompts\TaxDocumentPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\UtilityBillPromptTemplate;
 use App\GenAiProcessor\Support\K1CodeItemNormalizer;
 use App\Models\User;
 use App\Services\GenAiFileHelper;
+use App\Services\PHR\Import\PhrStructuredDataImporter;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Schema;
 use Bherila\GenAiLaravel\ToolChoice;
@@ -250,7 +252,9 @@ PROMPT;
             'document_extract' => $this->isMultiAccountDocumentContext($context)
                 ? new MultiAccountTaxImportPromptTemplate
                 : new TaxDocumentPromptTemplate,
-            default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
+            default => PhrStructuredDataImporter::isPhrJobType($jobType)
+                ? new PhrPromptTemplate($jobType)
+                : throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
         return $template->build($context);
@@ -456,7 +460,9 @@ PROMPT;
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
             'document_extract' => ['document_id', 'document_kind', 'tax_year', 'form_type', 'accounts', 'input_kind', 'source_form_type'],
-            default => throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
+            default => PhrStructuredDataImporter::isPhrJobType($jobType)
+                ? ['patient_id', 'file_count', 'document_type', 'filename_hint']
+                : throw new \InvalidArgumentException("Unknown job type: {$jobType}"),
         };
 
         $unexpectedKeys = array_diff(array_keys($context), $allowedKeys);
@@ -490,6 +496,12 @@ PROMPT;
         if ($jobType === 'utility_bill') {
             if (isset($context['utility_account_id']) && ! is_int($context['utility_account_id']) && ! ctype_digit((string) $context['utility_account_id'])) {
                 throw new \InvalidArgumentException('utility_account_id must be an integer');
+            }
+        }
+
+        if (PhrStructuredDataImporter::isPhrJobType($jobType)) {
+            if (! isset($context['patient_id']) || (! is_int($context['patient_id']) && ! ctype_digit((string) $context['patient_id']))) {
+                throw new \InvalidArgumentException('context.patient_id must be an integer');
             }
         }
 

@@ -11,6 +11,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $patient_id
  * @property int $user_id
+ * @property string|null $import_source
+ * @property string|null $external_id
  * @property string $vaccine_name
  * @property string|null $cvx_code
  * @property string|null $manufacturer
@@ -34,6 +36,8 @@ class PhrImmunization extends Model
     protected $fillable = [
         'patient_id',
         'user_id',
+        'import_source',
+        'external_id',
         'vaccine_name',
         'cvx_code',
         'manufacturer',

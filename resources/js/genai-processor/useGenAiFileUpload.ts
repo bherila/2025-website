@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 
+import { fetchWrapper } from '@/fetchWrapper'
 import type {
   GenAiJobStatus,
   GenAiJobType,
@@ -17,6 +18,18 @@ export interface GenAiUploadResult {
   deduplicated?: boolean
 }
 
+function normalizeError(err: unknown, fallback: string): Error {
+  if (err instanceof Error) {
+    return err
+  }
+
+  if (typeof err === 'string' && err.trim() !== '') {
+    return new Error(err)
+  }
+
+  return new Error(fallback)
+}
+
 export function useGenAiFileUpload(options: GenAiUploadOptions): {
   upload: (file: File) => Promise<GenAiUploadResult>
   uploading: boolean
@@ -32,25 +45,11 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
 
       try {
         // Step 1: Request a pre-signed upload URL
-        const uploadRes = await fetch('/api/genai/import/request-upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            filename: file.name,
-            content_type: file.type || 'application/pdf',
-            file_size: file.size,
-          }),
+        const uploadData = await fetchWrapper.post('/api/genai/import/request-upload', {
+          filename: file.name,
+          content_type: file.type || 'application/pdf',
+          file_size: file.size,
         })
-
-        if (!uploadRes.ok) {
-          const data = await uploadRes.json().catch(() => ({}))
-          throw new Error(
-            data.error || data.errors?.filename?.[0] || 'Failed to request upload URL',
-          )
-        }
-
-        const uploadData = await uploadRes.json()
         const { signed_url, s3_key } = uploadData
 
         if (typeof signed_url !== 'string' || typeof s3_key !== 'string') {
@@ -69,27 +68,15 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
         }
 
         // Step 3: Register the import job
-        const jobRes = await fetch('/api/genai/import/jobs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            s3_key,
-            original_filename: file.name,
-            file_size_bytes: file.size,
-            mime_type: file.type || 'application/pdf',
-            job_type: options.jobType,
-            context: options.context,
-            acct_id: options.acctId,
-          }),
+        const result = await fetchWrapper.post('/api/genai/import/jobs', {
+          s3_key,
+          original_filename: file.name,
+          file_size_bytes: file.size,
+          mime_type: file.type || 'application/pdf',
+          job_type: options.jobType,
+          context: options.context,
+          acct_id: options.acctId,
         })
-
-        if (!jobRes.ok) {
-          const data = await jobRes.json().catch(() => ({}))
-          throw new Error(data.error || 'Failed to create import job')
-        }
-
-        const result = await jobRes.json()
 
         if (typeof result.job_id !== 'number') {
           throw new Error('Invalid job response: missing or invalid job_id')
@@ -101,9 +88,9 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
           deduplicated: result.deduplicated,
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed'
-        setError(msg)
-        throw err
+        const error = normalizeError(err, 'Upload failed')
+        setError(error.message)
+        throw error
       } finally {
         setUploading(false)
       }

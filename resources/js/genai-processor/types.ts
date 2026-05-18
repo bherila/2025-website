@@ -3,6 +3,15 @@ export type GenAiJobType =
   | 'finance_payslip'
   | 'utility_bill'
   | 'document_extract'
+  | 'phr_lab_result'
+  | 'phr_vital'
+  | 'phr_office_visit'
+  | 'phr_medication'
+  | 'phr_immunization'
+  | 'phr_problem_list'
+  | 'phr_procedure'
+  | 'phr_allergy'
+  | 'phr_document'
 
 export type GenAiJobStatus =
   | 'pending'
