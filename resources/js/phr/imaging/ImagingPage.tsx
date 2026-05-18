@@ -27,7 +27,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
 
 const UPLOAD_CONCURRENCY = 4
 
-type UploadPhase = 'confirm' | 'uploading' | 'done' | 'aborting' | 'failed'
+type UploadPhase = 'uploading' | 'done' | 'aborting' | 'failed'
 
 interface FileFailure {
   path: string
@@ -49,7 +49,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
   const [error, setError] = useState<string | null>(null)
 
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [phase, setPhase] = useState<UploadPhase>('confirm')
+  const [phase, setPhase] = useState<UploadPhase>('uploading')
   const [queuedFiles, setQueuedFiles] = useState<FileWithRelativePath[]>([])
   const [rootName, setRootName] = useState<string | null>(null)
   const [bytesSent, setBytesSent] = useState(0)
@@ -96,27 +96,29 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
     }
 
     setError(null)
+    const inferredRoot = inferUploadRootName(accepted)
     setQueuedFiles(accepted)
-    setRootName(inferUploadRootName(accepted))
+    setRootName(inferredRoot)
     setBytesSent(0)
     setFilesProcessed(0)
     setCurrentFileName('')
     setSummary({ stored: 0, skipped: 0, errored: 0, failures: [] })
-    setPhase('confirm')
+    setPhase('uploading')
     setDialogOpen(true)
 
     if (inputRef.current) {
       inputRef.current.value = ''
     }
+
+    void startUpload(accepted, inferredRoot)
   }
 
-  async function startUpload(): Promise<void> {
-    setPhase('uploading')
+  async function startUpload(files: FileWithRelativePath[], uploadRootName: string | null): Promise<void> {
     setError(null)
     let uploadId: number | null = null
 
     try {
-      const openResponse = await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads`, rootName ? { root_name: rootName } : {})
+      const openResponse = await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads`, uploadRootName ? { root_name: uploadRootName } : {})
       const { upload } = PhrDicomUploadResponseSchema.parse(openResponse)
       const currentUploadId = upload.id
       uploadId = currentUploadId
@@ -124,7 +126,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
       controllerRef.current = new UploadController({
         patientId,
         uploadId: currentUploadId,
-        files: queuedFiles,
+        files,
         concurrency: UPLOAD_CONCURRENCY,
         onFileBytesProgress: (bytes) => setBytesSent((prev) => prev + bytes),
         onFileStarted: (name) => setCurrentFileName(name),
@@ -264,15 +266,13 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
         <DialogContent showCloseButton={phase !== 'uploading' && phase !== 'aborting'}>
           <DialogHeader>
             <DialogTitle>
-              {phase === 'confirm' && 'Upload DICOM folder'}
               {phase === 'uploading' && 'Uploading…'}
               {phase === 'aborting' && 'Cancelling…'}
               {phase === 'done' && (summary.errored > 0 ? 'Upload finished with errors' : 'Upload complete')}
               {phase === 'failed' && 'Upload failed'}
             </DialogTitle>
             <DialogDescription>
-              {phase === 'confirm' && `${totalFiles} file${totalFiles === 1 ? '' : 's'} · ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
-              {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}`}
+              {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
               {phase === 'done' && `Stored ${summary.stored} · Skipped ${summary.skipped}${summary.errored > 0 ? ` · Errored ${summary.errored}` : ''}`}
               {phase === 'failed' && `The upload session was cancelled. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
             </DialogDescription>
@@ -315,17 +315,6 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
           )}
 
           <DialogFooter>
-            {phase === 'confirm' && (
-              <>
-                <Button type="button" variant="outline" onClick={closeDialog}>
-                  Cancel
-                </Button>
-                <Button type="button" onClick={() => void startUpload()}>
-                  <UploadCloud className="size-4" />
-                  Upload {totalFiles} file{totalFiles === 1 ? '' : 's'}
-                </Button>
-              </>
-            )}
             {phase === 'uploading' && (
               <Button type="button" variant="outline" onClick={cancelUpload}>
                 <X className="size-4" />
@@ -447,7 +436,12 @@ class UploadController {
               relativePath,
             })
           } catch (error) {
-            resolve({ stored: false, skippedReason: null, errorMessage: errorMessage(error), relativePath })
+            resolve({
+              stored: false,
+              skippedReason: null,
+              errorMessage: `Unexpected server response (HTTP ${xhr.status}): ${errorMessage(error)} — ${truncate(xhr.responseText, 200)}`,
+              relativePath,
+            })
           }
         } else {
           resolve({ stored: false, skippedReason: null, errorMessage: extractServerError(xhr), relativePath })
@@ -533,7 +527,20 @@ function extractServerError(xhr: XMLHttpRequest): string {
   } catch {
     // body wasn't JSON, fall through
   }
-  return xhr.statusText || `HTTP ${xhr.status}`
+  const status = xhr.statusText || `HTTP ${xhr.status}`
+  const snippet = truncate(xhr.responseText, 200)
+  return snippet ? `${status} — ${snippet}` : status
+}
+
+function truncate(text: string, max: number): string {
+  if (!text) {
+    return ''
+  }
+  const oneLine = text.replace(/\s+/g, ' ').trim()
+  if (oneLine.length <= max) {
+    return oneLine
+  }
+  return `${oneLine.slice(0, max)}…`
 }
 
 function relativeFilePath(file: FileWithRelativePath): string {
@@ -552,6 +559,41 @@ function inferUploadRootName(files: FileWithRelativePath[]): string | null {
   return segments.length > 1 ? (segments[0] ?? null) : null
 }
 
+const AUXILIARY_BASENAMES = new Set(['thumbs.db', 'desktop.ini', '.ds_store'])
+
+const AUXILIARY_EXTENSIONS = new Set([
+  'bat',
+  'bmp',
+  'cmd',
+  'com',
+  'config',
+  'css',
+  'db',
+  'dll',
+  'doc',
+  'docx',
+  'exe',
+  'exml',
+  'gif',
+  'htm',
+  'html',
+  'ico',
+  'inf',
+  'ini',
+  'jpg',
+  'jpeg',
+  'js',
+  'lnk',
+  'msi',
+  'pdf',
+  'png',
+  'rtf',
+  'std',
+  'txt',
+  'url',
+  'xml',
+])
+
 function isAuxiliaryUploadPath(path: string): boolean {
   const normalizedPath = path.replace(/\\/g, '/')
   const basename = normalizedPath.split('/').pop()?.toLowerCase() ?? ''
@@ -560,35 +602,12 @@ function isAuxiliaryUploadPath(path: string): boolean {
     return false
   }
 
+  if (AUXILIARY_BASENAMES.has(basename)) {
+    return true
+  }
+
   const extension = basename.includes('.') ? basename.split('.').pop() ?? '' : ''
-  return [
-    'bat',
-    'bmp',
-    'cmd',
-    'com',
-    'css',
-    'dll',
-    'doc',
-    'docx',
-    'exe',
-    'gif',
-    'htm',
-    'html',
-    'ico',
-    'inf',
-    'ini',
-    'jpg',
-    'jpeg',
-    'js',
-    'lnk',
-    'msi',
-    'pdf',
-    'png',
-    'rtf',
-    'txt',
-    'url',
-    'xml',
-  ].includes(extension)
+  return AUXILIARY_EXTENSIONS.has(extension)
 }
 
 function downloadStudyZip(patientId: number, studyId: number): void {

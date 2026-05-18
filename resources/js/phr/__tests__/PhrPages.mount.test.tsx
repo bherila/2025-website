@@ -134,7 +134,6 @@ describe('PHR page mounts', () => {
       Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
 
       fireEvent.change(input, { target: { files: [file] } })
-      fireEvent.click(await screen.findByRole('button', { name: /upload 1 file/i }))
 
       await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
       expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()

@@ -117,6 +117,44 @@ class PhrDicomTest extends TestCase
         $this->actingAs($other)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")->assertNotFound();
     }
 
+    public function test_auxiliary_files_are_skipped(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+
+        $cases = [
+            ['CARDIAC_CT/Reviewer/Content/Thumbs.db', 'thumbnail cache binary'],
+            ['CARDIAC_CT/Reviewer/Content/Default Config/MAS.Oem.config', '<?xml version="1.0"?><config />'],
+            ['CARDIAC_CT/Reviewer/Content/Default Config/Modality/Reviewer.Modality.CT.config', '<?xml version="1.0"?><config />'],
+            ['CARDIAC_CT/Reviewer/Sorna.License.exml', 'encrypted license'],
+            ['CARDIAC_CT/Reviewer/Content/design.std', 'binary design payload'],
+            ['CARDIAC_CT/.DS_Store', "\0apple-fs-meta"],
+            ['CARDIAC_CT/desktop.ini', '[.ShellClassInfo]'],
+        ];
+
+        foreach ($cases as [$relativePath, $body]) {
+            $this->postFile(
+                $owner,
+                $patientId,
+                $uploadId,
+                UploadedFile::fake()->createWithContent(basename($relativePath), $body),
+                $relativePath,
+            )
+                ->assertOk()
+                ->assertJsonPath('result.stored', false)
+                ->assertJsonPath('result.skipped_reason', 'auxiliary_file');
+        }
+
+        $this->finalizeUpload($owner, $patientId, $uploadId)
+            ->assertOk()
+            ->assertJsonPath('upload.stored_files', 0)
+            ->assertJsonPath('upload.skipped_files', count($cases));
+    }
+
     public function test_finalized_session_rejects_additional_files(): void
     {
         $this->fakeDicomDisk();
