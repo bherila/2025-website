@@ -27,7 +27,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
 
 const UPLOAD_CONCURRENCY = 4
 
-type UploadPhase = 'uploading' | 'done' | 'aborting' | 'failed'
+type UploadPhase = 'uploading' | 'done' | 'aborting' | 'cancelled' | 'failed'
 
 interface FileFailure {
   path: string
@@ -136,21 +136,32 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
         },
       })
 
-      await controllerRef.current.run()
+      const outcomes = await controllerRef.current.run()
 
       if (controllerRef.current.aborted) {
         await cancelUploadSession(patientId, currentUploadId)
-      } else {
-        try {
-          await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${currentUploadId}/finalize`, {})
-        } catch (caught) {
-          const message = errorMessage(caught)
-          setError(message)
-          setSummary((prev) => appendFailure(prev, 'Finalize upload', message))
-          await cancelUploadSession(patientId, currentUploadId)
-          setPhase('failed')
-          return
-        }
+        setError('Upload cancelled.')
+        setPhase('cancelled')
+        return
+      }
+
+      const failedOutcomes = outcomes.filter((outcome) => outcome.errorMessage !== null)
+      if (failedOutcomes.length > 0) {
+        setError(failedOutcomes[0]?.errorMessage ?? 'Upload failed.')
+        await cancelUploadSession(patientId, currentUploadId)
+        setPhase('failed')
+        return
+      }
+
+      try {
+        await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${currentUploadId}/finalize`, {})
+      } catch (caught) {
+        const message = errorMessage(caught)
+        setError(message)
+        setSummary((prev) => appendFailure(prev, 'Finalize upload', message))
+        await cancelUploadSession(patientId, currentUploadId)
+        setPhase('failed')
+        return
       }
 
       setPhase('done')
@@ -269,12 +280,14 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
               {phase === 'uploading' && 'Uploading…'}
               {phase === 'aborting' && 'Cancelling…'}
               {phase === 'done' && (summary.errored > 0 ? 'Upload finished with errors' : 'Upload complete')}
+              {phase === 'cancelled' && 'Upload cancelled'}
               {phase === 'failed' && 'Upload failed'}
             </DialogTitle>
             <DialogDescription>
               {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
               {phase === 'done' && `Stored ${summary.stored} · Skipped ${summary.skipped}${summary.errored > 0 ? ` · Errored ${summary.errored}` : ''}`}
-              {phase === 'failed' && `The upload session was cancelled. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
+              {phase === 'cancelled' && `The upload session was cancelled. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
+              {phase === 'failed' && `The upload session was stopped. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
             </DialogDescription>
           </DialogHeader>
 
@@ -288,7 +301,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
             </div>
           )}
 
-          {(phase === 'done' || phase === 'failed') && summary.failures.length > 0 && (
+          {(phase === 'done' || phase === 'cancelled' || phase === 'failed') && summary.failures.length > 0 && (
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-xs">
               <p className="mb-1 flex items-center gap-1 font-medium text-foreground">
                 <AlertCircle className="size-3" />
@@ -327,9 +340,9 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
                 Cancelling…
               </Button>
             )}
-            {(phase === 'done' || phase === 'failed') && (
+            {(phase === 'done' || phase === 'cancelled' || phase === 'failed') && (
               <Button type="button" onClick={closeDialog}>
-                {phase === 'failed' ? 'Close' : 'Done'}
+                {phase === 'done' ? 'Done' : 'Close'}
               </Button>
             )}
           </DialogFooter>
@@ -363,6 +376,8 @@ class UploadController {
 
   private readonly activeRequests = new Set<XMLHttpRequest>()
 
+  private hasHardFailure = false
+
   aborted = false
 
   constructor(options: UploadControllerOptions) {
@@ -376,17 +391,20 @@ class UploadController {
     }
   }
 
-  async run(): Promise<void> {
+  async run(): Promise<FileOutcome[]> {
+    const outcomes: FileOutcome[] = []
     const workerCount = Math.min(this.options.concurrency, this.options.files.length)
     const workers: Promise<void>[] = []
     for (let i = 0; i < workerCount; i++) {
-      workers.push(this.runWorker())
+      workers.push(this.runWorker(outcomes))
     }
     await Promise.all(workers)
+
+    return outcomes
   }
 
-  private async runWorker(): Promise<void> {
-    while (!this.aborted) {
+  private async runWorker(outcomes: FileOutcome[]): Promise<void> {
+    while (!this.aborted && !this.hasHardFailure) {
       const index = this.nextIndex++
       if (index >= this.options.files.length) {
         return
@@ -396,7 +414,11 @@ class UploadController {
         return
       }
       const outcome = await this.uploadOne(file)
+      outcomes.push(outcome)
       this.options.onFileFinished(outcome)
+      if (outcome.errorMessage !== null && !this.aborted) {
+        this.hasHardFailure = true
+      }
     }
   }
 
@@ -407,6 +429,8 @@ class UploadController {
     return new Promise<FileOutcome>((resolve) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/files`)
+      xhr.setRequestHeader('Accept', 'application/json')
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest')
       const token = csrfToken()
       if (token) {
         xhr.setRequestHeader('X-CSRF-TOKEN', token)
@@ -463,7 +487,12 @@ class UploadController {
       formData.append('relative_path', relativePath)
 
       this.activeRequests.add(xhr)
-      xhr.send(formData)
+      try {
+        xhr.send(formData)
+      } catch (error) {
+        this.activeRequests.delete(xhr)
+        resolve({ stored: false, skippedReason: null, errorMessage: errorMessage(error), relativePath })
+      }
     })
   }
 }

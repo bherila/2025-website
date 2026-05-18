@@ -19,6 +19,7 @@ export const fetchWrapper = {
 function get(url: string) {
   const requestOptions = {
     method: 'GET',
+    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     credentials: 'include' as RequestCredentials,
   }
   return fetch(url, requestOptions).then(handleResponse)
@@ -28,7 +29,9 @@ function post(url: string, body: any) {
   const isFormData = body instanceof FormData;
   const requestOptions: RequestInit = {
     method: 'POST',
-    headers: isFormData ? { 'X-CSRF-TOKEN': getCsrfToken() || '' } : { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    headers: isFormData
+      ? { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': getCsrfToken() || '' }
+      : { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: isFormData ? body : JSON.stringify(body),
   }
@@ -39,7 +42,9 @@ function postRaw(url: string, body: any) {
   const isFormData = body instanceof FormData;
   const requestOptions: RequestInit = {
     method: 'POST',
-    headers: isFormData ? { 'X-CSRF-TOKEN': getCsrfToken() || '' } : { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    headers: isFormData
+      ? { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': getCsrfToken() || '' }
+      : { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: isFormData ? body : JSON.stringify(body),
   }
@@ -49,7 +54,7 @@ function postRaw(url: string, body: any) {
 function patch(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: JSON.stringify(body),
   }
@@ -59,7 +64,7 @@ function patch(url: string, body: any) {
 function put(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: JSON.stringify(body),
   }
@@ -71,6 +76,8 @@ function _delete(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'DELETE',
     headers: {
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': getCsrfToken() || ''
     },

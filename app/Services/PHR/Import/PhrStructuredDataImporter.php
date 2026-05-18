@@ -5,7 +5,6 @@ namespace App\Services\PHR\Import;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\PhrDocument;
 use App\Models\PhrPatient;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -16,6 +15,7 @@ class PhrStructuredDataImporter
     public function __construct(
         private PhrRecordAttributeMapper $attributeMapper,
         private PhrDocumentImporter $documentImporter,
+        private PhrImportModelUpserter $upserter,
     ) {}
 
     public static function isPhrJobType(string $jobType): bool
@@ -63,7 +63,7 @@ class PhrStructuredDataImporter
                     continue;
                 }
 
-                $model = $this->upsertModel($this->attributeMapper->modelClassFor($jobType), $attributes);
+                $model = $this->upserter->upsert($this->attributeMapper->modelClassFor($jobType), $attributes);
                 $model->wasRecentlyCreated ? $result->addCreated() : $result->addUpdated();
             }
 
@@ -93,35 +93,5 @@ class PhrStructuredDataImporter
     public function updateDocumentFromGenAiResult(PhrDocument $document, GenAiImportJob $job, array $payload): PhrDocument
     {
         return $this->documentImporter->updateDocumentFromGenAiResult($document, $job, $payload);
-    }
-
-    /**
-     * @param  class-string<Model>  $modelClass
-     * @param  array<string, mixed>  $attributes
-     */
-    private function upsertModel(string $modelClass, array $attributes): Model
-    {
-        $queryAttributes = null;
-        if (! empty($attributes['import_source']) && ! empty($attributes['external_id'])) {
-            $queryAttributes = [
-                'patient_id' => $attributes['patient_id'],
-                'import_source' => $attributes['import_source'],
-                'external_id' => $attributes['external_id'],
-            ];
-        }
-
-        if ($queryAttributes === null) {
-            return $modelClass::query()->create($attributes);
-        }
-
-        $existing = $modelClass::query()->where($queryAttributes)->first();
-        if ($existing !== null) {
-            $existing->update($attributes);
-            $existing->wasRecentlyCreated = false;
-
-            return $existing;
-        }
-
-        return $modelClass::query()->create($attributes);
     }
 }

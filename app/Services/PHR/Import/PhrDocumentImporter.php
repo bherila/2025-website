@@ -11,6 +11,8 @@ use RuntimeException;
 
 class PhrDocumentImporter
 {
+    public function __construct(private PhrImportModelUpserter $upserter) {}
+
     /**
      * @param  array<string, mixed>  $attributes
      */
@@ -158,7 +160,7 @@ class PhrDocumentImporter
             'imported_at' => now(),
         ];
 
-        return $this->upsertDocument($attributes);
+        return $this->upserter->upsert(PhrDocument::class, $attributes);
     }
 
     private function documentStoragePath(int $patientId, string $filename): string
@@ -176,34 +178,5 @@ class PhrDocumentImporter
         $mimeType = mime_content_type($path);
 
         return is_string($mimeType) ? $mimeType : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
-    private function upsertDocument(array $attributes): PhrDocument
-    {
-        $queryAttributes = null;
-        if (! empty($attributes['import_source']) && ! empty($attributes['external_id'])) {
-            $queryAttributes = [
-                'patient_id' => $attributes['patient_id'],
-                'import_source' => $attributes['import_source'],
-                'external_id' => $attributes['external_id'],
-            ];
-        }
-
-        if ($queryAttributes === null) {
-            return PhrDocument::query()->create($attributes);
-        }
-
-        $existing = PhrDocument::query()->where($queryAttributes)->first();
-        if ($existing !== null) {
-            $existing->update($attributes);
-            $existing->wasRecentlyCreated = false;
-
-            return $existing;
-        }
-
-        return PhrDocument::query()->create($attributes);
     }
 }
