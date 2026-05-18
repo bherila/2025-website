@@ -28,11 +28,14 @@ class DicomUploadProcessor
         'bmp',
         'cmd',
         'com',
+        'config',
         'css',
+        'db',
         'dll',
         'doc',
         'docx',
         'exe',
+        'exml',
         'gif',
         'htm',
         'html',
@@ -47,9 +50,19 @@ class DicomUploadProcessor
         'pdf',
         'png',
         'rtf',
+        'std',
         'txt',
         'url',
         'xml',
+    ];
+
+    /**
+     * @var array<int, string>
+     */
+    private const AUXILIARY_BASENAMES = [
+        'thumbs.db',
+        'desktop.ini',
+        '.ds_store',
     ];
 
     public const DISK = 'phr_dicom';
@@ -514,6 +527,11 @@ class DicomUploadProcessor
     {
         if ($this->isDicomdirPath($relativePath)) {
             return false;
+        }
+
+        $basename = strtolower(basename($relativePath));
+        if (in_array($basename, self::AUXILIARY_BASENAMES, true)) {
+            return true;
         }
 
         $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
