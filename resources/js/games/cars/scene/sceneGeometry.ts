@@ -1,6 +1,17 @@
 import * as THREE from 'three'
 
-import { blockingCellKeys, type Car, type Direction, type GameState, getCarCells, gridCellKey, loopPassengerCapacity, type Passenger } from '../gameEngine'
+import {
+  blockingCellKeys,
+  type Car,
+  type Direction,
+  directionStep,
+  type GameState,
+  getCarCells,
+  gridCellKey,
+  loopPassengerCapacity,
+  type Passenger,
+  pathCellsToExit,
+} from '../gameEngine'
 import {
   BOARD_CENTER_X,
   BOARD_CENTER_Y,
@@ -22,6 +33,10 @@ export function passengerGateCycle(phase: number, offset: number, layout: QueueL
 
 export function passengerGateProgress(phase: number, offset: number, layout: QueueLayout): number {
   return (((phase + offset) % layout.perimeter) + layout.perimeter) % layout.perimeter
+}
+
+export function feederJoinProgress(layout: QueueLayout): number {
+  return normalizeLoopDistance(layout.straightLength / 2 - boardingGateDistance(layout), layout.perimeter)
 }
 
 const FEEDER_ROW_SPACING = 0.34
@@ -136,6 +151,12 @@ export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[
     )
   } else if (car.direction === 'left' || car.direction === 'right') {
     routePositions.push(new THREE.Vector3(exit.x, start.y, INCOMING_LANE_Z))
+  } else if (isDiagonalDirection(car.direction)) {
+    const sideX = exit.x < start.x ? boardBounds.left : boardBounds.right
+    routePositions.push(
+      new THREE.Vector3(sideX, start.y, exit.z),
+      new THREE.Vector3(sideX, start.y, INCOMING_LANE_Z),
+    )
   }
 
   routePositions.push(
@@ -258,19 +279,9 @@ export function parkingSlotPosition(index: number, kind: 'regular' | 'vip'): THR
 }
 
 export function rotationForDirection(direction: Direction): number {
-  if (direction === 'right') {
-    return Math.PI / 2
-  }
+  const step = directionStep(direction)
 
-  if (direction === 'left') {
-    return -Math.PI / 2
-  }
-
-  if (direction === 'up') {
-    return Math.PI
-  }
-
-  return 0
+  return Math.atan2(step.x, step.y)
 }
 
 export function angleLerp(from: number, to: number, progress: number): number {
@@ -283,9 +294,13 @@ function boardingGateDistance(layout: QueueLayout): number {
   return layout.straightLength * 1.5 + Math.PI * layout.capRadius
 }
 
+function normalizeLoopDistance(distance: number, perimeter: number): number {
+  return ((distance % perimeter) + perimeter) % perimeter
+}
+
 function blockedTravelDistance(car: Car, state: GameState): number {
   const occupied = blockingCellKeys(state, car.id)
-  const path = pathCellsToBoardEdge(car, state.boardWidth, state.boardHeight)
+  const path = pathCellsToExit(car, state.boardWidth, state.boardHeight)
   const collisionIndex = path.findIndex((cell) => occupied.has(gridCellKey(cell)))
 
   if (collisionIndex < 0) {
@@ -295,57 +310,35 @@ function blockedTravelDistance(car: Car, state: GameState): number {
   return Math.max(CELL_SIZE * 0.42, (collisionIndex + 0.54) * CELL_SIZE)
 }
 
-function pathCellsToBoardEdge(car: Car, boardWidth: number, boardHeight: number): Array<{ x: number, y: number }> {
-  const cells: Array<{ x: number, y: number }> = []
+function boardExitPosition(car: Car): THREE.Vector3 {
+  const bounds = boardBoundsForRoute()
+  const path = pathCellsToExit(car, BOARD_WIDTH, BOARD_HEIGHT)
+  const step = directionStep(car.direction)
+  const lastCell = path[path.length - 1] ?? frontCellForRoute(car)
+  const exitCell = { x: lastCell.x + step.x, y: lastCell.y + step.y }
+  const gridExit = gridToWorld(exitCell.x, exitCell.y)
 
   if (car.direction === 'right') {
-    const start = car.position.x + car.length
-    for (let x = start; x < boardWidth; x += 1) {
-      cells.push({ x, y: car.position.y })
-    }
+    return new THREE.Vector3(bounds.right, 0.08, gridExit.z)
   }
 
   if (car.direction === 'left') {
-    const start = car.position.x - 1
-    for (let x = start; x >= 0; x -= 1) {
-      cells.push({ x, y: car.position.y })
-    }
+    return new THREE.Vector3(bounds.left, 0.08, gridExit.z)
   }
 
   if (car.direction === 'down') {
-    const start = car.position.y + car.length
-    for (let y = start; y < boardHeight; y += 1) {
-      cells.push({ x: car.position.x, y })
-    }
+    return new THREE.Vector3(gridExit.x, 0.08, bounds.bottom)
   }
 
   if (car.direction === 'up') {
-    const start = car.position.y - 1
-    for (let y = start; y >= 0; y -= 1) {
-      cells.push({ x: car.position.x, y })
-    }
+    return new THREE.Vector3(gridExit.x, 0.08, bounds.top)
   }
 
-  return cells
-}
-
-function boardExitPosition(car: Car): THREE.Vector3 {
-  const start = fieldPositionForCar(car)
-  const bounds = boardBoundsForRoute()
-
-  if (car.direction === 'right') {
-    return new THREE.Vector3(bounds.right, start.y, start.z)
-  }
-
-  if (car.direction === 'left') {
-    return new THREE.Vector3(bounds.left, start.y, start.z)
-  }
-
-  if (car.direction === 'down') {
-    return new THREE.Vector3(start.x, start.y, bounds.bottom)
-  }
-
-  return new THREE.Vector3(start.x, start.y, bounds.top)
+  return new THREE.Vector3(
+    Math.min(bounds.right, Math.max(bounds.left, gridExit.x)),
+    0.08,
+    Math.min(bounds.bottom, Math.max(bounds.top, gridExit.z)),
+  )
 }
 
 function boardBoundsForRoute(): { bottom: number, left: number, right: number, top: number } {
@@ -355,6 +348,28 @@ function boardBoundsForRoute(): { bottom: number, left: number, right: number, t
     top: PARKING_Z + 1.08,
     bottom: gridToWorld(0, BOARD_HEIGHT + 0.05).z,
   }
+}
+
+function frontCellForRoute(car: Pick<Car, 'direction' | 'length' | 'position'>): { x: number, y: number } {
+  const step = directionStep(car.direction)
+  const cells = getCarCells(car)
+  const firstCell = cells[0]
+  if (!firstCell) {
+    return { ...car.position }
+  }
+
+  const front = cells.slice(1).reduce((currentFront, cell) => {
+    const currentValue = currentFront.x * step.x + currentFront.y * step.y
+    const nextValue = cell.x * step.x + cell.y * step.y
+
+    return nextValue > currentValue ? cell : currentFront
+  }, firstCell)
+
+  return { ...front }
+}
+
+function isDiagonalDirection(direction: Direction): boolean {
+  return direction.includes('-')
 }
 
 function routePositionsToRoutePoints(positions: THREE.Vector3[]): RoutePoint[] {
@@ -374,19 +389,9 @@ function routePositionsToRoutePoints(positions: THREE.Vector3[]): RoutePoint[] {
 }
 
 function worldDirectionForCar(direction: Direction): THREE.Vector3 {
-  if (direction === 'right') {
-    return new THREE.Vector3(1, 0, 0)
-  }
+  const step = directionStep(direction)
 
-  if (direction === 'left') {
-    return new THREE.Vector3(-1, 0, 0)
-  }
-
-  if (direction === 'up') {
-    return new THREE.Vector3(0, 0, -1)
-  }
-
-  return new THREE.Vector3(0, 0, 1)
+  return new THREE.Vector3(step.x, 0, step.y).normalize()
 }
 
 function rotationFromDelta(deltaX: number, deltaZ: number): number {

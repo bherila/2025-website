@@ -17,7 +17,8 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 
 - Car color determines which passengers can board.
 - Car size determines capacity.
-- Car direction determines its exit path.
+- Car direction determines its exit path. Cars can face the four cardinal directions or a 45-degree diagonal direction.
+- Diagonal cars occupy one grid cell per seat-length step along the diagonal. Their clear path follows that same diagonal heading until the car exits the board.
 - Cars cannot cross through other cars.
 - Cars cannot cross through active garage cells.
 - A clicked car should visibly animate along a natural route: forward to the board edge, around the perimeter lane, then into the parking space. Cars should hold their heading on straight segments and rotate only as they turn into the next segment.
@@ -25,6 +26,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - Parked cars should align to the parking-space orientation when they arrive.
 - Car labels should be readable at gameplay distance. Seat count and direction should be rendered as a clear decal on the car body rather than as small floating 3D labels, and the arrow must point in the car's actual travel direction.
 - Hidden garage cars become visible only when they pop out onto the board.
+- Some obstructed cars can have their color hidden while they remain blocked. A color-hidden car renders as a neutral silhouette showing only its size and orientation arrow; its real color is still used by the solver and passenger queue. The color automatically reveals when the car becomes unobstructed or when a power-up moves it into parking.
 
 ## Passenger Queue
 
@@ -33,7 +35,8 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - Two feeder paths curve into the back of the loop, holding additional passengers behind it.
 - The two feeders drain sequentially, not in parallel: the left feeder is consumed first, and the right feeder only begins flowing once the left is empty. Side assignment is fixed per passenger at level generation, so a passenger does not visually switch sides while waiting.
 - The loop perimeter is sized so that when at active capacity, the passengers visibly fill it with no extra gap.
-- When active-loop passengers board, passengers from the active feeder walk into the back of the loop along a curved bezier path that joins tangentially.
+- When active-loop passengers board, their loop slot remains empty instead of causing the rest of the loop to jump forward. The empty slot continues moving with the loop and is refilled by a feeder passenger when that slot reaches the feeder join.
+- Passengers from the active feeder walk into the back of the loop along a curved bezier path that joins tangentially.
 - Passenger positions should be stable while walking; they should not appear or disappear except when boarding.
 - Passenger boarding is gate-based: a passenger is eligible to board only when their loop position crosses the parking gate at the bottom-front of the stadium.
 - Boarding should be tolerant around the gate. If a matching car is already parked and ready while the passenger is at the gate, the passenger should board instead of being forced into another full loop.
@@ -100,7 +103,9 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 - Generated levels must be provably winnable.
 - A solver order is computed during generation.
 - The solver treats active garage cells as blockers and removes a garage blocker only after the last hidden car has popped out.
+- The solver and placement checks support cardinal and diagonal car footprints, so diagonal cars are part of normal generated levels.
 - Car colors and passenger queue order are assigned from that solving order so there is always at least one intended completion path.
+- Hidden-color cars are selected only from obstructed visible cars after the solvable order has been established, so hiding color information does not change the underlying solution.
 - The active loop is smaller than the total passenger queue on normal levels, so the full passenger queue is not available immediately.
 - Difficulty ramps gradually with level: car count climbs from a small starting set up to a hard cap, and tunnel stacks are introduced and gradually multiplied as the level rises. The progression is intended to be felt over many levels rather than maxed out quickly.
 
@@ -134,7 +139,7 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 - The active loop capacity is intentionally capped in the game engine; remaining visible passengers render on feeder lanes and are not eligible to board until they enter the loop.
 - The interface should be playable on a smartphone in portrait orientation, with compact controls and a camera framing that keeps the queue, parking row, and board visible without horizontal scrolling. Landscape support is best-effort with wider aspect ratios.
 - Scene rebuilds are split into a static group (ground, queue track, parking row, field) keyed by a signature, and a dynamic group rebuilt every state update. Moving cars (parking and blocked animations) are retained across rebuilds so animations are never cut short when other state changes.
-- Car decal textures (the arrow + seat-count badge on top of each car) are cached by remaining seat count so the canvas is only drawn once per distinct value.
+- Car decal textures (the arrow + seat-count badge on top of each car) are cached by remaining seat count, colorblind pattern mode, and hidden-color state so the canvas is only drawn once per distinct value.
 
 ## Open Questions
 

@@ -70,6 +70,7 @@ export function createPassengerEntryAnimation(
   previousFeederPassengers: Passenger[],
   previousLayout: ReturnType<typeof queueLayoutForState>,
   target: THREE.Vector3,
+  startedAt = performance.now() / 1000,
 ): NonNullable<PassengerRenderItem['entry']> {
   const from = feederPassengerPosition(passenger, previousFeederPassengers, previousLayout)
   from.y = 0.1
@@ -81,7 +82,7 @@ export function createPassengerEntryAnimation(
   return {
     from,
     via,
-    startedAt: performance.now() / 1000,
+    startedAt,
     duration: Math.max(0.55, Math.min(1.05, distance * 0.18)),
   }
 }
@@ -98,6 +99,10 @@ export function notifyPassengerGate(
   let boardingsThisFrame = 0
   const unavailableCarIds = activeParkingCarIds(movingCars, elapsed)
   for (const passenger of passengers) {
+    if (passenger.entry && elapsed < passenger.entry.startedAt + passenger.entry.duration) {
+      continue
+    }
+
     const currentCycle = passengerGateCycle(phase, passenger.offset, passenger.layout)
     const previousCycle = passengerGateCycles.get(passenger.id) ?? currentCycle
     const crossedGate = currentCycle > previousCycle

@@ -7,6 +7,7 @@ import { lighten, roundedRect } from '../threeUtils'
 
 export interface CarVisualOptions {
   colorblindMode?: boolean
+  hideColor?: boolean
 }
 
 export function createCarMesh(
@@ -16,7 +17,8 @@ export function createCarMesh(
   options: CarVisualOptions = {},
 ): THREE.Group {
   const group = new THREE.Group()
-  const color = CAR_COLORS[car.color].hex
+  const hideColor = options.hideColor === true || (car.colorHidden && !parked)
+  const color = hideColor ? '#94a3b8' : CAR_COLORS[car.color].hex
   const carWidth = 0.54
   const carLength = parked ? 0.44 + car.length * 0.44 : car.length * CELL_SIZE - 0.12
   const body = new THREE.Mesh(
@@ -34,7 +36,7 @@ export function createCarMesh(
 
   const roof = new THREE.Mesh(
     roundedBoxGeometry(carWidth * 0.78, 0.24, Math.max(0.42, carLength * 0.45), 0.065),
-    new THREE.MeshStandardMaterial({ color: lighten(color), roughness: 0.4, metalness: 0.04 }),
+    new THREE.MeshStandardMaterial({ color: hideColor ? '#cbd5e1' : lighten(color), roughness: 0.4, metalness: 0.04 }),
   )
   roof.position.y = 0.54
   roof.position.z = -carLength * 0.05
@@ -103,8 +105,9 @@ const decalCanvasCache = new Map<string, HTMLCanvasElement>()
 export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}): THREE.CanvasTexture {
   const remaining = Math.max(0, car.capacity - car.boarded)
   const colorblindMode = options.colorblindMode === true
-  const pattern = colorblindMode ? CAR_PATTERNS[car.color] : null
-  const cacheKey = `${remaining}|${colorblindMode ? car.color : 'off'}`
+  const hideColor = options.hideColor === true || car.colorHidden
+  const pattern = colorblindMode && !hideColor ? CAR_PATTERNS[car.color] : null
+  const cacheKey = `${remaining}|${hideColor ? 'hidden' : 'visible'}|${colorblindMode ? car.color : 'off'}`
   let canvas = decalCanvasCache.get(cacheKey)
   if (!canvas) {
     canvas = document.createElement('canvas')
@@ -133,12 +136,14 @@ export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}):
       context.stroke()
       context.fill()
 
-      context.font = '900 102px Atkinson Hyperlegible Next, Arial, sans-serif'
-      context.textAlign = 'center'
-      context.textBaseline = 'middle'
-      context.lineWidth = 14
-      context.strokeText(String(remaining), 128, 188)
-      context.fillText(String(remaining), 128, 188)
+      if (!hideColor) {
+        context.font = '900 102px Atkinson Hyperlegible Next, Arial, sans-serif'
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.lineWidth = 14
+        context.strokeText(String(remaining), 128, 188)
+        context.fillText(String(remaining), 128, 188)
+      }
 
       if (pattern) {
         drawCarPatternCue(context, pattern, 28, 30, 48)

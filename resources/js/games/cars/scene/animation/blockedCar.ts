@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import { type Car, type Direction, type GameState, getCarCells, gridCellKey } from '../../gameEngine'
+import { type Car, type Direction, directionStep, type GameState, getCarCells, gridCellKey, pathCellsToExit } from '../../gameEngine'
 import { BLOCKED_BOUNCE_DURATION } from '../sceneConstants'
 import { createBlockedRoute, routeSegmentLengths } from '../sceneGeometry'
 import type { MovingCarRenderItem, RoutePoint } from '../sceneTypes'
@@ -140,7 +140,7 @@ function startBlockingCarCallout(
 }
 
 function findBlockingCarId(car: Car, state: GameState): string | null {
-  const path = pathCellsToBoardEdge(car, state.boardWidth, state.boardHeight)
+  const path = pathCellsToExit(car, state.boardWidth, state.boardHeight)
   const fieldCars = state.cars.filter((candidate) => candidate.status === 'field' && candidate.id !== car.id)
   const occupiedCarIds = new Map<string, string>()
 
@@ -175,54 +175,10 @@ function findSiblingCarMesh(mesh: THREE.Group, carId: string): THREE.Group | nul
   return null
 }
 
-function pathCellsToBoardEdge(car: Car, boardWidth: number, boardHeight: number): Array<{ x: number, y: number }> {
-  const cells: Array<{ x: number, y: number }> = []
-
-  if (car.direction === 'right') {
-    const start = car.position.x + car.length
-    for (let x = start; x < boardWidth; x += 1) {
-      cells.push({ x, y: car.position.y })
-    }
-  }
-
-  if (car.direction === 'left') {
-    const start = car.position.x - 1
-    for (let x = start; x >= 0; x -= 1) {
-      cells.push({ x, y: car.position.y })
-    }
-  }
-
-  if (car.direction === 'down') {
-    const start = car.position.y + car.length
-    for (let y = start; y < boardHeight; y += 1) {
-      cells.push({ x: car.position.x, y })
-    }
-  }
-
-  if (car.direction === 'up') {
-    const start = car.position.y - 1
-    for (let y = start; y >= 0; y -= 1) {
-      cells.push({ x: car.position.x, y })
-    }
-  }
-
-  return cells
-}
-
 function directionVector(direction: Direction): THREE.Vector3 {
-  if (direction === 'right') {
-    return new THREE.Vector3(1, 0, 0)
-  }
+  const step = directionStep(direction)
 
-  if (direction === 'left') {
-    return new THREE.Vector3(-1, 0, 0)
-  }
-
-  if (direction === 'up') {
-    return new THREE.Vector3(0, 0, -1)
-  }
-
-  return new THREE.Vector3(0, 0, 1)
+  return new THREE.Vector3(step.x, 0, step.y).normalize()
 }
 
 function stationaryRoute(position: THREE.Vector3): RoutePoint[] {

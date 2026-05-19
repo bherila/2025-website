@@ -37,7 +37,7 @@ export const CAR_PATTERNS = {
   brown: 'crosshatch',
 } as const satisfies Record<CarColor, CarPattern>
 
-export type Direction = 'up' | 'right' | 'down' | 'left'
+export type Direction = 'up' | 'up-right' | 'right' | 'down-right' | 'down' | 'down-left' | 'left' | 'up-left'
 
 export type CarStatus = 'field' | 'hidden' | 'parked' | 'departed'
 
@@ -53,6 +53,7 @@ export interface GridPosition {
 export interface Car {
   id: string
   color: CarColor
+  colorHidden: boolean
   direction: Direction
   capacity: number
   length: number
@@ -131,7 +132,17 @@ export interface SavedGameProgress {
   powerUps: PowerUpInventory
 }
 
-export const DIRECTIONS: Direction[] = ['up', 'right', 'down', 'left']
+export const DIRECTIONS: Direction[] = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left']
+export const DIRECTION_STEPS: Record<Direction, GridPosition> = {
+  up: { x: 0, y: -1 },
+  'up-right': { x: 1, y: -1 },
+  right: { x: 1, y: 0 },
+  'down-right': { x: 1, y: 1 },
+  down: { x: 0, y: 1 },
+  'down-left': { x: -1, y: 1 },
+  left: { x: -1, y: 0 },
+  'up-left': { x: -1, y: -1 },
+}
 export const CAPACITIES = [2, 4, 6] as const
 export const STARTING_REGULAR_SLOTS = 4
 export const TOTAL_REGULAR_SLOTS = 7

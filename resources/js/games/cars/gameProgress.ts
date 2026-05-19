@@ -273,6 +273,7 @@ function parseCar(value: unknown): Car | null {
   return {
     id: value.id,
     color,
+    colorHidden: value.colorHidden === true,
     direction,
     capacity,
     length,

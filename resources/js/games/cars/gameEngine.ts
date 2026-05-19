@@ -13,6 +13,7 @@ import {
   type CarColor,
   type CarStatus,
   type Direction,
+  DIRECTION_STEPS,
   DIRECTIONS,
   type GameState,
   type GridPosition,
@@ -63,6 +64,7 @@ export {
   CAR_COLORS,
   CAR_PATTERN_VALUES,
   CAR_PATTERNS,
+  DIRECTION_STEPS,
   DIRECTIONS,
   GAME_PROGRESS_STORAGE_KEY,
   MAX_LOOP_PASSENGERS,
@@ -151,6 +153,7 @@ export function generateLevel(
     }
 
     applySolvableColorsAndQueue(state, order, rng)
+    assignInitialHiddenCarColors(state, rng)
     state.lastMessage = `Level ${level} is ready. Clear the cars without opening extra spaces.`
 
     return state
@@ -160,6 +163,7 @@ export function generateLevel(
   const fallbackState = createStateFromSpecs(level, seed, fallbackSpecs, carry)
   const fallbackOrder = findSolvingOrder(fallbackState) ?? fallbackState.cars.map((car) => car.id)
   applySolvableColorsAndQueue(fallbackState, fallbackOrder, rng)
+  assignInitialHiddenCarColors(fallbackState, rng)
   fallbackState.lastMessage = `Level ${level} is ready.`
 
   return fallbackState
@@ -171,9 +175,35 @@ export function getCarCells(car: Pick<Car, 'direction' | 'length' | 'position'>)
   for (let offset = 0; offset < car.length; offset += 1) {
     if (car.direction === 'left' || car.direction === 'right') {
       cells.push({ x: car.position.x + offset, y: car.position.y })
-    } else {
+    } else if (car.direction === 'up' || car.direction === 'down') {
       cells.push({ x: car.position.x, y: car.position.y + offset })
+    } else if (car.direction === 'up-right' || car.direction === 'down-left') {
+      cells.push({ x: car.position.x + offset, y: car.position.y + car.length - 1 - offset })
+    } else {
+      cells.push({ x: car.position.x + offset, y: car.position.y + offset })
     }
+  }
+
+  return cells
+}
+
+export function directionStep(direction: Direction): GridPosition {
+  const step = DIRECTION_STEPS[direction]
+
+  return { x: step.x, y: step.y }
+}
+
+export function pathCellsToExit(car: Pick<Car, 'direction' | 'length' | 'position'>, boardWidth: number, boardHeight: number): GridPosition[] {
+  const step = directionStep(car.direction)
+  const frontCell = frontCellForCar(car)
+  const cells: GridPosition[] = []
+  let x = frontCell.x + step.x
+  let y = frontCell.y + step.y
+
+  while (x >= 0 && x < boardWidth && y >= 0 && y < boardHeight) {
+    cells.push({ x, y })
+    x += step.x
+    y += step.y
   }
 
   return cells
@@ -224,6 +254,7 @@ export function moveCarToParking(state: GameState, carId: string, slotId: string
 
   parkCar(next, car, slot)
   revealNextTunnelCar(next, car.tunnelId)
+  revealUnblockedCarColors(next)
 
   return next
 }
@@ -254,6 +285,7 @@ export function applyVipPowerUp(state: GameState, carId: string): GameState {
   next.powerUps.vip -= 1
   parkCar(next, car, slot)
   revealNextTunnelCar(next, car.tunnelId)
+  revealUnblockedCarColors(next)
 
   return next
 }
@@ -608,6 +640,7 @@ function createStateFromSpecs(
   const cars: Car[] = specs.map((spec) => ({
     id: spec.id,
     color: 'red',
+    colorHidden: false,
     direction: spec.direction,
     capacity: spec.capacity,
     length: spec.length,
@@ -683,6 +716,42 @@ function applySolvableColorsAndQueue(state: GameState, order: string[], rng: Ran
   state.passengerQueue = passengers
 }
 
+function assignInitialHiddenCarColors(state: GameState, rng: RandomGenerator): void {
+  if (state.level < 4) {
+    return
+  }
+
+  const eligibleCars = state.cars.filter((car) => car.status === 'field' && !canMoveCar(state, car.id))
+  if (eligibleCars.length === 0) {
+    return
+  }
+
+  const revealChallengeChance = Math.min(0.46, 0.1 + state.level * 0.018)
+  let hiddenCount = 0
+  for (const car of eligibleCars) {
+    if (rng.next() <= revealChallengeChance) {
+      car.colorHidden = true
+      hiddenCount += 1
+    }
+  }
+
+  if (hiddenCount === 0 && state.level >= 6) {
+    rng.pick(eligibleCars).colorHidden = true
+  }
+}
+
+function revealUnblockedCarColors(state: GameState): void {
+  for (const car of state.cars) {
+    if (!car.colorHidden) {
+      continue
+    }
+
+    if (car.status !== 'field' || canMoveCar(state, car.id)) {
+      car.colorHidden = false
+    }
+  }
+}
+
 function assignFeederSides(level: number, passengers: Passenger[]): void {
   const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((level - 1) / 3) * 2
   const cappedCapacity = Math.min(MAX_LOOP_PASSENGERS, levelCapacity)
@@ -701,6 +770,7 @@ function assignFeederSides(level: number, passengers: Passenger[]): void {
 
 function parkCar(state: GameState, car: Car, slot: ParkingSlot): void {
   car.status = 'parked'
+  car.colorHidden = false
   car.parkingSlotId = slot.id
   slot.occupiedCarId = car.id
   state.moves += 1
@@ -840,38 +910,6 @@ function canMoveCarInSnapshot(state: GameState, statuses: Map<string, CarStatus>
   return pathCellsToExit(car, state.boardWidth, state.boardHeight).every((cell) => !occupied.has(gridCellKey(cell)))
 }
 
-function pathCellsToExit(car: Car, boardWidth: number, boardHeight: number): GridPosition[] {
-  const cells: GridPosition[] = []
-
-  if (car.direction === 'right') {
-    const start = car.position.x + car.length
-    for (let x = start; x < boardWidth; x += 1) {
-      cells.push({ x, y: car.position.y })
-    }
-  }
-
-  if (car.direction === 'left') {
-    for (let x = car.position.x - 1; x >= 0; x -= 1) {
-      cells.push({ x, y: car.position.y })
-    }
-  }
-
-  if (car.direction === 'down') {
-    const start = car.position.y + car.length
-    for (let y = start; y < boardHeight; y += 1) {
-      cells.push({ x: car.position.x, y })
-    }
-  }
-
-  if (car.direction === 'up') {
-    for (let y = car.position.y - 1; y >= 0; y -= 1) {
-      cells.push({ x: car.position.x, y })
-    }
-  }
-
-  return cells
-}
-
 function occupiedCells(cars: Car[]): Set<string> {
   const cells = new Set<string>()
   for (const car of cars) {
@@ -881,6 +919,42 @@ function occupiedCells(cars: Car[]): Set<string> {
   }
 
   return cells
+}
+
+function frontCellForCar(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition {
+  const step = directionStep(car.direction)
+  const cells = getCarCells(car)
+  const firstCell = cells[0]
+  if (!firstCell) {
+    return { ...car.position }
+  }
+
+  const front = cells.slice(1).reduce((currentFront, cell) => {
+    const currentValue = currentFront.x * step.x + currentFront.y * step.y
+    const nextValue = cell.x * step.x + cell.y * step.y
+
+    return nextValue > currentValue ? cell : currentFront
+  }, firstCell)
+
+  return { ...front }
+}
+
+function backCellForCar(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition {
+  const step = directionStep(car.direction)
+  const cells = getCarCells(car)
+  const firstCell = cells[0]
+  if (!firstCell) {
+    return { ...car.position }
+  }
+
+  const back = cells.slice(1).reduce((currentBack, cell) => {
+    const currentValue = currentBack.x * step.x + currentBack.y * step.y
+    const nextValue = cell.x * step.x + cell.y * step.y
+
+    return nextValue < currentValue ? cell : currentBack
+  }, firstCell)
+
+  return { ...back }
 }
 
 export function blockingCellKeys(state: GameState, excludedCarId: string | null = null): Set<string> {
@@ -959,12 +1033,10 @@ function findFirstFreeGaragePlacement(
   direction: Direction,
   occupied: Set<string>,
 ): { garagePosition: GridPosition, position: GridPosition } | null {
-  const horizontal = direction === 'left' || direction === 'right'
-  const maxX = horizontal ? BOARD_WIDTH - length : BOARD_WIDTH - 1
-  const maxY = horizontal ? BOARD_HEIGHT - 1 : BOARD_HEIGHT - length
+  const bounds = placementBounds(length, direction)
 
-  for (let y = 0; y <= maxY; y += 1) {
-    for (let x = 0; x <= maxX; x += 1) {
+  for (let y = 0; y <= bounds.maxY; y += 1) {
+    for (let x = 0; x <= bounds.maxX; x += 1) {
       const position = { x, y }
       const garagePosition = garagePositionForCar({ direction, length, position })
       if (!garagePosition) {
@@ -982,35 +1054,16 @@ function findFirstFreeGaragePlacement(
 }
 
 function randomGarageSpawnPosition(length: number, direction: Direction, rng: RandomGenerator): GridPosition {
-  if (direction === 'right') {
-    return { x: rng.int(1, BOARD_WIDTH - length), y: rng.int(0, BOARD_HEIGHT - 1) }
-  }
+  const bounds = placementBounds(length, direction)
 
-  if (direction === 'left') {
-    return { x: rng.int(0, BOARD_WIDTH - length - 1), y: rng.int(0, BOARD_HEIGHT - 1) }
-  }
-
-  if (direction === 'down') {
-    return { x: rng.int(0, BOARD_WIDTH - 1), y: rng.int(1, BOARD_HEIGHT - length) }
-  }
-
-  return { x: rng.int(0, BOARD_WIDTH - 1), y: rng.int(0, BOARD_HEIGHT - length - 1) }
+  return { x: rng.int(0, bounds.maxX), y: rng.int(0, bounds.maxY) }
 }
 
 function garagePositionForCar(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition | null {
-  if (car.direction === 'right') {
-    return inBounds({ x: car.position.x - 1, y: car.position.y })
-  }
+  const step = directionStep(car.direction)
+  const backCell = backCellForCar(car)
 
-  if (car.direction === 'left') {
-    return inBounds({ x: car.position.x + car.length, y: car.position.y })
-  }
-
-  if (car.direction === 'down') {
-    return inBounds({ x: car.position.x, y: car.position.y - 1 })
-  }
-
-  return inBounds({ x: car.position.x, y: car.position.y + car.length })
+  return inBounds({ x: backCell.x - step.x, y: backCell.y - step.y })
 }
 
 function inBounds(position: GridPosition): GridPosition | null {
@@ -1027,11 +1080,12 @@ function findFreePlacement(
   occupied: Set<string>,
   rng: RandomGenerator,
 ): GridPosition | null {
+  const bounds = placementBounds(length, direction)
+
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const horizontal = direction === 'left' || direction === 'right'
     const position = {
-      x: horizontal ? rng.int(0, BOARD_WIDTH - length) : rng.int(0, BOARD_WIDTH - 1),
-      y: horizontal ? rng.int(0, BOARD_HEIGHT - 1) : rng.int(0, BOARD_HEIGHT - length),
+      x: rng.int(0, bounds.maxX),
+      y: rng.int(0, bounds.maxY),
     }
 
     const cells = getCarCells({ direction, length, position })
@@ -1044,12 +1098,10 @@ function findFreePlacement(
 }
 
 function findFirstFreePlacement(length: number, direction: Direction, occupied: Set<string>): GridPosition | null {
-  const horizontal = direction === 'left' || direction === 'right'
-  const maxX = horizontal ? BOARD_WIDTH - length : BOARD_WIDTH - 1
-  const maxY = horizontal ? BOARD_HEIGHT - 1 : BOARD_HEIGHT - length
+  const bounds = placementBounds(length, direction)
 
-  for (let y = 0; y <= maxY; y += 1) {
-    for (let x = 0; x <= maxX; x += 1) {
+  for (let y = 0; y <= bounds.maxY; y += 1) {
+    for (let x = 0; x <= bounds.maxX; x += 1) {
       const position = { x, y }
       const cells = getCarCells({ direction, length, position })
       if (placementIsFree(cells, occupied)) {
@@ -1059,6 +1111,18 @@ function findFirstFreePlacement(length: number, direction: Direction, occupied: 
   }
 
   return null
+}
+
+function placementBounds(length: number, direction: Direction): { maxX: number, maxY: number } {
+  if (direction === 'left' || direction === 'right') {
+    return { maxX: BOARD_WIDTH - length, maxY: BOARD_HEIGHT - 1 }
+  }
+
+  if (direction === 'up' || direction === 'down') {
+    return { maxX: BOARD_WIDTH - 1, maxY: BOARD_HEIGHT - length }
+  }
+
+  return { maxX: BOARD_WIDTH - length, maxY: BOARD_HEIGHT - length }
 }
 
 function placementIsFree(cells: GridPosition[], occupied: Set<string>): boolean {

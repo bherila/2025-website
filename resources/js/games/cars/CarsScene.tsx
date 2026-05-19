@@ -4,9 +4,8 @@ import * as THREE from 'three'
 import {
   CAR_COLORS,
   CAR_PATTERNS,
-  feederQueuePassengers,
   type GameState,
-  visibleQueuePassengers,
+  loopPassengerCapacity,
 } from './gameEngine'
 import { startBlockedCarAnimation } from './scene/animation/blockedCar'
 import { animateBoardingPassengers, startBoardingPassengerAnimations } from './scene/animation/boardingPassengers'
@@ -29,6 +28,7 @@ import {
   passengerInstancePoolMeshes,
 } from './scene/builders/passengerMesh'
 import { createQueueTrack } from './scene/builders/queueTrack'
+import { type PassengerLoopSlot, planPassengerLoopSlots } from './scene/passengerLoopSlots'
 import {
   CAR_MOVE_SECONDS_PER_UNIT,
   MIN_CAR_MOVE_DURATION,
@@ -82,6 +82,7 @@ export function CarsScene({
   const staticSignatureRef = useRef<string>('')
   const effectsRef = useRef<THREE.Group | null>(null)
   const passengersRef = useRef<PassengerRenderItem[]>([])
+  const passengerLoopSlotsRef = useRef<PassengerLoopSlot[]>([])
   const passengerOffsetsRef = useRef<Map<string, number>>(new Map())
   const passengerGateCyclesRef = useRef<Map<string, number>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
@@ -234,6 +235,7 @@ export function CarsScene({
       staticSignatureRef.current = ''
       effectsRef.current = null
       passengersRef.current = []
+      passengerLoopSlotsRef.current = []
       boardingPassengersRef.current = []
       fieldCarMeshes.clear()
       passengerGateCycles.clear()
@@ -250,6 +252,7 @@ export function CarsScene({
 
     if (previousLevelRef.current !== state.level) {
       passengerOffsetsRef.current.clear()
+      passengerLoopSlotsRef.current = []
       passengerGateCyclesRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
@@ -324,6 +327,7 @@ export function CarsScene({
       state,
       previousStateRef.current,
       passengersRef.current,
+      passengerLoopSlotsRef.current,
       passengerOffsetsRef.current,
       passengerGateCyclesRef.current,
       fieldCarMeshesRef.current,
@@ -391,6 +395,7 @@ function buildDynamicScene(
   state: GameState,
   previousState: GameState | null,
   passengers: PassengerRenderItem[],
+  passengerLoopSlots: PassengerLoopSlot[],
   passengerOffsets: Map<string, number>,
   passengerGateCycles: Map<string, number>,
   fieldCarMeshes: Map<string, THREE.Group>,
@@ -460,38 +465,41 @@ function buildDynamicScene(
   for (const poolMesh of passengerInstancePoolMeshes(passengerPools)) {
     content.add(poolMesh)
   }
-  const visiblePassengers = visibleQueuePassengers(state)
-  const previousVisiblePassengerIds = previousState
-    ? new Set(visibleQueuePassengers(previousState).map((passenger) => passenger.id))
-    : new Set<string>()
-  const previousFeederPassengers = previousState ? feederQueuePassengers(previousState) : []
-  const previousQueueLayout = previousState ? queueLayoutForState(previousState) : queueLayout
   const spacing = passengerSpacing()
-  const visiblePassengerIds = new Set(visiblePassengers.map((passenger) => passenger.id))
+  const now = performance.now() / 1000
+  const loopPlan = planPassengerLoopSlots({
+    capacity: loopPassengerCapacity(state),
+    layout: queueLayout,
+    now,
+    passengers: state.passengerQueue,
+    phase: passengerPhase,
+    slots: passengerLoopSlots,
+    spacing,
+    speed: PASSENGER_SPEED,
+  })
+  passengerLoopSlots.splice(0, passengerLoopSlots.length, ...loopPlan.slots)
+  const currentPassengerIds = new Set(state.passengerQueue.map((passenger) => passenger.id))
   for (const id of passengerOffsets.keys()) {
-    if (!visiblePassengerIds.has(id)) {
+    if (!currentPassengerIds.has(id)) {
       passengerOffsets.delete(id)
       passengerGateCycles.delete(id)
     }
   }
 
-  let previousAssignedOffset: number | null = null
-  for (const [index, passenger] of visiblePassengers.entries()) {
-    const existingOffset = passengerOffsets.get(passenger.id)
-    const offset: number = previousAssignedOffset === null
-      ? existingOffset ?? -spacing
-      : previousAssignedOffset - spacing
-    const enteringFromFeeder = Boolean(previousState && !previousVisiblePassengerIds.has(passenger.id))
+  for (const assignment of loopPlan.assignments) {
+    const { entryStartedAt, offset, passenger, sourcePassengers } = assignment
     passengerOffsets.set(passenger.id, offset)
-    passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
+    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null) {
+      passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
+    }
 
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
       colorblindMode,
       pattern: CAR_PATTERNS[passenger.color],
     })
     const position = queuePosition(passengerPhase + offset, queueLayout)
-    const entry = enteringFromFeeder
-      ? createPassengerEntryAnimation(passenger, previousFeederPassengers, previousQueueLayout, position)
+    const entry = entryStartedAt !== null && sourcePassengers
+      ? createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
       : null
     if (entry) {
       setPassengerRenderHandleTransform(handle, entry.from, 0)
@@ -508,10 +516,9 @@ function buildDynamicScene(
       passengerRenderItem.entry = entry
     }
     passengers.push(passengerRenderItem)
-    previousAssignedOffset = offset
   }
 
-  const feederPassengers = feederQueuePassengers(state)
+  const feederPassengers = loopPlan.feederPassengers.slice(0, 40)
   for (const passenger of feederPassengers) {
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
       colorblindMode,

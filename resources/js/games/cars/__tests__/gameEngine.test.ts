@@ -70,6 +70,53 @@ describe('cars game engine', () => {
     expect(moveCarToParking(state, 'blocked').lastMessage).toBe('That car is blocked by another car.')
   })
 
+  it('supports diagonal car footprints and diagonal exit blocking', () => {
+    const state = makeState({
+      boardWidth: 5,
+      boardHeight: 5,
+      cars: [
+        makeCar({ id: 'diagonal', direction: 'down-right', length: 2, position: { x: 0, y: 0 } }),
+        makeCar({ id: 'blocker', direction: 'right', length: 2, position: { x: 2, y: 2 } }),
+      ],
+    })
+
+    expect(getCarCells(makeCar({ direction: 'down-right', length: 3, position: { x: 1, y: 1 } }))).toEqual([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+    ])
+    expect(getCarCells(makeCar({ direction: 'up-right', length: 3, position: { x: 1, y: 1 } }))).toEqual([
+      { x: 1, y: 3 },
+      { x: 2, y: 2 },
+      { x: 3, y: 1 },
+    ])
+    expect(canMoveCar(state, 'diagonal')).toBe(false)
+  })
+
+  it('reveals a hidden car color once the car is no longer obstructed', () => {
+    const state = makeState({
+      boardWidth: 5,
+      boardHeight: 4,
+      cars: [
+        makeCar({ id: 'hidden-color', color: 'red', colorHidden: true, direction: 'right', position: { x: 0, y: 1 } }),
+        makeCar({ id: 'blocker', color: 'blue', direction: 'down', position: { x: 2, y: 0 } }),
+      ],
+      passengerQueue: [
+        { id: 'p1', color: 'blue' },
+        { id: 'p2', color: 'blue' },
+        { id: 'p3', color: 'red' },
+        { id: 'p4', color: 'red' },
+      ],
+    })
+
+    expect(canMoveCar(state, 'hidden-color')).toBe(false)
+
+    const next = moveCarToParking(state, 'blocker')
+
+    expect(next.cars.find((car) => car.id === 'hidden-color')?.colorHidden).toBe(false)
+    expect(canMoveCar(next, 'hidden-color')).toBe(true)
+  })
+
   it('boards FIFO passengers into a matching parked car and releases the slot', () => {
     const state = makeState({
       cars: [makeCar({ id: 'red-car', color: 'red', direction: 'right', position: { x: 3, y: 0 } })],
@@ -340,6 +387,7 @@ function makeCar(overrides: Partial<Car> = {}): Car {
   return {
     id: 'car-1',
     color: 'red',
+    colorHidden: false,
     direction: 'right',
     capacity: 2,
     length: 2,
