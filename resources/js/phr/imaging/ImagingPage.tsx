@@ -7,7 +7,8 @@ import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
 import { errorMessage } from '@/phr/shared'
 import {
-  PhrDicomSignedUploadResponseSchema,
+  type PhrDicomSignedUploadBatchItem,
+  PhrDicomSignedUploadBatchResponseSchema,
   PhrDicomStudiesResponseSchema,
   type PhrDicomStudy,
   PhrDicomUploadFileResponseSchema,
@@ -27,6 +28,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
 }
 
 const UPLOAD_CONCURRENCY = 4
+const SIGNED_UPLOAD_BATCH_SIZE = 32
 
 type UploadPhase = 'uploading' | 'done' | 'aborting' | 'cancelled' | 'failed'
 
@@ -362,6 +364,14 @@ interface FileOutcome {
   relativePath: string
 }
 
+interface SignedUploadBatchRequestFile {
+  client_id: string
+  filename: string
+  relative_path: string
+  content_type: string
+  file_size: number
+}
+
 interface UploadControllerOptions {
   patientId: number
   uploadId: number
@@ -378,6 +388,12 @@ class UploadController {
   private readonly options: UploadControllerOptions
 
   private nextIndex = 0
+
+  private nextSigningIndex = 0
+
+  private readonly signedUploadsByIndex = new Map<number, PhrDicomSignedUploadBatchItem>()
+
+  private signedUploadBatchPromise: Promise<void> | null = null
 
   private readonly activeRequests = new Set<XMLHttpRequest>()
 
@@ -418,7 +434,7 @@ class UploadController {
       if (!file) {
         return
       }
-      const outcome = await this.uploadOne(file)
+      const outcome = await this.uploadOne(index, file)
       outcomes.push(outcome)
       this.options.onFileFinished(outcome)
       if (outcome.errorMessage !== null && !this.aborted) {
@@ -427,7 +443,7 @@ class UploadController {
     }
   }
 
-  private async uploadOne(file: FileWithRelativePath): Promise<FileOutcome> {
+  private async uploadOne(index: number, file: FileWithRelativePath): Promise<FileOutcome> {
     const relativePath = relativeFilePath(file)
     this.options.onFileStarted(relativePath)
 
@@ -443,15 +459,7 @@ class UploadController {
     }
 
     try {
-      const signedUpload = PhrDicomSignedUploadResponseSchema.parse(await fetchWrapper.post(
-        `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/signed-url`,
-        {
-          filename: file.name,
-          relative_path: relativePath,
-          content_type: file.type || 'application/dicom',
-          file_size: file.size,
-        },
-      ))
+      const signedUpload = await this.signedUploadFor(index)
 
       if (this.aborted) {
         return { stored: false, skippedReason: null, errorMessage: 'Cancelled.', relativePath }
@@ -488,6 +496,86 @@ class UploadController {
         relativePath,
       }
     }
+  }
+
+  private async signedUploadFor(index: number): Promise<PhrDicomSignedUploadBatchItem> {
+    while (!this.signedUploadsByIndex.has(index)) {
+      if (this.nextSigningIndex >= this.options.files.length && this.signedUploadBatchPromise === null) {
+        break
+      }
+
+      await this.ensureSignedUploadBatch(index)
+    }
+
+    const signedUpload = this.signedUploadsByIndex.get(index)
+    if (!signedUpload) {
+      const file = this.options.files[index]
+      const fileLabel = file ? relativeFilePath(file) : `file ${index + 1}`
+      throw new Error(`Unable to reserve DICOM upload URL for ${fileLabel}.`)
+    }
+
+    this.signedUploadsByIndex.delete(index)
+
+    return signedUpload
+  }
+
+  private async ensureSignedUploadBatch(requiredIndex: number): Promise<void> {
+    if (this.signedUploadBatchPromise === null) {
+      this.signedUploadBatchPromise = this.requestNextSignedUploadBatch(requiredIndex).finally(() => {
+        this.signedUploadBatchPromise = null
+      })
+    }
+
+    await this.signedUploadBatchPromise
+  }
+
+  private async requestNextSignedUploadBatch(requiredIndex: number): Promise<void> {
+    if (this.aborted) {
+      return
+    }
+
+    if (this.nextSigningIndex < requiredIndex) {
+      this.nextSigningIndex = requiredIndex
+    }
+
+    const files: SignedUploadBatchRequestFile[] = []
+    while (this.nextSigningIndex < this.options.files.length && files.length < SIGNED_UPLOAD_BATCH_SIZE) {
+      const fileIndex = this.nextSigningIndex
+      const file = this.options.files[fileIndex]
+      this.nextSigningIndex += 1
+
+      if (!file || !this.shouldRequestSignedUpload(file)) {
+        continue
+      }
+
+      files.push({
+        client_id: String(fileIndex),
+        filename: file.name,
+        relative_path: relativeFilePath(file),
+        content_type: file.type || 'application/dicom',
+        file_size: file.size,
+      })
+    }
+
+    if (files.length === 0) {
+      return
+    }
+
+    const response = PhrDicomSignedUploadBatchResponseSchema.parse(await fetchWrapper.post(
+      `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/signed-urls`,
+      { files },
+    ))
+
+    for (const signedUpload of response.uploads) {
+      const fileIndex = Number.parseInt(signedUpload.client_id, 10)
+      if (Number.isInteger(fileIndex)) {
+        this.signedUploadsByIndex.set(fileIndex, signedUpload)
+      }
+    }
+  }
+
+  private shouldRequestSignedUpload(file: FileWithRelativePath): boolean {
+    return this.options.maxFileBytes === null || file.size <= this.options.maxFileBytes
   }
 
   private putFileToStorage(file: FileWithRelativePath, uploadUrl: string, signedHeaders: Record<string, string>): Promise<void> {

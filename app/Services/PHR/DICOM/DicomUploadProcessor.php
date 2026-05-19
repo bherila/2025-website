@@ -164,33 +164,72 @@ class DicomUploadProcessor
      */
     public function requestDirectUpload(PhrDicomUpload $upload, ?string $filename, ?string $relativePath, ?string $contentType, int $fileSizeBytes): array
     {
-        return DB::transaction(function () use ($upload, $filename, $relativePath, $contentType, $fileSizeBytes): array {
+        $signedUploads = $this->requestDirectUploadBatch($upload, [[
+            'client_id' => 'file',
+            'filename' => $filename ?? '',
+            'relative_path' => $relativePath,
+            'content_type' => $contentType,
+            'file_size' => $fileSizeBytes,
+        ]]);
+
+        $signedUpload = $signedUploads[0] ?? throw new RuntimeException('Unable to generate a signed DICOM upload URL.');
+
+        return [
+            'upload_url' => $signedUpload['upload_url'],
+            'headers' => $signedUpload['headers'],
+            'r2_key' => $signedUpload['r2_key'],
+            'relative_path' => $signedUpload['relative_path'],
+            'expires_in' => $signedUpload['expires_in'],
+        ];
+    }
+
+    /**
+     * Reserve object keys and return short-lived direct-to-R2 upload URLs.
+     *
+     * @param  list<array{client_id: string, filename: string, relative_path?: string|null, content_type?: string|null, file_size: int}>  $files
+     * @return list<array{client_id: string, upload_url: string, headers: array<string, string>, r2_key: string, relative_path: string, expires_in: int}>
+     */
+    public function requestDirectUploadBatch(PhrDicomUpload $upload, array $files): array
+    {
+        return DB::transaction(function () use ($upload, $files): array {
             $locked = PhrDicomUpload::query()->lockForUpdate()->findOrFail($upload->id);
             if ($locked->status !== PhrDicomUpload::STATUS_PENDING) {
                 throw new HttpException(409, 'Upload session is no longer accepting files.');
             }
 
-            $this->ensureWithinDirectUploadLimit($fileSizeBytes);
-
             $manifest = $locked->manifest_json ?? [];
             $skippedFiles = $locked->skipped_files_json ?? [];
             $reservedPaths = $this->stringList($manifest['reserved_paths'] ?? []);
-            $sanitized = $this->sanitizeRelativePath($relativePath, $filename, $locked->total_files + count($reservedPaths));
-            $unique = $this->uniqueAgainstManifest($sanitized, array_merge($this->stringList($manifest['stored_paths'] ?? []), $reservedPaths), $skippedFiles);
-            $storageKey = $this->storageKey($locked->r2_prefix, $unique);
+            $signedUploads = [];
 
-            $manifest['reserved_paths'][] = $unique;
+            foreach ($files as $file) {
+                $fileSizeBytes = $file['file_size'];
+                $this->ensureWithinDirectUploadLimit($fileSizeBytes);
+
+                $sanitized = $this->sanitizeRelativePath(
+                    $file['relative_path'] ?? null,
+                    $file['filename'],
+                    $locked->total_files + count($reservedPaths),
+                );
+                $unique = $this->uniqueAgainstManifest($sanitized, array_merge($this->stringList($manifest['stored_paths'] ?? []), $reservedPaths), $skippedFiles);
+                $storageKey = $this->storageKey($locked->r2_prefix, $unique);
+                $signedUpload = $this->signedUploadUrl($storageKey, $this->contentType($file['content_type'] ?? null));
+
+                $reservedPaths[] = $unique;
+                $manifest['reserved_paths'][] = $unique;
+                $signedUploads[] = [
+                    'client_id' => $file['client_id'],
+                    'upload_url' => $signedUpload['url'],
+                    'headers' => $signedUpload['headers'],
+                    'r2_key' => $storageKey,
+                    'relative_path' => $unique,
+                    'expires_in' => 900,
+                ];
+            }
+
             $locked->update(['manifest_json' => $this->uniqueManifest($manifest)]);
 
-            $signedUpload = $this->signedUploadUrl($storageKey, $this->contentType($contentType));
-
-            return [
-                'upload_url' => $signedUpload['url'],
-                'headers' => $signedUpload['headers'],
-                'r2_key' => $storageKey,
-                'relative_path' => $unique,
-                'expires_in' => 900,
-            ];
+            return $signedUploads;
         });
     }
 

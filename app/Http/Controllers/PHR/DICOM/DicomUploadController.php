@@ -5,6 +5,7 @@ namespace App\Http\Controllers\PHR\DICOM;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PHR\DICOM\CompleteDirectDicomUploadRequest;
 use App\Http\Requests\PHR\DICOM\OpenDicomUploadRequest;
+use App\Http\Requests\PHR\DICOM\RequestDirectDicomUploadBatchRequest;
 use App\Http\Requests\PHR\DICOM\RequestDirectDicomUploadRequest;
 use App\Http\Requests\PHR\DICOM\StoreDicomUploadFileRequest;
 use App\Models\PhrDicomUpload;
@@ -84,6 +85,25 @@ class DicomUploadController extends Controller
         );
 
         return response()->json($this->signedUploadPayload($signedUpload));
+    }
+
+    /**
+     * Reserve R2 object keys and return signed PUT URLs for a client-side batch.
+     */
+    public function requestUploadUrls(RequestDirectDicomUploadBatchRequest $request, int $patient, int $upload): JsonResponse
+    {
+        $patientModel = $this->resolvePatient($request, $patient);
+        $session = $this->resolveSession($patientModel, $upload);
+
+        if ($session->status !== PhrDicomUpload::STATUS_PENDING) {
+            throw new HttpException(409, 'Upload session is no longer accepting files.');
+        }
+
+        $signedUploads = $this->uploadProcessor->requestDirectUploadBatch($session, $request->uploadFiles());
+
+        return response()->json([
+            'uploads' => array_map(fn (array $signedUpload): array => $this->signedUploadBatchPayload($signedUpload), $signedUploads),
+        ]);
     }
 
     /**
@@ -202,6 +222,22 @@ class DicomUploadController extends Controller
     private function signedUploadPayload(array $signedUpload): array
     {
         return [
+            'upload_url' => $signedUpload['upload_url'],
+            'headers' => (object) $signedUpload['headers'],
+            'r2_key' => $signedUpload['r2_key'],
+            'relative_path' => $signedUpload['relative_path'],
+            'expires_in' => $signedUpload['expires_in'],
+        ];
+    }
+
+    /**
+     * @param  array{client_id: string, upload_url: string, headers: array<string, string>, r2_key: string, relative_path: string, expires_in: int}  $signedUpload
+     * @return array{client_id: string, upload_url: string, headers: object, r2_key: string, relative_path: string, expires_in: int}
+     */
+    private function signedUploadBatchPayload(array $signedUpload): array
+    {
+        return [
+            'client_id' => $signedUpload['client_id'],
             'upload_url' => $signedUpload['upload_url'],
             'headers' => (object) $signedUpload['headers'],
             'r2_key' => $signedUpload['r2_key'],

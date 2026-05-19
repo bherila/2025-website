@@ -212,6 +212,18 @@ export const PhrDicomSignedUploadResponseSchema = z.object({
   expires_in: z.number(),
 })
 
+export type PhrDicomSignedUpload = z.infer<typeof PhrDicomSignedUploadResponseSchema>
+
+export const PhrDicomSignedUploadBatchItemSchema = PhrDicomSignedUploadResponseSchema.extend({
+  client_id: z.string(),
+})
+
+export type PhrDicomSignedUploadBatchItem = z.infer<typeof PhrDicomSignedUploadBatchItemSchema>
+
+export const PhrDicomSignedUploadBatchResponseSchema = z.object({
+  uploads: z.array(PhrDicomSignedUploadBatchItemSchema),
+})
+
 export const PhrDicomUploadFileResultSchema = z.object({
   stored: z.boolean(),
   skipped_reason: z.string().nullable(),

@@ -324,6 +324,7 @@ Route::middleware(['web', 'auth'])
         Route::get('/patients/{patient}/dicom/studies', [PHRDicomStudyController::class, 'index'])->whereNumber('patient')->name('patients.dicom.studies.index');
         Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'open'])->whereNumber('patient')->name('patients.dicom.uploads.open');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-url', [PHRDicomUploadController::class, 'requestUploadUrl'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-url');
+        Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-urls', [PHRDicomUploadController::class, 'requestUploadUrls'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-urls');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/files', [PHRDicomUploadController::class, 'storeFile'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.files.store');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/files/complete', [PHRDicomUploadController::class, 'completeFile'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.files.complete');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/finalize', [PHRDicomUploadController::class, 'finalize'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.finalize');
