@@ -60,15 +60,21 @@ return [
             'report' => false,
         ],
 
-        // PHR DICOM object storage. Currently a local directory so we don't
-        // pay R2 round trips for the small volume we have today. The path is
-        // env-overridable so prod can point at a directory outside the deploy
-        // tree (the CI rsync uses --delete on `storage`, see ci.yml). To move
-        // to S3/R2 later: change driver to 's3' and add the usual AWS_*
-        // settings — the application code only references the disk by name.
+        // PHR DICOM object storage. This is intentionally separate from the
+        // default S3 disk because medical image payloads live in a dedicated
+        // R2 bucket and are uploaded directly by the browser through signed
+        // PUT URLs.
         'phr_dicom' => [
-            'driver' => 'local',
+            'driver' => env('PHR_DICOM_DISK_DRIVER', 's3'),
+            'key' => env('PHR_DICOM_R2_ACCESS_KEY_ID'),
+            'secret' => env('PHR_DICOM_R2_SECRET_ACCESS_KEY'),
+            'region' => env('PHR_DICOM_R2_REGION', 'auto'),
+            'bucket' => env('PHR_DICOM_R2_BUCKET'),
+            'url' => env('PHR_DICOM_R2_URL'),
+            'endpoint' => env('PHR_DICOM_R2_ENDPOINT'),
+            'use_path_style_endpoint' => env('PHR_DICOM_R2_USE_PATH_STYLE_ENDPOINT', false),
             'root' => env('PHR_DICOM_DISK_ROOT', storage_path('app/private/phr-dicom')),
+            'serve' => env('PHR_DICOM_DISK_SERVE', false),
             'throw' => false,
             'report' => false,
         ],

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\PHR\DICOM;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\PHR\DICOM\CompleteDirectDicomUploadRequest;
 use App\Http\Requests\PHR\DICOM\OpenDicomUploadRequest;
+use App\Http\Requests\PHR\DICOM\RequestDirectDicomUploadRequest;
 use App\Http\Requests\PHR\DICOM\StoreDicomUploadFileRequest;
 use App\Models\PhrDicomUpload;
 use App\Models\PhrPatient;
@@ -53,6 +55,55 @@ class DicomUploadController extends Controller
         $relativePath = $request->string('relative_path')->trim()->value() ?: null;
 
         $result = $this->uploadProcessor->processSingleFile($session, $file, $relativePath);
+
+        return response()->json([
+            'result' => $result,
+            'upload' => $this->uploadPayload($session->refresh()),
+        ]);
+    }
+
+    /**
+     * Reserve an R2 object key and return a signed PUT URL for the browser.
+     */
+    public function requestUploadUrl(RequestDirectDicomUploadRequest $request, int $patient, int $upload): JsonResponse
+    {
+        $patientModel = $this->resolvePatient($request, $patient);
+        $session = $this->resolveSession($patientModel, $upload);
+
+        if ($session->status !== PhrDicomUpload::STATUS_PENDING) {
+            throw new HttpException(409, 'Upload session is no longer accepting files.');
+        }
+
+        $signedUpload = $this->uploadProcessor->requestDirectUpload(
+            $session,
+            $request->string('filename')->value(),
+            $request->string('relative_path')->trim()->value() ?: null,
+            $request->string('content_type')->trim()->value() ?: null,
+        );
+
+        return response()->json($signedUpload);
+    }
+
+    /**
+     * Register a browser-uploaded R2 object against the open DICOM session.
+     */
+    public function completeFile(CompleteDirectDicomUploadRequest $request, int $patient, int $upload): JsonResponse
+    {
+        $patientModel = $this->resolvePatient($request, $patient);
+        $session = $this->resolveSession($patientModel, $upload);
+
+        if ($session->status !== PhrDicomUpload::STATUS_PENDING) {
+            throw new HttpException(409, 'Upload session is no longer accepting files.');
+        }
+
+        $result = $this->uploadProcessor->processDirectUploadedFile(
+            $session,
+            $request->string('r2_key')->value(),
+            $request->string('relative_path')->value(),
+            $request->string('original_filename')->value(),
+            $request->string('mime_type')->trim()->value() ?: null,
+            $request->integer('file_size_bytes'),
+        );
 
         return response()->json([
             'result' => $result,
@@ -129,77 +180,14 @@ class DicomUploadController extends Controller
     }
 
     /**
-     * @return array{max_file_bytes: int, max_file_size_label: string}
+     * @return array{max_file_bytes: int|null, max_file_size_label: string|null, direct_upload: bool}
      */
     private function uploadLimitsPayload(): array
     {
-        $maxFileBytes = $this->maxFileUploadBytes();
-
         return [
-            'max_file_bytes' => $maxFileBytes,
-            'max_file_size_label' => $this->formatBytes($maxFileBytes),
+            'max_file_bytes' => null,
+            'max_file_size_label' => null,
+            'direct_upload' => true,
         ];
-    }
-
-    private function maxFileUploadBytes(): int
-    {
-        $limits = [
-            StoreDicomUploadFileRequest::MAX_FILE_KILOBYTES * 1024,
-            $this->bytesFromPhpIniValue(ini_get('upload_max_filesize')),
-            $this->bytesFromPhpIniValue(ini_get('post_max_size')),
-        ];
-
-        $positiveLimits = [];
-        foreach ($limits as $limit) {
-            if ($limit !== null && $limit > 0) {
-                $positiveLimits[] = $limit;
-            }
-        }
-
-        return min($positiveLimits);
-    }
-
-    private function bytesFromPhpIniValue(string|false $value): ?int
-    {
-        if ($value === false) {
-            return null;
-        }
-
-        $trimmed = trim($value);
-        if ($trimmed === '') {
-            return null;
-        }
-
-        $number = (float) $trimmed;
-        if ($number <= 0) {
-            return null;
-        }
-
-        $unit = strtolower($trimmed[strlen($trimmed) - 1]);
-        $multiplier = match ($unit) {
-            'g' => 1024 * 1024 * 1024,
-            'm' => 1024 * 1024,
-            'k' => 1024,
-            default => 1,
-        };
-
-        return (int) floor($number * $multiplier);
-    }
-
-    private function formatBytes(int $bytes): string
-    {
-        if ($bytes < 1024) {
-            return "{$bytes} B";
-        }
-
-        if ($bytes < 1024 * 1024) {
-            return round($bytes / 1024, 1).' KB';
-        }
-
-        if ($bytes < 1024 * 1024 * 1024) {
-            return round($bytes / (1024 * 1024), 1).' MB';
-        }
-
-        return round($bytes / (1024 * 1024 * 1024), 2).' GB';
     }
 }

@@ -123,9 +123,10 @@ class DicomUploadProcessor
 
             $manifest = $locked->manifest_json ?? [];
             $skippedFiles = $locked->skipped_files_json ?? [];
+            $reservedPaths = $this->stringList($manifest['reserved_paths'] ?? []);
 
             $sanitized = $this->sanitizeRelativePath($relativePath, $file->getClientOriginalName(), $locked->total_files);
-            $unique = $this->uniqueAgainstManifest($sanitized, $manifest['stored_paths'] ?? [], $skippedFiles);
+            $unique = $this->uniqueAgainstManifest($sanitized, array_merge($this->stringList($manifest['stored_paths'] ?? []), $reservedPaths), $skippedFiles);
             $fileSize = (int) $file->getSize();
 
             $result = $this->classifyAndStore($patient, $locked, $file, $unique);
@@ -148,6 +149,107 @@ class DicomUploadProcessor
                 'stored' => $result['stored'],
                 'skipped_reason' => $result['skipped_reason'],
                 'relative_path' => $unique,
+                'study_id' => $result['study_id'],
+            ];
+        });
+    }
+
+    /**
+     * Reserve an object key and return a short-lived direct-to-R2 upload URL.
+     *
+     * The reservation keeps concurrent direct-upload requests from generating
+     * the same relative path before either object has been registered.
+     *
+     * @return array{upload_url: string, headers: array<string, string>, r2_key: string, relative_path: string, expires_in: int}
+     */
+    public function requestDirectUpload(PhrDicomUpload $upload, ?string $filename, ?string $relativePath, ?string $contentType): array
+    {
+        return DB::transaction(function () use ($upload, $filename, $relativePath, $contentType): array {
+            $locked = PhrDicomUpload::query()->lockForUpdate()->findOrFail($upload->id);
+            if ($locked->status !== PhrDicomUpload::STATUS_PENDING) {
+                throw new HttpException(409, 'Upload session is no longer accepting files.');
+            }
+
+            $manifest = $locked->manifest_json ?? [];
+            $skippedFiles = $locked->skipped_files_json ?? [];
+            $reservedPaths = $this->stringList($manifest['reserved_paths'] ?? []);
+            $sanitized = $this->sanitizeRelativePath($relativePath, $filename, $locked->total_files + count($reservedPaths));
+            $unique = $this->uniqueAgainstManifest($sanitized, array_merge($this->stringList($manifest['stored_paths'] ?? []), $reservedPaths), $skippedFiles);
+            $storageKey = $this->storageKey($locked->r2_prefix, $unique);
+
+            $manifest['reserved_paths'][] = $unique;
+            $locked->update(['manifest_json' => $this->uniqueManifest($manifest)]);
+
+            $signedUpload = $this->signedUploadUrl($storageKey, $this->contentType($contentType));
+
+            return [
+                'upload_url' => $signedUpload['url'],
+                'headers' => $signedUpload['headers'],
+                'r2_key' => $storageKey,
+                'relative_path' => $unique,
+                'expires_in' => 900,
+            ];
+        });
+    }
+
+    /**
+     * Register an object that was already uploaded directly to R2.
+     *
+     * @return array{stored: bool, skipped_reason: string|null, relative_path: string, study_id: int|null}
+     */
+    public function processDirectUploadedFile(PhrDicomUpload $upload, string $storageKey, string $relativePath, string $originalFilename, ?string $mimeType, int $fileSizeBytes): array
+    {
+        $patient = $upload->patient()->firstOrFail();
+
+        return DB::transaction(function () use ($upload, $patient, $storageKey, $relativePath, $originalFilename, $mimeType, $fileSizeBytes): array {
+            $locked = PhrDicomUpload::query()->lockForUpdate()->findOrFail($upload->id);
+            if ($locked->status !== PhrDicomUpload::STATUS_PENDING) {
+                throw new HttpException(409, 'Upload session is no longer accepting files.');
+            }
+
+            $manifest = $locked->manifest_json ?? [];
+            $skippedFiles = $locked->skipped_files_json ?? [];
+            $reservedPaths = $this->stringList($manifest['reserved_paths'] ?? []);
+            $normalizedRelativePath = $this->sanitizePathParts($relativePath);
+            if ($normalizedRelativePath === '' || $normalizedRelativePath !== $relativePath) {
+                throw new HttpException(422, 'Invalid DICOM upload path.');
+            }
+
+            if (! in_array($relativePath, $reservedPaths, true)) {
+                throw new HttpException(409, 'Direct upload file has already been completed or was not reserved.');
+            }
+
+            $expectedStorageKey = $this->storageKey($locked->r2_prefix, $relativePath);
+            if (! hash_equals($expectedStorageKey, $storageKey)) {
+                throw new HttpException(422, 'Invalid DICOM object reference.');
+            }
+
+            $actualSize = $this->storageObjectSize($storageKey);
+            if ($actualSize !== $fileSizeBytes) {
+                throw new HttpException(422, 'Uploaded DICOM object size did not match the selected file.');
+            }
+
+            $result = $this->classifyStoredObject($patient, $locked, $storageKey, $relativePath, $originalFilename, $this->contentType($mimeType), $actualSize);
+            $manifest = $this->removeReservedPath($manifest, $relativePath);
+            $manifest = $this->applyManifest($manifest, $result, $relativePath);
+            if ($result['skipped_reason'] !== null) {
+                $skippedFiles[] = $this->skipEntry($relativePath, $result['skipped_reason']);
+            }
+
+            $locked->update([
+                'total_files' => $locked->total_files + 1,
+                'stored_files' => $locked->stored_files + ($result['stored'] ? 1 : 0),
+                'skipped_files' => $locked->skipped_files + ($result['stored'] ? 0 : 1),
+                'total_bytes' => $locked->total_bytes + $actualSize,
+                'stored_bytes' => $locked->stored_bytes + ($result['stored'] ? $actualSize : 0),
+                'manifest_json' => $this->uniqueManifest($manifest),
+                'skipped_files_json' => $skippedFiles,
+            ]);
+
+            return [
+                'stored' => $result['stored'],
+                'skipped_reason' => $result['skipped_reason'],
+                'relative_path' => $relativePath,
                 'study_id' => $result['study_id'],
             ];
         });
@@ -295,14 +397,78 @@ class DicomUploadProcessor
             return $this->skipResult('duplicate_sop_instance');
         }
 
+        $storageKey = $this->storageKey($upload->r2_prefix, $relativePath);
+        $this->storeFile($realPath, $storageKey);
+
         $sha256 = hash_file('sha256', $realPath);
         if ($sha256 === false) {
             throw new RuntimeException("Unable to hash DICOM file [{$relativePath}].");
         }
 
-        $storageKey = $this->storageKey($upload->r2_prefix, $relativePath);
-        $this->storeFile($realPath, $storageKey);
+        return $this->persistStoredDicomObject(
+            $patient,
+            $upload,
+            $storageKey,
+            $relativePath,
+            basename($relativePath),
+            $file->getClientMimeType() ?: 'application/dicom',
+            (int) $file->getSize(),
+            $sha256,
+            $parsed,
+        );
+    }
 
+    /**
+     * Classify an object that has already been uploaded to the DICOM disk.
+     *
+     * @return array{stored: bool, skipped_reason: string|null, study_id: int|null, file_kind: string|null, normalized: array<string, mixed>|null}
+     */
+    private function classifyStoredObject(PhrPatient $patient, PhrDicomUpload $upload, string $storageKey, string $relativePath, string $originalFilename, string $mimeType, int $fileSizeBytes): array
+    {
+        if ($this->isAuxiliaryFile($relativePath)) {
+            $this->deleteStorageObject($storageKey);
+
+            return $this->skipResult('auxiliary_file');
+        }
+
+        $parsed = $this->metadataParser->parseBytes($this->readObjectPrefix($storageKey));
+        if (! $parsed['is_dicom']) {
+            $this->deleteStorageObject($storageKey);
+
+            return $this->skipResult('not_dicom');
+        }
+
+        if ($parsed['is_image_instance'] && $this->hasImageInstance($patient->id, $parsed['normalized'])) {
+            $this->deleteStorageObject($storageKey);
+
+            return $this->skipResult('duplicate_sop_instance');
+        }
+
+        return $this->persistStoredDicomObject(
+            $patient,
+            $upload,
+            $storageKey,
+            $relativePath,
+            $originalFilename,
+            $mimeType,
+            $fileSizeBytes,
+            $this->hashStorageObject($storageKey),
+            $parsed,
+        );
+    }
+
+    /**
+     * @param  array{
+     *     is_dicom: bool,
+     *     has_preamble: bool,
+     *     metadata: array<string, mixed>,
+     *     normalized: array<string, mixed>,
+     *     is_image_instance: bool
+     * }  $parsed
+     * @return array{stored: bool, skipped_reason: string|null, study_id: int|null, file_kind: string|null, normalized: array<string, mixed>|null}
+     */
+    private function persistStoredDicomObject(PhrPatient $patient, PhrDicomUpload $upload, string $storageKey, string $relativePath, string $originalFilename, string $mimeType, int $fileSizeBytes, string $sha256, array $parsed): array
+    {
         $fileKind = $this->isDicomdirPath($relativePath) ? PhrDicomFile::KIND_DICOMDIR : PhrDicomFile::KIND_DICOM;
         $dicomFile = PhrDicomFile::create([
             'patient_id' => $patient->id,
@@ -311,9 +477,9 @@ class DicomUploadProcessor
             'r2_key' => $storageKey,
             'original_relative_path' => $relativePath,
             'original_path_hash' => hash('sha256', $relativePath),
-            'original_filename' => basename($relativePath),
-            'mime_type' => $file->getClientMimeType() ?: 'application/dicom',
-            'file_size_bytes' => (int) $file->getSize(),
+            'original_filename' => $originalFilename,
+            'mime_type' => $mimeType,
+            'file_size_bytes' => $fileSizeBytes,
             'sha256' => $sha256,
             'metadata_json' => $parsed['metadata'],
         ]);
@@ -503,6 +669,123 @@ class DicomUploadProcessor
     }
 
     /**
+     * @return array{url: string, headers: array<string, string>}
+     */
+    private function signedUploadUrl(string $storageKey, string $contentType): array
+    {
+        $bucket = config('filesystems.disks.'.self::DISK.'.bucket');
+        if (! is_string($bucket) || trim($bucket) === '') {
+            throw new RuntimeException('PHR DICOM R2 bucket is not configured.');
+        }
+
+        $result = Storage::disk(self::DISK)->temporaryUploadUrl(
+            $storageKey,
+            now()->addMinutes(15),
+            [
+                'Bucket' => $bucket,
+                'ContentType' => $contentType,
+            ],
+        );
+
+        if (! isset($result['url']) || ! is_string($result['url'])) {
+            throw new RuntimeException('Unable to generate a signed DICOM upload URL.');
+        }
+
+        return [
+            'url' => $result['url'],
+            'headers' => $this->stringMap($result['headers'] ?? []),
+        ];
+    }
+
+    private function storageObjectSize(string $storageKey): int
+    {
+        try {
+            $disk = Storage::disk(self::DISK);
+            if (! $disk->exists($storageKey)) {
+                throw new HttpException(422, 'Uploaded DICOM object was not found in storage.');
+            }
+
+            return $disk->size($storageKey);
+        } catch (HttpException $error) {
+            throw $error;
+        } catch (Throwable $error) {
+            Log::warning('phr.dicom.storage_size_failed', [
+                'storage_key' => $storageKey,
+                'error' => $error->getMessage(),
+            ]);
+
+            throw new HttpException(422, 'Uploaded DICOM object could not be read from storage.');
+        }
+    }
+
+    private function readObjectPrefix(string $storageKey): string
+    {
+        $stream = Storage::disk(self::DISK)->readStream($storageKey);
+        if (! is_resource($stream)) {
+            throw new RuntimeException("Unable to open DICOM object [{$storageKey}].");
+        }
+
+        try {
+            $data = '';
+            while (! feof($stream) && strlen($data) < DicomMetadataParser::MAX_PARSE_BYTES) {
+                $remaining = DicomMetadataParser::MAX_PARSE_BYTES - strlen($data);
+                $chunk = fread($stream, min(8192, $remaining));
+                if ($chunk === false) {
+                    throw new RuntimeException("Unable to read DICOM object [{$storageKey}].");
+                }
+
+                if ($chunk === '') {
+                    break;
+                }
+
+                $data .= $chunk;
+            }
+
+            return $data;
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    private function hashStorageObject(string $storageKey): string
+    {
+        $stream = Storage::disk(self::DISK)->readStream($storageKey);
+        if (! is_resource($stream)) {
+            throw new RuntimeException("Unable to hash DICOM object [{$storageKey}].");
+        }
+
+        $context = hash_init('sha256');
+        try {
+            while (! feof($stream)) {
+                $chunk = fread($stream, 1024 * 1024);
+                if ($chunk === false) {
+                    throw new RuntimeException("Unable to hash DICOM object [{$storageKey}].");
+                }
+
+                if ($chunk !== '') {
+                    hash_update($context, $chunk);
+                }
+            }
+        } finally {
+            fclose($stream);
+        }
+
+        return hash_final($context);
+    }
+
+    private function deleteStorageObject(string $storageKey): void
+    {
+        try {
+            Storage::disk(self::DISK)->delete($storageKey);
+        } catch (Throwable $error) {
+            Log::warning('phr.dicom.storage_delete_failed', [
+                'storage_key' => $storageKey,
+                'error' => $error->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $normalized
      */
     private function hasImageInstance(int $patientId, array $normalized): bool
@@ -583,6 +866,20 @@ class DicomUploadProcessor
     }
 
     /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function removeReservedPath(array $manifest, string $relativePath): array
+    {
+        $manifest['reserved_paths'] = array_values(array_filter(
+            $this->stringList($manifest['reserved_paths'] ?? []),
+            static fn (string $reservedPath): bool => $reservedPath !== $relativePath,
+        ));
+
+        return $manifest;
+    }
+
+    /**
      * @return array{path: string, reason: string}
      */
     private function skipEntry(string $path, string $reason): array
@@ -599,11 +896,66 @@ class DicomUploadProcessor
      */
     private function uniqueManifest(array $manifest): array
     {
-        foreach (['stored_paths', 'dicomdir_paths', 'study_uids', 'series_uids', 'instance_uids'] as $key) {
+        foreach (['stored_paths', 'dicomdir_paths', 'study_uids', 'series_uids', 'instance_uids', 'reserved_paths'] as $key) {
             $manifest[$key] = array_values(array_unique(array_filter($manifest[$key] ?? [])));
         }
 
         return $manifest;
+    }
+
+    private function contentType(?string $contentType): string
+    {
+        $trimmed = trim((string) $contentType);
+
+        return $trimmed === '' ? 'application/dicom' : $trimmed;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stringList(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter($value, static fn (mixed $item): bool => is_string($item) && trim($item) !== ''));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function stringMap(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($value as $key => $item) {
+            if (is_string($key) && is_string($item)) {
+                $this->addSignedUploadHeader($map, $key, $item);
+            } elseif (is_string($key) && is_array($item)) {
+                $first = reset($item);
+                if (is_string($first)) {
+                    $this->addSignedUploadHeader($map, $key, $first);
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function addSignedUploadHeader(array &$headers, string $key, string $value): void
+    {
+        if (strtolower($key) === 'host') {
+            return;
+        }
+
+        $headers[$key] = $value;
     }
 
     private function mergeModalities(?string $existingModalities, ?string $modality): ?string
