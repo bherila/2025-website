@@ -13,6 +13,30 @@ export const CAR_COLORS = {
 
 export type CarColor = keyof typeof CAR_COLORS
 
+export const CAR_PATTERN_VALUES = [
+  'dot',
+  'stripe',
+  'triangle',
+  'star',
+  'diamond',
+  'chevron',
+  'ring',
+  'crosshatch',
+] as const
+
+export type CarPattern = typeof CAR_PATTERN_VALUES[number]
+
+export const CAR_PATTERNS = {
+  red: 'dot',
+  blue: 'stripe',
+  green: 'triangle',
+  yellow: 'star',
+  purple: 'diamond',
+  orange: 'chevron',
+  cyan: 'ring',
+  brown: 'crosshatch',
+} as const satisfies Record<CarColor, CarPattern>
+
 export type Direction = 'up' | 'right' | 'down' | 'left'
 
 export type CarStatus = 'field' | 'hidden' | 'parked' | 'departed'

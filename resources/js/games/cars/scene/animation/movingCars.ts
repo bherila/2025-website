@@ -14,12 +14,16 @@ export function animateMovingCars(cars: MovingCarRenderItem[], elapsed: number):
 
     const progress = Math.min(1, Math.max(0, (elapsed - car.startedAt) / car.duration))
     const eased = 1 - Math.pow(1 - progress, 3)
-    const routed = positionOnRoute(car, eased)
-    car.mesh.position.copy(routed.position)
-    car.mesh.position.y = routed.position.y + Math.sin(progress * Math.PI) * 0.18
-    car.mesh.rotation.y = routed.rotationY
+    if (car.skipRouteMotion !== true) {
+      const routed = positionOnRoute(car, eased)
+      car.mesh.position.copy(routed.position)
+      car.mesh.position.y = routed.position.y + Math.sin(progress * Math.PI) * 0.18
+      car.mesh.rotation.y = routed.rotationY
+    }
+    car.onUpdate?.(car, progress, eased)
 
     if (progress >= 1) {
+      car.onComplete?.(car)
       if (car.removeOnComplete) {
         car.mesh.parent?.remove(car.mesh)
         disposeObject(car.mesh)

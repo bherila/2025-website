@@ -1,11 +1,20 @@
 import * as THREE from 'three'
 
-import { type Car,CAR_COLORS } from '../../gameEngine'
+import { type Car, CAR_COLORS, CAR_PATTERNS, type CarPattern } from '../../gameTypes'
 import { CELL_SIZE, PARKED_ROTATION } from '../sceneConstants'
 import { rotationForDirection } from '../sceneGeometry'
 import { lighten, roundedRect } from '../threeUtils'
 
-export function createCarMesh(car: Car, position: THREE.Vector3, parked: boolean): THREE.Group {
+export interface CarVisualOptions {
+  colorblindMode?: boolean
+}
+
+export function createCarMesh(
+  car: Car,
+  position: THREE.Vector3,
+  parked: boolean,
+  options: CarVisualOptions = {},
+): THREE.Group {
   const group = new THREE.Group()
   const color = CAR_COLORS[car.color].hex
   const carWidth = 0.54
@@ -53,7 +62,7 @@ export function createCarMesh(car: Car, position: THREE.Vector3, parked: boolean
     }
   }
 
-  const decal = createCarDecal(car, carWidth, carLength)
+  const decal = createCarDecal(car, carWidth, carLength, options)
   group.add(decal)
 
   group.position.copy(position)
@@ -66,8 +75,13 @@ export function createCarMesh(car: Car, position: THREE.Vector3, parked: boolean
   return group
 }
 
-export function createCarDecal(car: Car, carWidth: number, carLength: number): THREE.Mesh {
-  const texture = createCarDecalTexture(car)
+export function createCarDecal(
+  car: Car,
+  carWidth: number,
+  carLength: number,
+  options: CarVisualOptions = {},
+): THREE.Mesh {
+  const texture = createCarDecalTexture(car, options)
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
@@ -84,11 +98,14 @@ export function createCarDecal(car: Car, carWidth: number, carLength: number): T
   return decal
 }
 
-const decalCanvasCache = new Map<number, HTMLCanvasElement>()
+const decalCanvasCache = new Map<string, HTMLCanvasElement>()
 
-export function createCarDecalTexture(car: Car): THREE.CanvasTexture {
+export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}): THREE.CanvasTexture {
   const remaining = Math.max(0, car.capacity - car.boarded)
-  let canvas = decalCanvasCache.get(remaining)
+  const colorblindMode = options.colorblindMode === true
+  const pattern = colorblindMode ? CAR_PATTERNS[car.color] : null
+  const cacheKey = `${remaining}|${colorblindMode ? car.color : 'off'}`
+  let canvas = decalCanvasCache.get(cacheKey)
   if (!canvas) {
     canvas = document.createElement('canvas')
     canvas.width = 256
@@ -122,14 +139,143 @@ export function createCarDecalTexture(car: Car): THREE.CanvasTexture {
       context.lineWidth = 14
       context.strokeText(String(remaining), 128, 188)
       context.fillText(String(remaining), 128, 188)
+
+      if (pattern) {
+        drawCarPatternCue(context, pattern, 28, 30, 48)
+      }
     }
-    decalCanvasCache.set(remaining, canvas)
+    decalCanvasCache.set(cacheKey, canvas)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
 
   return texture
+}
+
+export function drawCarPatternCue(
+  context: CanvasRenderingContext2D,
+  pattern: CarPattern,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const stroke = 'rgba(15, 23, 42, 0.86)'
+  const fill = '#ffffff'
+  const accent = 'rgba(15, 23, 42, 0.2)'
+  const centerX = x + size / 2
+  const centerY = y + size / 2
+  const unit = size / 8
+
+  context.save()
+  context.fillStyle = 'rgba(255, 255, 255, 0.96)'
+  roundedRect(context, x, y, size, size, size * 0.22)
+  context.fill()
+  context.strokeStyle = stroke
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.lineWidth = Math.max(3, size * 0.075)
+
+  switch (pattern) {
+    case 'dot':
+      context.fillStyle = stroke
+      for (const offsetX of [-1, 1]) {
+        for (const offsetY of [-1, 1]) {
+          context.beginPath()
+          context.arc(centerX + offsetX * unit * 1.35, centerY + offsetY * unit * 1.35, unit * 0.85, 0, Math.PI * 2)
+          context.fill()
+        }
+      }
+      break
+    case 'stripe':
+      for (let index = -2; index <= 2; index += 1) {
+        context.beginPath()
+        context.moveTo(x + unit * 1.1, centerY + index * unit * 1.15)
+        context.lineTo(x + size - unit * 1.1, centerY + index * unit * 1.15)
+        context.stroke()
+      }
+      break
+    case 'triangle':
+      context.fillStyle = accent
+      context.beginPath()
+      context.moveTo(centerX, y + unit * 1.15)
+      context.lineTo(x + size - unit * 1.25, y + size - unit * 1.2)
+      context.lineTo(x + unit * 1.25, y + size - unit * 1.2)
+      context.closePath()
+      context.fill()
+      context.stroke()
+      break
+    case 'star':
+      drawStar(context, centerX, centerY, unit * 3.05, unit * 1.35)
+      context.fillStyle = accent
+      context.fill()
+      context.stroke()
+      break
+    case 'diamond':
+      context.fillStyle = accent
+      context.beginPath()
+      context.moveTo(centerX, y + unit)
+      context.lineTo(x + size - unit, centerY)
+      context.lineTo(centerX, y + size - unit)
+      context.lineTo(x + unit, centerY)
+      context.closePath()
+      context.fill()
+      context.stroke()
+      break
+    case 'chevron':
+      for (const inset of [unit * 1.55, unit * 3]) {
+        context.beginPath()
+        context.moveTo(x + unit * 1.3, y + inset)
+        context.lineTo(centerX, y + inset + unit * 1.45)
+        context.lineTo(x + size - unit * 1.3, y + inset)
+        context.stroke()
+      }
+      break
+    case 'ring':
+      context.beginPath()
+      context.arc(centerX, centerY, unit * 2.45, 0, Math.PI * 2)
+      context.stroke()
+      context.beginPath()
+      context.arc(centerX, centerY, unit * 0.85, 0, Math.PI * 2)
+      context.stroke()
+      break
+    case 'crosshatch':
+      for (let index = -1; index <= 1; index += 1) {
+        context.beginPath()
+        context.moveTo(x + unit * (1.1 + index * 1.6), y + unit * 1.1)
+        context.lineTo(x + unit * (4.9 + index * 1.6), y + size - unit * 1.1)
+        context.stroke()
+        context.beginPath()
+        context.moveTo(x + size - unit * (1.1 + index * 1.6), y + unit * 1.1)
+        context.lineTo(x + size - unit * (4.9 + index * 1.6), y + size - unit * 1.1)
+        context.stroke()
+      }
+      break
+  }
+
+  context.restore()
+}
+
+function drawStar(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  outerRadius: number,
+  innerRadius: number,
+): void {
+  context.beginPath()
+  for (let point = 0; point < 10; point += 1) {
+    const radius = point % 2 === 0 ? outerRadius : innerRadius
+    const angle = -Math.PI / 2 + (point * Math.PI) / 5
+    const x = centerX + Math.cos(angle) * radius
+    const y = centerY + Math.sin(angle) * radius
+    if (point === 0) {
+      context.moveTo(x, y)
+    } else {
+      context.lineTo(x, y)
+    }
+  }
+  context.closePath()
 }
 
 const roundedBoxCache = new Map<string, THREE.BufferGeometry>()

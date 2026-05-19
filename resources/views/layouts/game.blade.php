@@ -8,7 +8,7 @@
     <title>@yield('title', 'Games | ' . config('app.name', 'Ben Herila'))</title>
     <meta name="color-scheme" content="dark light">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" integrity="sha512-c42qTSw/wPZ3/5LBzD+Bw5f7bSF2oxou6wEb+I/lqeaKV5FDIfMvvRp772y4jcJLKuGUOpbJMdg/BTl50fJYAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <script id="app-initial-data" type="application/json">
+    <script id="app-initial-data" type="application/json" @cspNonce>
       {!! json_encode([
         'appName' => config('app.name', 'Ben Herila'),
         'appUrl' => config('app.url', ''),
@@ -25,7 +25,7 @@
       ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
     </script>
     @stack('data-head')
-    <script>
+    <script @cspNonce>
       (function() {
         try {
           var theme = localStorage.getItem('theme') || 'system';
@@ -37,7 +37,7 @@
     </script>
     @vite(['resources/css/app.css', 'resources/js/back-to-top.tsx'])
     @stack('head')
-    <script>(_=>{let a})()</script>
+    <script @cspNonce>(_=>{let a})()</script>
   </head>
   <body class="game-shell min-h-screen flex flex-col">
     <main class="flex-1">

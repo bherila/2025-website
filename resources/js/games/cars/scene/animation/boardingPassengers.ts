@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import { CAR_COLORS, type GameState, type Passenger } from '../../gameEngine'
+import { CAR_COLORS, CAR_PATTERNS, type GameState, type Passenger } from '../../gameEngine'
 import { createPassengerMesh } from '../builders/passengerMesh'
 import { parkingSlotPosition, queueLayoutForState, queuePosition } from '../sceneGeometry'
 import type { BoardingPassengerRenderItem } from '../sceneTypes'
@@ -36,6 +36,7 @@ export function startBoardingPassengerAnimations(
   passengerPhase: number,
   effects: THREE.Group,
   boardingPassengers: BoardingPassengerRenderItem[],
+  colorblindMode = false,
 ): Map<string, number> {
   const currentPassengerIds = new Set(state.passengerQueue.map((passenger) => passenger.id))
   const removedPassengers = previousState.passengerQueue
@@ -50,7 +51,10 @@ export function startBoardingPassengerAnimations(
     const offset = passengerOffsets.get(assignment.passenger.id) ?? 0
     const from = queuePosition(passengerPhase + offset, queueLayout)
     from.y = 0.12
-    const mesh = createPassengerMesh(CAR_COLORS[assignment.passenger.color].hex)
+    const mesh = createPassengerMesh(CAR_COLORS[assignment.passenger.color].hex, {
+      colorblindMode,
+      pattern: CAR_PATTERNS[assignment.passenger.color],
+    })
     mesh.position.copy(from)
     effects.add(mesh)
     const duration = Math.max(0.58, Math.min(1.08, from.distanceTo(assignment.to) * 0.22))

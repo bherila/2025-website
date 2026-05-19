@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 
 import { CarsGame } from '../CarsGame'
 import { GAME_PROGRESS_STORAGE_KEY } from '../gameEngine'
+import { CARS_TUTORIAL_STORAGE_KEY } from '../TutorialOverlay'
 
 jest.mock('../CarsScene', () => ({
   CarsScene: ({ vipSelectionActive }: { vipSelectionActive: boolean }) => (
@@ -12,6 +13,7 @@ jest.mock('../CarsScene', () => ({
 describe('CarsGame', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    window.localStorage.setItem(CARS_TUTORIAL_STORAGE_KEY, '1')
   })
 
   it('mounts the game controls and Three.js scene shell', () => {
@@ -22,6 +24,7 @@ describe('CarsGame', () => {
     expect(screen.getByRole('button', { name: 'Shuffle' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Fill' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Spot' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tutorial' })).toBeInTheDocument()
     expect(screen.getByTestId('cars-scene')).toHaveAttribute('data-vip-selection', 'inactive')
   })
 

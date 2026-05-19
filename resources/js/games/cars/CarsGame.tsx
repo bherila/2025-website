@@ -1,7 +1,6 @@
-import { ArrowRight, Trophy } from 'lucide-react'
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
 
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 import { CarsScene } from './CarsScene'
 import { GameControls, type GameStats } from './GameControls'
@@ -11,26 +10,44 @@ import {
   applyShufflePowerUp,
   applyVipPowerUp,
   canMoveCar,
+  clearLevelSnapshot,
   type GameState,
-  labelForPowerUp,
+  loadLevelSnapshot,
   loadProgress,
   moveCarToParking,
   openParkingSlot,
   processBoardingAtParkingGate,
   progressFromState,
   restartLevel,
+  saveLevelSnapshot,
   saveProgress,
   startGameFromProgress,
 } from './gameEngine'
+import { LevelCompleteOverlay } from './LevelCompleteOverlay'
+import { shouldShowCarsTutorial, TutorialOverlay } from './TutorialOverlay'
+
+const COLORBLIND_MODE_STORAGE_KEY = 'bwh.cars-game.colorblind.v1'
 
 export function CarsGame(): ReactElement {
-  const [state, setState] = useState<GameState>(() => startGameFromProgress(loadProgress()))
+  const [state, setState] = useState<GameState>(() => {
+    const progress = loadProgress()
+
+    return loadLevelSnapshot(undefined, progress) ?? startGameFromProgress(progress)
+  })
   const [vipSelectionActive, setVipSelectionActive] = useState(false)
   const [blockedCarAttempt, setBlockedCarAttempt] = useState<{ carId: string, nonce: number } | null>(null)
   const [statsExpanded, setStatsExpanded] = useState(false)
+  const [tutorialOpen, setTutorialOpen] = useState(() => shouldShowCarsTutorial())
+  const [colorblindMode, setColorblindMode] = useState(() => loadColorblindMode())
 
   useEffect(() => {
     saveProgress(progressFromState(state))
+    if (state.completedLevel) {
+      clearLevelSnapshot()
+      return
+    }
+
+    saveLevelSnapshot(state)
   }, [state])
 
   const stats = useMemo<GameStats>(() => {
@@ -78,66 +95,115 @@ export function CarsGame(): ReactElement {
     setState((current) => openParkingSlot(current))
   }, [])
 
+  const handleColorblindModeChange = useCallback((enabled: boolean): void => {
+    setColorblindMode(enabled)
+    saveColorblindMode(enabled)
+  }, [])
+
   const handlePassengerGate = useCallback((passengerId: string): void => {
     setState((current) => processBoardingAtParkingGate(current, passengerId))
   }, [])
 
   const handleNextLevel = useCallback((): void => {
     setVipSelectionActive(false)
+    clearLevelSnapshot()
     setState((current) => advanceToNextLevel(current))
   }, [])
 
   const handleReset = useCallback((): void => {
     setVipSelectionActive(false)
+    clearLevelSnapshot()
     setState((current) => restartLevel(current))
   }, [])
 
   return (
-    <main className="h-screen overflow-hidden bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+    <div className="h-screen overflow-hidden bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <div className="mx-auto flex h-full max-w-7xl flex-col gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3 lg:px-6">
         <GameControls
+          colorblindMode={colorblindMode}
           stats={stats}
           statsExpanded={statsExpanded}
           state={state}
           vipSelectionActive={vipSelectionActive}
+          onColorblindModeChange={handleColorblindModeChange}
           onFill={handleFill}
           onOpenSlot={handleOpenSlot}
           onReset={handleReset}
           onShuffle={handleShuffle}
           onStatsExpandedChange={setStatsExpanded}
+          onTutorialOpen={() => setTutorialOpen(true)}
           onVipSelectionActiveChange={setVipSelectionActive}
         />
 
         <section className="relative min-h-0 flex-1">
           <CarsScene
             blockedCarAttempt={blockedCarAttempt}
+            colorblindMode={colorblindMode}
             state={state}
             vipSelectionActive={vipSelectionActive}
             onCarClick={handleCarClick}
             onPassengerGate={handlePassengerGate}
           />
 
-          <div className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg border border-white/70 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-800 shadow-lg shadow-slate-950/10 sm:left-3 sm:top-3 sm:max-w-[calc(100%-1.5rem)] sm:text-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100">
+          <style>{`
+            @keyframes cars-blocked-toast-pulse {
+              0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+                transform: scale(1);
+              }
+
+              45% {
+                box-shadow: 0 0 0 0.45rem rgba(239, 68, 68, 0.18);
+                transform: scale(1.015);
+              }
+
+              100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+                transform: scale(1);
+              }
+            }
+
+            .cars-blocked-toast-pulse {
+              animation: cars-blocked-toast-pulse 420ms ease-out both;
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+              .cars-blocked-toast-pulse {
+                animation: none;
+              }
+            }
+          `}</style>
+          <div
+            className={cn(
+              'pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg border border-white/70 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-800 shadow-lg shadow-slate-950/10 sm:left-3 sm:top-3 sm:max-w-[calc(100%-1.5rem)] sm:text-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100',
+              blockedCarAttempt && 'cars-blocked-toast-pulse border-red-300 dark:border-red-700',
+            )}
+            key={blockedCarAttempt?.nonce ?? 'cars-message'}
+          >
             {vipSelectionActive ? 'VIP selection active' : state.lastMessage}
           </div>
 
-          {state.completedLevel && (
-            <div className="absolute inset-x-4 top-20 mx-auto max-w-md rounded-lg border border-emerald-200 bg-white/95 p-5 text-center shadow-2xl shadow-slate-950/20 dark:border-emerald-900 dark:bg-slate-950/95">
-              <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                <Trophy className="size-6" />
-              </div>
-              <div className="text-xl font-bold">Level {state.completedLevel.level} Complete</div>
-              <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                {state.completedLevel.score.toLocaleString()} points · Earned {labelForPowerUp(state.completedLevel.awardedPowerUp)}
-              </div>
-              <Button className="mt-4 h-11 w-full" type="button" onClick={handleNextLevel}>
-                Next Level
-                <ArrowRight className="size-4" />
-              </Button>
-            </div>
-          )}
+          <LevelCompleteOverlay state={state} onNextLevel={handleNextLevel} onRestart={handleReset} />
         </section>
       </div>
-    </main>
+
+      <TutorialOverlay open={tutorialOpen} onOpenChange={setTutorialOpen} />
+    </div>
   )
+}
+
+function loadColorblindMode(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.localStorage.getItem(COLORBLIND_MODE_STORAGE_KEY) === '1'
+}
+
+function saveColorblindMode(enabled: boolean): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(COLORBLIND_MODE_STORAGE_KEY, enabled ? '1' : '0')
 }

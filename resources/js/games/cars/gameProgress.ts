@@ -1,9 +1,28 @@
 import {
+  type Car,
+  CAR_COLORS,
+  type CarColor,
+  type CarStatus,
+  type Direction,
+  DIRECTIONS,
+  type FeederSide,
   GAME_PROGRESS_STORAGE_KEY,
   type GameState,
+  type GridPosition,
+  type ParkingSlot,
+  type ParkingSlotKind,
+  type Passenger,
   type PowerUpInventory,
   type SavedGameProgress,
+  type Tunnel,
 } from './gameTypes'
+
+export const LEVEL_SNAPSHOT_STORAGE_KEY = 'bwh.cars-game.snapshot.v1'
+
+interface SavedLevelSnapshot {
+  version: 1
+  state: GameState
+}
 
 export function createInitialPowerUps(): PowerUpInventory {
   return {
@@ -60,6 +79,52 @@ export function saveProgress(progress: SavedGameProgress, storage: Storage | nul
   storage.setItem(GAME_PROGRESS_STORAGE_KEY, JSON.stringify(progress))
 }
 
+export function saveLevelSnapshot(state: GameState, storage: Storage | null = safeLocalStorage()): void {
+  if (!storage || state.completedLevel) {
+    return
+  }
+
+  const snapshot: SavedLevelSnapshot = {
+    version: 1,
+    state: cloneSerializableState(state),
+  }
+  storage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
+}
+
+export function loadLevelSnapshot(
+  storage: Storage | null = safeLocalStorage(),
+  progress: SavedGameProgress = loadProgress(storage),
+): GameState | null {
+  if (!storage) {
+    return null
+  }
+
+  try {
+    const raw = storage.getItem(LEVEL_SNAPSHOT_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as unknown
+    if (!isRecord(parsed) || parsed.version !== 1) {
+      return null
+    }
+
+    const state = parseGameState(parsed.state)
+    if (!state || state.level !== progress.level) {
+      return null
+    }
+
+    return state
+  } catch {
+    return null
+  }
+}
+
+export function clearLevelSnapshot(storage: Storage | null = safeLocalStorage()): void {
+  storage?.removeItem(LEVEL_SNAPSHOT_STORAGE_KEY)
+}
+
 export function progressFromState(state: GameState): SavedGameProgress {
   return {
     version: 1,
@@ -90,4 +155,291 @@ export function sanitizePowerUps(powerUps: unknown): PowerUpInventory {
 
 export function safeProgressNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function cloneSerializableState(state: GameState): GameState {
+  return {
+    ...state,
+    cars: state.cars.map((car) => ({
+      ...car,
+      position: { ...car.position },
+    })),
+    tunnels: state.tunnels.map((tunnel) => ({
+      ...tunnel,
+      position: { ...tunnel.position },
+      garagePosition: { ...tunnel.garagePosition },
+      carIds: [...tunnel.carIds],
+    })),
+    passengerQueue: state.passengerQueue.map((passenger) => ({ ...passenger })),
+    parkingSlots: state.parkingSlots.map((slot) => ({ ...slot })),
+    powerUps: { ...state.powerUps },
+    completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
+  }
+}
+
+function parseGameState(value: unknown): GameState | null {
+  if (!isRecord(value) || value.version !== 1) {
+    return null
+  }
+
+  const level = parseInteger(value.level, 1)
+  const seed = parseInteger(value.seed)
+  const boardWidth = parseInteger(value.boardWidth, 1)
+  const boardHeight = parseInteger(value.boardHeight, 1)
+  const cars = parseArray(value.cars, parseCar)
+  const tunnels = parseArray(value.tunnels, parseTunnel)
+  const passengerQueue = parseArray(value.passengerQueue, parsePassenger)
+  const parkingSlots = parseArray(value.parkingSlots, parseParkingSlot)
+  const levelScore = parseNumber(value.levelScore)
+  const totalScore = parseNumber(value.totalScore)
+  const highScore = parseNumber(value.highScore)
+  const moves = parseNumber(value.moves)
+  const maxRegularSlotsUsed = parseNumber(value.maxRegularSlotsUsed)
+  const maxRegularSlotsUnlocked = parseNumber(value.maxRegularSlotsUnlocked)
+
+  if (
+    level === null
+    || seed === null
+    || boardWidth === null
+    || boardHeight === null
+    || cars === null
+    || tunnels === null
+    || passengerQueue === null
+    || parkingSlots === null
+    || levelScore === null
+    || totalScore === null
+    || highScore === null
+    || moves === null
+    || maxRegularSlotsUsed === null
+    || maxRegularSlotsUnlocked === null
+    || !isRecord(value.powerUps)
+    || value.completedLevel !== null
+  ) {
+    return null
+  }
+
+  return {
+    version: 1,
+    level,
+    seed,
+    boardWidth,
+    boardHeight,
+    cars,
+    tunnels,
+    passengerQueue,
+    parkingSlots,
+    powerUps: sanitizePowerUps(value.powerUps),
+    levelScore,
+    totalScore,
+    highScore,
+    moves,
+    maxRegularSlotsUsed,
+    maxRegularSlotsUnlocked,
+    lastMessage: typeof value.lastMessage === 'string' ? value.lastMessage : '',
+    completedLevel: null,
+  }
+}
+
+function parseCar(value: unknown): Car | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const position = parseGridPosition(value.position)
+  const color = parseCarColor(value.color)
+  const direction = parseDirection(value.direction)
+  const status = parseCarStatus(value.status)
+  const capacity = parseInteger(value.capacity, 1)
+  const length = parseInteger(value.length, 1)
+  const sequence = parseInteger(value.sequence, 0)
+
+  if (
+    typeof value.id !== 'string'
+    || color === null
+    || direction === null
+    || capacity === null
+    || length === null
+    || position === null
+    || status === null
+    || !isNullableString(value.parkingSlotId)
+    || typeof value.boarded !== 'number'
+    || !Number.isFinite(value.boarded)
+    || !isNullableString(value.tunnelId)
+    || sequence === null
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    color,
+    direction,
+    capacity,
+    length,
+    position,
+    status,
+    parkingSlotId: value.parkingSlotId,
+    boarded: value.boarded,
+    tunnelId: value.tunnelId,
+    sequence,
+  }
+}
+
+function parseTunnel(value: unknown): Tunnel | null {
+  if (!isRecord(value) || typeof value.id !== 'string') {
+    return null
+  }
+
+  const position = parseGridPosition(value.position)
+  const garagePosition = parseGridPosition(value.garagePosition)
+  const direction = parseDirection(value.direction)
+  const carIds = parseArray(value.carIds, parseString)
+  const remaining = parseInteger(value.remaining, 0)
+
+  if (
+    position === null
+    || garagePosition === null
+    || direction === null
+    || carIds === null
+    || !isNullableString(value.visibleCarId)
+    || remaining === null
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    position,
+    garagePosition,
+    direction,
+    carIds,
+    visibleCarId: value.visibleCarId,
+    remaining,
+  }
+}
+
+function parsePassenger(value: unknown): Passenger | null {
+  if (!isRecord(value) || typeof value.id !== 'string') {
+    return null
+  }
+
+  const color = parseCarColor(value.color)
+  const feederSide = parseFeederSide(value.feederSide)
+  if (color === null || feederSide === null) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    color,
+    ...(feederSide ? { feederSide } : {}),
+  }
+}
+
+function parseParkingSlot(value: unknown): ParkingSlot | null {
+  if (!isRecord(value) || typeof value.id !== 'string') {
+    return null
+  }
+
+  const kind = parseParkingSlotKind(value.kind)
+  const index = parseInteger(value.index)
+  if (
+    kind === null
+    || typeof value.unlocked !== 'boolean'
+    || !isNullableString(value.occupiedCarId)
+    || index === null
+  ) {
+    return null
+  }
+
+  return {
+    id: value.id,
+    kind,
+    unlocked: value.unlocked,
+    occupiedCarId: value.occupiedCarId,
+    index,
+  }
+}
+
+function parseGridPosition(value: unknown): GridPosition | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const x = parseInteger(value.x)
+  const y = parseInteger(value.y)
+  if (x === null || y === null) {
+    return null
+  }
+
+  return { x, y }
+}
+
+function parseArray<T>(value: unknown, parser: (item: unknown) => T | null): T[] | null {
+  if (!Array.isArray(value)) {
+    return null
+  }
+
+  const parsed: T[] = []
+  for (const item of value) {
+    const next = parser(item)
+    if (next === null) {
+      return null
+    }
+    parsed.push(next)
+  }
+
+  return parsed
+}
+
+function parseString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function parseInteger(value: unknown, minimum: number | null = null): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return null
+  }
+
+  if (minimum !== null && value < minimum) {
+    return null
+  }
+
+  return value
+}
+
+function parseNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseCarColor(value: unknown): CarColor | null {
+  return typeof value === 'string' && value in CAR_COLORS ? value as CarColor : null
+}
+
+function parseDirection(value: unknown): Direction | null {
+  return typeof value === 'string' && DIRECTIONS.includes(value as Direction) ? value as Direction : null
+}
+
+function parseCarStatus(value: unknown): CarStatus | null {
+  return value === 'field' || value === 'hidden' || value === 'parked' || value === 'departed' ? value : null
+}
+
+function parseFeederSide(value: unknown): FeederSide | undefined | null {
+  if (value === undefined) {
+    return undefined
+  }
+
+  return value === 'left' || value === 'right' ? value : null
+}
+
+function parseParkingSlotKind(value: unknown): ParkingSlotKind | null {
+  return value === 'regular' || value === 'vip' ? value : null
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

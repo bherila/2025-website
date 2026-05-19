@@ -1,4 +1,4 @@
-import { ChevronDown, Crown, Plus, RotateCcw, Shuffle, Users } from 'lucide-react'
+import { ChevronDown, Crown, HelpCircle, Plus, RotateCcw, Shuffle, Users } from 'lucide-react'
 import { type ComponentProps, type Dispatch, type ReactElement, type ReactNode, type SetStateAction } from 'react'
 
 import {
@@ -13,6 +13,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
@@ -33,15 +35,18 @@ interface PowerUpConfirmation {
 }
 
 interface GameControlsProps {
+  colorblindMode: boolean
   stats: GameStats
   statsExpanded: boolean
   state: GameState
   vipSelectionActive: boolean
+  onColorblindModeChange: (enabled: boolean) => void
   onFill: () => void
   onOpenSlot: () => void
   onReset: () => void
   onShuffle: () => void
   onStatsExpandedChange: Dispatch<SetStateAction<boolean>>
+  onTutorialOpen: () => void
   onVipSelectionActiveChange: Dispatch<SetStateAction<boolean>>
 }
 
@@ -64,27 +69,37 @@ const POWER_UP_CONFIRMATIONS = {
 } satisfies Record<string, PowerUpConfirmation>
 
 export function GameControls({
+  colorblindMode,
   stats,
   statsExpanded,
   state,
   vipSelectionActive,
+  onColorblindModeChange,
   onFill,
   onOpenSlot,
   onReset,
   onShuffle,
   onStatsExpandedChange,
+  onTutorialOpen,
   onVipSelectionActiveChange,
 }: GameControlsProps): ReactElement {
   return (
     <>
       <MobileStatsHeader
+        colorblindMode={colorblindMode}
         stats={stats}
         statsExpanded={statsExpanded}
         state={state}
+        onColorblindModeChange={onColorblindModeChange}
         onStatsExpandedChange={onStatsExpandedChange}
       />
 
-      <DesktopStatsHeader stats={stats} state={state} />
+      <DesktopStatsHeader
+        colorblindMode={colorblindMode}
+        stats={stats}
+        state={state}
+        onColorblindModeChange={onColorblindModeChange}
+      />
 
       <BottomControls
         stats={stats}
@@ -94,6 +109,7 @@ export function GameControls({
         onOpenSlot={onOpenSlot}
         onReset={onReset}
         onShuffle={onShuffle}
+        onTutorialOpen={onTutorialOpen}
         onVipSelectionActiveChange={onVipSelectionActiveChange}
       />
     </>
@@ -101,8 +117,10 @@ export function GameControls({
 }
 
 interface StatsHeaderProps {
+  colorblindMode: boolean
   stats: GameStats
   state: GameState
+  onColorblindModeChange: (enabled: boolean) => void
 }
 
 interface MobileStatsHeaderProps extends StatsHeaderProps {
@@ -110,7 +128,14 @@ interface MobileStatsHeaderProps extends StatsHeaderProps {
   onStatsExpandedChange: Dispatch<SetStateAction<boolean>>
 }
 
-function MobileStatsHeader({ stats, statsExpanded, state, onStatsExpandedChange }: MobileStatsHeaderProps): ReactElement {
+function MobileStatsHeader({
+  colorblindMode,
+  stats,
+  statsExpanded,
+  state,
+  onColorblindModeChange,
+  onStatsExpandedChange,
+}: MobileStatsHeaderProps): ReactElement {
   return (
     <header className="sm:hidden">
       <button
@@ -139,12 +164,18 @@ function MobileStatsHeader({ stats, statsExpanded, state, onStatsExpandedChange 
         <Metric label="Best" value={state.highScore.toLocaleString()} />
         <Metric label="Queue" value={state.passengerQueue.length.toLocaleString()} />
         <Metric label="Spaces" value={String(stats.unlockedRegularSlots)} />
+        <ColorblindToggle
+          checked={colorblindMode}
+          className="col-span-3"
+          id="cars-colorblind-mobile"
+          onCheckedChange={onColorblindModeChange}
+        />
       </div>
     </header>
   )
 }
 
-function DesktopStatsHeader({ stats, state }: StatsHeaderProps): ReactElement {
+function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindModeChange }: StatsHeaderProps): ReactElement {
   return (
     <header className="hidden gap-2 sm:grid lg:grid-cols-[1fr_auto] lg:items-center">
       <div className="flex flex-wrap items-center gap-3">
@@ -156,6 +187,11 @@ function DesktopStatsHeader({ stats, state }: StatsHeaderProps): ReactElement {
         <Metric label="Queue" value={state.passengerQueue.length.toLocaleString()} />
         <Metric label="Spaces" value={String(stats.unlockedRegularSlots)} />
       </div>
+      <ColorblindToggle
+        checked={colorblindMode}
+        id="cars-colorblind-desktop"
+        onCheckedChange={onColorblindModeChange}
+      />
     </header>
   )
 }
@@ -168,6 +204,7 @@ interface BottomControlsProps {
   onOpenSlot: () => void
   onReset: () => void
   onShuffle: () => void
+  onTutorialOpen: () => void
   onVipSelectionActiveChange: Dispatch<SetStateAction<boolean>>
 }
 
@@ -179,10 +216,11 @@ function BottomControls({
   onOpenSlot,
   onReset,
   onShuffle,
+  onTutorialOpen,
   onVipSelectionActiveChange,
 }: BottomControlsProps): ReactElement {
   return (
-    <div className="absolute inset-x-2 bottom-2 z-20 grid grid-cols-5 gap-2 sm:inset-x-auto sm:left-1/2 sm:w-auto sm:-translate-x-1/2 sm:grid-cols-[repeat(5,3.5rem)]">
+    <div className="absolute inset-x-2 bottom-2 z-20 grid grid-cols-6 gap-2 sm:inset-x-auto sm:left-1/2 sm:w-auto sm:-translate-x-1/2 sm:grid-cols-[repeat(6,3.5rem)]">
       <BottomControlButton
         active={vipSelectionActive}
         confirmation={vipSelectionActive ? undefined : POWER_UP_CONFIRMATIONS.vip}
@@ -221,6 +259,36 @@ function BottomControls({
         label="Reset"
         variant="ghost"
         onClick={onReset}
+      />
+      <BottomControlButton
+        disabled={false}
+        icon={<HelpCircle />}
+        label="Tutorial"
+        variant="ghost"
+        onClick={onTutorialOpen}
+      />
+    </div>
+  )
+}
+
+interface ColorblindToggleProps {
+  checked: boolean
+  id: string
+  onCheckedChange: (enabled: boolean) => void
+  className?: string
+}
+
+function ColorblindToggle({ checked, className, id, onCheckedChange }: ColorblindToggleProps): ReactElement {
+  return (
+    <div className={cn('flex items-center justify-between gap-3 rounded-lg border border-white/70 bg-white/80 px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900', className)}>
+      <Label className="cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-200" htmlFor={id}>
+        Colorblind mode
+      </Label>
+      <Switch
+        aria-label="Colorblind mode"
+        checked={checked}
+        id={id}
+        onCheckedChange={onCheckedChange}
       />
     </div>
   )

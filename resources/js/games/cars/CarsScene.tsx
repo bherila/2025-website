@@ -3,6 +3,7 @@ import * as THREE from 'three'
 
 import {
   CAR_COLORS,
+  CAR_PATTERNS,
   feederQueuePassengers,
   type GameState,
   visibleQueuePassengers,
@@ -11,13 +12,22 @@ import { startBlockedCarAnimation } from './scene/animation/blockedCar'
 import { animateBoardingPassengers, startBoardingPassengerAnimations } from './scene/animation/boardingPassengers'
 import { startDepartingCarAnimations } from './scene/animation/departingCar'
 import { animateMovingCars, retainPersistentMovingCars as retainPersistentMovingCarsImpl } from './scene/animation/movingCars'
-import { animatePassengers, createPassengerEntryAnimation, notifyPassengerGate } from './scene/animation/passengers'
+import {
+  animatePassengers,
+  createPassengerEntryAnimation,
+  notifyPassengerGate,
+  setPassengerRenderHandleTransform,
+} from './scene/animation/passengers'
 import { createCarMesh } from './scene/builders/carMesh'
 import { createField } from './scene/builders/field'
 import { createGarage } from './scene/builders/garage'
 import { createGround } from './scene/builders/ground'
 import { createParkingRow } from './scene/builders/parkingRow'
-import { createPassengerMesh } from './scene/builders/passengerMesh'
+import {
+  createPassengerInstanceHandle,
+  createPassengerInstancePools,
+  passengerInstancePoolMeshes,
+} from './scene/builders/passengerMesh'
 import { createQueueTrack } from './scene/builders/queueTrack'
 import {
   CAR_MOVE_SECONDS_PER_UNIT,
@@ -46,13 +56,21 @@ export { retainPersistentMovingCarsImpl as retainPersistentMovingCars }
 
 interface CarsSceneProps {
   blockedCarAttempt: { carId: string, nonce: number } | null
+  colorblindMode: boolean
   state: GameState
   vipSelectionActive: boolean
   onCarClick: (carId: string) => void
   onPassengerGate: (passengerId: string) => void
 }
 
-export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarClick, onPassengerGate }: CarsSceneProps): ReactElement {
+export function CarsScene({
+  blockedCarAttempt,
+  colorblindMode,
+  state,
+  vipSelectionActive,
+  onCarClick,
+  onPassengerGate,
+}: CarsSceneProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -75,7 +93,6 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
   const passengerPhaseRef = useRef(0)
   const previousBlockedAttemptRef = useRef<number | null>(null)
   const previousLevelRef = useRef<number | null>(null)
-  const vipSelectionActiveRef = useRef(vipSelectionActive)
 
   useEffect(() => {
     onCarClickRef.current = onCarClick
@@ -88,10 +105,6 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
   useEffect(() => {
     stateRef.current = state
   }, [state])
-
-  useEffect(() => {
-    vipSelectionActiveRef.current = vipSelectionActive
-  }, [vipSelectionActive])
 
   useEffect(() => {
     const container = containerRef.current
@@ -246,7 +259,7 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
     }
 
     const effects = effectsRef.current
-    movingCarsRef.current = effects ? retainPersistentMovingCarsImpl(movingCarsRef.current, effects) : []
+    movingCarsRef.current = retainSceneMovingCars(movingCarsRef.current, dynamicGroup, effects)
 
     if (previousStateRef.current?.level === state.level && effects) {
       const departureDelays = startBoardingPassengerAnimations(
@@ -256,6 +269,7 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
         passengerPhaseRef.current,
         effects,
         boardingPassengersRef.current,
+        colorblindMode,
       )
       startDepartingCarAnimations(
         previousStateRef.current,
@@ -263,6 +277,7 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
         effects,
         movingCarsRef.current,
         departureDelays,
+        colorblindMode,
       )
     }
 
@@ -280,6 +295,10 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
         retainedMeshes.add(moving.mesh)
       }
       if (moving.movementKind === 'blocked' && moving.carId && moving.mesh.parent === dynamicGroup) {
+        retainedMeshes.add(moving.mesh)
+        retainedFieldCarMeshes.set(moving.carId, moving.mesh as THREE.Group)
+      }
+      if (moving.movementKind === 'blocked-cause' && moving.carId && moving.mesh.parent === dynamicGroup) {
         retainedMeshes.add(moving.mesh)
         retainedFieldCarMeshes.set(moving.carId, moving.mesh as THREE.Group)
       }
@@ -308,17 +327,18 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
       fieldCarMeshesRef.current,
       passengerPhaseRef.current,
       movingCarsRef.current,
+      colorblindMode,
     )
     if (blockedCarAttempt && previousBlockedAttemptRef.current !== blockedCarAttempt.nonce) {
       const car = state.cars.find((candidate) => candidate.id === blockedCarAttempt.carId)
       const mesh = fieldCarMeshesRef.current.get(blockedCarAttempt.carId)
-      if (car && mesh) {
-        startBlockedCarAnimation(car, state, mesh, movingCarsRef.current)
+      if (car && mesh && effects) {
+        startBlockedCarAnimation(car, state, mesh, movingCarsRef.current, effects)
       }
       previousBlockedAttemptRef.current = blockedCarAttempt.nonce
     }
     previousStateRef.current = state
-  }, [blockedCarAttempt, state])
+  }, [blockedCarAttempt, colorblindMode, state])
 
   return (
     <div
@@ -327,6 +347,20 @@ export function CarsScene({ blockedCarAttempt, state, vipSelectionActive, onCarC
       data-vip-selection={vipSelectionActive}
     />
   )
+}
+
+export function retainSceneMovingCars(
+  cars: MovingCarRenderItem[],
+  dynamicGroup: THREE.Group,
+  effects: THREE.Group | null,
+): MovingCarRenderItem[] {
+  return cars.filter((car) => {
+    if (car.removeOnComplete) {
+      return Boolean(effects && car.mesh.parent === effects)
+    }
+
+    return car.mesh.parent === dynamicGroup
+  })
 }
 
 function staticSceneSignature(state: GameState): string {
@@ -360,6 +394,7 @@ function buildDynamicScene(
   fieldCarMeshes: Map<string, THREE.Group>,
   passengerPhase: number,
   movingCars: MovingCarRenderItem[],
+  colorblindMode: boolean,
 ): void {
   const activeParkingCarIds = new Set(
     movingCars
@@ -385,7 +420,7 @@ function buildDynamicScene(
     }
 
     const target = parkingSlotPosition(slot.index, slot.kind)
-    const mesh = createCarMesh(car, target, true)
+    const mesh = createCarMesh(car, target, true, { colorblindMode })
     const previousCar = previousState?.cars.find((candidate) => candidate.id === car.id)
     if (previousCar?.status === 'field') {
       const route = createParkingRoute(previousCar, target)
@@ -411,14 +446,18 @@ function buildDynamicScene(
   }
 
   for (const car of state.cars) {
-    if (car.status === 'field' && !activeBlockedCarIds.has(car.id)) {
-      const mesh = createCarMesh(car, fieldPositionForCar(car), false)
+    if (car.status === 'field' && !activeBlockedCarIds.has(car.id) && !fieldCarMeshes.has(car.id)) {
+      const mesh = createCarMesh(car, fieldPositionForCar(car), false, { colorblindMode })
       fieldCarMeshes.set(car.id, mesh)
       content.add(mesh)
     }
   }
 
   const queueLayout = queueLayoutForState(state)
+  const passengerPools = createPassengerInstancePools(state.passengerQueue.length, { colorblindMode })
+  for (const poolMesh of passengerInstancePoolMeshes(passengerPools)) {
+    content.add(poolMesh)
+  }
   const visiblePassengers = visibleQueuePassengers(state)
   const previousVisiblePassengerIds = previousState
     ? new Set(visibleQueuePassengers(previousState).map((passenger) => passenger.id))
@@ -444,19 +483,22 @@ function buildDynamicScene(
     passengerOffsets.set(passenger.id, offset)
     passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
 
-    const mesh = createPassengerMesh(CAR_COLORS[passenger.color].hex)
+    const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
+      colorblindMode,
+      pattern: CAR_PATTERNS[passenger.color],
+    })
     const position = queuePosition(passengerPhase + offset, queueLayout)
     const entry = enteringFromFeeder
       ? createPassengerEntryAnimation(passenger, previousFeederPassengers, previousQueueLayout, position)
       : null
     if (entry) {
-      mesh.position.copy(entry.from)
+      setPassengerRenderHandleTransform(handle, entry.from, 0)
     } else {
-      mesh.position.set(position.x, 0.12, position.z)
+      setPassengerRenderHandleTransform(handle, new THREE.Vector3(position.x, 0.12, position.z), 0)
     }
     const passengerRenderItem: PassengerRenderItem = {
       id: passenger.id,
-      mesh,
+      mesh: handle,
       offset,
       layout: queueLayout,
     }
@@ -464,15 +506,16 @@ function buildDynamicScene(
       passengerRenderItem.entry = entry
     }
     passengers.push(passengerRenderItem)
-    content.add(mesh)
     previousAssignedOffset = offset
   }
 
   const feederPassengers = feederQueuePassengers(state)
   for (const passenger of feederPassengers) {
-    const mesh = createPassengerMesh(CAR_COLORS[passenger.color].hex)
+    const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
+      colorblindMode,
+      pattern: CAR_PATTERNS[passenger.color],
+    })
     const position = feederPassengerPosition(passenger, feederPassengers, queueLayout)
-    mesh.position.set(position.x, 0.1, position.z)
-    content.add(mesh)
+    setPassengerRenderHandleTransform(handle, new THREE.Vector3(position.x, 0.1, position.z), 0)
   }
 }

@@ -29,15 +29,20 @@ import {
 } from './gameTypes'
 
 export {
+  clearLevelSnapshot,
   createInitialPowerUps,
   createInitialProgress,
+  LEVEL_SNAPSHOT_STORAGE_KEY,
+  loadLevelSnapshot,
   loadProgress,
   progressFromState,
+  saveLevelSnapshot,
   saveProgress,
 } from './gameProgress'
 export type {
   Car,
   CarColor,
+  CarPattern,
   CarStatus,
   CompletedLevel,
   Direction,
@@ -56,6 +61,8 @@ export {
   BOARD_WIDTH,
   CAPACITIES,
   CAR_COLORS,
+  CAR_PATTERN_VALUES,
+  CAR_PATTERNS,
   DIRECTIONS,
   GAME_PROGRESS_STORAGE_KEY,
   MAX_LOOP_PASSENGERS,
@@ -390,7 +397,11 @@ export function findSolvingOrder(state: GameState): string[] | null {
 
   const order: string[] = []
   while (true) {
-    const remaining = state.cars.filter((car) => statuses.get(car.id) !== 'departed')
+    const remaining = state.cars.filter((car) => {
+      const status = statuses.get(car.id)
+
+      return status !== 'departed' && status !== 'parked'
+    })
     if (remaining.length === 0) {
       return order
     }
@@ -418,7 +429,9 @@ export function findSolvingOrder(state: GameState): string[] | null {
 export function solverCompletesLevel(state: GameState): boolean {
   const order = findSolvingOrder(state)
 
-  return Boolean(order && order.length === state.cars.filter((car) => car.status !== 'departed').length)
+  const unsolvedCars = state.cars.filter((car) => car.status !== 'departed' && car.status !== 'parked')
+
+  return Boolean(order && order.length === unsolvedCars.length)
 }
 
 export function calculateLevelScore(state: GameState): number {

@@ -230,6 +230,29 @@ describe('cars game engine', () => {
     expect(next.completedLevel).not.toBeNull()
   })
 
+  it('shuffles parked cars and remaining field cars into future queue order', () => {
+    const state = makeState({
+      cars: [
+        makeCar({ id: 'parked', color: 'red', status: 'parked', parkingSlotId: 'slot-1', sequence: 0 }),
+        makeCar({ id: 'field', color: 'yellow', direction: 'right', position: { x: 0, y: 2 }, sequence: 1 }),
+      ],
+      parkingSlots: makeParkingSlots('parked'),
+      passengerQueue: [
+        { id: 'p1', color: 'blue' },
+        { id: 'p2', color: 'blue' },
+        { id: 'p3', color: 'green' },
+        { id: 'p4', color: 'green' },
+      ],
+      powerUps: { vip: 0, shuffle: 1, fill: 0 },
+    })
+
+    const shuffled = applyShufflePowerUp(state)
+
+    expect(shuffled.cars.find((car) => car.id === 'parked')?.color).toBe('blue')
+    expect(shuffled.cars.find((car) => car.id === 'field')?.color).toBe('green')
+    expect(shuffled.powerUps.shuffle).toBe(0)
+  })
+
   it('fill cheats parked cars full using FIFO passengers regardless of color', () => {
     const state = makeState({
       cars: [makeCar({ id: 'parked', color: 'red', capacity: 4, length: 3, status: 'parked', parkingSlotId: 'slot-1' })],

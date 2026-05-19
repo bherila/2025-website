@@ -11,6 +11,7 @@ export function startDepartingCarAnimations(
   effects: THREE.Group,
   movingCars: MovingCarRenderItem[],
   departureDelays: Map<string, number>,
+  colorblindMode = false,
 ): void {
   for (const previousCar of previousState.cars) {
     const currentCar = state.cars.find((candidate) => candidate.id === previousCar.id)
@@ -28,7 +29,7 @@ export function startDepartingCarAnimations(
       ...previousCar,
       boarded: Math.max(previousCar.boarded, currentCar?.boarded ?? previousCar.boarded),
     }
-    const mesh = createCarMesh(visualCar, start, true)
+    const mesh = createCarMesh(visualCar, start, true, { colorblindMode })
     effects.add(mesh)
     const route = createDepartureRoute(start)
     const segmentLengths = routeSegmentLengths(route)

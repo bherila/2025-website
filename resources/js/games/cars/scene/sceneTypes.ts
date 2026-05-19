@@ -1,16 +1,38 @@
 import * as THREE from 'three'
 
+import type { CarPattern } from '../gameTypes'
+
 export interface PassengerRenderItem {
   id: string
-  mesh: THREE.Group
+  mesh: PassengerRenderHandle
   offset: number
   layout: QueueLayout
   entry?: PassengerEntryRenderItem
 }
 
+export type PassengerRenderHandle = THREE.Group | PassengerInstanceHandle
+
+export interface PassengerInstanceHandle {
+  badgeIndex: number | null
+  badgePattern: CarPattern | null
+  bodyIndex: number
+  color: THREE.Color
+  headIndex: number
+  pool: PassengerInstancePools
+}
+
+export interface PassengerInstancePools {
+  badgeCounts: Partial<Record<CarPattern, number>>
+  badgeMeshes: Partial<Record<CarPattern, THREE.InstancedMesh>>
+  bodyMesh: THREE.InstancedMesh
+  capacity: number
+  headMesh: THREE.InstancedMesh
+  used: number
+}
+
 export interface MovingCarRenderItem {
   carId?: string
-  movementKind?: 'blocked' | 'departure' | 'parking'
+  movementKind?: 'blocked' | 'blocked-cause' | 'departure' | 'impact' | 'parking'
   mesh: THREE.Group
   route: RoutePoint[]
   segmentLengths: number[]
@@ -18,6 +40,9 @@ export interface MovingCarRenderItem {
   startedAt: number
   duration: number
   removeOnComplete?: boolean
+  skipRouteMotion?: boolean
+  onUpdate?: (item: MovingCarRenderItem, progress: number, eased: number) => void
+  onComplete?: (item: MovingCarRenderItem) => void
 }
 
 export interface BoardingPassengerRenderItem {
