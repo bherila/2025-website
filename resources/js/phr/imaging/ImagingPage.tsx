@@ -119,7 +119,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
 
     try {
       const openResponse = await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads`, uploadRootName ? { root_name: uploadRootName } : {})
-      const { upload } = PhrDicomUploadResponseSchema.parse(openResponse)
+      const { upload, limits } = PhrDicomUploadResponseSchema.parse(openResponse)
       const currentUploadId = upload.id
       uploadId = currentUploadId
 
@@ -128,6 +128,8 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
         uploadId: currentUploadId,
         files,
         concurrency: UPLOAD_CONCURRENCY,
+        maxFileBytes: limits?.max_file_bytes ?? null,
+        maxFileSizeLabel: limits?.max_file_size_label ?? null,
         onFileBytesProgress: (bytes) => setBytesSent((prev) => prev + bytes),
         onFileStarted: (name) => setCurrentFileName(name),
         onFileFinished: (outcome) => {
@@ -286,8 +288,8 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
             <DialogDescription>
               {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
               {phase === 'done' && `Stored ${summary.stored} · Skipped ${summary.skipped}${summary.errored > 0 ? ` · Errored ${summary.errored}` : ''}`}
-              {phase === 'cancelled' && `The upload session was cancelled. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
-              {phase === 'failed' && `The upload session was stopped. Stored ${summary.stored} · Skipped ${summary.skipped} · Errored ${summary.errored}`}
+              {phase === 'cancelled' && `The upload session was cancelled and stored files were discarded. Processed ${filesProcessed} of ${totalFiles} files.`}
+              {phase === 'failed' && `The upload session was stopped and stored files were discarded. Processed ${filesProcessed} of ${totalFiles} files.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -364,6 +366,8 @@ interface UploadControllerOptions {
   uploadId: number
   files: FileWithRelativePath[]
   concurrency: number
+  maxFileBytes: number | null
+  maxFileSizeLabel: string | null
   onFileBytesProgress: (deltaBytes: number) => void
   onFileStarted: (name: string) => void
   onFileFinished: (outcome: FileOutcome) => void
@@ -425,6 +429,17 @@ class UploadController {
   private uploadOne(file: FileWithRelativePath): Promise<FileOutcome> {
     const relativePath = relativeFilePath(file)
     this.options.onFileStarted(relativePath)
+
+    if (this.options.maxFileBytes !== null && file.size > this.options.maxFileBytes) {
+      this.options.onFileBytesProgress(file.size)
+
+      return Promise.resolve({
+        stored: false,
+        skippedReason: null,
+        errorMessage: `File is ${formatBytes(file.size)}, which exceeds the server upload limit of ${this.options.maxFileSizeLabel ?? formatBytes(this.options.maxFileBytes)}.`,
+        relativePath,
+      })
+    }
 
     return new Promise<FileOutcome>((resolve) => {
       const xhr = new XMLHttpRequest()

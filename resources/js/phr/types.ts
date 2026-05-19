@@ -190,6 +190,10 @@ export const PhrDicomStudiesResponseSchema = z.object({
 
 export const PhrDicomUploadResponseSchema = z.object({
   upload: PhrDicomUploadSchema,
+  limits: z.object({
+    max_file_bytes: z.number().nullable(),
+    max_file_size_label: nullableString,
+  }).optional(),
 })
 
 export const PhrDicomUploadFileResultSchema = z.object({

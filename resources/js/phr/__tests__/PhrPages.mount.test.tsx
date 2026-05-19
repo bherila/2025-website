@@ -200,6 +200,58 @@ describe('PHR page mounts', () => {
     }
   })
 
+  it('fails oversized imaging files before sending them to the server', async () => {
+    const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    MockUploadXMLHttpRequest.reset()
+    globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
+
+    const finalizeUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`
+    const cancelUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`
+
+    mockPost.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
+        return {
+          upload: makeDicomUpload('pending'),
+          limits: {
+            max_file_bytes: 3,
+            max_file_size_label: '3 B',
+          },
+        }
+      }
+      if (url === cancelUrl) {
+        return { upload: makeDicomUpload('failed') }
+      }
+      if (url === finalizeUrl) {
+        throw new Error('Finalize should not be called.')
+      }
+      return { patient: makePatient() }
+    })
+
+    try {
+      const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload dicom/i })).toBeInTheDocument())
+
+      const input = container.querySelector('input[type="file"]')
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Expected DICOM file input to render.')
+      }
+
+      const file = new File(['dicom'], 'IM0001', { type: 'application/dicom' })
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
+
+      fireEvent.change(input, { target: { files: [file] } })
+
+      await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
+      expect(MockUploadXMLHttpRequest.instances).toHaveLength(0)
+      expect(screen.getAllByText(/exceeds the server upload limit of 3 B/).length).toBeGreaterThan(0)
+      expect(mockPost).toHaveBeenCalledWith(cancelUrl, {})
+      expect(mockPost).not.toHaveBeenCalledWith(finalizeUrl, {})
+    } finally {
+      globalThis.XMLHttpRequest = originalXmlHttpRequest
+    }
+  })
+
   it('mounts access page without crash', () => {
     render(<AccessPage patientId={PATIENT_ID} />)
     expect(document.body).toBeTruthy()

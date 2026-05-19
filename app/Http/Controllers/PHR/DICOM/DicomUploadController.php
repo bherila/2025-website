@@ -31,7 +31,10 @@ class DicomUploadController extends Controller
 
         $upload = $this->uploadProcessor->openUpload($patientModel, (int) $request->user()?->id, $rootName);
 
-        return response()->json(['upload' => $this->uploadPayload($upload)], 201);
+        return response()->json([
+            'upload' => $this->uploadPayload($upload),
+            'limits' => $this->uploadLimitsPayload(),
+        ], 201);
     }
 
     /**
@@ -123,5 +126,80 @@ class DicomUploadController extends Controller
             'created_at' => $upload->created_at?->toDateTimeString(),
             'updated_at' => $upload->updated_at?->toDateTimeString(),
         ];
+    }
+
+    /**
+     * @return array{max_file_bytes: int, max_file_size_label: string}
+     */
+    private function uploadLimitsPayload(): array
+    {
+        $maxFileBytes = $this->maxFileUploadBytes();
+
+        return [
+            'max_file_bytes' => $maxFileBytes,
+            'max_file_size_label' => $this->formatBytes($maxFileBytes),
+        ];
+    }
+
+    private function maxFileUploadBytes(): int
+    {
+        $limits = [
+            StoreDicomUploadFileRequest::MAX_FILE_KILOBYTES * 1024,
+            $this->bytesFromPhpIniValue(ini_get('upload_max_filesize')),
+            $this->bytesFromPhpIniValue(ini_get('post_max_size')),
+        ];
+
+        $positiveLimits = [];
+        foreach ($limits as $limit) {
+            if ($limit !== null && $limit > 0) {
+                $positiveLimits[] = $limit;
+            }
+        }
+
+        return min($positiveLimits);
+    }
+
+    private function bytesFromPhpIniValue(string|false $value): ?int
+    {
+        if ($value === false) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $number = (float) $trimmed;
+        if ($number <= 0) {
+            return null;
+        }
+
+        $unit = strtolower($trimmed[strlen($trimmed) - 1]);
+        $multiplier = match ($unit) {
+            'g' => 1024 * 1024 * 1024,
+            'm' => 1024 * 1024,
+            'k' => 1024,
+            default => 1,
+        };
+
+        return (int) floor($number * $multiplier);
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return "{$bytes} B";
+        }
+
+        if ($bytes < 1024 * 1024) {
+            return round($bytes / 1024, 1).' KB';
+        }
+
+        if ($bytes < 1024 * 1024 * 1024) {
+            return round($bytes / (1024 * 1024), 1).' MB';
+        }
+
+        return round($bytes / (1024 * 1024 * 1024), 2).' GB';
     }
 }
