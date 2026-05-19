@@ -7,7 +7,7 @@ export function createGround(): THREE.Object3D {
 
   const grass = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 18),
-    new THREE.MeshStandardMaterial({ color: '#79bf5b', roughness: 0.86 }),
+    new THREE.MeshStandardMaterial({ color: '#8bd974', roughness: 0.88 }),
   )
   grass.rotation.x = -Math.PI / 2
   grass.position.z = QUEUE_Z - 1.5
@@ -16,7 +16,7 @@ export function createGround(): THREE.Object3D {
 
   const lot = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 16),
-    new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.72 }),
+    new THREE.MeshStandardMaterial({ color: '#d9ecf1', roughness: 0.76 }),
   )
   lot.rotation.x = -Math.PI / 2
   lot.position.z = 2.8

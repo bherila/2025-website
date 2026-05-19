@@ -18,7 +18,7 @@ export function createQueueTrack(state: GameState): THREE.Object3D {
   trackOuter.holes.push(trackHole)
   const track = new THREE.Mesh(
     new THREE.ExtrudeGeometry(trackOuter, { depth: 0.12, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: '#65728a', roughness: 0.62 }),
+    new THREE.MeshStandardMaterial({ color: '#6f7c93', roughness: 0.66 }),
   )
   track.rotation.x = -Math.PI / 2
   track.position.set(0, 0.14, QUEUE_Z)
@@ -30,7 +30,7 @@ export function createQueueTrack(state: GameState): THREE.Object3D {
   ringOuter.holes.push(ringInner)
   const rim = new THREE.Mesh(
     new THREE.ExtrudeGeometry(ringOuter, { depth: 0.04, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: '#f1f5f9', roughness: 0.55 }),
+    new THREE.MeshStandardMaterial({ color: '#f7fbff', roughness: 0.56 }),
   )
   rim.rotation.x = -Math.PI / 2
   rim.position.set(0, 0.18, QUEUE_Z)
@@ -39,7 +39,7 @@ export function createQueueTrack(state: GameState): THREE.Object3D {
   const innerShape = makeStadiumShape(straightLength, Math.max(0.15, capRadius - TRACK_INNER_PAD - 0.02))
   const infield = new THREE.Mesh(
     new THREE.ExtrudeGeometry(innerShape, { depth: 0.04, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: '#79bf5b', roughness: 0.82 }),
+    new THREE.MeshStandardMaterial({ color: '#85cf70', roughness: 0.84 }),
   )
   infield.rotation.x = -Math.PI / 2
   infield.position.set(0, 0.16, QUEUE_Z)
@@ -67,11 +67,11 @@ export function createQueueTrack(state: GameState): THREE.Object3D {
 
   for (const side of [-1, 1] as const) {
     const curve = feederCurve(side, layout)
-    const trim = flatRibbonAlongCurve(curve, 0.72, 0.05, '#cbd5e1', '#94a3b8', 0.08)
+    const trim = flatRibbonAlongCurve(curve, 0.72, 0.05, '#dbe6ef', '#9fb0c4', 0.08)
     trim.position.y = 0.05
     group.add(trim)
 
-    const feeder = flatRibbonAlongCurve(curve, 0.62, 0.08, '#65728a')
+    const feeder = flatRibbonAlongCurve(curve, 0.62, 0.08, '#6f7c93')
     feeder.position.y = 0.06
     feeder.receiveShadow = true
     group.add(feeder)

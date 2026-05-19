@@ -15,7 +15,7 @@ export function createParkingRow(state: GameState): THREE.Object3D {
   const asphaltShape = roundedRectShape(ASPHALT_WIDTH, ASPHALT_DEPTH, 0.42)
   const asphalt = new THREE.Mesh(
     new THREE.ExtrudeGeometry(asphaltShape, { depth: 0.06, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: '#5a6577', roughness: 0.78 }),
+    new THREE.MeshStandardMaterial({ color: '#667386', roughness: 0.8 }),
   )
   asphalt.rotation.x = -Math.PI / 2
   asphalt.position.set(0, 0.05, ASPHALT_CENTER_Z)
@@ -35,8 +35,8 @@ export function createParkingRow(state: GameState): THREE.Object3D {
     const fillColor = slot.kind === 'vip'
       ? '#facc15'
       : slot.unlocked
-        ? '#6b7689'
-        : '#4d5667'
+        ? '#778296'
+        : '#596474'
     const slotBase = new THREE.Mesh(
       new THREE.ExtrudeGeometry(slotShape, { depth: 0.025, bevelEnabled: false }),
       new THREE.MeshStandardMaterial({ color: fillColor, roughness: 0.7 }),
@@ -49,8 +49,8 @@ export function createParkingRow(state: GameState): THREE.Object3D {
     const outlineColor = slot.kind === 'vip'
       ? '#a16207'
       : slot.unlocked
-        ? '#cbd5e1'
-        : '#7c8595'
+        ? '#dbe6f1'
+        : '#8793a4'
     const outline = makeRoundedRectOutline(slotWidth, slotDepth, 0.18, 0.06)
     const outlineMesh = new THREE.Mesh(
       outline,

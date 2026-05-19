@@ -117,8 +117,8 @@ export function CarsGame(): ReactElement {
   }, [])
 
   return (
-    <div className="h-screen overflow-hidden bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <div className="mx-auto flex h-full max-w-7xl flex-col gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3 lg:px-6">
+    <div className="h-screen overflow-hidden bg-sky-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+      <div className="mx-auto flex h-full max-w-7xl flex-col gap-2 px-2 py-2 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5">
         <GameControls
           colorblindMode={colorblindMode}
           stats={stats}
@@ -175,12 +175,20 @@ export function CarsGame(): ReactElement {
           `}</style>
           <div
             className={cn(
-              'pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg border border-white/70 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-800 shadow-lg shadow-slate-950/10 sm:left-3 sm:top-3 sm:max-w-[calc(100%-1.5rem)] sm:text-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100',
-              blockedCarAttempt && 'cars-blocked-toast-pulse border-red-300 dark:border-red-700',
+              'pointer-events-none absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-lg shadow-slate-950/10 backdrop-blur-md sm:left-4 sm:top-4 sm:max-w-[calc(100%-2rem)] sm:text-sm dark:border-white/10 dark:bg-slate-950/75 dark:text-slate-100',
+              blockedCarAttempt && 'cars-blocked-toast-pulse border-rose-300 bg-rose-50/90 text-rose-950 dark:border-rose-500/50 dark:bg-rose-950/75 dark:text-rose-100',
             )}
             key={blockedCarAttempt?.nonce ?? 'cars-message'}
           >
-            {vipSelectionActive ? 'VIP selection active' : state.lastMessage}
+            <span
+              className={cn(
+                'size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-950/20',
+                vipSelectionActive && 'bg-amber-400',
+                blockedCarAttempt && 'bg-rose-500',
+              )}
+              aria-hidden="true"
+            />
+            <span>{vipSelectionActive ? 'VIP selection active' : state.lastMessage}</span>
           </div>
 
           <LevelCompleteOverlay state={state} onNextLevel={handleNextLevel} onRestart={handleReset} />

@@ -345,7 +345,7 @@ export function CarsScene({
   return (
     <div
       ref={containerRef}
-      className="h-full min-h-0 w-full overflow-hidden rounded-lg border border-white/40 bg-slate-300 shadow-2xl shadow-slate-950/20 sm:min-h-[560px] dark:border-slate-700 dark:bg-slate-900"
+      className="h-full min-h-0 w-full overflow-hidden rounded-2xl border border-white/70 bg-slate-200 shadow-2xl shadow-slate-950/15 sm:min-h-[560px] dark:border-white/10 dark:bg-slate-900 dark:shadow-slate-950/35"
       data-vip-selection={vipSelectionActive}
     />
   )

@@ -11,13 +11,13 @@ export function createField(state: GameState): THREE.Object3D {
   const height = gridHeight + bottomPad
   const base = new THREE.Mesh(
     new THREE.BoxGeometry(width, 0.14, height),
-    new THREE.MeshStandardMaterial({ color: '#dbe3ef', roughness: 0.78 }),
+    new THREE.MeshStandardMaterial({ color: '#edf6f8', roughness: 0.8 }),
   )
   base.position.set(0, 0.01, FIELD_Z + bottomPad / 2)
   base.receiveShadow = true
   group.add(base)
 
-  const gridMaterial = new THREE.MeshStandardMaterial({ color: '#b7c2d1', roughness: 0.7 })
+  const gridMaterial = new THREE.MeshStandardMaterial({ color: '#cad8e7', roughness: 0.72 })
   for (let x = 0; x <= state.boardWidth; x += 1) {
     const line = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.02, gridHeight), gridMaterial)
     line.position.set((x - state.boardWidth / 2) * CELL_SIZE, 0.1, FIELD_Z)
