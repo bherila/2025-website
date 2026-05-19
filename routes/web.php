@@ -15,6 +15,7 @@ use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\OhifViewerController;
 use App\Http\Controllers\PHR\PageController as PHRPageController;
 use App\Http\Controllers\PHR\PhrDocumentController;
 use App\Http\Controllers\PHR\PhrExportController;
@@ -167,6 +168,11 @@ Route::get('/tools/address-labels', [AddressLabelController::class, 'index'])->n
 Route::post('/tools/address-labels/pdf', [AddressLabelController::class, 'generate'])->name('tools.address-labels.pdf');
 Route::post('/tools/address-labels/preview', [AddressLabelController::class, 'preview'])->name('tools.address-labels.preview');
 Route::get('/tools/address-labels/calibration', [AddressLabelController::class, 'calibration'])->name('tools.address-labels.calibration');
+
+Route::get('/ohif', OhifViewerController::class)->name('ohif.index');
+Route::get('/ohif/viewer/{path?}', OhifViewerController::class)
+    ->where('path', '.*')
+    ->name('ohif.viewer');
 
 Route::get('/financial-planning', function () {
     return view('financial-planning.index');
