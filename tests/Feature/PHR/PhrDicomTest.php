@@ -10,6 +10,7 @@ use App\Models\PhrDicomUpload;
 use App\Models\PhrPatient;
 use App\Models\User;
 use App\Services\PHR\DICOM\DicomMetadataParser;
+use App\Services\PHR\DICOM\DicomUploadLimits;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
@@ -45,6 +46,21 @@ class PhrDicomTest extends TestCase
         ]);
 
         $this->assertSame(PhrDicomUpload::STATUS_PENDING, $upload->refresh()->status);
+    }
+
+    public function test_open_upload_advertises_direct_upload_size_cap(): void
+    {
+        config(['phr.dicom_max_file_bytes' => DicomUploadLimits::DEFAULT_MAX_DIRECT_FILE_BYTES]);
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads", ['root_name' => 'CARDIAC_CT'])
+            ->assertCreated()
+            ->assertJsonPath('limits.max_file_bytes', DicomUploadLimits::DEFAULT_MAX_DIRECT_FILE_BYTES)
+            ->assertJsonPath('limits.max_file_size_label', '1 GB')
+            ->assertJsonPath('limits.direct_upload', true);
     }
 
     public function test_manager_can_upload_directory_and_viewer_can_read_metadata_and_download_study(): void
@@ -255,6 +271,62 @@ class PhrDicomTest extends TestCase
             'CARDIAC_CT/ST0001/SE0001/IM0001',
             'CARDIAC_CT/ST0001/SE0001/IM0001-2',
         ], $upload->manifest_json['reserved_paths']);
+    }
+
+    public function test_direct_upload_url_rejects_files_over_configured_cap(): void
+    {
+        config(['phr.dicom_max_file_bytes' => 10]);
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/signed-url", [
+                'filename' => 'IM0001',
+                'relative_path' => 'CARDIAC_CT/ST0001/SE0001/IM0001',
+                'content_type' => 'application/dicom',
+                'file_size' => 11,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file_size')
+            ->assertJsonPath('errors.file_size.0', 'Each DICOM file must be 10 B or smaller.');
+
+        $upload = PhrDicomUpload::query()->findOrFail($uploadId);
+        $this->assertArrayNotHasKey('reserved_paths', $upload->manifest_json);
+    }
+
+    public function test_direct_upload_completion_deletes_objects_over_configured_cap(): void
+    {
+        config(['phr.dicom_max_file_bytes' => 10]);
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $upload = PhrDicomUpload::query()->findOrFail($uploadId);
+        $relativePath = 'CARDIAC_CT/ST0001/SE0001/IM0001';
+        $storageKey = $upload->r2_prefix.'/'.$relativePath;
+
+        $upload->update([
+            'manifest_json' => array_merge($upload->manifest_json ?? [], [
+                'reserved_paths' => [$relativePath],
+            ]),
+        ]);
+        Storage::disk(DicomUploadProcessor::DISK)->put($storageKey, str_repeat('x', 11));
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/files/complete", [
+                'r2_key' => $storageKey,
+                'relative_path' => $relativePath,
+                'original_filename' => 'IM0001',
+                'mime_type' => 'application/dicom',
+                'file_size_bytes' => 10,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Each DICOM file must be 10 B or smaller.');
+
+        Storage::disk(DicomUploadProcessor::DISK)->assertMissing($storageKey);
     }
 
     public function test_direct_uploaded_r2_object_is_registered_and_finalized(): void

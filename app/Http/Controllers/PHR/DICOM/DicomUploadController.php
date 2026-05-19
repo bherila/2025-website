@@ -10,6 +10,7 @@ use App\Http\Requests\PHR\DICOM\StoreDicomUploadFileRequest;
 use App\Models\PhrDicomUpload;
 use App\Models\PhrPatient;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Services\PHR\DICOM\DicomUploadLimits;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -79,6 +80,7 @@ class DicomUploadController extends Controller
             $request->string('filename')->value(),
             $request->string('relative_path')->trim()->value() ?: null,
             $request->string('content_type')->trim()->value() ?: null,
+            $request->integer('file_size'),
         );
 
         return response()->json($signedUpload);
@@ -180,13 +182,15 @@ class DicomUploadController extends Controller
     }
 
     /**
-     * @return array{max_file_bytes: int|null, max_file_size_label: string|null, direct_upload: bool}
+     * @return array{max_file_bytes: int, max_file_size_label: string, direct_upload: bool}
      */
     private function uploadLimitsPayload(): array
     {
+        $maxFileBytes = DicomUploadLimits::maxDirectFileBytes();
+
         return [
-            'max_file_bytes' => null,
-            'max_file_size_label' => null,
+            'max_file_bytes' => $maxFileBytes,
+            'max_file_size_label' => DicomUploadLimits::formatBytes($maxFileBytes),
             'direct_upload' => true,
         ];
     }

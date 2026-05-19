@@ -162,13 +162,15 @@ class DicomUploadProcessor
      *
      * @return array{upload_url: string, headers: array<string, string>, r2_key: string, relative_path: string, expires_in: int}
      */
-    public function requestDirectUpload(PhrDicomUpload $upload, ?string $filename, ?string $relativePath, ?string $contentType): array
+    public function requestDirectUpload(PhrDicomUpload $upload, ?string $filename, ?string $relativePath, ?string $contentType, int $fileSizeBytes): array
     {
-        return DB::transaction(function () use ($upload, $filename, $relativePath, $contentType): array {
+        return DB::transaction(function () use ($upload, $filename, $relativePath, $contentType, $fileSizeBytes): array {
             $locked = PhrDicomUpload::query()->lockForUpdate()->findOrFail($upload->id);
             if ($locked->status !== PhrDicomUpload::STATUS_PENDING) {
                 throw new HttpException(409, 'Upload session is no longer accepting files.');
             }
+
+            $this->ensureWithinDirectUploadLimit($fileSizeBytes);
 
             $manifest = $locked->manifest_json ?? [];
             $skippedFiles = $locked->skipped_files_json ?? [];
@@ -207,6 +209,8 @@ class DicomUploadProcessor
                 throw new HttpException(409, 'Upload session is no longer accepting files.');
             }
 
+            $this->ensureWithinDirectUploadLimit($fileSizeBytes);
+
             $manifest = $locked->manifest_json ?? [];
             $skippedFiles = $locked->skipped_files_json ?? [];
             $reservedPaths = $this->stringList($manifest['reserved_paths'] ?? []);
@@ -225,6 +229,12 @@ class DicomUploadProcessor
             }
 
             $actualSize = $this->storageObjectSize($storageKey);
+            if ($actualSize > DicomUploadLimits::maxDirectFileBytes()) {
+                $this->deleteStorageObject($storageKey);
+
+                throw new HttpException(422, $this->directUploadLimitMessage());
+            }
+
             if ($actualSize !== $fileSizeBytes) {
                 throw new HttpException(422, 'Uploaded DICOM object size did not match the selected file.');
             }
@@ -783,6 +793,18 @@ class DicomUploadProcessor
                 'error' => $error->getMessage(),
             ]);
         }
+    }
+
+    private function ensureWithinDirectUploadLimit(int $fileSizeBytes): void
+    {
+        if ($fileSizeBytes > DicomUploadLimits::maxDirectFileBytes()) {
+            throw new HttpException(422, $this->directUploadLimitMessage());
+        }
+    }
+
+    private function directUploadLimitMessage(): string
+    {
+        return 'Each DICOM file must be '.DicomUploadLimits::formatBytes(DicomUploadLimits::maxDirectFileBytes()).' or smaller.';
     }
 
     /**
