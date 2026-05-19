@@ -4,7 +4,7 @@ namespace App\Services\PHR\DICOM;
 
 class DicomMetadataParser
 {
-    private const MAX_PARSE_BYTES = 4194304;
+    public const MAX_PARSE_BYTES = 4194304;
 
     /**
      * @var array<string, array{name: string, type: string}>
@@ -79,7 +79,25 @@ class DicomMetadataParser
     public function parse(string $path): array
     {
         $data = file_get_contents($path, false, null, 0, self::MAX_PARSE_BYTES);
-        if ($data === false || strlen($data) < 8) {
+        if ($data === false) {
+            return $this->emptyResult();
+        }
+
+        return $this->parseBytes($data);
+    }
+
+    /**
+     * @return array{
+     *     is_dicom: bool,
+     *     has_preamble: bool,
+     *     metadata: array<string, mixed>,
+     *     normalized: array<string, mixed>,
+     *     is_image_instance: bool
+     * }
+     */
+    public function parseBytes(string $data): array
+    {
+        if (strlen($data) < 8) {
             return $this->emptyResult();
         }
 

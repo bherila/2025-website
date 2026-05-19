@@ -193,7 +193,16 @@ export const PhrDicomUploadResponseSchema = z.object({
   limits: z.object({
     max_file_bytes: z.number().nullable(),
     max_file_size_label: nullableString,
+    direct_upload: z.boolean().optional(),
   }).optional(),
+})
+
+export const PhrDicomSignedUploadResponseSchema = z.object({
+  upload_url: z.string(),
+  headers: z.record(z.string(), z.string()).default({}),
+  r2_key: z.string(),
+  relative_path: z.string(),
+  expires_in: z.number(),
 })
 
 export const PhrDicomUploadFileResultSchema = z.object({
