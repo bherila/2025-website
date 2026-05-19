@@ -83,7 +83,7 @@ class DicomUploadController extends Controller
             $request->integer('file_size'),
         );
 
-        return response()->json($signedUpload);
+        return response()->json($this->signedUploadPayload($signedUpload));
     }
 
     /**
@@ -192,6 +192,21 @@ class DicomUploadController extends Controller
             'max_file_bytes' => $maxFileBytes,
             'max_file_size_label' => DicomUploadLimits::formatBytes($maxFileBytes),
             'direct_upload' => true,
+        ];
+    }
+
+    /**
+     * @param  array{upload_url: string, headers: array<string, string>, r2_key: string, relative_path: string, expires_in: int}  $signedUpload
+     * @return array{upload_url: string, headers: object, r2_key: string, relative_path: string, expires_in: int}
+     */
+    private function signedUploadPayload(array $signedUpload): array
+    {
+        return [
+            'upload_url' => $signedUpload['upload_url'],
+            'headers' => (object) $signedUpload['headers'],
+            'r2_key' => $signedUpload['r2_key'],
+            'relative_path' => $signedUpload['relative_path'],
+            'expires_in' => $signedUpload['expires_in'],
         ];
     }
 }

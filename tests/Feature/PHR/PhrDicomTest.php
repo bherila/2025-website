@@ -273,6 +273,45 @@ class PhrDicomTest extends TestCase
         ], $upload->manifest_json['reserved_paths']);
     }
 
+    public function test_direct_upload_url_serializes_empty_headers_as_json_object(): void
+    {
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $adapter = new class
+        {
+            /**
+             * @param  array<string, mixed>  $options
+             * @return array{url: string, headers: array<string, string>}
+             */
+            public function temporaryUploadUrl(string $path, mixed $expiration, array $options): array
+            {
+                return [
+                    'url' => 'https://r2.example.test/'.rawurlencode($path),
+                    'headers' => [],
+                ];
+            }
+        };
+
+        config(['filesystems.disks.'.DicomUploadProcessor::DISK.'.bucket' => 'dicom-test-bucket']);
+        Storage::shouldReceive('disk')
+            ->once()
+            ->with(DicomUploadProcessor::DISK)
+            ->andReturn($adapter);
+
+        $response = $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/signed-url", [
+                'filename' => 'IM0001',
+                'relative_path' => 'CARDIAC_CT/ST0001/SE0001/IM0001',
+                'content_type' => 'application/dicom',
+                'file_size' => 1024,
+            ])
+            ->assertOk()
+            ->assertJsonPath('relative_path', 'CARDIAC_CT/ST0001/SE0001/IM0001');
+
+        $this->assertStringContainsString('"headers":{}', (string) $response->getContent());
+    }
+
     public function test_direct_upload_url_rejects_files_over_configured_cap(): void
     {
         config(['phr.dicom_max_file_bytes' => 10]);

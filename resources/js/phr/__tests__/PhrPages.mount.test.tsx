@@ -168,6 +168,59 @@ describe('PHR page mounts', () => {
     }
   })
 
+  it('uploads imaging files when signed URL response has empty headers array', async () => {
+    const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    MockUploadXMLHttpRequest.reset()
+    globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
+
+    mockPost.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
+        return { upload: makeDicomUpload('pending') }
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/signed-url`) {
+        return makeSignedDicomUpload([])
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`) {
+        return makeDicomUploadFileResponse()
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`) {
+        return { upload: makeDicomUpload('processed') }
+      }
+      return { patient: makePatient() }
+    })
+
+    try {
+      const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload dicom/i })).toBeInTheDocument())
+
+      const input = container.querySelector('input[type="file"]')
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Expected DICOM file input to render.')
+      }
+
+      const file = new File(['dicom'], 'IM0001', { type: 'application/dicom' })
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
+
+      fireEvent.change(input, { target: { files: [file] } })
+
+      await waitFor(() => expect(screen.getByText('Upload complete')).toBeInTheDocument())
+      expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders).toEqual({
+        'Content-Type': 'application/dicom',
+      })
+      expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`, {
+        r2_key: 'phr/dicom/patients/1/uploads/upload-uuid/CARDIAC_CT/IM0001',
+        relative_path: 'CARDIAC_CT/IM0001',
+        original_filename: 'IM0001',
+        mime_type: 'application/dicom',
+        file_size_bytes: 5,
+      })
+      expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`, {})
+    } finally {
+      globalThis.XMLHttpRequest = originalXmlHttpRequest
+    }
+  })
+
   it('cancels imaging upload sessions when direct storage upload fails', async () => {
     const originalXmlHttpRequest = globalThis.XMLHttpRequest
     MockUploadXMLHttpRequest.reset()
@@ -346,13 +399,13 @@ function makeDicomUpload(status: string) {
   }
 }
 
-function makeSignedDicomUpload() {
+function makeSignedDicomUpload(headers: Record<string, string> | [] = {
+  'Content-Type': 'application/dicom',
+  'x-amz-meta-upload': 'dicom',
+}) {
   return {
     upload_url: 'https://r2.example.test/signed-put',
-    headers: {
-      'Content-Type': 'application/dicom',
-      'x-amz-meta-upload': 'dicom',
-    },
+    headers,
     r2_key: 'phr/dicom/patients/1/uploads/upload-uuid/CARDIAC_CT/IM0001',
     relative_path: 'CARDIAC_CT/IM0001',
     expires_in: 900,

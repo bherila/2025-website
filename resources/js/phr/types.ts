@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
 const nullableString = z.string().nullable()
+const signedUploadHeadersSchema = z.preprocess((value) => {
+  if (Array.isArray(value) && value.length === 0) {
+    return {}
+  }
+
+  return value
+}, z.record(z.string(), z.string()))
 
 export const PhrConditionClinicalStatusSchema = z.enum([
   'active',
@@ -199,7 +206,7 @@ export const PhrDicomUploadResponseSchema = z.object({
 
 export const PhrDicomSignedUploadResponseSchema = z.object({
   upload_url: z.string(),
-  headers: z.record(z.string(), z.string()).default({}),
+  headers: signedUploadHeadersSchema.default({}),
   r2_key: z.string(),
   relative_path: z.string(),
   expires_in: z.number(),
