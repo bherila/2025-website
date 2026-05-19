@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
 import { errorMessage } from '@/phr/shared'
 import {
+  PhrDicomSignedUploadResponseSchema,
   PhrDicomStudiesResponseSchema,
   type PhrDicomStudy,
   PhrDicomUploadFileResponseSchema,
@@ -426,31 +427,79 @@ class UploadController {
     }
   }
 
-  private uploadOne(file: FileWithRelativePath): Promise<FileOutcome> {
+  private async uploadOne(file: FileWithRelativePath): Promise<FileOutcome> {
     const relativePath = relativeFilePath(file)
     this.options.onFileStarted(relativePath)
 
     if (this.options.maxFileBytes !== null && file.size > this.options.maxFileBytes) {
       this.options.onFileBytesProgress(file.size)
 
-      return Promise.resolve({
+      return {
         stored: false,
         skippedReason: null,
         errorMessage: `File is ${formatBytes(file.size)}, which exceeds the server upload limit of ${this.options.maxFileSizeLabel ?? formatBytes(this.options.maxFileBytes)}.`,
         relativePath,
-      })
+      }
     }
 
-    return new Promise<FileOutcome>((resolve) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/files`)
-      xhr.setRequestHeader('Accept', 'application/json')
-      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest')
-      const token = csrfToken()
-      if (token) {
-        xhr.setRequestHeader('X-CSRF-TOKEN', token)
+    try {
+      const signedUpload = PhrDicomSignedUploadResponseSchema.parse(await fetchWrapper.post(
+        `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/signed-url`,
+        {
+          filename: file.name,
+          relative_path: relativePath,
+          content_type: file.type || 'application/dicom',
+          file_size: file.size,
+        },
+      ))
+
+      if (this.aborted) {
+        return { stored: false, skippedReason: null, errorMessage: 'Cancelled.', relativePath }
       }
-      xhr.withCredentials = true
+
+      await this.putFileToStorage(file, signedUpload.upload_url, signedUpload.headers)
+
+      if (this.aborted) {
+        return { stored: false, skippedReason: null, errorMessage: 'Cancelled.', relativePath }
+      }
+
+      const completed = PhrDicomUploadFileResponseSchema.parse(await fetchWrapper.post(
+        `/api/phr/patients/${this.options.patientId}/dicom/uploads/${this.options.uploadId}/files/complete`,
+        {
+          r2_key: signedUpload.r2_key,
+          relative_path: signedUpload.relative_path,
+          original_filename: file.name,
+          mime_type: file.type || 'application/dicom',
+          file_size_bytes: file.size,
+        },
+      ))
+
+      return {
+        stored: completed.result.stored,
+        skippedReason: completed.result.skipped_reason,
+        errorMessage: null,
+        relativePath: completed.result.relative_path,
+      }
+    } catch (error) {
+      return {
+        stored: false,
+        skippedReason: null,
+        errorMessage: errorMessage(error),
+        relativePath,
+      }
+    }
+  }
+
+  private putFileToStorage(file: FileWithRelativePath, uploadUrl: string, signedHeaders: Record<string, string>): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', uploadUrl)
+      for (const [key, value] of Object.entries(signedHeaders)) {
+        xhr.setRequestHeader(key, value)
+      }
+      if (!Object.keys(signedHeaders).some((key) => key.toLowerCase() === 'content-type')) {
+        xhr.setRequestHeader('Content-Type', file.type || 'application/dicom')
+      }
 
       let lastLoaded = 0
       xhr.upload.addEventListener('progress', (event) => {
@@ -466,47 +515,28 @@ class UploadController {
         this.options.onFileBytesProgress(file.size - lastLoaded)
 
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const parsed = PhrDicomUploadFileResponseSchema.parse(JSON.parse(xhr.responseText))
-            resolve({
-              stored: parsed.result.stored,
-              skippedReason: parsed.result.skipped_reason,
-              errorMessage: null,
-              relativePath,
-            })
-          } catch (error) {
-            resolve({
-              stored: false,
-              skippedReason: null,
-              errorMessage: `Unexpected server response (HTTP ${xhr.status}): ${errorMessage(error)} — ${truncate(xhr.responseText, 200)}`,
-              relativePath,
-            })
-          }
+          resolve()
         } else {
-          resolve({ stored: false, skippedReason: null, errorMessage: extractServerError(xhr), relativePath })
+          reject(new Error(`Storage upload failed: ${extractServerError(xhr)}`))
         }
       })
 
       xhr.addEventListener('error', () => {
         this.activeRequests.delete(xhr)
-        resolve({ stored: false, skippedReason: null, errorMessage: 'Network error.', relativePath })
+        reject(new Error('Network error during storage upload.'))
       })
 
       xhr.addEventListener('abort', () => {
         this.activeRequests.delete(xhr)
-        resolve({ stored: false, skippedReason: null, errorMessage: 'Cancelled.', relativePath })
+        reject(new Error('Cancelled.'))
       })
-
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('relative_path', relativePath)
 
       this.activeRequests.add(xhr)
       try {
-        xhr.send(formData)
+        xhr.send(file)
       } catch (error) {
         this.activeRequests.delete(xhr)
-        resolve({ stored: false, skippedReason: null, errorMessage: errorMessage(error), relativePath })
+        reject(error instanceof Error ? error : new Error(errorMessage(error)))
       }
     })
   }
@@ -555,11 +585,6 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-function csrfToken(): string | null {
-  const meta = document.querySelector('meta[name="csrf-token"]')
-  return meta ? meta.getAttribute('content') : null
 }
 
 function extractServerError(xhr: XMLHttpRequest): string {

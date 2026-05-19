@@ -112,6 +112,12 @@ describe('PHR page mounts', () => {
       if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
         return { upload: makeDicomUpload('pending') }
       }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/signed-url`) {
+        return makeSignedDicomUpload()
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`) {
+        return makeDicomUploadFileResponse()
+      }
       if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`) {
         throw new Error('Finalize failed.')
       }
@@ -138,20 +144,35 @@ describe('PHR page mounts', () => {
 
       await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
       expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders).toMatchObject({
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/dicom',
+        'x-amz-meta-upload': 'dicom',
       })
       expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()
       expect(screen.getAllByText(/Finalize failed\./).length).toBeGreaterThan(0)
+      expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/signed-url`, {
+        filename: 'IM0001',
+        relative_path: 'CARDIAC_CT/IM0001',
+        content_type: 'application/dicom',
+        file_size: 5,
+      })
+      expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`, {
+        r2_key: 'phr/dicom/patients/1/uploads/upload-uuid/CARDIAC_CT/IM0001',
+        relative_path: 'CARDIAC_CT/IM0001',
+        original_filename: 'IM0001',
+        mime_type: 'application/dicom',
+        file_size_bytes: 5,
+      })
       expect(mockPost).toHaveBeenCalledWith(`/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`, {})
     } finally {
       globalThis.XMLHttpRequest = originalXmlHttpRequest
     }
   })
 
-  it('cancels imaging upload sessions instead of finalizing unexpected HTML responses', async () => {
+  it('cancels imaging upload sessions when direct storage upload fails', async () => {
     const originalXmlHttpRequest = globalThis.XMLHttpRequest
     MockUploadXMLHttpRequest.reset()
+    MockUploadXMLHttpRequest.status = 403
+    MockUploadXMLHttpRequest.statusText = 'Forbidden'
     MockUploadXMLHttpRequest.responseText = '<!DOCTYPE html><html lang="en"><head><title>Redirected</title></head></html>'
     globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
 
@@ -161,6 +182,12 @@ describe('PHR page mounts', () => {
     mockPost.mockImplementation(async (url: string) => {
       if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
         return { upload: makeDicomUpload('pending') }
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/signed-url`) {
+        return makeSignedDicomUpload()
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`) {
+        throw new Error('Complete should not be called.')
       }
       if (url === finalizeUrl) {
         throw new Error('Finalize should not be called.')
@@ -187,12 +214,9 @@ describe('PHR page mounts', () => {
       fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(() => expect(screen.getByText('Upload failed')).toBeInTheDocument())
-      expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders).toMatchObject({
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      })
+      expect(MockUploadXMLHttpRequest.instances[0]?.requestHeaders['Content-Type']).toBe('application/dicom')
       expect(screen.queryByText('Upload complete')).not.toBeInTheDocument()
-      expect(screen.getAllByText(/Unexpected server response/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/Storage upload failed/).length).toBeGreaterThan(0)
       expect(mockPost).toHaveBeenCalledWith(cancelUrl, {})
       expect(mockPost).not.toHaveBeenCalledWith(finalizeUrl, {})
     } finally {
@@ -322,14 +346,21 @@ function makeDicomUpload(status: string) {
   }
 }
 
-class MockUploadXMLHttpRequest {
-  static instances: MockUploadXMLHttpRequest[] = []
+function makeSignedDicomUpload() {
+  return {
+    upload_url: 'https://r2.example.test/signed-put',
+    headers: {
+      'Content-Type': 'application/dicom',
+      'x-amz-meta-upload': 'dicom',
+    },
+    r2_key: 'phr/dicom/patients/1/uploads/upload-uuid/CARDIAC_CT/IM0001',
+    relative_path: 'CARDIAC_CT/IM0001',
+    expires_in: 900,
+  }
+}
 
-  static status = 200
-
-  static statusText = 'OK'
-
-  static responseText = JSON.stringify({
+function makeDicomUploadFileResponse() {
+  return {
     result: {
       stored: true,
       skipped_reason: null,
@@ -337,21 +368,23 @@ class MockUploadXMLHttpRequest {
       study_id: 7001,
     },
     upload: makeDicomUpload('pending'),
-  })
+  }
+}
+
+class MockUploadXMLHttpRequest {
+  static instances: MockUploadXMLHttpRequest[] = []
+
+  static status = 200
+
+  static statusText = 'OK'
+
+  static responseText = ''
 
   static reset(): void {
     MockUploadXMLHttpRequest.instances = []
     MockUploadXMLHttpRequest.status = 200
     MockUploadXMLHttpRequest.statusText = 'OK'
-    MockUploadXMLHttpRequest.responseText = JSON.stringify({
-      result: {
-        stored: true,
-        skipped_reason: null,
-        relative_path: 'CARDIAC_CT/IM0001',
-        study_id: 7001,
-      },
-      upload: makeDicomUpload('pending'),
-    })
+    MockUploadXMLHttpRequest.responseText = ''
   }
 
   upload = new MockUploadEventTarget()
