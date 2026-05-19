@@ -40,6 +40,7 @@ describe('Parking Pickup passenger rendering', () => {
     animatePassengers([passenger], 0, 0)
 
     const color = new THREE.Color()
+    const vertexColor = pools.headMesh.geometry.getAttribute('color')
     const matrix = new THREE.Matrix4()
     const position = new THREE.Vector3()
     const quaternion = new THREE.Quaternion()
@@ -52,6 +53,7 @@ describe('Parking Pickup passenger rendering', () => {
     expect(pools.used).toBe(1)
     expect(pools.headMesh.count).toBe(1)
     expect(pools.bodyMesh.count).toBe(1)
+    expect(Array.from(vertexColor.array.slice(0, 3))).toEqual([1, 1, 1])
     expect(`#${color.getHexString()}`).toBe(CAR_COLORS.red.hex)
     expect(position.y).toBeCloseTo(0.57)
   })

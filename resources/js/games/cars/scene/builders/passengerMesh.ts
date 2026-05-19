@@ -35,7 +35,7 @@ export function createPassengerInstancePools(
 ): PassengerInstancePools {
   const instanceCapacity = Math.max(0, Math.floor(capacity))
   const headMesh = new THREE.InstancedMesh(
-    new THREE.SphereGeometry(0.14, 16, 16),
+    withWhiteVertexColors(new THREE.SphereGeometry(0.14, 16, 16)),
     new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, vertexColors: true }),
     instanceCapacity,
   )
@@ -44,7 +44,7 @@ export function createPassengerInstancePools(
   headMesh.count = 0
 
   const bodyMesh = new THREE.InstancedMesh(
-    new THREE.CapsuleGeometry(0.1, 0.24, 8, 16),
+    withWhiteVertexColors(new THREE.CapsuleGeometry(0.1, 0.24, 8, 16)),
     new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, vertexColors: true }),
     instanceCapacity,
   )
@@ -152,6 +152,14 @@ function nextBadgeIndex(pools: PassengerInstancePools, pattern: CarPattern): num
   badgeMesh.count = index + 1
 
   return index
+}
+
+function withWhiteVertexColors<T extends THREE.BufferGeometry>(geometry: T): T {
+  const position = geometry.getAttribute('position')
+  const colors = new Float32Array(position.count * 3).fill(1)
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+
+  return geometry
 }
 
 function createPassengerPatternBadge(pattern: CarPattern): THREE.Mesh {
