@@ -1,0 +1,321 @@
+import * as THREE from 'three'
+
+import { type Car, CAR_COLORS, CAR_PATTERNS, type CarPattern } from '../../gameTypes'
+import { CELL_SIZE, PARKED_ROTATION } from '../sceneConstants'
+import { rotationForDirection } from '../sceneGeometry'
+import { lighten, roundedRect } from '../threeUtils'
+
+export interface CarVisualOptions {
+  colorblindMode?: boolean
+  hideColor?: boolean
+}
+
+export function createCarMesh(
+  car: Car,
+  position: THREE.Vector3,
+  parked: boolean,
+  options: CarVisualOptions = {},
+): THREE.Group {
+  const group = new THREE.Group()
+  const hideColor = options.hideColor === true || (car.colorHidden && !parked)
+  const color = hideColor ? '#94a3b8' : CAR_COLORS[car.color].hex
+  const carWidth = 0.54
+  const carLength = parked ? 0.44 + car.length * 0.44 : car.length * CELL_SIZE - 0.12
+  const body = new THREE.Mesh(
+    roundedBoxGeometry(carWidth, 0.34, carLength, 0.085),
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.42,
+      metalness: 0.05,
+    }),
+  )
+  body.castShadow = true
+  body.receiveShadow = true
+  body.position.y = 0.25
+  group.add(body)
+
+  const roof = new THREE.Mesh(
+    roundedBoxGeometry(carWidth * 0.78, 0.24, Math.max(0.42, carLength * 0.45), 0.065),
+    new THREE.MeshStandardMaterial({ color: hideColor ? '#cbd5e1' : lighten(color), roughness: 0.4, metalness: 0.04 }),
+  )
+  roof.position.y = 0.54
+  roof.position.z = -carLength * 0.05
+  roof.castShadow = true
+  group.add(roof)
+
+  const windshield = new THREE.Mesh(
+    new THREE.BoxGeometry(carWidth * 0.68, 0.025, Math.max(0.12, carLength * 0.2)),
+    new THREE.MeshStandardMaterial({ color: '#e0f2fe', roughness: 0.1, metalness: 0.1 }),
+  )
+  windshield.position.y = 0.68
+  windshield.position.z = carLength * 0.18
+  group.add(windshield)
+
+  for (const side of [-1, 1]) {
+    for (const end of [-1, 1]) {
+      const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.105, 0.105, 0.085, 16),
+        new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.5 }),
+      )
+      wheel.rotation.z = Math.PI / 2
+      wheel.position.set(side * (carWidth / 2 + 0.04), 0.14, end * (carLength / 2 - 0.18))
+      wheel.castShadow = true
+      group.add(wheel)
+    }
+  }
+
+  const decal = createCarDecal(car, carWidth, carLength, options)
+  group.add(decal)
+
+  group.position.copy(position)
+  group.rotation.y = parked ? PARKED_ROTATION : rotationForDirection(car.direction)
+  group.userData = { carId: car.id }
+  group.traverse((child) => {
+    child.userData = { carId: car.id }
+  })
+
+  return group
+}
+
+export function createCarDecal(
+  car: Car,
+  carWidth: number,
+  carLength: number,
+  options: CarVisualOptions = {},
+): THREE.Mesh {
+  const texture = createCarDecalTexture(car, options)
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+  })
+  const decal = new THREE.Mesh(
+    new THREE.PlaneGeometry(carWidth * 0.86, Math.min(carLength * 0.74, 1.25)),
+    material,
+  )
+  decal.rotation.x = -Math.PI / 2
+  decal.rotation.z = Math.PI
+  decal.position.set(0, 0.705, -carLength * 0.02)
+
+  return decal
+}
+
+const decalCanvasCache = new Map<string, HTMLCanvasElement>()
+
+export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}): THREE.CanvasTexture {
+  const remaining = Math.max(0, car.capacity - car.boarded)
+  const colorblindMode = options.colorblindMode === true
+  const hideColor = options.hideColor === true || car.colorHidden
+  const pattern = colorblindMode && !hideColor ? CAR_PATTERNS[car.color] : null
+  const cacheKey = `${remaining}|${hideColor ? 'hidden' : 'visible'}|${colorblindMode ? car.color : 'off'}`
+  let canvas = decalCanvasCache.get(cacheKey)
+  if (!canvas) {
+    canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 256
+    const context = canvas.getContext('2d')
+    if (context) {
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.fillStyle = 'rgba(15, 23, 42, 0.66)'
+      roundedRect(context, 18, 18, 220, 220, 30)
+      context.fill()
+
+      context.fillStyle = '#ffffff'
+      context.strokeStyle = 'rgba(15, 23, 42, 0.5)'
+      context.lineWidth = 12
+      context.lineJoin = 'round'
+      context.beginPath()
+      context.moveTo(128, 30)
+      context.lineTo(190, 92)
+      context.lineTo(154, 92)
+      context.lineTo(154, 132)
+      context.lineTo(102, 132)
+      context.lineTo(102, 92)
+      context.lineTo(66, 92)
+      context.closePath()
+      context.stroke()
+      context.fill()
+
+      if (!hideColor) {
+        context.font = '900 102px Atkinson Hyperlegible Next, Arial, sans-serif'
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.lineWidth = 14
+        context.strokeText(String(remaining), 128, 188)
+        context.fillText(String(remaining), 128, 188)
+      }
+
+      if (pattern) {
+        drawCarPatternCue(context, pattern, 28, 30, 48)
+      }
+    }
+    decalCanvasCache.set(cacheKey, canvas)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+
+  return texture
+}
+
+export function drawCarPatternCue(
+  context: CanvasRenderingContext2D,
+  pattern: CarPattern,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const stroke = 'rgba(15, 23, 42, 0.86)'
+  const fill = '#ffffff'
+  const accent = 'rgba(15, 23, 42, 0.2)'
+  const centerX = x + size / 2
+  const centerY = y + size / 2
+  const unit = size / 8
+
+  context.save()
+  context.fillStyle = 'rgba(255, 255, 255, 0.96)'
+  roundedRect(context, x, y, size, size, size * 0.22)
+  context.fill()
+  context.strokeStyle = stroke
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.lineWidth = Math.max(3, size * 0.075)
+
+  switch (pattern) {
+    case 'dot':
+      context.fillStyle = stroke
+      for (const offsetX of [-1, 1]) {
+        for (const offsetY of [-1, 1]) {
+          context.beginPath()
+          context.arc(centerX + offsetX * unit * 1.35, centerY + offsetY * unit * 1.35, unit * 0.85, 0, Math.PI * 2)
+          context.fill()
+        }
+      }
+      break
+    case 'stripe':
+      for (let index = -2; index <= 2; index += 1) {
+        context.beginPath()
+        context.moveTo(x + unit * 1.1, centerY + index * unit * 1.15)
+        context.lineTo(x + size - unit * 1.1, centerY + index * unit * 1.15)
+        context.stroke()
+      }
+      break
+    case 'triangle':
+      context.fillStyle = accent
+      context.beginPath()
+      context.moveTo(centerX, y + unit * 1.15)
+      context.lineTo(x + size - unit * 1.25, y + size - unit * 1.2)
+      context.lineTo(x + unit * 1.25, y + size - unit * 1.2)
+      context.closePath()
+      context.fill()
+      context.stroke()
+      break
+    case 'star':
+      drawStar(context, centerX, centerY, unit * 3.05, unit * 1.35)
+      context.fillStyle = accent
+      context.fill()
+      context.stroke()
+      break
+    case 'diamond':
+      context.fillStyle = accent
+      context.beginPath()
+      context.moveTo(centerX, y + unit)
+      context.lineTo(x + size - unit, centerY)
+      context.lineTo(centerX, y + size - unit)
+      context.lineTo(x + unit, centerY)
+      context.closePath()
+      context.fill()
+      context.stroke()
+      break
+    case 'chevron':
+      for (const inset of [unit * 1.55, unit * 3]) {
+        context.beginPath()
+        context.moveTo(x + unit * 1.3, y + inset)
+        context.lineTo(centerX, y + inset + unit * 1.45)
+        context.lineTo(x + size - unit * 1.3, y + inset)
+        context.stroke()
+      }
+      break
+    case 'ring':
+      context.beginPath()
+      context.arc(centerX, centerY, unit * 2.45, 0, Math.PI * 2)
+      context.stroke()
+      context.beginPath()
+      context.arc(centerX, centerY, unit * 0.85, 0, Math.PI * 2)
+      context.stroke()
+      break
+    case 'crosshatch':
+      for (let index = -1; index <= 1; index += 1) {
+        context.beginPath()
+        context.moveTo(x + unit * (1.1 + index * 1.6), y + unit * 1.1)
+        context.lineTo(x + unit * (4.9 + index * 1.6), y + size - unit * 1.1)
+        context.stroke()
+        context.beginPath()
+        context.moveTo(x + size - unit * (1.1 + index * 1.6), y + unit * 1.1)
+        context.lineTo(x + size - unit * (4.9 + index * 1.6), y + size - unit * 1.1)
+        context.stroke()
+      }
+      break
+  }
+
+  context.restore()
+}
+
+function drawStar(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  outerRadius: number,
+  innerRadius: number,
+): void {
+  context.beginPath()
+  for (let point = 0; point < 10; point += 1) {
+    const radius = point % 2 === 0 ? outerRadius : innerRadius
+    const angle = -Math.PI / 2 + (point * Math.PI) / 5
+    const x = centerX + Math.cos(angle) * radius
+    const y = centerY + Math.sin(angle) * radius
+    if (point === 0) {
+      context.moveTo(x, y)
+    } else {
+      context.lineTo(x, y)
+    }
+  }
+  context.closePath()
+}
+
+const roundedBoxCache = new Map<string, THREE.BufferGeometry>()
+
+function roundedBoxGeometry(width: number, height: number, depth: number, radius: number): THREE.BufferGeometry {
+  const key = `${width.toFixed(3)}|${height.toFixed(3)}|${depth.toFixed(3)}|${radius.toFixed(3)}`
+  const cached = roundedBoxCache.get(key)
+  if (cached) {
+    return cached
+  }
+
+  const r = Math.min(radius, Math.min(width, depth) / 2)
+  const innerWidth = width - 2 * r
+  const innerDepth = depth - 2 * r
+  const shape = new THREE.Shape()
+  shape.moveTo(-innerWidth / 2, -depth / 2)
+  shape.lineTo(innerWidth / 2, -depth / 2)
+  shape.absarc(innerWidth / 2, -innerDepth / 2, r, -Math.PI / 2, 0, false)
+  shape.lineTo(width / 2, innerDepth / 2)
+  shape.absarc(innerWidth / 2, innerDepth / 2, r, 0, Math.PI / 2, false)
+  shape.lineTo(-innerWidth / 2, depth / 2)
+  shape.absarc(-innerWidth / 2, innerDepth / 2, r, Math.PI / 2, Math.PI, false)
+  shape.lineTo(-width / 2, -innerDepth / 2)
+  shape.absarc(-innerWidth / 2, -innerDepth / 2, r, Math.PI, Math.PI * 1.5, false)
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: height,
+    bevelEnabled: true,
+    bevelThickness: r * 0.5,
+    bevelSize: r * 0.5,
+    bevelSegments: 3,
+    curveSegments: 8,
+  })
+  geometry.translate(0, 0, -height / 2)
+  geometry.rotateX(-Math.PI / 2)
+  roundedBoxCache.set(key, geometry)
+
+  return geometry
+}

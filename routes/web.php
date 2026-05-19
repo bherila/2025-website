@@ -160,6 +160,10 @@ Route::middleware('auth')->group(function () {
 
 Route::get('/tools/bingo', [BingoController::class, 'index']);
 
+Route::get('/games/parking-pickup', function () {
+    return view('games.cars');
+})->name('games.parking-pickup');
+
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
