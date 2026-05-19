@@ -150,9 +150,35 @@ class PhrDicomTest extends TestCase
         }
 
         $this->finalizeUpload($owner, $patientId, $uploadId)
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'No DICOM image instances were uploaded. The session contained only non-image DICOM files, skipped files, or files that failed before reaching the server.');
+
+        $upload = PhrDicomUpload::query()->where('patient_id', $patientId)->sole();
+        $this->assertSame(PhrDicomUpload::STATUS_FAILED, $upload->status);
+        $this->assertSame(0, $upload->stored_files);
+        $this->assertSame(count($cases), $upload->skipped_files);
+    }
+
+    public function test_dicomdir_only_upload_cannot_be_finalized_as_imaging_study(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('DICOMDIR', $this->dicomdirBytes()), 'CARDIAC_CT/DICOMDIR')
             ->assertOk()
-            ->assertJsonPath('upload.stored_files', 0)
-            ->assertJsonPath('upload.skipped_files', count($cases));
+            ->assertJsonPath('result.stored', true);
+
+        $this->finalizeUpload($owner, $patientId, $uploadId)
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'No DICOM image instances were uploaded. The session contained only non-image DICOM files, skipped files, or files that failed before reaching the server.');
+
+        $this->assertSame(PhrDicomUpload::STATUS_FAILED, PhrDicomUpload::query()->where('patient_id', $patientId)->sole()->status);
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+        $this->assertSame([], Storage::disk(DicomUploadProcessor::DISK)->allFiles());
     }
 
     public function test_finalized_session_rejects_additional_files(): void
@@ -185,6 +211,34 @@ class PhrDicomTest extends TestCase
             ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/cancel")
             ->assertOk()
             ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_FAILED);
+
+        $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(0, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+    }
+
+    public function test_invalid_php_upload_returns_actionable_dicom_error(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $uploadId = $this->openUpload($owner, $patientId, null);
+        $message = 'The DICOM file could not be uploaded. It may exceed the server upload limit. Try a smaller file or ask an administrator to raise the PHP upload_max_filesize, post_max_size, and web server body size limits.';
+        $path = tempnam(sys_get_temp_dir(), 'dicom-upload-');
+        $this->assertIsString($path);
+        file_put_contents($path, 'dicom');
+
+        try {
+            $file = new UploadedFile($path, 'IN000001', 'application/dicom', UPLOAD_ERR_INI_SIZE, true);
+
+            $this->postFile($owner, $patientId, $uploadId, $file, 'CARDIAC_CT/ST0001/SE0001/IN000001')
+                ->assertStatus(422)
+                ->assertJsonPath('message', $message)
+                ->assertJsonPath('errors.file.0', $message);
+        } finally {
+            @unlink($path);
+        }
 
         $this->assertSame(0, PhrDicomFile::query()->where('patient_id', $patientId)->count());
         $this->assertSame(0, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
@@ -411,6 +465,7 @@ class PhrDicomTest extends TestCase
         }
 
         return $this->actingAs($actor)
+            ->withHeader('Accept', 'application/json')
             ->post("/api/phr/patients/{$patientId}/dicom/uploads/{$uploadId}/files", $payload);
     }
 

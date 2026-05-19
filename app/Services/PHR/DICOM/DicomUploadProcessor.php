@@ -158,7 +158,19 @@ class DicomUploadProcessor
      */
     public function finalizeUpload(PhrDicomUpload $upload): PhrDicomUpload
     {
-        $upload->update(['status' => PhrDicomUpload::STATUS_PROCESSED]);
+        $upload->refresh();
+
+        if (! $this->uploadContainsImagePayload($upload)) {
+            $message = 'No DICOM image instances were uploaded. The session contained only non-image DICOM files, skipped files, or files that failed before reaching the server.';
+            $this->failUpload($upload, $message);
+
+            throw new HttpException(422, $message);
+        }
+
+        $upload->update([
+            'status' => PhrDicomUpload::STATUS_PROCESSED,
+            'error_message' => null,
+        ]);
 
         return $upload->refresh();
     }
@@ -237,6 +249,21 @@ class DicomUploadProcessor
     public function disk(): Filesystem
     {
         return Storage::disk(self::DISK);
+    }
+
+    private function uploadContainsImagePayload(PhrDicomUpload $upload): bool
+    {
+        if (PhrDicomInstance::query()->where('upload_id', $upload->id)->exists()) {
+            return true;
+        }
+
+        foreach ($upload->skipped_files_json ?? [] as $skippedFile) {
+            if (($skippedFile['reason'] ?? null) === 'duplicate_sop_instance') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
