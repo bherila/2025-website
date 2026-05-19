@@ -18,7 +18,7 @@ import {
   openParkingSlot,
   processBoardingAtParkingGate,
   progressFromState,
-  resetGame,
+  restartLevel,
   saveProgress,
   startGameFromProgress,
 } from './gameEngine'
@@ -89,7 +89,7 @@ export function CarsGame(): ReactElement {
 
   const handleReset = useCallback((): void => {
     setVipSelectionActive(false)
-    setState(resetGame())
+    setState((current) => restartLevel(current))
   }, [])
 
   return (

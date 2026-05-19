@@ -96,6 +96,14 @@ export function resetGame(): GameState {
   return startGameFromProgress(createInitialProgress())
 }
 
+export function restartLevel(state: GameState): GameState {
+  return generateLevel(state.level, seedForLevel(state.level), {
+    totalScore: state.totalScore,
+    highScore: state.highScore,
+    powerUps: state.powerUps,
+  })
+}
+
 export function advanceToNextLevel(state: GameState): GameState {
   if (!state.completedLevel) {
     return state
