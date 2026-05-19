@@ -116,7 +116,7 @@ class PhrDicomTest extends TestCase
             ->assertOk()
             ->assertJsonPath('studies.0.StudyInstanceUID', $study->study_instance_uid)
             ->assertJsonPath('studies.0.series.0.instances.0.metadata.Rows', 512)
-            ->assertJsonPath('studies.0.series.0.instances.0.url', url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"));
+            ->assertJsonPath('studies.0.series.0.instances.0.url', 'dicomweb:'.url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"));
 
         $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")
             ->assertOk()

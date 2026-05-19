@@ -685,6 +685,6 @@ function downloadStudyZip(patientId: number, studyId: number): void {
 
 function openInOhifViewer(patientId: number, studyId: number): void {
   const manifestUrl = `/api/phr/patients/${patientId}/dicom/studies/${studyId}/viewer-json`
-  const viewerUrl = `/ohif/viewer?datasources=dicomjson&url=${encodeURIComponent(manifestUrl)}`
+  const viewerUrl = `/ohif/viewer/dicomjson?url=${encodeURIComponent(manifestUrl)}`
   window.open(viewerUrl, '_blank', 'noopener,noreferrer')
 }

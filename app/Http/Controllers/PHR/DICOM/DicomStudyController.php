@@ -133,7 +133,7 @@ class DicomStudyController extends Controller
 
         return [
             'metadata' => array_filter($metadata, fn (mixed $value): bool => $value !== null),
-            'url' => url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"),
+            'url' => 'dicomweb:'.url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"),
         ];
     }
 }

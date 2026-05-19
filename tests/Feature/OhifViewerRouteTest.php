@@ -48,7 +48,7 @@ class OhifViewerRouteTest extends TestCase
 
     public function test_ohif_viewer_path_serves_static_viewer_entrypoint(): void
     {
-        $response = $this->get('/ohif/viewer?datasources=dicomjson&url=%2Fapi%2Fphr%2Fpatients%2F2%2Fdicom%2Fstudies%2F1%2Fviewer-json');
+        $response = $this->get('/ohif/viewer/dicomjson?url=%2Fapi%2Fphr%2Fpatients%2F2%2Fdicom%2Fstudies%2F1%2Fviewer-json');
 
         $response->assertOk();
         $this->assertInstanceOf(BinaryFileResponse::class, $response->baseResponse);

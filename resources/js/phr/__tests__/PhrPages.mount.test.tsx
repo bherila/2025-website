@@ -103,6 +103,34 @@ describe('PHR page mounts', () => {
     expect(document.body).toBeTruthy()
   })
 
+  it('opens imaging studies with the OHIF DICOM JSON route', async () => {
+    const openSpy = jest.fn()
+    const originalOpen = window.open
+    window.open = openSpy as unknown as typeof window.open
+
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient: makePatient() }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies`) {
+        return { studies: [makeDicomStudy()] }
+      }
+      return {}
+    })
+
+    try {
+      render(<ImagingPage patientId={PATIENT_ID} />)
+
+      fireEvent.click(await screen.findByRole('button', { name: /viewer/i }))
+
+      expect(openSpy).toHaveBeenCalledWith(
+        `/ohif/viewer/dicomjson?url=${encodeURIComponent(`/api/phr/patients/${PATIENT_ID}/dicom/studies/7001/viewer-json`)}`,
+        '_blank',
+        'noopener,noreferrer',
+      )
+    } finally {
+      window.open = originalOpen
+    }
+  })
+
   it('keeps imaging upload dialog failed when finalize fails', async () => {
     const originalXmlHttpRequest = globalThis.XMLHttpRequest
     MockUploadXMLHttpRequest.reset()
@@ -394,6 +422,24 @@ function makeDicomUpload(status: string) {
     stored_bytes: status === 'pending' ? 0 : 5,
     manifest_json: null,
     skipped_files_json: [],
+    created_at: null,
+    updated_at: null,
+  }
+}
+
+function makeDicomStudy() {
+  return {
+    id: 7001,
+    patient_id: PATIENT_ID,
+    upload_id: 501,
+    study_instance_uid: '1.2.840.113619.2.55.3.604688437.20260517.1',
+    study_date: '2026-05-17',
+    study_time: null,
+    accession_number: null,
+    description: 'Cardiac CT',
+    modalities: 'CT',
+    series_count: 1,
+    instance_count: 1,
     created_at: null,
     updated_at: null,
   }

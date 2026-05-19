@@ -3,7 +3,7 @@
 The PHR UI's Viewer button on each study opens the OHIF Viewer in a new tab pointed at the patient's authenticated `viewer-json` manifest:
 
 ```text
-/ohif/viewer?datasources=dicomjson&url=<encoded-manifest-url>
+/ohif/viewer/dicomjson?url=<encoded-manifest-url>
 ```
 
 where the manifest URL is:
@@ -15,7 +15,7 @@ where the manifest URL is:
 OHIF loads the manifest with the browser's session cookie, then fetches each instance from the URLs the manifest contains:
 
 ```text
-/api/phr/patients/{patient}/dicom/instances/{instance}/file
+dicomweb:https://<host>/api/phr/patients/{patient}/dicom/instances/{instance}/file
 ```
 
 Both endpoints are protected by the existing `web` + `auth` middleware, so the storage layer stays private and there is no CORS plumbing. ZIP downloads of the originals are still served by:
