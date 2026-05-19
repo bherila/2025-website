@@ -10,6 +10,7 @@ use App\Services\PHR\Access\PhrPatientAccessService;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use ZipStream\ZipStream;
@@ -21,7 +22,7 @@ class DicomFileController extends Controller
         private readonly PhrPatientAccessService $accessService,
     ) {}
 
-    public function proxyInstanceFile(Request $request, int $patient, int $instance): StreamedResponse
+    public function proxyInstanceFile(Request $request, int $patient, int $instance): RedirectResponse
     {
         $userId = (int) $request->user()?->id;
         $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
@@ -30,18 +31,9 @@ class DicomFileController extends Controller
             ->with(['file'])
             ->findOrFail($instance);
 
-        $stream = $this->uploadProcessor->disk()->readStream($resolvedInstance->file->r2_key);
-        abort_if(! is_resource($stream), 404);
-
-        return response()->stream(function () use ($stream): void {
-            fpassthru($stream);
-            fclose($stream);
-        }, 200, [
-            'Content-Type' => 'application/dicom',
-            'Content-Length' => (string) $resolvedInstance->file->file_size_bytes,
-            'Content-Disposition' => 'inline; filename="'.$this->safeDownloadName($resolvedInstance->file->original_filename).'"',
-            'Cache-Control' => 'private, no-store',
-        ]);
+        return redirect()
+            ->away($this->uploadProcessor->temporaryViewerUrl($resolvedInstance->file))
+            ->header('Cache-Control', 'private, no-store');
     }
 
     public function downloadStudy(Request $request, int $patient, int $study): StreamedResponse

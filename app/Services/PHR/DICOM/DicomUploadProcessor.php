@@ -194,6 +194,18 @@ class DicomUploadProcessor
         });
     }
 
+    public function temporaryViewerUrl(PhrDicomFile $file): string
+    {
+        return Storage::disk(self::DISK)->temporaryUrl(
+            $file->r2_key,
+            now()->addMinutes($this->viewerUrlTtlMinutes()),
+            [
+                'ResponseContentType' => 'application/dicom',
+                'ResponseContentDisposition' => 'inline; filename="'.$this->safeResponseFilename($file->original_filename).'"',
+            ],
+        );
+    }
+
     /**
      * Register an object that was already uploaded directly to R2.
      *
@@ -705,6 +717,16 @@ class DicomUploadProcessor
             'url' => $result['url'],
             'headers' => $this->stringMap($result['headers'] ?? []),
         ];
+    }
+
+    private function viewerUrlTtlMinutes(): int
+    {
+        return max(1, (int) config('phr.dicom_viewer_url_ttl_minutes', 30));
+    }
+
+    private function safeResponseFilename(string $filename): string
+    {
+        return str_replace(['"', "\r", "\n"], '', $filename);
     }
 
     private function storageObjectSize(string $storageKey): int

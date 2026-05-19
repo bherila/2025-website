@@ -6,7 +6,7 @@ use Tests\TestCase;
 
 class CspPolicyTest extends TestCase
 {
-    public function test_report_only_csp_allows_configured_dicom_r2_upload_sources(): void
+    public function test_report_only_csp_allows_configured_dicom_r2_storage_sources(): void
     {
         config()->set('filesystems.disks.phr_dicom.endpoint', 'https://460f679bfb0a7ee47cc561c1d08e154f.r2.cloudflarestorage.com');
         config()->set('filesystems.disks.phr_dicom.bucket', 'bhdicom');

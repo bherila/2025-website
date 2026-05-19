@@ -13,6 +13,7 @@ use App\Services\PHR\DICOM\DicomMetadataParser;
 use App\Services\PHR\DICOM\DicomUploadLimits;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
@@ -112,15 +113,27 @@ class PhrDicomTest extends TestCase
             ->assertOk()
             ->assertJsonPath('studies.0.instance_count', 1);
 
-        $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/viewer-json")
-            ->assertOk()
-            ->assertJsonPath('studies.0.StudyInstanceUID', $study->study_instance_uid)
-            ->assertJsonPath('studies.0.series.0.instances.0.metadata.Rows', 512)
-            ->assertJsonPath('studies.0.series.0.instances.0.url', 'dicomweb:'.url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"));
+        config(['phr.dicom_viewer_url_ttl_minutes' => 12]);
+        $now = Carbon::parse('2026-05-19 12:00:00');
+        Carbon::setTestNow($now);
 
-        $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")
-            ->assertOk()
-            ->assertHeader('Content-Type', 'application/dicom');
+        try {
+            $viewerResponse = $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/viewer-json")
+                ->assertOk()
+                ->assertJsonPath('studies.0.StudyInstanceUID', $study->study_instance_uid)
+                ->assertJsonPath('studies.0.series.0.instances.0.metadata.Rows', 512);
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $signedInstanceUrl = (string) $viewerResponse->json('studies.0.series.0.instances.0.url');
+        $this->assertStringStartsWith('dicomweb:http://localhost/phr/dicom/patients/', $signedInstanceUrl);
+        $this->assertStringContainsString('expiration='.$now->copy()->addMinutes(12)->timestamp, $signedInstanceUrl);
+        $this->assertStringNotContainsString('/api/phr/patients/', $signedInstanceUrl);
+
+        $redirectResponse = $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")
+            ->assertRedirect();
+        $this->assertStringStartsWith('http://localhost/phr/dicom/patients/', (string) $redirectResponse->headers->get('Location'));
 
         $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/download")
             ->assertOk()

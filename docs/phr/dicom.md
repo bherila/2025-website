@@ -32,11 +32,13 @@ GET /api/phr/patients/{patient}/dicom/studies/{study}/download
 GET /api/phr/patients/{patient}/dicom/instances/{instance}/file
 ```
 
+The instance file endpoint is an authenticated compatibility redirect to a short-lived signed storage URL; OHIF receives the same signed URL directly in `viewer-json`.
+
 ## Storage
 
-Raw objects are stored on the dedicated `phr_dicom` filesystem disk (see `config/filesystems.php`). For now this disk is a `local` driver rooted at `storage/app/private/phr-dicom`, overridable to a path outside the deploy tree via the `PHR_DICOM_DISK_ROOT` env var. The CI rsync uses `--delete` against `storage/`, so production should always point this somewhere stable.
+Raw objects are stored on the dedicated `phr_dicom` filesystem disk (see `config/filesystems.php`). The production path is Cloudflare R2 through the S3-compatible driver, configured with the `PHR_DICOM_R2_*` env vars. Local development can use the `local` driver by setting `PHR_DICOM_DISK_DRIVER=local`, `PHR_DICOM_DISK_SERVE=true`, and optionally `PHR_DICOM_DISK_ROOT`.
 
-To migrate to S3/R2 later, change the disk's `driver` to `s3` and provide `AWS_*` env vars. Application code references the disk by name, so the code path should not need to change.
+OHIF viewer manifests use short-lived `temporaryUrl()` links from this disk so image payloads are fetched directly from storage instead of being streamed through PHP. The default read TTL is 30 minutes and is configurable via `PHR_DICOM_VIEWER_URL_TTL_MINUTES`.
 
 Object keys follow:
 

@@ -27,7 +27,7 @@ class CloudflareCspPolicy implements Preset
                 'https://static.cloudflareinsights.com',
                 'https://cloudflareinsights.com',
                 'https://o933149.ingest.us.sentry.io',
-                ...$this->dicomUploadConnectSources(),
+                ...$this->dicomStorageConnectSources(),
             ])
             ->add(Directive::IMG, [
                 Keyword::SELF,
@@ -48,7 +48,7 @@ class CloudflareCspPolicy implements Preset
     /**
      * @return list<string>
      */
-    private function dicomUploadConnectSources(): array
+    private function dicomStorageConnectSources(): array
     {
         $sources = [];
         $endpoint = config('filesystems.disks.phr_dicom.endpoint');

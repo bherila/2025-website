@@ -12,13 +12,15 @@ where the manifest URL is:
 /api/phr/patients/{patient}/dicom/studies/{study}/viewer-json
 ```
 
-OHIF loads the manifest with the browser's session cookie, then fetches each instance from the URLs the manifest contains:
+OHIF loads the manifest with the browser's session cookie, then fetches each instance directly from the signed storage URLs the manifest contains:
 
 ```text
-dicomweb:https://<host>/api/phr/patients/{patient}/dicom/instances/{instance}/file
+dicomweb:https://<dicom-storage-host>/<signed-object-url>
 ```
 
-Both endpoints are protected by the existing `web` + `auth` middleware, so the storage layer stays private and there is no CORS plumbing. ZIP downloads of the originals are still served by:
+The manifest endpoint is protected by the existing `web` + `auth` middleware. Instance URLs are generated with Laravel `temporaryUrl()` against the `phr_dicom` disk and expire after `PHR_DICOM_VIEWER_URL_TTL_MINUTES` (default 30). The older `/api/phr/patients/{patient}/dicom/instances/{instance}/file` endpoint still performs the same access check, then redirects to a short-lived storage URL instead of streaming the object through PHP.
+
+The DICOM storage origin must remain allowed by CSP `connect-src` and by the R2 bucket CORS policy for browser GETs. ZIP downloads of the originals are still served by:
 
 ```text
 /api/phr/patients/{patient}/dicom/studies/{study}/download

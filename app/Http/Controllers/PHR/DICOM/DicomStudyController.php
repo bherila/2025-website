@@ -7,12 +7,16 @@ use App\Models\PhrDicomInstance;
 use App\Models\PhrDicomSeries;
 use App\Models\PhrDicomStudy;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DicomStudyController extends Controller
 {
-    public function __construct(private PhrPatientAccessService $accessService) {}
+    public function __construct(
+        private PhrPatientAccessService $accessService,
+        private DicomUploadProcessor $uploadProcessor,
+    ) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
@@ -41,7 +45,7 @@ class DicomStudyController extends Controller
             ->findOrFail($study);
 
         return response()->json([
-            'studies' => [$this->viewerStudyPayload($resolvedStudy, (int) $resolvedPatient->id)],
+            'studies' => [$this->viewerStudyPayload($resolvedStudy)],
         ])->header('Cache-Control', 'no-store');
     }
 
@@ -70,12 +74,12 @@ class DicomStudyController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function viewerStudyPayload(PhrDicomStudy $study, int $patientId): array
+    private function viewerStudyPayload(PhrDicomStudy $study): array
     {
         $metadata = $study->metadata_json ?? [];
         $seriesPayloads = $study->series
             ->sortBy(fn (PhrDicomSeries $series): int => $series->series_number ?? $series->id)
-            ->map(fn (PhrDicomSeries $series): array => $this->viewerSeriesPayload($series, $patientId, $study->study_instance_uid))
+            ->map(fn (PhrDicomSeries $series): array => $this->viewerSeriesPayload($series, $study->study_instance_uid))
             ->values()
             ->all();
 
@@ -98,7 +102,7 @@ class DicomStudyController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function viewerSeriesPayload(PhrDicomSeries $series, int $patientId, string $studyInstanceUid): array
+    private function viewerSeriesPayload(PhrDicomSeries $series, string $studyInstanceUid): array
     {
         $metadata = $series->metadata_json ?? [];
 
@@ -109,7 +113,7 @@ class DicomStudyController extends Controller
             'SeriesDescription' => $series->description ?? $metadata['SeriesDescription'] ?? '',
             'instances' => $series->instances
                 ->sortBy(fn (PhrDicomInstance $instance): int => $instance->instance_number ?? $instance->id)
-                ->map(fn (PhrDicomInstance $instance): array => $this->viewerInstancePayload($instance, $series, $patientId, $studyInstanceUid))
+                ->map(fn (PhrDicomInstance $instance): array => $this->viewerInstancePayload($instance, $series, $studyInstanceUid))
                 ->values()
                 ->all(),
         ];
@@ -118,7 +122,7 @@ class DicomStudyController extends Controller
     /**
      * @return array{metadata: array<string, mixed>, url: string}
      */
-    private function viewerInstancePayload(PhrDicomInstance $instance, PhrDicomSeries $series, int $patientId, string $studyInstanceUid): array
+    private function viewerInstancePayload(PhrDicomInstance $instance, PhrDicomSeries $series, string $studyInstanceUid): array
     {
         $metadata = $instance->metadata_json ?? [];
         $metadata['StudyInstanceUID'] = $studyInstanceUid;
@@ -133,7 +137,7 @@ class DicomStudyController extends Controller
 
         return [
             'metadata' => array_filter($metadata, fn (mixed $value): bool => $value !== null),
-            'url' => 'dicomweb:'.url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"),
+            'url' => 'dicomweb:'.$this->uploadProcessor->temporaryViewerUrl($instance->file),
         ];
     }
 }
