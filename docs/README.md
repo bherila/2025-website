@@ -21,6 +21,7 @@ Start here when you need project documentation. Keep durable architecture and wo
 | Finance | [finance/README.md](finance/README.md) |
 | Client management | [client-management/index.md](client-management/index.md) |
 | Personal health records | [phr/index.md](phr/index.md) |
+| Games | [games/parking-pickup.md](games/parking-pickup.md) |
 
 ## Maintenance Notes
 
