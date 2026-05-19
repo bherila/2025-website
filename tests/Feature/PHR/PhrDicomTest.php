@@ -133,6 +133,50 @@ class PhrDicomTest extends TestCase
         $this->actingAs($other)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")->assertNotFound();
     }
 
+    public function test_study_index_returns_newest_first_with_file_size_bytes(): void
+    {
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $oldStudy = $this->createIndexedStudy(
+            $owner,
+            $patientId,
+            '1.2.840.113619.study.old',
+            '2025-12-31',
+            '235959',
+            [1024 * 1024],
+        );
+        $morningStudy = $this->createIndexedStudy(
+            $owner,
+            $patientId,
+            '1.2.840.113619.study.morning',
+            '2026-05-19',
+            '081500',
+            [1024 * 1024, 512 * 1024],
+        );
+        $latestStudy = $this->createIndexedStudy(
+            $owner,
+            $patientId,
+            '1.2.840.113619.study.latest',
+            '2026-05-19',
+            '163000',
+            [2 * 1024 * 1024],
+        );
+
+        $response = $this->actingAs($owner)
+            ->getJson("/api/phr/patients/{$patientId}/dicom/studies")
+            ->assertOk();
+
+        $this->assertSame([
+            $latestStudy->id,
+            $morningStudy->id,
+            $oldStudy->id,
+        ], array_column($response->json('studies'), 'id'));
+        $this->assertSame(2 * 1024 * 1024, $response->json('studies.0.file_size_bytes'));
+        $this->assertSame(1572864, $response->json('studies.1.file_size_bytes'));
+        $this->assertSame(1024 * 1024, $response->json('studies.2.file_size_bytes'));
+    }
+
     public function test_auxiliary_files_are_skipped(): void
     {
         $this->fakeDicomDisk();
@@ -874,6 +918,66 @@ class PhrDicomTest extends TestCase
             'email' => $grantee->email,
             'access_level' => $level,
         ])->assertCreated();
+    }
+
+    /**
+     * @param  list<int>  $fileSizes
+     */
+    private function createIndexedStudy(User $owner, int $patientId, string $studyInstanceUid, string $studyDate, string $studyTime, array $fileSizes): PhrDicomStudy
+    {
+        $upload = PhrDicomUpload::create([
+            'patient_id' => $patientId,
+            'uploaded_by_user_id' => $owner->id,
+            'status' => PhrDicomUpload::STATUS_PROCESSED,
+            'stored_files' => count($fileSizes),
+            'stored_bytes' => array_sum($fileSizes),
+            'r2_prefix' => 'phr/dicom/patients/'.$patientId.'/uploads/'.$studyInstanceUid,
+        ]);
+
+        $study = PhrDicomStudy::create([
+            'patient_id' => $patientId,
+            'upload_id' => $upload->id,
+            'study_instance_uid' => $studyInstanceUid,
+            'study_date' => $studyDate,
+            'study_time' => $studyTime,
+            'description' => 'Indexed Study '.$studyInstanceUid,
+            'modalities' => 'CT',
+        ]);
+
+        $series = PhrDicomSeries::create([
+            'patient_id' => $patientId,
+            'study_id' => $study->id,
+            'series_instance_uid' => $studyInstanceUid.'.1',
+            'modality' => 'CT',
+        ]);
+
+        foreach ($fileSizes as $index => $fileSize) {
+            $relativePath = 'INDEXED/'.$studyInstanceUid.'/IM'.str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT);
+            $file = PhrDicomFile::create([
+                'patient_id' => $patientId,
+                'upload_id' => $upload->id,
+                'file_kind' => PhrDicomFile::KIND_DICOM,
+                'r2_key' => $upload->r2_prefix.'/'.$relativePath,
+                'original_relative_path' => $relativePath,
+                'original_path_hash' => hash('sha256', $relativePath),
+                'original_filename' => basename($relativePath),
+                'mime_type' => 'application/dicom',
+                'file_size_bytes' => $fileSize,
+                'sha256' => hash('sha256', $studyInstanceUid.'-'.$index),
+            ]);
+
+            PhrDicomInstance::create([
+                'patient_id' => $patientId,
+                'study_id' => $study->id,
+                'series_id' => $series->id,
+                'upload_id' => $upload->id,
+                'file_id' => $file->id,
+                'sop_instance_uid' => $studyInstanceUid.'.1.'.($index + 1),
+                'instance_number' => $index + 1,
+            ]);
+        }
+
+        return $study;
     }
 
     private function processorThatThrowsOnParseCall(int $throwOnParseCall): DicomUploadProcessor

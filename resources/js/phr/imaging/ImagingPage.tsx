@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
+import { formatBytes } from '@/lib/utils'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDicomSignedUploadBatchItem,
@@ -70,7 +71,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
         fetchWrapper.get(`/api/phr/patients/${patientId}/dicom/studies`),
         fetchWrapper.get(`/api/phr/patients/${patientId}`),
       ])
-      setStudies(PhrDicomStudiesResponseSchema.parse(rawStudies).studies)
+      setStudies([...PhrDicomStudiesResponseSchema.parse(rawStudies).studies].sort(compareStudiesNewestFirst))
       const p = (rawPatient as { patient?: { can_manage?: boolean } } | null)?.patient
       setCanManage(Boolean(p?.can_manage))
     } catch (caught) {
@@ -250,7 +251,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
               <div className="min-w-0">
                 <p className="break-words font-medium text-card-foreground">{study.description || 'DICOM Study'}</p>
                 <p className="mt-1 break-words text-xs text-muted-foreground">
-                  {[study.study_date, study.modalities, `${study.series_count} series`, `${study.instance_count} images`].filter(Boolean).join(' · ')}
+                  {[study.study_date, study.modalities, `${study.series_count} series`, `${study.instance_count} images`, formatBytes(study.file_size_bytes)].filter(Boolean).join(' · ')}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -662,19 +663,6 @@ async function cancelUploadSession(patientId: number, uploadId: number): Promise
   await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${uploadId}/cancel`, {}).catch(() => {})
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
 function extractServerError(xhr: XMLHttpRequest): string {
   try {
     const parsed = JSON.parse(xhr.responseText)
@@ -698,6 +686,24 @@ function truncate(text: string, max: number): string {
     return oneLine
   }
   return `${oneLine.slice(0, max)}…`
+}
+
+function compareStudiesNewestFirst(a: PhrDicomStudy, b: PhrDicomStudy): number {
+  const dateComparison = compareNullableStringsDesc(a.study_date, b.study_date)
+  if (dateComparison !== 0) {
+    return dateComparison
+  }
+
+  const timeComparison = compareNullableStringsDesc(a.study_time, b.study_time)
+  if (timeComparison !== 0) {
+    return timeComparison
+  }
+
+  return b.id - a.id
+}
+
+function compareNullableStringsDesc(a: string | null, b: string | null): number {
+  return (b ?? '').localeCompare(a ?? '')
 }
 
 function relativeFilePath(file: FileWithRelativePath): string {

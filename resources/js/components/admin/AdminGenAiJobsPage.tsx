@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { GenAiImportJobData, GenAiImportResultData } from '@/genai-processor/types'
+import { formatBytes } from '@/lib/utils'
 
 interface AdminGenAiJob extends GenAiImportJobData {
   user?: {
@@ -58,12 +59,6 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   finance_payslip: 'Payslip',
   utility_bill: 'Utility Bill',
   document_extract: 'Document Extract',
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function formatDate(dateString: string | null): string {

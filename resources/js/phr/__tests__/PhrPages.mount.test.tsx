@@ -13,6 +13,7 @@ import MedicationsPage from '@/phr/medications/MedicationsPage'
 import OfficeVisitsPage from '@/phr/office-visits/OfficeVisitsPage'
 import PatientsPage from '@/phr/patients/PatientsPage'
 import ProceduresPage from '@/phr/procedures/ProceduresPage'
+import type { PhrDicomStudy } from '@/phr/types'
 import VitalsPage from '@/phr/vitals/VitalsPage'
 
 const PATIENT_ID = 101
@@ -129,6 +130,44 @@ describe('PHR page mounts', () => {
     } finally {
       window.open = originalOpen
     }
+  })
+
+  it('renders imaging studies newest first with file sizes', async () => {
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient: makePatient() }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies`) {
+        return {
+          studies: [
+            makeDicomStudy({
+              id: 7001,
+              description: 'Older CT',
+              study_date: '2026-05-17',
+              study_time: '120000',
+              file_size_bytes: 1024 * 1024,
+            }),
+            makeDicomStudy({
+              id: 7002,
+              description: 'Recent MR',
+              modalities: 'MR',
+              study_date: '2026-05-18',
+              study_time: '090000',
+              file_size_bytes: 2 * 1024 * 1024,
+            }),
+          ],
+        }
+      }
+      return {}
+    })
+
+    const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Recent MR')).toBeInTheDocument())
+    expect(screen.getByText(/2\.0 MB/)).toBeInTheDocument()
+    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument()
+
+    const text = container.textContent ?? ''
+    expect(text.indexOf('Recent MR')).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf('Recent MR')).toBeLessThan(text.indexOf('Older CT'))
   })
 
   it('keeps imaging upload dialog failed when finalize fails', async () => {
@@ -523,7 +562,7 @@ function makeDicomUpload(status: string) {
   }
 }
 
-function makeDicomStudy() {
+function makeDicomStudy(overrides: Partial<PhrDicomStudy> = {}): PhrDicomStudy {
   return {
     id: 7001,
     patient_id: PATIENT_ID,
@@ -536,8 +575,10 @@ function makeDicomStudy() {
     modalities: 'CT',
     series_count: 1,
     instance_count: 1,
+    file_size_bytes: 2 * 1024 * 1024,
     created_at: null,
     updated_at: null,
+    ...overrides,
   }
 }
 

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
+import { formatBytes } from '@/lib/utils'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDocument,
@@ -639,14 +640,6 @@ function formatDate(value: string | null): string {
 function toInputDateTime(value: string | null): string {
   if (!value) return ''
   return value.replace(' ', 'T').slice(0, 16)
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const value = bytes / (1024 ** index)
-  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
 function splitTags(raw: string): string[] {

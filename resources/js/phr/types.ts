@@ -135,6 +135,7 @@ export const PhrDicomStudySchema = z.object({
   modalities: nullableString,
   series_count: z.number(),
   instance_count: z.number(),
+  file_size_bytes: z.number(),
   created_at: nullableString,
   updated_at: nullableString,
 })

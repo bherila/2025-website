@@ -24,9 +24,19 @@ class DicomStudyController extends Controller
         $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
         $studies = PhrDicomStudy::query()
+            ->select('phr_dicom_studies.*')
+            ->selectSub(
+                PhrDicomInstance::query()
+                    ->join('phr_dicom_files', 'phr_dicom_files.id', '=', 'phr_dicom_instances.file_id')
+                    ->selectRaw('COALESCE(SUM(phr_dicom_files.file_size_bytes), 0)')
+                    ->whereColumn('phr_dicom_instances.study_id', 'phr_dicom_studies.id'),
+                'file_size_bytes',
+            )
             ->forPatient((int) $resolvedPatient->id)
             ->withCount(['series', 'instances'])
             ->orderByDesc('study_date')
+            ->orderByDesc('study_time')
+            ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get()
             ->map(fn (PhrDicomStudy $study): array => $this->studyPayload($study))
@@ -66,6 +76,7 @@ class DicomStudyController extends Controller
             'modalities' => $study->modalities,
             'series_count' => (int) ($study->series_count ?? 0),
             'instance_count' => (int) ($study->instances_count ?? 0),
+            'file_size_bytes' => (int) ($study->getAttribute('file_size_bytes') ?? 0),
             'created_at' => $study->created_at?->toDateTimeString(),
             'updated_at' => $study->updated_at?->toDateTimeString(),
         ];
