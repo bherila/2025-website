@@ -197,6 +197,41 @@ class PhrDicomTest extends TestCase
         ])), 'IM0002')->assertStatus(409);
     }
 
+    public function test_upload_parses_image_metadata_after_undefined_length_sequence(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $uploadId = $this->openUpload($owner, $patientId, 'XR_FOOT');
+        $response = $this->postFile(
+            $owner,
+            $patientId,
+            $uploadId,
+            UploadedFile::fake()->createWithContent('IN000001', $this->dicomBytes(includeUndefinedLengthSequence: true)),
+            'XR_FOOT/DICOM/P0000001/ST000001/SE000001/IN000001',
+        )
+            ->assertOk()
+            ->assertJsonPath('result.stored', true);
+        $this->assertIsInt($response->json('result.study_id'));
+
+        $this->finalizeUpload($owner, $patientId, $uploadId)
+            ->assertOk()
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_PROCESSED)
+            ->assertJsonPath('upload.stored_files', 1);
+
+        $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
+        $series = PhrDicomSeries::query()->where('study_id', $study->id)->sole();
+        $instance = PhrDicomInstance::query()->where('series_id', $series->id)->sole();
+
+        $this->assertSame('1.2.840.113619.2.55.3.604688437.20260517.1', $study->study_instance_uid);
+        $this->assertSame('1.2.840.113619.2.55.3.604688437.20260517.1.1', $series->series_instance_uid);
+        $this->assertSame('1.2.840.113619.2.55.3.604688437.20260517.1.1.1', $instance->sop_instance_uid);
+        $this->assertSame(512, $instance->rows);
+        $this->assertSame(512, $instance->columns);
+    }
+
     public function test_cancel_marks_session_failed_and_removes_stored_files(): void
     {
         $this->fakeDicomDisk();
@@ -528,7 +563,7 @@ class PhrDicomTest extends TestCase
     /**
      * @param  array<string, string>  $overrides
      */
-    private function dicomBytes(array $overrides = []): string
+    private function dicomBytes(array $overrides = [], bool $includeUndefinedLengthSequence = false): string
     {
         $values = [
             'study_instance_uid' => '1.2.840.113619.2.55.3.604688437.20260517.1',
@@ -547,6 +582,7 @@ class PhrDicomTest extends TestCase
             .$this->element(0x0008, 0x0060, 'CS', 'CT')
             .$this->element(0x0008, 0x1030, 'LO', 'Cardiac CT')
             .$this->element(0x0008, 0x103E, 'LO', 'Axial')
+            .($includeUndefinedLengthSequence ? $this->undefinedLengthProcedureCodeSequence() : '')
             .$this->element(0x0010, 0x0010, 'PN', 'Primary^Patient')
             .$this->element(0x0010, 0x0020, 'LO', 'PHR-1')
             .$this->element(0x0010, 0x0040, 'CS', 'O')
@@ -567,6 +603,19 @@ class PhrDicomTest extends TestCase
             .$this->element(0x0028, 0x0101, 'US', pack('v', 12))
             .$this->element(0x0028, 0x0102, 'US', pack('v', 11))
             .$this->element(0x0028, 0x0103, 'US', pack('v', 0));
+    }
+
+    private function undefinedLengthProcedureCodeSequence(): string
+    {
+        $itemPayload = $this->element(0x0008, 0x0100, 'SH', 'R-10208')
+            .$this->element(0x0008, 0x0102, 'SH', 'SNM3')
+            .$this->element(0x0008, 0x0104, 'LO', 'ANTERO-POSTERIOR OBLIQUE');
+
+        return pack('v', 0x0008).pack('v', 0x1032).'SQ'."\0\0".pack('V', 0xFFFFFFFF)
+            .pack('v', 0xFFFE).pack('v', 0xE000).pack('V', 0xFFFFFFFF)
+            .$itemPayload
+            .pack('v', 0xFFFE).pack('v', 0xE00D).pack('V', 0)
+            .pack('v', 0xFFFE).pack('v', 0xE0DD).pack('V', 0);
     }
 
     private function dicomdirBytes(): string
