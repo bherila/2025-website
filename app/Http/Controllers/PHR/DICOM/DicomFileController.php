@@ -22,7 +22,7 @@ class DicomFileController extends Controller
         private readonly PhrPatientAccessService $accessService,
     ) {}
 
-    public function proxyInstanceFile(Request $request, int $patient, int $instance): RedirectResponse
+    public function proxyInstanceFile(Request $request, int $patient, int $instance): RedirectResponse|StreamedResponse
     {
         $userId = (int) $request->user()?->id;
         $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
@@ -31,9 +31,24 @@ class DicomFileController extends Controller
             ->with(['file'])
             ->findOrFail($instance);
 
-        return redirect()
-            ->away($this->uploadProcessor->temporaryViewerUrl($resolvedInstance->file))
-            ->header('Cache-Control', 'private, no-store');
+        if ($this->uploadProcessor->shouldUseDirectSignedViewerUrls()) {
+            return redirect()
+                ->away($this->uploadProcessor->temporaryViewerUrl($resolvedInstance->file))
+                ->header('Cache-Control', 'private, no-store');
+        }
+
+        $stream = $this->uploadProcessor->disk()->readStream($resolvedInstance->file->r2_key);
+        abort_if(! is_resource($stream), 404);
+
+        return response()->stream(function () use ($stream): void {
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, [
+            'Content-Type' => 'application/dicom',
+            'Content-Length' => (string) $resolvedInstance->file->file_size_bytes,
+            'Content-Disposition' => 'inline; filename="'.$this->safeDownloadName($resolvedInstance->file->original_filename).'"',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public function downloadStudy(Request $request, int $patient, int $study): StreamedResponse

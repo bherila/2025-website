@@ -45,7 +45,7 @@ class DicomStudyController extends Controller
             ->findOrFail($study);
 
         return response()->json([
-            'studies' => [$this->viewerStudyPayload($resolvedStudy)],
+            'studies' => [$this->viewerStudyPayload($resolvedStudy, (int) $resolvedPatient->id)],
         ])->header('Cache-Control', 'no-store');
     }
 
@@ -74,12 +74,12 @@ class DicomStudyController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function viewerStudyPayload(PhrDicomStudy $study): array
+    private function viewerStudyPayload(PhrDicomStudy $study, int $patientId): array
     {
         $metadata = $study->metadata_json ?? [];
         $seriesPayloads = $study->series
             ->sortBy(fn (PhrDicomSeries $series): int => $series->series_number ?? $series->id)
-            ->map(fn (PhrDicomSeries $series): array => $this->viewerSeriesPayload($series, $study->study_instance_uid))
+            ->map(fn (PhrDicomSeries $series): array => $this->viewerSeriesPayload($series, $patientId, $study->study_instance_uid))
             ->values()
             ->all();
 
@@ -102,7 +102,7 @@ class DicomStudyController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function viewerSeriesPayload(PhrDicomSeries $series, string $studyInstanceUid): array
+    private function viewerSeriesPayload(PhrDicomSeries $series, int $patientId, string $studyInstanceUid): array
     {
         $metadata = $series->metadata_json ?? [];
 
@@ -113,7 +113,7 @@ class DicomStudyController extends Controller
             'SeriesDescription' => $series->description ?? $metadata['SeriesDescription'] ?? '',
             'instances' => $series->instances
                 ->sortBy(fn (PhrDicomInstance $instance): int => $instance->instance_number ?? $instance->id)
-                ->map(fn (PhrDicomInstance $instance): array => $this->viewerInstancePayload($instance, $series, $studyInstanceUid))
+                ->map(fn (PhrDicomInstance $instance): array => $this->viewerInstancePayload($instance, $series, $patientId, $studyInstanceUid))
                 ->values()
                 ->all(),
         ];
@@ -122,7 +122,7 @@ class DicomStudyController extends Controller
     /**
      * @return array{metadata: array<string, mixed>, url: string}
      */
-    private function viewerInstancePayload(PhrDicomInstance $instance, PhrDicomSeries $series, string $studyInstanceUid): array
+    private function viewerInstancePayload(PhrDicomInstance $instance, PhrDicomSeries $series, int $patientId, string $studyInstanceUid): array
     {
         $metadata = $instance->metadata_json ?? [];
         $metadata['StudyInstanceUID'] = $studyInstanceUid;
@@ -137,7 +137,16 @@ class DicomStudyController extends Controller
 
         return [
             'metadata' => array_filter($metadata, fn (mixed $value): bool => $value !== null),
-            'url' => 'dicomweb:'.$this->uploadProcessor->temporaryViewerUrl($instance->file),
+            'url' => 'dicomweb:'.$this->viewerInstanceUrl($instance, $patientId),
         ];
+    }
+
+    private function viewerInstanceUrl(PhrDicomInstance $instance, int $patientId): string
+    {
+        if ($this->uploadProcessor->shouldUseDirectSignedViewerUrls()) {
+            return $this->uploadProcessor->temporaryViewerUrl($instance->file);
+        }
+
+        return url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file");
     }
 }

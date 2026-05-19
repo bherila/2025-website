@@ -12,15 +12,17 @@ where the manifest URL is:
 /api/phr/patients/{patient}/dicom/studies/{study}/viewer-json
 ```
 
-OHIF loads the manifest with the browser's session cookie, then fetches each instance directly from the signed storage URLs the manifest contains:
+OHIF loads the manifest with the browser's session cookie, then fetches each instance from the URLs the manifest contains:
 
 ```text
-dicomweb:https://<dicom-storage-host>/<signed-object-url>
+dicomweb:https://<host>/api/phr/patients/{patient}/dicom/instances/{instance}/file
 ```
 
-The manifest endpoint is protected by the existing `web` + `auth` middleware. Instance URLs are generated with Laravel `temporaryUrl()` against the `phr_dicom` disk and expire after `PHR_DICOM_VIEWER_URL_TTL_MINUTES` (default 30). The older `/api/phr/patients/{patient}/dicom/instances/{instance}/file` endpoint still performs the same access check, then redirects to a short-lived storage URL instead of streaming the object through PHP.
+The manifest and instance endpoints are protected by the existing `web` + `auth` middleware, so the default viewer path is same-origin and does not depend on R2 CORS. The instance endpoint streams from the private `phr_dicom` disk.
 
-The DICOM storage origin must remain allowed by CSP `connect-src` and by the R2 bucket CORS policy for browser GETs. ZIP downloads of the originals are still served by:
+Direct signed storage reads are available only when `PHR_DICOM_VIEWER_DIRECT_SIGNED_URLS=true`. In that mode, instance URLs are generated with Laravel `temporaryUrl()` against the `phr_dicom` disk and expire after `PHR_DICOM_VIEWER_URL_TTL_MINUTES` (default 30). The DICOM storage origin must be allowed by CSP `connect-src` and by the R2 bucket CORS policy for browser GETs, otherwise OHIF's XHR requests fail with CORS errors.
+
+ZIP downloads of the originals are still served by:
 
 ```text
 /api/phr/patients/{patient}/dicom/studies/{study}/download

@@ -13,7 +13,6 @@ use App\Services\PHR\DICOM\DicomMetadataParser;
 use App\Services\PHR\DICOM\DicomUploadLimits;
 use App\Services\PHR\DICOM\DicomUploadProcessor;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
@@ -113,27 +112,15 @@ class PhrDicomTest extends TestCase
             ->assertOk()
             ->assertJsonPath('studies.0.instance_count', 1);
 
-        config(['phr.dicom_viewer_url_ttl_minutes' => 12]);
-        $now = Carbon::parse('2026-05-19 12:00:00');
-        Carbon::setTestNow($now);
+        $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/viewer-json")
+            ->assertOk()
+            ->assertJsonPath('studies.0.StudyInstanceUID', $study->study_instance_uid)
+            ->assertJsonPath('studies.0.series.0.instances.0.metadata.Rows', 512)
+            ->assertJsonPath('studies.0.series.0.instances.0.url', 'dicomweb:'.url("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file"));
 
-        try {
-            $viewerResponse = $this->actingAs($viewer)->getJson("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/viewer-json")
-                ->assertOk()
-                ->assertJsonPath('studies.0.StudyInstanceUID', $study->study_instance_uid)
-                ->assertJsonPath('studies.0.series.0.instances.0.metadata.Rows', 512);
-        } finally {
-            Carbon::setTestNow();
-        }
-
-        $signedInstanceUrl = (string) $viewerResponse->json('studies.0.series.0.instances.0.url');
-        $this->assertStringStartsWith('dicomweb:http://localhost/phr/dicom/patients/', $signedInstanceUrl);
-        $this->assertStringContainsString('expiration='.$now->copy()->addMinutes(12)->timestamp, $signedInstanceUrl);
-        $this->assertStringNotContainsString('/api/phr/patients/', $signedInstanceUrl);
-
-        $redirectResponse = $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")
-            ->assertRedirect();
-        $this->assertStringStartsWith('http://localhost/phr/dicom/patients/', (string) $redirectResponse->headers->get('Location'));
+        $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/instances/{$instance->id}/file")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/dicom');
 
         $this->actingAs($viewer)->get("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/download")
             ->assertOk()
@@ -323,6 +310,36 @@ class PhrDicomTest extends TestCase
             ->assertJsonPath('relative_path', 'CARDIAC_CT/ST0001/SE0001/IM0001');
 
         $this->assertStringContainsString('"headers":{}', (string) $response->getContent());
+    }
+
+    public function test_viewer_json_can_emit_direct_signed_instance_urls_when_enabled(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $viewer = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+        $this->grantPatientAccess($owner, $patientId, $viewer, 'viewer');
+
+        $uploadId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $this->postFile($owner, $patientId, $uploadId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'CARDIAC_CT/ST0001/SE0001/IM0001')->assertOk();
+        $this->finalizeUpload($owner, $patientId, $uploadId)->assertOk();
+
+        $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
+
+        config([
+            'phr.dicom_viewer_direct_signed_urls' => true,
+            'phr.dicom_viewer_url_ttl_minutes' => 12,
+        ]);
+
+        $viewerResponse = $this->actingAs($viewer)
+            ->getJson("/api/phr/patients/{$patientId}/dicom/studies/{$study->id}/viewer-json")
+            ->assertOk();
+
+        $signedInstanceUrl = (string) $viewerResponse->json('studies.0.series.0.instances.0.url');
+        $this->assertStringStartsWith('dicomweb:http://localhost/phr/dicom/patients/', $signedInstanceUrl);
+        $this->assertStringContainsString('expiration=', $signedInstanceUrl);
+        $this->assertStringNotContainsString('/api/phr/patients/', $signedInstanceUrl);
     }
 
     public function test_direct_upload_url_rejects_files_over_configured_cap(): void

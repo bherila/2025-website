@@ -206,6 +206,11 @@ class DicomUploadProcessor
         );
     }
 
+    public function shouldUseDirectSignedViewerUrls(): bool
+    {
+        return (bool) config('phr.dicom_viewer_direct_signed_urls', false);
+    }
+
     /**
      * Register an object that was already uploaded directly to R2.
      *

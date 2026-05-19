@@ -32,13 +32,11 @@ GET /api/phr/patients/{patient}/dicom/studies/{study}/download
 GET /api/phr/patients/{patient}/dicom/instances/{instance}/file
 ```
 
-The instance file endpoint is an authenticated compatibility redirect to a short-lived signed storage URL; OHIF receives the same signed URL directly in `viewer-json`.
-
 ## Storage
 
 Raw objects are stored on the dedicated `phr_dicom` filesystem disk (see `config/filesystems.php`). The production path is Cloudflare R2 through the S3-compatible driver, configured with the `PHR_DICOM_R2_*` env vars. Local development can use the `local` driver by setting `PHR_DICOM_DISK_DRIVER=local`, `PHR_DICOM_DISK_SERVE=true`, and optionally `PHR_DICOM_DISK_ROOT`.
 
-OHIF viewer manifests use short-lived `temporaryUrl()` links from this disk so image payloads are fetched directly from storage instead of being streamed through PHP. The default read TTL is 30 minutes and is configurable via `PHR_DICOM_VIEWER_URL_TTL_MINUTES`.
+OHIF viewer manifests default to authenticated same-origin instance URLs because OHIF fetches DICOM files with XHR and direct R2 reads require a bucket CORS policy that allows the app origin. If `PHR_DICOM_VIEWER_DIRECT_SIGNED_URLS=true`, the manifest uses short-lived `temporaryUrl()` links from this disk so image payloads are fetched directly from storage instead of being streamed through PHP. The default direct-read TTL is 30 minutes and is configurable via `PHR_DICOM_VIEWER_URL_TTL_MINUTES`.
 
 Object keys follow:
 
