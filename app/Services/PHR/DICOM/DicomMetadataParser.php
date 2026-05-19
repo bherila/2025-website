@@ -206,7 +206,11 @@ class DicomMetadataParser
             $valueOffset = $offset + 8;
         }
 
-        if ($valueLength === 0xFFFFFFFF || $valueOffset + $valueLength > $dataLength) {
+        if ($valueLength === 0xFFFFFFFF) {
+            return $this->skipUndefinedLengthElement($data, $valueOffset, $explicitVr) ?? $offset;
+        }
+
+        if ($valueOffset + $valueLength > $dataLength) {
             return $offset;
         }
 
@@ -217,6 +221,84 @@ class DicomMetadataParser
         }
 
         return $valueOffset + $valueLength;
+    }
+
+    private function skipUndefinedLengthElement(string $data, int $valueOffset, bool $explicitVr): ?int
+    {
+        return $this->skipUndefinedLengthSequence($data, $valueOffset, $explicitVr);
+    }
+
+    private function skipUndefinedLengthSequence(string $data, int $offset, bool $explicitVr): ?int
+    {
+        $length = strlen($data);
+        $cursor = $offset;
+
+        while ($cursor + 8 <= $length) {
+            $group = $this->readUInt16($data, $cursor);
+            $element = $this->readUInt16($data, $cursor + 2);
+            $itemLength = $this->readUInt32($data, $cursor + 4);
+
+            if ($group !== 0xFFFE) {
+                return null;
+            }
+
+            if ($element === 0xE0DD) {
+                return $cursor + 8;
+            }
+
+            if ($element !== 0xE000) {
+                return null;
+            }
+
+            $itemValueOffset = $cursor + 8;
+            if ($itemLength === 0xFFFFFFFF) {
+                $itemEnd = $this->skipUndefinedLengthItem($data, $itemValueOffset, $explicitVr);
+                if ($itemEnd === null) {
+                    return null;
+                }
+
+                $cursor = $itemEnd;
+
+                continue;
+            }
+
+            if ($itemValueOffset + $itemLength > $length) {
+                return null;
+            }
+
+            $cursor = $itemValueOffset + $itemLength;
+        }
+
+        return null;
+    }
+
+    private function skipUndefinedLengthItem(string $data, int $offset, bool $explicitVr): ?int
+    {
+        $length = strlen($data);
+        $cursor = $offset;
+        $metadata = [];
+
+        while ($cursor + 8 <= $length) {
+            $group = $this->readUInt16($data, $cursor);
+            $element = $this->readUInt16($data, $cursor + 2);
+
+            if ($group === 0xFFFE && $element === 0xE00D) {
+                return $cursor + 8;
+            }
+
+            if ($group === 0xFFFE && $element === 0xE0DD) {
+                return $cursor;
+            }
+
+            $nextOffset = $this->parseElement($data, $cursor, $metadata, $explicitVr);
+            if ($nextOffset <= $cursor) {
+                return null;
+            }
+
+            $cursor = $nextOffset;
+        }
+
+        return null;
     }
 
     /**
