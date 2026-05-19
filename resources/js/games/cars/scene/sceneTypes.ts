@@ -40,8 +40,9 @@ export interface MovingCarRenderItem {
   startedAt: number
   duration: number
   removeOnComplete?: boolean
+  routeProgress?: (progress: number) => number
   skipRouteMotion?: boolean
-  onUpdate?: (item: MovingCarRenderItem, progress: number, eased: number) => void
+  onUpdate?: (item: MovingCarRenderItem, progress: number, routeProgress: number) => void
   onComplete?: (item: MovingCarRenderItem) => void
 }
 

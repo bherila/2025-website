@@ -13,14 +13,16 @@ export function animateMovingCars(cars: MovingCarRenderItem[], elapsed: number):
     }
 
     const progress = Math.min(1, Math.max(0, (elapsed - car.startedAt) / car.duration))
-    const eased = 1 - Math.pow(1 - progress, 3)
+    const routeProgress = car.routeProgress?.(progress) ?? easeOutRouteProgress(progress)
     if (car.skipRouteMotion !== true) {
-      const routed = positionOnRoute(car, eased)
+      const routed = positionOnRoute(car, routeProgress)
       car.mesh.position.copy(routed.position)
-      car.mesh.position.y = routed.position.y + Math.sin(progress * Math.PI) * 0.18
+      car.mesh.position.y = car.movementKind === 'departure'
+        ? routed.position.y
+        : routed.position.y + Math.sin(progress * Math.PI) * 0.18
       car.mesh.rotation.y = routed.rotationY
     }
-    car.onUpdate?.(car, progress, eased)
+    car.onUpdate?.(car, progress, routeProgress)
 
     if (progress >= 1) {
       car.onComplete?.(car)
@@ -31,6 +33,10 @@ export function animateMovingCars(cars: MovingCarRenderItem[], elapsed: number):
       cars.splice(index, 1)
     }
   }
+}
+
+export function easeOutRouteProgress(progress: number): number {
+  return 1 - Math.pow(1 - progress, 3)
 }
 
 export function positionOnRoute(car: MovingCarRenderItem, progress: number): RoutePoint {

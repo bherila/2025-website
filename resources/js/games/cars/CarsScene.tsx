@@ -36,6 +36,7 @@ import {
 } from './scene/sceneConstants'
 import {
   createParkingRoute,
+  departureExitXForViewport,
   feederPassengerPosition,
   fieldPositionForCar,
   parkingSlotPosition,
@@ -278,6 +279,7 @@ export function CarsScene({
         movingCarsRef.current,
         departureDelays,
         colorblindMode,
+        departureExitXForViewport(cameraRef.current),
       )
     }
 

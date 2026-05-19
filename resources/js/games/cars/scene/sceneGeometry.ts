@@ -25,6 +25,9 @@ export function passengerGateProgress(phase: number, offset: number, layout: Que
 }
 
 const FEEDER_ROW_SPACING = 0.34
+const DEFAULT_DEPARTURE_OFFSCREEN_X = 22
+const DEPARTURE_VIEWPORT_CLEARANCE = 3.2
+const DEPARTURE_EXIT_SEARCH_LIMIT = 56
 
 export function feederPassengerPosition(passenger: Passenger, feederPassengers: Passenger[], layout: QueueLayout): THREE.Vector3 {
   const side: -1 | 1 = passenger.feederSide === 'right' ? 1 : -1
@@ -157,15 +160,54 @@ export function createBlockedRoute(car: Car, state: GameState): RoutePoint[] {
   ]
 }
 
-export function createDepartureRoute(start: THREE.Vector3): RoutePoint[] {
+export function createDepartureRoute(start: THREE.Vector3, exitX = DEFAULT_DEPARTURE_OFFSCREEN_X): RoutePoint[] {
   const backOut = new THREE.Vector3(start.x, start.y, OUTGOING_LANE_Z)
-  const exit = new THREE.Vector3(13.5, start.y, OUTGOING_LANE_Z)
+  const exit = new THREE.Vector3(exitX, start.y, OUTGOING_LANE_Z)
 
   return [
     { position: start, rotationY: PARKED_ROTATION },
     { position: backOut, rotationY: PARKED_ROTATION },
     { position: exit, rotationY: Math.PI / 2 },
   ]
+}
+
+export function departureExitXForViewport(camera: THREE.Camera | null): number {
+  if (!camera) {
+    return DEFAULT_DEPARTURE_OFFSCREEN_X
+  }
+
+  camera.updateMatrixWorld()
+  if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {
+    camera.updateProjectionMatrix()
+  }
+
+  let low = 0
+  let high = DEFAULT_DEPARTURE_OFFSCREEN_X
+  let projected = projectedXAtDepartureLane(high, camera)
+  while (Number.isFinite(projected) && projected < 1 && high < DEPARTURE_EXIT_SEARCH_LIMIT) {
+    low = high
+    high = Math.min(DEPARTURE_EXIT_SEARCH_LIMIT, high * 1.35)
+    projected = projectedXAtDepartureLane(high, camera)
+  }
+
+  if (!Number.isFinite(projected) || projected < 1) {
+    return DEPARTURE_EXIT_SEARCH_LIMIT
+  }
+
+  for (let step = 0; step < 16; step += 1) {
+    const midpoint = (low + high) / 2
+    if (projectedXAtDepartureLane(midpoint, camera) < 1) {
+      low = midpoint
+    } else {
+      high = midpoint
+    }
+  }
+
+  return Math.max(DEFAULT_DEPARTURE_OFFSCREEN_X, high + DEPARTURE_VIEWPORT_CLEARANCE)
+}
+
+function projectedXAtDepartureLane(x: number, camera: THREE.Camera): number {
+  return new THREE.Vector3(x, 0.08, OUTGOING_LANE_Z).project(camera).x
 }
 
 export function routeSegmentLengths(route: RoutePoint[]): number[] {
