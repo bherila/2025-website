@@ -27,6 +27,7 @@ class CloudflareCspPolicy implements Preset
                 'https://static.cloudflareinsights.com',
                 'https://cloudflareinsights.com',
                 'https://o933149.ingest.us.sentry.io',
+                ...$this->dicomUploadConnectSources(),
             ])
             ->add(Directive::IMG, [
                 Keyword::SELF,
@@ -42,5 +43,85 @@ class CloudflareCspPolicy implements Preset
             ->add(Directive::FORM_ACTION, [Keyword::SELF])
             ->addNonce(Directive::SCRIPT)
             ->addNonce(Directive::STYLE);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function dicomUploadConnectSources(): array
+    {
+        $sources = [];
+        $endpoint = config('filesystems.disks.phr_dicom.endpoint');
+        $url = config('filesystems.disks.phr_dicom.url');
+
+        foreach ([$endpoint, $url] as $configuredUrl) {
+            $source = $this->originFromUrl($configuredUrl);
+
+            if ($source !== null) {
+                $sources[] = $source;
+            }
+        }
+
+        $virtualHostedSource = $this->dicomVirtualHostedSource($endpoint);
+
+        if ($virtualHostedSource !== null) {
+            $sources[] = $virtualHostedSource;
+        }
+
+        return array_values(array_unique($sources));
+    }
+
+    private function dicomVirtualHostedSource(mixed $endpoint): ?string
+    {
+        $bucket = config('filesystems.disks.phr_dicom.bucket');
+
+        if (! is_string($bucket) || $bucket === '' || ! is_string($endpoint) || $endpoint === '') {
+            return null;
+        }
+
+        $parts = parse_url($endpoint);
+
+        if (! is_array($parts)) {
+            return null;
+        }
+
+        $scheme = $parts['scheme'] ?? null;
+        $host = $parts['host'] ?? null;
+
+        if (! is_string($scheme) || ! is_string($host) || ! str_ends_with($host, '.r2.cloudflarestorage.com')) {
+            return null;
+        }
+
+        if (str_starts_with($host, $bucket.'.')) {
+            return null;
+        }
+
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        return $scheme.'://'.$bucket.'.'.$host.$port;
+    }
+
+    private function originFromUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        $parts = parse_url($url);
+
+        if (! is_array($parts)) {
+            return null;
+        }
+
+        $scheme = $parts['scheme'] ?? null;
+        $host = $parts['host'] ?? null;
+
+        if (! is_string($scheme) || ! is_string($host)) {
+            return null;
+        }
+
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        return $scheme.'://'.$host.$port;
     }
 }
