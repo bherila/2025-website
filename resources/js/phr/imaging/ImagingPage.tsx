@@ -13,6 +13,7 @@ import {
   PhrDicomStudiesResponseSchema,
   type PhrDicomStudy,
   PhrDicomUploadFileResponseSchema,
+  PhrDicomUploadFinalizeResponseSchema,
   PhrDicomUploadResponseSchema,
 } from '@/phr/types'
 
@@ -31,7 +32,7 @@ const directoryInputAttributes: DirectoryInputAttributes = {
 const UPLOAD_CONCURRENCY = 4
 const SIGNED_UPLOAD_BATCH_SIZE = 32
 
-type UploadPhase = 'uploading' | 'done' | 'aborting' | 'cancelled' | 'failed'
+type UploadPhase = 'uploading' | 'done' | 'duplicate' | 'aborting' | 'cancelled' | 'failed'
 
 interface FileFailure {
   path: string
@@ -160,7 +161,16 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
       }
 
       try {
-        await fetchWrapper.post(`/api/phr/patients/${patientId}/dicom/uploads/${currentUploadId}/finalize`, {})
+        const finalizeResponse = PhrDicomUploadFinalizeResponseSchema.parse(await fetchWrapper.post(
+          `/api/phr/patients/${patientId}/dicom/uploads/${currentUploadId}/finalize`,
+          {},
+        ))
+        if (finalizeResponse.duplicate_upload === true) {
+          setError(null)
+          setPhase('duplicate')
+          await loadStudies()
+          return
+        }
       } catch (caught) {
         const message = errorMessage(caught)
         setError(message)
@@ -286,12 +296,14 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
               {phase === 'uploading' && 'Uploading…'}
               {phase === 'aborting' && 'Cancelling…'}
               {phase === 'done' && (summary.errored > 0 ? 'Upload finished with errors' : 'Upload complete')}
+              {phase === 'duplicate' && 'Duplicate study skipped'}
               {phase === 'cancelled' && 'Upload cancelled'}
               {phase === 'failed' && 'Upload failed'}
             </DialogTitle>
             <DialogDescription>
               {(phase === 'uploading' || phase === 'aborting') && `${filesProcessed} of ${totalFiles} files · ${formatBytes(bytesSent)} / ${formatBytes(totalBytes)}${rootName ? ` · ${rootName}` : ''}`}
               {phase === 'done' && `Stored ${summary.stored} · Skipped ${summary.skipped}${summary.errored > 0 ? ` · Errored ${summary.errored}` : ''}`}
+              {phase === 'duplicate' && `No new images were added. Stored ${summary.stored} · Skipped ${summary.skipped}`}
               {phase === 'cancelled' && `The upload session was cancelled and stored files were discarded. Processed ${filesProcessed} of ${totalFiles} files.`}
               {phase === 'failed' && `The upload session was stopped and stored files were discarded. Processed ${filesProcessed} of ${totalFiles} files.`}
             </DialogDescription>
@@ -307,7 +319,7 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
             </div>
           )}
 
-          {(phase === 'done' || phase === 'cancelled' || phase === 'failed') && summary.failures.length > 0 && (
+          {(phase === 'done' || phase === 'duplicate' || phase === 'cancelled' || phase === 'failed') && summary.failures.length > 0 && (
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-xs">
               <p className="mb-1 flex items-center gap-1 font-medium text-foreground">
                 <AlertCircle className="size-3" />
@@ -333,6 +345,13 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
             </p>
           )}
 
+          {phase === 'duplicate' && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="size-4 text-muted-foreground" />
+              This study is already available in the imaging library.
+            </p>
+          )}
+
           <DialogFooter>
             {phase === 'uploading' && (
               <Button type="button" variant="outline" onClick={cancelUpload}>
@@ -346,9 +365,9 @@ export default function ImagingPage({ patientId }: { patientId: number }) {
                 Cancelling…
               </Button>
             )}
-            {(phase === 'done' || phase === 'cancelled' || phase === 'failed') && (
+            {(phase === 'done' || phase === 'duplicate' || phase === 'cancelled' || phase === 'failed') && (
               <Button type="button" onClick={closeDialog}>
-                {phase === 'done' ? 'Done' : 'Close'}
+                {phase === 'done' || phase === 'duplicate' ? 'Done' : 'Close'}
               </Button>
             )}
           </DialogFooter>

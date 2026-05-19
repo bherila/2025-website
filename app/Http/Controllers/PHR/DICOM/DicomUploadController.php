@@ -134,7 +134,7 @@ class DicomUploadController extends Controller
     }
 
     /**
-     * Finalize an open session by transitioning it to STATUS_PROCESSED.
+     * Finalize an open session.
      */
     public function finalize(Request $request, int $patient, int $upload): JsonResponse
     {
@@ -145,7 +145,10 @@ class DicomUploadController extends Controller
             $session = $this->uploadProcessor->finalizeUpload($session);
         }
 
-        return response()->json(['upload' => $this->uploadPayload($session)]);
+        return response()->json([
+            'upload' => $this->uploadPayload($session),
+            'duplicate_upload' => $this->uploadProcessor->isDuplicateUploadDiscard($session),
+        ]);
     }
 
     /**
@@ -196,6 +199,7 @@ class DicomUploadController extends Controller
             'stored_bytes' => $upload->stored_bytes,
             'manifest_json' => $upload->manifest_json,
             'skipped_files_json' => $upload->skipped_files_json,
+            'error_message' => $upload->error_message,
             'created_at' => $upload->created_at?->toDateTimeString(),
             'updated_at' => $upload->updated_at?->toDateTimeString(),
         ];

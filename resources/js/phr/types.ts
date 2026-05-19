@@ -160,6 +160,7 @@ export const PhrDicomUploadSchema = z.object({
   stored_bytes: z.number(),
   manifest_json: z.record(z.string(), z.unknown()).nullable(),
   skipped_files_json: z.array(PhrDicomSkippedFileSchema).nullable(),
+  error_message: nullableString.optional(),
   created_at: nullableString,
   updated_at: nullableString,
 })
@@ -203,6 +204,10 @@ export const PhrDicomUploadResponseSchema = z.object({
     max_file_size_label: nullableString,
     direct_upload: z.boolean().optional(),
   }).optional(),
+})
+
+export const PhrDicomUploadFinalizeResponseSchema = PhrDicomUploadResponseSchema.extend({
+  duplicate_upload: z.boolean().optional(),
 })
 
 export const PhrDicomSignedUploadResponseSchema = z.object({

@@ -67,6 +67,8 @@ class DicomUploadProcessor
 
     public const DISK = 'phr_dicom';
 
+    public const DUPLICATE_UPLOAD_MESSAGE = 'Duplicate DICOM study upload was skipped because all image instances already exist for this patient.';
+
     public function __construct(private readonly DicomMetadataParser $metadataParser) {}
 
     /**
@@ -322,25 +324,37 @@ class DicomUploadProcessor
     }
 
     /**
-     * Finalize an open upload session by transitioning it to STATUS_PROCESSED.
+     * Finalize an open upload session.
      */
     public function finalizeUpload(PhrDicomUpload $upload): PhrDicomUpload
     {
         $upload->refresh();
 
-        if (! $this->uploadContainsImagePayload($upload)) {
-            $message = 'No DICOM image instances were uploaded. The session contained only non-image DICOM files, skipped files, or files that failed before reaching the server.';
-            $this->failUpload($upload, $message);
+        if ($this->uploadHasNewImageInstances($upload)) {
+            $upload->update([
+                'status' => PhrDicomUpload::STATUS_PROCESSED,
+                'error_message' => null,
+            ]);
 
-            throw new HttpException(422, $message);
+            return $upload->refresh();
         }
 
-        $upload->update([
-            'status' => PhrDicomUpload::STATUS_PROCESSED,
-            'error_message' => null,
-        ]);
+        if ($this->uploadContainsDuplicateImagePayload($upload)) {
+            $this->failUpload($upload, self::DUPLICATE_UPLOAD_MESSAGE);
 
-        return $upload->refresh();
+            return $upload->refresh();
+        }
+
+        $message = 'No DICOM image instances were uploaded. The session contained only non-image DICOM files, skipped files, or files that failed before reaching the server.';
+        $this->failUpload($upload, $message);
+
+        throw new HttpException(422, $message);
+    }
+
+    public function isDuplicateUploadDiscard(PhrDicomUpload $upload): bool
+    {
+        return $upload->status === PhrDicomUpload::STATUS_FAILED
+            && $upload->error_message === self::DUPLICATE_UPLOAD_MESSAGE;
     }
 
     /**
@@ -419,12 +433,13 @@ class DicomUploadProcessor
         return Storage::disk(self::DISK);
     }
 
-    private function uploadContainsImagePayload(PhrDicomUpload $upload): bool
+    private function uploadHasNewImageInstances(PhrDicomUpload $upload): bool
     {
-        if (PhrDicomInstance::query()->where('upload_id', $upload->id)->exists()) {
-            return true;
-        }
+        return PhrDicomInstance::query()->where('upload_id', $upload->id)->exists();
+    }
 
+    private function uploadContainsDuplicateImagePayload(PhrDicomUpload $upload): bool
+    {
         foreach ($upload->skipped_files_json ?? [] as $skippedFile) {
             if (($skippedFile['reason'] ?? null) === 'duplicate_sop_instance') {
                 return true;

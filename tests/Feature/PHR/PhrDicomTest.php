@@ -766,6 +766,66 @@ class PhrDicomTest extends TestCase
         $this->assertSame(2, PhrDicomInstance::query()->where('study_id', $study->id)->count());
     }
 
+    public function test_duplicate_only_direct_upload_is_discarded_without_deleting_original_study(): void
+    {
+        $this->fakeDicomDisk();
+
+        $owner = $this->createUser();
+        $patientId = $this->createPatientFor($owner);
+
+        $firstId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $this->postFile($owner, $patientId, $firstId, UploadedFile::fake()->createWithContent('IM0001', $this->dicomBytes()), 'CARDIAC_CT/ST0001/SE0001/IM0001')->assertOk();
+        $this->finalizeUpload($owner, $patientId, $firstId)->assertOk();
+
+        $study = PhrDicomStudy::query()->where('patient_id', $patientId)->sole();
+        $originalUploadId = (int) $study->upload_id;
+        $originalFile = PhrDicomFile::query()->where('patient_id', $patientId)->sole();
+
+        $secondId = $this->openUpload($owner, $patientId, 'CARDIAC_CT');
+        $secondUpload = PhrDicomUpload::query()->findOrFail($secondId);
+        $relativePath = 'CARDIAC_CT/ST0001/SE0001/IM0001';
+        $storageKey = $secondUpload->r2_prefix.'/'.$relativePath;
+        $contents = $this->dicomBytes();
+
+        $secondUpload->update([
+            'manifest_json' => array_merge($secondUpload->manifest_json ?? [], [
+                'reserved_paths' => [$relativePath],
+            ]),
+        ]);
+        Storage::disk(DicomUploadProcessor::DISK)->put($storageKey, $contents);
+
+        $this->actingAs($owner)
+            ->postJson("/api/phr/patients/{$patientId}/dicom/uploads/{$secondId}/files/complete", [
+                'r2_key' => $storageKey,
+                'relative_path' => $relativePath,
+                'original_filename' => 'IM0001',
+                'mime_type' => 'application/dicom',
+                'file_size_bytes' => strlen($contents),
+            ])
+            ->assertOk()
+            ->assertJsonPath('result.stored', false)
+            ->assertJsonPath('result.skipped_reason', 'duplicate_sop_instance')
+            ->assertJsonPath('upload.stored_files', 0)
+            ->assertJsonPath('upload.skipped_files', 1);
+
+        Storage::disk(DicomUploadProcessor::DISK)->assertMissing($storageKey);
+
+        $this->finalizeUpload($owner, $patientId, $secondId)
+            ->assertOk()
+            ->assertJsonPath('duplicate_upload', true)
+            ->assertJsonPath('upload.status', PhrDicomUpload::STATUS_FAILED)
+            ->assertJsonPath('upload.error_message', DicomUploadProcessor::DUPLICATE_UPLOAD_MESSAGE);
+
+        $study->refresh();
+        $this->assertSame($originalUploadId, (int) $study->upload_id);
+        $this->assertSame(1, PhrDicomStudy::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(1, PhrDicomFile::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(1, PhrDicomInstance::query()->where('patient_id', $patientId)->count());
+        $this->assertSame(1, PhrDicomUpload::query()->where('patient_id', $patientId)->where('status', PhrDicomUpload::STATUS_PROCESSED)->count());
+        $this->assertSame(1, PhrDicomUpload::query()->where('patient_id', $patientId)->where('status', PhrDicomUpload::STATUS_FAILED)->count());
+        Storage::disk(DicomUploadProcessor::DISK)->assertExists($originalFile->r2_key);
+    }
+
     public function test_blank_relative_paths_fall_back_to_unique_original_filenames(): void
     {
         $this->fakeDicomDisk();

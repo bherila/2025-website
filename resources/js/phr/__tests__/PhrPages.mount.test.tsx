@@ -291,6 +291,71 @@ describe('PHR page mounts', () => {
     }
   })
 
+  it('shows duplicate skipped completion when finalize discards a duplicate imaging upload', async () => {
+    const originalXmlHttpRequest = globalThis.XMLHttpRequest
+    MockUploadXMLHttpRequest.reset()
+    globalThis.XMLHttpRequest = MockUploadXMLHttpRequest as unknown as typeof XMLHttpRequest
+
+    const finalizeUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/finalize`
+    const cancelUrl = `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/cancel`
+
+    mockPost.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads`) {
+        return { upload: makeDicomUpload('pending') }
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/signed-urls`) {
+        return makeSignedDicomUploadBatch()
+      }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/uploads/501/files/complete`) {
+        return makeDicomUploadFileResponse('CARDIAC_CT/IM0001', {
+          stored: false,
+          skipped_reason: 'duplicate_sop_instance',
+          study_id: null,
+        })
+      }
+      if (url === finalizeUrl) {
+        return {
+          upload: makeDicomUpload('failed', {
+            stored_files: 0,
+            stored_bytes: 0,
+            skipped_files: 1,
+            error_message: 'Duplicate DICOM study upload was skipped because all image instances already exist for this patient.',
+          }),
+          duplicate_upload: true,
+        }
+      }
+      if (url === cancelUrl) {
+        throw new Error('Cancel should not be called.')
+      }
+      return { patient: makePatient() }
+    })
+
+    try {
+      const { container } = render(<ImagingPage patientId={PATIENT_ID} />)
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload dicom/i })).toBeInTheDocument())
+
+      const input = container.querySelector('input[type="file"]')
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Expected DICOM file input to render.')
+      }
+
+      const file = new File(['dicom'], 'IM0001', { type: 'application/dicom' })
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'CARDIAC_CT/IM0001' })
+
+      fireEvent.change(input, { target: { files: [file] } })
+
+      await waitFor(() => expect(screen.getByText('Duplicate study skipped')).toBeInTheDocument())
+      expect(screen.queryByText('Upload failed')).not.toBeInTheDocument()
+      expect(screen.getByText('No new images were added. Stored 0 · Skipped 1')).toBeInTheDocument()
+      expect(screen.getByText('This study is already available in the imaging library.')).toBeInTheDocument()
+      expect(mockPost).toHaveBeenCalledWith(finalizeUrl, {})
+      expect(mockPost).not.toHaveBeenCalledWith(cancelUrl, {})
+    } finally {
+      globalThis.XMLHttpRequest = originalXmlHttpRequest
+    }
+  })
+
   it('requests signed DICOM upload URLs in batches', async () => {
     const originalXmlHttpRequest = globalThis.XMLHttpRequest
     MockUploadXMLHttpRequest.reset()
@@ -543,7 +608,7 @@ describe('PHR page mounts', () => {
   })
 })
 
-function makeDicomUpload(status: string) {
+function makeDicomUpload(status: string, overrides: Record<string, unknown> = {}) {
   return {
     id: 501,
     patient_id: PATIENT_ID,
@@ -557,8 +622,10 @@ function makeDicomUpload(status: string) {
     stored_bytes: status === 'pending' ? 0 : 5,
     manifest_json: null,
     skipped_files_json: [],
+    error_message: null,
     created_at: null,
     updated_at: null,
+    ...overrides,
   }
 }
 
@@ -602,13 +669,17 @@ function makeSignedDicomUpload(clientId: string, relativePath: string, headers: 
   }
 }
 
-function makeDicomUploadFileResponse(relativePath = 'CARDIAC_CT/IM0001') {
+function makeDicomUploadFileResponse(
+  relativePath = 'CARDIAC_CT/IM0001',
+  overrides: Partial<{ stored: boolean, skipped_reason: string | null, study_id: number | null }> = {},
+) {
   return {
     result: {
       stored: true,
       skipped_reason: null,
       relative_path: relativePath,
       study_id: 7001,
+      ...overrides,
     },
     upload: makeDicomUpload('pending'),
   }
