@@ -3,11 +3,9 @@ import * as THREE from 'three'
 import { type GridPosition } from '../gameEngine'
 
 export interface ConveyorRenderItem {
-  capacity: number
   id: string
   index: number
   mesh: THREE.Group
-  total: number
 }
 
 export interface BeltMarkerRenderItem {
@@ -21,4 +19,18 @@ export interface FallingRenderItem {
   id: string
   mesh: THREE.Group
   startedAt: number
+}
+
+export interface SortingStackRenderItem {
+  id: string
+  index: number
+  group: THREE.Group
+  topBlockId: string | null
+}
+
+export interface ActiveTween {
+  startedAt: number
+  duration: number
+  update: (progress: number) => void
+  cleanup?: () => void
 }

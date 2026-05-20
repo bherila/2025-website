@@ -22,6 +22,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 - Box color determines which sorting block can consume the released marbles.
 - Some boxes are hidden and render as question-mark blocks until opened. Their true color is still known to the level generator and solver.
 - A clicked box is only opened when the conveyor has enough free capacity for all nine marbles.
+- Opening a box bursts the crate with a small ring + shard effect, then the nine marbles fall in a two-stage cascade: first vertically from the grid cell into the basin funnel mouth, then forward onto the conveyor belt.
 - Opening a box increments moves and may reduce the level score.
 - Open grid cells are eligible for chute refills.
 
@@ -38,6 +39,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 
 - The conveyor is a continuous stadium-shaped loop below the grid.
 - The conveyor has finite marble capacity. This makes the order of box openings matter.
+- Marbles are drawn as a packed queue (shoulder-to-shoulder along the belt), spaced by marble diameter rather than spread evenly across the loop.
 - Marbles keep their stable identity while circulating and should not teleport between updates.
 - Sorting is gate-based: only a marble crossing the sorting gate may enter a block.
 - If no compatible block has a slot when a marble reaches the gate, the marble keeps circulating.
@@ -46,10 +48,10 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 
 ## Sorting Blocks
 
-- Sorting blocks are arranged in vertical stacks below the conveyor.
-- Each visible top block has three slots.
+- Sorting blocks are arranged in vertical stacks below the conveyor. The active (depth 0) block sits closest to the conveyor; upcoming blocks recede behind it so the player can read which colors are queued.
+- The active block shows three lego-stud-style slots on its top face. Empty slots render as recessed dark dimples; filled slots render as colored studs with a seated marble.
 - A slot can only accept a marble whose color matches the block color.
-- A filled block clears immediately and exposes the next block in the same stack.
+- A filled block clears with a small confetti burst, and the next block tweens up from below to take its place.
 - Stack order is randomized. A color may be buried under other colors, so the player needs to open boxes in an order that keeps the belt from filling before matching receptacles are exposed.
 - Empty stacks render as inactive lanes.
 - Completing blocks is the primary objective; all stacks must be empty to complete the level.

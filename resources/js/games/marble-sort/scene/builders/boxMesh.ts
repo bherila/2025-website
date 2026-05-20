@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 import {
   BOX_MARBLE_COUNT,
@@ -15,10 +16,10 @@ export function createBoxMesh(box: MarbleBox, colorblindMode: boolean): THREE.Gr
   group.userData.boxId = box.id
   group.position.copy(gridCellPosition(box.position))
 
-  const color = box.hidden ? '#9aa9ba' : MARBLE_COLORS[box.color].hex
+  const color = box.hidden ? '#a4b1c4' : MARBLE_COLORS[box.color].hex
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.86, 0.32, 0.72),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.48 }),
+    new RoundedBoxGeometry(0.88, 0.36, 0.74, 4, 0.1),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.02 }),
   )
   body.castShadow = true
   body.receiveShadow = true
@@ -26,19 +27,21 @@ export function createBoxMesh(box: MarbleBox, colorblindMode: boolean): THREE.Gr
   group.add(body)
 
   if (box.hidden) {
-    const sprite = createTextSprite('?', { fontSize: 76 })
-    sprite.position.set(0, 0.34, 0)
-    sprite.scale.set(0.44, 0.22, 1)
+    const sprite = createTextSprite('?', { fontSize: 84 })
+    sprite.position.set(0, 0.38, 0)
+    sprite.scale.set(0.48, 0.24, 1)
+    sprite.material.depthTest = false
+    sprite.renderOrder = 2
     group.add(sprite)
 
     return group
   }
 
   for (let index = 0; index < BOX_MARBLE_COUNT; index += 1) {
-    const marble = createMarbleMesh(box.color, 0.075)
+    const marble = createMarbleMesh(box.color, 0.085)
     const column = index % 3
     const row = Math.floor(index / 3)
-    marble.position.set((column - 1) * 0.22, 0.2, (row - 1) * 0.17)
+    marble.position.set((column - 1) * 0.22, 0.22, (row - 1) * 0.18)
     group.add(marble)
   }
 
@@ -48,7 +51,7 @@ export function createBoxMesh(box: MarbleBox, colorblindMode: boolean): THREE.Gr
       color: '#111827',
       fontSize: 64,
     })
-    label.position.set(0.3, 0.38, -0.25)
+    label.position.set(0.32, 0.4, -0.26)
     label.scale.set(0.22, 0.11, 1)
     group.add(label)
   }

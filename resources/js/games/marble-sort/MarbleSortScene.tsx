@@ -1,8 +1,25 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
-import { type GameState } from './gameEngine'
+import { type GameState, type MarbleBox, type SortingStack } from './gameEngine'
+import {
+  type BoxBurst,
+  createBoxBurst,
+  disposeBoxBurst,
+  updateBoxBurst,
+} from './scene/animation/boxBurst'
+import {
+  type ConfettiBurst,
+  createConfettiBurst,
+  disposeConfettiBurst,
+  updateConfettiBurst,
+} from './scene/animation/confetti'
 import { animateConveyorBeltMarkers, animateConveyorItems, animateFallingItems } from './scene/animation/conveyor'
+import {
+  createStackRiseTween,
+  type StackRiseTween,
+  updateStackRiseTween,
+} from './scene/animation/sortingStack'
 import { createBoxMesh } from './scene/builders/boxMesh'
 import { createChuteMesh } from './scene/builders/chuteMesh'
 import { createConveyorBeltMarkers, createConveyorTrack } from './scene/builders/conveyorTrack'
@@ -10,6 +27,7 @@ import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
+import { gridCellPosition } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem, ConveyorRenderItem, FallingRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -26,13 +44,19 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const staticGroupRef = useRef<THREE.Group | null>(null)
   const dynamicGroupRef = useRef<THREE.Group | null>(null)
+  const effectGroupRef = useRef<THREE.Group | null>(null)
   const conveyorItemsRef = useRef<ConveyorRenderItem[]>([])
   const beltMarkersRef = useRef<BeltMarkerRenderItem[]>([])
   const fallingItemsRef = useRef<FallingRenderItem[]>([])
   const fallingStartedAtRef = useRef<Map<string, number>>(new Map())
   const onBoxClickRef = useRef(onBoxClick)
   const stateRef = useRef(state)
+  const previousStateRef = useRef<GameState | null>(null)
   const conveyorPhaseRef = useRef(0)
+  const confettiBurstsRef = useRef<ConfettiBurst[]>([])
+  const boxBurstsRef = useRef<BoxBurst[]>([])
+  const stackTweensRef = useRef<StackRiseTween[]>([])
+  const stackGroupsRef = useRef<Map<string, THREE.Group>>(new Map())
 
   useEffect(() => {
     onBoxClickRef.current = onBoxClick
@@ -52,26 +76,32 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     scene.background = new THREE.Color(SCENE_BACKGROUND)
     sceneRef.current = scene
 
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80)
-    camera.position.set(0, 9.3, 4.8)
-    camera.lookAt(0, 0, -0.6)
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 80)
+    camera.position.set(0, 12.2, 3.5)
+    camera.lookAt(0, 0, 0.2)
     cameraRef.current = camera
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     rendererRef.current = renderer
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight('#ffffff', '#5e8f72', 2.1)
+    const stackGroups = stackGroupsRef.current
+
+    const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
     scene.add(ambient)
 
-    const sun = new THREE.DirectionalLight('#ffffff', 2.6)
-    sun.position.set(-3, 9, 4)
+    const sun = new THREE.DirectionalLight('#ffffff', 2.4)
+    sun.position.set(-3, 11, 4)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     scene.add(sun)
+
+    const rim = new THREE.DirectionalLight('#bcdfff', 0.8)
+    rim.position.set(4, 6, -3)
+    scene.add(rim)
 
     const staticGroup = new THREE.Group()
     staticGroup.add(createPlayfield())
@@ -86,6 +116,10 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     scene.add(dynamicGroup)
     dynamicGroupRef.current = dynamicGroup
     const fallingStartedAt = fallingStartedAtRef.current
+
+    const effectGroup = new THREE.Group()
+    scene.add(effectGroup)
+    effectGroupRef.current = effectGroup
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
@@ -113,9 +147,9 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       const height = Math.max(480, container.clientHeight)
       const narrow = width < 640
       renderer.setSize(width, height)
-      camera.fov = narrow ? 50 : 42
-      camera.position.set(0, narrow ? 10.8 : 9.4, narrow ? 5.65 : 4.85)
-      camera.lookAt(0, 0, narrow ? -0.45 : -0.7)
+      camera.fov = narrow ? 42 : 36
+      camera.position.set(0, narrow ? 13.8 : 12.2, narrow ? 4.2 : 3.5)
+      camera.lookAt(0, 0, narrow ? 0.4 : 0.2)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     }
@@ -130,10 +164,35 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const animate = (timestamp?: number): void => {
       timer.update(timestamp)
       const delta = timer.getDelta()
-      conveyorPhaseRef.current += delta * 0.12
+      const now = performance.now() / 1000
+      conveyorPhaseRef.current += delta * 0.07
       animateConveyorBeltMarkers(beltMarkersRef.current, conveyorPhaseRef.current)
       animateConveyorItems(conveyorItemsRef.current, conveyorPhaseRef.current)
-      animateFallingItems(fallingItemsRef.current, performance.now() / 1000)
+      animateFallingItems(fallingItemsRef.current, now)
+
+      confettiBurstsRef.current = confettiBurstsRef.current.filter((burst) => {
+        const done = updateConfettiBurst(burst, now)
+        if (done) {
+          effectGroup.remove(burst.group)
+          disposeConfettiBurst(burst)
+        }
+        return !done
+      })
+
+      boxBurstsRef.current = boxBurstsRef.current.filter((burst) => {
+        const done = updateBoxBurst(burst, now)
+        if (done) {
+          effectGroup.remove(burst.group)
+          disposeBoxBurst(burst)
+        }
+        return !done
+      })
+
+      stackTweensRef.current = stackTweensRef.current.filter((tween) => {
+        const done = updateStackRiseTween(tween, now)
+        return !done
+      })
+
       renderer.render(scene, camera)
       frameId = window.requestAnimationFrame(animate)
     }
@@ -150,6 +209,9 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       if (dynamicGroupRef.current) {
         clearGroup(dynamicGroupRef.current)
       }
+      if (effectGroupRef.current) {
+        clearGroup(effectGroupRef.current)
+      }
       renderer.dispose()
       renderer.domElement.remove()
       sceneRef.current = null
@@ -157,22 +219,39 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       rendererRef.current = null
       staticGroupRef.current = null
       dynamicGroupRef.current = null
+      effectGroupRef.current = null
       conveyorItemsRef.current = []
       beltMarkersRef.current = []
       fallingItemsRef.current = []
+      confettiBurstsRef.current = []
+      boxBurstsRef.current = []
+      stackTweensRef.current = []
+      stackGroups.clear()
       fallingStartedAt.clear()
     }
   }, [])
 
   useEffect(() => {
     const dynamicGroup = dynamicGroupRef.current
-    if (!dynamicGroup) {
+    const effectGroup = effectGroupRef.current
+    if (!dynamicGroup || !effectGroup) {
       return
+    }
+
+    const previous = previousStateRef.current
+    const burstEvents = computeBurstEvents(previous, state)
+    const clearEvents = computeClearedBlockEvents(previous, state)
+
+    for (const event of burstEvents) {
+      const burst = createBoxBurst(gridCellPosition(event.position), event.color)
+      effectGroup.add(burst.group)
+      boxBurstsRef.current.push(burst)
     }
 
     clearGroup(dynamicGroup)
     conveyorItemsRef.current = []
     fallingItemsRef.current = []
+    stackGroupsRef.current.clear()
 
     const now = performance.now() / 1000
     const currentFallingIds = new Set(state.fallingMarbles.map((marble) => marble.id))
@@ -209,17 +288,33 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       const mesh = createMarbleMesh(marble.color, 0.13)
       dynamicGroup.add(mesh)
       conveyorItemsRef.current.push({
-        capacity: state.conveyorCapacity,
         id: marble.id,
         index,
         mesh,
-        total: state.conveyor.length,
       })
     })
 
     for (const stack of state.sortingStacks) {
-      dynamicGroup.add(createSortingStackMesh(stack, state.sortingStacks.length, colorblindMode))
+      const stackMesh = createSortingStackMesh(stack, state.sortingStacks.length, colorblindMode)
+      dynamicGroup.add(stackMesh)
+      stackGroupsRef.current.set(stack.id, stackMesh)
     }
+
+    for (const event of clearEvents) {
+      const stackGroup = stackGroupsRef.current.get(event.stackId)
+      if (stackGroup) {
+        const tween = createStackRiseTween(stackGroup)
+        stackTweensRef.current.push(tween)
+      }
+      const stack = state.sortingStacks.find((candidate) => candidate.id === event.stackId)
+      const x = stackGroup?.position.x ?? 0
+      const z = stackGroup?.position.z ?? 0
+      const confetti = createConfettiBurst(new THREE.Vector3(x, 0.4, z), stack?.color ?? event.color)
+      effectGroup.add(confetti.group)
+      confettiBurstsRef.current.push(confetti)
+    }
+
+    previousStateRef.current = state
   }, [colorblindMode, state])
 
   return (
@@ -228,6 +323,51 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       className="h-full min-h-0 w-full overflow-hidden rounded-lg border border-white/70 bg-emerald-500 shadow-2xl shadow-slate-950/20 sm:min-h-[560px] dark:border-white/10 dark:bg-emerald-950 dark:shadow-slate-950/35"
     />
   )
+}
+
+interface BurstEvent {
+  id: string
+  color: MarbleBox['color']
+  position: MarbleBox['position']
+}
+
+interface ClearEvent {
+  stackId: string
+  color: SortingStack['color']
+}
+
+function computeBurstEvents(previous: GameState | null, next: GameState): BurstEvent[] {
+  if (!previous) {
+    return []
+  }
+  const currentIds = new Set(next.boxes.map((box) => box.id))
+  const events: BurstEvent[] = []
+  for (const box of previous.boxes) {
+    if (!currentIds.has(box.id)) {
+      events.push({ id: box.id, color: box.color, position: box.position })
+    }
+  }
+  return events
+}
+
+function computeClearedBlockEvents(previous: GameState | null, next: GameState): ClearEvent[] {
+  if (!previous) {
+    return []
+  }
+  const events: ClearEvent[] = []
+  const previousById = new Map(previous.sortingStacks.map((stack) => [stack.id, stack]))
+  for (const stack of next.sortingStacks) {
+    const before = previousById.get(stack.id)
+    if (!before) {
+      continue
+    }
+    const beforeTop = before.blocks[0]
+    const afterTop = stack.blocks[0]
+    if (beforeTop && (!afterTop || beforeTop.id !== afterTop.id)) {
+      events.push({ stackId: stack.id, color: beforeTop.color })
+    }
+  }
+  return events
 }
 
 export function disposeMarbleSortObjectForTest(object: THREE.Object3D): void {
