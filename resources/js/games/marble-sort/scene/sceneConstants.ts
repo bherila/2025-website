@@ -1,10 +1,10 @@
 export const GRID_CELL_SIZE = 0.92
 export const GRID_CELL_GAP = 0.18
 export const GRID_ORIGIN_X = -1.1
-export const GRID_ORIGIN_Z = -2.8
+export const GRID_ORIGIN_Z = -2.55
 export const GRID_STEP_X = 1.1
 export const GRID_STEP_Z = 0.82
-export const CONVEYOR_CENTER_Z = 1.95
+export const CONVEYOR_CENTER_Z = 2.85
 export const CONVEYOR_WIDTH = 5.4
 export const CONVEYOR_HEIGHT = 1.05
 export const CONVEYOR_MARBLE_Y = 0.36
@@ -12,17 +12,19 @@ export const MARBLE_DIAMETER = 0.27
 export const MARBLE_RADIUS = MARBLE_DIAMETER / 2
 export const CONVEYOR_PERIMETER = 2 * (CONVEYOR_WIDTH - CONVEYOR_HEIGHT) + Math.PI * CONVEYOR_HEIGHT
 export const CONVEYOR_SLOT_FRACTION = MARBLE_DIAMETER / CONVEYOR_PERIMETER
-export const BASIN_NORTH_Z = 0.55
-export const BASIN_SOUTH_Z = 1.4
+// Funnel starts just south of the grid plate (which ends at Z ≈ 1.19) and
+// descends to meet the conveyor's north edge.
+export const BASIN_NORTH_Z = 1.25
+export const BASIN_SOUTH_Z = 2.3
 export const BASIN_CENTER_Z = (BASIN_NORTH_Z + BASIN_SOUTH_Z) / 2
 export const BASIN_FLOOR_Y = CONVEYOR_MARBLE_Y - 0.02
-export const BASIN_TOP_HALF_WIDTH = 1.65
+export const BASIN_TOP_HALF_WIDTH = 1.5
 export const BASIN_EXIT_HALF_WIDTH = 0.42
 export const BASIN_HALF_DEPTH = (BASIN_SOUTH_Z - BASIN_NORTH_Z) / 2
 export const BASIN_HALF_WIDTH = BASIN_TOP_HALF_WIDTH
 export const BASIN_EXIT_X = 0
 export const BASIN_EXIT_Z = BASIN_SOUTH_Z
-export const SORTING_STACK_Z = 2.95
+export const SORTING_STACK_Z = 4.45
 export const SORTING_STACK_BLOCK_DEPTH = 0.44
 export const SORTING_STACK_BLOCK_STEP_Z = 0.40
 export const SORTING_STACK_BLOCK_STEP_Y = 0.06

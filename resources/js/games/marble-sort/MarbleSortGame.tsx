@@ -9,13 +9,14 @@ import {
   applyExtraBeltPowerUp,
   applyMagnetPowerUp,
   applyShufflePowerUp,
+  arriveFallingMarble,
   availableConveyorSlots,
   clearLevelSnapshot,
   type GameState,
   loadLevelSnapshot,
   loadProgress,
   openBox,
-  processConveyorTick,
+  processBeltTick,
   progressFromState,
   remainingChuteBoxes,
   remainingSortingBlocks,
@@ -57,7 +58,7 @@ export function MarbleSortGame(): ReactElement {
     }
 
     const interval = window.setInterval(() => {
-      setState((current) => processConveyorTick(current))
+      setState((current) => processBeltTick(current))
     }, CONVEYOR_TICK_INTERVAL_MS)
 
     return () => window.clearInterval(interval)
@@ -72,6 +73,10 @@ export function MarbleSortGame(): ReactElement {
 
   const handleBoxClick = useCallback((boxId: string): void => {
     setState((current) => openBox(current, boxId))
+  }, [])
+
+  const handleMarbleArrived = useCallback((marbleId: string): void => {
+    setState((current) => arriveFallingMarble(current, marbleId))
   }, [])
 
   const handleMagnet = useCallback((): void => {
@@ -123,6 +128,7 @@ export function MarbleSortGame(): ReactElement {
             colorblindMode={colorblindMode}
             state={state}
             onBoxClick={handleBoxClick}
+            onMarbleArrived={handleMarbleArrived}
           />
 
           <div

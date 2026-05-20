@@ -33,10 +33,11 @@ export function createSortingStackMesh(
 
   if (stack.blocks.length === 0) {
     const lane = new THREE.Mesh(
-      new THREE.BoxGeometry(BLOCK_WIDTH, 0.08, SORTING_STACK_BLOCK_DEPTH * 1.4),
-      new THREE.MeshStandardMaterial({ color: '#dde7ec', roughness: 0.78, transparent: true, opacity: 0.32 }),
+      new THREE.BoxGeometry(BLOCK_WIDTH, 0.06, SORTING_STACK_BLOCK_DEPTH * 1.4),
+      new THREE.MeshStandardMaterial({ color: '#bcd1c0', roughness: 0.78 }),
     )
-    lane.position.set(0, 0.05, 0)
+    lane.position.set(0, 0.04, 0)
+    lane.receiveShadow = true
     group.add(lane)
 
     return group
@@ -84,12 +85,10 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
   group.add(body)
 
   const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(BLOCK_WIDTH + 0.02, BLOCK_HEIGHT * 0.32, SORTING_STACK_BLOCK_DEPTH + 0.02),
+    new THREE.BoxGeometry(BLOCK_WIDTH * 0.985, BLOCK_HEIGHT * 0.3, SORTING_STACK_BLOCK_DEPTH * 0.985),
     new THREE.MeshStandardMaterial({
-      color: darken(hex, 0.18),
+      color: darken(hex, 0.28),
       roughness: 0.55,
-      transparent: true,
-      opacity: 0.7,
     }),
   )
   rim.position.y = -BLOCK_HEIGHT / 2 + 0.04
@@ -123,13 +122,6 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
         group.add(highlight)
       }
     }
-  } else {
-    const highlight = new THREE.Mesh(
-      new THREE.BoxGeometry(BLOCK_WIDTH * 0.86, 0.02, SORTING_STACK_BLOCK_DEPTH * 0.82),
-      new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4, transparent: true, opacity: 0.18 }),
-    )
-    highlight.position.y = BLOCK_HEIGHT / 2 + 0.01
-    group.add(highlight)
   }
 
   return group

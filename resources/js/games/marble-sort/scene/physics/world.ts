@@ -19,7 +19,7 @@ const WALL_HEIGHT = 0.6
 const WALL_THICKNESS = 0.12
 
 export function createPhysicsWorld(): PhysicsWorld {
-  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 4.6) })
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 6.2) })
   world.broadphase = new CANNON.NaiveBroadphase()
   world.allowSleep = true
 
@@ -45,9 +45,25 @@ export function createPhysicsWorld(): PhysicsWorld {
   addAngledWall(containerBody, 'left')
   addAngledWall(containerBody, 'right')
 
+  // Lateral channel walls north of the basin so marbles dropped anywhere in the
+  // grid stay bound in X while they slide south toward the funnel mouth.
+  const channelNorthZ = -3.2
+  const channelLength = BASIN_NORTH_Z - channelNorthZ
+  const channelCenterZ = (channelNorthZ + BASIN_NORTH_Z) / 2
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, channelLength / 2)),
+    new CANNON.Vec3(-BASIN_TOP_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelCenterZ),
+  )
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, channelLength / 2)),
+    new CANNON.Vec3(BASIN_TOP_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelCenterZ),
+  )
+
+  // North end wall sits at the very top of the channel (well above the grid)
+  // so any northward bounce is contained.
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, BASIN_NORTH_Z - WALL_THICKNESS),
+    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelNorthZ - WALL_THICKNESS / 2),
   )
 
   containerBody.addShape(
@@ -109,20 +125,21 @@ export function spawnMarbleBody(
   const releaseIndex = index % 9
   const column = releaseIndex % 3
   const row = Math.floor(releaseIndex / 3)
+  const stagger = releaseIndex / 9
   body.position.set(
-    position.x + (column - 1) * 0.1,
-    position.y + 0.38 + row * 0.025,
-    position.z - 0.08 + row * 0.045,
+    position.x + (column - 1) * 0.07,
+    position.y + 0.34 + stagger * 0.08,
+    position.z - 0.05 + (row - 1) * 0.06,
   )
   body.velocity.set(
-    (column - 1) * 0.035,
-    -0.08 - row * 0.015,
-    0.18 + row * 0.035,
+    (column - 1) * 0.04,
+    -0.06,
+    0.45,
   )
   body.angularVelocity.set(
-    (column - 1) * 0.25,
-    0.12 + row * 0.05,
-    (1 - column) * 0.2,
+    (column - 1) * 0.3,
+    0.08,
+    (1 - column) * 0.22,
   )
   world.addBody(body)
 

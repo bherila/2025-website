@@ -192,6 +192,48 @@ export function processConveyorTick(state: GameState): GameState {
   return advanceConveyor(state)
 }
 
+// Advance the conveyor only — does NOT auto-settle falling marbles. The scene
+// drives settling via arriveFallingMarble() when each marble's physics reaches
+// the basin exit, so the visual fall and the logical belt entry stay aligned.
+export function processBeltTick(state: GameState): GameState {
+  if (state.completedLevel || state.gameOver) {
+    return state
+  }
+
+  return advanceConveyor(state)
+}
+
+export function arriveFallingMarble(state: GameState, marbleId: string): GameState {
+  if (state.completedLevel || state.gameOver) {
+    return state
+  }
+
+  const index = state.fallingMarbles.findIndex((candidate) => candidate.id === marbleId)
+  if (index < 0) {
+    return state
+  }
+
+  const freeSlots = state.conveyorCapacity - state.conveyor.length
+  if (freeSlots < 1) {
+    return state
+  }
+
+  const next = cloneState(state)
+  const marble = next.fallingMarbles[index]
+  if (!marble) {
+    return state
+  }
+  next.fallingMarbles = [
+    ...next.fallingMarbles.slice(0, index),
+    ...next.fallingMarbles.slice(index + 1),
+  ]
+  const { from: _from, ...conveyorMarble } = marble
+  next.conveyor = [...next.conveyor, conveyorMarble]
+  next.conveyorTicks += 1
+
+  return checkBeltFull(checkLevelComplete(next))
+}
+
 function settleFallingMarbles(state: GameState, freeSlots: number): GameState {
   const next = cloneState(state)
   const settledCount = Math.min(freeSlots, MARBLES_SETTLED_PER_TICK)
@@ -261,7 +303,8 @@ export function applyMagnetPowerUp(state: GameState): GameState {
   const remaining: ConveyorMarble[] = []
   let sorted = 0
   for (const marble of next.conveyor) {
-    if (fillMarbleIntoSortingBlock(next, marble)) {
+    const stackIndex = leftmostOpenStackIndexForColor(next, marble.color)
+    if (stackIndex !== undefined && fillMarbleIntoSortingBlock(next, marble, stackIndex)) {
       sorted += 1
     } else {
       remaining.push(marble)
@@ -372,6 +415,33 @@ export function solverCompletesLevel(state: GameState): boolean {
 
 export function availableConveyorSlots(state: GameState): number {
   return Math.max(0, state.conveyorCapacity - state.conveyor.length - state.fallingMarbles.length)
+}
+
+export function isBoxDisplayedAsHidden(box: MarbleBox, boxes: readonly MarbleBox[]): boolean {
+  if (!box.hidden) {
+    return false
+  }
+
+  const occupied = new Set<string>()
+  for (const candidate of boxes) {
+    occupied.add(`${candidate.position.column},${candidate.position.row}`)
+  }
+
+  const neighbors: Array<[number, number]> = [
+    [box.position.column, box.position.row - 1],
+    [box.position.column, box.position.row + 1],
+    [box.position.column - 1, box.position.row],
+    [box.position.column + 1, box.position.row],
+  ]
+
+  for (const [column, row] of neighbors) {
+    const inGrid = column >= 0 && column < GRID_COLUMNS && row >= 0 && row < GRID_ROWS
+    if (inGrid && !occupied.has(`${column},${row}`)) {
+      return false
+    }
+  }
+
+  return true
 }
 
 export function remainingChuteBoxes(state: GameState): number {
@@ -733,12 +803,47 @@ function findPassingSortableConveyorMarble(state: GameState): PassingSortableMar
     }
 
     const stack = state.sortingStacks.find((candidate) => candidate.index === stackIndex)
-    if (stack?.blocks[0]?.color === marble.color) {
-      return { marble, stackIndex }
+    if (stack?.blocks[0]?.color !== marble.color) {
+      continue
     }
+
+    if (!isLeftmostOpenStackForColor(state, marble.color, stackIndex)) {
+      continue
+    }
+
+    return { marble, stackIndex }
   }
 
   return null
+}
+
+function isLeftmostOpenStackForColor(state: GameState, color: MarbleColor, stackIndex: number): boolean {
+  for (const candidate of state.sortingStacks) {
+    if (candidate.index >= stackIndex) {
+      continue
+    }
+    const block = candidate.blocks[0]
+    if (block && block.color === color && block.slotsFilled < SORTING_BLOCK_CAPACITY) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function leftmostOpenStackIndexForColor(state: GameState, color: MarbleColor): number | undefined {
+  let leftmost: number | undefined
+  for (const stack of state.sortingStacks) {
+    const block = stack.blocks[0]
+    if (!block || block.color !== color || block.slotsFilled >= SORTING_BLOCK_CAPACITY) {
+      continue
+    }
+    if (leftmost === undefined || stack.index < leftmost) {
+      leftmost = stack.index
+    }
+  }
+
+  return leftmost
 }
 
 function signatureForDrain(state: GameState): string {

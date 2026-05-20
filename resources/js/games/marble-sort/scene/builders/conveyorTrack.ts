@@ -66,14 +66,6 @@ export function createConveyorTrack(): THREE.Group {
   belt.position.y = 0.04
   group.add(belt)
 
-  const gate = new THREE.Mesh(
-    new THREE.BoxGeometry(0.16, 0.18, CONVEYOR_HEIGHT * 0.82),
-    new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.2 }),
-  )
-  gate.position.set(-(CONVEYOR_WIDTH - CONVEYOR_HEIGHT) / 2 + 0.05, 0.16, CONVEYOR_CENTER_Z)
-  gate.castShadow = true
-  group.add(gate)
-
   return group
 }
 

@@ -5,7 +5,6 @@ import {
   BASIN_NORTH_Z,
   BASIN_SOUTH_Z,
   BASIN_TOP_HALF_WIDTH,
-  CONVEYOR_CENTER_Z,
   GRID_CELL_GAP,
   GRID_CELL_SIZE,
   GRID_ORIGIN_X,
@@ -16,39 +15,43 @@ import {
 } from '../sceneConstants'
 import { createCanvasPlane } from '../threeUtils'
 
-const TRAY_WIDTH = 6.6
-const TRAY_NORTH_Z = -3.4
-const TRAY_SOUTH_Z = BASIN_SOUTH_Z + 0.18
-const TRAY_DEPTH = TRAY_SOUTH_Z - TRAY_NORTH_Z
-const TRAY_CENTER_Z = (TRAY_NORTH_Z + TRAY_SOUTH_Z) / 2
-const SORTING_DECK_WIDTH = 6.7
-const SORTING_DECK_NORTH_Z = CONVEYOR_CENTER_Z - 0.72
-const SORTING_DECK_SOUTH_Z = SORTING_STACK_Z + 1.75
-const SORTING_DECK_DEPTH = SORTING_DECK_SOUTH_Z - SORTING_DECK_NORTH_Z
-const SORTING_DECK_CENTER_Z = (SORTING_DECK_NORTH_Z + SORTING_DECK_SOUTH_Z) / 2
+const TOP_TRAY_WIDTH = 7.2
+const TOP_TRAY_NORTH_Z = -3.25
+// Top tray's south edge coincides with the basin's south edge — the V-notch in
+// the bottom border *is* the funnel chute opening above the conveyor.
+const TOP_TRAY_SOUTH_Z = BASIN_SOUTH_Z
+const TOP_TRAY_DEPTH = TOP_TRAY_SOUTH_Z - TOP_TRAY_NORTH_Z
+const TOP_TRAY_CENTER_Z = (TOP_TRAY_NORTH_Z + TOP_TRAY_SOUTH_Z) / 2
+const BOTTOM_TRAY_WIDTH = 7.2
+const BOTTOM_TRAY_NORTH_Z = SORTING_STACK_Z - 1.05
+const BOTTOM_TRAY_SOUTH_Z = SORTING_STACK_Z + 2.0
+const BOTTOM_TRAY_DEPTH = BOTTOM_TRAY_SOUTH_Z - BOTTOM_TRAY_NORTH_Z
+const BOTTOM_TRAY_CENTER_Z = (BOTTOM_TRAY_NORTH_Z + BOTTOM_TRAY_SOUTH_Z) / 2
 
 export function createPlayfield(): THREE.Group {
   const group = new THREE.Group()
 
   const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(14, 18),
+    new THREE.PlaneGeometry(16, 22),
     new THREE.MeshBasicMaterial({ color: '#54c074' }),
   )
   grass.rotation.x = -Math.PI / 2
   grass.position.set(0, -0.06, 0)
   group.add(grass)
 
-  const tray = createCanvasPlane(TRAY_WIDTH, TRAY_DEPTH, drawTray)
-  tray.position.set(0, 0, TRAY_CENTER_Z)
-  group.add(tray)
+  const topTray = createCanvasPlane(TOP_TRAY_WIDTH, TOP_TRAY_DEPTH, drawTopTray)
+  topTray.position.set(0, 0, TOP_TRAY_CENTER_Z)
+  group.add(topTray)
 
-  const sortingDeck = createCanvasPlane(SORTING_DECK_WIDTH, SORTING_DECK_DEPTH, drawSortingDeck)
-  sortingDeck.position.set(0, -0.045, SORTING_DECK_CENTER_Z)
-  group.add(sortingDeck)
+  const bottomTray = createCanvasPlane(BOTTOM_TRAY_WIDTH, BOTTOM_TRAY_DEPTH, drawBottomTray)
+  bottomTray.position.set(0, 0, BOTTOM_TRAY_CENTER_Z)
+  group.add(bottomTray)
 
+  // Plate sized exactly to the 3x5 grid of cells — anything larger would jut
+  // south and occlude the painted funnel below the grid.
   const gridPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(3.85, 0.08, 4.7),
-    new THREE.MeshStandardMaterial({ color: '#e3eaf5', roughness: 0.55, transparent: true, opacity: 0.65 }),
+    new THREE.BoxGeometry(3.85, 0.08, GRID_STEP_Z * 4 + GRID_CELL_SIZE),
+    new THREE.MeshStandardMaterial({ color: '#e3eaf5', roughness: 0.55 }),
   )
   gridPlate.position.set(0, 0.02, GRID_ORIGIN_Z + GRID_STEP_Z * 2)
   gridPlate.receiveShadow = true
@@ -58,7 +61,7 @@ export function createPlayfield(): THREE.Group {
     for (let column = 0; column < 3; column += 1) {
       const cell = new THREE.Mesh(
         new THREE.BoxGeometry(GRID_CELL_SIZE - GRID_CELL_GAP, 0.06, GRID_CELL_SIZE - GRID_CELL_GAP),
-        new THREE.MeshStandardMaterial({ color: '#f1f4fb', roughness: 0.6, transparent: true, opacity: 0.95 }),
+        new THREE.MeshStandardMaterial({ color: '#f1f4fb', roughness: 0.6 }),
       )
       cell.position.set(GRID_ORIGIN_X + column * GRID_STEP_X, 0.09, GRID_ORIGIN_Z + row * GRID_STEP_Z)
       cell.receiveShadow = true
@@ -69,93 +72,127 @@ export function createPlayfield(): THREE.Group {
   return group
 }
 
-function drawSortingDeck(context: CanvasRenderingContext2D, w: number, h: number): void {
-  context.clearRect(0, 0, w, h)
-
-  const borderInset = 18
-  const borderRadius = 76
-
-  context.fillStyle = '#dceedd'
-  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
-  context.fill()
-
-  context.strokeStyle = '#368754'
-  context.lineWidth = 30
-  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
-  context.stroke()
-
-  context.globalAlpha = 0.45
-  context.fillStyle = '#ffffff'
-  roundedRect(context, borderInset + 24, borderInset + 18, w - (borderInset + 24) * 2, h * 0.08, 40)
-  context.fill()
-  context.globalAlpha = 1
+function drawBottomTray(context: CanvasRenderingContext2D, w: number, h: number): void {
+  drawTrayFrame(context, w, h, '#cce4cd', '#368754')
 }
 
-function drawTray(context: CanvasRenderingContext2D, w: number, h: number): void {
+function drawTopTray(context: CanvasRenderingContext2D, w: number, h: number): void {
   context.clearRect(0, 0, w, h)
 
-  const fillColor = '#dceedd'
-  const wallColor = '#368754'
-  const borderRadius = 84
-  const borderInset = 18
+  const inset = 18
+  const r = 78
+  const fill = '#dceedd'
+  const wall = '#368754'
 
-  context.fillStyle = fillColor
-  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  // Where the funnel walls meet the side edges of the rectangle (start of the V notch).
+  const shoulderY = worldZToPixelTop(BASIN_NORTH_Z, h)
+  // The funnel exit reaches the canvas south edge so the green walls visually
+  // continue straight onto the conveyor housing below.
+  const exitY = h - 4
+  const halfWidthTop = (BASIN_TOP_HALF_WIDTH / TOP_TRAY_WIDTH) * w
+  const halfWidthBot = (BASIN_EXIT_HALF_WIDTH / TOP_TRAY_WIDTH) * w
+  const cx = w / 2
+
+  // Build the closed outer shape: rounded rect on top, V-shaped notch in the
+  // bottom edge that opens directly above the conveyor below the tray.
+  const buildShape = (): void => {
+    context.beginPath()
+    context.moveTo(inset + r, inset)
+    context.lineTo(w - inset - r, inset)
+    context.quadraticCurveTo(w - inset, inset, w - inset, inset + r)
+    context.lineTo(w - inset, shoulderY)
+    // Right shoulder of the bottom edge.
+    context.lineTo(cx + halfWidthTop, shoulderY)
+    // Right funnel wall curving inward and down to the narrow exit.
+    context.bezierCurveTo(
+      cx + halfWidthTop - 6, shoulderY + (exitY - shoulderY) * 0.5,
+      cx + halfWidthBot + 18, exitY - 22,
+      cx + halfWidthBot, exitY,
+    )
+    // Exit opening (this edge is filled but the green border is not stroked here).
+    context.lineTo(cx - halfWidthBot, exitY)
+    // Left funnel wall curving outward back up to the left shoulder.
+    context.bezierCurveTo(
+      cx - halfWidthBot - 18, exitY - 22,
+      cx - halfWidthTop + 6, shoulderY + (exitY - shoulderY) * 0.5,
+      cx - halfWidthTop, shoulderY,
+    )
+    // Left shoulder of the bottom edge.
+    context.lineTo(inset, shoulderY)
+    context.lineTo(inset, inset + r)
+    context.quadraticCurveTo(inset, inset, inset + r, inset)
+    context.closePath()
+  }
+
+  buildShape()
+  context.fillStyle = fill
   context.fill()
 
-  context.globalAlpha = 0.5
-  context.fillStyle = '#ffffff'
-  roundedRect(context, borderInset + 22, borderInset + 16, w - (borderInset + 22) * 2, h * 0.06, 38)
-  context.fill()
-  context.globalAlpha = 1
-
-  const pxNorth = worldZToPixel(BASIN_NORTH_Z, h)
-  const pxSouth = worldZToPixel(BASIN_SOUTH_Z, h)
-  const pxTopHalf = (BASIN_TOP_HALF_WIDTH / TRAY_WIDTH) * w
-  const pxExitHalf = (BASIN_EXIT_HALF_WIDTH / TRAY_WIDTH) * w
-  const cxLeftTop = w / 2 - pxTopHalf
-  const cxRightTop = w / 2 + pxTopHalf
-  const cxLeftExit = w / 2 - pxExitHalf
-  const cxRightExit = w / 2 + pxExitHalf
-
-  context.lineJoin = 'round'
+  // Stroke the border in two arcs so the exit opening at the bottom of the V
+  // stays clean (no border across the conveyor drop slot).
   context.lineCap = 'round'
-
-  context.strokeStyle = wallColor
+  context.lineJoin = 'round'
+  context.strokeStyle = wall
   context.lineWidth = 30
-  roundedRectStrokeWithExit(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius, cxLeftExit, cxRightExit)
 
-  context.strokeStyle = wallColor
-  context.lineWidth = 26
   context.beginPath()
-  context.moveTo(cxLeftTop, pxNorth)
+  context.moveTo(inset + r, inset)
+  context.lineTo(w - inset - r, inset)
+  context.quadraticCurveTo(w - inset, inset, w - inset, inset + r)
+  context.lineTo(w - inset, shoulderY)
+  context.lineTo(cx + halfWidthTop, shoulderY)
   context.bezierCurveTo(
-    cxLeftTop - 4, pxNorth + (pxSouth - pxNorth) * 0.45,
-    cxLeftExit + 36, pxSouth - 38,
-    cxLeftExit, pxSouth + 14,
+    cx + halfWidthTop - 6, shoulderY + (exitY - shoulderY) * 0.5,
+    cx + halfWidthBot + 18, exitY - 22,
+    cx + halfWidthBot, exitY,
   )
   context.stroke()
 
   context.beginPath()
-  context.moveTo(cxRightTop, pxNorth)
+  context.moveTo(cx - halfWidthBot, exitY)
   context.bezierCurveTo(
-    cxRightTop + 4, pxNorth + (pxSouth - pxNorth) * 0.45,
-    cxRightExit - 36, pxSouth - 38,
-    cxRightExit, pxSouth + 14,
+    cx - halfWidthBot - 18, exitY - 22,
+    cx - halfWidthTop + 6, shoulderY + (exitY - shoulderY) * 0.5,
+    cx - halfWidthTop, shoulderY,
   )
+  context.lineTo(inset, shoulderY)
+  context.lineTo(inset, inset + r)
+  context.quadraticCurveTo(inset, inset, inset + r, inset)
   context.stroke()
 
-  context.fillStyle = wallColor
-  context.beginPath()
-  context.arc(cxLeftExit, pxSouth + 14, 14, 0, Math.PI * 2)
+  // Top-edge specular highlight.
+  context.globalAlpha = 0.42
+  context.fillStyle = '#ffffff'
+  roundedRect(context, inset + 26, inset + 18, w - (inset + 26) * 2, h * 0.045, 40)
   context.fill()
-  context.beginPath()
-  context.arc(cxRightExit, pxSouth + 14, 14, 0, Math.PI * 2)
-  context.fill()
+  context.globalAlpha = 1
 }
 
-function worldZToPixel(worldZ: number, pixelHeight: number): number {
-  return ((worldZ - TRAY_NORTH_Z) / TRAY_DEPTH) * pixelHeight
+function drawTrayFrame(context: CanvasRenderingContext2D, w: number, h: number, fill: string, wall: string): void {
+  context.clearRect(0, 0, w, h)
+
+  const borderInset = 18
+  const borderRadius = 78
+
+  context.fillStyle = fill
+  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  context.fill()
+
+  context.strokeStyle = wall
+  context.lineWidth = 30
+  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  context.stroke()
+
+  // Light specular highlight along the top edge so the tray reads as plastic.
+  context.globalAlpha = 0.42
+  context.fillStyle = '#ffffff'
+  roundedRect(context, borderInset + 26, borderInset + 18, w - (borderInset + 26) * 2, h * 0.07, 40)
+  context.fill()
+  context.globalAlpha = 1
+}
+
+function worldZToPixelTop(worldZ: number, pixelHeight: number): number {
+  return ((worldZ - TOP_TRAY_NORTH_Z) / TOP_TRAY_DEPTH) * pixelHeight
 }
 
 function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -172,30 +209,3 @@ function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w:
   context.closePath()
 }
 
-function roundedRectStrokeWithExit(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  exitLeft: number,
-  exitRight: number,
-): void {
-  context.beginPath()
-  context.moveTo(x + r, y)
-  context.lineTo(x + w - r, y)
-  context.quadraticCurveTo(x + w, y, x + w, y + r)
-  context.lineTo(x + w, y + h - r)
-  context.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  context.lineTo(exitRight, y + h)
-  context.stroke()
-
-  context.beginPath()
-  context.moveTo(exitLeft, y + h)
-  context.lineTo(x + r, y + h)
-  context.quadraticCurveTo(x, y + h, x, y + h - r)
-  context.lineTo(x, y + r)
-  context.quadraticCurveTo(x, y, x + r, y)
-  context.stroke()
-}

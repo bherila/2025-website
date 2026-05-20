@@ -27,8 +27,8 @@ export function gridCellPosition(position: GridPosition): THREE.Vector3 {
 
 export function chutePosition(row: number, side: ChuteSide): THREE.Vector3 {
   return new THREE.Vector3(
-    side === 'left' ? GRID_ORIGIN_X - 1.25 : GRID_ORIGIN_X + GRID_STEP_X * 2 + 1.25,
-    0.22,
+    side === 'left' ? GRID_ORIGIN_X - 0.78 : GRID_ORIGIN_X + GRID_STEP_X * 2 + 0.78,
+    0.16,
     GRID_ORIGIN_Z + row * GRID_STEP_Z,
   )
 }

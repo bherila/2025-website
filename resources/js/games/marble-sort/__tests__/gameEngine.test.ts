@@ -1,9 +1,12 @@
 import {
+  applyMagnetPowerUp,
   availableConveyorSlots,
   BOX_MARBLE_COUNT,
   drainConveyor,
   type GameState,
   generateLevel,
+  isBoxDisplayedAsHidden,
+  type MarbleBox,
   openBox,
   processConveyorTick,
   remainingChuteBoxes,
@@ -169,6 +172,81 @@ describe('marble sort game engine', () => {
     expect(sorted.sortingStacks.find((stack) => stack.index === 1)?.blocks[0]?.slotsFilled).toBe(1)
   })
 
+  it('fills the leftmost matching sorting stack before any rightward same-color stack', () => {
+    const state = generateLevel(1, 41_003)
+    const matchingColor = state.activeColors[0]
+    const otherColor = state.activeColors.find((color) => color !== matchingColor)
+    if (!matchingColor || !otherColor) {
+      throw new Error('Expected generated level to include at least two colors.')
+    }
+
+    let queued: GameState = {
+      ...state,
+      conveyor: Array.from({ length: 2 }, (_, index) => ({
+        id: `match-${index}`,
+        color: matchingColor,
+        sequence: index + 1,
+      })),
+      conveyorCapacity: 27,
+      conveyorTicks: 0,
+      fallingMarbles: [],
+      sortingStacks: setOpenStackColors(state, {
+        0: matchingColor,
+        1: otherColor,
+        2: matchingColor,
+      }),
+    }
+
+    for (let tick = 0; tick < 60 && queued.conveyor.length > 0; tick += 1) {
+      queued = processConveyorTick(queued)
+    }
+
+    const leftStack = queued.sortingStacks.find((stack) => stack.index === 0)
+    const rightStack = queued.sortingStacks.find((stack) => stack.index === 2)
+
+    // Both marbles should have entered the leftmost matching stack.
+    expect(queued.conveyor).toHaveLength(0)
+    expect(rightStack?.blocks[0]?.color).toBe(matchingColor)
+    expect(rightStack?.blocks[0]?.slotsFilled ?? 0).toBe(0)
+    expect(leftStack?.blocks[0]?.color).toBe(matchingColor)
+    expect(leftStack?.blocks[0]?.slotsFilled ?? 0).toBe(2)
+  })
+
+  it('magnet power-up only drains marbles into the leftmost matching stack', () => {
+    const state = generateLevel(1, 41_004)
+    const matchingColor = state.activeColors[0]
+    const otherColor = state.activeColors.find((color) => color !== matchingColor)
+    if (!matchingColor || !otherColor) {
+      throw new Error('Expected generated level to include at least two colors.')
+    }
+
+    const queued: GameState = {
+      ...state,
+      conveyor: [
+        { id: 'm1', color: matchingColor, sequence: 1 },
+        { id: 'm2', color: matchingColor, sequence: 2 },
+      ],
+      conveyorCapacity: 27,
+      conveyorTicks: 0,
+      fallingMarbles: [],
+      powerUps: { ...state.powerUps, magnet: 1 },
+      sortingStacks: setOpenStackColors(state, {
+        0: matchingColor,
+        1: otherColor,
+        2: matchingColor,
+      }),
+    }
+
+    const result = applyMagnetPowerUp(queued)
+    const rightStack = result.sortingStacks.find((stack) => stack.index === 2)
+
+    // No marbles should have leaked to the rightward matching stack.
+    expect(rightStack?.blocks[0]?.color).toBe(matchingColor)
+    expect(rightStack?.blocks[0]?.slotsFilled ?? 0).toBe(0)
+    // The magnet should have sorted both marbles via the leftmost matching stack.
+    expect(result.conveyor).toHaveLength(0)
+  })
+
   it('settles falling marbles onto the conveyor in batches and sorts matching receptacles', () => {
     const state = generateLevel(1, 41_001)
     const box = findBoxForOpenReceptacle(state)
@@ -186,6 +264,48 @@ describe('marble sort game engine', () => {
 
     expect(remainingSortingBlocks(drained)).toBeLessThan(startingBlocks)
     expect(availableConveyorSlots(drained)).toBeGreaterThan(0)
+  })
+
+  it('hides mystery boxes only when all in-grid orthogonal neighbors are still present', () => {
+    const make = (column: number, row: number, hidden: boolean): MarbleBox => ({
+      color: 'pink',
+      hidden,
+      id: `b-${column}-${row}`,
+      position: { column, row },
+      source: 'initial',
+    })
+
+    // Interior (1,1) hidden box with all 4 neighbors present should display hidden.
+    const fullGrid: MarbleBox[] = []
+    for (let row = 0; row < 5; row += 1) {
+      for (let column = 0; column < 3; column += 1) {
+        fullGrid.push(make(column, row, column === 1 && row === 1))
+      }
+    }
+    const interior = fullGrid.find((b) => b.position.column === 1 && b.position.row === 1)!
+    expect(isBoxDisplayedAsHidden(interior, fullGrid)).toBe(true)
+
+    // Remove the box directly above the hidden one - it should reveal.
+    const aboveRemoved = fullGrid.filter((b) => !(b.position.column === 1 && b.position.row === 0))
+    expect(isBoxDisplayedAsHidden(interior, aboveRemoved)).toBe(false)
+
+    // Corner box at (0,0): off-grid neighbors count as covered, in-grid neighbors are (1,0) and (0,1).
+    const corner = make(0, 0, true)
+    const cornerBoxes: MarbleBox[] = [
+      corner,
+      make(1, 0, false),
+      make(0, 1, false),
+    ]
+    expect(isBoxDisplayedAsHidden(corner, cornerBoxes)).toBe(true)
+
+    // Remove the in-grid neighbor to the right — corner reveals.
+    expect(isBoxDisplayedAsHidden(corner, [corner, make(0, 1, false)])).toBe(false)
+
+    // A non-hidden box never displays as hidden.
+    const visibleInterior = make(1, 1, false)
+    expect(isBoxDisplayedAsHidden(visibleInterior, fullGrid.map((b) => (
+      b.position.column === 1 && b.position.row === 1 ? visibleInterior : b
+    )))).toBe(false)
   })
 
   it('can solve a full level through public engine actions', () => {
