@@ -3,6 +3,7 @@ import {
   applyFillPowerUp,
   applyShufflePowerUp,
   applyVipPowerUp,
+  calculateLevelScore,
   canBoardPassengerAtParkingGate,
   canMoveCar,
   type Car,
@@ -12,10 +13,13 @@ import {
   generateLevel,
   getCarCells,
   getCarOccupiedCells,
+  getLevelDifficulty,
   lengthForCapacity,
+  levelHasAvailableRescue,
   loadProgress,
   loopPassengerCapacity,
   moveCarToParking,
+  openParkingSlot,
   type ParkingSlot,
   pathCellsToExit,
   processBoardingAtParkingGate,
@@ -46,6 +50,26 @@ describe('cars game engine', () => {
     expect(lengthForCapacity(4)).toBe(2)
     expect(lengthForCapacity(6)).toBe(3)
     expect(lengthForCapacity(10)).toBe(4)
+  })
+
+  it('applies difficulty cadence, loop capacity, and score multipliers', () => {
+    const passengers = Array.from({ length: 50 }, (_, index) => ({
+      color: 'red' as const,
+      id: `p${index + 1}`,
+    }))
+
+    expect(getLevelDifficulty(4)).toMatchObject({ kind: 'regular', label: '', scoreMultiplier: 1 })
+    expect(getLevelDifficulty(5)).toMatchObject({ kind: 'hard', label: 'HARD', scoreMultiplier: 2 })
+    expect(getLevelDifficulty(20)).toMatchObject({ kind: 'super-hard', label: 'SUPER HARD', scoreMultiplier: 3 })
+
+    expect(loopPassengerCapacity(makeState({ level: 1, passengerQueue: passengers }))).toBe(18)
+    expect(loopPassengerCapacity(makeState({ level: 4, passengerQueue: passengers }))).toBe(20)
+    expect(loopPassengerCapacity(makeState({ level: 5, passengerQueue: passengers }))).toBe(12)
+    expect(loopPassengerCapacity(makeState({ level: 20, passengerQueue: passengers }))).toBe(13)
+
+    expect(calculateLevelScore(makeState({ level: 4 }))).toBe(1440)
+    expect(calculateLevelScore(makeState({ level: 5 }))).toBe(3100)
+    expect(calculateLevelScore(makeState({ level: 20 }))).toBe(9600)
   })
 
   it('allows only the visible tunnel car tail to overlap an active garage cell', () => {
@@ -411,6 +435,84 @@ describe('cars game engine', () => {
     expect(next.passengerQueue).toHaveLength(0)
   })
 
+  it('fails a level when no boarding, moves, slots, or power-ups can rescue it', () => {
+    const state = makeNoRescueState()
+
+    expect(levelHasAvailableRescue(state)).toBe(false)
+
+    const next = processBoardingAtParkingGate(state, 'p1')
+
+    expect(next).not.toBe(state)
+    expect(next.failedLevel).toEqual({
+      level: 1,
+      reason: 'No moves left. Restart the level to try again.',
+    })
+    expect(next.lastMessage).toBe('No moves left. Restart the level to try again.')
+  })
+
+  it('keeps the level alive while any rescue action remains available', () => {
+    const baseState = makeNoRescueState()
+    const rescuableStates: GameState[] = [
+      makeNoRescueState({
+        passengerQueue: [
+          { id: 'p1', color: 'red' },
+          { id: 'p2', color: 'red' },
+        ],
+      }),
+      makeNoRescueState({
+        cars: [
+          ...baseState.cars,
+          makeCar({ id: 'field', color: 'blue', direction: 'right', position: { x: 0, y: 2 } }),
+        ],
+        parkingSlots: makeNoRescueParkingSlots().map((slot) => slot.id === 'slot-2'
+          ? { ...slot, occupiedCarId: null }
+          : slot),
+      }),
+      makeNoRescueState({
+        parkingSlots: makeNoRescueParkingSlots().map((slot) => slot.id === 'slot-5'
+          ? { ...slot, occupiedCarId: null, unlocked: false }
+          : slot),
+      }),
+      makeNoRescueState({
+        cars: [
+          ...baseState.cars,
+          makeCar({ id: 'vip-field', color: 'blue', direction: 'right', position: { x: 0, y: 2 } }),
+        ],
+        powerUps: { fill: 0, shuffle: 0, vip: 1 },
+      }),
+      makeNoRescueState({
+        powerUps: { fill: 0, shuffle: 1, vip: 0 },
+      }),
+      makeNoRescueState({
+        powerUps: { fill: 1, shuffle: 0, vip: 0 },
+      }),
+    ]
+
+    for (const state of rescuableStates) {
+      expect(levelHasAvailableRescue(state)).toBe(true)
+      expect(processBoardingAtParkingGate(state, 'p1').failedLevel).toBeNull()
+    }
+  })
+
+  it('blocks state-changing actions after a level has failed', () => {
+    const failedState = makeState({
+      cars: [makeCar({ id: 'field', color: 'blue', direction: 'right', position: { x: 0, y: 2 } })],
+      failedLevel: {
+        level: 1,
+        reason: 'No moves left. Restart the level to try again.',
+      },
+      parkingSlots: makeParkingSlots().map((slot) => slot.id === 'slot-5'
+        ? { ...slot, unlocked: false }
+        : slot),
+      powerUps: { fill: 0, shuffle: 1, vip: 0 },
+    })
+
+    expect(canMoveCar(failedState, 'field')).toBe(false)
+    expect(moveCarToParking(failedState, 'field')).toEqual(failedState)
+    expect(openParkingSlot(failedState)).toEqual(failedState)
+    expect(applyShufflePowerUp(failedState)).toEqual(failedState)
+  })
+
   it('saves, loads, and repairs local progress', () => {
     saveProgress({
       version: 1,
@@ -461,6 +563,7 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     maxRegularSlotsUnlocked: 4,
     lastMessage: '',
     completedLevel: null,
+    failedLevel: null,
   }
 
   return {
@@ -471,7 +574,21 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     passengerQueue: overrides.passengerQueue ?? state.passengerQueue,
     parkingSlots: overrides.parkingSlots ?? state.parkingSlots,
     powerUps: overrides.powerUps ?? state.powerUps,
+    completedLevel: overrides.completedLevel ?? state.completedLevel,
+    failedLevel: overrides.failedLevel ?? state.failedLevel,
   }
+}
+
+function makeNoRescueState(overrides: Partial<GameState> = {}): GameState {
+  return makeState({
+    cars: [
+      makeCar({ id: 'parked-red', color: 'red', status: 'parked', parkingSlotId: 'slot-1' }),
+    ],
+    parkingSlots: makeNoRescueParkingSlots(),
+    passengerQueue: [{ id: 'p1', color: 'blue' }],
+    powerUps: { fill: 0, shuffle: 0, vip: 0 },
+    ...overrides,
+  })
 }
 
 function makeCar(overrides: Partial<Car> = {}): Car {
@@ -527,4 +644,18 @@ function makeParkingSlots(occupiedCarId: string | null = null): ParkingSlot[] {
     { id: 'slot-4', kind: 'regular', unlocked: true, occupiedCarId: null, index: 3 },
     { id: 'slot-5', kind: 'regular', unlocked: false, occupiedCarId: null, index: 4 },
   ]
+}
+
+function makeNoRescueParkingSlots(): ParkingSlot[] {
+  return makeParkingSlots().map((slot) => {
+    if (slot.kind === 'vip') {
+      return slot
+    }
+
+    return {
+      ...slot,
+      occupiedCarId: slot.id === 'slot-1' ? 'parked-red' : `occupied-${slot.id}`,
+      unlocked: true,
+    }
+  })
 }

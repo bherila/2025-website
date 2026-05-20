@@ -67,6 +67,10 @@ export function CarsGame(): ReactElement {
 
   const handleCarClick = useCallback((carId: string): void => {
     setState((current) => {
+      if (current.failedLevel) {
+        return current
+      }
+
       if (vipSelectionActive) {
         return applyVipPowerUp(current, carId)
       }

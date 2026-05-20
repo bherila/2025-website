@@ -7,6 +7,7 @@ import {
   type CarStatus,
   type Direction,
   DIRECTIONS,
+  type FailedLevel,
   type FeederSide,
   GAME_PROGRESS_STORAGE_KEY,
   type GameState,
@@ -177,6 +178,7 @@ function cloneSerializableState(state: GameState): GameState {
     parkingSlots: state.parkingSlots.map((slot) => ({ ...slot })),
     powerUps: { ...state.powerUps },
     completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
+    failedLevel: state.failedLevel ? { ...state.failedLevel } : null,
   }
 }
 
@@ -199,6 +201,7 @@ function parseGameState(value: unknown): GameState | null {
   const moves = parseNumber(value.moves)
   const maxRegularSlotsUsed = parseNumber(value.maxRegularSlotsUsed)
   const maxRegularSlotsUnlocked = parseNumber(value.maxRegularSlotsUnlocked)
+  const failedLevel = parseFailedLevel(value.failedLevel)
 
   if (
     level === null
@@ -215,6 +218,7 @@ function parseGameState(value: unknown): GameState | null {
     || moves === null
     || maxRegularSlotsUsed === null
     || maxRegularSlotsUnlocked === null
+    || failedLevel === null
     || !isRecord(value.powerUps)
     || value.completedLevel !== null
   ) {
@@ -248,6 +252,27 @@ function parseGameState(value: unknown): GameState | null {
     maxRegularSlotsUnlocked,
     lastMessage: typeof value.lastMessage === 'string' ? value.lastMessage : '',
     completedLevel: null,
+    failedLevel: failedLevel ?? null,
+  }
+}
+
+function parseFailedLevel(value: unknown): FailedLevel | undefined | null {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const level = parseInteger(value.level, 1)
+  if (level === null || typeof value.reason !== 'string') {
+    return null
+  }
+
+  return {
+    level,
+    reason: value.reason,
   }
 }
 

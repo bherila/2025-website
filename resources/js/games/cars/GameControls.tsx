@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-import { type GameState } from './gameEngine'
+import { type GameState, getLevelDifficulty } from './gameEngine'
 
 export interface GameStats {
   departedCars: number
@@ -139,14 +139,15 @@ function MobileStatsHeader({
   return (
     <header className="sm:hidden">
       <button
-        className="flex h-12 w-full items-center justify-between rounded-xl border border-white/70 bg-white/85 px-3 text-left shadow-sm shadow-slate-950/5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-slate-950/25"
+        className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/70 bg-white/85 px-3 py-1.5 text-left shadow-sm shadow-slate-950/5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-slate-950/25"
         type="button"
         onClick={() => onStatsExpandedChange((current) => !current)}
       >
         <span className="flex items-center gap-3">
-          <span>
+          <span className="flex min-w-10 flex-col items-start">
             <span className="block text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">Level</span>
             <span className="block text-xl font-bold leading-none">{state.level}</span>
+            <DifficultyBadge level={state.level} compact />
           </span>
           <span>
             <span className="block text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">Score</span>
@@ -179,9 +180,10 @@ function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindModeChan
   return (
     <header className="hidden items-center justify-between gap-4 rounded-xl border border-white/70 bg-white/75 px-3 py-2 shadow-sm shadow-slate-950/5 backdrop-blur-md sm:flex dark:border-white/10 dark:bg-slate-900/75 dark:shadow-slate-950/25">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex min-w-24 items-center gap-3 rounded-lg bg-slate-950 px-3 py-2 text-white shadow-sm shadow-slate-950/15 dark:bg-white dark:text-slate-950">
+        <div className="flex min-w-24 flex-col items-center rounded-lg bg-slate-950 px-3 py-2 text-white shadow-sm shadow-slate-950/15 dark:bg-white dark:text-slate-950">
           <span className="text-[10px] font-bold uppercase leading-none text-white/60 dark:text-slate-500">Level</span>
           <span className="text-2xl font-black leading-none tabular-nums">{state.level}</span>
+          <DifficultyBadge level={state.level} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Metric label="Level Score" value={state.levelScore.toLocaleString()} />
@@ -224,6 +226,8 @@ function BottomControls({
   onTutorialOpen,
   onVipSelectionActiveChange,
 }: BottomControlsProps): ReactElement {
+  const levelEnded = Boolean(state.completedLevel || state.failedLevel)
+
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
       <div className="pointer-events-auto grid grid-cols-6 gap-1.5 rounded-2xl border border-white/70 bg-white/80 p-1.5 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/75">
@@ -231,7 +235,7 @@ function BottomControls({
           active={vipSelectionActive}
           confirmation={vipSelectionActive ? undefined : POWER_UP_CONFIRMATIONS.vip}
           count={state.powerUps.vip}
-          disabled={state.powerUps.vip < 1 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.vip < 1 || levelEnded}
           icon={<Crown />}
           label="VIP"
           onClick={() => onVipSelectionActiveChange((current) => !current)}
@@ -239,7 +243,7 @@ function BottomControls({
         <BottomControlButton
           confirmation={POWER_UP_CONFIRMATIONS.shuffle}
           count={state.powerUps.shuffle}
-          disabled={state.powerUps.shuffle < 1 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.shuffle < 1 || levelEnded}
           icon={<Shuffle />}
           label="Shuffle"
           onClick={onShuffle}
@@ -247,13 +251,13 @@ function BottomControls({
         <BottomControlButton
           confirmation={POWER_UP_CONFIRMATIONS.fill}
           count={state.powerUps.fill}
-          disabled={state.powerUps.fill < 1 || stats.parkedCars < 1 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.fill < 1 || stats.parkedCars < 1 || levelEnded}
           icon={<Users />}
           label="Fill"
           onClick={onFill}
         />
         <BottomControlButton
-          disabled={!stats.hasLockedRegularSlot || Boolean(state.completedLevel)}
+          disabled={!stats.hasLockedRegularSlot || levelEnded}
           icon={<Plus />}
           label="Open Spot"
           variant="outline"
@@ -275,6 +279,25 @@ function BottomControls({
         />
       </div>
     </div>
+  )
+}
+
+function DifficultyBadge({ compact = false, level }: { compact?: boolean, level: number }): ReactElement | null {
+  const difficulty = getLevelDifficulty(level)
+  if (difficulty.kind === 'regular') {
+    return null
+  }
+
+  return (
+    <span
+      className={cn(
+        'mt-1 rounded bg-red-600 px-1.5 py-0.5 font-black uppercase leading-none tracking-normal text-white shadow-sm shadow-red-950/25 dark:bg-red-500 dark:text-white',
+        compact ? 'text-[8px]' : 'text-[9px]',
+        difficulty.kind === 'super-hard' && 'bg-red-700 dark:bg-red-600',
+      )}
+    >
+      {difficulty.label}
+    </span>
   )
 }
 

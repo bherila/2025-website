@@ -117,9 +117,9 @@ export function queuePosition(rawDistance: number, layout: QueueLayout): THREE.V
 
 export function queueLayoutForState(state: GameState): QueueLayout {
   const activeCount = Math.max(1, loopPassengerCapacity(state))
-  const targetPerimeter = Math.max(4.6, activeCount * passengerSpacing())
-  const capRadius = Math.max(1.1, Math.min(2.1, targetPerimeter / 9.0))
-  const straightLength = Math.max(0.9, (targetPerimeter - Math.PI * 2 * capRadius) / 2)
+  const targetPerimeter = Math.max(3.2, activeCount * passengerSpacing())
+  const capRadius = Math.max(0.48, Math.min(1.45, targetPerimeter / 8.0))
+  const straightLength = Math.max(0.45, (targetPerimeter - Math.PI * 2 * capRadius) / 2)
   const perimeter = straightLength * 2 + Math.PI * 2 * capRadius
   const width = straightLength + capRadius * 2 + 0.7
   const depth = capRadius * 2 + 0.7

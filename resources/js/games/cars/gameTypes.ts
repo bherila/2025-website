@@ -103,6 +103,11 @@ export interface CompletedLevel {
   awardedPowerUp: PowerUpKind
 }
 
+export interface FailedLevel {
+  level: number
+  reason: string
+}
+
 export interface GameState {
   version: 1
   level: number
@@ -122,6 +127,7 @@ export interface GameState {
   maxRegularSlotsUnlocked: number
   lastMessage: string
   completedLevel: CompletedLevel | null
+  failedLevel: FailedLevel | null
 }
 
 export interface SavedGameProgress {
@@ -148,8 +154,8 @@ export const STARTING_REGULAR_SLOTS = 4
 export const TOTAL_REGULAR_SLOTS = 7
 export const BOARD_WIDTH = 16
 export const BOARD_HEIGHT = 11
-export const MIN_LOOP_PASSENGERS = 22
-export const MAX_LOOP_PASSENGERS = 42
+export const MIN_LOOP_PASSENGERS = 18
+export const MAX_LOOP_PASSENGERS = 34
 
 export function lengthForCapacity(capacity: number): number {
   if (capacity <= 4) {

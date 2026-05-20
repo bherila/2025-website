@@ -1,13 +1,12 @@
-import { ArrowRight, RotateCcw, Sparkles, Trophy } from 'lucide-react'
+import { AlertTriangle, ArrowRight, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import { type CSSProperties, type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-import { labelForPowerUp } from './gameEngine'
-import { type CompletedLevel, type GameState } from './gameEngine'
+import { type CompletedLevel, type FailedLevel, type GameState, getLevelDifficulty, labelForPowerUp } from './gameEngine'
 
 export interface LevelCompleteOverlayProps {
-  state: Pick<GameState, 'completedLevel'>
+  state: Pick<GameState, 'completedLevel' | 'failedLevel'>
   onNextLevel: () => void
   onRestart: () => void
 }
@@ -42,12 +41,13 @@ const CONFETTI_PIECES = Array.from({ length: 36 }, (_, index) => {
 })
 
 export function LevelCompleteOverlay({ state, onNextLevel, onRestart }: LevelCompleteOverlayProps): ReactElement | null {
-  if (!state.completedLevel) {
+  if (!state.completedLevel && !state.failedLevel) {
     return null
   }
+  const failedLevel = state.failedLevel
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-3 pb-24 pt-6 sm:p-6" role="dialog" aria-labelledby="cars-level-complete-title">
+    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-3 pb-24 pt-6 sm:p-6" role="dialog" aria-labelledby={failedLevel ? 'cars-level-failed-title' : 'cars-level-complete-title'}>
       <style>{`
         @keyframes cars-level-complete-enter {
           from {
@@ -98,45 +98,92 @@ export function LevelCompleteOverlay({ state, onNextLevel, onRestart }: LevelCom
         }
       `}</style>
 
-      <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-[2px] dark:bg-slate-950/45" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 overflow-hidden" aria-hidden="true">
-        {CONFETTI_PIECES.map((piece) => (
-          <div
-            className={`cars-confetti-piece absolute top-0 h-3 ${piece.wideClass} ${piece.roundedClass} ${piece.colorClass} shadow-sm`}
-            key={piece.id}
-            style={piece.style}
-          />
-        ))}
+      <div className={failedLevel ? 'absolute inset-0 bg-red-950/25 backdrop-blur-[2px] dark:bg-red-950/45' : 'absolute inset-0 bg-slate-950/20 backdrop-blur-[2px] dark:bg-slate-950/45'} />
+      {!failedLevel && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-72 overflow-hidden" aria-hidden="true">
+          {CONFETTI_PIECES.map((piece) => (
+            <div
+              className={`cars-confetti-piece absolute top-0 h-3 ${piece.wideClass} ${piece.roundedClass} ${piece.colorClass} shadow-sm`}
+              key={piece.id}
+              style={piece.style}
+            />
+          ))}
+        </div>
+      )}
+
+      {failedLevel
+        ? <LevelFailedCard failedLevel={failedLevel} onRestart={onRestart} />
+        : state.completedLevel
+          ? <LevelCompleteCard completedLevel={state.completedLevel} onNextLevel={onNextLevel} onRestart={onRestart} />
+          : null}
+    </div>
+  )
+}
+
+function LevelCompleteCard({
+  completedLevel,
+  onNextLevel,
+  onRestart,
+}: {
+  completedLevel: CompletedLevel
+  onNextLevel: () => void
+  onRestart: () => void
+}): ReactElement {
+  return (
+    <div className="cars-level-complete-card pointer-events-auto relative w-full max-w-md overflow-hidden rounded-lg border border-emerald-200 bg-white/95 p-5 text-center shadow-2xl shadow-slate-950/25 sm:p-6 dark:border-emerald-900 dark:bg-slate-950/95">
+      <div className="absolute right-4 top-4 text-amber-400" aria-hidden="true">
+        <Sparkles className="size-5" />
+      </div>
+      <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 ring-8 ring-emerald-100/45 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-900/25">
+        <Trophy className="size-7" />
       </div>
 
-      <div className="cars-level-complete-card pointer-events-auto relative w-full max-w-md overflow-hidden rounded-lg border border-emerald-200 bg-white/95 p-5 text-center shadow-2xl shadow-slate-950/25 sm:p-6 dark:border-emerald-900 dark:bg-slate-950/95">
-        <div className="absolute right-4 top-4 text-amber-400" aria-hidden="true">
-          <Sparkles className="size-5" />
-        </div>
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 ring-8 ring-emerald-100/45 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-900/25">
-          <Trophy className="size-7" />
-        </div>
+      <LevelCompleteSummary completedLevel={completedLevel} />
 
-        <LevelCompleteSummary completedLevel={state.completedLevel} />
-
-        <div className="mt-5 grid gap-2 sm:grid-cols-2">
-          <Button className="h-11 sm:col-start-2" type="button" onClick={onNextLevel}>
-            Next Level
-            <ArrowRight className="size-4" />
-          </Button>
-          <Button className="h-11 sm:col-start-1 sm:row-start-1" type="button" variant="outline" onClick={onRestart}>
-            <RotateCcw className="size-4" />
-            Restart Level
-          </Button>
-        </div>
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <Button className="h-11 sm:col-start-2" type="button" onClick={onNextLevel}>
+          Next Level
+          <ArrowRight className="size-4" />
+        </Button>
+        <Button className="h-11 sm:col-start-1 sm:row-start-1" type="button" variant="outline" onClick={onRestart}>
+          <RotateCcw className="size-4" />
+          Restart Level
+        </Button>
       </div>
     </div>
   )
 }
 
+function LevelFailedCard({ failedLevel, onRestart }: { failedLevel: FailedLevel, onRestart: () => void }): ReactElement {
+  return (
+    <div className="cars-level-complete-card pointer-events-auto relative w-full max-w-md overflow-hidden rounded-lg border border-red-300 bg-white/95 p-5 text-center shadow-2xl shadow-red-950/25 sm:p-6 dark:border-red-900 dark:bg-slate-950/95">
+      <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-red-100 text-red-700 ring-8 ring-red-100/45 dark:bg-red-950 dark:text-red-300 dark:ring-red-900/25">
+        <AlertTriangle className="size-7" />
+      </div>
+      <h2 className="text-2xl font-bold tracking-normal text-slate-950 dark:text-slate-50" id="cars-level-failed-title">
+        Level {failedLevel.level} Failed
+      </h2>
+      <p className="mx-auto mt-2 max-w-xs text-sm font-medium text-slate-600 dark:text-slate-300">
+        {failedLevel.reason}
+      </p>
+      <Button className="mt-5 h-11 w-full" type="button" variant="destructive" onClick={onRestart}>
+        <RotateCcw className="size-4" />
+        Restart Level
+      </Button>
+    </div>
+  )
+}
+
 function LevelCompleteSummary({ completedLevel }: { completedLevel: CompletedLevel }): ReactElement {
+  const difficulty = getLevelDifficulty(completedLevel.level)
+
   return (
     <>
+      {difficulty.kind !== 'regular' && (
+        <div className="mx-auto mb-2 inline-flex rounded bg-red-600 px-2 py-1 text-[10px] font-black uppercase leading-none text-white dark:bg-red-500">
+          {difficulty.label} x{difficulty.scoreMultiplier}
+        </div>
+      )}
       <h2 className="text-2xl font-bold tracking-normal text-slate-950 dark:text-slate-50" id="cars-level-complete-title">
         Level {completedLevel.level} Complete
       </h2>

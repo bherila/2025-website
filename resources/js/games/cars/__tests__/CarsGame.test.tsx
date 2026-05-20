@@ -28,6 +28,34 @@ describe('CarsGame', () => {
     expect(screen.getByTestId('cars-scene')).toHaveAttribute('data-vip-selection', 'inactive')
   })
 
+  it('shows hard difficulty indicators on every fifth level', () => {
+    window.localStorage.setItem(GAME_PROGRESS_STORAGE_KEY, JSON.stringify({
+      highScore: 0,
+      level: 5,
+      powerUps: { fill: 0, shuffle: 0, vip: 0 },
+      totalScore: 0,
+      version: 1,
+    }))
+
+    render(<CarsGame />)
+
+    expect(screen.getAllByText('HARD').length).toBeGreaterThan(0)
+  })
+
+  it('shows super hard difficulty indicators on every twentieth level', () => {
+    window.localStorage.setItem(GAME_PROGRESS_STORAGE_KEY, JSON.stringify({
+      highScore: 0,
+      level: 20,
+      powerUps: { fill: 0, shuffle: 0, vip: 0 },
+      totalScore: 0,
+      version: 1,
+    }))
+
+    render(<CarsGame />)
+
+    expect(screen.getAllByText('SUPER HARD').length).toBeGreaterThan(0)
+  })
+
   it('confirms VIP power-up use before arming selection mode', () => {
     window.localStorage.setItem(GAME_PROGRESS_STORAGE_KEY, JSON.stringify({
       highScore: 0,

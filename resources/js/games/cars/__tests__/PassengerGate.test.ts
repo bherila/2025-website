@@ -67,6 +67,7 @@ const testState: GameState = {
   boardWidth: 5,
   cars: [parkedCar],
   completedLevel: null,
+  failedLevel: null,
   highScore: 0,
   lastMessage: '',
   level: 1,

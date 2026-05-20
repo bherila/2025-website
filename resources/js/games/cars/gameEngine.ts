@@ -48,6 +48,7 @@ export type {
   CarStatus,
   CompletedLevel,
   Direction,
+  FailedLevel,
   GameState,
   GridPosition,
   ParkingSlot,
@@ -98,7 +99,55 @@ interface BoardDimensions {
   boardHeight: number
 }
 
+export type LevelDifficultyKind = 'regular' | 'hard' | 'super-hard'
+
+export interface LevelDifficulty {
+  kind: LevelDifficultyKind
+  label: string
+  loopCapacityMultiplier: number
+  minLoopPassengers: number
+  scoreMultiplier: number
+}
+
+const REGULAR_LOOP_GROWTH_INTERVAL = 2
+const HARD_LEVEL_INTERVAL = 5
+const SUPER_HARD_LEVEL_INTERVAL = 20
+const HARD_LOOP_CAPACITY_MULTIPLIER = 0.55
+const SUPER_HARD_LOOP_CAPACITY_MULTIPLIER = 0.4
+const HARD_MIN_LOOP_PASSENGERS = 10
+const SUPER_HARD_MIN_LOOP_PASSENGERS = 8
+
 const CAR_COLOR_KEYS = Object.keys(CAR_COLORS) as CarColor[]
+
+export function getLevelDifficulty(level: number): LevelDifficulty {
+  if (level > 0 && level % SUPER_HARD_LEVEL_INTERVAL === 0) {
+    return {
+      kind: 'super-hard',
+      label: 'SUPER HARD',
+      loopCapacityMultiplier: SUPER_HARD_LOOP_CAPACITY_MULTIPLIER,
+      minLoopPassengers: SUPER_HARD_MIN_LOOP_PASSENGERS,
+      scoreMultiplier: 3,
+    }
+  }
+
+  if (level > 0 && level % HARD_LEVEL_INTERVAL === 0) {
+    return {
+      kind: 'hard',
+      label: 'HARD',
+      loopCapacityMultiplier: HARD_LOOP_CAPACITY_MULTIPLIER,
+      minLoopPassengers: HARD_MIN_LOOP_PASSENGERS,
+      scoreMultiplier: 2,
+    }
+  }
+
+  return {
+    kind: 'regular',
+    label: '',
+    loopCapacityMultiplier: 1,
+    minLoopPassengers: MIN_LOOP_PASSENGERS,
+    scoreMultiplier: 1,
+  }
+}
 
 export function startGameFromProgress(progress: SavedGameProgress = loadProgress()): GameState {
   return generateLevel(progress.level, seedForLevel(progress.level), {
@@ -308,7 +357,7 @@ function isInBoardBounds(position: GridPosition, board: BoardDimensions): boolea
 
 export function canMoveCar(state: GameState, carId: string): boolean {
   const car = findCar(state, carId)
-  if (!car || car.status !== 'field') {
+  if (state.failedLevel || !car || car.status !== 'field') {
     return false
   }
 
@@ -326,18 +375,20 @@ export function activeGarageCells(state: Pick<GameState, 'tunnels'>): GridPositi
 
 export function moveCarToParking(state: GameState, carId: string, slotId: string | null = null): GameState {
   const next = cloneState(state)
-  if (next.completedLevel) {
+  if (levelHasEnded(next)) {
     return next
   }
 
   const car = findCar(next, carId)
   if (!car || car.status !== 'field') {
     next.lastMessage = 'That car is not available.'
+    failLevelIfNeeded(next)
     return next
   }
 
   if (!canMoveCar(next, carId)) {
     next.lastMessage = 'That car is blocked by another car.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -347,19 +398,21 @@ export function moveCarToParking(state: GameState, carId: string, slotId: string
 
   if (!slot || slot.kind !== 'regular' || !slot.unlocked || slot.occupiedCarId) {
     next.lastMessage = 'Open another parking space before moving that car.'
+    failLevelIfNeeded(next)
     return next
   }
 
   parkCar(next, car, slot)
   revealNextTunnelCar(next, car.tunnelId)
   revealUnblockedCarColors(next)
+  failLevelIfNeeded(next)
 
   return next
 }
 
 export function applyVipPowerUp(state: GameState, carId: string): GameState {
   const next = cloneState(state)
-  if (next.completedLevel) {
+  if (levelHasEnded(next)) {
     return next
   }
 
@@ -367,16 +420,19 @@ export function applyVipPowerUp(state: GameState, carId: string): GameState {
   const car = findCar(next, carId)
   if (next.powerUps.vip < 1) {
     next.lastMessage = 'No VIP power-up is available.'
+    failLevelIfNeeded(next)
     return next
   }
 
   if (!slot || slot.occupiedCarId) {
     next.lastMessage = 'The VIP slot is already occupied.'
+    failLevelIfNeeded(next)
     return next
   }
 
   if (!car || car.status !== 'field') {
     next.lastMessage = 'Choose a visible car for the VIP slot.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -384,18 +440,20 @@ export function applyVipPowerUp(state: GameState, carId: string): GameState {
   parkCar(next, car, slot)
   revealNextTunnelCar(next, car.tunnelId)
   revealUnblockedCarColors(next)
+  failLevelIfNeeded(next)
 
   return next
 }
 
 export function applyShufflePowerUp(state: GameState): GameState {
   const next = cloneState(state)
-  if (next.completedLevel) {
+  if (levelHasEnded(next)) {
     return next
   }
 
   if (next.powerUps.shuffle < 1) {
     next.lastMessage = 'No shuffle power-up is available.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -412,6 +470,7 @@ export function applyShufflePowerUp(state: GameState): GameState {
 
   if (activeCars.length === 0 || next.passengerQueue.length === 0) {
     next.lastMessage = 'There is nothing useful to shuffle.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -426,18 +485,20 @@ export function applyShufflePowerUp(state: GameState): GameState {
 
   next.powerUps.shuffle -= 1
   next.lastMessage = 'Car colors were shuffled into a playable order.'
+  failLevelIfNeeded(next)
 
   return next
 }
 
 export function applyFillPowerUp(state: GameState): GameState {
   const next = cloneState(state)
-  if (next.completedLevel) {
+  if (levelHasEnded(next)) {
     return next
   }
 
   if (next.powerUps.fill < 1) {
     next.lastMessage = 'No fill power-up is available.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -447,6 +508,7 @@ export function applyFillPowerUp(state: GameState): GameState {
 
   if (parkedCars.length === 0) {
     next.lastMessage = 'Park a car before using Fill.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -466,22 +528,26 @@ export function applyFillPowerUp(state: GameState): GameState {
 
   next.lastMessage = 'Fill loaded every parked car it could.'
   completeLevelIfNeeded(next)
+  failLevelIfNeeded(next)
 
   return next
 }
 
 export function processBoardingAtParkingGate(state: GameState, passengerId: string | null = null): GameState {
-  if (state.completedLevel) {
+  if (levelHasEnded(state)) {
     return state
   }
 
   const next = cloneState(state)
   const boarded = boardPassengerAtParkingGate(next, passengerId)
   if (!boarded) {
-    return state
+    failLevelIfNeeded(next)
+
+    return next.failedLevel ? next : state
   }
 
   completeLevelIfNeeded(next)
+  failLevelIfNeeded(next)
 
   return next
 }
@@ -491,7 +557,7 @@ export function canBoardPassengerAtParkingGate(
   passengerId: string,
   unavailableCarIds: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (state.completedLevel) {
+  if (levelHasEnded(state)) {
     return false
   }
 
@@ -505,9 +571,14 @@ export function canBoardPassengerAtParkingGate(
 
 export function openParkingSlot(state: GameState): GameState {
   const next = cloneState(state)
+  if (levelHasEnded(next)) {
+    return next
+  }
+
   const slot = next.parkingSlots.find((candidate) => candidate.kind === 'regular' && !candidate.unlocked)
   if (!slot) {
     next.lastMessage = 'All parking spaces are already open.'
+    failLevelIfNeeded(next)
     return next
   }
 
@@ -515,6 +586,7 @@ export function openParkingSlot(state: GameState): GameState {
   next.maxRegularSlotsUnlocked = Math.max(next.maxRegularSlotsUnlocked, unlockedRegularSlots(next))
   next.levelScore = calculateLevelScore(next)
   next.lastMessage = 'Opened another parking space. This lowers the level score.'
+  failLevelIfNeeded(next)
 
   return next
 }
@@ -569,15 +641,27 @@ export function calculateLevelScore(state: GameState): number {
   const usedPenalty = Math.max(0, state.maxRegularSlotsUsed - 1) * 95
   const movePenalty = Math.max(0, state.moves - state.cars.length) * 12
   const baseScore = 1000 + state.level * 110
+  const scoreBeforeMultiplier = Math.max(100, baseScore - openedPenalty - usedPenalty - movePenalty)
 
-  return Math.max(100, baseScore - openedPenalty - usedPenalty - movePenalty)
+  return scoreBeforeMultiplier * getLevelDifficulty(state.level).scoreMultiplier
 }
 
 export function loopPassengerCapacity(state: Pick<GameState, 'level' | 'passengerQueue'>): number {
-  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((state.level - 1) / 2) * 2
-  const cappedCapacity = Math.min(MAX_LOOP_PASSENGERS, levelCapacity)
+  return loopPassengerCapacityForCount(state.level, state.passengerQueue.length)
+}
 
-  return Math.min(state.passengerQueue.length, Math.max(MIN_LOOP_PASSENGERS, cappedCapacity))
+function loopPassengerCapacityForCount(level: number, passengerCount: number): number {
+  const difficulty = getLevelDifficulty(level)
+  const regularCapacity = Math.min(
+    MAX_LOOP_PASSENGERS,
+    MIN_LOOP_PASSENGERS + Math.floor((level - 1) / REGULAR_LOOP_GROWTH_INTERVAL) * 2,
+  )
+  const difficultyCapacity = Math.max(
+    difficulty.minLoopPassengers,
+    Math.floor(regularCapacity * difficulty.loopCapacityMultiplier),
+  )
+
+  return Math.min(passengerCount, difficultyCapacity)
 }
 
 export function visibleQueuePassengers(state: GameState, maxVisible = loopPassengerCapacity(state)): Passenger[] {
@@ -785,6 +869,7 @@ function createStateFromSpecs(
     maxRegularSlotsUnlocked: STARTING_REGULAR_SLOTS,
     lastMessage: '',
     completedLevel: null,
+    failedLevel: null,
   }
   state.levelScore = calculateLevelScore(state)
 
@@ -851,9 +936,7 @@ function revealUnblockedCarColors(state: GameState): void {
 }
 
 function assignFeederSides(level: number, passengers: Passenger[]): void {
-  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((level - 1) / 2) * 2
-  const cappedCapacity = Math.min(MAX_LOOP_PASSENGERS, levelCapacity)
-  const loopCapacity = Math.min(passengers.length, Math.max(MIN_LOOP_PASSENGERS, cappedCapacity))
+  const loopCapacity = loopPassengerCapacityForCount(level, passengers.length)
   const feederCount = Math.max(0, passengers.length - loopCapacity)
   const leftReserve = Math.ceil(feederCount / 2)
   for (let index = loopCapacity; index < passengers.length; index += 1) {
@@ -931,7 +1014,7 @@ function departParkedCar(state: GameState, car: Car): void {
 
 function completeLevelIfNeeded(state: GameState): void {
   const allCarsDeparted = state.cars.every((car) => car.status === 'departed')
-  if (!allCarsDeparted || state.passengerQueue.length > 0 || state.completedLevel) {
+  if (!allCarsDeparted || state.passengerQueue.length > 0 || levelHasEnded(state)) {
     return
   }
 
@@ -947,6 +1030,73 @@ function completeLevelIfNeeded(state: GameState): void {
     awardedPowerUp,
   }
   state.lastMessage = `Level ${state.level} complete. Earned ${labelForPowerUp(awardedPowerUp)}.`
+}
+
+function failLevelIfNeeded(state: GameState): void {
+  if (levelHasEnded(state) || levelHasAvailableRescue(state)) {
+    return
+  }
+
+  const reason = 'No moves left. Restart the level to try again.'
+  state.failedLevel = {
+    level: state.level,
+    reason,
+  }
+  state.lastMessage = reason
+}
+
+function levelHasEnded(state: Pick<GameState, 'completedLevel' | 'failedLevel'>): boolean {
+  return Boolean(state.completedLevel || state.failedLevel)
+}
+
+export function levelHasAvailableRescue(state: GameState): boolean {
+  return canBoardVisiblePassenger(state)
+    || canParkAnyFieldCar(state)
+    || canOpenLockedRegularSlot(state)
+    || canUseVipPowerUp(state)
+    || canUseShufflePowerUp(state)
+    || canUseFillPowerUp(state)
+}
+
+function canBoardVisiblePassenger(state: GameState): boolean {
+  return visibleQueuePassengers(state).some((passenger) => Boolean(findBoardingCarForPassenger(state, passenger)))
+}
+
+function canParkAnyFieldCar(state: GameState): boolean {
+  if (!firstOpenRegularSlot(state)) {
+    return false
+  }
+
+  return state.cars.some((car) => car.status === 'field' && canMoveCar(state, car.id))
+}
+
+function canOpenLockedRegularSlot(state: GameState): boolean {
+  return state.parkingSlots.some((slot) => slot.kind === 'regular' && !slot.unlocked)
+}
+
+function canUseVipPowerUp(state: GameState): boolean {
+  const vipSlot = state.parkingSlots.find((slot) => slot.kind === 'vip')
+
+  return state.powerUps.vip > 0
+    && Boolean(vipSlot && !vipSlot.occupiedCarId)
+    && state.cars.some((car) => car.status === 'field')
+}
+
+function canUseShufflePowerUp(state: GameState): boolean {
+  if (state.powerUps.shuffle < 1 || state.passengerQueue.length === 0) {
+    return false
+  }
+
+  return state.cars.some((car) => car.status === 'parked' && car.boarded < car.capacity)
+    || canParkAnyFieldCar(state)
+}
+
+function canUseFillPowerUp(state: GameState): boolean {
+  if (state.powerUps.fill < 1 || state.passengerQueue.length === 0) {
+    return false
+  }
+
+  return state.cars.some((car) => car.status === 'parked' && car.boarded < car.capacity)
 }
 
 function revealNextTunnelCar(state: GameState, tunnelId: string | null): void {
@@ -1295,6 +1445,7 @@ function cloneState(state: GameState): GameState {
     parkingSlots: state.parkingSlots.map((slot) => ({ ...slot })),
     powerUps: { ...state.powerUps },
     completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
+    failedLevel: state.failedLevel ? { ...state.failedLevel } : null,
   }
 }
 

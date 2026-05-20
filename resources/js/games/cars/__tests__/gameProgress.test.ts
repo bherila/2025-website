@@ -40,6 +40,21 @@ describe('cars game level snapshots', () => {
     })).toBeNull()
   })
 
+  it('saves and loads a failed-level snapshot', () => {
+    const state = generateLevel(3, 20_003)
+    state.failedLevel = {
+      level: 3,
+      reason: 'No moves left. Restart the level to try again.',
+    }
+
+    saveLevelSnapshot(state)
+
+    expect(loadLevelSnapshot(undefined, {
+      ...createInitialProgress(),
+      level: 3,
+    })).toEqual(state)
+  })
+
   it('rejects version and progress-level mismatches', () => {
     const state = generateLevel(4, 20_004)
 
@@ -69,6 +84,22 @@ describe('cars game level snapshots', () => {
       state: {
         ...state,
         cars: undefined,
+      },
+    }))
+
+    expect(loadLevelSnapshot(undefined, {
+      ...createInitialProgress(),
+      level: 2,
+    })).toBeNull()
+
+    window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      state: {
+        ...state,
+        failedLevel: {
+          level: '2',
+          reason: 'No moves left. Restart the level to try again.',
+        },
       },
     }))
 
