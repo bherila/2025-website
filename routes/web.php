@@ -164,6 +164,10 @@ Route::get('/games/parking-pickup', function () {
     return view('games.cars');
 })->name('games.parking-pickup');
 
+Route::get('/games/marble-sort', function () {
+    return view('games.marble-sort');
+})->name('games.marble-sort');
+
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });

@@ -1,0 +1,11 @@
+export const GRID_CELL_SIZE = 0.92
+export const GRID_CELL_GAP = 0.18
+export const GRID_ORIGIN_X = -1.1
+export const GRID_ORIGIN_Z = 2.65
+export const GRID_STEP_X = 1.1
+export const GRID_STEP_Z = 0.82
+export const CONVEYOR_CENTER_Z = -2.25
+export const CONVEYOR_WIDTH = 5.4
+export const CONVEYOR_HEIGHT = 1.05
+export const SORTING_STACK_Z = -3.65
+export const SCENE_BACKGROUND = '#4dad62'
