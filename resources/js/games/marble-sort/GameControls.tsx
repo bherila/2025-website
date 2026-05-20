@@ -204,13 +204,15 @@ function BottomControls({
   onShuffle,
   onTutorialOpen,
 }: BottomControlsProps): ReactElement {
+  const actionDisabled = Boolean(state.completedLevel || state.gameOver)
+
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
       <div className="pointer-events-auto grid grid-cols-5 gap-1.5 rounded-lg border border-white/70 bg-white/80 p-1.5 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/75">
         <BottomControlButton
           confirmation={POWER_UP_CONFIRMATIONS.magnet}
           count={state.powerUps.magnet}
-          disabled={state.powerUps.magnet < 1 || stats.conveyorCount < 1 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.magnet < 1 || stats.conveyorCount < 1 || actionDisabled}
           icon={<Magnet />}
           label={labelForPowerUp('magnet')}
           onClick={onMagnet}
@@ -218,7 +220,7 @@ function BottomControls({
         <BottomControlButton
           confirmation={POWER_UP_CONFIRMATIONS.shuffle}
           count={state.powerUps.shuffle}
-          disabled={state.powerUps.shuffle < 1 || stats.boxCount < 2 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.shuffle < 1 || stats.boxCount < 2 || actionDisabled}
           icon={<Shuffle />}
           label={labelForPowerUp('shuffle')}
           onClick={onShuffle}
@@ -226,7 +228,7 @@ function BottomControls({
         <BottomControlButton
           confirmation={POWER_UP_CONFIRMATIONS.extraBelt}
           count={state.powerUps.extraBelt}
-          disabled={state.powerUps.extraBelt < 1 || Boolean(state.completedLevel)}
+          disabled={state.powerUps.extraBelt < 1 || actionDisabled}
           icon={<MoveRight />}
           label={labelForPowerUp('extraBelt')}
           onClick={onExtraBelt}

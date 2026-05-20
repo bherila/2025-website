@@ -5,6 +5,7 @@ import {
   type CompletedLevel,
   type ConveyorMarble,
   type FallingMarble,
+  type GameOver,
   type GameState,
   GRID_COLUMNS,
   GRID_ROWS,
@@ -178,6 +179,7 @@ function cloneSerializableState(state: GameState): GameState {
     })),
     powerUps: { ...state.powerUps },
     completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
+    gameOver: state.gameOver ? { ...state.gameOver } : null,
   }
 }
 
@@ -259,6 +261,7 @@ function parseGameState(value: unknown): GameState | null {
     powerUps: sanitizePowerUps(value.powerUps),
     lastMessage: typeof value.lastMessage === 'string' ? value.lastMessage : '',
     completedLevel: parseCompletedLevel(value.completedLevel),
+    gameOver: parseGameOver(value.gameOver),
   }
 }
 
@@ -386,6 +389,19 @@ function parseCompletedLevel(value: unknown): CompletedLevel | null {
     awardedPowerUp: value.awardedPowerUp === 'shuffle' || value.awardedPowerUp === 'extraBelt' ? value.awardedPowerUp : 'magnet',
     level,
     score,
+  }
+}
+
+function parseGameOver(value: unknown): GameOver | null {
+  if (!isRecord(value) || value.reason !== 'belt_full') {
+    return null
+  }
+
+  return {
+    reason: 'belt_full',
+    message: typeof value.message === 'string'
+      ? value.message
+      : 'The conveyor is full. Reset the level and pop boxes in a different order.',
   }
 }
 

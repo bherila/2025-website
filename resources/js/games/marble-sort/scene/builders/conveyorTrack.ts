@@ -5,32 +5,46 @@ import {
   CONVEYOR_HEIGHT,
   CONVEYOR_WIDTH,
 } from '../sceneConstants'
+import { conveyorPositionAt } from '../sceneGeometry'
+import { type BeltMarkerRenderItem } from '../sceneTypes'
 import { createCanvasPlane, roundRect } from '../threeUtils'
 
 export function createConveyorTrack(): THREE.Group {
   const group = new THREE.Group()
   const belt = createCanvasPlane(CONVEYOR_WIDTH, CONVEYOR_HEIGHT, (context, width, height) => {
     context.clearRect(0, 0, width, height)
-    roundRect(context, 8, 8, width - 16, height - 16, height / 2 - 8)
-    context.fillStyle = '#eef2f7'
+    roundRect(context, 5, 5, width - 10, height - 10, height / 2 - 5)
+    context.fillStyle = '#f8fafc'
     context.fill()
-    context.lineWidth = 18
-    context.strokeStyle = '#768092'
+    context.lineWidth = 22
+    context.strokeStyle = '#dfe7f3'
     context.stroke()
 
-    roundRect(context, 48, 42, width - 96, height - 84, height / 2 - 42)
+    roundRect(context, 42, 38, width - 84, height - 76, height / 2 - 38)
+    const gradient = context.createLinearGradient(0, 0, 0, height)
+    gradient.addColorStop(0, '#8a91a3')
+    gradient.addColorStop(0.48, '#626b7f')
+    gradient.addColorStop(1, '#8f98aa')
+    context.fillStyle = gradient
+    context.fill()
+    context.lineWidth = 5
+    context.strokeStyle = '#485064'
+    context.stroke()
+
+    roundRect(context, 78, 78, width - 156, height - 156, height / 2 - 78)
     context.strokeStyle = '#ffffff'
-    context.lineWidth = 10
+    context.lineWidth = 12
     context.stroke()
 
-    context.fillStyle = '#6b7280'
-    for (let index = 0; index < 22; index += 1) {
-      const x = 74 + index * ((width - 148) / 21)
-      context.globalAlpha = index % 2 === 0 ? 0.45 : 0.22
-      context.beginPath()
-      context.ellipse(x, height / 2, 12, 22, 0, 0, Math.PI * 2)
-      context.fill()
-    }
+    context.globalAlpha = 0.55
+    context.strokeStyle = '#eef2ff'
+    context.lineWidth = 3
+    context.beginPath()
+    context.moveTo(98, height * 0.34)
+    context.lineTo(width - 98, height * 0.34)
+    context.moveTo(98, height * 0.66)
+    context.lineTo(width - 98, height * 0.66)
+    context.stroke()
     context.globalAlpha = 1
   })
   belt.position.z = CONVEYOR_CENTER_Z
@@ -46,4 +60,27 @@ export function createConveyorTrack(): THREE.Group {
   group.add(gate)
 
   return group
+}
+
+export function createConveyorBeltMarkers(count = 34): { group: THREE.Group, markers: BeltMarkerRenderItem[] } {
+  const group = new THREE.Group()
+  const markers: BeltMarkerRenderItem[] = []
+  const markerGeometry = new THREE.CylinderGeometry(0.065, 0.065, 0.035, 18)
+  const markerMaterial = new THREE.MeshStandardMaterial({
+    color: '#aeb6c7',
+    metalness: 0.02,
+    roughness: 0.62,
+  })
+
+  for (let index = 0; index < count; index += 1) {
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+    marker.rotation.x = Math.PI / 2
+    marker.receiveShadow = true
+    marker.position.copy(conveyorPositionAt(index / count))
+    marker.position.y = 0.18
+    group.add(marker)
+    markers.push({ index, mesh: marker, total: count })
+  }
+
+  return { group, markers }
 }

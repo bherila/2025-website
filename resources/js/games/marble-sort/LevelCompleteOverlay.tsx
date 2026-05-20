@@ -1,4 +1,4 @@
-import { ArrowRight, RotateCcw, Sparkles, Trophy } from 'lucide-react'
+import { AlertTriangle, ArrowRight, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import { type ReactElement } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -6,12 +6,33 @@ import { Button } from '@/components/ui/button'
 import { type CompletedLevel, type GameState, labelForPowerUp } from './gameEngine'
 
 interface LevelCompleteOverlayProps {
-  state: Pick<GameState, 'completedLevel'>
+  state: Pick<GameState, 'completedLevel' | 'gameOver'>
   onNextLevel: () => void
   onRestart: () => void
 }
 
 export function LevelCompleteOverlay({ state, onNextLevel, onRestart }: LevelCompleteOverlayProps): ReactElement | null {
+  if (state.gameOver) {
+    return (
+      <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-3 pb-24 pt-6 sm:p-6" role="dialog" aria-labelledby="marble-sort-game-over-title">
+        <div className="absolute inset-0 bg-rose-950/30 backdrop-blur-[2px] dark:bg-rose-950/45" />
+        <div className="pointer-events-auto relative w-full max-w-md overflow-hidden rounded-lg border border-rose-200 bg-white/95 p-5 text-center shadow-2xl shadow-slate-950/25 sm:p-6 dark:border-rose-900 dark:bg-slate-950/95">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-rose-100 text-rose-700 ring-8 ring-rose-100/45 dark:bg-rose-950 dark:text-rose-300 dark:ring-rose-900/25">
+            <AlertTriangle className="size-7" />
+          </div>
+          <h2 className="text-2xl font-bold tracking-normal text-slate-950 dark:text-slate-50" id="marble-sort-game-over-title">
+            Belt Full
+          </h2>
+          <p className="mt-3 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">{state.gameOver.message}</p>
+          <Button className="mt-5 h-11 w-full" type="button" onClick={onRestart}>
+            <RotateCcw className="size-4" />
+            Reset Level
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!state.completedLevel) {
     return null
   }

@@ -55,6 +55,20 @@ describe('marble sort progress persistence', () => {
     expect(window.localStorage.getItem(MARBLE_SORT_SNAPSHOT_STORAGE_KEY)).toBeNull()
   })
 
+  it('preserves a belt-full game over snapshot until reset', () => {
+    const state = {
+      ...generateLevel(1, 42_001),
+      gameOver: {
+        message: 'The conveyor is full. Reset the level and pop boxes in a different order.',
+        reason: 'belt_full' as const,
+      },
+    }
+
+    saveLevelSnapshot(state)
+
+    expect(loadLevelSnapshot()?.gameOver?.reason).toBe('belt_full')
+  })
+
   it('advances saved progress after a completed state', () => {
     const completed = {
       ...generateLevel(1, 41_000),

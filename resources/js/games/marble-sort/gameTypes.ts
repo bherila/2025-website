@@ -107,6 +107,11 @@ export interface CompletedLevel {
   score: number
 }
 
+export interface GameOver {
+  reason: 'belt_full'
+  message: string
+}
+
 export interface GameState {
   version: 1
   level: number
@@ -131,6 +136,7 @@ export interface GameState {
   powerUps: PowerUpInventory
   lastMessage: string
   completedLevel: CompletedLevel | null
+  gameOver: GameOver | null
 }
 
 export interface SavedGameProgress {

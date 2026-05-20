@@ -10,6 +10,7 @@ import {
   type Chute,
   type CompletedLevel,
   type ConveyorMarble,
+  type GameOver,
   type GameState,
   GRID_COLUMNS,
   GRID_ROWS,
@@ -43,6 +44,7 @@ export type {
   CompletedLevel,
   ConveyorMarble,
   FallingMarble,
+  GameOver,
   GameState,
   GridPosition,
   MarbleBox,
@@ -80,6 +82,7 @@ interface ChutePlan {
 
 const MARBLE_COLOR_KEYS = Object.keys(MARBLE_COLORS) as MarbleColor[]
 const POWER_UPS: PowerUpKind[] = ['magnet', 'shuffle', 'extraBelt']
+const MARBLES_SETTLED_PER_TICK = 3
 
 export function startGameFromProgress(progress: SavedGameProgress = loadProgress()): GameState {
   return generateLevel(progress.level, seedForLevel(progress.level), {
@@ -135,7 +138,7 @@ export function generateLevel(
 }
 
 export function openBox(state: GameState, boxId: string): GameState {
-  if (state.completedLevel) {
+  if (state.completedLevel || state.gameOver) {
     return state
   }
 
@@ -144,13 +147,6 @@ export function openBox(state: GameState, boxId: string): GameState {
     return {
       ...state,
       lastMessage: 'That square is already clear.',
-    }
-  }
-
-  if (availableConveyorSlots(state) < BOX_MARBLE_COUNT) {
-    return {
-      ...state,
-      lastMessage: 'The conveyor is too full. Let some marbles sort first.',
     }
   }
 
@@ -173,19 +169,20 @@ export function openBox(state: GameState, boxId: string): GameState {
   refillGridFromChutes(next, box)
   next.lastMessage = `${MARBLE_COLORS[box.color].label} box opened. ${BOX_MARBLE_COUNT} marbles are falling.`
 
-  return next
+  return checkBeltFull(next)
 }
 
 export function processConveyorTick(state: GameState): GameState {
-  if (state.completedLevel) {
+  if (state.completedLevel || state.gameOver) {
     return state
   }
 
   if (state.fallingMarbles.length > 0) {
     const next = cloneState(state)
     const freeSlots = Math.max(0, next.conveyorCapacity - next.conveyor.length)
-    const settled = next.fallingMarbles.slice(0, freeSlots)
-    const waiting = next.fallingMarbles.slice(freeSlots)
+    const settledCount = Math.min(freeSlots, MARBLES_SETTLED_PER_TICK)
+    const settled = next.fallingMarbles.slice(0, settledCount)
+    const waiting = next.fallingMarbles.slice(settledCount)
     next.conveyor = [...next.conveyor, ...settled.map(({ from: _from, ...marble }) => marble)]
     next.fallingMarbles = waiting
     next.conveyorTicks += 1
@@ -193,11 +190,15 @@ export function processConveyorTick(state: GameState): GameState {
       ? 'Some marbles are waiting for space on the conveyor.'
       : 'Marbles joined the conveyor.'
 
-    return checkLevelComplete(next)
+    return checkBeltFull(checkLevelComplete(next))
   }
 
   if (state.conveyor.length < 1) {
     return checkLevelComplete(state)
+  }
+
+  if (state.conveyor.length >= state.conveyorCapacity) {
+    return checkBeltFull(state)
   }
 
   const next = cloneState(state)
@@ -215,14 +216,14 @@ export function processConveyorTick(state: GameState): GameState {
   }
   next.conveyorTicks += 1
 
-  return checkLevelComplete(next)
+  return checkBeltFull(checkLevelComplete(next))
 }
 
 export function drainConveyor(state: GameState, maxTicks = 5000): GameState {
   let next = state
 
   for (let tick = 0; tick < maxTicks; tick += 1) {
-    if (next.completedLevel || (next.fallingMarbles.length === 0 && next.conveyor.length === 0)) {
+    if (next.completedLevel || next.gameOver || (next.fallingMarbles.length === 0 && next.conveyor.length === 0)) {
       return checkLevelComplete(next)
     }
 
@@ -237,7 +238,7 @@ export function drainConveyor(state: GameState, maxTicks = 5000): GameState {
 }
 
 export function applyMagnetPowerUp(state: GameState): GameState {
-  if (state.completedLevel || state.powerUps.magnet < 1) {
+  if (state.completedLevel || state.gameOver || state.powerUps.magnet < 1) {
     return state
   }
 
@@ -276,7 +277,7 @@ export function applyMagnetPowerUp(state: GameState): GameState {
 }
 
 export function applyShufflePowerUp(state: GameState): GameState {
-  if (state.completedLevel || state.powerUps.shuffle < 1) {
+  if (state.completedLevel || state.gameOver || state.powerUps.shuffle < 1) {
     return state
   }
 
@@ -320,7 +321,7 @@ export function applyShufflePowerUp(state: GameState): GameState {
 }
 
 export function applyExtraBeltPowerUp(state: GameState): GameState {
-  if (state.completedLevel || state.powerUps.extraBelt < 1) {
+  if (state.completedLevel || state.gameOver || state.powerUps.extraBelt < 1) {
     return state
   }
 
@@ -346,7 +347,11 @@ export function solverCompletesLevel(state: GameState): boolean {
       return true
     }
 
-    const openable = next.boxes.find((box) => hasSortingCapacityForColor(next, box.color))
+    if (next.gameOver) {
+      return false
+    }
+
+    const openable = next.boxes.find((box) => hasOpenReceptacleForColor(next, box.color))
     if (!openable || availableConveyorSlots(next) < BOX_MARBLE_COUNT) {
       return false
     }
@@ -427,7 +432,7 @@ function createGeneratedLevel(
       side: plan.side,
     }
   })
-  const sortingStacks = createSortingStacks(activeColors, [...boxes, ...chuteBoxesAsGridBoxes(chutes)])
+  const sortingStacks = createSortingStacks(activeColors, [...boxes, ...chuteBoxesAsGridBoxes(chutes)], rng)
   const conveyorCapacity = Math.max(BOX_MARBLE_COUNT, BASE_CONVEYOR_CAPACITY - Math.min(Math.floor(level / 4) * 3, 9))
   const startingPowerUps = sanitizePowerUps(carry.powerUps)
 
@@ -445,6 +450,7 @@ function createGeneratedLevel(
     fallingMarbles: [],
     highScore: safeProgressNumber(carry.highScore),
     lastMessage: `Level ${level} is ready. Bust boxes when the conveyor has space.`,
+    gameOver: null,
     level,
     levelScore: 1_000 + level * 120 + totalBoxes * 30,
     moves: 0,
@@ -498,6 +504,7 @@ function createFallbackLevel(
     fallingMarbles: [],
     highScore: safeProgressNumber(carry.highScore),
     lastMessage: `Level ${level} is ready.`,
+    gameOver: null,
     level,
     levelScore: 1_000 + level * 120,
     moves: 0,
@@ -506,7 +513,7 @@ function createFallbackLevel(
     powerUps: sanitizePowerUps(carry.powerUps),
     powerUpsUsed: 0,
     seed,
-    sortingStacks: createSortingStacks(activeColors, boxes),
+    sortingStacks: createSortingStacks(activeColors, boxes, createRng(seed + 17)),
     totalScore: safeProgressNumber(carry.totalScore),
   }
 }
@@ -533,26 +540,36 @@ function createBalancedColorQueue(colors: MarbleColor[], count: number, rng: Ran
   return shuffle(queue, rng)
 }
 
-function createSortingStacks(colors: MarbleColor[], boxes: MarbleBox[]): SortingStack[] {
+function createSortingStacks(colors: MarbleColor[], boxes: MarbleBox[], rng: RandomGenerator): SortingStack[] {
   const boxCounts = new Map<MarbleColor, number>()
   for (const box of boxes) {
     boxCounts.set(box.color, (boxCounts.get(box.color) ?? 0) + 1)
   }
 
-  return colors.map((color, index) => {
-    const blockCount = (boxCounts.get(color) ?? 0) * (BOX_MARBLE_COUNT / SORTING_BLOCK_CAPACITY)
-
-    return {
-      blocks: Array.from({ length: blockCount }, (_, blockIndex): SortingBlock => ({
-        color,
-        id: `stack-${index + 1}-block-${blockIndex + 1}`,
-        slotsFilled: 0,
-      })),
+  const blocks = shuffle(colors.flatMap((color) => (
+    Array.from({ length: (boxCounts.get(color) ?? 0) * (BOX_MARBLE_COUNT / SORTING_BLOCK_CAPACITY) }, (_, blockIndex): SortingBlock => ({
       color,
-      id: `stack-${index + 1}`,
-      index,
-    }
+      id: `block-${color}-${blockIndex + 1}`,
+      slotsFilled: 0,
+    }))
+  )), rng)
+
+  const stacks = colors.map((color, index): SortingStack => ({
+    blocks: [],
+    color,
+    id: `stack-${index + 1}`,
+    index,
+  }))
+
+  blocks.forEach((block, index) => {
+    const stack = stacks[index % stacks.length]
+    stack?.blocks.push({
+      ...block,
+      id: `stack-${(index % stacks.length) + 1}-${block.id}`,
+    })
   })
+
+  return stacks
 }
 
 function chuteBoxesAsGridBoxes(chutes: Chute[]): MarbleBox[] {
@@ -617,7 +634,7 @@ function fillMarbleIntoSortingBlock(state: GameState, marble: ConveyorMarble): b
 }
 
 function checkLevelComplete(state: GameState): GameState {
-  if (state.completedLevel) {
+  if (state.completedLevel || state.gameOver) {
     return state
   }
 
@@ -647,6 +664,7 @@ function checkLevelComplete(state: GameState): GameState {
   return {
     ...state,
     completedLevel,
+    gameOver: null,
     highScore: Math.max(state.highScore, totalScore),
     lastMessage: `Level ${state.level} complete.`,
     powerUps,
@@ -654,8 +672,25 @@ function checkLevelComplete(state: GameState): GameState {
   }
 }
 
-function hasSortingCapacityForColor(state: GameState, color: MarbleColor): boolean {
-  return state.sortingStacks.some((stack) => stack.blocks.some((block) => block.color === color))
+function checkBeltFull(state: GameState): GameState {
+  if (state.completedLevel || state.gameOver || state.conveyor.length < state.conveyorCapacity) {
+    return state
+  }
+
+  const gameOver: GameOver = {
+    reason: 'belt_full',
+    message: 'The conveyor is full. Reset the level and pop boxes in a different order.',
+  }
+
+  return {
+    ...state,
+    gameOver,
+    lastMessage: gameOver.message,
+  }
+}
+
+function hasOpenReceptacleForColor(state: GameState, color: MarbleColor): boolean {
+  return state.sortingStacks.some((stack) => stack.blocks[0]?.color === color)
 }
 
 function signatureForDrain(state: GameState): string {
@@ -689,6 +724,7 @@ function cloneState(state: GameState): GameState {
       blocks: stack.blocks.map((block) => ({ ...block })),
     })),
     completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
+    gameOver: state.gameOver ? { ...state.gameOver } : null,
   }
 }
 

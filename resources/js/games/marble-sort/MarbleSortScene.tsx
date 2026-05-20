@@ -2,15 +2,15 @@ import { type ReactElement, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
 import { type GameState } from './gameEngine'
-import { animateConveyorItems, animateFallingItems } from './scene/animation/conveyor'
+import { animateConveyorBeltMarkers, animateConveyorItems, animateFallingItems } from './scene/animation/conveyor'
 import { createBoxMesh } from './scene/builders/boxMesh'
 import { createChuteMesh } from './scene/builders/chuteMesh'
-import { createConveyorTrack } from './scene/builders/conveyorTrack'
+import { createConveyorBeltMarkers, createConveyorTrack } from './scene/builders/conveyorTrack'
 import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
-import type { ConveyorRenderItem, FallingRenderItem } from './scene/sceneTypes'
+import type { BeltMarkerRenderItem, ConveyorRenderItem, FallingRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
 interface MarbleSortSceneProps {
@@ -27,6 +27,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const staticGroupRef = useRef<THREE.Group | null>(null)
   const dynamicGroupRef = useRef<THREE.Group | null>(null)
   const conveyorItemsRef = useRef<ConveyorRenderItem[]>([])
+  const beltMarkersRef = useRef<BeltMarkerRenderItem[]>([])
   const fallingItemsRef = useRef<FallingRenderItem[]>([])
   const fallingStartedAtRef = useRef<Map<string, number>>(new Map())
   const onBoxClickRef = useRef(onBoxClick)
@@ -75,6 +76,9 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const staticGroup = new THREE.Group()
     staticGroup.add(createPlayfield())
     staticGroup.add(createConveyorTrack())
+    const beltMarkers = createConveyorBeltMarkers()
+    staticGroup.add(beltMarkers.group)
+    beltMarkersRef.current = beltMarkers.markers
     scene.add(staticGroup)
     staticGroupRef.current = staticGroup
 
@@ -126,7 +130,8 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const animate = (timestamp?: number): void => {
       timer.update(timestamp)
       const delta = timer.getDelta()
-      conveyorPhaseRef.current += delta * 0.08
+      conveyorPhaseRef.current += delta * 0.12
+      animateConveyorBeltMarkers(beltMarkersRef.current, conveyorPhaseRef.current)
       animateConveyorItems(conveyorItemsRef.current, conveyorPhaseRef.current)
       animateFallingItems(fallingItemsRef.current, performance.now() / 1000)
       renderer.render(scene, camera)
@@ -153,6 +158,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       staticGroupRef.current = null
       dynamicGroupRef.current = null
       conveyorItemsRef.current = []
+      beltMarkersRef.current = []
       fallingItemsRef.current = []
       fallingStartedAt.clear()
     }
@@ -203,6 +209,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       const mesh = createMarbleMesh(marble.color, 0.13)
       dynamicGroup.add(mesh)
       conveyorItemsRef.current.push({
+        capacity: state.conveyorCapacity,
         id: marble.id,
         index,
         mesh,

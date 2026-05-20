@@ -54,8 +54,9 @@ export function createSortingStackMesh(stack: SortingStack, totalStacks: number,
     group.add(empty)
   }
 
-  if (colorblindMode && stack.blocks[0]) {
-    const label = createTextSprite(MARBLE_PATTERNS[stack.color].slice(0, 1).toUpperCase(), {
+  const topBlockColor = stack.blocks[0]?.color
+  if (colorblindMode && topBlockColor) {
+    const label = createTextSprite(MARBLE_PATTERNS[topBlockColor].slice(0, 1).toUpperCase(), {
       background: '#ffffff',
       color: '#111827',
       fontSize: 62,

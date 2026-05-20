@@ -41,6 +41,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 - Marbles keep their stable identity while circulating and should not teleport between updates.
 - Sorting is gate-based: only a marble crossing the sorting gate may enter a block.
 - If no compatible block has a slot when a marble reaches the gate, the marble keeps circulating.
+- If circulating and falling marbles fill the belt, the level enters a game-over state and must be reset.
 - The level generator sizes sorting stacks so every generated marble has a compatible destination.
 
 ## Sorting Blocks
@@ -49,6 +50,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 - Each visible top block has three slots.
 - A slot can only accept a marble whose color matches the block color.
 - A filled block clears immediately and exposes the next block in the same stack.
+- Stack order is randomized. A color may be buried under other colors, so the player needs to open boxes in an order that keeps the belt from filling before matching receptacles are exposed.
 - Empty stacks render as inactive lanes.
 - Completing blocks is the primary objective; all stacks must be empty to complete the level.
 
@@ -81,7 +83,7 @@ Each power-up uses a confirmation dialog before spending inventory.
 
 - Levels are randomly generated from a deterministic seed for the level number.
 - Generated levels must be solvable by a simple solver pass before they are accepted.
-- The solver opens boxes in a generated order, drains the conveyor into matching blocks, and verifies that chute refills plus sorting stacks can finish.
+- The solver opens boxes whose colors match currently exposed receptacles, drains the conveyor into matching blocks, and verifies that chute refills plus randomized sorting stacks can finish before the belt fills.
 - Difficulty ramps gradually with level:
   - more colors are introduced,
   - more chute-fed boxes appear,

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import { type ChuteSide, type GridPosition } from '../gameEngine'
+import { type ChuteSide, GRID_COLUMNS, type GridPosition } from '../gameEngine'
 import {
   CONVEYOR_CENTER_Z,
   CONVEYOR_HEIGHT,
@@ -16,7 +16,7 @@ export function gridCellPosition(position: GridPosition): THREE.Vector3 {
   return new THREE.Vector3(
     GRID_ORIGIN_X + position.column * GRID_STEP_X,
     0.18,
-    GRID_ORIGIN_Z - position.row * GRID_STEP_Z,
+    GRID_ORIGIN_Z + position.row * GRID_STEP_Z,
   )
 }
 
@@ -24,7 +24,7 @@ export function chutePosition(row: number, side: ChuteSide): THREE.Vector3 {
   return new THREE.Vector3(
     side === 'left' ? GRID_ORIGIN_X - 1.25 : GRID_ORIGIN_X + GRID_STEP_X * 2 + 1.25,
     0.22,
-    GRID_ORIGIN_Z - row * GRID_STEP_Z,
+    GRID_ORIGIN_Z + row * GRID_STEP_Z,
   )
 }
 
@@ -67,11 +67,22 @@ export function conveyorPositionAt(progress: number): THREE.Vector3 {
 
 export function fallingMarblePosition(from: GridPosition, index: number, elapsed: number): THREE.Vector3 {
   const source = gridCellPosition(from)
-  const drift = ((index % 5) - 2) * 0.13
-  const progress = Math.min(1, elapsed / 0.75)
-  const x = source.x + drift * progress
-  const z = source.z + (CONVEYOR_CENTER_Z + 0.25 - source.z) * progress
-  const arc = Math.sin(progress * Math.PI) * 0.55
+  const rowBand = Math.floor(index / 3)
+  const laneOffset = ((index % 3) - 1) * 0.16
+  const stagger = rowBand * 0.08
+  const progress = easeOutCubic(Math.min(1, Math.max(0, (elapsed - stagger) / 1.05)))
+  const funnelX = (from.column - (GRID_COLUMNS - 1) / 2) * 0.2 + laneOffset
+  const landingX = laneOffset + ((index % 2) === 0 ? -0.08 : 0.08)
+  const midway = Math.min(1, progress / 0.62)
+  const finish = Math.max(0, (progress - 0.62) / 0.38)
+  const x = source.x + (funnelX - source.x) * midway + (landingX - funnelX) * finish
+  const z = source.z + (CONVEYOR_CENTER_Z - 0.55 - source.z) * midway + (CONVEYOR_CENTER_Z + 0.38 - (CONVEYOR_CENTER_Z - 0.55)) * finish
+  const arc = Math.sin(progress * Math.PI) * 0.7
+  const bounce = Math.sin(Math.max(0, finish) * Math.PI * 2) * 0.06 * (1 - finish)
 
-  return new THREE.Vector3(x, 0.34 + arc, z)
+  return new THREE.Vector3(x, 0.32 + arc + bounce, z)
+}
+
+function easeOutCubic(value: number): number {
+  return 1 - ((1 - value) ** 3)
 }

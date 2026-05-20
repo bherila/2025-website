@@ -50,7 +50,7 @@ export function MarbleSortGame(): ReactElement {
   }, [state])
 
   useEffect(() => {
-    if (state.completedLevel || (state.conveyor.length === 0 && state.fallingMarbles.length === 0)) {
+    if (state.completedLevel || state.gameOver || (state.conveyor.length === 0 && state.fallingMarbles.length === 0)) {
       return
     }
 
@@ -59,7 +59,7 @@ export function MarbleSortGame(): ReactElement {
     }, 220)
 
     return () => window.clearInterval(interval)
-  }, [state.completedLevel, state.conveyor.length, state.fallingMarbles.length])
+  }, [state.completedLevel, state.conveyor.length, state.fallingMarbles.length, state.gameOver])
 
   const stats = useMemo<GameStats>(() => ({
     boxCount: state.boxes.length,
@@ -132,6 +132,7 @@ export function MarbleSortGame(): ReactElement {
                 'size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-950/20',
                 availableConveyorSlots(state) < 9 && 'bg-amber-400',
                 state.completedLevel && 'bg-sky-400',
+                state.gameOver && 'bg-rose-500',
               )}
               aria-hidden="true"
             />
