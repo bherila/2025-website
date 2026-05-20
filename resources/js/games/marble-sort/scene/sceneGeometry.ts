@@ -78,7 +78,8 @@ export function conveyorPositionAt(progress: number): THREE.Vector3 {
   return new THREE.Vector3(leftX + Math.cos(angle) * radius, CONVEYOR_MARBLE_Y, CONVEYOR_CENTER_Z + Math.sin(angle) * radius)
 }
 
-export function conveyorSlotPosition(index: number, phase: number): THREE.Vector3 {
-  return conveyorPositionAt(phase + index * CONVEYOR_SLOT_FRACTION)
-}
+export function conveyorSlotPosition(index: number, phase: number, slotCount = 0): THREE.Vector3 {
+  const slotFraction = slotCount > 0 ? 1 / slotCount : CONVEYOR_SLOT_FRACTION
 
+  return conveyorPositionAt(phase + index * slotFraction)
+}

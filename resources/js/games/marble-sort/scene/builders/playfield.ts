@@ -5,12 +5,14 @@ import {
   BASIN_NORTH_Z,
   BASIN_SOUTH_Z,
   BASIN_TOP_HALF_WIDTH,
+  CONVEYOR_CENTER_Z,
   GRID_CELL_GAP,
   GRID_CELL_SIZE,
   GRID_ORIGIN_X,
   GRID_ORIGIN_Z,
   GRID_STEP_X,
   GRID_STEP_Z,
+  SORTING_STACK_Z,
 } from '../sceneConstants'
 import { createCanvasPlane } from '../threeUtils'
 
@@ -19,6 +21,11 @@ const TRAY_NORTH_Z = -3.4
 const TRAY_SOUTH_Z = BASIN_SOUTH_Z + 0.18
 const TRAY_DEPTH = TRAY_SOUTH_Z - TRAY_NORTH_Z
 const TRAY_CENTER_Z = (TRAY_NORTH_Z + TRAY_SOUTH_Z) / 2
+const SORTING_DECK_WIDTH = 6.7
+const SORTING_DECK_NORTH_Z = CONVEYOR_CENTER_Z - 0.72
+const SORTING_DECK_SOUTH_Z = SORTING_STACK_Z + 1.75
+const SORTING_DECK_DEPTH = SORTING_DECK_SOUTH_Z - SORTING_DECK_NORTH_Z
+const SORTING_DECK_CENTER_Z = (SORTING_DECK_NORTH_Z + SORTING_DECK_SOUTH_Z) / 2
 
 export function createPlayfield(): THREE.Group {
   const group = new THREE.Group()
@@ -34,6 +41,10 @@ export function createPlayfield(): THREE.Group {
   const tray = createCanvasPlane(TRAY_WIDTH, TRAY_DEPTH, drawTray)
   tray.position.set(0, 0, TRAY_CENTER_Z)
   group.add(tray)
+
+  const sortingDeck = createCanvasPlane(SORTING_DECK_WIDTH, SORTING_DECK_DEPTH, drawSortingDeck)
+  sortingDeck.position.set(0, -0.045, SORTING_DECK_CENTER_Z)
+  group.add(sortingDeck)
 
   const gridPlate = new THREE.Mesh(
     new THREE.BoxGeometry(3.85, 0.08, 4.7),
@@ -56,6 +67,28 @@ export function createPlayfield(): THREE.Group {
   }
 
   return group
+}
+
+function drawSortingDeck(context: CanvasRenderingContext2D, w: number, h: number): void {
+  context.clearRect(0, 0, w, h)
+
+  const borderInset = 18
+  const borderRadius = 76
+
+  context.fillStyle = '#dceedd'
+  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  context.fill()
+
+  context.strokeStyle = '#368754'
+  context.lineWidth = 30
+  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  context.stroke()
+
+  context.globalAlpha = 0.45
+  context.fillStyle = '#ffffff'
+  roundedRect(context, borderInset + 24, borderInset + 18, w - (borderInset + 24) * 2, h * 0.08, 40)
+  context.fill()
+  context.globalAlpha = 1
 }
 
 function drawTray(context: CanvasRenderingContext2D, w: number, h: number): void {

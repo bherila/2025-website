@@ -19,19 +19,19 @@ const WALL_HEIGHT = 0.6
 const WALL_THICKNESS = 0.12
 
 export function createPhysicsWorld(): PhysicsWorld {
-  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -3.0, 6.4) })
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 4.6) })
   world.broadphase = new CANNON.NaiveBroadphase()
   world.allowSleep = true
 
   const marbleMaterial = new CANNON.Material('marble')
   const wallMaterial = new CANNON.Material('wall')
   world.addContactMaterial(new CANNON.ContactMaterial(marbleMaterial, wallMaterial, {
-    friction: 0.12,
-    restitution: 0.22,
+    friction: 0.16,
+    restitution: 0.08,
   }))
   world.addContactMaterial(new CANNON.ContactMaterial(marbleMaterial, marbleMaterial, {
-    friction: 0.05,
-    restitution: 0.1,
+    friction: 0.08,
+    restitution: 0.04,
   }))
 
   const containerBody = new CANNON.Body({ mass: 0, material: wallMaterial })
@@ -106,17 +106,18 @@ export function spawnMarbleBody(
     sleepSpeedLimit: 0.08,
     sleepTimeLimit: 0.6,
   })
-  const lateralJitter = (Math.random() - 0.5) * 0.12
-  body.position.set(position.x + lateralJitter, position.y + 0.7, position.z + 0.15)
+  const burstOffset = index % 9
+  const lateralJitter = (Math.random() - 0.5) * 0.06
+  body.position.set(position.x + lateralJitter, position.y + 0.46, position.z + 0.05)
   body.velocity.set(
-    (Math.random() - 0.5) * 0.5,
-    -0.4 - index * 0.04,
-    0.6 + Math.random() * 0.5,
+    (Math.random() - 0.5) * 0.18,
+    -0.16 - burstOffset * 0.015,
+    0.28 + Math.random() * 0.18,
   )
   body.angularVelocity.set(
-    (Math.random() - 0.5) * 2,
-    (Math.random() - 0.5) * 2,
-    (Math.random() - 0.5) * 2,
+    (Math.random() - 0.5) * 0.8,
+    (Math.random() - 0.5) * 0.8,
+    (Math.random() - 0.5) * 0.8,
   )
   world.addBody(body)
 

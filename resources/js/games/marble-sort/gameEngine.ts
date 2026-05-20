@@ -178,27 +178,33 @@ export function processConveyorTick(state: GameState): GameState {
   }
 
   if (state.fallingMarbles.length > 0) {
-    const next = cloneState(state)
-    const freeSlots = Math.max(0, next.conveyorCapacity - next.conveyor.length)
-    const settledCount = Math.min(freeSlots, MARBLES_SETTLED_PER_TICK)
-    const settled = next.fallingMarbles.slice(0, settledCount)
-    const waiting = next.fallingMarbles.slice(settledCount)
-    next.conveyor = [...next.conveyor, ...settled.map(({ from: _from, ...marble }) => marble)]
-    next.fallingMarbles = waiting
-    next.conveyorTicks += 1
-    next.lastMessage = waiting.length > 0
-      ? 'Some marbles are waiting for space on the conveyor.'
-      : 'Marbles joined the conveyor.'
-
-    return checkBeltFull(checkLevelComplete(next))
+    const freeSlots = Math.max(0, state.conveyorCapacity - state.conveyor.length)
+    if (freeSlots > 0) {
+      return settleFallingMarbles(state, freeSlots)
+    }
   }
 
+  return advanceConveyor(state)
+}
+
+function settleFallingMarbles(state: GameState, freeSlots: number): GameState {
+  const next = cloneState(state)
+  const settledCount = Math.min(freeSlots, MARBLES_SETTLED_PER_TICK)
+  const settled = next.fallingMarbles.slice(0, settledCount)
+  const waiting = next.fallingMarbles.slice(settledCount)
+  next.conveyor = [...next.conveyor, ...settled.map(({ from: _from, ...marble }) => marble)]
+  next.fallingMarbles = waiting
+  next.conveyorTicks += 1
+  next.lastMessage = waiting.length > 0
+    ? 'Some marbles are waiting for space on the conveyor.'
+    : 'Marbles joined the conveyor.'
+
+  return checkBeltFull(checkLevelComplete(next))
+}
+
+function advanceConveyor(state: GameState): GameState {
   if (state.conveyor.length < 1) {
     return checkLevelComplete(state)
-  }
-
-  if (state.conveyor.length >= state.conveyorCapacity) {
-    return checkBeltFull(state)
   }
 
   const next = cloneState(state)
@@ -673,7 +679,12 @@ function checkLevelComplete(state: GameState): GameState {
 }
 
 function checkBeltFull(state: GameState): GameState {
-  if (state.completedLevel || state.gameOver || state.conveyor.length < state.conveyorCapacity) {
+  if (
+    state.completedLevel
+    || state.gameOver
+    || state.conveyor.length < state.conveyorCapacity
+    || hasSortableConveyorMarble(state)
+  ) {
     return state
   }
 
@@ -691,6 +702,10 @@ function checkBeltFull(state: GameState): GameState {
 
 function hasOpenReceptacleForColor(state: GameState, color: MarbleColor): boolean {
   return state.sortingStacks.some((stack) => stack.blocks[0]?.color === color)
+}
+
+function hasSortableConveyorMarble(state: GameState): boolean {
+  return state.conveyor.some((marble) => hasOpenReceptacleForColor(state, marble.color))
 }
 
 function signatureForDrain(state: GameState): string {

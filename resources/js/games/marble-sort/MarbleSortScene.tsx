@@ -61,7 +61,7 @@ interface TransitData {
   from: THREE.Vector3
 }
 
-const TRANSIT_DURATION = 0.28
+const TRANSIT_DURATION = 0.48
 
 export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSortSceneProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -144,6 +144,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const bodies = bodiesRef.current
     const transit = transitRef.current
     const order = conveyorOrderRef.current
+    const slotCount = Math.max(1, stateRef.current.conveyorCapacity, order.length)
 
     for (const [id, entry] of entries) {
       if (entry.phase === 'falling') {
@@ -160,7 +161,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
         }
         const t = Math.min(1, Math.max(0, (now - data.startedAt) / data.duration))
         const eased = easeOutCubic(t)
-        const target = conveyorSlotPosition(index, phase)
+        const target = conveyorSlotPosition(index, phase, slotCount)
         entry.mesh.position.set(
           data.from.x + (target.x - data.from.x) * eased,
           data.from.y + (target.y - data.from.y) * eased,
@@ -178,7 +179,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       if (index < 0) {
         continue
       }
-      entry.mesh.position.copy(conveyorSlotPosition(index, phase))
+      entry.mesh.position.copy(conveyorSlotPosition(index, phase, slotCount))
       entry.mesh.rotation.x += 0.08
     }
   }
@@ -209,11 +210,13 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     rendererRef.current = renderer
     container.appendChild(renderer.domElement)
 
     const stackGroups = stackGroupsRef.current
+    const marbleEntries = marbleEntriesRef.current
+    const transitEntries = transitRef.current
 
     const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
     scene.add(ambient)
@@ -363,8 +366,8 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       effectGroupRef.current = null
       physicsRef.current = null
       bodiesRef.current = null
-      marbleEntriesRef.current.clear()
-      transitRef.current.clear()
+      marbleEntries.clear()
+      transitEntries.clear()
       conveyorOrderRef.current = []
       beltMarkersRef.current = []
       confettiBurstsRef.current = []
