@@ -103,6 +103,35 @@ describe('marble sort game engine', () => {
     expect(advanced.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 3)
   })
 
+  it('keeps the conveyor array in physical order when a passing marble cannot sort', () => {
+    const state = generateLevel(1, 41_002)
+    const matchingColor = state.sortingStacks[0]?.blocks[0]?.color
+    const blockedColor = state.activeColors.find((color) => color !== matchingColor)
+    if (!matchingColor || !blockedColor) {
+      throw new Error('Expected generated level to include at least two colors.')
+    }
+
+    const queued = {
+      ...state,
+      conveyor: [
+        { id: 'blocked', color: blockedColor, sequence: 1 },
+        { id: 'matching', color: matchingColor, sequence: 2 },
+      ],
+      conveyorTicks: 0,
+      fallingMarbles: [],
+      sortingStacks: blockReceptaclesForColor(state, blockedColor),
+    }
+
+    const firstPass = processConveyorTick(queued)
+
+    expect(firstPass.conveyor.map((marble) => marble.id)).toEqual(['blocked', 'matching'])
+    expect(firstPass.conveyorTicks).toBe(1)
+
+    const secondPass = processConveyorTick(firstPass)
+
+    expect(secondPass.conveyor.map((marble) => marble.id)).toEqual(['blocked'])
+  })
+
   it('settles falling marbles onto the conveyor in batches and sorts matching receptacles', () => {
     const state = generateLevel(1, 41_001)
     const box = findBoxForOpenReceptacle(state)

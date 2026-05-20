@@ -208,16 +208,16 @@ function advanceConveyor(state: GameState): GameState {
   }
 
   const next = cloneState(state)
-  const [marble, ...rest] = next.conveyor
+  const candidateIndex = next.conveyorTicks % next.conveyor.length
+  const marble = next.conveyor[candidateIndex]
   if (!marble) {
     return checkLevelComplete(next)
   }
 
   if (fillMarbleIntoSortingBlock(next, marble)) {
-    next.conveyor = rest
+    next.conveyor = next.conveyor.filter((candidate) => candidate.id !== marble.id)
     next.lastMessage = `${MARBLE_COLORS[marble.color].label} marble sorted.`
   } else {
-    next.conveyor = [...rest, marble]
     next.lastMessage = `${MARBLE_COLORS[marble.color].label} marble needs a matching open block.`
   }
   next.conveyorTicks += 1
@@ -711,6 +711,7 @@ function hasSortableConveyorMarble(state: GameState): boolean {
 function signatureForDrain(state: GameState): string {
   return [
     state.fallingMarbles.length,
+    state.conveyor.length > 0 ? state.conveyorTicks % state.conveyor.length : 0,
     state.conveyor.map((marble) => marble.id).join(','),
     state.sortingStacks.map((stack) => `${stack.id}:${stack.blocks.length}:${stack.blocks[0]?.slotsFilled ?? 0}`).join('|'),
   ].join('/')
