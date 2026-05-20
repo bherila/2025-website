@@ -27,6 +27,11 @@ import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
+  assignMissingConveyorProgress,
+  CONVEYOR_PROGRESS_SPEED,
+  pruneConveyorProgress,
+} from './scene/conveyorProgress'
+import {
   createMarbleBodyManager,
   type MarbleBodyManager,
 } from './scene/physics/marbleBodies'
@@ -37,7 +42,7 @@ import {
   stepPhysics,
 } from './scene/physics/world'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
-import { conveyorSlotPosition, gridCellPosition } from './scene/sceneGeometry'
+import { conveyorPositionAt, gridCellPosition } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -77,7 +82,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const bodiesRef = useRef<MarbleBodyManager | null>(null)
   const marbleEntriesRef = useRef<Map<string, MarbleEntry>>(new Map())
   const transitRef = useRef<Map<string, TransitData>>(new Map())
-  const conveyorOrderRef = useRef<string[]>([])
+  const conveyorProgressRef = useRef<Map<string, number>>(new Map())
   const onBoxClickRef = useRef(onBoxClick)
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
@@ -91,6 +96,10 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const entries = marbleEntriesRef.current
     const fallingIds = new Set(nextState.fallingMarbles.map((marble) => marble.id))
     const conveyorIds = new Set(nextState.conveyor.map((marble) => marble.id))
+    const conveyorProgress = conveyorProgressRef.current
+    const nextOrder = nextState.conveyor.map((marble) => marble.id)
+
+    assignMissingConveyorProgress(conveyorProgress, nextOrder, nextState.conveyorCapacity, conveyorPhaseRef.current)
 
     for (const [id, entry] of Array.from(entries.entries())) {
       if (fallingIds.has(id)) {
@@ -116,6 +125,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       disposeObject(entry.mesh)
       entries.delete(id)
       transitRef.current.delete(id)
+      conveyorProgress.delete(id)
       bodies.release(id)
     }
 
@@ -136,15 +146,21 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       }
     }
 
-    conveyorOrderRef.current = nextState.conveyor.map((marble) => marble.id)
+    pruneConveyorProgress(conveyorProgress, conveyorIds)
   }
 
-  const updateMarbleMeshes = (now: number, phase: number): void => {
+  const updateMarbleMeshes = (now: number, delta: number): void => {
     const entries = marbleEntriesRef.current
     const bodies = bodiesRef.current
     const transit = transitRef.current
-    const order = conveyorOrderRef.current
-    const slotCount = Math.max(1, stateRef.current.conveyorCapacity, order.length)
+    const conveyorProgress = conveyorProgressRef.current
+
+    for (const [id, progress] of conveyorProgress) {
+      const entry = entries.get(id)
+      if (entry && entry.phase !== 'falling') {
+        conveyorProgress.set(id, progress + (delta * CONVEYOR_PROGRESS_SPEED))
+      }
+    }
 
     for (const [id, entry] of entries) {
       if (entry.phase === 'falling') {
@@ -154,14 +170,14 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
 
       if (entry.phase === 'transit') {
         const data = transit.get(id)
-        const index = order.indexOf(id)
-        if (!data || index < 0) {
+        const progress = conveyorProgress.get(id)
+        if (!data || progress === undefined) {
           entry.phase = 'conveyor'
           continue
         }
         const t = Math.min(1, Math.max(0, (now - data.startedAt) / data.duration))
         const eased = easeOutCubic(t)
-        const target = conveyorSlotPosition(index, phase, slotCount)
+        const target = conveyorPositionAt(progress)
         entry.mesh.position.set(
           data.from.x + (target.x - data.from.x) * eased,
           data.from.y + (target.y - data.from.y) * eased,
@@ -175,11 +191,11 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
         continue
       }
 
-      const index = order.indexOf(id)
-      if (index < 0) {
+      const progress = conveyorProgress.get(id)
+      if (progress === undefined) {
         continue
       }
-      entry.mesh.position.copy(conveyorSlotPosition(index, phase, slotCount))
+      entry.mesh.position.copy(conveyorPositionAt(progress))
       entry.mesh.rotation.x += 0.08
     }
   }
@@ -217,6 +233,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const stackGroups = stackGroupsRef.current
     const marbleEntries = marbleEntriesRef.current
     const transitEntries = transitRef.current
+    const conveyorProgress = conveyorProgressRef.current
 
     const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
     scene.add(ambient)
@@ -300,11 +317,11 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       timer.update(timestamp)
       const delta = timer.getDelta()
       const now = performance.now() / 1000
-      conveyorPhaseRef.current += delta * 0.06
+      conveyorPhaseRef.current += delta * CONVEYOR_PROGRESS_SPEED
 
       stepPhysics(physics.world, delta)
       animateConveyorBeltMarkers(beltMarkersRef.current, conveyorPhaseRef.current)
-      updateMarbleMeshes(now, conveyorPhaseRef.current)
+      updateMarbleMeshes(now, delta)
 
       confettiBurstsRef.current = confettiBurstsRef.current.filter((burst) => {
         const done = updateConfettiBurst(burst, now)
@@ -368,7 +385,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       bodiesRef.current = null
       marbleEntries.clear()
       transitEntries.clear()
-      conveyorOrderRef.current = []
+      conveyorProgress.clear()
       beltMarkersRef.current = []
       confettiBurstsRef.current = []
       boxBurstsRef.current = []
