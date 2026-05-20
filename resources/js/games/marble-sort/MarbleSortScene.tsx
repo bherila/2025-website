@@ -22,11 +22,11 @@ import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
   CONVEYOR_PROGRESS_SPEED,
+  conveyorPhaseForTick,
   conveyorSlotCountFor,
   conveyorSlotProgress,
   easeConveyorOffset,
   preserveConveyorOffsetsForOrderChange,
-  stabilizeConveyorPhaseForOrderChange,
 } from './scene/conveyorProgress'
 import {
   createMarbleBodyManager,
@@ -86,6 +86,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
   const conveyorPhaseRef = useRef(0)
+  const beltMarkerPhaseRef = useRef(0)
   const confettiBurstsRef = useRef<ConfettiBurst[]>([])
   const stackTweensRef = useRef<StackRiseTween[]>([])
   const stackGroupsRef = useRef<Map<string, THREE.Group>>(new Map())
@@ -100,13 +101,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const previousPhase = conveyorPhaseRef.current
     const nextOrder = nextState.conveyor.map((marble) => marble.id)
     const nextSlotCount = conveyorSlotCountFor(nextState.conveyorCapacity, nextOrder.length)
-    const nextPhase = stabilizeConveyorPhaseForOrderChange(
-      previousPhase,
-      previousOrder,
-      nextOrder,
-      previousSlotCount,
-      nextSlotCount,
-    )
+    const nextPhase = conveyorPhaseForTick(nextState.conveyorTicks, nextSlotCount)
 
     preserveConveyorOffsetsForOrderChange(
       conveyorOffsets,
@@ -343,10 +338,10 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       timer.update(timestamp)
       const delta = timer.getDelta()
       const now = performance.now() / 1000
-      conveyorPhaseRef.current += delta * CONVEYOR_PROGRESS_SPEED
+      beltMarkerPhaseRef.current += delta * CONVEYOR_PROGRESS_SPEED
 
       stepPhysics(physics.world, delta)
-      animateConveyorBeltMarkers(beltMarkersRef.current, conveyorPhaseRef.current)
+      animateConveyorBeltMarkers(beltMarkersRef.current, beltMarkerPhaseRef.current)
       updateMarbleMeshes(now, delta)
 
       confettiBurstsRef.current = confettiBurstsRef.current.filter((burst) => {
@@ -405,6 +400,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       conveyorOffsets.clear()
       conveyorOrderRef.current = []
       conveyorSlotCountRef.current = 1
+      beltMarkerPhaseRef.current = 0
       beltMarkersRef.current = []
       confettiBurstsRef.current = []
       stackTweensRef.current = []

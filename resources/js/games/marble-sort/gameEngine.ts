@@ -24,6 +24,11 @@ import {
   type SortingBlock,
   type SortingStack,
 } from './gameTypes'
+import {
+  conveyorPhaseForTick,
+  conveyorSlotCountFor,
+  passingSortingStackIndexForSlot,
+} from './scene/conveyorProgress'
 
 export {
   clearLevelSnapshot,
@@ -208,17 +213,14 @@ function advanceConveyor(state: GameState): GameState {
   }
 
   const next = cloneState(state)
-  const candidateIndex = next.conveyorTicks % next.conveyor.length
-  const marble = next.conveyor[candidateIndex]
-  if (!marble) {
-    return checkLevelComplete(next)
-  }
+  const passingMarble = findPassingSortableConveyorMarble(next)
 
-  if (fillMarbleIntoSortingBlock(next, marble)) {
+  if (passingMarble && fillMarbleIntoSortingBlock(next, passingMarble.marble, passingMarble.stackIndex)) {
+    const marble = passingMarble.marble
     next.conveyor = next.conveyor.filter((candidate) => candidate.id !== marble.id)
     next.lastMessage = `${MARBLE_COLORS[marble.color].label} marble sorted.`
   } else {
-    next.lastMessage = `${MARBLE_COLORS[marble.color].label} marble needs a matching open block.`
+    next.lastMessage = 'Marbles are circling toward matching blocks.'
   }
   next.conveyorTicks += 1
 
@@ -622,10 +624,12 @@ function chutePriority(chute: Chute, column: number): number {
   return chute.side === 'left' ? 1 : 2
 }
 
-function fillMarbleIntoSortingBlock(state: GameState, marble: ConveyorMarble): boolean {
-  const stack = state.sortingStacks.find((candidate) => candidate.blocks[0]?.color === marble.color)
+function fillMarbleIntoSortingBlock(state: GameState, marble: ConveyorMarble, stackIndex?: number): boolean {
+  const stack = stackIndex === undefined
+    ? state.sortingStacks.find((candidate) => candidate.blocks[0]?.color === marble.color)
+    : state.sortingStacks.find((candidate) => candidate.index === stackIndex)
   const block = stack?.blocks[0]
-  if (!stack || !block || block.slotsFilled >= SORTING_BLOCK_CAPACITY) {
+  if (!stack || !block || block.color !== marble.color || block.slotsFilled >= SORTING_BLOCK_CAPACITY) {
     return false
   }
 
@@ -708,10 +712,41 @@ function hasSortableConveyorMarble(state: GameState): boolean {
   return state.conveyor.some((marble) => hasOpenReceptacleForColor(state, marble.color))
 }
 
+interface PassingSortableMarble {
+  marble: ConveyorMarble
+  stackIndex: number
+}
+
+function findPassingSortableConveyorMarble(state: GameState): PassingSortableMarble | null {
+  const slotCount = conveyorSlotCountFor(state.conveyorCapacity, state.conveyor.length)
+  const phase = conveyorPhaseForTick(state.conveyorTicks, slotCount)
+
+  for (let index = 0; index < state.conveyor.length; index += 1) {
+    const marble = state.conveyor[index]
+    if (!marble) {
+      continue
+    }
+
+    const stackIndex = passingSortingStackIndexForSlot(phase, slotCount, index, state.sortingStacks.length)
+    if (stackIndex === undefined) {
+      continue
+    }
+
+    const stack = state.sortingStacks.find((candidate) => candidate.index === stackIndex)
+    if (stack?.blocks[0]?.color === marble.color) {
+      return { marble, stackIndex }
+    }
+  }
+
+  return null
+}
+
 function signatureForDrain(state: GameState): string {
+  const slotCount = conveyorSlotCountFor(state.conveyorCapacity, state.conveyor.length)
+
   return [
     state.fallingMarbles.length,
-    state.conveyor.length > 0 ? state.conveyorTicks % state.conveyor.length : 0,
+    state.conveyor.length > 0 ? state.conveyorTicks % slotCount : 0,
     state.conveyor.map((marble) => marble.id).join(','),
     state.sortingStacks.map((stack) => `${stack.id}:${stack.blocks.length}:${stack.blocks[0]?.slotsFilled ?? 0}`).join('|'),
   ].join('/')

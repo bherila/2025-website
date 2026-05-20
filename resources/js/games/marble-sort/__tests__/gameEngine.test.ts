@@ -2,6 +2,7 @@ import {
   availableConveyorSlots,
   BOX_MARBLE_COUNT,
   drainConveyor,
+  type GameState,
   generateLevel,
   openBox,
   processConveyorTick,
@@ -132,6 +133,42 @@ describe('marble sort game engine', () => {
     expect(secondPass.conveyor.map((marble) => marble.id)).toEqual(['blocked'])
   })
 
+  it('only sorts a marble when it is physically beside the matching Lego stack', () => {
+    const state = generateLevel(1, 41_003)
+    const matchingColor = state.activeColors[0]
+    const blockedColor = state.activeColors.find((color) => color !== matchingColor)
+    if (!matchingColor || !blockedColor) {
+      throw new Error('Expected generated level to include at least two colors.')
+    }
+
+    let queued: GameState = {
+      ...state,
+      conveyor: [
+        { id: 'matching', color: matchingColor, sequence: 1 },
+      ],
+      conveyorCapacity: 27,
+      conveyorTicks: 0,
+      fallingMarbles: [],
+      sortingStacks: setOpenStackColors(state, {
+        0: blockedColor,
+        1: matchingColor,
+        2: blockedColor,
+      }),
+    }
+
+    for (let tick = 0; tick < 5; tick += 1) {
+      queued = processConveyorTick(queued)
+    }
+
+    expect(queued.conveyor.map((marble) => marble.id)).toEqual(['matching'])
+    expect(queued.conveyorTicks).toBe(5)
+
+    const sorted = processConveyorTick(queued)
+
+    expect(sorted.conveyor).toHaveLength(0)
+    expect(sorted.sortingStacks.find((stack) => stack.index === 1)?.blocks[0]?.slotsFilled).toBe(1)
+  })
+
   it('settles falling marbles onto the conveyor in batches and sorts matching receptacles', () => {
     const state = generateLevel(1, 41_001)
     const box = findBoxForOpenReceptacle(state)
@@ -189,6 +226,19 @@ function blockReceptaclesForColor(
     blocks: stack.blocks.map((block) => ({
       ...block,
       color: block.color === blockedColor ? replacementColor : block.color,
+    })),
+  }))
+}
+
+function setOpenStackColors(
+  state: ReturnType<typeof generateLevel>,
+  colorsByIndex: Record<number, ReturnType<typeof generateLevel>['activeColors'][number]>,
+): ReturnType<typeof generateLevel>['sortingStacks'] {
+  return state.sortingStacks.map((stack) => ({
+    ...stack,
+    blocks: stack.blocks.map((block, blockIndex) => ({
+      ...block,
+      color: blockIndex === 0 ? (colorsByIndex[stack.index] ?? block.color) : block.color,
     })),
   }))
 }
