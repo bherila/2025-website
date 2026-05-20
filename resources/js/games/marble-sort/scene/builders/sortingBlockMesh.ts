@@ -124,16 +124,12 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
       }
     }
   } else {
-    for (let row = 0; row < 3; row += 1) {
-      for (let column = 0; column < 3; column += 1) {
-        const stud = new THREE.Mesh(
-          new THREE.SphereGeometry(0.075, 14, 10),
-          new THREE.MeshStandardMaterial({ color: hex, roughness: 0.32 }),
-        )
-        stud.position.set((column - 1) * 0.22, BLOCK_HEIGHT / 2 + 0.02, (row - 1) * 0.12)
-        group.add(stud)
-      }
-    }
+    const highlight = new THREE.Mesh(
+      new THREE.BoxGeometry(BLOCK_WIDTH * 0.86, 0.02, SORTING_STACK_BLOCK_DEPTH * 0.82),
+      new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4, transparent: true, opacity: 0.18 }),
+    )
+    highlight.position.y = BLOCK_HEIGHT / 2 + 0.01
+    group.add(highlight)
   }
 
   return group

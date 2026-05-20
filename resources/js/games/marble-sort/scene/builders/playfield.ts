@@ -1,7 +1,10 @@
 import * as THREE from 'three'
 
 import {
-  CONVEYOR_CENTER_Z,
+  BASIN_EXIT_HALF_WIDTH,
+  BASIN_NORTH_Z,
+  BASIN_SOUTH_Z,
+  BASIN_TOP_HALF_WIDTH,
   GRID_CELL_GAP,
   GRID_CELL_SIZE,
   GRID_ORIGIN_X,
@@ -9,49 +12,32 @@ import {
   GRID_STEP_X,
   GRID_STEP_Z,
 } from '../sceneConstants'
-import { createCanvasPlane, roundRect } from '../threeUtils'
+import { createCanvasPlane } from '../threeUtils'
+
+const TRAY_WIDTH = 6.6
+const TRAY_NORTH_Z = -3.4
+const TRAY_SOUTH_Z = BASIN_SOUTH_Z + 0.18
+const TRAY_DEPTH = TRAY_SOUTH_Z - TRAY_NORTH_Z
+const TRAY_CENTER_Z = (TRAY_NORTH_Z + TRAY_SOUTH_Z) / 2
 
 export function createPlayfield(): THREE.Group {
   const group = new THREE.Group()
 
   const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(11, 14),
+    new THREE.PlaneGeometry(14, 18),
     new THREE.MeshBasicMaterial({ color: '#54c074' }),
   )
   grass.rotation.x = -Math.PI / 2
   grass.position.set(0, -0.06, 0)
   group.add(grass)
 
-  const basin = createCanvasPlane(7.0, 7.6, (context, width, height) => {
-    context.clearRect(0, 0, width, height)
-    roundRect(context, 30, 26, width - 60, height - 110, 110)
-    context.fillStyle = '#dceedd'
-    context.fill()
-    context.lineWidth = 26
-    context.strokeStyle = '#368754'
-    context.stroke()
-
-    context.globalAlpha = 0.4
-    context.fillStyle = '#ffffff'
-    roundRect(context, 70, 60, width - 140, height * 0.18, 60)
-    context.fill()
-    context.globalAlpha = 1
-
-    context.beginPath()
-    context.moveTo(width * 0.08, height * 0.78)
-    context.quadraticCurveTo(width * 0.34, height * 0.86, width * 0.4, height - 22)
-    context.lineTo(width * 0.6, height - 22)
-    context.quadraticCurveTo(width * 0.66, height * 0.86, width * 0.92, height * 0.78)
-    context.strokeStyle = '#368754'
-    context.lineWidth = 24
-    context.stroke()
-  })
-  basin.position.set(0, 0, -0.95)
-  group.add(basin)
+  const tray = createCanvasPlane(TRAY_WIDTH, TRAY_DEPTH, drawTray)
+  tray.position.set(0, 0, TRAY_CENTER_Z)
+  group.add(tray)
 
   const gridPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(3.8, 0.08, 4.7),
-    new THREE.MeshStandardMaterial({ color: '#e3eaf5', roughness: 0.55, transparent: true, opacity: 0.8 }),
+    new THREE.BoxGeometry(3.85, 0.08, 4.7),
+    new THREE.MeshStandardMaterial({ color: '#e3eaf5', roughness: 0.55, transparent: true, opacity: 0.65 }),
   )
   gridPlate.position.set(0, 0.02, GRID_ORIGIN_Z + GRID_STEP_Z * 2)
   gridPlate.receiveShadow = true
@@ -61,7 +47,7 @@ export function createPlayfield(): THREE.Group {
     for (let column = 0; column < 3; column += 1) {
       const cell = new THREE.Mesh(
         new THREE.BoxGeometry(GRID_CELL_SIZE - GRID_CELL_GAP, 0.06, GRID_CELL_SIZE - GRID_CELL_GAP),
-        new THREE.MeshStandardMaterial({ color: '#f1f4fb', roughness: 0.6, transparent: true, opacity: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: '#f1f4fb', roughness: 0.6, transparent: true, opacity: 0.95 }),
       )
       cell.position.set(GRID_ORIGIN_X + column * GRID_STEP_X, 0.09, GRID_ORIGIN_Z + row * GRID_STEP_Z)
       cell.receiveShadow = true
@@ -69,19 +55,114 @@ export function createPlayfield(): THREE.Group {
     }
   }
 
-  const funnel = createCanvasPlane(5.4, 1.4, (context, width, height) => {
-    context.clearRect(0, 0, width, height)
-    context.beginPath()
-    context.moveTo(28, 18)
-    context.quadraticCurveTo(width * 0.3, height * 0.2, width * 0.42, height - 24)
-    context.lineTo(width * 0.58, height - 22)
-    context.quadraticCurveTo(width * 0.7, height * 0.2, width - 28, 18)
-    context.strokeStyle = '#368754'
-    context.lineWidth = 22
-    context.stroke()
-  })
-  funnel.position.set(0, 0.05, CONVEYOR_CENTER_Z - 0.78)
-  group.add(funnel)
-
   return group
+}
+
+function drawTray(context: CanvasRenderingContext2D, w: number, h: number): void {
+  context.clearRect(0, 0, w, h)
+
+  const fillColor = '#dceedd'
+  const wallColor = '#368754'
+  const borderRadius = 84
+  const borderInset = 18
+
+  context.fillStyle = fillColor
+  roundedRect(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius)
+  context.fill()
+
+  context.globalAlpha = 0.5
+  context.fillStyle = '#ffffff'
+  roundedRect(context, borderInset + 22, borderInset + 16, w - (borderInset + 22) * 2, h * 0.06, 38)
+  context.fill()
+  context.globalAlpha = 1
+
+  const pxNorth = worldZToPixel(BASIN_NORTH_Z, h)
+  const pxSouth = worldZToPixel(BASIN_SOUTH_Z, h)
+  const pxTopHalf = (BASIN_TOP_HALF_WIDTH / TRAY_WIDTH) * w
+  const pxExitHalf = (BASIN_EXIT_HALF_WIDTH / TRAY_WIDTH) * w
+  const cxLeftTop = w / 2 - pxTopHalf
+  const cxRightTop = w / 2 + pxTopHalf
+  const cxLeftExit = w / 2 - pxExitHalf
+  const cxRightExit = w / 2 + pxExitHalf
+
+  context.lineJoin = 'round'
+  context.lineCap = 'round'
+
+  context.strokeStyle = wallColor
+  context.lineWidth = 30
+  roundedRectStrokeWithExit(context, borderInset, borderInset, w - borderInset * 2, h - borderInset * 2, borderRadius, cxLeftExit, cxRightExit)
+
+  context.strokeStyle = wallColor
+  context.lineWidth = 26
+  context.beginPath()
+  context.moveTo(cxLeftTop, pxNorth)
+  context.bezierCurveTo(
+    cxLeftTop - 4, pxNorth + (pxSouth - pxNorth) * 0.45,
+    cxLeftExit + 36, pxSouth - 38,
+    cxLeftExit, pxSouth + 14,
+  )
+  context.stroke()
+
+  context.beginPath()
+  context.moveTo(cxRightTop, pxNorth)
+  context.bezierCurveTo(
+    cxRightTop + 4, pxNorth + (pxSouth - pxNorth) * 0.45,
+    cxRightExit - 36, pxSouth - 38,
+    cxRightExit, pxSouth + 14,
+  )
+  context.stroke()
+
+  context.fillStyle = wallColor
+  context.beginPath()
+  context.arc(cxLeftExit, pxSouth + 14, 14, 0, Math.PI * 2)
+  context.fill()
+  context.beginPath()
+  context.arc(cxRightExit, pxSouth + 14, 14, 0, Math.PI * 2)
+  context.fill()
+}
+
+function worldZToPixel(worldZ: number, pixelHeight: number): number {
+  return ((worldZ - TRAY_NORTH_Z) / TRAY_DEPTH) * pixelHeight
+}
+
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  context.beginPath()
+  context.moveTo(x + r, y)
+  context.lineTo(x + w - r, y)
+  context.quadraticCurveTo(x + w, y, x + w, y + r)
+  context.lineTo(x + w, y + h - r)
+  context.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  context.lineTo(x + r, y + h)
+  context.quadraticCurveTo(x, y + h, x, y + h - r)
+  context.lineTo(x, y + r)
+  context.quadraticCurveTo(x, y, x + r, y)
+  context.closePath()
+}
+
+function roundedRectStrokeWithExit(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  exitLeft: number,
+  exitRight: number,
+): void {
+  context.beginPath()
+  context.moveTo(x + r, y)
+  context.lineTo(x + w - r, y)
+  context.quadraticCurveTo(x + w, y, x + w, y + r)
+  context.lineTo(x + w, y + h - r)
+  context.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  context.lineTo(exitRight, y + h)
+  context.stroke()
+
+  context.beginPath()
+  context.moveTo(exitLeft, y + h)
+  context.lineTo(x + r, y + h)
+  context.quadraticCurveTo(x, y + h, x, y + h - r)
+  context.lineTo(x, y + r)
+  context.quadraticCurveTo(x, y, x + r, y)
+  context.stroke()
 }

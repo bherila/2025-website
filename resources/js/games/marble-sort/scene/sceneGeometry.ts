@@ -7,8 +7,6 @@ import {
   CONVEYOR_MARBLE_Y,
   CONVEYOR_SLOT_FRACTION,
   CONVEYOR_WIDTH,
-  FUNNEL_MOUTH_Y,
-  FUNNEL_MOUTH_Z,
   GRID_ORIGIN_X,
   GRID_ORIGIN_Z,
   GRID_STEP_X,
@@ -50,14 +48,6 @@ export function sortingStackBlockOffset(depth: number): THREE.Vector3 {
   )
 }
 
-export function funnelMouthPosition(column: number): THREE.Vector3 {
-  return new THREE.Vector3(
-    GRID_ORIGIN_X + column * GRID_STEP_X,
-    FUNNEL_MOUTH_Y,
-    FUNNEL_MOUTH_Z,
-  )
-}
-
 export function conveyorPositionAt(progress: number): THREE.Vector3 {
   const normalized = ((progress % 1) + 1) % 1
   const straight = CONVEYOR_WIDTH - CONVEYOR_HEIGHT
@@ -92,36 +82,3 @@ export function conveyorSlotPosition(index: number, phase: number): THREE.Vector
   return conveyorPositionAt(phase + index * CONVEYOR_SLOT_FRACTION)
 }
 
-export function fallingMarblePosition(from: GridPosition, index: number, elapsed: number): THREE.Vector3 {
-  const source = gridCellPosition(from)
-  const mouth = funnelMouthPosition(from.column)
-  const stagger = index * 0.05
-  const dropDuration = 0.55
-  const slideDuration = 0.45
-  const rawTime = Math.max(0, elapsed - stagger)
-  const dropT = Math.min(1, rawTime / dropDuration)
-  const slideT = Math.min(1, Math.max(0, rawTime - dropDuration) / slideDuration)
-
-  const lateralWobble = ((index % 3) - 1) * 0.08
-  const stage1X = source.x + (mouth.x - source.x) * easeInQuad(dropT) + lateralWobble * dropT
-  const stage1Z = source.z + (mouth.z - source.z) * easeInQuad(dropT)
-  const stage1Y = source.y + 0.1 + (mouth.y + 0.18 - source.y) * easeInQuad(dropT) - dropT * dropT * 0.05
-
-  const finalX = mouth.x + ((index % 5) - 2) * 0.06
-  const finalZ = CONVEYOR_CENTER_Z + 0.02
-  const stage2X = stage1X + (finalX - stage1X) * easeOutCubic(slideT)
-  const stage2Z = stage1Z + (finalZ - stage1Z) * easeOutCubic(slideT)
-  const bounce = Math.max(0, Math.sin(slideT * Math.PI)) * 0.18
-  const settleY = CONVEYOR_MARBLE_Y + 0.02
-  const stage2Y = stage1Y + (settleY - stage1Y) * easeOutCubic(slideT) + bounce * (1 - slideT * 0.5)
-
-  return new THREE.Vector3(stage2X, stage2Y, stage2Z)
-}
-
-function easeOutCubic(value: number): number {
-  return 1 - ((1 - value) ** 3)
-}
-
-function easeInQuad(value: number): number {
-  return value * value
-}
