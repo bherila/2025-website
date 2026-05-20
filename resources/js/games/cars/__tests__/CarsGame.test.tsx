@@ -26,6 +26,7 @@ describe('CarsGame', () => {
     expect(screen.getByRole('button', { name: 'Open Spot' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tutorial' })).toBeInTheDocument()
     expect(screen.getByTestId('cars-scene')).toHaveAttribute('data-vip-selection', 'inactive')
+    expect(screen.getByTestId('portrait-game-viewport').getAttribute('style')).toContain('calc(100vh * 3 / 4)')
   })
 
   it('confirms VIP power-up use before arming selection mode', () => {

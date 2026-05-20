@@ -2,6 +2,7 @@ import { type ReactElement, useCallback, useEffect, useMemo, useState } from 're
 
 import { cn } from '@/lib/utils'
 
+import { PortraitGameShell } from '../PortraitGameShell'
 import { GameControls, type GameStats } from './GameControls'
 import {
   advanceToNextLevel,
@@ -100,8 +101,8 @@ export function MarbleSortGame(): ReactElement {
   }, [])
 
   return (
-    <div className="h-screen overflow-hidden bg-emerald-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <div className="mx-auto flex h-full max-w-7xl flex-col gap-2 px-2 py-2 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5">
+    <div className="bg-emerald-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+      <PortraitGameShell contentClassName="gap-2 px-2 py-2 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5">
         <GameControls
           colorblindMode={colorblindMode}
           stats={stats}
@@ -141,7 +142,7 @@ export function MarbleSortGame(): ReactElement {
 
           <LevelCompleteOverlay state={state} onNextLevel={handleNextLevel} onRestart={handleReset} />
         </section>
-      </div>
+      </PortraitGameShell>
 
       <TutorialOverlay open={tutorialOpen} onOpenChange={setTutorialOpen} />
     </div>

@@ -26,6 +26,7 @@ describe('MarbleSortGame', () => {
     expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tutorial' })).toBeInTheDocument()
     expect(screen.getByTestId('marble-sort-scene')).toHaveAttribute('data-colorblind-mode', 'disabled')
+    expect(screen.getByTestId('portrait-game-viewport').getAttribute('style')).toContain('calc(100vh * 3 / 4)')
   })
 
   it('confirms power-up use before applying the action', () => {
