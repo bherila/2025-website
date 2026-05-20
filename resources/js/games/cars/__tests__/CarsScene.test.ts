@@ -3,8 +3,8 @@ import * as THREE from 'three'
 import { retainPersistentMovingCars, retainSceneMovingCars } from '../CarsScene'
 import { generateLevel, loopPassengerCapacity } from '../gameEngine'
 import { accelerateThenConstantRouteProgress } from '../scene/animation/departingCar'
-import { animateMovingCars, positionOnRoute } from '../scene/animation/movingCars'
-import { passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
+import { animateMovingCars, positionOnRoute, routeRotationAtSegment } from '../scene/animation/movingCars'
+import { angleLerp, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
 import type { MovingCarRenderItem } from '../scene/sceneTypes'
 
 describe('CarsScene animation bookkeeping', () => {
@@ -65,6 +65,18 @@ describe('CarsScene animation bookkeeping', () => {
     expect(accelerateThenConstantRouteProgress(1)).toBe(1)
     expect(earlyDelta).toBeLessThan(cruiseDelta)
     expect(cruiseDelta).toBeCloseTo(lateDelta, 5)
+  })
+
+  it('uses the shortest rotation when a parking route wraps past negative pi', () => {
+    expect(angleLerp(Math.PI, -Math.PI / 2, 0.5)).toBeCloseTo(Math.PI * 1.25)
+
+    const route = [
+      { position: new THREE.Vector3(0, 0.08, 1), rotationY: Math.PI },
+      { position: new THREE.Vector3(0, 0.08, 0), rotationY: Math.PI },
+      { position: new THREE.Vector3(-1, 0.08, 0), rotationY: -Math.PI / 2 },
+    ]
+
+    expect(routeRotationAtSegment(route, 1, 0.09)).toBeCloseTo(Math.PI * 1.25)
   })
 
   it('uses the departure route curve without parking bounce', () => {

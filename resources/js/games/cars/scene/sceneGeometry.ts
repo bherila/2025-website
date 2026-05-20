@@ -290,7 +290,8 @@ export function rotationForDirection(direction: Direction): number {
 }
 
 export function angleLerp(from: number, to: number, progress: number): number {
-  const delta = ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI
+  const fullTurn = Math.PI * 2
+  const delta = (((to - from + Math.PI) % fullTurn) + fullTurn) % fullTurn - Math.PI
 
   return from + delta * progress
 }
