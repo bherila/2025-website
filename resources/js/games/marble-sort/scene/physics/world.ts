@@ -106,18 +106,23 @@ export function spawnMarbleBody(
     sleepSpeedLimit: 0.08,
     sleepTimeLimit: 0.6,
   })
-  const burstOffset = index % 9
-  const lateralJitter = (Math.random() - 0.5) * 0.06
-  body.position.set(position.x + lateralJitter, position.y + 0.46, position.z + 0.05)
+  const releaseIndex = index % 9
+  const column = releaseIndex % 3
+  const row = Math.floor(releaseIndex / 3)
+  body.position.set(
+    position.x + (column - 1) * 0.1,
+    position.y + 0.38 + row * 0.025,
+    position.z - 0.08 + row * 0.045,
+  )
   body.velocity.set(
-    (Math.random() - 0.5) * 0.18,
-    -0.16 - burstOffset * 0.015,
-    0.28 + Math.random() * 0.18,
+    (column - 1) * 0.035,
+    -0.08 - row * 0.015,
+    0.18 + row * 0.035,
   )
   body.angularVelocity.set(
-    (Math.random() - 0.5) * 0.8,
-    (Math.random() - 0.5) * 0.8,
-    (Math.random() - 0.5) * 0.8,
+    (column - 1) * 0.25,
+    0.12 + row * 0.05,
+    (1 - column) * 0.2,
   )
   world.addBody(body)
 

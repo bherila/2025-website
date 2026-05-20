@@ -82,7 +82,7 @@ interface ChutePlan {
 
 const MARBLE_COLOR_KEYS = Object.keys(MARBLE_COLORS) as MarbleColor[]
 const POWER_UPS: PowerUpKind[] = ['magnet', 'shuffle', 'extraBelt']
-const MARBLES_SETTLED_PER_TICK = 3
+const MARBLES_SETTLED_PER_TICK = 1
 
 export function startGameFromProgress(progress: SavedGameProgress = loadProgress()): GameState {
   return generateLevel(progress.level, seedForLevel(progress.level), {

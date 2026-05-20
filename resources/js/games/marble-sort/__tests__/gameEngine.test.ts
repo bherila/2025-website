@@ -72,7 +72,7 @@ describe('marble sort game engine', () => {
       conveyorCapacity: 3,
       sortingStacks: blockReceptaclesForColor(state, box.color),
     }, box.id)
-    const next = processConveyorTick(opened)
+    const next = processConveyorTick(processConveyorTick(processConveyorTick(opened)))
 
     expect(next.gameOver?.reason).toBe('belt_full')
     expect(next.conveyor).toHaveLength(3)
@@ -90,7 +90,7 @@ describe('marble sort game engine', () => {
     }
 
     const opened = openBox(state, box.id)
-    const settled = processConveyorTick(opened)
+    const settled = processConveyorTick(processConveyorTick(processConveyorTick(opened)))
 
     expect(settled.conveyor).toHaveLength(3)
     expect(settled.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 3)
@@ -113,8 +113,8 @@ describe('marble sort game engine', () => {
     const opened = openBox(state, box.id)
     const settled = processConveyorTick(opened)
 
-    expect(settled.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 3)
-    expect(settled.conveyor).toHaveLength(3)
+    expect(settled.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 1)
+    expect(settled.conveyor).toHaveLength(1)
 
     const drained = drainConveyor(settled)
 

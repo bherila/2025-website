@@ -1,13 +1,7 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
-import { type GameState, type MarbleBox, type MarbleColor, type SortingStack } from './gameEngine'
-import {
-  type BoxBurst,
-  createBoxBurst,
-  disposeBoxBurst,
-  updateBoxBurst,
-} from './scene/animation/boxBurst'
+import { type GameState, type MarbleColor, type SortingStack } from './gameEngine'
 import {
   type ConfettiBurst,
   createConfettiBurst,
@@ -27,9 +21,12 @@ import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
-  assignMissingConveyorProgress,
   CONVEYOR_PROGRESS_SPEED,
-  pruneConveyorProgress,
+  conveyorSlotCountFor,
+  conveyorSlotProgress,
+  easeConveyorOffset,
+  preserveConveyorOffsetsForOrderChange,
+  stabilizeConveyorPhaseForOrderChange,
 } from './scene/conveyorProgress'
 import {
   createMarbleBodyManager,
@@ -42,7 +39,7 @@ import {
   stepPhysics,
 } from './scene/physics/world'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
-import { conveyorPositionAt, gridCellPosition } from './scene/sceneGeometry'
+import { conveyorPositionAt } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -82,13 +79,14 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const bodiesRef = useRef<MarbleBodyManager | null>(null)
   const marbleEntriesRef = useRef<Map<string, MarbleEntry>>(new Map())
   const transitRef = useRef<Map<string, TransitData>>(new Map())
-  const conveyorProgressRef = useRef<Map<string, number>>(new Map())
+  const conveyorOffsetsRef = useRef<Map<string, number>>(new Map())
+  const conveyorOrderRef = useRef<string[]>([])
+  const conveyorSlotCountRef = useRef(1)
   const onBoxClickRef = useRef(onBoxClick)
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
   const conveyorPhaseRef = useRef(0)
   const confettiBurstsRef = useRef<ConfettiBurst[]>([])
-  const boxBurstsRef = useRef<BoxBurst[]>([])
   const stackTweensRef = useRef<StackRiseTween[]>([])
   const stackGroupsRef = useRef<Map<string, THREE.Group>>(new Map())
 
@@ -96,10 +94,32 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const entries = marbleEntriesRef.current
     const fallingIds = new Set(nextState.fallingMarbles.map((marble) => marble.id))
     const conveyorIds = new Set(nextState.conveyor.map((marble) => marble.id))
-    const conveyorProgress = conveyorProgressRef.current
+    const conveyorOffsets = conveyorOffsetsRef.current
+    const previousOrder = conveyorOrderRef.current
+    const previousSlotCount = conveyorSlotCountRef.current
+    const previousPhase = conveyorPhaseRef.current
     const nextOrder = nextState.conveyor.map((marble) => marble.id)
+    const nextSlotCount = conveyorSlotCountFor(nextState.conveyorCapacity, nextOrder.length)
+    const nextPhase = stabilizeConveyorPhaseForOrderChange(
+      previousPhase,
+      previousOrder,
+      nextOrder,
+      previousSlotCount,
+      nextSlotCount,
+    )
 
-    assignMissingConveyorProgress(conveyorProgress, nextOrder, nextState.conveyorCapacity, conveyorPhaseRef.current)
+    preserveConveyorOffsetsForOrderChange(
+      conveyorOffsets,
+      previousOrder,
+      nextOrder,
+      previousPhase,
+      nextPhase,
+      previousSlotCount,
+      nextSlotCount,
+    )
+    conveyorPhaseRef.current = nextPhase
+    conveyorOrderRef.current = nextOrder
+    conveyorSlotCountRef.current = nextSlotCount
 
     for (const [id, entry] of Array.from(entries.entries())) {
       if (fallingIds.has(id)) {
@@ -125,7 +145,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       disposeObject(entry.mesh)
       entries.delete(id)
       transitRef.current.delete(id)
-      conveyorProgress.delete(id)
+      conveyorOffsets.delete(id)
       bodies.release(id)
     }
 
@@ -146,19 +166,25 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       }
     }
 
-    pruneConveyorProgress(conveyorProgress, conveyorIds)
+    for (const id of Array.from(conveyorOffsets.keys())) {
+      if (!conveyorIds.has(id)) {
+        conveyorOffsets.delete(id)
+      }
+    }
   }
 
   const updateMarbleMeshes = (now: number, delta: number): void => {
     const entries = marbleEntriesRef.current
     const bodies = bodiesRef.current
     const transit = transitRef.current
-    const conveyorProgress = conveyorProgressRef.current
+    const conveyorOffsets = conveyorOffsetsRef.current
+    const order = conveyorOrderRef.current
+    const slotCount = conveyorSlotCountRef.current
 
-    for (const [id, progress] of conveyorProgress) {
+    for (const [id, offset] of conveyorOffsets) {
       const entry = entries.get(id)
       if (entry && entry.phase !== 'falling') {
-        conveyorProgress.set(id, progress + (delta * CONVEYOR_PROGRESS_SPEED))
+        conveyorOffsets.set(id, easeConveyorOffset(offset, delta))
       }
     }
 
@@ -170,8 +196,8 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
 
       if (entry.phase === 'transit') {
         const data = transit.get(id)
-        const progress = conveyorProgress.get(id)
-        if (!data || progress === undefined) {
+        const progress = conveyorProgressFor(id, order, slotCount, conveyorPhaseRef.current, conveyorOffsets)
+        if (!data || progress === null) {
           entry.phase = 'conveyor'
           continue
         }
@@ -191,8 +217,8 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
         continue
       }
 
-      const progress = conveyorProgress.get(id)
-      if (progress === undefined) {
+      const progress = conveyorProgressFor(id, order, slotCount, conveyorPhaseRef.current, conveyorOffsets)
+      if (progress === null) {
         continue
       }
       entry.mesh.position.copy(conveyorPositionAt(progress))
@@ -233,7 +259,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const stackGroups = stackGroupsRef.current
     const marbleEntries = marbleEntriesRef.current
     const transitEntries = transitRef.current
-    const conveyorProgress = conveyorProgressRef.current
+    const conveyorOffsets = conveyorOffsetsRef.current
 
     const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
     scene.add(ambient)
@@ -332,15 +358,6 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
         return !done
       })
 
-      boxBurstsRef.current = boxBurstsRef.current.filter((burst) => {
-        const done = updateBoxBurst(burst, now)
-        if (done) {
-          effectGroup.remove(burst.group)
-          disposeBoxBurst(burst)
-        }
-        return !done
-      })
-
       stackTweensRef.current = stackTweensRef.current.filter((tween) => {
         const done = updateStackRiseTween(tween, now)
         return !done
@@ -385,10 +402,11 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       bodiesRef.current = null
       marbleEntries.clear()
       transitEntries.clear()
-      conveyorProgress.clear()
+      conveyorOffsets.clear()
+      conveyorOrderRef.current = []
+      conveyorSlotCountRef.current = 1
       beltMarkersRef.current = []
       confettiBurstsRef.current = []
-      boxBurstsRef.current = []
       stackTweensRef.current = []
       stackGroups.clear()
     }
@@ -404,14 +422,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     }
 
     const previous = previousStateRef.current
-    const burstEvents = computeBurstEvents(previous, state)
     const clearEvents = computeClearedBlockEvents(previous, state)
-
-    for (const event of burstEvents) {
-      const burst = createBoxBurst(gridCellPosition(event.position), event.color)
-      effectGroup.add(burst.group)
-      boxBurstsRef.current.push(burst)
-    }
 
     clearGroup(dynamicGroup)
     stackGroupsRef.current.clear()
@@ -461,29 +472,24 @@ function easeOutCubic(t: number): number {
   return 1 - ((1 - t) ** 3)
 }
 
-interface BurstEvent {
-  id: string
-  color: MarbleBox['color']
-  position: MarbleBox['position']
+function conveyorProgressFor(
+  id: string,
+  order: string[],
+  slotCount: number,
+  phase: number,
+  offsets: Map<string, number>,
+): number | null {
+  const index = order.indexOf(id)
+  if (index < 0) {
+    return null
+  }
+
+  return conveyorSlotProgress(phase, slotCount, index) + (offsets.get(id) ?? 0)
 }
 
 interface ClearEvent {
   stackId: string
   color: SortingStack['color']
-}
-
-function computeBurstEvents(previous: GameState | null, next: GameState): BurstEvent[] {
-  if (!previous) {
-    return []
-  }
-  const currentIds = new Set(next.boxes.map((box) => box.id))
-  const events: BurstEvent[] = []
-  for (const box of previous.boxes) {
-    if (!currentIds.has(box.id)) {
-      events.push({ id: box.id, color: box.color, position: box.position })
-    }
-  }
-  return events
 }
 
 function computeClearedBlockEvents(previous: GameState | null, next: GameState): ClearEvent[] {
