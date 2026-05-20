@@ -26,6 +26,7 @@ import {
 } from './gameEngine'
 import { LevelCompleteOverlay } from './LevelCompleteOverlay'
 import { MarbleSortScene } from './MarbleSortScene'
+import { CONVEYOR_TICK_INTERVAL_MS } from './scene/conveyorProgress'
 import { shouldShowMarbleSortTutorial, TutorialOverlay } from './TutorialOverlay'
 
 const COLORBLIND_MODE_STORAGE_KEY = 'bwh.marble-sort.colorblind.v1'
@@ -57,7 +58,7 @@ export function MarbleSortGame(): ReactElement {
 
     const interval = window.setInterval(() => {
       setState((current) => processConveyorTick(current))
-    }, 220)
+    }, CONVEYOR_TICK_INTERVAL_MS)
 
     return () => window.clearInterval(interval)
   }, [state.completedLevel, state.conveyor.length, state.fallingMarbles.length, state.gameOver])

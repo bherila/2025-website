@@ -23,6 +23,7 @@ import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
   CONVEYOR_PROGRESS_SPEED,
   conveyorPhaseForTick,
+  conveyorProgressSpeedForSlotCount,
   conveyorSlotCountFor,
   conveyorSlotProgress,
   easeConveyorOffset,
@@ -85,6 +86,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
   const onBoxClickRef = useRef(onBoxClick)
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
+  const previousColorblindModeRef = useRef(colorblindMode)
   const conveyorPhaseRef = useRef(0)
   const beltMarkerPhaseRef = useRef(0)
   const confettiBurstsRef = useRef<ConfettiBurst[]>([])
@@ -101,7 +103,9 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     const previousPhase = conveyorPhaseRef.current
     const nextOrder = nextState.conveyor.map((marble) => marble.id)
     const nextSlotCount = conveyorSlotCountFor(nextState.conveyorCapacity, nextOrder.length)
-    const nextPhase = conveyorPhaseForTick(nextState.conveyorTicks, nextSlotCount)
+    const nextPhase = previousOrder.length > 0
+      ? previousPhase
+      : conveyorPhaseForTick(nextState.conveyorTicks, nextSlotCount)
 
     preserveConveyorOffsetsForOrderChange(
       conveyorOffsets,
@@ -338,6 +342,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
       timer.update(timestamp)
       const delta = timer.getDelta()
       const now = performance.now() / 1000
+      conveyorPhaseRef.current += delta * conveyorProgressSpeedForSlotCount(conveyorSlotCountRef.current)
       beltMarkerPhaseRef.current += delta * CONVEYOR_PROGRESS_SPEED
 
       stepPhysics(physics.world, delta)
@@ -419,22 +424,29 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
 
     const previous = previousStateRef.current
     const clearEvents = computeClearedBlockEvents(previous, state)
+    const shouldRebuildDynamicObjects = (
+      !previous
+      || previousColorblindModeRef.current !== colorblindMode
+      || dynamicObjectsSignature(previous) !== dynamicObjectsSignature(state)
+    )
 
-    clearGroup(dynamicGroup)
-    stackGroupsRef.current.clear()
+    if (shouldRebuildDynamicObjects) {
+      clearGroup(dynamicGroup)
+      stackGroupsRef.current.clear()
 
-    for (const chute of state.chutes) {
-      dynamicGroup.add(createChuteMesh(chute))
-    }
+      for (const chute of state.chutes) {
+        dynamicGroup.add(createChuteMesh(chute))
+      }
 
-    for (const box of state.boxes) {
-      dynamicGroup.add(createBoxMesh(box, colorblindMode))
-    }
+      for (const box of state.boxes) {
+        dynamicGroup.add(createBoxMesh(box, colorblindMode))
+      }
 
-    for (const stack of state.sortingStacks) {
-      const stackMesh = createSortingStackMesh(stack, state.sortingStacks.length, colorblindMode)
-      dynamicGroup.add(stackMesh)
-      stackGroupsRef.current.set(stack.id, stackMesh)
+      for (const stack of state.sortingStacks) {
+        const stackMesh = createSortingStackMesh(stack, state.sortingStacks.length, colorblindMode)
+        dynamicGroup.add(stackMesh)
+        stackGroupsRef.current.set(stack.id, stackMesh)
+      }
     }
 
     syncMarbles(state, marbleGroup, bodies)
@@ -454,6 +466,7 @@ export function MarbleSortScene({ colorblindMode, state, onBoxClick }: MarbleSor
     }
 
     previousStateRef.current = state
+    previousColorblindModeRef.current = colorblindMode
   }, [colorblindMode, state])
 
   return (
@@ -506,6 +519,18 @@ function computeClearedBlockEvents(previous: GameState | null, next: GameState):
     }
   }
   return events
+}
+
+function dynamicObjectsSignature(state: GameState): string {
+  return [
+    state.boxes.map((box) => `${box.id}:${box.color}:${box.hidden ? 1 : 0}:${box.position.column}:${box.position.row}`).join(','),
+    state.chutes.map((chute) => (
+      `${chute.id}:${chute.side}:${chute.row}:${chute.remaining}:${chute.queue.map((box) => `${box.color}:${box.hidden ? 1 : 0}`).join('.')}`
+    )).join(','),
+    state.sortingStacks.map((stack) => (
+      `${stack.id}:${stack.blocks.map((block) => `${block.id}:${block.color}:${block.slotsFilled}`).join('.')}`
+    )).join(','),
+  ].join('|')
 }
 
 export function disposeMarbleSortObjectForTest(object: THREE.Object3D): void {

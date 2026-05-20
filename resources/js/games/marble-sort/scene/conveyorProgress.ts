@@ -4,7 +4,11 @@ import {
   CONVEYOR_WIDTH,
 } from './sceneConstants'
 
-export const CONVEYOR_PROGRESS_SPEED = 0.06
+const BASE_CONVEYOR_TICK_INTERVAL_MS = 220
+const CONVEYOR_SPEED_MULTIPLIER = 1.15
+
+export const CONVEYOR_TICK_INTERVAL_MS = Math.round(BASE_CONVEYOR_TICK_INTERVAL_MS / CONVEYOR_SPEED_MULTIPLIER)
+export const CONVEYOR_PROGRESS_SPEED = 0.06 * CONVEYOR_SPEED_MULTIPLIER
 export const CONVEYOR_SHIFT_DURATION = 0.18
 
 export function conveyorSlotCountFor(capacity: number, orderLength: number): number {
@@ -13,6 +17,10 @@ export function conveyorSlotCountFor(capacity: number, orderLength: number): num
 
 export function conveyorPhaseForTick(tick: number, slotCount: number): number {
   return tick / Math.max(1, slotCount)
+}
+
+export function conveyorProgressSpeedForSlotCount(slotCount: number): number {
+  return 1 / Math.max(1, slotCount) / (CONVEYOR_TICK_INTERVAL_MS / 1000)
 }
 
 export function conveyorSlotProgress(phase: number, slotCount: number, index: number): number {
