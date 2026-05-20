@@ -77,4 +77,36 @@ describe('cars game level snapshots', () => {
       level: 2,
     })).toBeNull()
   })
+
+  it('rejects stale snapshots with old board dimensions or capacity lengths', () => {
+    const state = generateLevel(5, 20_005)
+
+    window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      state: {
+        ...state,
+        boardHeight: state.boardHeight - 2,
+      },
+    }))
+
+    expect(loadLevelSnapshot(undefined, {
+      ...createInitialProgress(),
+      level: 5,
+    })).toBeNull()
+
+    window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      state: {
+        ...state,
+        cars: state.cars.map((car, index) => index === 0
+          ? { ...car, capacity: 10, length: 5 }
+          : car),
+      },
+    }))
+
+    expect(loadLevelSnapshot(undefined, {
+      ...createInitialProgress(),
+      level: 5,
+    })).toBeNull()
+  })
 })

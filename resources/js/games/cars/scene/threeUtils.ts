@@ -40,6 +40,42 @@ export function createTextSprite(text: string, color: string, background: string
   return new THREE.Sprite(material)
 }
 
+export function createTextLabelMesh(
+  text: string,
+  color: string,
+  background: string,
+  fontSize: number,
+  width: number,
+  height: number,
+): THREE.Mesh {
+  const aspect = width / height
+  const canvas = document.createElement('canvas')
+  canvas.width = aspect >= 1 ? 256 : Math.round(256 * aspect)
+  canvas.height = aspect >= 1 ? Math.round(256 / aspect) : 256
+  const context = canvas.getContext('2d')
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') {
+      context.fillStyle = background
+      roundedRect(context, 8, 8, canvas.width - 16, canvas.height - 16, 24)
+      context.fill()
+    }
+    context.font = `900 ${fontSize}px Atkinson Hyperlegible Next, Arial, sans-serif`
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.lineWidth = 8
+    context.strokeStyle = 'rgba(15, 23, 42, 0.55)'
+    context.strokeText(text, canvas.width / 2, canvas.height / 2)
+    context.fillStyle = color
+    context.fillText(text, canvas.width / 2, canvas.height / 2)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false })
+
+  return new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
+}
+
 export function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
   context.beginPath()
   context.moveTo(x + radius, y)

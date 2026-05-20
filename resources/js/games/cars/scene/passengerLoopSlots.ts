@@ -58,9 +58,17 @@ export function planPassengerLoopSlots({
       entryStartedAt: entryIsActive(slot.entryStartedAt, now) ? slot.entryStartedAt : null,
     }
   })
-  const targetCapacity = passengers.length > 0 ? Math.max(capacity, nextSlots.length) : nextSlots.length
+  const occupiedSlotCount = nextSlots.filter((slot) => slot.passengerId !== null).length
+  const desiredCapacity = passengers.length > 0 ? Math.max(capacity, occupiedSlotCount) : 0
+  while (nextSlots.length > desiredCapacity) {
+    const removeIndex = findLastEmptySlotIndex(nextSlots)
+    if (removeIndex === -1) {
+      break
+    }
+    nextSlots.splice(removeIndex, 1)
+  }
 
-  while (nextSlots.length < targetCapacity) {
+  while (nextSlots.length < desiredCapacity) {
     const previousSlot = nextSlots[nextSlots.length - 1]
     nextSlots.push({
       entryStartedAt: null,
@@ -125,6 +133,16 @@ export function planPassengerLoopSlots({
     feederPassengers: unassignedPassengers,
     slots: nextSlots,
   }
+}
+
+function findLastEmptySlotIndex(slots: PassengerLoopSlot[]): number {
+  for (let i = slots.length - 1; i >= 0; i -= 1) {
+    if (slots[i]?.passengerId === null) {
+      return i
+    }
+  }
+
+  return -1
 }
 
 function timeUntilFeederJoin(phase: number, offset: number, layout: QueueLayout, speed: number): number {

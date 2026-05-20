@@ -1,6 +1,14 @@
 import * as THREE from 'three'
 
-import { type Car, type Direction, directionStep, type GameState, getCarCells, gridCellKey, pathCellsToExit } from '../../gameEngine'
+import {
+  type Car,
+  type Direction,
+  directionStep,
+  type GameState,
+  getCarOccupiedCells,
+  gridCellKey,
+  pathOccupiedCellStepsToExit,
+} from '../../gameEngine'
 import { BLOCKED_BOUNCE_DURATION } from '../sceneConstants'
 import { createBlockedRoute, routeSegmentLengths } from '../sceneGeometry'
 import type { MovingCarRenderItem, RoutePoint } from '../sceneTypes'
@@ -140,20 +148,22 @@ function startBlockingCarCallout(
 }
 
 function findBlockingCarId(car: Car, state: GameState): string | null {
-  const path = pathCellsToExit(car, state.boardWidth, state.boardHeight)
+  const path = pathOccupiedCellStepsToExit(car, state.boardWidth, state.boardHeight)
   const fieldCars = state.cars.filter((candidate) => candidate.status === 'field' && candidate.id !== car.id)
   const occupiedCarIds = new Map<string, string>()
 
   for (const candidate of fieldCars) {
-    for (const cell of getCarCells(candidate)) {
+    for (const cell of getCarOccupiedCells(candidate, state)) {
       occupiedCarIds.set(gridCellKey(cell), candidate.id)
     }
   }
 
-  for (const cell of path) {
-    const carId = occupiedCarIds.get(gridCellKey(cell))
-    if (carId) {
-      return carId
+  for (const cells of path) {
+    for (const cell of cells) {
+      const carId = occupiedCarIds.get(gridCellKey(cell))
+      if (carId) {
+        return carId
+      }
     }
   }
 

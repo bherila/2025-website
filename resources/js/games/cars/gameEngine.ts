@@ -17,6 +17,7 @@ import {
   DIRECTIONS,
   type GameState,
   type GridPosition,
+  lengthForCapacity,
   MAX_LOOP_PASSENGERS,
   MIN_LOOP_PASSENGERS,
   type ParkingSlot,
@@ -67,6 +68,7 @@ export {
   DIRECTION_STEPS,
   DIRECTIONS,
   GAME_PROGRESS_STORAGE_KEY,
+  lengthForCapacity,
   MAX_LOOP_PASSENGERS,
   MIN_LOOP_PASSENGERS,
   STARTING_REGULAR_SLOTS,
@@ -89,6 +91,11 @@ interface PlacementSpec {
   position: GridPosition
   sequence: number
   status: CarStatus
+}
+
+interface BoardDimensions {
+  boardWidth: number
+  boardHeight: number
 }
 
 const CAR_COLOR_KEYS = Object.keys(CAR_COLORS) as CarColor[]
@@ -136,7 +143,7 @@ export function generateLevel(
   } = {},
 ): GameState {
   const rng = createRng(seed)
-  const totalCars = Math.min(7 + Math.floor(level * 1.6), 30)
+  const totalCars = Math.min(9 + Math.floor(level * 1.8), 40)
   const tunnelStacks = Math.min(Math.max(0, Math.floor((level - 1) / 2)), 6)
   const maxAttempts = 180
 
@@ -187,6 +194,34 @@ export function getCarCells(car: Pick<Car, 'direction' | 'length' | 'position'>)
   return cells
 }
 
+export function getCarOccupiedCells(
+  car: Pick<Car, 'direction' | 'length' | 'position'>,
+  board: BoardDimensions = currentBoardDimensions(),
+): GridPosition[] {
+  const cells = getCarCells(car)
+  const keyedCells = new Map<string, GridPosition>()
+  for (const cell of cells) {
+    addCellIfInBounds(keyedCells, cell, board)
+  }
+
+  if (!car.direction.includes('-')) {
+    return [...keyedCells.values()]
+  }
+
+  for (let index = 0; index < cells.length - 1; index += 1) {
+    const current = cells[index]
+    const next = cells[index + 1]
+    if (!current || !next) {
+      continue
+    }
+
+    addCellIfInBounds(keyedCells, { x: current.x, y: next.y }, board)
+    addCellIfInBounds(keyedCells, { x: next.x, y: current.y }, board)
+  }
+
+  return [...keyedCells.values()]
+}
+
 export function directionStep(direction: Direction): GridPosition {
   const step = DIRECTION_STEPS[direction]
 
@@ -209,6 +244,68 @@ export function pathCellsToExit(car: Pick<Car, 'direction' | 'length' | 'positio
   return cells
 }
 
+export function pathOccupiedCellsToExit(
+  car: Pick<Car, 'direction' | 'length' | 'position'>,
+  boardWidth: number,
+  boardHeight: number,
+): GridPosition[] {
+  const keyedCells = new Map<string, GridPosition>()
+  for (const stepCells of pathOccupiedCellStepsToExit(car, boardWidth, boardHeight)) {
+    for (const cell of stepCells) {
+      keyedCells.set(gridCellKey(cell), cell)
+    }
+  }
+
+  return [...keyedCells.values()]
+}
+
+export function pathOccupiedCellStepsToExit(
+  car: Pick<Car, 'direction' | 'length' | 'position'>,
+  boardWidth: number,
+  boardHeight: number,
+): GridPosition[][] {
+  const step = directionStep(car.direction)
+  const board = { boardWidth, boardHeight }
+  const steps: GridPosition[][] = []
+  let position = { ...car.position }
+  const maxSteps = boardWidth + boardHeight + car.length + 4
+
+  for (let move = 0; move < maxSteps; move += 1) {
+    position = {
+      x: position.x + step.x,
+      y: position.y + step.y,
+    }
+    const cells = getCarOccupiedCells({ ...car, position }, board)
+    if (cells.length === 0) {
+      return steps
+    }
+
+    steps.push(cells)
+  }
+
+  return steps
+}
+
+function currentBoardDimensions(): BoardDimensions {
+  return {
+    boardWidth: BOARD_WIDTH,
+    boardHeight: BOARD_HEIGHT,
+  }
+}
+
+function addCellIfInBounds(cells: Map<string, GridPosition>, cell: GridPosition, board: BoardDimensions): void {
+  if (isInBoardBounds(cell, board)) {
+    cells.set(gridCellKey(cell), cell)
+  }
+}
+
+function isInBoardBounds(position: GridPosition, board: BoardDimensions): boolean {
+  return position.x >= 0
+    && position.x < board.boardWidth
+    && position.y >= 0
+    && position.y < board.boardHeight
+}
+
 export function canMoveCar(state: GameState, carId: string): boolean {
   const car = findCar(state, carId)
   if (!car || car.status !== 'field') {
@@ -217,7 +314,8 @@ export function canMoveCar(state: GameState, carId: string): boolean {
 
   const occupied = blockingCellKeys(state, car.id)
 
-  return pathCellsToExit(car, state.boardWidth, state.boardHeight).every((cell) => !occupied.has(gridCellKey(cell)))
+  return pathOccupiedCellStepsToExit(car, state.boardWidth, state.boardHeight)
+    .every((stepCells) => stepCells.every((cell) => !occupied.has(gridCellKey(cell))))
 }
 
 export function activeGarageCells(state: Pick<GameState, 'tunnels'>): GridPosition[] {
@@ -476,7 +574,7 @@ export function calculateLevelScore(state: GameState): number {
 }
 
 export function loopPassengerCapacity(state: Pick<GameState, 'level' | 'passengerQueue'>): number {
-  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((state.level - 1) / 3) * 2
+  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((state.level - 1) / 2) * 2
   const cappedCapacity = Math.min(MAX_LOOP_PASSENGERS, levelCapacity)
 
   return Math.min(state.passengerQueue.length, Math.max(MIN_LOOP_PASSENGERS, cappedCapacity))
@@ -535,7 +633,7 @@ function createPlacementSpecs(totalCars: number, tunnelStacks: number, rng: Rand
       return null
     }
 
-    reserveCells(occupied, getCarCells({ direction, length, position }))
+    reserveCells(occupied, getCarOccupiedCells({ direction, length, position }))
 
     specs.push({
       id: `car-${sequence + 1}`,
@@ -564,7 +662,7 @@ function createOpenLaneSpecs(totalCars: number, tunnelStacks: number, rng: Rando
   let carsRemaining = totalCars
 
   for (let tunnelIndex = 0; tunnelIndex < tunnelStacks && carsRemaining >= 2; tunnelIndex += 1) {
-    const capacity = 2
+    const capacity = 4
     const direction: Direction = 'right'
     const length = lengthForCapacity(capacity)
     const placement = findFirstFreeGaragePlacement(length, direction, occupied) ?? {
@@ -602,7 +700,7 @@ function createOpenLaneSpecs(totalCars: number, tunnelStacks: number, rng: Rando
       x: direction === 'right' ? 0 : Math.max(0, BOARD_WIDTH - length),
       y: row,
     }
-    reserveCells(occupied, getCarCells({ direction, length, position }))
+    reserveCells(occupied, getCarOccupiedCells({ direction, length, position }))
 
     specs.push({
       id: `car-${sequence + 1}`,
@@ -753,7 +851,7 @@ function revealUnblockedCarColors(state: GameState): void {
 }
 
 function assignFeederSides(level: number, passengers: Passenger[]): void {
-  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((level - 1) / 3) * 2
+  const levelCapacity = MIN_LOOP_PASSENGERS + Math.floor((level - 1) / 2) * 2
   const cappedCapacity = Math.min(MAX_LOOP_PASSENGERS, levelCapacity)
   const loopCapacity = Math.min(passengers.length, Math.max(MIN_LOOP_PASSENGERS, cappedCapacity))
   const feederCount = Math.max(0, passengers.length - loopCapacity)
@@ -907,13 +1005,14 @@ function canMoveCarInSnapshot(state: GameState, statuses: Map<string, CarStatus>
 
   const occupied = blockingCellsInSnapshot(state, statuses, car.id)
 
-  return pathCellsToExit(car, state.boardWidth, state.boardHeight).every((cell) => !occupied.has(gridCellKey(cell)))
+  return pathOccupiedCellStepsToExit(car, state.boardWidth, state.boardHeight)
+    .every((stepCells) => stepCells.every((cell) => !occupied.has(gridCellKey(cell))))
 }
 
-function occupiedCells(cars: Car[]): Set<string> {
+function occupiedCells(cars: Car[], board: BoardDimensions): Set<string> {
   const cells = new Set<string>()
   for (const car of cars) {
-    for (const cell of getCarCells(car)) {
+    for (const cell of getCarOccupiedCells(car, board)) {
       cells.add(gridCellKey(cell))
     }
   }
@@ -960,6 +1059,7 @@ function backCellForCar(car: Pick<Car, 'direction' | 'length' | 'position'>): Gr
 export function blockingCellKeys(state: GameState, excludedCarId: string | null = null): Set<string> {
   const cells = occupiedCells(
     state.cars.filter((candidate) => candidate.status === 'field' && candidate.id !== excludedCarId),
+    state,
   )
   for (const cell of activeGarageCells(state)) {
     cells.add(gridCellKey(cell))
@@ -975,6 +1075,7 @@ function blockingCellsInSnapshot(
 ): Set<string> {
   const cells = occupiedCells(
     state.cars.filter((candidate) => statuses.get(candidate.id) === 'field' && candidate.id !== excludedCarId),
+    state,
   )
   for (const cell of activeGarageCellsInSnapshot(state, statuses)) {
     cells.add(gridCellKey(cell))
@@ -1001,7 +1102,7 @@ function garagePlacementCells(
   placement: { garagePosition: GridPosition, position: GridPosition },
 ): GridPosition[] {
   return [
-    ...getCarCells({ direction, length, position: placement.position }),
+    ...getCarOccupiedCells({ direction, length, position: placement.position }),
     placement.garagePosition,
   ]
 }
@@ -1019,7 +1120,7 @@ function findFreeGaragePlacement(
       continue
     }
 
-    const cells = [...getCarCells({ direction, length, position }), garagePosition]
+    const cells = garagePlacementCells(length, direction, { position, garagePosition })
     if (placementIsFree(cells, occupied)) {
       return { position, garagePosition }
     }
@@ -1060,10 +1161,7 @@ function randomGarageSpawnPosition(length: number, direction: Direction, rng: Ra
 }
 
 function garagePositionForCar(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition | null {
-  const step = directionStep(car.direction)
-  const backCell = backCellForCar(car)
-
-  return inBounds({ x: backCell.x - step.x, y: backCell.y - step.y })
+  return inBounds(backCellForCar(car))
 }
 
 function inBounds(position: GridPosition): GridPosition | null {
@@ -1088,7 +1186,7 @@ function findFreePlacement(
       y: rng.int(0, bounds.maxY),
     }
 
-    const cells = getCarCells({ direction, length, position })
+    const cells = getCarOccupiedCells({ direction, length, position })
     if (placementIsFree(cells, occupied)) {
       return position
     }
@@ -1103,7 +1201,7 @@ function findFirstFreePlacement(length: number, direction: Direction, occupied: 
   for (let y = 0; y <= bounds.maxY; y += 1) {
     for (let x = 0; x <= bounds.maxX; x += 1) {
       const position = { x, y }
-      const cells = getCarCells({ direction, length, position })
+      const cells = getCarOccupiedCells({ direction, length, position })
       if (placementIsFree(cells, occupied)) {
         return position
       }
@@ -1198,18 +1296,6 @@ function cloneState(state: GameState): GameState {
     powerUps: { ...state.powerUps },
     completedLevel: state.completedLevel ? { ...state.completedLevel } : null,
   }
-}
-
-function lengthForCapacity(capacity: number): number {
-  if (capacity <= 2) {
-    return 2
-  }
-
-  if (capacity <= 4) {
-    return 3
-  }
-
-  return 4
 }
 
 function awardPowerUp(state: GameState): PowerUpKind {

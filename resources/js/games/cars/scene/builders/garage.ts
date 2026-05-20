@@ -5,6 +5,8 @@ import { CELL_SIZE } from '../sceneConstants'
 import { gridToWorld, rotationForDirection } from '../sceneGeometry'
 import { createTextSprite } from '../threeUtils'
 
+const garageBadgeCache = new Map<number, HTMLCanvasElement>()
+
 export function createGarage(gridX: number, gridY: number, direction: Direction, remaining: number): THREE.Object3D {
   const group = new THREE.Group()
   const center = gridToWorld(gridX, gridY)
@@ -43,9 +45,8 @@ export function createGarage(gridX: number, gridY: number, direction: Direction,
   doorway.position.set(0, 0.32, CELL_SIZE * 0.34)
   group.add(doorway)
 
-  const countBadge = createTextSprite(`x${remaining}`, '#ffffff', 'rgba(15, 23, 42, 0.94)', 68)
+  const countBadge = createDirectionalCountBadge(remaining)
   countBadge.position.set(0, 1.06, 0)
-  countBadge.scale.set(0.72, 0.5, 1)
   group.add(countBadge)
 
   const label = createTextSprite('GARAGE', '#cbd5e1', 'rgba(15, 23, 42, 0.78)', 24)
@@ -65,4 +66,48 @@ export function createGarage(gridX: number, gridY: number, direction: Direction,
   }
 
   return group
+}
+
+function createDirectionalCountBadge(remaining: number): THREE.Mesh {
+  let canvas = garageBadgeCache.get(remaining)
+  if (!canvas) {
+    canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 256
+    const context = canvas.getContext('2d')
+    if (context) {
+      drawDirectionalCountBadge(context, remaining)
+    }
+    garageBadgeCache.set(remaining, canvas)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.7, 0.7),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+  )
+  mesh.rotation.x = -Math.PI / 2
+  mesh.rotation.z = Math.PI
+
+  return mesh
+}
+
+export function drawDirectionalCountBadge(context: CanvasRenderingContext2D, remaining: number): void {
+  context.clearRect(0, 0, 256, 256)
+  context.fillStyle = 'rgba(15, 23, 42, 0.92)'
+  context.beginPath()
+  context.moveTo(40, 176)
+  context.lineTo(40, 80)
+  context.lineTo(96, 80)
+  context.lineTo(128, 24)
+  context.lineTo(160, 80)
+  context.lineTo(216, 80)
+  context.lineTo(216, 176)
+  context.closePath()
+  context.fill()
+  context.fillStyle = '#ffffff'
+  context.font = '900 92px Atkinson Hyperlegible Next, Arial, sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(`x${remaining}`, 128, 130)
 }

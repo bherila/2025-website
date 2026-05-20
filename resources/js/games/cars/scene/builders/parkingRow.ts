@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 
 import type { GameState } from '../../gameEngine'
-import { INCOMING_LANE_Z, OUTGOING_LANE_Z, PARKING_Z } from '../sceneConstants'
+import { INCOMING_LANE_Z, OUTGOING_LANE_Z, PARKING_SLOT_TILT, PARKING_Z } from '../sceneConstants'
 import { parkingSlotPosition } from '../sceneGeometry'
-import { createTextSprite } from '../threeUtils'
+import { createTextLabelMesh } from '../threeUtils'
 
 const ASPHALT_WIDTH = 24.0
 const ASPHALT_DEPTH = 4.4
@@ -28,20 +28,22 @@ export function createParkingRow(state: GameState): THREE.Object3D {
 
   for (const slot of state.parkingSlots) {
     const position = parkingSlotPosition(slot.index, slot.kind)
-    const slotWidth = slot.kind === 'vip' ? 1.05 : 1.22
+    const slotWidth = 0.98
     const slotDepth = 1.86
+    const tiltAngle = PARKING_SLOT_TILT
 
     const slotShape = roundedRectShape(slotWidth, slotDepth, 0.18)
     const fillColor = slot.kind === 'vip'
       ? '#facc15'
       : slot.unlocked
-        ? '#778296'
-        : '#596474'
+        ? '#8a96ab'
+        : '#5b6675'
     const slotBase = new THREE.Mesh(
       new THREE.ExtrudeGeometry(slotShape, { depth: 0.025, bevelEnabled: false }),
-      new THREE.MeshStandardMaterial({ color: fillColor, roughness: 0.7 }),
+      new THREE.MeshBasicMaterial({ color: fillColor }),
     )
     slotBase.rotation.x = -Math.PI / 2
+    slotBase.rotation.z = tiltAngle
     slotBase.position.set(position.x, 0.115, position.z)
     slotBase.receiveShadow = true
     group.add(slotBase)
@@ -57,20 +59,23 @@ export function createParkingRow(state: GameState): THREE.Object3D {
       new THREE.MeshBasicMaterial({ color: outlineColor }),
     )
     outlineMesh.rotation.x = -Math.PI / 2
+    outlineMesh.rotation.z = tiltAngle
     outlineMesh.position.set(position.x, 0.145, position.z)
     group.add(outlineMesh)
 
     if (slot.kind === 'vip') {
-      const vip = createTextSprite('VIP', '#7c2d12', 'rgba(0, 0, 0, 0)', 64)
-      vip.position.set(position.x, 0.4, position.z)
-      vip.scale.set(0.86, 0.5, 1)
+      const vip = createTextLabelMesh('VIP', '#7c2d12', 'rgba(0, 0, 0, 0)', 130, 0.88, 0.56)
+      vip.rotation.x = -Math.PI / 2
+      vip.rotation.z = tiltAngle
+      vip.position.set(position.x, 0.17, position.z)
       group.add(vip)
     }
 
     if (slot.kind === 'regular' && !slot.unlocked) {
-      const plus = createTextSprite('+', '#86efac', 'rgba(0, 0, 0, 0)', 96)
-      plus.position.set(position.x, 0.36, position.z)
-      plus.scale.set(0.66, 0.66, 1)
+      const plus = createTextLabelMesh('+', '#4ade80', 'rgba(0, 0, 0, 0)', 260, 0.96, 0.96)
+      plus.rotation.x = -Math.PI / 2
+      plus.rotation.z = tiltAngle
+      plus.position.set(position.x, 0.17, position.z)
       group.add(plus)
     }
   }

@@ -11,6 +11,7 @@ import {
   loopPassengerCapacity,
   type Passenger,
   pathCellsToExit,
+  pathOccupiedCellStepsToExit,
 } from '../gameEngine'
 import {
   BOARD_CENTER_X,
@@ -22,6 +23,7 @@ import {
   INCOMING_LANE_Z,
   OUTGOING_LANE_Z,
   PARKED_ROTATION,
+  PARKING_SLOT_TILT,
   PARKING_Z,
   QUEUE_Z,
 } from './sceneConstants'
@@ -115,9 +117,9 @@ export function queuePosition(rawDistance: number, layout: QueueLayout): THREE.V
 
 export function queueLayoutForState(state: GameState): QueueLayout {
   const activeCount = Math.max(1, loopPassengerCapacity(state))
-  const targetPerimeter = Math.max(3.0, activeCount * passengerSpacing())
-  const capRadius = Math.max(0.78, Math.min(1.45, targetPerimeter / 11.0))
-  const straightLength = Math.max(0.6, (targetPerimeter - Math.PI * 2 * capRadius) / 2)
+  const targetPerimeter = Math.max(4.6, activeCount * passengerSpacing())
+  const capRadius = Math.max(1.1, Math.min(2.1, targetPerimeter / 9.0))
+  const straightLength = Math.max(0.9, (targetPerimeter - Math.PI * 2 * capRadius) / 2)
   const perimeter = straightLength * 2 + Math.PI * 2 * capRadius
   const width = straightLength + capRadius * 2 + 0.7
   const depth = capRadius * 2 + 0.7
@@ -134,7 +136,7 @@ export function queueLayoutForState(state: GameState): QueueLayout {
 }
 
 export function passengerSpacing(): number {
-  return 0.34
+  return 0.38
 }
 
 export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[] {
@@ -142,6 +144,8 @@ export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[
   const exit = boardExitPosition(car)
   const boardBounds = boardBoundsForRoute()
   const routePositions = [start, exit]
+  const laneOffsetX = (INCOMING_LANE_Z - target.z) * Math.tan(PARKING_SLOT_TILT)
+  const approachX = target.x + laneOffsetX
 
   if (car.direction === 'down') {
     const sideX = target.x < 0 ? boardBounds.left : boardBounds.right
@@ -160,7 +164,7 @@ export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[
   }
 
   routePositions.push(
-    new THREE.Vector3(target.x, start.y, INCOMING_LANE_Z),
+    new THREE.Vector3(approachX, start.y, INCOMING_LANE_Z),
     new THREE.Vector3(target.x, target.y, target.z),
   )
 
@@ -182,12 +186,13 @@ export function createBlockedRoute(car: Car, state: GameState): RoutePoint[] {
 }
 
 export function createDepartureRoute(start: THREE.Vector3, exitX = DEFAULT_DEPARTURE_OFFSCREEN_X): RoutePoint[] {
-  const backOut = new THREE.Vector3(start.x, start.y, OUTGOING_LANE_Z)
+  const laneOffsetX = (OUTGOING_LANE_Z - start.z) * Math.tan(PARKING_SLOT_TILT)
+  const backOut = new THREE.Vector3(start.x + laneOffsetX, start.y, OUTGOING_LANE_Z)
   const exit = new THREE.Vector3(exitX, start.y, OUTGOING_LANE_Z)
 
   return [
-    { position: start, rotationY: PARKED_ROTATION },
-    { position: backOut, rotationY: PARKED_ROTATION },
+    { position: start, rotationY: PARKED_ROTATION + PARKING_SLOT_TILT },
+    { position: backOut, rotationY: PARKED_ROTATION + PARKING_SLOT_TILT },
     { position: exit, rotationY: Math.PI / 2 },
   ]
 }
@@ -272,10 +277,10 @@ export function gridToWorld(x: number, y: number): THREE.Vector3 {
 
 export function parkingSlotPosition(index: number, kind: 'regular' | 'vip'): THREE.Vector3 {
   if (kind === 'vip') {
-    return new THREE.Vector3(-4.5, 0.08, PARKING_Z)
+    return new THREE.Vector3(-4.6, 0.08, PARKING_Z)
   }
 
-  return new THREE.Vector3(-3.0 + index * 1.10, 0.08, PARKING_Z)
+  return new THREE.Vector3(-3.0 + index * 1.18, 0.08, PARKING_Z)
 }
 
 export function rotationForDirection(direction: Direction): number {
@@ -300,8 +305,8 @@ function normalizeLoopDistance(distance: number, perimeter: number): number {
 
 function blockedTravelDistance(car: Car, state: GameState): number {
   const occupied = blockingCellKeys(state, car.id)
-  const path = pathCellsToExit(car, state.boardWidth, state.boardHeight)
-  const collisionIndex = path.findIndex((cell) => occupied.has(gridCellKey(cell)))
+  const path = pathOccupiedCellStepsToExit(car, state.boardWidth, state.boardHeight)
+  const collisionIndex = path.findIndex((cells) => cells.some((cell) => occupied.has(gridCellKey(cell))))
 
   if (collisionIndex < 0) {
     return CELL_SIZE * 0.7
@@ -383,7 +388,7 @@ function routePositionsToRoutePoints(positions: THREE.Vector3[]): RoutePoint[] {
 
     return {
       position,
-      rotationY: index === positions.length - 1 ? PARKED_ROTATION : rotationY,
+      rotationY: index === positions.length - 1 ? PARKED_ROTATION + PARKING_SLOT_TILT : rotationY,
     }
   })
 }

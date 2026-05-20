@@ -8,6 +8,7 @@ export interface PassengerRenderItem {
   offset: number
   layout: QueueLayout
   entry?: PassengerEntryRenderItem
+  fixedTarget?: THREE.Vector3
 }
 
 export type PassengerRenderHandle = THREE.Group | PassengerInstanceHandle

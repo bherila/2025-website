@@ -1,4 +1,6 @@
 import {
+  BOARD_HEIGHT,
+  BOARD_WIDTH,
   type Car,
   CAR_COLORS,
   type CarColor,
@@ -9,6 +11,7 @@ import {
   GAME_PROGRESS_STORAGE_KEY,
   type GameState,
   type GridPosition,
+  lengthForCapacity,
   type ParkingSlot,
   type ParkingSlotKind,
   type Passenger,
@@ -215,6 +218,14 @@ function parseGameState(value: unknown): GameState | null {
     || !isRecord(value.powerUps)
     || value.completedLevel !== null
   ) {
+    return null
+  }
+
+  if (boardWidth !== BOARD_WIDTH || boardHeight !== BOARD_HEIGHT) {
+    return null
+  }
+
+  if (cars.some((car) => car.length !== lengthForCapacity(car.capacity))) {
     return null
   }
 

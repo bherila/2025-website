@@ -3,7 +3,7 @@ export const GAME_PROGRESS_STORAGE_KEY = 'bwh.cars-game.progress.v1'
 export const CAR_COLORS = {
   red: { label: 'Red', hex: '#ef4444' },
   blue: { label: 'Blue', hex: '#0ea5e9' },
-  green: { label: 'Green', hex: '#22c55e' },
+  green: { label: 'Green', hex: '#15803d' },
   yellow: { label: 'Yellow', hex: '#facc15' },
   purple: { label: 'Purple', hex: '#a855f7' },
   orange: { label: 'Orange', hex: '#f97316' },
@@ -143,10 +143,22 @@ export const DIRECTION_STEPS: Record<Direction, GridPosition> = {
   left: { x: -1, y: 0 },
   'up-left': { x: -1, y: -1 },
 }
-export const CAPACITIES = [2, 4, 6] as const
+export const CAPACITIES = [4, 6, 10] as const
 export const STARTING_REGULAR_SLOTS = 4
 export const TOTAL_REGULAR_SLOTS = 7
-export const BOARD_WIDTH = 14
-export const BOARD_HEIGHT = 9
-export const MIN_LOOP_PASSENGERS = 16
-export const MAX_LOOP_PASSENGERS = 30
+export const BOARD_WIDTH = 16
+export const BOARD_HEIGHT = 11
+export const MIN_LOOP_PASSENGERS = 22
+export const MAX_LOOP_PASSENGERS = 42
+
+export function lengthForCapacity(capacity: number): number {
+  if (capacity <= 4) {
+    return 2
+  }
+
+  if (capacity <= 6) {
+    return 3
+  }
+
+  return 4
+}

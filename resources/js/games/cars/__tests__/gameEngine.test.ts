@@ -6,13 +6,18 @@ import {
   canBoardPassengerAtParkingGate,
   canMoveCar,
   type Car,
+  directionStep,
+  findSolvingOrder,
   type GameState,
   generateLevel,
   getCarCells,
+  getCarOccupiedCells,
+  lengthForCapacity,
   loadProgress,
   loopPassengerCapacity,
   moveCarToParking,
   type ParkingSlot,
+  pathCellsToExit,
   processBoardingAtParkingGate,
   resetGame,
   saveProgress,
@@ -37,18 +42,89 @@ describe('cars game engine', () => {
     }
   })
 
-  it('generates garage cells as real one-cell obstacles that do not overlap cars', () => {
-    const state = generateLevel(8, 20_008)
-    const carCells = new Set(
-      state.cars
-        .filter((car) => car.status !== 'departed')
-        .flatMap((car) => getCarCells(car))
-        .map((cell) => `${cell.x}:${cell.y}`),
-    )
+  it('maps capacity to the intended grid length', () => {
+    expect(lengthForCapacity(4)).toBe(2)
+    expect(lengthForCapacity(6)).toBe(3)
+    expect(lengthForCapacity(10)).toBe(4)
+  })
 
-    for (const cell of activeGarageCells(state)) {
-      expect(carCells.has(`${cell.x}:${cell.y}`)).toBe(false)
+  it('allows only the visible tunnel car tail to overlap an active garage cell', () => {
+    const state = generateLevel(8, 20_008)
+
+    expect(activeGarageCells(state).length).toBeGreaterThan(0)
+
+    for (const tunnel of state.tunnels.filter((candidate) => candidate.remaining > 0)) {
+      const visibleCar = state.cars.find((car) => car.id === tunnel.visibleCarId)
+      if (!visibleCar) {
+        throw new Error(`Expected visible car for ${tunnel.id}`)
+      }
+
+      expect(visibleCar).toBeDefined()
+      expect(visibleCar.status).toBe('field')
+      expect(tunnel.garagePosition).toEqual(backCellForTest(visibleCar))
+      expect(getCarCells(visibleCar).filter((cell) => gridCellKeyForTest(cell) === gridCellKeyForTest(tunnel.garagePosition))).toHaveLength(1)
     }
+
+    const visibleFieldCells = new Map<string, string>()
+    for (const car of state.cars.filter((candidate) => candidate.status === 'field')) {
+      for (const cell of getCarOccupiedCells(car, state)) {
+        const key = gridCellKeyForTest(cell)
+
+        expect(visibleFieldCells.get(key)).toBeUndefined()
+        visibleFieldCells.set(key, car.id)
+      }
+    }
+  })
+
+  it('keeps generated diagonal cars clear of adjacent visual-overlap cells', () => {
+    const states = [
+      generateLevel(8, 20_008),
+      generateLevel(10, 20_010),
+    ]
+    const diagonalCars = states
+      .flatMap((state) => state.cars.filter((car) => car.status === 'field' && car.direction.includes('-')))
+
+    expect(diagonalCars.length).toBeGreaterThan(0)
+
+    for (const state of states) {
+      const occupiedCells = new Map<string, string>()
+      for (const car of state.cars.filter((candidate) => candidate.status === 'field')) {
+        for (const cell of getCarOccupiedCells(car, state)) {
+          const key = gridCellKeyForTest(cell)
+          const occupyingCarId = occupiedCells.get(key)
+
+          expect(occupyingCarId).toBeUndefined()
+          occupiedCells.set(key, car.id)
+        }
+      }
+    }
+  })
+
+  it('expands diagonal occupied footprints for every diagonal direction', () => {
+    const board = { boardWidth: 5, boardHeight: 5 }
+    const descendingFootprint = sortCells([
+      { x: 1, y: 1 },
+      { x: 1, y: 2 },
+      { x: 2, y: 1 },
+      { x: 2, y: 2 },
+      { x: 2, y: 3 },
+      { x: 3, y: 2 },
+      { x: 3, y: 3 },
+    ])
+    const ascendingFootprint = sortCells([
+      { x: 1, y: 2 },
+      { x: 1, y: 3 },
+      { x: 2, y: 1 },
+      { x: 2, y: 2 },
+      { x: 2, y: 3 },
+      { x: 3, y: 1 },
+      { x: 3, y: 2 },
+    ])
+
+    expect(sortCells(getCarOccupiedCells(makeCar({ direction: 'down-right', length: 3, position: { x: 1, y: 1 } }), board))).toEqual(descendingFootprint)
+    expect(sortCells(getCarOccupiedCells(makeCar({ direction: 'up-left', length: 3, position: { x: 1, y: 1 } }), board))).toEqual(descendingFootprint)
+    expect(sortCells(getCarOccupiedCells(makeCar({ direction: 'up-right', length: 3, position: { x: 1, y: 1 } }), board))).toEqual(ascendingFootprint)
+    expect(sortCells(getCarOccupiedCells(makeCar({ direction: 'down-left', length: 3, position: { x: 1, y: 1 } }), board))).toEqual(ascendingFootprint)
   })
 
   it('limits the active loop to a smaller passenger buffer', () => {
@@ -91,6 +167,21 @@ describe('cars game engine', () => {
       { x: 3, y: 1 },
     ])
     expect(canMoveCar(state, 'diagonal')).toBe(false)
+  })
+
+  it('blocks diagonal movement through swept footprint cells outside the center-line path', () => {
+    const diagonal = makeCar({ id: 'diagonal', direction: 'down-right', length: 2, position: { x: 0, y: 0 }, sequence: 0 })
+    const blocker = makeCar({ id: 'blocker', direction: 'right', length: 2, position: { x: 2, y: 1 }, sequence: 1 })
+    const state = makeState({
+      boardWidth: 5,
+      boardHeight: 5,
+      cars: [diagonal, blocker],
+    })
+
+    expect(pathCellsToExit(diagonal, state.boardWidth, state.boardHeight)).not.toContainEqual({ x: 2, y: 1 })
+    expect(getCarOccupiedCells({ ...diagonal, position: { x: 1, y: 1 } }, state)).toContainEqual({ x: 2, y: 1 })
+    expect(canMoveCar(state, 'diagonal')).toBe(false)
+    expect(findSolvingOrder(state)).toEqual(['blocker', 'diagonal'])
   })
 
   it('reveals a hidden car color once the car is no longer obstructed', () => {
@@ -399,6 +490,32 @@ function makeCar(overrides: Partial<Car> = {}): Car {
     sequence: 0,
     ...overrides,
   }
+}
+
+function backCellForTest(car: Pick<Car, 'direction' | 'length' | 'position'>): { x: number, y: number } {
+  const step = directionStep(car.direction)
+  const cells = getCarCells(car)
+  const firstCell = cells[0]
+  if (!firstCell) {
+    return { ...car.position }
+  }
+
+  const back = cells.slice(1).reduce((currentBack, cell) => {
+    const currentValue = currentBack.x * step.x + currentBack.y * step.y
+    const nextValue = cell.x * step.x + cell.y * step.y
+
+    return nextValue < currentValue ? cell : currentBack
+  }, firstCell)
+
+  return { ...back }
+}
+
+function gridCellKeyForTest(cell: { x: number, y: number }): string {
+  return `${cell.x}:${cell.y}`
+}
+
+function sortCells(cells: { x: number, y: number }[]): { x: number, y: number }[] {
+  return [...cells].sort((left, right) => left.x - right.x || left.y - right.y)
 }
 
 function makeParkingSlots(occupiedCarId: string | null = null): ParkingSlot[] {

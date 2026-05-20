@@ -16,7 +16,8 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 ## Cars
 
 - Car color determines which passengers can board.
-- Car size determines capacity.
+- Car size determines capacity. There are three sizes: 4-seat (length 2), 6-seat (length 3), and 10-seat (length 4). Length is the number of grid cells the car occupies along its facing axis.
+- The remaining seat-count badge renders as a billboard sprite that always reads upright in screen space, even as the car rotates between cardinal/diagonal headings.
 - Car direction determines its exit path. Cars can face the four cardinal directions or a 45-degree diagonal direction.
 - Diagonal cars occupy one grid cell per seat-length step along the diagonal. Their clear path follows that same diagonal heading until the car exits the board.
 - Cars cannot cross through other cars.
@@ -24,9 +25,9 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - A clicked car should visibly animate along a natural route: forward to the board edge, around the perimeter lane, then into the parking space. Cars should hold their heading on straight segments and rotate only as they turn into the next segment.
 - If a blocked car is clicked, it should drive forward until it reaches the blocking car, then bounce back to its original position.
 - Parked cars should align to the parking-space orientation when they arrive.
-- Car labels should be readable at gameplay distance. Seat count and direction should be rendered as a clear decal on the car body rather than as small floating 3D labels, and the arrow must point in the car's actual travel direction.
+- Car labels should be readable at gameplay distance. The directional arrow and seat-count counter are rendered as separate square decals on the head side of the car body so they never get squashed by the car's length, and the arrow must point in the car's actual travel direction.
 - Hidden garage cars become visible only when they pop out onto the board.
-- Some obstructed cars can have their color hidden while they remain blocked. A color-hidden car renders as a neutral silhouette showing only its size and orientation arrow; its real color is still used by the solver and passenger queue. The color automatically reveals when the car becomes unobstructed or when a power-up moves it into parking.
+- Some obstructed cars can have their color hidden while they remain blocked. A color-hidden car renders as a near-black silhouette with a "?" decal in place of the arrow, hiding both the color and the seat count; its real color is still used by the solver and passenger queue. The color automatically reveals when the car becomes unobstructed or when a power-up moves it into parking.
 
 ## Passenger Queue
 
@@ -48,6 +49,8 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 ## Parking Spaces
 
 - The parking area renders as a single rounded asphalt slab spanning the screen, with the VIP slot on the left and the regular slots to its right; locked slots show a green plus marker.
+- All parking spaces (VIP, unlocked, and locked) are the same size and share a uniform slight tilt so the row reads as one row of angled spaces. Parked cars and their entry/exit routes are rotated by the same tilt so they align with the space they occupy instead of sliding in straight and rotating into place.
+- The VIP, "+", and other slot labels render as flat textured meshes (not billboards) so they tilt together with their slot.
 - Regular parking spaces are the primary constraint. Seven regular slots total; four are unlocked at the start of each level.
 - The VIP parking space is separate and does not count against score penalties.
 - If all regular parking spaces are occupied, the player can open another regular space.
@@ -72,10 +75,10 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 ## Garages
 
 - Garages hold hidden cars behind a visible front car.
-- Each active garage occupies one real board cell.
+- Each active garage occupies one real board cell. A visible car emerging from that garage may share its tail cell with the garage so it appears partly inside the doorway.
 - The garage cell blocks car placement and car movement like any other obstacle.
 - The garage UI is neutral and should not reveal the hidden cars' colors.
-- The player should clearly see how many cars remain in the garage through a count badge.
+- The player should clearly see how many cars remain in the garage through a count badge. The badge is a flat arrow-shaped tag laid above the garage so that its tip points in the direction the next emerging car will travel.
 - When the visible garage car leaves the field, the next hidden car pops out.
 - Each reveal decreases the garage count.
 - Once no hidden cars remain in a garage, the garage cell and UI disappear and no longer block movement.
@@ -106,7 +109,8 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 - The solver and placement checks support cardinal and diagonal car footprints, so diagonal cars are part of normal generated levels.
 - Car colors and passenger queue order are assigned from that solving order so there is always at least one intended completion path.
 - Hidden-color cars are selected only from obstructed visible cars after the solvable order has been established, so hiding color information does not change the underlying solution.
-- The active loop is smaller than the total passenger queue on normal levels, so the full passenger queue is not available immediately.
+- The active loop is smaller than the total passenger queue on normal levels, so the full passenger queue is not available immediately. The loop sizes itself to the active capacity so it never has wrap-around overlap — when capacity shrinks (late-level cleanup), excess empty slots are pruned so passengers never land in near-duplicate positions.
+- Feeder passengers are persistent render items: when one boards or shifts forward in the queue, the rest interpolate to their new positions instead of teleporting between rebuilds.
 - Difficulty ramps gradually with level: car count climbs from a small starting set up to a hard cap, and tunnel stacks are introduced and gradually multiplied as the level rises. The progression is intended to be felt over many levels rather than maxed out quickly.
 
 ## Scoring And Progress

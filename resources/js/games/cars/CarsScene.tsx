@@ -85,6 +85,7 @@ export function CarsScene({
   const passengerLoopSlotsRef = useRef<PassengerLoopSlot[]>([])
   const passengerOffsetsRef = useRef<Map<string, number>>(new Map())
   const passengerGateCyclesRef = useRef<Map<string, number>>(new Map())
+  const feederPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
   const fieldCarMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
   const movingCarsRef = useRef<MovingCarRenderItem[]>([])
@@ -183,9 +184,9 @@ export function CarsScene({
       const height = Math.max(480, container.clientHeight)
       renderer.setSize(width, height)
       const narrow = width < 640
-      camera.fov = narrow ? 64 : 55
-      camera.position.set(0, narrow ? 20.0 : 19.0, narrow ? 6.5 : 7.0)
-      camera.lookAt(0, 0, narrow ? -2.5 : -3.6)
+      camera.fov = narrow ? 50 : 42
+      camera.position.set(0, narrow ? 22.0 : 21.0, narrow ? 5.6 : 5.4)
+      camera.lookAt(0, 0, narrow ? -2.8 : -3.6)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     }
@@ -254,6 +255,7 @@ export function CarsScene({
       passengerOffsetsRef.current.clear()
       passengerLoopSlotsRef.current = []
       passengerGateCyclesRef.current.clear()
+      feederPositionsRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
         clearGroup(effectsRef.current)
@@ -334,6 +336,7 @@ export function CarsScene({
       passengerPhaseRef.current,
       movingCarsRef.current,
       colorblindMode,
+      feederPositionsRef.current,
     )
     if (blockedCarAttempt && previousBlockedAttemptRef.current !== blockedCarAttempt.nonce) {
       const car = state.cars.find((candidate) => candidate.id === blockedCarAttempt.carId)
@@ -402,6 +405,7 @@ function buildDynamicScene(
   passengerPhase: number,
   movingCars: MovingCarRenderItem[],
   colorblindMode: boolean,
+  feederPositions: Map<string, THREE.Vector3>,
 ): void {
   const activeParkingCarIds = new Set(
     movingCars
@@ -519,12 +523,39 @@ function buildDynamicScene(
   }
 
   const feederPassengers = loopPlan.feederPassengers.slice(0, 40)
+  const feederIds = new Set(feederPassengers.map((passenger) => passenger.id))
+  for (const id of feederPositions.keys()) {
+    if (!feederIds.has(id)) {
+      feederPositions.delete(id)
+    }
+  }
   for (const passenger of feederPassengers) {
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
       colorblindMode,
       pattern: CAR_PATTERNS[passenger.color],
     })
-    const position = feederPassengerPosition(passenger, feederPassengers, queueLayout)
-    setPassengerRenderHandleTransform(handle, new THREE.Vector3(position.x, 0.1, position.z), 0)
+    const target = feederPassengerPosition(passenger, feederPassengers, queueLayout)
+    target.y = 0.1
+    const previous = feederPositions.get(passenger.id)
+    const fixedTarget = target.clone()
+    const item: PassengerRenderItem = {
+      id: passenger.id,
+      mesh: handle,
+      offset: 0,
+      layout: queueLayout,
+      fixedTarget,
+    }
+    if (previous && previous.distanceTo(target) > 0.01) {
+      item.entry = {
+        from: previous.clone(),
+        startedAt: now,
+        duration: 0.55,
+      }
+      setPassengerRenderHandleTransform(handle, previous, 0)
+    } else {
+      setPassengerRenderHandleTransform(handle, target, 0)
+    }
+    feederPositions.set(passenger.id, target.clone())
+    passengers.push(item)
   }
 }

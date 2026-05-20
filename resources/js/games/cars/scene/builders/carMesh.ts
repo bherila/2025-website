@@ -1,13 +1,51 @@
 import * as THREE from 'three'
 
 import { type Car, CAR_COLORS, CAR_PATTERNS, type CarPattern } from '../../gameTypes'
-import { CELL_SIZE, PARKED_ROTATION } from '../sceneConstants'
+import { CELL_SIZE, PARKED_ROTATION, PARKING_SLOT_TILT } from '../sceneConstants'
 import { rotationForDirection } from '../sceneGeometry'
 import { lighten, roundedRect } from '../threeUtils'
 
 export interface CarVisualOptions {
   colorblindMode?: boolean
   hideColor?: boolean
+}
+
+export interface CarVisualMetrics {
+  bodyHeight: number
+  carLength: number
+  carWidth: number
+  counterSize: number
+  counterZ: number
+  decalSize: number
+  decalZ: number
+  roofLength: number
+  roofWidth: number
+}
+
+const FIELD_CAR_WIDTH = CELL_SIZE * 0.56
+const FIELD_CAR_END_PADDING = CELL_SIZE * 0.22
+const PARKED_CAR_WIDTH = CELL_SIZE * 0.58
+const PARKED_CAR_END_PADDING = CELL_SIZE * 0.28
+const COUNTER_SIZE = 0.3
+
+export function carVisualMetrics(car: Pick<Car, 'length'>, parked: boolean): CarVisualMetrics {
+  const carWidth = parked ? PARKED_CAR_WIDTH : FIELD_CAR_WIDTH
+  const carLength = parked
+    ? Math.max(CELL_SIZE, car.length * CELL_SIZE - PARKED_CAR_END_PADDING)
+    : Math.max(CELL_SIZE, car.length * CELL_SIZE - FIELD_CAR_END_PADDING)
+  const counterZ = carLength * 0.14
+
+  return {
+    bodyHeight: 0.34,
+    carLength,
+    carWidth,
+    counterSize: COUNTER_SIZE,
+    counterZ,
+    decalSize: Math.min(carWidth * 0.72, 0.3),
+    decalZ: Math.min(carLength * 0.39, counterZ + COUNTER_SIZE * 0.94),
+    roofLength: Math.max(0.34, carLength * 0.5),
+    roofWidth: carWidth * 0.78,
+  }
 }
 
 export function createCarMesh(
@@ -18,11 +56,10 @@ export function createCarMesh(
 ): THREE.Group {
   const group = new THREE.Group()
   const hideColor = options.hideColor === true || (car.colorHidden && !parked)
-  const color = hideColor ? '#94a3b8' : CAR_COLORS[car.color].hex
-  const carWidth = 0.54
-  const carLength = parked ? 0.44 + car.length * 0.44 : car.length * CELL_SIZE - 0.12
+  const color = hideColor ? '#1f2937' : CAR_COLORS[car.color].hex
+  const metrics = carVisualMetrics(car, parked)
   const body = new THREE.Mesh(
-    roundedBoxGeometry(carWidth, 0.34, carLength, 0.085),
+    roundedBoxGeometry(metrics.carWidth, metrics.bodyHeight, metrics.carLength, 0.085),
     new THREE.MeshStandardMaterial({
       color,
       roughness: 0.42,
@@ -35,21 +72,13 @@ export function createCarMesh(
   group.add(body)
 
   const roof = new THREE.Mesh(
-    roundedBoxGeometry(carWidth * 0.78, 0.24, Math.max(0.42, carLength * 0.45), 0.065),
-    new THREE.MeshStandardMaterial({ color: hideColor ? '#cbd5e1' : lighten(color), roughness: 0.4, metalness: 0.04 }),
+    roundedBoxGeometry(metrics.roofWidth, 0.24, metrics.roofLength, 0.065),
+    new THREE.MeshStandardMaterial({ color: hideColor ? '#374151' : lighten(color), roughness: 0.4, metalness: 0.04 }),
   )
   roof.position.y = 0.54
-  roof.position.z = -carLength * 0.05
+  roof.position.z = -metrics.carLength * 0.05
   roof.castShadow = true
   group.add(roof)
-
-  const windshield = new THREE.Mesh(
-    new THREE.BoxGeometry(carWidth * 0.68, 0.025, Math.max(0.12, carLength * 0.2)),
-    new THREE.MeshStandardMaterial({ color: '#e0f2fe', roughness: 0.1, metalness: 0.1 }),
-  )
-  windshield.position.y = 0.68
-  windshield.position.z = carLength * 0.18
-  group.add(windshield)
 
   for (const side of [-1, 1]) {
     for (const end of [-1, 1]) {
@@ -58,17 +87,23 @@ export function createCarMesh(
         new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.5 }),
       )
       wheel.rotation.z = Math.PI / 2
-      wheel.position.set(side * (carWidth / 2 + 0.04), 0.14, end * (carLength / 2 - 0.18))
+      wheel.position.set(side * (metrics.carWidth / 2 + 0.04), 0.14, end * (metrics.carLength / 2 - 0.18))
       wheel.castShadow = true
       group.add(wheel)
     }
   }
 
-  const decal = createCarDecal(car, carWidth, carLength, options)
+  const decal = createCarDecal(car, metrics, options)
   group.add(decal)
 
+  const hideCount = options.hideColor === true || car.colorHidden
+  if (!hideCount) {
+    const counter = createCarCounterSprite(car, metrics)
+    group.add(counter)
+  }
+
   group.position.copy(position)
-  group.rotation.y = parked ? PARKED_ROTATION : rotationForDirection(car.direction)
+  group.rotation.y = parked ? PARKED_ROTATION + PARKING_SLOT_TILT : rotationForDirection(car.direction)
   group.userData = { carId: car.id }
   group.traverse((child) => {
     child.userData = { carId: car.id }
@@ -79,8 +114,7 @@ export function createCarMesh(
 
 export function createCarDecal(
   car: Car,
-  carWidth: number,
-  carLength: number,
+  metrics: CarVisualMetrics,
   options: CarVisualOptions = {},
 ): THREE.Mesh {
   const texture = createCarDecalTexture(car, options)
@@ -89,13 +123,10 @@ export function createCarDecal(
     transparent: true,
     depthWrite: false,
   })
-  const decal = new THREE.Mesh(
-    new THREE.PlaneGeometry(carWidth * 0.86, Math.min(carLength * 0.74, 1.25)),
-    material,
-  )
+  const decal = new THREE.Mesh(new THREE.PlaneGeometry(metrics.decalSize, metrics.decalSize), material)
   decal.rotation.x = -Math.PI / 2
   decal.rotation.z = Math.PI
-  decal.position.set(0, 0.705, -carLength * 0.02)
+  decal.position.set(0, 0.705, metrics.decalZ)
 
   return decal
 }
@@ -103,11 +134,10 @@ export function createCarDecal(
 const decalCanvasCache = new Map<string, HTMLCanvasElement>()
 
 export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}): THREE.CanvasTexture {
-  const remaining = Math.max(0, car.capacity - car.boarded)
   const colorblindMode = options.colorblindMode === true
   const hideColor = options.hideColor === true || car.colorHidden
   const pattern = colorblindMode && !hideColor ? CAR_PATTERNS[car.color] : null
-  const cacheKey = `${remaining}|${hideColor ? 'hidden' : 'visible'}|${colorblindMode ? car.color : 'off'}`
+  const cacheKey = `${hideColor ? 'hidden' : 'visible'}|${colorblindMode ? car.color : 'off'}`
   let canvas = decalCanvasCache.get(cacheKey)
   if (!canvas) {
     canvas = document.createElement('canvas')
@@ -116,37 +146,38 @@ export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}):
     const context = canvas.getContext('2d')
     if (context) {
       context.clearRect(0, 0, canvas.width, canvas.height)
-      context.fillStyle = 'rgba(15, 23, 42, 0.66)'
-      roundedRect(context, 18, 18, 220, 220, 30)
-      context.fill()
 
-      context.fillStyle = '#ffffff'
-      context.strokeStyle = 'rgba(15, 23, 42, 0.5)'
-      context.lineWidth = 12
-      context.lineJoin = 'round'
-      context.beginPath()
-      context.moveTo(128, 30)
-      context.lineTo(190, 92)
-      context.lineTo(154, 92)
-      context.lineTo(154, 132)
-      context.lineTo(102, 132)
-      context.lineTo(102, 92)
-      context.lineTo(66, 92)
-      context.closePath()
-      context.stroke()
-      context.fill()
-
-      if (!hideColor) {
-        context.font = '900 102px Atkinson Hyperlegible Next, Arial, sans-serif'
+      if (hideColor) {
+        context.fillStyle = '#ffffff'
+        context.strokeStyle = 'rgba(15, 23, 42, 0.82)'
+        context.lineWidth = 22
+        context.lineJoin = 'round'
+        context.font = '900 210px Atkinson Hyperlegible Next, Arial, sans-serif'
         context.textAlign = 'center'
         context.textBaseline = 'middle'
-        context.lineWidth = 14
-        context.strokeText(String(remaining), 128, 188)
-        context.fillText(String(remaining), 128, 188)
+        context.strokeText('?', 128, 138)
+        context.fillText('?', 128, 138)
+      } else {
+        context.fillStyle = '#ffffff'
+        context.strokeStyle = 'rgba(15, 23, 42, 0.82)'
+        context.lineWidth = 26
+        context.lineJoin = 'round'
+        context.lineCap = 'round'
+        context.beginPath()
+        context.moveTo(128, 20)
+        context.lineTo(224, 120)
+        context.lineTo(172, 120)
+        context.lineTo(172, 190)
+        context.lineTo(84, 190)
+        context.lineTo(84, 120)
+        context.lineTo(32, 120)
+        context.closePath()
+        context.stroke()
+        context.fill()
       }
 
       if (pattern) {
-        drawCarPatternCue(context, pattern, 28, 30, 48)
+        drawCarPatternCue(context, pattern, 20, 200, 48)
       }
     }
     decalCanvasCache.set(cacheKey, canvas)
@@ -281,6 +312,45 @@ function drawStar(
     }
   }
   context.closePath()
+}
+
+const counterCanvasCache = new Map<number, HTMLCanvasElement>()
+
+export function createCarCounterSprite(car: Car, metrics: CarVisualMetrics): THREE.Sprite {
+  const remaining = Math.max(0, car.capacity - car.boarded)
+  let canvas = counterCanvasCache.get(remaining)
+  if (!canvas) {
+    canvas = document.createElement('canvas')
+    canvas.width = 192
+    canvas.height = 192
+    const context = canvas.getContext('2d')
+    if (context) {
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.fillStyle = '#ffffff'
+      context.strokeStyle = 'rgba(15, 23, 42, 0.82)'
+      context.lineWidth = 12
+      context.beginPath()
+      context.arc(96, 96, 80, 0, Math.PI * 2)
+      context.fill()
+      context.stroke()
+      context.fillStyle = '#0f172a'
+      const text = String(remaining)
+      const fontSize = text.length >= 2 ? 110 : 134
+      context.font = `900 ${fontSize}px Atkinson Hyperlegible Next, Arial, sans-serif`
+      context.textAlign = 'center'
+      context.textBaseline = 'middle'
+      context.fillText(text, 96, 102)
+    }
+    counterCanvasCache.set(remaining, canvas)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }))
+  sprite.scale.set(metrics.counterSize, metrics.counterSize, 1)
+  sprite.position.set(0, 0.78, metrics.counterZ)
+  sprite.renderOrder = 2
+
+  return sprite
 }
 
 const roundedBoxCache = new Map<string, THREE.BufferGeometry>()

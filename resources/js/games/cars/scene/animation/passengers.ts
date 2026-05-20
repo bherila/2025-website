@@ -21,18 +21,29 @@ import type {
 export function animatePassengers(passengers: PassengerRenderItem[], phase: number, elapsed: number): void {
   const dirtyPools = new Set<PassengerInstancePools>()
   for (const item of passengers) {
-    const position = queuePosition(phase + item.offset, item.layout)
-    const y = 0.12 + Math.sin(elapsed * 6 + item.offset) * 0.025
-    passengerPosition.set(position.x, y, position.z)
+    let targetX: number
+    let targetZ: number
+    let y: number
+    if (item.fixedTarget) {
+      targetX = item.fixedTarget.x
+      targetZ = item.fixedTarget.z
+      y = 0.1 + Math.sin(elapsed * 4 + item.offset) * 0.018
+    } else {
+      const position = queuePosition(phase + item.offset, item.layout)
+      targetX = position.x
+      targetZ = position.z
+      y = 0.12 + Math.sin(elapsed * 6 + item.offset) * 0.025
+    }
+    passengerPosition.set(targetX, y, targetZ)
     if (item.entry) {
       const progress = Math.min(1, Math.max(0, (performance.now() / 1000 - item.entry.startedAt) / item.entry.duration))
       const eased = progress * progress * (3 - 2 * progress)
       if (item.entry.via) {
         const oneMinus = 1 - eased
         passengerPosition.set(
-          oneMinus * oneMinus * item.entry.from.x + 2 * oneMinus * eased * item.entry.via.x + eased * eased * position.x,
+          oneMinus * oneMinus * item.entry.from.x + 2 * oneMinus * eased * item.entry.via.x + eased * eased * targetX,
           oneMinus * oneMinus * item.entry.from.y + 2 * oneMinus * eased * item.entry.via.y + eased * eased * y,
-          oneMinus * oneMinus * item.entry.from.z + 2 * oneMinus * eased * item.entry.via.z + eased * eased * position.z,
+          oneMinus * oneMinus * item.entry.from.z + 2 * oneMinus * eased * item.entry.via.z + eased * eased * targetZ,
         )
       } else {
         passengerPosition.lerpVectors(item.entry.from, passengerPosition, eased)
@@ -41,7 +52,8 @@ export function animatePassengers(passengers: PassengerRenderItem[], phase: numb
         delete item.entry
       }
     }
-    applyPassengerTransform(item.mesh, passengerPosition, Math.sin(elapsed * 2 + item.offset) * 0.16, dirtyPools)
+    const rotationY = item.fixedTarget ? 0 : Math.sin(elapsed * 2 + item.offset) * 0.16
+    applyPassengerTransform(item.mesh, passengerPosition, rotationY, dirtyPools)
   }
 
   for (const pool of dirtyPools) {
