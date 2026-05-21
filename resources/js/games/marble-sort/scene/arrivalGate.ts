@@ -1,6 +1,7 @@
-import { BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_SOUTH_Z } from './sceneConstants'
+import { BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_SOUTH_Z, MARBLE_DIAMETER } from './sceneConstants'
 
 export const ARRIVAL_Z_TOLERANCE = 0.05
+export const ARRIVAL_CAPTURE_HALF_WIDTH = BASIN_HOLD_CORRIDOR_HALF_WIDTH + MARBLE_DIAMETER
 export const ARRIVAL_RETRY_COOLDOWN = 0.15
 
 interface ArrivalBodyPosition {
@@ -21,7 +22,7 @@ export function shouldReportArrival(
   if (body.position.z < BASIN_SOUTH_Z - ARRIVAL_Z_TOLERANCE) {
     return false
   }
-  if (Math.abs(body.position.x) > BASIN_HOLD_CORRIDOR_HALF_WIDTH) {
+  if (Math.abs(body.position.x) > ARRIVAL_CAPTURE_HALF_WIDTH) {
     return false
   }
   const last = attempts.get(marbleId) ?? Number.NEGATIVE_INFINITY

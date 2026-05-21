@@ -18,7 +18,7 @@ export interface PhysicsWorld {
   containerBody: CANNON.Body
 }
 
-const WALL_HEIGHT = 0.6
+const WALL_HEIGHT = 1.8
 const WALL_THICKNESS = 0.12
 // Z-perpendicular walls (backstop, outer south, north end) get extra thickness
 // because the marble's +Z velocity at impact can approach 0.12 per physics

@@ -1,15 +1,28 @@
 import {
+  BOX_MARBLE_COUNT,
+  isBoxOpenable,
+  openBox,
+  startGameFromProgress,
+} from '../gameEngine'
+import {
+  ARRIVAL_CAPTURE_HALF_WIDTH,
   ARRIVAL_RETRY_COOLDOWN,
   ARRIVAL_Z_TOLERANCE,
   shouldReportArrival,
 } from '../scene/arrivalGate'
-import { createPhysicsWorld } from '../scene/physics/world'
+import {
+  createPhysicsWorld,
+  disposePhysicsWorld,
+  spawnMarbleBody,
+  stepPhysics,
+} from '../scene/physics/world'
 import {
   BASIN_HOLD_CORRIDOR_HALF_WIDTH,
   BASIN_HOLD_LINE_Z,
   BASIN_SOUTH_Z,
   MARBLE_RADIUS,
 } from '../scene/sceneConstants'
+import { gridCellPosition } from '../scene/sceneGeometry'
 
 const ID = 'marble-1'
 
@@ -32,11 +45,18 @@ describe('shouldReportArrival', () => {
     expect(shouldReportArrival(ID, body, fallingIds, attempts, 1)).toBe(true)
   })
 
-  it('rejects marbles outside the hold corridor X range', () => {
+  it('rejects marbles outside the arrival capture X range', () => {
     const fallingIds = new Set([ID])
     const attempts = new Map<string, number>()
-    const body = bodyAt(BASIN_HOLD_CORRIDOR_HALF_WIDTH + 0.05, BASIN_SOUTH_Z)
+    const body = bodyAt(ARRIVAL_CAPTURE_HALF_WIDTH + 0.01, BASIN_SOUTH_Z)
     expect(shouldReportArrival(ID, body, fallingIds, attempts, 1)).toBe(false)
+  })
+
+  it('accepts an airborne marble just outside the floor-level rail corridor', () => {
+    const fallingIds = new Set([ID])
+    const attempts = new Map<string, number>()
+    const body = bodyAt(BASIN_HOLD_CORRIDOR_HALF_WIDTH + 0.2, BASIN_SOUTH_Z)
+    expect(shouldReportArrival(ID, body, fallingIds, attempts, 1)).toBe(true)
   })
 
   it('accepts a marble resting against the backstop inside the rail corridor', () => {
@@ -83,5 +103,55 @@ describe('physics rail / arrival gate invariant', () => {
 
     const reachableMarbleCenterX = expectedRailCenterX - WALL_THICKNESS / 2 - MARBLE_RADIUS
     expect(reachableMarbleCenterX).toBeCloseTo(BASIN_HOLD_CORRIDOR_HALF_WIDTH)
+  })
+
+  it('reports every marble from the first popped level-one box before any can escape', () => {
+    const state = startGameFromProgress({
+      highScore: 0,
+      level: 1,
+      powerUps: { extraBelt: 0, magnet: 0, shuffle: 0 },
+      totalScore: 0,
+      version: 1,
+    })
+    const box = state.boxes.find((candidate) => isBoxOpenable(candidate, state.boxes))
+    if (!box) {
+      throw new Error('Expected level one to have an openable box.')
+    }
+    const opened = openBox(state, box.id)
+    expect(opened.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT)
+
+    const physics = createPhysicsWorld()
+    const fallingIds = new Set(opened.fallingMarbles.map((marble) => marble.id))
+    const attempts = new Map<string, number>()
+    const bodies = new Map(opened.fallingMarbles.map((marble, index) => [
+      marble.id,
+      spawnMarbleBody(
+        physics.world,
+        physics.marbleMaterial,
+        gridCellPosition(marble.from),
+        index,
+      ),
+    ]))
+    const reported = new Set<string>()
+
+    for (let step = 0; step < 360 && reported.size < BOX_MARBLE_COUNT; step += 1) {
+      const now = step / 60
+      stepPhysics(physics.world, 1 / 60)
+
+      for (const [id, body] of Array.from(bodies.entries())) {
+        if (!shouldReportArrival(id, body, fallingIds, attempts, now, 0)) {
+          continue
+        }
+
+        reported.add(id)
+        fallingIds.delete(id)
+        physics.world.removeBody(body)
+        bodies.delete(id)
+      }
+    }
+
+    disposePhysicsWorld(physics)
+
+    expect(reported.size).toBe(BOX_MARBLE_COUNT)
   })
 })
