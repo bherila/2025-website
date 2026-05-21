@@ -8,6 +8,7 @@ import {
   BASIN_NORTH_Z,
   BASIN_SOUTH_Z,
   BASIN_TOP_HALF_WIDTH,
+  CONVEYOR_BELT_SOUTH_Z,
   MARBLE_RADIUS,
 } from '../sceneConstants'
 
@@ -19,8 +20,16 @@ export interface PhysicsWorld {
 
 const WALL_HEIGHT = 0.6
 const WALL_THICKNESS = 0.12
+// Z-perpendicular walls (backstop, outer south, north end) get extra thickness
+// because the marble's +Z velocity at impact can approach 0.12 per physics
+// step, the same as WALL_THICKNESS — close enough to tunnel through. 0.5
+// leaves a 4× safety margin even on slow frames.
+const BACKSTOP_THICKNESS = 0.5
 const FLOOR_THICKNESS = 0.2
 const CHANNEL_NORTH_Z = -3.2
+// Floor extends well south of the backstop so any tunneled marble lands on
+// it instead of falling out of the world.
+const FLOOR_SOUTH_Z = CONVEYOR_BELT_SOUTH_Z + 1
 const FLOOR_TOP_Y = BASIN_FLOOR_Y - MARBLE_RADIUS
 const WALL_CENTER_Y = FLOOR_TOP_Y + WALL_HEIGHT / 2
 
@@ -42,11 +51,11 @@ export function createPhysicsWorld(): PhysicsWorld {
 
   const containerBody = new CANNON.Body({ mass: 0, material: wallMaterial })
 
-  // Finite floor box spanning the whole pen from the north channel end down to
-  // the holding line south of the throat. Top surface sits at BASIN_FLOOR_Y -
-  // MARBLE_RADIUS so marbles rest at BASIN_FLOOR_Y, unchanged.
-  const floorDepth = BASIN_HOLD_LINE_Z - CHANNEL_NORTH_Z
-  const floorMidZ = (CHANNEL_NORTH_Z + BASIN_HOLD_LINE_Z) / 2
+  // Finite floor box covering the whole pen plus a safety extension past the
+  // backstop, so a marble that somehow tunnels through the backstop still
+  // lands on a floor and can't fall out of the world.
+  const floorDepth = FLOOR_SOUTH_Z - CHANNEL_NORTH_Z
+  const floorMidZ = (CHANNEL_NORTH_Z + FLOOR_SOUTH_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, FLOOR_THICKNESS / 2, floorDepth / 2)),
     new CANNON.Vec3(0, BASIN_FLOOR_Y - MARBLE_RADIUS - FLOOR_THICKNESS / 2, floorMidZ),
@@ -75,31 +84,13 @@ export function createPhysicsWorld(): PhysicsWorld {
     new CANNON.Vec3(0, WALL_CENTER_Y, CHANNEL_NORTH_Z - WALL_THICKNESS / 2),
   )
 
-  // Outer south side-walls flanking the throat: prevent marbles from squeezing
-  // out east/west of the funnel exit.
-  containerBody.addShape(
-    new CANNON.Box(new CANNON.Vec3((BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(
-      -(BASIN_EXIT_HALF_WIDTH + (BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2),
-      WALL_CENTER_Y,
-      BASIN_SOUTH_Z + WALL_THICKNESS,
-    ),
-  )
-  containerBody.addShape(
-    new CANNON.Box(new CANNON.Vec3((BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(
-      BASIN_EXIT_HALF_WIDTH + (BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2,
-      WALL_CENTER_Y,
-      BASIN_SOUTH_Z + WALL_THICKNESS,
-    ),
-  )
-
-  // Side rails between the throat and the backstop. The rail's inner face
-  // sits one MARBLE_RADIUS outside BASIN_HOLD_CORRIDOR_HALF_WIDTH, so a marble
-  // pressed against the rail has its center exactly at the gate's X limit.
+  // Side rails from the throat all the way to the floor's south edge so the
+  // marble corridor is bounded east-west everywhere a marble can physically
+  // be. They extend past the backstop so any marble that tunnels through it
+  // is still confined to the arrival X gate.
   const railCenterX = BASIN_HOLD_CORRIDOR_HALF_WIDTH + MARBLE_RADIUS + WALL_THICKNESS / 2
-  const corridorDepth = BASIN_HOLD_LINE_Z - BASIN_SOUTH_Z
-  const corridorCenterZ = (BASIN_SOUTH_Z + BASIN_HOLD_LINE_Z) / 2
+  const corridorDepth = FLOOR_SOUTH_Z - BASIN_SOUTH_Z
+  const corridorCenterZ = (BASIN_SOUTH_Z + FLOOR_SOUTH_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
     new CANNON.Vec3(-railCenterX, WALL_CENTER_Y, corridorCenterZ),
@@ -110,11 +101,13 @@ export function createPhysicsWorld(): PhysicsWorld {
   )
 
   // South backstop wall: stops a marble that crosses the throat when the
-  // conveyor is full. The marble waits here until the throttled arrival retry
-  // in MarbleSortScene succeeds.
+  // conveyor is full. Uses BACKSTOP_THICKNESS because marble vz at impact
+  // (after ~1m of gravity-driven fall through the funnel + corridor) can
+  // approach WALL_THICKNESS per physics step, which would tunnel a thin
+  // wall.
   containerBody.addShape(
-    new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(0, WALL_CENTER_Y, BASIN_HOLD_LINE_Z),
+    new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, BACKSTOP_THICKNESS / 2)),
+    new CANNON.Vec3(0, WALL_CENTER_Y, BASIN_HOLD_LINE_Z + BACKSTOP_THICKNESS / 2),
   )
 
   world.addBody(containerBody)
