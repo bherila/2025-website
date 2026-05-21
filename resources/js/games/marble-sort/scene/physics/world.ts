@@ -32,6 +32,13 @@ const CHANNEL_NORTH_Z = -3.2
 const FLOOR_SOUTH_Z = CONVEYOR_BELT_SOUTH_Z + 1
 const FLOOR_TOP_Y = BASIN_FLOOR_Y - MARBLE_RADIUS
 const WALL_CENTER_Y = FLOOR_TOP_Y + WALL_HEIGHT / 2
+// Ceiling above the funnel and corridor: keeps marbles in a single layer so
+// they don't pile up vertically when the conveyor is backed up. Bottom face
+// sits one MARBLE_RADIUS + small clearance above the floor, leaving room for
+// exactly one marble in y.
+const CEILING_THICKNESS = 0.2
+const CEILING_BOTTOM_Y = BASIN_FLOOR_Y + MARBLE_RADIUS + 0.08
+const CEILING_CENTER_Y = CEILING_BOTTOM_Y + CEILING_THICKNESS / 2
 
 export function createPhysicsWorld(): PhysicsWorld {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 6.2) })
@@ -108,6 +115,18 @@ export function createPhysicsWorld(): PhysicsWorld {
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, BACKSTOP_THICKNESS / 2)),
     new CANNON.Vec3(0, WALL_CENTER_Y, BASIN_HOLD_LINE_Z + BACKSTOP_THICKNESS / 2),
+  )
+
+  // Ceiling over the funnel + corridor + safety floor. Forces marbles to
+  // settle in a single layer when the conveyor backs up — a stacked marble
+  // (center at floor + diameter) would clash with the ceiling and be pushed
+  // sideways instead. Z range starts at BASIN_NORTH_Z so the grid spawn area
+  // is unobstructed.
+  const ceilingDepth = FLOOR_SOUTH_Z - BASIN_NORTH_Z
+  const ceilingMidZ = (BASIN_NORTH_Z + FLOOR_SOUTH_Z) / 2
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, CEILING_THICKNESS / 2, ceilingDepth / 2)),
+    new CANNON.Vec3(0, CEILING_CENTER_Y, ceilingMidZ),
   )
 
   world.addBody(containerBody)

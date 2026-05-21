@@ -255,13 +255,34 @@ function advanceConveyor(state: GameState): GameState {
   }
 
   const next = cloneState(state)
-  const passingMarble = findPassingSortableConveyorMarble(next)
-
-  if (passingMarble && fillMarbleIntoSortingBlock(next, passingMarble.marble, passingMarble.stackIndex)) {
+  const sortedColors: MarbleColor[] = []
+  // Each slot's drop window is only 0.5/slotCount wide and the slot advances
+  // 1/slotCount per tick, so any marble that passes a matching stack gets
+  // exactly one tick of opportunity. Sort EVERY eligible marble this tick;
+  // otherwise the second eligible marble misses its window and has to do a
+  // full lap.
+  let guard = next.conveyor.length
+  while (guard > 0) {
+    guard -= 1
+    const passingMarble = findPassingSortableConveyorMarble(next)
+    if (!passingMarble) {
+      break
+    }
+    if (!fillMarbleIntoSortingBlock(next, passingMarble.marble, passingMarble.stackIndex)) {
+      break
+    }
     const marble = passingMarble.marble
     next.conveyor = next.conveyor.filter((candidate) => candidate.id !== marble.id)
-    next.lastMessage = `${MARBLE_COLORS[marble.color].label} marble sorted.`
-  } else {
+    sortedColors.push(marble.color)
+  }
+
+  if (sortedColors.length === 1) {
+    next.lastMessage = `${MARBLE_COLORS[sortedColors[0]!].label} marble sorted.`
+  }
+  else if (sortedColors.length > 1) {
+    next.lastMessage = `${sortedColors.length.toLocaleString()} marbles sorted.`
+  }
+  else {
     next.lastMessage = 'Marbles are circling toward matching blocks.'
   }
   next.conveyorTicks += 1
