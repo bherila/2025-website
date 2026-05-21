@@ -128,6 +128,6 @@ function sortingStackDropProgress(index: number, total: number): number {
   return (stackX - conveyorLeftX) / CONVEYOR_PERIMETER
 }
 
-function centeredProgressDelta(delta: number): number {
+export function centeredProgressDelta(delta: number): number {
   return ((((delta + 0.5) % 1) + 1) % 1) - 0.5
 }

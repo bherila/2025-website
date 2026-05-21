@@ -34,6 +34,7 @@ import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
+  centeredProgressDelta,
   CONVEYOR_PROGRESS_SPEED,
   conveyorPhaseForTick,
   conveyorProgressSpeedForSlotCount,
@@ -42,6 +43,7 @@ import {
   easeConveyorOffset,
   preserveConveyorOffsetsForOrderChange,
 } from './scene/conveyorProgress'
+import { createPhysicsDebugOverlay, physicsDebugOverlayEnabled } from './scene/physics/debugOverlay'
 import {
   createMarbleBodyManager,
   type MarbleBodyManager,
@@ -53,7 +55,7 @@ import {
   stepPhysics,
 } from './scene/physics/world'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
-import { conveyorPositionAt } from './scene/sceneGeometry'
+import { CONVEYOR_ENTRY_PROGRESS, conveyorPositionAt } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -170,6 +172,14 @@ export function MarbleSortScene({
             duration: TRANSIT_DURATION,
             from,
           })
+          // Park the marble at the conveyor entry point so it appears at the
+          // funnel mouth, then easeConveyorOffset slides it into its canonical
+          // belt slot rather than teleporting to an arbitrary slot location.
+          const slotIndex = nextOrder.indexOf(id)
+          if (slotIndex >= 0) {
+            const slotProgress = conveyorSlotProgress(nextPhase, nextSlotCount, slotIndex)
+            conveyorOffsets.set(id, centeredProgressDelta(CONVEYOR_ENTRY_PROGRESS - slotProgress))
+          }
           entry.phase = 'transit'
           bodies.release(id)
         }
@@ -390,6 +400,10 @@ export function MarbleSortScene({
     const physics = createPhysicsWorld()
     physicsRef.current = physics
     bodiesRef.current = createMarbleBodyManager(physics)
+
+    if (physicsDebugOverlayEnabled()) {
+      staticGroup.add(createPhysicsDebugOverlay(physics.containerBody))
+    }
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()

@@ -21,6 +21,8 @@ const WALL_HEIGHT = 0.6
 const WALL_THICKNESS = 0.12
 const FLOOR_THICKNESS = 0.2
 const CHANNEL_NORTH_Z = -3.2
+const FLOOR_TOP_Y = BASIN_FLOOR_Y - MARBLE_RADIUS
+const WALL_CENTER_Y = FLOOR_TOP_Y + WALL_HEIGHT / 2
 
 export function createPhysicsWorld(): PhysicsWorld {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 6.2) })
@@ -59,18 +61,18 @@ export function createPhysicsWorld(): PhysicsWorld {
   const channelCenterZ = (CHANNEL_NORTH_Z + BASIN_NORTH_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, channelLength / 2)),
-    new CANNON.Vec3(-BASIN_TOP_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelCenterZ),
+    new CANNON.Vec3(-BASIN_TOP_HALF_WIDTH, WALL_CENTER_Y, channelCenterZ),
   )
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, channelLength / 2)),
-    new CANNON.Vec3(BASIN_TOP_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelCenterZ),
+    new CANNON.Vec3(BASIN_TOP_HALF_WIDTH, WALL_CENTER_Y, channelCenterZ),
   )
 
   // North end wall sits at the very top of the channel (well above the grid)
   // so any northward bounce is contained.
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, CHANNEL_NORTH_Z - WALL_THICKNESS / 2),
+    new CANNON.Vec3(0, WALL_CENTER_Y, CHANNEL_NORTH_Z - WALL_THICKNESS / 2),
   )
 
   // Outer south side-walls flanking the throat: prevent marbles from squeezing
@@ -79,7 +81,7 @@ export function createPhysicsWorld(): PhysicsWorld {
     new CANNON.Box(new CANNON.Vec3((BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
     new CANNON.Vec3(
       -(BASIN_EXIT_HALF_WIDTH + (BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2),
-      BASIN_FLOOR_Y + WALL_HEIGHT / 2,
+      WALL_CENTER_Y,
       BASIN_SOUTH_Z + WALL_THICKNESS,
     ),
   )
@@ -87,7 +89,7 @@ export function createPhysicsWorld(): PhysicsWorld {
     new CANNON.Box(new CANNON.Vec3((BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
     new CANNON.Vec3(
       BASIN_EXIT_HALF_WIDTH + (BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2,
-      BASIN_FLOOR_Y + WALL_HEIGHT / 2,
+      WALL_CENTER_Y,
       BASIN_SOUTH_Z + WALL_THICKNESS,
     ),
   )
@@ -100,11 +102,11 @@ export function createPhysicsWorld(): PhysicsWorld {
   const corridorCenterZ = (BASIN_SOUTH_Z + BASIN_HOLD_LINE_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
-    new CANNON.Vec3(-railCenterX, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+    new CANNON.Vec3(-railCenterX, WALL_CENTER_Y, corridorCenterZ),
   )
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
-    new CANNON.Vec3(railCenterX, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+    new CANNON.Vec3(railCenterX, WALL_CENTER_Y, corridorCenterZ),
   )
 
   // South backstop wall: stops a marble that crosses the throat when the
@@ -112,7 +114,7 @@ export function createPhysicsWorld(): PhysicsWorld {
   // in MarbleSortScene succeeds.
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, BASIN_HOLD_LINE_Z),
+    new CANNON.Vec3(0, WALL_CENTER_Y, BASIN_HOLD_LINE_Z),
   )
 
   world.addBody(containerBody)
@@ -127,14 +129,20 @@ function addAngledWall(body: CANNON.Body, side: 'left' | 'right'): void {
   const dx = bottomX - topX
   const dz = BASIN_SOUTH_Z - BASIN_NORTH_Z
   const length = Math.sqrt(dx * dx + dz * dz)
+  // Rotation that takes the box's local +Z axis to the diagonal direction
+  // (dx, dz). Using +angle (not -angle) keeps the wide endpoint at NORTH_Z
+  // and the narrow endpoint at SOUTH_Z so the funnel actually funnels inward.
   const angle = Math.atan2(dx, dz)
+  // Center the wall axis exactly on the funnel diagonal. The wall extends
+  // ±WALL_THICKNESS/2 perpendicular to the diagonal, so its inner face sits
+  // slightly inside the diagonal and its outer face slightly outside.
   const centerX = (topX + bottomX) / 2
   const centerZ = (BASIN_NORTH_Z + BASIN_SOUTH_Z) / 2
 
   body.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, length / 2)),
-    new CANNON.Vec3(centerX - sign * WALL_THICKNESS / 2, BASIN_FLOOR_Y + WALL_HEIGHT / 2, centerZ),
-    new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -angle),
+    new CANNON.Vec3(centerX, WALL_CENTER_Y, centerZ),
+    new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle),
   )
 }
 

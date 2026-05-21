@@ -5,6 +5,7 @@ import {
   CONVEYOR_CENTER_Z,
   CONVEYOR_HEIGHT,
   CONVEYOR_MARBLE_Y,
+  CONVEYOR_PERIMETER,
   CONVEYOR_SLOT_FRACTION,
   CONVEYOR_WIDTH,
   GRID_ORIGIN_X,
@@ -16,6 +17,13 @@ import {
   SORTING_STACK_TOP_Y,
   SORTING_STACK_Z,
 } from './sceneConstants'
+
+// Progress value on the belt's north (upper) straight run, centred at x = 0.
+// This is the point where the funnel throat meets the belt — every accepted
+// marble enters the conveyor here, regardless of its canonical slot index.
+export const CONVEYOR_ENTRY_PROGRESS = (
+  (CONVEYOR_WIDTH - CONVEYOR_HEIGHT) * 1.5 + Math.PI * (CONVEYOR_HEIGHT / 2)
+) / CONVEYOR_PERIMETER
 
 export function gridCellPosition(position: GridPosition): THREE.Vector3 {
   return new THREE.Vector3(
