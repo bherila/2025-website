@@ -8,6 +8,7 @@ import {
   BASIN_HOLD_CORRIDOR_HALF_WIDTH,
   BASIN_HOLD_LINE_Z,
   BASIN_SOUTH_Z,
+  MARBLE_RADIUS,
 } from '../scene/sceneConstants'
 
 const ID = 'marble-1'
@@ -66,15 +67,21 @@ describe('shouldReportArrival', () => {
 })
 
 describe('physics rail / arrival gate invariant', () => {
-  it('places exactly two corridor rails at ±BASIN_HOLD_CORRIDOR_HALF_WIDTH', () => {
+  it('places rails so a marble pressed against them sits exactly at the gate X limit', () => {
+    const WALL_THICKNESS = 0.12
+    const expectedRailCenterX = BASIN_HOLD_CORRIDOR_HALF_WIDTH + MARBLE_RADIUS + WALL_THICKNESS / 2
+
     const physics = createPhysicsWorld()
     const offsets = physics.containerBody.shapeOffsets
     const matches = offsets.filter((offset) =>
-      Math.abs(Math.abs(offset.x) - BASIN_HOLD_CORRIDOR_HALF_WIDTH) < 1e-6,
+      Math.abs(Math.abs(offset.x) - expectedRailCenterX) < 1e-6,
     )
     expect(matches).toHaveLength(2)
     const xs = matches.map((offset) => offset.x).sort((a, b) => a - b)
-    expect(xs[0]).toBeCloseTo(-BASIN_HOLD_CORRIDOR_HALF_WIDTH)
-    expect(xs[1]).toBeCloseTo(BASIN_HOLD_CORRIDOR_HALF_WIDTH)
+    expect(xs[0]).toBeCloseTo(-expectedRailCenterX)
+    expect(xs[1]).toBeCloseTo(expectedRailCenterX)
+
+    const reachableMarbleCenterX = expectedRailCenterX - WALL_THICKNESS / 2 - MARBLE_RADIUS
+    expect(reachableMarbleCenterX).toBeCloseTo(BASIN_HOLD_CORRIDOR_HALF_WIDTH)
   })
 })

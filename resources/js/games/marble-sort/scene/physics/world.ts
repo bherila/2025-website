@@ -92,18 +92,19 @@ export function createPhysicsWorld(): PhysicsWorld {
     ),
   )
 
-  // Side rails between the throat and the backstop. They sit at ±the same
-  // half-width that arrivalGate.ts uses for its X check, so a marble waiting
-  // against the backstop is guaranteed to remain reportable.
+  // Side rails between the throat and the backstop. The rail's inner face
+  // sits one MARBLE_RADIUS outside BASIN_HOLD_CORRIDOR_HALF_WIDTH, so a marble
+  // pressed against the rail has its center exactly at the gate's X limit.
+  const railCenterX = BASIN_HOLD_CORRIDOR_HALF_WIDTH + MARBLE_RADIUS + WALL_THICKNESS / 2
   const corridorDepth = BASIN_HOLD_LINE_Z - BASIN_SOUTH_Z
   const corridorCenterZ = (BASIN_SOUTH_Z + BASIN_HOLD_LINE_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
-    new CANNON.Vec3(-BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+    new CANNON.Vec3(-railCenterX, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
   )
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
-    new CANNON.Vec3(BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+    new CANNON.Vec3(railCenterX, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
   )
 
   // South backstop wall: stops a marble that crosses the throat when the
