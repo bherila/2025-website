@@ -17,10 +17,14 @@ export const CONVEYOR_SLOT_FRACTION = MARBLE_DIAMETER / CONVEYOR_PERIMETER
 export const CONVEYOR_BELT_NORTH_Z = CONVEYOR_CENTER_Z - CONVEYOR_HEIGHT / 2
 export const CONVEYOR_BELT_SOUTH_Z = CONVEYOR_CENTER_Z + CONVEYOR_HEIGHT / 2
 // Funnel starts just south of the grid plate (which ends at Z ≈ 1.19) and
-// overlaps the belt's north edge so the conveyor visually tucks under the V.
+// exits slightly north of the belt's north edge so marbles physically fall
+// south through the throat and land on the belt. The conveyor housing (wider
+// in Z than the belt) reaches north past the belt edge into the funnel area,
+// producing the "tucked under" visual without putting the throat geometry
+// inside the belt's z range.
 export const BASIN_NORTH_Z = 1.25
 export const BASIN_CONVEYOR_OVERLAP = 0.08
-export const BASIN_SOUTH_Z = CONVEYOR_BELT_NORTH_Z + BASIN_CONVEYOR_OVERLAP
+export const BASIN_SOUTH_Z = CONVEYOR_BELT_NORTH_Z - BASIN_CONVEYOR_OVERLAP
 export const BASIN_CENTER_Z = (BASIN_NORTH_Z + BASIN_SOUTH_Z) / 2
 export const BASIN_FLOOR_Y = CONVEYOR_MARBLE_Y - 0.02
 export const BASIN_TOP_HALF_WIDTH = 1.5

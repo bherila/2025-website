@@ -18,10 +18,13 @@ describe('marble sort scene geometry constants', () => {
     expect(BASIN_EXIT_HALF_WIDTH).toBeLessThan(BASIN_TOP_HALF_WIDTH)
   })
 
-  it('overlaps the funnel exit with the conveyor belt north edge', () => {
-    const overlap = BASIN_SOUTH_Z - CONVEYOR_BELT_NORTH_Z
-    expect(overlap).toBeGreaterThanOrEqual(0.04)
-    expect(overlap).toBeLessThanOrEqual(0.2)
+  it('places the funnel exit just north of the conveyor belt edge', () => {
+    // Negative "overlap" means BASIN_SOUTH_Z is north of the belt's north edge,
+    // so marbles physically fall south through the throat onto the belt rather
+    // than appearing to jump back northward when transit completes.
+    const gap = CONVEYOR_BELT_NORTH_Z - BASIN_SOUTH_Z
+    expect(gap).toBeGreaterThanOrEqual(0.04)
+    expect(gap).toBeLessThanOrEqual(0.2)
   })
 
   it('keeps the throat narrower than the belt', () => {
