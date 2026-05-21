@@ -15,6 +15,7 @@ use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\MD\MarkdownRendererController;
 use App\Http\Controllers\OhifViewerController;
 use App\Http\Controllers\PHR\PageController as PHRPageController;
 use App\Http\Controllers\PHR\PhrDocumentController;
@@ -167,6 +168,11 @@ Route::get('/games/parking-pickup', function () {
 Route::get('/tools/irs-f461', function () {
     return view('tools.irs-f461');
 });
+
+Route::get('/tools/markdown', [MarkdownRendererController::class, 'show'])
+    ->name('tools.markdown');
+Route::get('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'showByCode'])
+    ->name('tools.markdown.shared');
 
 Route::get('/tools/address-labels', [AddressLabelController::class, 'index'])->name('tools.address-labels.index');
 Route::post('/tools/address-labels/pdf', [AddressLabelController::class, 'generate'])->name('tools.address-labels.pdf');

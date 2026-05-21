@@ -260,3 +260,49 @@
     @apply border-destructive/30 text-destructive;
   }
 }
+
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  nav,
+  header.markdown-toolbar,
+  .markdown-editor-pane,
+  .markdown-actions,
+  .no-print {
+    display: none !important;
+  }
+
+  .markdown-tool-shell,
+  .markdown-preview-pane,
+  .markdown-preview {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .markdown-preview {
+    background: #fff !important;
+    color: #111 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .markdown-preview pre,
+  .markdown-preview .mermaid-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .markdown-preview svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}

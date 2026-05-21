@@ -21,12 +21,14 @@ class CloudflareCspPolicy implements Preset
                 'sha256-w63f9LEKljqLLUqt53Iz8HrxPLoxKWGSbpu4EG+fC/I=',
                 'sha256-8+BnHqFPqzqrFsUzcLKGPfEnwOHjnRSMvsGouNq74nM=',
                 'https://static.cloudflareinsights.com',
+                'https://esm.sh',
             ])
             ->add(Directive::CONNECT, [
                 Keyword::SELF,
                 'https://static.cloudflareinsights.com',
                 'https://cloudflareinsights.com',
                 'https://o933149.ingest.us.sentry.io',
+                'https://esm.sh',
                 ...$this->dicomStorageConnectSources(),
             ])
             ->add(Directive::IMG, [
@@ -36,6 +38,7 @@ class CloudflareCspPolicy implements Preset
             ->add(Directive::STYLE, [
                 Keyword::SELF,
                 'https://cdnjs.cloudflare.com',
+                'https://esm.sh',
             ])
             ->add(Directive::OBJECT, [Keyword::NONE])
             ->add(Directive::BASE, [Keyword::SELF])

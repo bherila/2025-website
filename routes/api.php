@@ -53,6 +53,7 @@ use App\Http\Controllers\FinanceTool\TaxYearLotsMatchController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
+use App\Http\Controllers\MD\MarkdownRendererController;
 use App\Http\Controllers\PasskeyController;
 use App\Http\Controllers\PHR\AllergyController as PHRAllergyController;
 use App\Http\Controllers\PHR\ConditionController as PHRConditionController;
@@ -83,6 +84,9 @@ Route::post('/webhooks/stripe', StripeWebhookController::class);
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conversion/compute', [RothConversionController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
+
+Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
+Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
