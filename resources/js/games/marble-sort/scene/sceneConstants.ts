@@ -46,9 +46,10 @@ export const BASIN_HALF_DEPTH = (BASIN_SOUTH_Z - BASIN_NORTH_Z) / 2
 export const BASIN_HALF_WIDTH = BASIN_TOP_HALF_WIDTH
 export const BASIN_EXIT_X = 0
 export const BASIN_EXIT_Z = BASIN_SOUTH_Z
-// Holding corridor south of the throat where a marble waits when the conveyor
-// is full. world.ts side rails and arrivalGate.ts MUST use the same values.
-export const BASIN_HOLD_LINE_Z = CONVEYOR_CENTER_Z + 0.05
+// Holding corridor at the funnel mouth where a marble waits when the conveyor
+// is full. Keep this before the inner conveyor lane so backed-up marbles spread
+// through the funnel instead of sitting on top of belt marbles.
+export const BASIN_HOLD_LINE_Z = BASIN_SOUTH_Z + MARBLE_RADIUS + 0.06
 export const BASIN_HOLD_CORRIDOR_HALF_WIDTH = BASIN_EXIT_HALF_WIDTH + MARBLE_RADIUS + 0.04
 export const SORTING_STACK_Z = 4.45
 export const SORTING_STACK_BLOCK_DEPTH = 0.44

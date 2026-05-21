@@ -37,6 +37,7 @@ describe('marble sort scene geometry constants', () => {
 
   it('places the hold line south of the throat', () => {
     expect(BASIN_HOLD_LINE_Z).toBeGreaterThan(BASIN_SOUTH_Z)
+    expect(BASIN_HOLD_LINE_Z).toBeLessThan(CONVEYOR_PATH_NORTH_Z)
   })
 
   it('keeps the hold corridor wider than the throat but inside the basin', () => {

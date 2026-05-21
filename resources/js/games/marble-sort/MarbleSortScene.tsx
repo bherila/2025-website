@@ -42,6 +42,7 @@ import {
   conveyorSlotProgress,
   easeConveyorOffset,
   preserveConveyorOffsetsForOrderChange,
+  sortingStackDropProgress,
 } from './scene/conveyorProgress'
 import { createPhysicsDebugOverlay, physicsDebugOverlayEnabled } from './scene/physics/debugOverlay'
 import {
@@ -189,7 +190,12 @@ export function MarbleSortScene({
       const targetStackId = queue && queue.length > 0 ? queue.shift() : undefined
       if (targetStackId) {
         const stackGroup = stackGroupsRef.current.get(targetStackId)
-        if (stackGroup) {
+        const targetStack = nextState.sortingStacks.find((stack) => stack.id === targetStackId)
+        if (stackGroup && targetStack) {
+          entry.mesh.position.copy(conveyorPositionAt(sortingStackDropProgress(
+            targetStack.index,
+            nextState.sortingStacks.length,
+          )))
           const targetPosition = stackGroup.position.clone().add(new THREE.Vector3(0, 0.55, 0))
           slotDropTweensRef.current.set(id, createSlotDropTween(id, entry.mesh, targetPosition, now))
           entry.phase = 'slotDrop'

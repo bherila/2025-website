@@ -4,7 +4,10 @@ import {
   easeConveyorOffset,
   passingSortingStackIndexForSlot,
   preserveConveyorOffsetsForOrderChange,
+  sortingStackDropProgress,
 } from '../scene/conveyorProgress'
+import { CONVEYOR_PATH_SOUTH_Z } from '../scene/sceneConstants'
+import { conveyorPositionAt, sortingStackColumnPosition } from '../scene/sceneGeometry'
 
 describe('MarbleSortScene conveyor animation bookkeeping', () => {
   it('keeps existing marbles in place while the belt advances to the next physical slot', () => {
@@ -91,5 +94,15 @@ describe('MarbleSortScene conveyor animation bookkeeping', () => {
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(5, 27), 27, 0, 3)).toBe(1)
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(8, 27), 27, 0, 3)).toBe(2)
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(0, 27), 27, 0, 3)).toBeUndefined()
+  })
+
+  it('drops marbles from the belt side closest to the target sorting stack', () => {
+    for (let index = 0; index < 3; index += 1) {
+      const dropPosition = conveyorPositionAt(sortingStackDropProgress(index, 3))
+      const stackPosition = sortingStackColumnPosition(index, 3)
+
+      expect(dropPosition.x).toBeCloseTo(stackPosition.x)
+      expect(dropPosition.z).toBeCloseTo(CONVEYOR_PATH_SOUTH_Z)
+    }
   })
 })

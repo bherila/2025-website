@@ -118,7 +118,7 @@ export function easeConveyorOffset(offset: number, deltaSeconds: number): number
   return offset > 0 ? offset - step : offset + step
 }
 
-function sortingStackDropProgress(index: number, total: number): number {
+export function sortingStackDropProgress(index: number, total: number): number {
   const spacing = Math.min(1.18, 5.0 / Math.max(1, total))
   const left = -((total - 1) * spacing) / 2
   const stackX = left + index * spacing
