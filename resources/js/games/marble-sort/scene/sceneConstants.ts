@@ -11,11 +11,24 @@ export const CONVEYOR_MARBLE_Y = 0.36
 export const MARBLE_DIAMETER = 0.27
 export const MARBLE_RADIUS = MARBLE_DIAMETER / 2
 export const CONVEYOR_PERIMETER = 2 * (CONVEYOR_WIDTH - CONVEYOR_HEIGHT) + Math.PI * CONVEYOR_HEIGHT
-export const CONVEYOR_SLOT_FRACTION = MARBLE_DIAMETER / CONVEYOR_PERIMETER
-// Belt = the top run that marbles ride on. The visible housing is wider in Z,
-// but funnel alignment is to the belt, not the housing.
+// Belt = the painted top run. CONVEYOR_WIDTH × CONVEYOR_HEIGHT is the visible
+// belt rectangle that marbles SIT ON; do not use it for the marble path. The
+// path is an inset oval — see CONVEYOR_PATH_* below.
 export const CONVEYOR_BELT_NORTH_Z = CONVEYOR_CENTER_Z - CONVEYOR_HEIGHT / 2
 export const CONVEYOR_BELT_SOUTH_Z = CONVEYOR_CENTER_Z + CONVEYOR_HEIGHT / 2
+
+// Inner marble-lane oval. Marbles and belt markers travel along this path,
+// which sits inside the belt rectangle so marbles appear in the gray slot
+// channel rather than orbiting the housing rim. The belt visual stays at
+// CONVEYOR_WIDTH × CONVEYOR_HEIGHT.
+export const CONVEYOR_PATH_WIDTH = CONVEYOR_WIDTH - 0.7
+export const CONVEYOR_PATH_HEIGHT = CONVEYOR_HEIGHT - 0.36
+export const CONVEYOR_PATH_RADIUS = CONVEYOR_PATH_HEIGHT / 2
+export const CONVEYOR_PATH_PERIMETER = 2 * (CONVEYOR_PATH_WIDTH - CONVEYOR_PATH_HEIGHT)
+  + Math.PI * CONVEYOR_PATH_HEIGHT
+export const CONVEYOR_PATH_NORTH_Z = CONVEYOR_CENTER_Z - CONVEYOR_PATH_RADIUS
+export const CONVEYOR_PATH_SOUTH_Z = CONVEYOR_CENTER_Z + CONVEYOR_PATH_RADIUS
+export const CONVEYOR_SLOT_FRACTION = MARBLE_DIAMETER / CONVEYOR_PATH_PERIMETER
 // Funnel starts just south of the grid plate (which ends at Z ≈ 1.19) and
 // exits slightly north of the belt's north edge so marbles physically fall
 // south through the throat and land on the belt. The conveyor housing (wider

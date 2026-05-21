@@ -1,7 +1,7 @@
 import {
-  CONVEYOR_HEIGHT,
-  CONVEYOR_PERIMETER,
-  CONVEYOR_WIDTH,
+  CONVEYOR_PATH_HEIGHT,
+  CONVEYOR_PATH_PERIMETER,
+  CONVEYOR_PATH_WIDTH,
 } from './sceneConstants'
 
 const BASE_CONVEYOR_TICK_INTERVAL_MS = 220
@@ -122,10 +122,10 @@ function sortingStackDropProgress(index: number, total: number): number {
   const spacing = Math.min(1.18, 5.0 / Math.max(1, total))
   const left = -((total - 1) * spacing) / 2
   const stackX = left + index * spacing
-  const straight = CONVEYOR_WIDTH - CONVEYOR_HEIGHT
+  const straight = CONVEYOR_PATH_WIDTH - CONVEYOR_PATH_HEIGHT
   const conveyorLeftX = -straight / 2
 
-  return (stackX - conveyorLeftX) / CONVEYOR_PERIMETER
+  return (stackX - conveyorLeftX) / CONVEYOR_PATH_PERIMETER
 }
 
 export function centeredProgressDelta(delta: number): number {

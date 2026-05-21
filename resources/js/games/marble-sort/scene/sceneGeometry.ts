@@ -3,11 +3,12 @@ import * as THREE from 'three'
 import { type ChuteSide, type GridPosition } from '../gameEngine'
 import {
   CONVEYOR_CENTER_Z,
-  CONVEYOR_HEIGHT,
   CONVEYOR_MARBLE_Y,
-  CONVEYOR_PERIMETER,
+  CONVEYOR_PATH_HEIGHT,
+  CONVEYOR_PATH_PERIMETER,
+  CONVEYOR_PATH_RADIUS,
+  CONVEYOR_PATH_WIDTH,
   CONVEYOR_SLOT_FRACTION,
-  CONVEYOR_WIDTH,
   GRID_ORIGIN_X,
   GRID_ORIGIN_Z,
   GRID_STEP_X,
@@ -18,12 +19,12 @@ import {
   SORTING_STACK_Z,
 } from './sceneConstants'
 
-// Progress value on the belt's north (upper) straight run, centred at x = 0.
-// This is the point where the funnel throat meets the belt — every accepted
-// marble enters the conveyor here, regardless of its canonical slot index.
+// Progress value on the path's north (upper) straight run, centred at x = 0.
+// This is the point where the funnel throat meets the inner belt lane — every
+// accepted marble enters the conveyor here, regardless of its canonical slot.
 export const CONVEYOR_ENTRY_PROGRESS = (
-  (CONVEYOR_WIDTH - CONVEYOR_HEIGHT) * 1.5 + Math.PI * (CONVEYOR_HEIGHT / 2)
-) / CONVEYOR_PERIMETER
+  (CONVEYOR_PATH_WIDTH - CONVEYOR_PATH_HEIGHT) * 1.5 + Math.PI * CONVEYOR_PATH_RADIUS
+) / CONVEYOR_PATH_PERIMETER
 
 export function gridCellPosition(position: GridPosition): THREE.Vector3 {
   return new THREE.Vector3(
@@ -58,9 +59,9 @@ export function sortingStackBlockOffset(depth: number): THREE.Vector3 {
 
 export function conveyorPositionAt(progress: number): THREE.Vector3 {
   const normalized = ((progress % 1) + 1) % 1
-  const straight = CONVEYOR_WIDTH - CONVEYOR_HEIGHT
-  const radius = CONVEYOR_HEIGHT / 2
-  const perimeter = straight * 2 + Math.PI * CONVEYOR_HEIGHT
+  const straight = CONVEYOR_PATH_WIDTH - CONVEYOR_PATH_HEIGHT
+  const radius = CONVEYOR_PATH_RADIUS
+  const perimeter = CONVEYOR_PATH_PERIMETER
   const distance = normalized * perimeter
   const leftX = -straight / 2
   const rightX = straight / 2
