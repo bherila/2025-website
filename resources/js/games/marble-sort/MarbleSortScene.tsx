@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import {
   type GameState,
   isBoxDisplayedAsHidden,
-  type MarbleBox,
+  isBoxOpenable,
   type MarbleColor,
   SORTING_BLOCK_CAPACITY,
   type SortingStack,
@@ -388,6 +388,7 @@ export function MarbleSortScene({
     const dynamicGroup = new THREE.Group()
     scene.add(dynamicGroup)
     dynamicGroupRef.current = dynamicGroup
+    previousStateRef.current = null
 
     const marbleGroup = new THREE.Group()
     scene.add(marbleGroup)
@@ -549,11 +550,9 @@ export function MarbleSortScene({
       }
 
       for (const box of state.boxes) {
-        const displayBox: MarbleBox = {
-          ...box,
-          hidden: isBoxDisplayedAsHidden(box, state.boxes),
-        }
-        dynamicGroup.add(createBoxMesh(displayBox, colorblindMode))
+        const displayHidden = isBoxDisplayedAsHidden(box, state.boxes)
+        const openable = isBoxOpenable(box, state.boxes)
+        dynamicGroup.add(createBoxMesh(box, colorblindMode, { displayHidden, openable }))
       }
 
       for (const stack of state.sortingStacks) {
@@ -669,7 +668,12 @@ function computeClearedBlockEvents(previous: GameState | null, next: GameState):
 
 function dynamicObjectsSignature(state: GameState): string {
   return [
-    state.boxes.map((box) => `${box.id}:${box.color}:${box.hidden ? 1 : 0}:${isBoxDisplayedAsHidden(box, state.boxes) ? 1 : 0}:${box.position.column}:${box.position.row}`).join(','),
+    state.boxes.map((box) => {
+      const displayHidden = isBoxDisplayedAsHidden(box, state.boxes)
+      const openable = isBoxOpenable(box, state.boxes)
+
+      return `${box.id}:${box.color}:${box.hidden ? 1 : 0}:${displayHidden ? 1 : 0}:${openable ? 1 : 0}:${box.position.column}:${box.position.row}`
+    }).join(','),
     state.chutes.map((chute) => (
       `${chute.id}:${chute.side}:${chute.row}:${chute.remaining}:${chute.queue.map((box) => `${box.color}:${box.hidden ? 1 : 0}`).join('.')}`
     )).join(','),

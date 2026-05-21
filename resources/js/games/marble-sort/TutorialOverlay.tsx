@@ -17,8 +17,10 @@ import { MARBLE_SORT_PROGRESS_STORAGE_KEY, type SavedGameProgress } from './game
 export const MARBLE_SORT_TUTORIAL_STORAGE_KEY = 'bwh.marble-sort.tutorial-seen.v1'
 
 export const MARBLE_SORT_TUTORIAL_STEPS = [
-  'Bust a box to release nine marbles onto the conveyor.',
-  'Marbles sort automatically when they pass a matching 3-slot block.',
+  'Pop only exposed bottom-of-column tiles. Tiles with 3x3 marbles are ready.',
+  'Mystery ? tiles must be revealed before they can be popped.',
+  'Plain solid color tiles are blocked. Clear the tile directly below first.',
+  'Each pop releases nine marbles that sort into matching 3-slot blocks.',
   'Chutes refill rows until their counters reach zero. Clear every box, chute, marble, and block.',
 ] as const
 
@@ -79,7 +81,7 @@ export function TutorialOverlay({ open, onOpenChange }: TutorialOverlayProps): R
             <div>
               <DialogTitle className="text-xl text-slate-950 dark:text-slate-50">Marble Sort</DialogTitle>
               <DialogDescription className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                Learn the loop in three quick steps.
+                Learn the tile rules in five quick steps.
               </DialogDescription>
             </div>
           </div>

@@ -7,7 +7,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 ## Core Loop
 
 1. A level starts with a 3-column by 5-row grid, side chute counters, a conveyor loop, and sorting block stacks.
-2. The player clicks a box in the grid. If the conveyor has room for the box payload, the box busts open and releases nine marbles of its true color.
+2. The player clicks an exposed bottom-of-column box. If the conveyor has room for the box payload, the box busts open and releases nine marbles of its true color.
 3. Released marbles fall from the grid basin into the conveyor.
 4. Conveyor marbles circulate past the sorting gate.
 5. When a marble reaches the gate, it fills the top compatible sorting block if that block has an open slot.
@@ -20,8 +20,11 @@ The page uses `resources/views/layouts/game.blade.php`, matching the Parking Pic
 - The grid is fixed at three columns by five rows for the first version.
 - Each box contains exactly nine marbles.
 - Box color determines which sorting block can consume the released marbles.
-- Some boxes are hidden and render as question-mark blocks until opened. Their true color is still known to the level generator and solver.
-- A clicked box is only opened when the conveyor has enough free capacity for all nine marbles.
+- Some boxes are hidden and render as question-mark blocks until one of their in-grid neighbors is cleared. Their true color is still known to the level generator and solver.
+- A displayed question-mark box cannot be opened.
+- A known-color box can only be opened when it is free: bottom-row boxes are free, and any other box is free only after the box directly below it in the same column has been cleared.
+- Openable known-color boxes render with the 3x3 marble studs. Known-color blocked boxes render as plain solid color tiles until the box below is cleared.
+- A clicked box is only opened when it is revealed, free, and the conveyor has enough free capacity for all nine marbles.
 - Opening a box bursts the crate with a small ring + shard effect, then the nine marbles fall in a two-stage cascade: first vertically from the grid cell into the basin funnel mouth, then forward onto the conveyor belt.
 - Opening a box increments moves and may reduce the level score.
 - Open grid cells are eligible for chute refills.
@@ -85,7 +88,7 @@ Each power-up uses a confirmation dialog before spending inventory.
 
 - Levels are randomly generated from a deterministic seed for the level number.
 - Generated levels must be solvable by a simple solver pass before they are accepted.
-- The solver opens boxes whose colors match currently exposed receptacles, drains the conveyor into matching blocks, and verifies that chute refills plus randomized sorting stacks can finish before the belt fills.
+- The solver opens only revealed free boxes whose colors match currently exposed receptacles, drains the conveyor into matching blocks, and verifies that chute refills plus sorting stack order can finish before the belt fills.
 - Difficulty ramps gradually with level:
   - more colors are introduced,
   - more chute-fed boxes appear,
@@ -116,6 +119,7 @@ Each power-up uses a confirmation dialog before spending inventory.
 - Shared game contracts: `resources/js/games/marble-sort/gameTypes.ts`
 - Progress persistence: `resources/js/games/marble-sort/gameProgress.ts`
 - Progress key: `bwh.marble-sort.progress.v1`
+- Level snapshot key: `bwh.marble-sort.snapshot.v2`
 - Rendering uses Three.js through Vite.
 - The first version uses automatic conveyor sorting rather than manual drag-and-drop.
 

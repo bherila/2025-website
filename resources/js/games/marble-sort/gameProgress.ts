@@ -17,7 +17,7 @@ import {
   type SortingStack,
 } from './gameTypes'
 
-export const MARBLE_SORT_SNAPSHOT_STORAGE_KEY = 'bwh.marble-sort.snapshot.v1'
+export const MARBLE_SORT_SNAPSHOT_STORAGE_KEY = 'bwh.marble-sort.snapshot.v2'
 
 interface SavedLevelSnapshot {
   version: 1

@@ -11,22 +11,31 @@ import { gridCellPosition } from '../sceneGeometry'
 import { createTextSprite } from '../threeUtils'
 import { createMarbleMesh } from './marbleMesh'
 
-export function createBoxMesh(box: MarbleBox, colorblindMode: boolean): THREE.Group {
+interface BoxMeshOptions {
+  displayHidden: boolean
+  openable: boolean
+}
+
+export function createBoxMesh(box: MarbleBox, colorblindMode: boolean, options: BoxMeshOptions): THREE.Group {
   const group = new THREE.Group()
-  group.userData.boxId = box.id
+  if (options.openable) {
+    group.userData.boxId = box.id
+  }
   group.position.copy(gridCellPosition(box.position))
 
-  const color = box.hidden ? '#a4b1c4' : MARBLE_COLORS[box.color].hex
+  const color = options.displayHidden ? '#a4b1c4' : MARBLE_COLORS[box.color].hex
   const body = new THREE.Mesh(
     new RoundedBoxGeometry(0.88, 0.36, 0.74, 4, 0.1),
     new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.02 }),
   )
   body.castShadow = true
   body.receiveShadow = true
-  body.userData.boxId = box.id
+  if (options.openable) {
+    body.userData.boxId = box.id
+  }
   group.add(body)
 
-  if (box.hidden) {
+  if (options.displayHidden) {
     const sprite = createTextSprite('?', { fontSize: 84 })
     sprite.position.set(0, 0.38, 0)
     sprite.scale.set(0.48, 0.24, 1)
@@ -37,12 +46,14 @@ export function createBoxMesh(box: MarbleBox, colorblindMode: boolean): THREE.Gr
     return group
   }
 
-  for (let index = 0; index < BOX_MARBLE_COUNT; index += 1) {
-    const marble = createMarbleMesh(box.color, 0.085)
-    const column = index % 3
-    const row = Math.floor(index / 3)
-    marble.position.set((column - 1) * 0.22, 0.22, (row - 1) * 0.18)
-    group.add(marble)
+  if (options.openable) {
+    for (let index = 0; index < BOX_MARBLE_COUNT; index += 1) {
+      const marble = createMarbleMesh(box.color, 0.085)
+      const column = index % 3
+      const row = Math.floor(index / 3)
+      marble.position.set((column - 1) * 0.22, 0.22, (row - 1) * 0.18)
+      group.add(marble)
+    }
   }
 
   if (colorblindMode) {

@@ -5,8 +5,15 @@ import {
   drainConveyor,
   type GameState,
   generateLevel,
+  GRID_COLUMNS,
+  GRID_ROWS,
   isBoxDisplayedAsHidden,
+  isBoxFree,
+  isBoxOpenable,
+  MARBLE_COLORS,
+  MARBLE_PATTERNS,
   type MarbleBox,
+  type MarbleColor,
   openBox,
   processConveyorTick,
   remainingChuteBoxes,
@@ -14,13 +21,21 @@ import {
   solverCompletesLevel,
 } from '../gameEngine'
 
+const REFERENCE_COLORS = ['blue', 'yellow', 'purple', 'green', 'red', 'orange', 'black', 'white'] as const satisfies readonly MarbleColor[]
+
 describe('marble sort game engine', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
 
+  it('uses the reference color and pattern keys', () => {
+    expect(Object.keys(MARBLE_COLORS)).toEqual(REFERENCE_COLORS)
+    expect(Object.keys(MARBLE_PATTERNS)).toEqual(REFERENCE_COLORS)
+    expect(new Set(Object.values(MARBLE_PATTERNS)).size).toBe(REFERENCE_COLORS.length)
+  })
+
   it('generates deterministic solvable levels', () => {
-    for (let level = 1; level <= 8; level += 1) {
+    for (let level = 1; level <= 30; level += 1) {
       const first = generateLevel(level, 40_000 + level)
       const second = generateLevel(level, 40_000 + level)
 
@@ -31,16 +46,33 @@ describe('marble sort game engine', () => {
     }
   })
 
+  it('generates high-level boards with all eight colors and a solver proof', () => {
+    const state = generateLevel(12, 52_000)
+    const boxColors = new Set([
+      ...state.boxes.map((box) => box.color),
+      ...state.chutes.flatMap((chute) => chute.queue.map((box) => box.color)),
+    ])
+
+    expect(state.activeColors).toHaveLength(8)
+    expect(boxColors).toEqual(new Set(state.activeColors))
+    expect(solverCompletesLevel(state)).toBe(true)
+  })
+
   it('opens a box, releases nine marbles, and refills from a row chute', () => {
-    const state = generateLevel(6, 46_000)
-    const chute = state.chutes.find((candidate) => candidate.remaining > 0)
-    if (!chute) {
-      throw new Error('Expected generated level to include a chute.')
-    }
-    const box = state.boxes.find((candidate) => candidate.position.row === chute.row)
-    if (!box) {
-      throw new Error('Expected a box in the chute row.')
-    }
+    const box = makeBox('box-1', 'blue', 1, GRID_ROWS - 1)
+    const state = createState({
+      activeColors: ['blue', 'red'],
+      boxes: [box],
+      chutes: [{
+        id: 'chute-1',
+        queue: [{ color: 'red', hidden: false }],
+        remaining: 1,
+        row: GRID_ROWS - 1,
+        side: 'left',
+      }],
+      nextBoxSequence: 2,
+      sortingStacks: stacksForOpenColors(['blue', 'red']),
+    })
 
     const next = openBox(state, box.id)
     const replacement = next.boxes.find((candidate) => (
@@ -66,9 +98,9 @@ describe('marble sort game engine', () => {
 
   it('ends the level when falling marbles fill the conveyor', () => {
     const state = generateLevel(1, 41_000)
-    const box = state.boxes[0]
+    const box = findBoxForOpenReceptacle(state)
     if (!box) {
-      throw new Error('Expected generated level to include boxes.')
+      throw new Error('Expected generated level to include an openable box matching an open receptacle.')
     }
 
     const opened = openBox({
@@ -270,7 +302,7 @@ describe('marble sort game engine', () => {
 
   it('hides mystery boxes only when all in-grid orthogonal neighbors are still present', () => {
     const make = (column: number, row: number, hidden: boolean): MarbleBox => ({
-      color: 'pink',
+      color: 'blue',
       hidden,
       id: `b-${column}-${row}`,
       position: { column, row },
@@ -279,8 +311,8 @@ describe('marble sort game engine', () => {
 
     // Interior (1,1) hidden box with all 4 neighbors present should display hidden.
     const fullGrid: MarbleBox[] = []
-    for (let row = 0; row < 5; row += 1) {
-      for (let column = 0; column < 3; column += 1) {
+    for (let row = 0; row < GRID_ROWS; row += 1) {
+      for (let column = 0; column < GRID_COLUMNS; column += 1) {
         fullGrid.push(make(column, row, column === 1 && row === 1))
       }
     }
@@ -310,6 +342,117 @@ describe('marble sort game engine', () => {
     )))).toBe(false)
   })
 
+  it('applies the bottom-of-column free rule', () => {
+    const bottom = makeBox('bottom', 'blue', 1, GRID_ROWS - 1)
+    const above = makeBox('above', 'yellow', 1, GRID_ROWS - 2)
+    const side = makeBox('side', 'green', 0, GRID_ROWS - 2)
+
+    expect(isBoxFree(bottom, [bottom])).toBe(true)
+    expect(isBoxFree(above, [above, bottom])).toBe(false)
+    expect(isBoxFree(above, [above])).toBe(true)
+    expect(isBoxFree(above, [above, bottom, side])).toBe(false)
+    expect(isBoxFree(above, [above, bottom])).toBe(false)
+  })
+
+  it('reports only revealed free boxes as openable', () => {
+    const displayedHidden = makeBox('hidden-bottom', 'blue', 1, GRID_ROWS - 1, true)
+    const displayedHiddenBoxes = [
+      displayedHidden,
+      makeBox('hidden-left', 'yellow', 0, GRID_ROWS - 1),
+      makeBox('hidden-right', 'green', 2, GRID_ROWS - 1),
+      makeBox('hidden-above', 'purple', 1, GRID_ROWS - 2),
+    ]
+    const blocked = makeBox('blocked', 'red', 0, GRID_ROWS - 2)
+    const blocker = makeBox('blocker', 'orange', 0, GRID_ROWS - 1)
+    const free = makeBox('free', 'black', 2, GRID_ROWS - 1)
+    const revealedHidden = makeBox('revealed-hidden', 'white', 1, GRID_ROWS - 2, true)
+
+    expect(isBoxDisplayedAsHidden(displayedHidden, displayedHiddenBoxes)).toBe(true)
+    expect(isBoxOpenable(displayedHidden, displayedHiddenBoxes)).toBe(false)
+    expect(isBoxOpenable(blocked, [blocked, blocker])).toBe(false)
+    expect(isBoxOpenable(free, [free])).toBe(true)
+    expect(isBoxDisplayedAsHidden(revealedHidden, [revealedHidden])).toBe(false)
+    expect(isBoxOpenable(revealedHidden, [revealedHidden])).toBe(true)
+  })
+
+  it('rejects direct openBox calls for displayed hidden and blocked boxes', () => {
+    const hidden = makeBox('hidden', 'blue', 1, GRID_ROWS - 1, true)
+    const hiddenState = createState({
+      boxes: [
+        hidden,
+        makeBox('hidden-left', 'yellow', 0, GRID_ROWS - 1),
+        makeBox('hidden-right', 'green', 2, GRID_ROWS - 1),
+        makeBox('hidden-above', 'purple', 1, GRID_ROWS - 2),
+      ],
+    })
+
+    const hiddenAttempt = openBox(hiddenState, hidden.id)
+
+    expect(hiddenAttempt.moves).toBe(hiddenState.moves)
+    expect(hiddenAttempt.fallingMarbles).toHaveLength(0)
+    expect(hiddenAttempt.boxes).toEqual(hiddenState.boxes)
+    expect(hiddenAttempt.lastMessage).toBe('That mystery tile must be revealed first.')
+
+    const blocked = makeBox('blocked', 'red', 0, GRID_ROWS - 2)
+    const blockedState = createState({
+      boxes: [
+        blocked,
+        makeBox('below', 'orange', 0, GRID_ROWS - 1),
+      ],
+    })
+
+    const blockedAttempt = openBox(blockedState, blocked.id)
+
+    expect(blockedAttempt.moves).toBe(blockedState.moves)
+    expect(blockedAttempt.fallingMarbles).toHaveLength(0)
+    expect(blockedAttempt.boxes).toEqual(blockedState.boxes)
+    expect(blockedAttempt.lastMessage).toBe('Clear the boxes below this tile first.')
+  })
+
+  it('unlocks only the tile directly above a removed lower box', () => {
+    let state = createState({
+      boxes: [
+        makeBox('above-blue', 'purple', 0, GRID_ROWS - 2),
+        makeBox('above-yellow', 'yellow', 1, GRID_ROWS - 2),
+        makeBox('above-green', 'green', 2, GRID_ROWS - 2),
+        makeBox('bottom-blue', 'blue', 0, GRID_ROWS - 1),
+        makeBox('bottom-yellow', 'yellow', 1, GRID_ROWS - 1),
+        makeBox('bottom-green', 'green', 2, GRID_ROWS - 1),
+      ],
+    })
+
+    expect(openableBoxIds(state)).toEqual(['bottom-blue', 'bottom-yellow', 'bottom-green'])
+
+    state = openBox(state, 'bottom-yellow')
+    state = openBox(state, 'bottom-green')
+
+    expect(openableBoxIds(state)).toEqual(['above-yellow', 'above-green', 'bottom-blue'])
+  })
+
+  it('solver refuses to use hidden or blocked boxes even when their colors have receptacles', () => {
+    const hidden = makeBox('hidden', 'blue', 1, GRID_ROWS - 1, true)
+    const hiddenState = createState({
+      boxes: [
+        hidden,
+        makeBox('hidden-left', 'yellow', 0, GRID_ROWS - 1),
+        makeBox('hidden-right', 'green', 2, GRID_ROWS - 1),
+        makeBox('hidden-above', 'purple', 1, GRID_ROWS - 2),
+      ],
+      sortingStacks: stacksForOpenColors(['blue']),
+    })
+    const blocked = makeBox('blocked', 'red', 0, GRID_ROWS - 2)
+    const blockedState = createState({
+      boxes: [
+        blocked,
+        makeBox('below', 'orange', 0, GRID_ROWS - 1),
+      ],
+      sortingStacks: stacksForOpenColors(['red']),
+    })
+
+    expect(solverCompletesLevel(hiddenState)).toBe(false)
+    expect(solverCompletesLevel(blockedState)).toBe(false)
+  })
+
   it('can solve a full level through public engine actions', () => {
     let state = generateLevel(3, 43_000)
 
@@ -321,6 +464,7 @@ describe('marble sort game engine', () => {
         break
       }
 
+      expect(isBoxOpenable(nextBox, state.boxes)).toBe(true)
       state = openBox(state, nextBox.id)
     }
 
@@ -334,14 +478,14 @@ describe('marble sort game engine', () => {
 function findBoxForOpenReceptacle(state: ReturnType<typeof generateLevel>) {
   const openColors = new Set(state.sortingStacks.map((stack) => stack.blocks[0]?.color).filter(Boolean))
 
-  return state.boxes.find((box) => openColors.has(box.color))
+  return state.boxes.find((box) => isBoxOpenable(box, state.boxes) && openColors.has(box.color))
 }
 
 function blockReceptaclesForColor(
   state: ReturnType<typeof generateLevel>,
   blockedColor: ReturnType<typeof generateLevel>['activeColors'][number],
 ): ReturnType<typeof generateLevel>['sortingStacks'] {
-  const replacementColor = state.activeColors.find((color) => color !== blockedColor) ?? 'pink'
+  const replacementColor = state.activeColors.find((color) => color !== blockedColor) ?? 'blue'
 
   return state.sortingStacks.map((stack) => ({
     ...stack,
@@ -363,4 +507,73 @@ function setOpenStackColors(
       color: blockIndex === 0 ? (colorsByIndex[stack.index] ?? block.color) : block.color,
     })),
   }))
+}
+
+function makeBox(
+  id: string,
+  color: MarbleColor,
+  column: number,
+  row: number,
+  hidden = false,
+): MarbleBox {
+  return {
+    color,
+    hidden,
+    id,
+    position: { column, row },
+    source: 'initial',
+  }
+}
+
+function createState(overrides: Partial<GameState> = {}): GameState {
+  return {
+    version: 1,
+    activeColors: [...REFERENCE_COLORS],
+    baseConveyorCapacity: 27,
+    boxes: [],
+    chutes: [],
+    clearedBlocks: 0,
+    completedLevel: null,
+    conveyor: [],
+    conveyorCapacity: 27,
+    conveyorTicks: 0,
+    fallingMarbles: [],
+    gameOver: null,
+    highScore: 0,
+    lastMessage: '',
+    level: 1,
+    levelScore: 1_000,
+    moves: 0,
+    nextBoxSequence: 1,
+    nextMarbleSequence: 1,
+    powerUps: {
+      extraBelt: 0,
+      magnet: 0,
+      shuffle: 0,
+    },
+    powerUpsUsed: 0,
+    seed: 1,
+    sortingStacks: [],
+    totalScore: 0,
+    ...overrides,
+  }
+}
+
+function stacksForOpenColors(colors: readonly MarbleColor[]): GameState['sortingStacks'] {
+  return colors.map((color, index) => ({
+    blocks: Array.from({ length: 3 }, (_, blockIndex) => ({
+      color,
+      id: `stack-${index + 1}-block-${blockIndex + 1}`,
+      slotsFilled: 0,
+    })),
+    color,
+    id: `stack-${index + 1}`,
+    index,
+  }))
+}
+
+function openableBoxIds(state: GameState): string[] {
+  return state.boxes
+    .filter((box) => isBoxOpenable(box, state.boxes))
+    .map((box) => box.id)
 }

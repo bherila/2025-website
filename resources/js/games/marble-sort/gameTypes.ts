@@ -7,14 +7,14 @@ export const SORTING_BLOCK_CAPACITY = 3
 export const BASE_CONVEYOR_CAPACITY = 27
 
 export const MARBLE_COLORS = {
-  pink: { label: 'Pink', hex: '#fb4f78' },
-  yellow: { label: 'Yellow', hex: '#facc15' },
-  cyan: { label: 'Cyan', hex: '#54dce8' },
-  orange: { label: 'Orange', hex: '#fb9b13' },
-  charcoal: { label: 'Charcoal', hex: '#4b4858' },
-  white: { label: 'White', hex: '#e9fbff' },
-  purple: { label: 'Purple', hex: '#a855f7' },
-  clay: { label: 'Clay', hex: '#c96545' },
+  blue: { label: 'blue', hex: '#2563eb' },
+  yellow: { label: 'yellow', hex: '#facc15' },
+  purple: { label: 'purple', hex: '#a855f7' },
+  green: { label: 'green', hex: '#22c55e' },
+  red: { label: 'red', hex: '#fb4f78' },
+  orange: { label: 'orange', hex: '#fb9b13' },
+  black: { label: 'black', hex: '#3f3f46' },
+  white: { label: 'white', hex: '#e9fbff' },
 } as const
 
 export type MarbleColor = keyof typeof MARBLE_COLORS
@@ -33,14 +33,14 @@ export const MARBLE_PATTERN_VALUES = [
 export type MarblePattern = typeof MARBLE_PATTERN_VALUES[number]
 
 export const MARBLE_PATTERNS = {
-  pink: 'dot',
+  blue: 'dot',
   yellow: 'stripe',
-  cyan: 'triangle',
-  orange: 'star',
-  charcoal: 'diamond',
-  white: 'chevron',
-  purple: 'ring',
-  clay: 'crosshatch',
+  purple: 'triangle',
+  green: 'star',
+  red: 'diamond',
+  orange: 'chevron',
+  black: 'ring',
+  white: 'crosshatch',
 } as const satisfies Record<MarbleColor, MarblePattern>
 
 export type ChuteSide = 'left' | 'right'

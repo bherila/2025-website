@@ -21,7 +21,6 @@ import {
   type PowerUpKind,
   type SavedGameProgress,
   SORTING_BLOCK_CAPACITY,
-  type SortingBlock,
   type SortingStack,
 } from './gameTypes'
 import {
@@ -132,7 +131,7 @@ export function generateLevel(
     powerUps?: PowerUpInventory
   } = {},
 ): GameState {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const state = createGeneratedLevel(level, seed + attempt, carry)
     if (solverCompletesLevel(state)) {
       return state
@@ -152,6 +151,20 @@ export function openBox(state: GameState, boxId: string): GameState {
     return {
       ...state,
       lastMessage: 'That square is already clear.',
+    }
+  }
+
+  if (isBoxDisplayedAsHidden(box, state.boxes)) {
+    return {
+      ...state,
+      lastMessage: 'That mystery tile must be revealed first.',
+    }
+  }
+
+  if (!isBoxFree(box, state.boxes)) {
+    return {
+      ...state,
+      lastMessage: 'Clear the boxes below this tile first.',
     }
   }
 
@@ -423,7 +436,10 @@ export function solverCompletesLevel(state: GameState): boolean {
       return false
     }
 
-    const openable = next.boxes.find((box) => hasOpenReceptacleForColor(next, box.color))
+    const openable = next.boxes.find((box) => (
+      isBoxOpenable(box, next.boxes)
+      && hasOpenReceptacleForColor(next, box.color)
+    ))
     if (!openable || availableConveyorSlots(next) < BOX_MARBLE_COUNT) {
       return false
     }
@@ -436,6 +452,25 @@ export function solverCompletesLevel(state: GameState): boolean {
 
 export function availableConveyorSlots(state: GameState): number {
   return Math.max(0, state.conveyorCapacity - state.conveyor.length - state.fallingMarbles.length)
+}
+
+export function isBoxFree(box: MarbleBox, boxes: readonly MarbleBox[]): boolean {
+  if (box.position.row >= GRID_ROWS - 1) {
+    return true
+  }
+
+  return !boxes.some((candidate) => (
+    candidate.position.column === box.position.column
+    && candidate.position.row === box.position.row + 1
+  ))
+}
+
+export function isBoxOpenable(box: MarbleBox, boxes: readonly MarbleBox[]): boolean {
+  if (isBoxDisplayedAsHidden(box, boxes)) {
+    return false
+  }
+
+  return isBoxFree(box, boxes)
 }
 
 export function isBoxDisplayedAsHidden(box: MarbleBox, boxes: readonly MarbleBox[]): boolean {
@@ -495,8 +530,8 @@ function createGeneratedLevel(
   },
 ): GameState {
   const rng = createRng(seed)
-  const activeColorCount = Math.min(3 + Math.floor((level - 1) / 3), 6)
-  const activeColors = shuffle(MARBLE_COLOR_KEYS, rng).slice(0, activeColorCount)
+  const activeColorCount = Math.min(3 + Math.floor((level - 1) / 2), 8)
+  const activeColors = MARBLE_COLOR_KEYS.slice(0, activeColorCount)
   const chutePlans = createChutePlans(level, rng)
   const totalBoxes = GRID_COLUMNS * GRID_ROWS + chutePlans.reduce((total, chute) => total + chute.count, 0)
   const colorQueue = createBalancedColorQueue(activeColors, totalBoxes, rng)
@@ -508,7 +543,7 @@ function createGeneratedLevel(
     for (let column = 0; column < GRID_COLUMNS; column += 1) {
       boxes.push({
         color: colorQueue.shift() ?? rng.pick(activeColors),
-        hidden: rng.next() < hiddenChance,
+        hidden: row < GRID_ROWS - 1 && rng.next() < hiddenChance,
         id: `box-${nextBoxSequence}`,
         position: { column, row },
         source: 'initial',
@@ -520,7 +555,7 @@ function createGeneratedLevel(
   const chutes: Chute[] = chutePlans.map((plan, index) => {
     const queue = Array.from({ length: plan.count }, () => ({
       color: colorQueue.shift() ?? rng.pick(activeColors),
-      hidden: rng.next() < hiddenChance,
+      hidden: false,
     }))
 
     return {
@@ -531,7 +566,7 @@ function createGeneratedLevel(
       side: plan.side,
     }
   })
-  const sortingStacks = createSortingStacks(activeColors, [...boxes, ...chuteBoxesAsGridBoxes(chutes)], rng)
+  const sortingStacks = createSortingStacks(activeColors, boxes, chutes)
   const conveyorCapacity = Math.max(BOX_MARBLE_COUNT, BASE_CONVEYOR_CAPACITY - Math.min(Math.floor(level / 4) * 3, 9))
   const startingPowerUps = sanitizePowerUps(carry.powerUps)
 
@@ -548,7 +583,7 @@ function createGeneratedLevel(
     conveyorTicks: 0,
     fallingMarbles: [],
     highScore: safeProgressNumber(carry.highScore),
-    lastMessage: `Level ${level} is ready. Bust boxes when the conveyor has space.`,
+    lastMessage: `Level ${level} is ready. Pop exposed tiles when the conveyor has space.`,
     gameOver: null,
     level,
     levelScore: 1_000 + level * 120 + totalBoxes * 30,
@@ -579,7 +614,7 @@ function createFallbackLevel(
   for (let row = 0; row < GRID_ROWS; row += 1) {
     for (let column = 0; column < GRID_COLUMNS; column += 1) {
       boxes.push({
-        color: activeColors[(row + column) % activeColors.length] ?? 'pink',
+        color: activeColors[(row + column) % activeColors.length] ?? 'blue',
         hidden: false,
         id: `box-${nextBoxSequence}`,
         position: { column, row },
@@ -612,7 +647,7 @@ function createFallbackLevel(
     powerUps: sanitizePowerUps(carry.powerUps),
     powerUpsUsed: 0,
     seed,
-    sortingStacks: createSortingStacks(activeColors, boxes, createRng(seed + 17)),
+    sortingStacks: createSortingStacks(activeColors, boxes, []),
     totalScore: safeProgressNumber(carry.totalScore),
   }
 }
@@ -639,20 +674,7 @@ function createBalancedColorQueue(colors: MarbleColor[], count: number, rng: Ran
   return shuffle(queue, rng)
 }
 
-function createSortingStacks(colors: MarbleColor[], boxes: MarbleBox[], rng: RandomGenerator): SortingStack[] {
-  const boxCounts = new Map<MarbleColor, number>()
-  for (const box of boxes) {
-    boxCounts.set(box.color, (boxCounts.get(box.color) ?? 0) + 1)
-  }
-
-  const blocks = shuffle(colors.flatMap((color) => (
-    Array.from({ length: (boxCounts.get(color) ?? 0) * (BOX_MARBLE_COUNT / SORTING_BLOCK_CAPACITY) }, (_, blockIndex): SortingBlock => ({
-      color,
-      id: `block-${color}-${blockIndex + 1}`,
-      slotsFilled: 0,
-    }))
-  )), rng)
-
+function createSortingStacks(colors: MarbleColor[], boxes: MarbleBox[], chutes: Chute[]): SortingStack[] {
   const stacks = colors.map((color, index): SortingStack => ({
     blocks: [],
     color,
@@ -660,25 +682,67 @@ function createSortingStacks(colors: MarbleColor[], boxes: MarbleBox[], rng: Ran
     index,
   }))
 
-  blocks.forEach((block, index) => {
-    const stack = stacks[index % stacks.length]
-    stack?.blocks.push({
-      ...block,
-      id: `stack-${(index % stacks.length) + 1}-${block.id}`,
-    })
+  const openSequence = createSolvableOpenSequence(boxes, chutes)
+  openSequence.forEach((color, sequenceIndex) => {
+    for (let blockIndex = 0; blockIndex < BOX_MARBLE_COUNT / SORTING_BLOCK_CAPACITY; blockIndex += 1) {
+      const stack = stacks[blockIndex % stacks.length]
+      stack?.blocks.push({
+        color,
+        id: `stack-${(blockIndex % stacks.length) + 1}-block-${sequenceIndex + 1}-${blockIndex + 1}`,
+        slotsFilled: 0,
+      })
+    }
   })
 
   return stacks
 }
 
-function chuteBoxesAsGridBoxes(chutes: Chute[]): MarbleBox[] {
-  return chutes.flatMap((chute) => chute.queue.map((box, index) => ({
-    color: box.color,
-    hidden: box.hidden,
-    id: `${chute.id}-queued-${index + 1}`,
-    position: { column: chute.side === 'left' ? 0 : GRID_COLUMNS - 1, row: chute.row },
-    source: 'chute' as const,
-  })))
+function createSolvableOpenSequence(initialBoxes: MarbleBox[], initialChutes: Chute[]): MarbleColor[] {
+  const boxes = initialBoxes.map((box) => ({
+    ...box,
+    position: { ...box.position },
+  }))
+  const chutes = initialChutes.map((chute) => ({
+    ...chute,
+    queue: chute.queue.map((box) => ({ ...box })),
+  }))
+  const sequence: MarbleColor[] = []
+  let nextBoxSequence = boxes.length + 1
+  const totalBoxes = boxes.length + chutes.reduce((total, chute) => total + chute.queue.length, 0)
+
+  for (let guard = 0; guard < totalBoxes; guard += 1) {
+    const box = boxes.find((candidate) => isBoxOpenable(candidate, boxes))
+    if (!box) {
+      break
+    }
+
+    sequence.push(box.color)
+    const boxIndex = boxes.findIndex((candidate) => candidate.id === box.id)
+    if (boxIndex >= 0) {
+      boxes.splice(boxIndex, 1)
+    }
+
+    const rowChutes = chutes
+      .filter((chute) => chute.row === box.position.row && chute.remaining > 0 && chute.queue.length > 0)
+      .sort((first, second) => chutePriority(first, box.position.column) - chutePriority(second, box.position.column))
+    const chute = rowChutes[0]
+    const queued = chute?.queue.shift()
+    if (!chute || !queued) {
+      continue
+    }
+
+    chute.remaining = chute.queue.length
+    boxes.push({
+      color: queued.color,
+      hidden: queued.hidden,
+      id: `sequence-box-${nextBoxSequence}`,
+      position: { ...box.position },
+      source: 'chute',
+    })
+    nextBoxSequence += 1
+  }
+
+  return sequence
 }
 
 function refillGridFromChutes(state: GameState, openedBox: MarbleBox): void {
