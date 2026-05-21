@@ -2,12 +2,7 @@ import { useContext, useEffect, useId, useState } from 'react'
 
 import { loadMermaid } from './mermaidLoader'
 import { PreviewRenderRegistryContext } from './PreviewContext'
-
-function sanitizeSvg(svg: string): string {
-  return svg
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject>/gi, '')
-}
+import { sanitizeSvgMarkup } from './sanitizeSvg'
 
 interface MermaidBlockProps {
   code: string
@@ -37,7 +32,7 @@ export function MermaidBlock({ code }: MermaidBlockProps): React.JSX.Element {
         const renderId = `mermaid-${Date.now()}-${renderCounter}`
         const { svg } = await mermaid.render(renderId, code)
         if (!cancelled) {
-          setState({ kind: 'rendered', svg: sanitizeSvg(svg) })
+          setState({ kind: 'rendered', svg: sanitizeSvgMarkup(svg) })
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to render Mermaid diagram'

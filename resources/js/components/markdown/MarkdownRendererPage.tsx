@@ -66,7 +66,12 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
         window.history.replaceState(null, '', `/tools/markdown/s/${response.shortCode}`)
       }
     } catch (error) {
-      const message = typeof error === 'string' ? error : 'Could not save document'
+      let message = 'Could not save document'
+      if (typeof error === 'string' && error.trim() !== '') {
+        message = error
+      } else if (error instanceof Error && error.message !== '') {
+        message = error.message
+      }
       setSaveError(message)
     } finally {
       setSaving(false)

@@ -35,6 +35,21 @@ async function waitForImages(root: HTMLElement | null): Promise<void> {
 export interface PrintDeps {
   print?: () => void
   fonts?: { ready: Promise<unknown> }
+  /** Max time to wait for async preview blocks (Mermaid/Shiki) before printing anyway. */
+  settleTimeoutMs?: number
+}
+
+const DEFAULT_SETTLE_TIMEOUT_MS = 10_000
+
+function waitWithTimeout(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs)
+    const settle = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    promise.then(settle, settle)
+  })
 }
 
 export async function prepareAndPrint(
@@ -42,7 +57,8 @@ export async function prepareAndPrint(
   previewEl: HTMLElement | null,
   deps: PrintDeps = {},
 ): Promise<void> {
-  await registry.waitUntilSettled()
+  const settleTimeoutMs = deps.settleTimeoutMs ?? DEFAULT_SETTLE_TIMEOUT_MS
+  await waitWithTimeout(registry.waitUntilSettled(), settleTimeoutMs)
   await waitForImages(previewEl)
 
   const fonts = deps.fonts ?? (typeof document !== 'undefined' && 'fonts' in document ? (document.fonts as unknown as { ready: Promise<unknown> }) : undefined)

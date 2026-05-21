@@ -48,4 +48,21 @@ describe('prepareAndPrint', () => {
     await completion
     expect(print).toHaveBeenCalledTimes(1)
   })
+
+  it('prints anyway after settleTimeoutMs if a pending block never resolves', async () => {
+    const registry = createPreviewRenderRegistry()
+    registry.resetForRevision('rev')
+    registry.registerPending('hung-mermaid')
+
+    const print = jest.fn()
+    const previewEl = document.createElement('div')
+
+    await prepareAndPrint(registry, previewEl, {
+      print,
+      fonts: { ready: Promise.resolve() },
+      settleTimeoutMs: 5,
+    })
+
+    expect(print).toHaveBeenCalledTimes(1)
+  })
 })
