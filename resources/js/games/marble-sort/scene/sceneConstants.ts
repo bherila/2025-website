@@ -12,10 +12,15 @@ export const MARBLE_DIAMETER = 0.27
 export const MARBLE_RADIUS = MARBLE_DIAMETER / 2
 export const CONVEYOR_PERIMETER = 2 * (CONVEYOR_WIDTH - CONVEYOR_HEIGHT) + Math.PI * CONVEYOR_HEIGHT
 export const CONVEYOR_SLOT_FRACTION = MARBLE_DIAMETER / CONVEYOR_PERIMETER
+// Belt = the top run that marbles ride on. The visible housing is wider in Z,
+// but funnel alignment is to the belt, not the housing.
+export const CONVEYOR_BELT_NORTH_Z = CONVEYOR_CENTER_Z - CONVEYOR_HEIGHT / 2
+export const CONVEYOR_BELT_SOUTH_Z = CONVEYOR_CENTER_Z + CONVEYOR_HEIGHT / 2
 // Funnel starts just south of the grid plate (which ends at Z ≈ 1.19) and
-// descends to meet the conveyor's north edge.
+// overlaps the belt's north edge so the conveyor visually tucks under the V.
 export const BASIN_NORTH_Z = 1.25
-export const BASIN_SOUTH_Z = 2.3
+export const BASIN_CONVEYOR_OVERLAP = 0.08
+export const BASIN_SOUTH_Z = CONVEYOR_BELT_NORTH_Z + BASIN_CONVEYOR_OVERLAP
 export const BASIN_CENTER_Z = (BASIN_NORTH_Z + BASIN_SOUTH_Z) / 2
 export const BASIN_FLOOR_Y = CONVEYOR_MARBLE_Y - 0.02
 export const BASIN_TOP_HALF_WIDTH = 1.5
@@ -24,6 +29,10 @@ export const BASIN_HALF_DEPTH = (BASIN_SOUTH_Z - BASIN_NORTH_Z) / 2
 export const BASIN_HALF_WIDTH = BASIN_TOP_HALF_WIDTH
 export const BASIN_EXIT_X = 0
 export const BASIN_EXIT_Z = BASIN_SOUTH_Z
+// Holding corridor south of the throat where a marble waits when the conveyor
+// is full. world.ts side rails and arrivalGate.ts MUST use the same values.
+export const BASIN_HOLD_LINE_Z = CONVEYOR_CENTER_Z + 0.05
+export const BASIN_HOLD_CORRIDOR_HALF_WIDTH = BASIN_EXIT_HALF_WIDTH + MARBLE_RADIUS + 0.04
 export const SORTING_STACK_Z = 4.45
 export const SORTING_STACK_BLOCK_DEPTH = 0.44
 export const SORTING_STACK_BLOCK_STEP_Z = 0.40

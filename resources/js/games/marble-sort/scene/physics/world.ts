@@ -3,6 +3,8 @@ import * as CANNON from 'cannon-es'
 import {
   BASIN_EXIT_HALF_WIDTH,
   BASIN_FLOOR_Y,
+  BASIN_HOLD_CORRIDOR_HALF_WIDTH,
+  BASIN_HOLD_LINE_Z,
   BASIN_NORTH_Z,
   BASIN_SOUTH_Z,
   BASIN_TOP_HALF_WIDTH,
@@ -17,6 +19,8 @@ export interface PhysicsWorld {
 
 const WALL_HEIGHT = 0.6
 const WALL_THICKNESS = 0.12
+const FLOOR_THICKNESS = 0.2
+const CHANNEL_NORTH_Z = -3.2
 
 export function createPhysicsWorld(): PhysicsWorld {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 6.2) })
@@ -36,10 +40,14 @@ export function createPhysicsWorld(): PhysicsWorld {
 
   const containerBody = new CANNON.Body({ mass: 0, material: wallMaterial })
 
+  // Finite floor box spanning the whole pen from the north channel end down to
+  // the holding line south of the throat. Top surface sits at BASIN_FLOOR_Y -
+  // MARBLE_RADIUS so marbles rest at BASIN_FLOOR_Y, unchanged.
+  const floorDepth = BASIN_HOLD_LINE_Z - CHANNEL_NORTH_Z
+  const floorMidZ = (CHANNEL_NORTH_Z + BASIN_HOLD_LINE_Z) / 2
   containerBody.addShape(
-    new CANNON.Plane(),
-    new CANNON.Vec3(0, BASIN_FLOOR_Y - MARBLE_RADIUS, (BASIN_NORTH_Z + BASIN_SOUTH_Z) / 2),
-    new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2),
+    new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, FLOOR_THICKNESS / 2, floorDepth / 2)),
+    new CANNON.Vec3(0, BASIN_FLOOR_Y - MARBLE_RADIUS - FLOOR_THICKNESS / 2, floorMidZ),
   )
 
   addAngledWall(containerBody, 'left')
@@ -47,9 +55,8 @@ export function createPhysicsWorld(): PhysicsWorld {
 
   // Lateral channel walls north of the basin so marbles dropped anywhere in the
   // grid stay bound in X while they slide south toward the funnel mouth.
-  const channelNorthZ = -3.2
-  const channelLength = BASIN_NORTH_Z - channelNorthZ
-  const channelCenterZ = (channelNorthZ + BASIN_NORTH_Z) / 2
+  const channelLength = BASIN_NORTH_Z - CHANNEL_NORTH_Z
+  const channelCenterZ = (CHANNEL_NORTH_Z + BASIN_NORTH_Z) / 2
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, channelLength / 2)),
     new CANNON.Vec3(-BASIN_TOP_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelCenterZ),
@@ -63,9 +70,11 @@ export function createPhysicsWorld(): PhysicsWorld {
   // so any northward bounce is contained.
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
-    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, channelNorthZ - WALL_THICKNESS / 2),
+    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, CHANNEL_NORTH_Z - WALL_THICKNESS / 2),
   )
 
+  // Outer south side-walls flanking the throat: prevent marbles from squeezing
+  // out east/west of the funnel exit.
   containerBody.addShape(
     new CANNON.Box(new CANNON.Vec3((BASIN_TOP_HALF_WIDTH - BASIN_EXIT_HALF_WIDTH) / 2, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
     new CANNON.Vec3(
@@ -81,6 +90,28 @@ export function createPhysicsWorld(): PhysicsWorld {
       BASIN_FLOOR_Y + WALL_HEIGHT / 2,
       BASIN_SOUTH_Z + WALL_THICKNESS,
     ),
+  )
+
+  // Side rails between the throat and the backstop. They sit at ±the same
+  // half-width that arrivalGate.ts uses for its X check, so a marble waiting
+  // against the backstop is guaranteed to remain reportable.
+  const corridorDepth = BASIN_HOLD_LINE_Z - BASIN_SOUTH_Z
+  const corridorCenterZ = (BASIN_SOUTH_Z + BASIN_HOLD_LINE_Z) / 2
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
+    new CANNON.Vec3(-BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+  )
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS / 2, WALL_HEIGHT / 2, corridorDepth / 2)),
+    new CANNON.Vec3(BASIN_HOLD_CORRIDOR_HALF_WIDTH, BASIN_FLOOR_Y + WALL_HEIGHT / 2, corridorCenterZ),
+  )
+
+  // South backstop wall: stops a marble that crosses the throat when the
+  // conveyor is full. The marble waits here until the throttled arrival retry
+  // in MarbleSortScene succeeds.
+  containerBody.addShape(
+    new CANNON.Box(new CANNON.Vec3(BASIN_TOP_HALF_WIDTH + 0.3, WALL_HEIGHT / 2, WALL_THICKNESS / 2)),
+    new CANNON.Vec3(0, BASIN_FLOOR_Y + WALL_HEIGHT / 2, BASIN_HOLD_LINE_Z),
   )
 
   world.addBody(containerBody)

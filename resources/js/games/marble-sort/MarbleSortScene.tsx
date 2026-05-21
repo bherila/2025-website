@@ -26,6 +26,7 @@ import {
   type StackRiseTween,
   updateStackRiseTween,
 } from './scene/animation/sortingStack'
+import { shouldReportArrival } from './scene/arrivalGate'
 import { createBoxMesh } from './scene/builders/boxMesh'
 import { createChuteMesh } from './scene/builders/chuteMesh'
 import { createConveyorBeltMarkers, createConveyorTrack } from './scene/builders/conveyorTrack'
@@ -51,7 +52,7 @@ import {
   type PhysicsWorld,
   stepPhysics,
 } from './scene/physics/world'
-import { BASIN_SOUTH_Z, SCENE_BACKGROUND } from './scene/sceneConstants'
+import { SCENE_BACKGROUND } from './scene/sceneConstants'
 import { conveyorPositionAt } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
@@ -103,7 +104,8 @@ export function MarbleSortScene({
   const conveyorSlotCountRef = useRef(1)
   const onBoxClickRef = useRef(onBoxClick)
   const onMarbleArrivedRef = useRef(onMarbleArrived)
-  const arrivedReportedRef = useRef<Set<string>>(new Set())
+  const arrivedAttemptsRef = useRef<Map<string, number>>(new Map())
+  const fallingIdsRef = useRef<Set<string>>(new Set())
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
   const previousColorblindModeRef = useRef(colorblindMode)
@@ -122,6 +124,7 @@ export function MarbleSortScene({
   ): void => {
     const entries = marbleEntriesRef.current
     const fallingIds = new Set(nextState.fallingMarbles.map((marble) => marble.id))
+    fallingIdsRef.current = fallingIds
     const conveyorIds = new Set(nextState.conveyor.map((marble) => marble.id))
     const conveyorOffsets = conveyorOffsetsRef.current
     const previousOrder = conveyorOrderRef.current
@@ -217,10 +220,10 @@ export function MarbleSortScene({
       }
     }
 
-    const reported = arrivedReportedRef.current
-    for (const id of Array.from(reported)) {
+    const attempts = arrivedAttemptsRef.current
+    for (const id of Array.from(attempts.keys())) {
       if (!fallingIds.has(id)) {
-        reported.delete(id)
+        attempts.delete(id)
       }
     }
   }
@@ -259,13 +262,14 @@ export function MarbleSortScene({
       }
     }
 
-    const reported = arrivedReportedRef.current
+    const attempts = arrivedAttemptsRef.current
+    const fallingIds = fallingIdsRef.current
     for (const [id, entry] of entries) {
       if (entry.phase === 'falling') {
         bodies?.applyToMesh(id, entry.mesh)
         const body = bodies?.get(id)
-        if (body && !reported.has(id) && body.position.z >= BASIN_SOUTH_Z - 0.05) {
-          reported.add(id)
+        if (body && shouldReportArrival(id, body, fallingIds, attempts, now)) {
+          attempts.set(id, now)
           onMarbleArrivedRef.current(id)
         }
         continue
@@ -346,7 +350,8 @@ export function MarbleSortScene({
     const transitEntries = transitRef.current
     const conveyorOffsets = conveyorOffsetsRef.current
     const slotDropTweens = slotDropTweensRef.current
-    const arrivedReported = arrivedReportedRef.current
+    const arrivedAttempts = arrivedAttemptsRef.current
+    const fallingIds = fallingIdsRef.current
 
     const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
     scene.add(ambient)
@@ -498,7 +503,8 @@ export function MarbleSortScene({
       confettiBurstsRef.current = []
       stackTweensRef.current = []
       slotDropTweens.clear()
-      arrivedReported.clear()
+      arrivedAttempts.clear()
+      fallingIds.clear()
       stackGroups.clear()
     }
   }, [])
