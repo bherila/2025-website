@@ -394,11 +394,11 @@ export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) 
               <div className="divide-y divide-border">
                 {documents.map((document) => (
                   <button
-                     key={document.id}
-                     type="button"
-                     className={`grid w-full gap-2 px-3 py-3 text-left hover:bg-muted/30 lg:grid-cols-[minmax(0,1fr)_140px_140px_110px] lg:items-center ${document.id === selectedDocument?.id ? 'bg-accent/50' : 'bg-background'}`}
-                     onClick={() => selectDocument(document)}
-                   >
+                    key={document.id}
+                    type="button"
+                    className={`grid w-full gap-2 px-3 py-3 text-left hover:bg-muted/30 lg:grid-cols-[minmax(0,1fr)_140px_140px_110px] lg:items-center ${document.id === selectedDocument?.id ? 'bg-accent/50' : 'bg-background'}`}
+                    onClick={() => selectDocument(document)}
+                  >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-foreground">{displayTitle(document)}</span>
                       {document.summary && <span className="mt-1 block line-clamp-1 text-sm text-muted-foreground">{document.summary}</span>}
