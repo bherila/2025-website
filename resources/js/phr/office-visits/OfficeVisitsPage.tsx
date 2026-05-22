@@ -73,7 +73,7 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
   )
 }
 
-export default function OfficeVisitsPage({ patientId }: PhrListPageProps) {
+export default function OfficeVisitsPage({ patientId, onDrill }: PhrListPageProps) {
   const [visits, setVisits] = useState<PhrOfficeVisit[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -108,7 +108,11 @@ export default function OfficeVisitsPage({ patientId }: PhrListPageProps) {
       {!busy && visits.length === 0 && <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">No office visits recorded.</div>}
       <div className="flex flex-col gap-3">
         {visits.map((v) => (
-          <div key={v.id} className="rounded-lg border border-border bg-card p-4">
+          <div
+            key={v.id}
+            className={`rounded-lg border border-border bg-card p-4 ${onDrill ? 'cursor-pointer transition-colors hover:bg-muted/30' : ''}`}
+            onClick={() => onDrill?.({ id: 'office-visit-detail', instance: String(v.id) })}
+          >
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-medium text-card-foreground">{v.visit_date ?? '—'} {v.visit_type ? `· ${v.visit_type}` : ''}</p>

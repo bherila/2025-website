@@ -249,6 +249,10 @@ export const PhrAccessResponseSchema = z.object({
   patient: PhrPatientSchema,
 })
 
+export const PhrAccessGrantDetailResponseSchema = z.object({
+  access: PhrAccessGrantSchema,
+})
+
 export const PhrDocumentSchema = z.object({
   id: z.number(),
   patient_id: z.number(),
@@ -388,6 +392,10 @@ export type PhrOfficeVisit = z.infer<typeof PhrOfficeVisitSchema>
 export const PhrOfficeVisitsResponseSchema = z.object({
   office_visits: z.array(PhrOfficeVisitSchema),
   can_manage: z.boolean().default(false),
+})
+
+export const PhrOfficeVisitResponseSchema = z.object({
+  office_visit: PhrOfficeVisitSchema,
 })
 
 // ── Medications ───────────────────────────────────────────────────────────────

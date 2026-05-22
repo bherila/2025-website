@@ -59,6 +59,7 @@ interface MedicationTableProps {
   onConfirmDelete: (medicationId: number) => Promise<void>
   onEndNow: (medication: PhrMedication) => Promise<void>
   isMutating: (key: string) => boolean
+  onDrill?: PhrListPageProps['onDrill']
 }
 
 const STATUS_CLASS: Record<MedicationStatus, string> = {
@@ -305,6 +306,7 @@ function MedicationTable({
   onConfirmDelete,
   onEndNow,
   isMutating,
+  onDrill,
 }: MedicationTableProps) {
   return (
     <section className="rounded-lg border border-border bg-card">
@@ -337,7 +339,10 @@ function MedicationTable({
 
                 return (
                   <Fragment key={medication.id}>
-                    <tr className="align-top">
+                    <tr
+                      className={`align-top ${onDrill ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+                      onClick={() => onDrill?.({ id: 'medication-detail', instance: String(medication.id) })}
+                    >
                       <td className="px-4 py-3">
                         <div className="font-medium text-card-foreground">{medication.name}</div>
                         {medication.reason_for_use && (
@@ -354,7 +359,7 @@ function MedicationTable({
                         </span>
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                           <div className="flex justify-end gap-2">
                             {medication.status === 'active' && (
                               <Button
@@ -447,7 +452,7 @@ function MedicationTable({
   )
 }
 
-export default function MedicationsPage({ patientId }: PhrListPageProps) {
+export default function MedicationsPage({ patientId, onDrill }: PhrListPageProps) {
   const [statusFilter, setStatusFilter] = useState<MedicationFilter>('all')
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/medications`
@@ -580,6 +585,7 @@ export default function MedicationsPage({ patientId }: PhrListPageProps) {
             onConfirmDelete={async (id) => { await crud.deleteRecord(id) }}
             onEndNow={endNow}
             isMutating={crud.isMutating}
+            onDrill={onDrill}
           />
 
           <section className="rounded-lg border border-border bg-card">
@@ -618,9 +624,10 @@ export default function MedicationsPage({ patientId }: PhrListPageProps) {
                   onStartDelete={crud.startDelete}
                   onCancelDelete={crud.cancelDelete}
                   onConfirmDelete={async (id) => { await crud.deleteRecord(id) }}
-                  onEndNow={endNow}
-                  isMutating={crud.isMutating}
-                />
+                   onEndNow={endNow}
+                   isMutating={crud.isMutating}
+                   onDrill={onDrill}
+                 />
               </div>
             )}
           </section>

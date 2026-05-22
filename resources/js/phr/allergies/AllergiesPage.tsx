@@ -106,6 +106,7 @@ interface AllergiesTableProps {
   onCancelDelete: () => void
   onConfirmDelete: (allergyId: number) => Promise<void>
   isMutating: (key: string) => boolean
+  onDrill?: PhrListPageProps['onDrill']
 }
 
 function allergyFormFromRecord(allergy: PhrAllergy): PhrAllergyFormData {
@@ -313,6 +314,7 @@ function AllergiesTable({
   onCancelDelete,
   onConfirmDelete,
   isMutating,
+  onDrill,
 }: AllergiesTableProps) {
   return (
     <section className="rounded-lg border border-border bg-card">
@@ -343,7 +345,10 @@ function AllergiesTable({
 
                 return (
                   <Fragment key={allergy.id}>
-                    <tr className={`align-top ${rowClass}`}>
+                    <tr
+                      className={`align-top ${rowClass} ${onDrill ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+                      onClick={() => onDrill?.({ id: 'allergy-detail', instance: String(allergy.id) })}
+                    >
                       <td className="px-4 py-3">
                         <div className="font-medium text-card-foreground">{allergy.substance}</div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -375,7 +380,7 @@ function AllergiesTable({
                         </div>
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                           <div className="flex justify-end gap-2">
                             <Button
                               type="button"
@@ -449,7 +454,7 @@ function AllergiesTable({
   )
 }
 
-export default function AllergiesPage({ patientId }: PhrListPageProps) {
+export default function AllergiesPage({ patientId, onDrill }: PhrListPageProps) {
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/allergies`
   const crud = useClinicalCrud<PhrAllergy, PhrAllergyFormData>({
@@ -554,6 +559,7 @@ export default function AllergiesPage({ patientId }: PhrListPageProps) {
             onCancelDelete={crud.cancelDelete}
             onConfirmDelete={async (allergyId) => { await crud.deleteRecord(allergyId) }}
             isMutating={crud.isMutating}
+            onDrill={onDrill}
           />
 
           <section className="rounded-lg border border-border bg-card">
@@ -589,9 +595,10 @@ export default function AllergiesPage({ patientId }: PhrListPageProps) {
                   onSaveEdit={saveAllergy}
                   onStartDelete={crud.startDelete}
                   onCancelDelete={crud.cancelDelete}
-                  onConfirmDelete={async (allergyId) => { await crud.deleteRecord(allergyId) }}
-                  isMutating={crud.isMutating}
-                />
+                   onConfirmDelete={async (allergyId) => { await crud.deleteRecord(allergyId) }}
+                   isMutating={crud.isMutating}
+                   onDrill={onDrill}
+                 />
               </div>
             )}
           </section>
