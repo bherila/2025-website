@@ -69,6 +69,11 @@ const filingStatuses: { value: FilingStatus; label: string }[] = [
   { value: 'qualifying_surviving_spouse', label: 'Qualifying surviving spouse' },
 ]
 
+/** Placeholder — RothConversion renders form sections via its own logic, not MillerRegistryShell. */
+export function notRenderedViaMillerShell(): never {
+  throw new Error('RothConversion does not render via MillerRegistryShell')
+}
+
 export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
   {
     id: 'people',
@@ -77,7 +82,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Birth years, projection window, and survivor transition.',
     icon: Users,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Birth years, projection window, and survivor transition.', icon: Users },
   },
   {
@@ -87,7 +92,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Recurring income, retirement ages, and claiming ages.',
     icon: Landmark,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Recurring income, retirement ages, and claiming ages.', icon: Landmark },
   },
   {
@@ -97,7 +102,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Annual spending needs and Schedule A expense inputs.',
     icon: Receipt,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Annual spending needs and Schedule A expense inputs.', icon: Receipt },
   },
   {
@@ -107,7 +112,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Current account balances used by the projection.',
     icon: PiggyBank,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Current account balances used by the projection.', icon: PiggyBank },
   },
   {
@@ -117,7 +122,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Conversion mode, bracket target, and harvesting rules.',
     icon: Calculator,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Conversion mode, bracket target, and harvesting rules.', icon: Calculator },
   },
   {
@@ -127,7 +132,7 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     description: 'Growth, inflation, state tax, and IRMAA lookback assumptions.',
     icon: SlidersHorizontal,
     presentation: 'column',
-    component: () => <></>,
+    component: notRenderedViaMillerShell,
     meta: { description: 'Growth, inflation, state tax, and IRMAA lookback assumptions.', icon: SlidersHorizontal },
   },
 ]
