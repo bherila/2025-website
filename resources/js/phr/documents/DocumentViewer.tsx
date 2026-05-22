@@ -40,18 +40,26 @@ export default function DocumentViewer({ patientId, recordId }: DocumentViewerPr
           headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           credentials: 'include',
         })
+
+        if (response.status === 404) {
+          if (!cancelled) {
+            setDocument(null)
+            setNotFound(true)
+          }
+          return
+        }
+
         const raw = await response.text()
-        const payload = raw === '' ? null : JSON.parse(raw)
+        let payload: unknown = null
+        if (raw !== '') {
+          try {
+            payload = JSON.parse(raw)
+          } catch {
+            payload = raw
+          }
+        }
 
         if (!response.ok) {
-          if (response.status === 404) {
-            if (!cancelled) {
-              setDocument(null)
-              setNotFound(true)
-            }
-            return
-          }
-
           const message = (payload && typeof payload === 'object' && 'message' in payload)
             ? String((payload as { message?: string }).message)
             : response.statusText
