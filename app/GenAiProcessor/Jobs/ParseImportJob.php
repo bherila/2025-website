@@ -26,9 +26,11 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ParseImportJob implements ShouldQueue
 {
@@ -89,16 +91,38 @@ class ParseImportJob implements ShouldQueue
 
         $fileStream = null;
         try {
-            // Stream file from S3 to avoid buffering large uploads fully into memory
-            $fileStream = Storage::disk('s3')->readStream($job->s3_path);
-            if (! $fileStream) {
-                $job->markFailed('File not found in S3');
+            $context = $job->getContextArray();
 
-                return;
+            if ($job->job_type === 'class_action_email') {
+                $pastedText = trim((string) ($context['pasted_text'] ?? ''));
+                if ($pastedText === '') {
+                    $job->markFailed('Pasted input text is empty.');
+
+                    return;
+                }
+
+                $fileStream = fopen('php://temp', 'r+');
+                if (! is_resource($fileStream)) {
+                    $job->markFailed('Unable to allocate memory stream for pasted input.');
+
+                    return;
+                }
+                fwrite($fileStream, $pastedText);
+                rewind($fileStream);
+                $fileSize = strlen($pastedText);
+            } else {
+                // Stream file from S3 to avoid buffering large uploads fully into memory
+                $fileStream = Storage::disk('s3')->readStream($job->s3_path);
+                if (! $fileStream) {
+                    $job->markFailed('File not found in S3');
+
+                    return;
+                }
+
+                $fileSize = (int) (Storage::disk('s3')->size($job->s3_path) ?: 0);
             }
 
             // Guard against oversized inline-fallback payloads for providers without a File API.
-            $fileSize = (int) (Storage::disk('s3')->size($job->s3_path) ?: 0);
             if ($fileSize > 0 && ! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
                 $job->markFailed('File exceeds the size limit for the configured AI provider.');
 
@@ -106,7 +130,6 @@ class ParseImportJob implements ShouldQueue
             }
 
             // Build prompt
-            $context = $job->getContextArray();
             $prompt = $dispatcher->buildPrompt($job->job_type, $context);
 
             // Claim quota right before the AI call to avoid double-counting
@@ -135,7 +158,7 @@ class ParseImportJob implements ShouldQueue
                 $dispatcher,
                 $job->job_type,
                 $fileStream,
-                $job->mime_type ?? 'application/pdf',
+                $job->mime_type ?? ($job->job_type === 'class_action_email' ? 'text/plain' : 'application/pdf'),
                 $prompt
             );
 
@@ -314,6 +337,9 @@ class ParseImportJob implements ShouldQueue
             case 'finance_transactions':
                 $this->createFinanceResults($job, $data);
                 break;
+            case 'class_action_email':
+                $this->createClassActionEmailResults($job, $data);
+                break;
             case 'finance_payslip':
                 $this->createPayslipResults($job, $data);
                 break;
@@ -378,6 +404,215 @@ class ParseImportJob implements ShouldQueue
                 'status' => 'pending_review',
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function createClassActionEmailResults(GenAiImportJob $job, array $data): void
+    {
+        $result = $this->sanitizeClassActionEmailResult($data);
+
+        $classActionUrl = is_string($result['class_action_url'] ?? null)
+            ? trim((string) $result['class_action_url'])
+            : '';
+
+        if ($classActionUrl !== '') {
+            $referenceText = $this->fetchAllowedClassActionReferenceText($classActionUrl);
+            if ($referenceText !== null) {
+                $result['reference_page_text'] = $referenceText;
+            }
+        }
+
+        GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode($result),
+            'status' => 'pending_review',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function sanitizeClassActionEmailResult(array $data): array
+    {
+        $result = [
+            'name' => $this->sanitizeString($data['name'] ?? null, 255),
+            'claim_id' => $this->sanitizeString($data['claim_id'] ?? null, 128),
+            'pin' => $this->sanitizeString($data['pin'] ?? null, 128),
+            'administrator' => $this->sanitizeString($data['administrator'] ?? null, 255),
+            'defendant' => $this->sanitizeString($data['defendant'] ?? null, 255),
+            'class_action_url' => $this->sanitizeUrl($data['class_action_url'] ?? null),
+            'notification_received_on' => $this->sanitizeDate($data['notification_received_on'] ?? null),
+            'claim_submitted_on' => $this->sanitizeDate($data['claim_submitted_on'] ?? null),
+            'claim_deadline' => $this->sanitizeDate($data['claim_deadline'] ?? null),
+            'final_approval_hearing_on' => $this->sanitizeDate($data['final_approval_hearing_on'] ?? null),
+            'payment_election_submitted_on' => $this->sanitizeDate($data['payment_election_submitted_on'] ?? null),
+            'expected_payment_on' => $this->sanitizeDate($data['expected_payment_on'] ?? null),
+            'expected_payment_amount' => $this->sanitizeMoney($data['expected_payment_amount'] ?? null),
+            'confidence' => $this->sanitizeConfidence($data['confidence'] ?? null),
+            'notes' => $this->sanitizeString($data['notes'] ?? null, 5000),
+        ];
+
+        return $result;
+    }
+
+    private function sanitizeString(mixed $value, int $maxLength): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        return Str::limit($trimmed, $maxLength, '');
+    }
+
+    private function sanitizeDate(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed) === 1 ? $trimmed : null;
+    }
+
+    private function sanitizeUrl(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '' || filter_var($trimmed, FILTER_VALIDATE_URL) === false) {
+            return null;
+        }
+
+        return Str::limit($trimmed, 2048, '');
+    }
+
+    private function sanitizeMoney(mixed $value): ?float
+    {
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        $amount = (float) $value;
+
+        return $amount >= 0 ? round($amount, 2) : null;
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function sanitizeConfidence(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $allowedFields = [
+            'name',
+            'claim_id',
+            'pin',
+            'administrator',
+            'defendant',
+            'class_action_url',
+            'notification_received_on',
+            'claim_submitted_on',
+            'claim_deadline',
+            'final_approval_hearing_on',
+            'payment_election_submitted_on',
+            'expected_payment_on',
+            'expected_payment_amount',
+            'notes',
+        ];
+
+        $confidence = [];
+        foreach ($value as $key => $score) {
+            if (! in_array($key, $allowedFields, true) || ! is_numeric($score)) {
+                continue;
+            }
+
+            $numeric = (float) $score;
+            if ($numeric < 0 || $numeric > 1) {
+                continue;
+            }
+
+            $confidence[$key] = round($numeric, 4);
+        }
+
+        return $confidence;
+    }
+
+    private function fetchAllowedClassActionReferenceText(string $url): ?string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (! is_string($host) || ! $this->isAllowedSettlementHost($host)) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(20)->get($url);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $contentType = strtolower($response->header('Content-Type'));
+        if (! str_contains($contentType, 'text/html') && ! str_contains($contentType, 'application/xhtml+xml')) {
+            return null;
+        }
+
+        $html = $response->body();
+        if (strlen($html) > 1_000_000) {
+            return null;
+        }
+
+        $dom = new \DOMDocument;
+        $loaded = @$dom->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET);
+        if (! $loaded) {
+            return null;
+        }
+
+        $text = trim(preg_replace('/\s+/', ' ', $dom->textContent ?? ''));
+        if ($text === '') {
+            return null;
+        }
+
+        return Str::limit($text, 8000, '');
+    }
+
+    private function isAllowedSettlementHost(string $host): bool
+    {
+        $normalizedHost = strtolower($host);
+        $allowedHosts = [
+            'epiqclassaction.com',
+            'angeiongroup.com',
+            'jndla.com',
+            'krollsettlementadministration.com',
+            'abdataclassaction.com',
+            'rustconsulting.com',
+            'digitaldisbursements.com',
+        ];
+
+        foreach ($allowedHosts as $allowedHost) {
+            if ($normalizedHost === $allowedHost || str_ends_with($normalizedHost, '.'.$allowedHost)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

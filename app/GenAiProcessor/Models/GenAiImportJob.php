@@ -16,6 +16,7 @@ class GenAiImportJob extends Model
 
     public const VALID_JOB_TYPES = [
         'finance_transactions',
+        'class_action_email',
         'finance_payslip',
         'utility_bill',
         'document_extract',

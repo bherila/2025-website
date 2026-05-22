@@ -183,6 +183,72 @@ class GenAiImportController extends Controller
     }
 
     /**
+     * Create a new import job from pasted text (no S3 upload).
+     * POST /api/genai/import/paste
+     */
+    public function paste(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'text' => 'required|string|max:200000',
+            'job_type' => 'required|string|in:class_action_email',
+            'context_json' => 'nullable|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = Auth::user();
+        $text = trim((string) $request->input('text'));
+        $jobType = (string) $request->input('job_type');
+        /** @var array<string, mixed> $context */
+        $context = $request->input('context_json', []);
+        $context['pasted_text'] = $text;
+
+        try {
+            $this->dispatcher->validateContext($jobType, $context);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $fileHash = hash('sha256', $text);
+
+        $existing = GenAiImportJob::query()
+            ->where('file_hash', $fileHash)
+            ->where('user_id', $user->id)
+            ->where('job_type', $jobType)
+            ->whereIn('status', ['parsed', 'imported'])
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'job_id' => $existing->id,
+                'status' => $existing->status,
+                'deduplicated' => true,
+            ]);
+        }
+
+        $job = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => $jobType,
+            'file_hash' => $fileHash,
+            'original_filename' => 'pasted-import.txt',
+            's3_path' => 'inline://paste/'.Str::uuid(),
+            'mime_type' => 'text/plain',
+            'file_size_bytes' => strlen($text),
+            'context_json' => json_encode($context),
+            'status' => 'pending',
+        ]);
+
+        ParseImportJob::dispatch($job->id);
+
+        return response()->json([
+            'job_id' => $job->id,
+            'status' => $job->status,
+        ], 201);
+    }
+
+    /**
      * List the current user's import jobs.
      * GET /api/genai/import/jobs
      */

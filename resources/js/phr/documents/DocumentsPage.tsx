@@ -101,7 +101,7 @@ const emptyFilters: FilterState = {
   date_to: '',
 }
 
-export default function DocumentsPage({ patientId }: PhrListPageProps) {
+export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [documents, setDocuments] = useState<PhrDocument[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -260,6 +260,11 @@ export default function DocumentsPage({ patientId }: PhrListPageProps) {
     setUploadFile(event.target.files?.[0] ?? null)
   }
 
+  function selectDocument(document: PhrDocument): void {
+    setSelectedId(document.id)
+    onDrill?.({ id: 'document-viewer', instance: String(document.id) })
+  }
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -372,7 +377,7 @@ export default function DocumentsPage({ patientId }: PhrListPageProps) {
                   key={document.id}
                   document={document}
                   selected={document.id === selectedDocument?.id}
-                  onSelect={() => setSelectedId(document.id)}
+                  onSelect={() => selectDocument(document)}
                 />
               ))}
             </div>
@@ -392,7 +397,7 @@ export default function DocumentsPage({ patientId }: PhrListPageProps) {
                     key={document.id}
                     type="button"
                     className={`grid w-full gap-2 px-3 py-3 text-left hover:bg-muted/30 lg:grid-cols-[minmax(0,1fr)_140px_140px_110px] lg:items-center ${document.id === selectedDocument?.id ? 'bg-accent/50' : 'bg-background'}`}
-                    onClick={() => setSelectedId(document.id)}
+                    onClick={() => selectDocument(document)}
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-foreground">{displayTitle(document)}</span>

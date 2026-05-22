@@ -184,6 +184,42 @@ export const PhrLabResultResponseSchema = z.object({
   lab_result: PhrLabResultSchema,
 })
 
+export const PhrLabPanelResultRowSchema = z.object({
+  id: z.number(),
+  analyte: nullableString,
+  value: nullableString,
+  value_numeric: nullableString,
+  unit: nullableString,
+  range_min: nullableString,
+  range_max: nullableString,
+  range_unit: nullableString,
+  reference_range_text: nullableString,
+  abnormal_flag: nullableString,
+  result_datetime: nullableString,
+  collection_datetime: nullableString,
+  trend: z.enum(['up', 'down', 'flat']).nullable(),
+})
+
+export type PhrLabPanelResultRow = z.infer<typeof PhrLabPanelResultRowSchema>
+
+export const PhrLabPanelSchema = z.object({
+  id: z.number(),
+  panel_name: nullableString,
+  collection_datetime: nullableString,
+  ordering_provider: nullableString,
+  resulting_lab: nullableString,
+  source: nullableString,
+  source_document_id: z.number().nullable(),
+  source_document_url: nullableString,
+  rows: z.array(PhrLabPanelResultRowSchema),
+})
+
+export type PhrLabPanel = z.infer<typeof PhrLabPanelSchema>
+
+export const PhrLabPanelDetailResponseSchema = z.object({
+  panel: PhrLabPanelSchema,
+})
+
 export const PhrVitalsResponseSchema = z.object({
   vitals: z.array(PhrVitalSchema),
   can_manage: z.boolean().default(false),
@@ -193,8 +229,67 @@ export const PhrVitalResponseSchema = z.object({
   vital: PhrVitalSchema,
 })
 
+export const PhrVitalReadingDetailResponseSchema = z.object({
+  vital: PhrVitalSchema,
+})
+
+export const PhrVitalTrendPointSchema = z.object({
+  reading_id: z.number(),
+  recorded_at: nullableString,
+  value: z.number(),
+})
+export type PhrVitalTrendPoint = z.infer<typeof PhrVitalTrendPointSchema>
+
+export const PhrVitalTrendResponseSchema = z.object({
+  metric_key: z.string().trim().min(1),
+  metric_label: z.string().trim().min(1),
+  unit: nullableString,
+  points: z.array(PhrVitalTrendPointSchema),
+})
+export type PhrVitalTrendResponse = z.infer<typeof PhrVitalTrendResponseSchema>
+
 export const PhrDicomStudiesResponseSchema = z.object({
   studies: z.array(PhrDicomStudySchema),
+})
+
+export const PhrDicomStudyResponseSchema = z.object({
+  study: PhrDicomStudySchema,
+})
+
+export const PhrDicomViewerInstanceSchema = z.object({
+  metadata: z.record(z.string(), z.unknown()),
+  url: z.string(),
+})
+
+export const PhrDicomViewerSeriesSchema = z.object({
+  SeriesInstanceUID: z.string(),
+  SeriesNumber: z.number().nullable(),
+  Modality: z.string(),
+  SeriesDescription: z.string(),
+  instances: z.array(PhrDicomViewerInstanceSchema),
+})
+
+export type PhrDicomViewerSeries = z.infer<typeof PhrDicomViewerSeriesSchema>
+
+export const PhrDicomViewerStudySchema = z.object({
+  StudyInstanceUID: z.string(),
+  StudyDate: z.string(),
+  StudyTime: z.string(),
+  PatientName: z.string(),
+  PatientID: z.string(),
+  AccessionNumber: z.string(),
+  PatientAge: z.string(),
+  PatientSex: z.string(),
+  StudyDescription: z.string(),
+  series: z.array(PhrDicomViewerSeriesSchema),
+  NumInstances: z.number(),
+  Modalities: z.string(),
+})
+
+export type PhrDicomViewerStudy = z.infer<typeof PhrDicomViewerStudySchema>
+
+export const PhrDicomViewerResponseSchema = z.object({
+  studies: z.array(PhrDicomViewerStudySchema),
 })
 
 export const PhrDicomUploadResponseSchema = z.object({
@@ -286,6 +381,10 @@ export type PhrDocument = z.infer<typeof PhrDocumentSchema>
 export const PhrDocumentsResponseSchema = z.object({
   documents: z.array(PhrDocumentSchema),
   can_manage: z.boolean().default(false),
+})
+
+export const PhrDocumentResponseSchema = z.object({
+  document: PhrDocumentSchema,
 })
 
 export const PhrDocumentMetadataFormSchema = z.object({

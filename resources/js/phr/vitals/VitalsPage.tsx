@@ -14,6 +14,7 @@ import {
   PhrVitalResponseSchema,
   PhrVitalsResponseSchema,
 } from '@/phr/types'
+import { metricCandidates } from '@/phr/vitals/metrics'
 
 interface LabeledInputProps extends Omit<ComponentProps<typeof Input>, 'onChange'> {
   label: string
@@ -137,7 +138,7 @@ function displayValue(v: PhrVital): string {
   return '—'
 }
 
-export default function VitalsPage({ patientId }: PhrListPageProps) {
+export default function VitalsPage({ patientId, onDrill }: PhrListPageProps) {
   const [vitals, setVitals] = useState<PhrVital[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -247,18 +248,47 @@ export default function VitalsPage({ patientId }: PhrListPageProps) {
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Unit</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Body Site</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Trend</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((v) => (
-                <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                  <td className="px-3 py-2 font-medium text-foreground">{v.vital_name ?? '—'}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-foreground">{displayValue(v)}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{v.unit ?? (v.secondary_unit ?? '—')}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{v.body_site ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{vitalDate(v) || '—'}</td>
-                </tr>
-              ))}
+              {filtered.map((v) => {
+                const candidates = metricCandidates(v)
+
+                return (
+                  <tr
+                    key={v.id}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/20"
+                    onClick={() => onDrill?.({ id: 'vitals-reading-detail', instance: String(v.id) })}
+                  >
+                    <td className="px-3 py-2 font-medium text-foreground">{v.vital_name ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-foreground">{displayValue(v)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{v.unit ?? (v.secondary_unit ?? '—')}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{v.body_site ?? '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{vitalDate(v) || '—'}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {candidates.length === 0 && <span className="text-muted-foreground">—</span>}
+                        {candidates.map((candidate) => (
+                          <Button
+                            key={`${v.id}-${candidate.key}`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onDrill?.({ id: 'vitals-trend', instance: candidate.key })
+                            }}
+                          >
+                            {candidate.label} trend
+                          </Button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

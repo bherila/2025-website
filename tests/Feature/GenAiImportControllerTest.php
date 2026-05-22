@@ -112,6 +112,50 @@ class GenAiImportControllerTest extends TestCase
     }
 
     // ================================================================
+    // paste tests
+    // ================================================================
+
+    public function test_paste_requires_authentication(): void
+    {
+        $this->postJson('/api/genai/import/paste', [])->assertUnauthorized();
+    }
+
+    public function test_paste_creates_class_action_email_job(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->actingAs($user)->postJson('/api/genai/import/paste', [
+            'text' => 'Unique ID: 3GHJCKGF, PIN: JRXCXP',
+            'job_type' => 'class_action_email',
+            'context_json' => ['reference_page_text' => 'Settlement details'],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure(['job_id', 'status'])
+            ->assertJsonPath('status', 'pending');
+
+        $jobId = (int) $response->json('job_id');
+        $job = GenAiImportJob::findOrFail($jobId);
+
+        $this->assertSame('class_action_email', $job->job_type);
+        $this->assertSame('text/plain', $job->mime_type);
+        $this->assertStringStartsWith('inline://paste/', $job->s3_path);
+        $this->assertNotNull($job->context_json);
+        $this->assertStringContainsString('"pasted_text":"Unique ID: 3GHJCKGF, PIN: JRXCXP"', $job->context_json);
+    }
+
+    public function test_paste_validates_job_type_and_text(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->postJson('/api/genai/import/paste', [
+            'text' => '',
+            'job_type' => 'finance_transactions',
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['text', 'job_type']);
+    }
+
+    // ================================================================
     // createJob tests
     // ================================================================
 

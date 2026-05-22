@@ -286,10 +286,12 @@ Route::middleware(['web', 'auth'])
         Route::get('/patients/{patient}/lab-results', [PHRLabResultController::class, 'index'])->whereNumber('patient')->name('patients.lab-results.index');
         Route::post('/patients/{patient}/lab-results', [PHRLabResultController::class, 'store'])->whereNumber('patient')->name('patients.lab-results.store');
         Route::get('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'show'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.show');
+        Route::get('/patients/{patient}/labs/{labResult}', [PHRLabResultController::class, 'showPanel'])->whereNumber(['patient', 'labResult'])->name('patients.labs.show');
         Route::patch('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'update'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.update');
         Route::delete('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'destroy'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.destroy');
         Route::get('/patients/{patient}/vitals', [PHRVitalController::class, 'index'])->whereNumber('patient')->name('patients.vitals.index');
         Route::post('/patients/{patient}/vitals', [PHRVitalController::class, 'store'])->whereNumber('patient')->name('patients.vitals.store');
+        Route::get('/patients/{patient}/vitals/trend/{metricKey}', [PHRVitalController::class, 'trend'])->whereNumber('patient')->name('patients.vitals.trend');
         Route::get('/patients/{patient}/vitals/{vital}', [PHRVitalController::class, 'show'])->whereNumber(['patient', 'vital'])->name('patients.vitals.show');
         Route::patch('/patients/{patient}/vitals/{vital}', [PHRVitalController::class, 'update'])->whereNumber(['patient', 'vital'])->name('patients.vitals.update');
         Route::delete('/patients/{patient}/vitals/{vital}', [PHRVitalController::class, 'destroy'])->whereNumber(['patient', 'vital'])->name('patients.vitals.destroy');
@@ -326,6 +328,7 @@ Route::middleware(['web', 'auth'])
         Route::patch('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'update'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.update');
         Route::delete('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'destroy'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.destroy');
         Route::get('/patients/{patient}/dicom/studies', [PHRDicomStudyController::class, 'index'])->whereNumber('patient')->name('patients.dicom.studies.index');
+        Route::get('/patients/{patient}/dicom/studies/{study}', [PHRDicomStudyController::class, 'show'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.show');
         Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'open'])->whereNumber('patient')->name('patients.dicom.uploads.open');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-url', [PHRDicomUploadController::class, 'requestUploadUrl'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-url');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-urls', [PHRDicomUploadController::class, 'requestUploadUrls'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-urls');
@@ -551,6 +554,7 @@ Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);
 Route::middleware(['web', 'auth'])->post('/genai/import/jobs', [GenAiImportController::class, 'createJob']);
+Route::middleware(['web', 'auth'])->post('/genai/import/paste', [GenAiImportController::class, 'paste']);
 Route::middleware(['web', 'auth'])->get('/genai/import/jobs', [GenAiImportController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'show']);
 Route::middleware(['web', 'auth'])->post('/genai/import/jobs/{job_id}/retry', [GenAiImportController::class, 'retry']);

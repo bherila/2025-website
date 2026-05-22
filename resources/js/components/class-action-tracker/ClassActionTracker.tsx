@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -47,6 +48,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
+import { useGenAiJobPolling } from '@/genai-processor/useGenAiJobPolling'
 
 interface PaymentTransaction {
   t_id: number
@@ -61,10 +63,20 @@ interface PaymentTransaction {
 interface ClassActionClaim {
   id: number
   name: string
+  claim_id: string | null
+  pin: string | null
+  administrator: string | null
+  defendant: string | null
   notification_received_on: string | null
   notification_email_copy: string | null
   class_action_url: string | null
   payment_election_submitted_on: string | null
+  claim_submitted_on: string | null
+  claim_deadline: string | null
+  final_approval_hearing_on: string | null
+  expected_payment_amount: number | null
+  expected_payment_on: string | null
+  actual_payment_amount: number | null
   payment_received: boolean
   payment_received_on: string | null
   payment_fin_transaction_id: number | null
@@ -84,12 +96,29 @@ const optionalUrlSchema = z
   .trim()
   .refine((value) => value === '' || isValidUrl(value), 'Enter a valid URL.')
 
+const moneyInputPattern = /^\$?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/
+
+const optionalMoneySchema = z
+  .string()
+  .trim()
+  .refine((value) => value === '' || isValidMoney(value), 'Use a valid amount.')
+
 const classActionClaimFormSchema = z.object({
   name: z.string().trim().min(1, 'Class action name is required.').max(255, 'Class action name is too long.'),
+  claim_id: z.string().trim().max(128, 'Claim ID is too long.'),
+  pin: z.string().trim().max(128, 'PIN is too long.'),
+  administrator: z.string().trim().max(255, 'Administrator is too long.'),
+  defendant: z.string().trim().max(255, 'Defendant is too long.'),
   notification_received_on: optionalDateSchema,
   notification_email_copy: z.string(),
   class_action_url: optionalUrlSchema,
   payment_election_submitted_on: optionalDateSchema,
+  claim_submitted_on: optionalDateSchema,
+  claim_deadline: optionalDateSchema,
+  final_approval_hearing_on: optionalDateSchema,
+  expected_payment_amount: optionalMoneySchema,
+  expected_payment_on: optionalDateSchema,
+  actual_payment_amount: optionalMoneySchema,
   payment_received: z.boolean(),
   payment_received_on: optionalDateSchema,
   payment_fin_transaction_id: z
@@ -101,14 +130,42 @@ const classActionClaimFormSchema = z.object({
 
 type ClassActionClaimFormValues = z.infer<typeof classActionClaimFormSchema>
 type FieldErrors = Partial<Record<keyof ClassActionClaimFormValues, string>>
-type StatusFilter = 'all' | 'needs-election' | 'awaiting-payment' | 'paid'
+type StatusFilter = 'all' | 'needs-election' | 'awaiting-payment' | 'paid' | 'upcoming-deadlines'
+type ImportAction = 'create' | 'merge'
+
+type ImportFieldKey = keyof Pick<ClassActionClaimFormValues,
+  | 'name'
+  | 'claim_id'
+  | 'pin'
+  | 'administrator'
+  | 'defendant'
+  | 'notification_received_on'
+  | 'class_action_url'
+  | 'claim_submitted_on'
+  | 'claim_deadline'
+  | 'final_approval_hearing_on'
+  | 'payment_election_submitted_on'
+  | 'expected_payment_on'
+  | 'expected_payment_amount'
+  | 'notes'
+>
 
 const emptyForm: ClassActionClaimFormValues = {
   name: '',
+  claim_id: '',
+  pin: '',
+  administrator: '',
+  defendant: '',
   notification_received_on: '',
   notification_email_copy: '',
   class_action_url: '',
   payment_election_submitted_on: '',
+  claim_submitted_on: '',
+  claim_deadline: '',
+  final_approval_hearing_on: '',
+  expected_payment_amount: '',
+  expected_payment_on: '',
+  actual_payment_amount: '',
   payment_received: false,
   payment_received_on: '',
   payment_fin_transaction_id: '',
@@ -118,8 +175,26 @@ const emptyForm: ClassActionClaimFormValues = {
 const statusFilters: Array<{ label: string; value: StatusFilter }> = [
   { label: 'All', value: 'all' },
   { label: 'Needs election', value: 'needs-election' },
+  { label: 'Upcoming deadlines', value: 'upcoming-deadlines' },
   { label: 'Awaiting payment', value: 'awaiting-payment' },
   { label: 'Paid', value: 'paid' },
+]
+
+const importFields: Array<{ field: ImportFieldKey; label: string }> = [
+  { field: 'name', label: 'Class Action' },
+  { field: 'claim_id', label: 'Claim ID / Unique ID' },
+  { field: 'pin', label: 'PIN' },
+  { field: 'administrator', label: 'Administrator' },
+  { field: 'defendant', label: 'Defendant' },
+  { field: 'notification_received_on', label: 'Notification Received On' },
+  { field: 'class_action_url', label: 'Class Action URL' },
+  { field: 'claim_submitted_on', label: 'Claim Submitted On' },
+  { field: 'claim_deadline', label: 'Claim Deadline' },
+  { field: 'final_approval_hearing_on', label: 'Final Approval Hearing On' },
+  { field: 'payment_election_submitted_on', label: 'Payment Election Submitted On' },
+  { field: 'expected_payment_on', label: 'Expected Payment On' },
+  { field: 'expected_payment_amount', label: 'Expected Payment Amount' },
+  { field: 'notes', label: 'Notes' },
 ]
 
 function ClassActionTracker(): React.ReactElement {
@@ -133,6 +208,17 @@ function ClassActionTracker(): React.ReactElement {
   const [editingClaim, setEditingClaim] = useState<ClassActionClaim | null>(null)
   const [form, setForm] = useState<ClassActionClaimFormValues>(emptyForm)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importSubmitting, setImportSubmitting] = useState(false)
+  const [importJobId, setImportJobId] = useState<number | null>(null)
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [reviewDraft, setReviewDraft] = useState<Partial<Record<ImportFieldKey, string>>>({})
+  const [reviewUseField, setReviewUseField] = useState<Partial<Record<ImportFieldKey, boolean>>>({})
+  const [reviewTarget, setReviewTarget] = useState<ImportAction>('create')
+  const [reviewMergeClaimId, setReviewMergeClaimId] = useState<number | null>(null)
+
+  const { status: importJobStatus, results: importJobResults, error: importJobError } = useGenAiJobPolling(importJobId)
 
   const loadClaims = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -152,6 +238,50 @@ function ClassActionTracker(): React.ReactElement {
   useEffect(() => {
     void loadClaims()
   }, [loadClaims])
+
+  useEffect(() => {
+    if (!importJobError) {
+      return
+    }
+
+    setError(importJobError)
+  }, [importJobError])
+
+  useEffect(() => {
+    if (!importJobId || importJobStatus !== 'parsed' || importJobResults.length === 0) {
+      return
+    }
+
+    const firstResult = importJobResults[0]
+    if (!firstResult?.result_json) {
+      setError('AI import returned an empty result.')
+      setImportJobId(null)
+
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(firstResult.result_json) as Record<string, unknown>
+      const fieldDraft = importDraftFromParsedResult(parsed)
+      const matchedClaim = findBestImportClaimMatch(claims, fieldDraft)
+
+      const defaultUse: Partial<Record<ImportFieldKey, boolean>> = {}
+      for (const { field } of importFields) {
+        defaultUse[field] = Boolean(fieldDraft[field] && fieldDraft[field]?.trim() !== '')
+      }
+
+      setReviewDraft(fieldDraft)
+      setReviewUseField(defaultUse)
+      setReviewTarget(matchedClaim ? 'merge' : 'create')
+      setReviewMergeClaimId(matchedClaim?.id ?? null)
+      setReviewDialogOpen(true)
+      setImportDialogOpen(false)
+      setImportJobId(null)
+    } catch {
+      setError('Unable to parse AI import result.')
+      setImportJobId(null)
+    }
+  }, [claims, importJobId, importJobResults, importJobStatus])
 
   const summary = useMemo(() => {
     return claims.reduce(
@@ -179,6 +309,9 @@ function ClassActionTracker(): React.ReactElement {
 
       return [
         claim.name,
+        claim.claim_id,
+        claim.administrator,
+        claim.defendant,
         claim.notes,
         claim.notification_email_copy,
         claim.class_action_url,
@@ -245,6 +378,54 @@ function ClassActionTracker(): React.ReactElement {
     }
   }
 
+  async function submitEmailImport(): Promise<void> {
+    const text = importText.trim()
+    if (text === '') {
+      setError('Paste a notification email before importing.')
+
+      return
+    }
+
+    setImportSubmitting(true)
+    setError(null)
+
+    try {
+      const response = await fetchWrapper.post('/api/genai/import/paste', {
+        text,
+        job_type: 'class_action_email',
+      }) as { job_id: number }
+
+      setImportJobId(response.job_id)
+    } catch (err) {
+      setError(errorMessage(err, 'Unable to start email import.'))
+    } finally {
+      setImportSubmitting(false)
+    }
+  }
+
+  function applyReviewSelection(): void {
+    const mergeClaim = reviewTarget === 'merge'
+      ? claims.find((claim) => claim.id === reviewMergeClaimId) ?? null
+      : null
+
+    const nextForm = mergeClaim ? formFromClaim(mergeClaim) : { ...emptyForm }
+
+    for (const { field } of importFields) {
+      if (!reviewUseField[field]) {
+        continue
+      }
+
+      const draftValue = (reviewDraft[field] ?? '').trim()
+      nextForm[field] = draftValue
+    }
+
+    setEditingClaim(mergeClaim)
+    setForm(nextForm)
+    setFieldErrors({})
+    setReviewDialogOpen(false)
+    setDialogOpen(true)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -259,6 +440,16 @@ function ClassActionTracker(): React.ReactElement {
           <Button onClick={openCreateDialog}>
             <Plus className="size-4" />
             Add Claim
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setImportDialogOpen(true)
+              setImportText('')
+              setImportJobId(null)
+            }}
+          >
+            Import from email…
           </Button>
         </div>
       </div>
@@ -305,6 +496,7 @@ function ClassActionTracker(): React.ReactElement {
             <TableRow>
               <TableHead className="min-w-56">Class Action</TableHead>
               <TableHead>Notification</TableHead>
+              <TableHead>Claim Deadline</TableHead>
               <TableHead>Payment Election</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead className="min-w-64">Notes</TableHead>
@@ -314,14 +506,14 @@ function ClassActionTracker(): React.ReactElement {
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   Loading...
                 </TableCell>
               </TableRow>
             )}
             {!loading && visibleClaims.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   No claims found.
                 </TableCell>
               </TableRow>
@@ -331,6 +523,12 @@ function ClassActionTracker(): React.ReactElement {
                 <TableCell className="align-top">
                   <div className="flex flex-col gap-1">
                     <span className="font-medium text-gray-950 dark:text-gray-50">{claim.name}</span>
+                    {claim.claim_id && (
+                      <span className="text-xs text-muted-foreground">ID: {claim.claim_id}</span>
+                    )}
+                    {claim.administrator && (
+                      <span className="text-xs text-muted-foreground">Admin: {claim.administrator}</span>
+                    )}
                     {claim.class_action_url && (
                       <a
                         href={claim.class_action_url}
@@ -346,6 +544,9 @@ function ClassActionTracker(): React.ReactElement {
                 </TableCell>
                 <TableCell className="align-top">
                   <DateOrEmpty value={claim.notification_received_on} />
+                </TableCell>
+                <TableCell className="align-top">
+                  <DeadlineCell claim={claim} />
                 </TableCell>
                 <TableCell className="align-top">
                   {claim.payment_election_submitted_on ? (
@@ -399,6 +600,115 @@ function ClassActionTracker(): React.ReactElement {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import from notification email</DialogTitle>
+            <DialogDescription>Paste an email and we&apos;ll extract a candidate claim for review.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            aria-label="Notification email text"
+            rows={12}
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setImportDialogOpen(false)} disabled={importSubmitting}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void submitEmailImport()} disabled={importSubmitting}>
+              {importSubmitting ? 'Submitting…' : 'Extract claim'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Review extracted claim details</DialogTitle>
+            <DialogDescription>Select fields to apply before saving.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="review-action">Import mode</Label>
+              <Select value={reviewTarget} onValueChange={(value) => setReviewTarget(value as ImportAction)}>
+                <SelectTrigger id="review-action">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="create">Create new claim</SelectItem>
+                  <SelectItem value="merge">Merge into existing claim</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {reviewTarget === 'merge' && (
+              <div>
+                <Label htmlFor="review-merge-claim">Existing claim</Label>
+                <Select
+                  value={reviewMergeClaimId === null ? null : reviewMergeClaimId.toString()}
+                  onValueChange={(value) => setReviewMergeClaimId(Number(value))}
+                >
+                  <SelectTrigger id="review-merge-claim">
+                    <SelectValue placeholder="Select claim" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {claims.map((claim) => (
+                      <SelectItem key={claim.id} value={claim.id.toString()}>
+                        {claim.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {importFields.map(({ field, label }) => {
+              const existingValue = fieldValueForReview(
+                reviewTarget === 'merge'
+                  ? claims.find((claim) => claim.id === reviewMergeClaimId) ?? null
+                  : null,
+                field,
+              )
+
+              return (
+                <div key={field} className="grid gap-2 rounded-md border p-3 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center">
+                  <div className="text-sm font-medium">{label}</div>
+                  <div className="text-sm text-muted-foreground">{existingValue || '—'}</div>
+                  <Input
+                    value={reviewDraft[field] ?? ''}
+                    onChange={(event) => setReviewDraft((current) => ({ ...current, [field]: event.target.value }))}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={reviewUseField[field] === true}
+                      onCheckedChange={(checked) => setReviewUseField((current) => ({ ...current, [field]: checked === true }))}
+                    />
+                    <span className="text-xs text-muted-foreground">Use</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReviewDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={applyReviewSelection}
+              disabled={reviewTarget === 'merge' && reviewMergeClaimId === null}
+            >
+              Apply to form
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -478,6 +788,42 @@ function ClaimForm({ fieldErrors, form, onChange }: ClaimFormProps): React.React
           <FieldError message={fieldErrors.name} />
         </div>
         <div>
+          <Label htmlFor="claim-id">Claim ID / Unique ID</Label>
+          <Input
+            id="claim-id"
+            value={form.claim_id}
+            onChange={(event) => updateField('claim_id', event.target.value)}
+          />
+          <FieldError message={fieldErrors.claim_id} />
+        </div>
+        <div>
+          <Label htmlFor="claim-pin">PIN</Label>
+          <Input
+            id="claim-pin"
+            value={form.pin}
+            onChange={(event) => updateField('pin', event.target.value)}
+          />
+          <FieldError message={fieldErrors.pin} />
+        </div>
+        <div>
+          <Label htmlFor="claim-administrator">Administrator</Label>
+          <Input
+            id="claim-administrator"
+            value={form.administrator}
+            onChange={(event) => updateField('administrator', event.target.value)}
+          />
+          <FieldError message={fieldErrors.administrator} />
+        </div>
+        <div>
+          <Label htmlFor="claim-defendant">Defendant</Label>
+          <Input
+            id="claim-defendant"
+            value={form.defendant}
+            onChange={(event) => updateField('defendant', event.target.value)}
+          />
+          <FieldError message={fieldErrors.defendant} />
+        </div>
+        <div>
           <Label htmlFor="notification-received-on">Date Notification Received</Label>
           <Input
             id="notification-received-on"
@@ -516,6 +862,57 @@ function ClaimForm({ fieldErrors, form, onChange }: ClaimFormProps): React.React
           />
           <FieldError message={fieldErrors.payment_election_submitted_on} />
         </div>
+        <div>
+          <Label htmlFor="claim-submitted-on">Claim Submitted On</Label>
+          <Input
+            id="claim-submitted-on"
+            type="date"
+            value={form.claim_submitted_on}
+            onChange={(event) => updateField('claim_submitted_on', event.target.value)}
+          />
+          <FieldError message={fieldErrors.claim_submitted_on} />
+        </div>
+        <div>
+          <Label htmlFor="claim-deadline">Claim Deadline</Label>
+          <Input
+            id="claim-deadline"
+            type="date"
+            value={form.claim_deadline}
+            onChange={(event) => updateField('claim_deadline', event.target.value)}
+          />
+          <FieldError message={fieldErrors.claim_deadline} />
+        </div>
+        <div>
+          <Label htmlFor="final-approval-hearing-on">Final Approval Hearing</Label>
+          <Input
+            id="final-approval-hearing-on"
+            type="date"
+            value={form.final_approval_hearing_on}
+            onChange={(event) => updateField('final_approval_hearing_on', event.target.value)}
+          />
+          <FieldError message={fieldErrors.final_approval_hearing_on} />
+        </div>
+        <div>
+          <Label htmlFor="expected-payment-on">Expected Payment On</Label>
+          <Input
+            id="expected-payment-on"
+            type="date"
+            value={form.expected_payment_on}
+            onChange={(event) => updateField('expected_payment_on', event.target.value)}
+          />
+          <FieldError message={fieldErrors.expected_payment_on} />
+        </div>
+        <div>
+          <Label htmlFor="expected-payment-amount">Expected Payment Amount</Label>
+          <Input
+            id="expected-payment-amount"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={form.expected_payment_amount}
+            onChange={(event) => updateField('expected_payment_amount', event.target.value)}
+          />
+          <FieldError message={fieldErrors.expected_payment_amount} />
+        </div>
         <div className="flex items-end pb-2">
           <div className="flex items-center gap-2">
             <Checkbox
@@ -537,6 +934,17 @@ function ClaimForm({ fieldErrors, form, onChange }: ClaimFormProps): React.React
                 onChange={(event) => updateField('payment_received_on', event.target.value)}
               />
               <FieldError message={fieldErrors.payment_received_on} />
+            </div>
+            <div>
+              <Label htmlFor="actual-payment-amount">Actual Payment Amount</Label>
+              <Input
+                id="actual-payment-amount"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={form.actual_payment_amount}
+                onChange={(event) => updateField('actual_payment_amount', event.target.value)}
+              />
+              <FieldError message={fieldErrors.actual_payment_amount} />
             </div>
             <div>
               <Label htmlFor="payment-fin-transaction-id">Finance Transaction ID</Label>
@@ -580,6 +988,9 @@ function PaymentCell({ claim }: { claim: ClassActionClaim }): React.ReactElement
         <CheckCircle2 className="size-4 text-emerald-600" />
         <DateOrEmpty value={claim.payment_received_on} />
       </div>
+      {claim.actual_payment_amount !== null && (
+        <span className="text-sm text-muted-foreground">{currency(claim.actual_payment_amount).format()}</span>
+      )}
       {claim.payment_transaction && claim.payment_transaction.url && (
         <a
           href={claim.payment_transaction.url}
@@ -592,6 +1003,23 @@ function PaymentCell({ claim }: { claim: ClassActionClaim }): React.ReactElement
       {claim.payment_transaction && !claim.payment_transaction.url && (
         <span className="text-sm text-muted-foreground">{transactionLabel(claim.payment_transaction)}</span>
       )}
+    </div>
+  )
+}
+
+function DeadlineCell({ claim }: { claim: ClassActionClaim }): React.ReactElement {
+  if (!claim.claim_deadline) {
+    return <Badge variant="outline">Not set</Badge>
+  }
+
+  const deadline = deadlineState(claim.claim_deadline)
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm">{formatDate(claim.claim_deadline)}</span>
+      <Badge variant="outline" className={deadline.className}>
+        {deadline.label}
+      </Badge>
     </div>
   )
 }
@@ -621,16 +1049,32 @@ function claimMatchesStatus(claim: ClassActionClaim, status: StatusFilter): bool
     return claim.payment_received
   }
 
+  if (status === 'upcoming-deadlines') {
+    const deadline = deadlineState(claim.claim_deadline)
+
+    return deadline.daysRemaining !== null && deadline.daysRemaining >= 0
+  }
+
   return true
 }
 
 function formFromClaim(claim: ClassActionClaim): ClassActionClaimFormValues {
   return {
     name: claim.name,
+    claim_id: claim.claim_id ?? '',
+    pin: claim.pin ?? '',
+    administrator: claim.administrator ?? '',
+    defendant: claim.defendant ?? '',
     notification_received_on: claim.notification_received_on ?? '',
     notification_email_copy: claim.notification_email_copy ?? '',
     class_action_url: claim.class_action_url ?? '',
     payment_election_submitted_on: claim.payment_election_submitted_on ?? '',
+    claim_submitted_on: claim.claim_submitted_on ?? '',
+    claim_deadline: claim.claim_deadline ?? '',
+    final_approval_hearing_on: claim.final_approval_hearing_on ?? '',
+    expected_payment_amount: claim.expected_payment_amount === null ? '' : currency(claim.expected_payment_amount).value.toFixed(2),
+    expected_payment_on: claim.expected_payment_on ?? '',
+    actual_payment_amount: claim.actual_payment_amount === null ? '' : currency(claim.actual_payment_amount).value.toFixed(2),
     payment_received: claim.payment_received,
     payment_received_on: claim.payment_received_on ?? '',
     payment_fin_transaction_id: claim.payment_fin_transaction_id?.toString() ?? '',
@@ -643,10 +1087,20 @@ function payloadFromForm(formValues: ClassActionClaimFormValues): Record<string,
 
   return {
     name: formValues.name.trim(),
+    claim_id: blankToNull(formValues.claim_id),
+    pin: blankToNull(formValues.pin),
+    administrator: blankToNull(formValues.administrator),
+    defendant: blankToNull(formValues.defendant),
     notification_received_on: blankToNull(formValues.notification_received_on),
     notification_email_copy: blankToNull(formValues.notification_email_copy),
     class_action_url: blankToNull(formValues.class_action_url),
     payment_election_submitted_on: blankToNull(formValues.payment_election_submitted_on),
+    claim_submitted_on: blankToNull(formValues.claim_submitted_on),
+    claim_deadline: blankToNull(formValues.claim_deadline),
+    final_approval_hearing_on: blankToNull(formValues.final_approval_hearing_on),
+    expected_payment_amount: moneyToNumber(formValues.expected_payment_amount),
+    expected_payment_on: blankToNull(formValues.expected_payment_on),
+    actual_payment_amount: paymentReceived ? moneyToNumber(formValues.actual_payment_amount) : null,
     payment_received: paymentReceived,
     payment_received_on: paymentReceived ? blankToNull(formValues.payment_received_on) : null,
     payment_fin_transaction_id: paymentReceived && formValues.payment_fin_transaction_id.trim() !== ''
@@ -692,6 +1146,35 @@ function formatDate(value: string | null): string {
   return `${month}/${day}/${year}`
 }
 
+function deadlineState(value: string | null): { daysRemaining: number | null; label: string; className: string } {
+  if (!value) {
+    return { daysRemaining: null, label: 'No deadline', className: '' }
+  }
+
+  const parsedDate = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { daysRemaining: null, label: 'Unknown', className: '' }
+  }
+
+  const today = new Date()
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const daysRemaining = Math.floor((parsedDate.getTime() - startOfToday.getTime()) / 86400000)
+
+  if (daysRemaining < 0) {
+    return { daysRemaining, label: `${Math.abs(daysRemaining)} days past`, className: 'border-gray-300 text-gray-600' }
+  }
+
+  if (daysRemaining <= 3) {
+    return { daysRemaining, label: daysRemaining === 0 ? 'Due today' : `${daysRemaining} days left`, className: 'border-red-300 text-red-700' }
+  }
+
+  if (daysRemaining <= 14) {
+    return { daysRemaining, label: `${daysRemaining} days left`, className: 'border-amber-300 text-amber-700' }
+  }
+
+  return { daysRemaining, label: `${daysRemaining} days left`, className: 'border-gray-300 text-gray-700' }
+}
+
 function transactionLabel(transaction: PaymentTransaction): string {
   const amount = transaction.amount === null ? null : currency(transaction.amount).format()
   const account = transaction.account_name ?? `Transaction ${transaction.t_id}`
@@ -700,9 +1183,104 @@ function transactionLabel(transaction: PaymentTransaction): string {
   return [account, date, amount].filter(Boolean).join(' · ')
 }
 
+function moneyToNumber(value: string): number | null {
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return null
+  }
+
+  return currency(trimmed).value
+}
+
+function isValidMoney(value: string): boolean {
+  try {
+    if (value.trim() === '') {
+      return true
+    }
+
+    if (!moneyInputPattern.test(value.trim())) {
+      return false
+    }
+
+    const parsed = currency(value)
+
+    return Number.isFinite(parsed.value) && parsed.value >= 0
+  } catch {
+    return false
+  }
+}
+
+function importDraftFromParsedResult(data: Record<string, unknown>): Partial<Record<ImportFieldKey, string>> {
+  return {
+    name: toDraftString(data.name),
+    claim_id: toDraftString(data.claim_id),
+    pin: toDraftString(data.pin),
+    administrator: toDraftString(data.administrator),
+    defendant: toDraftString(data.defendant),
+    notification_received_on: toDraftString(data.notification_received_on),
+    class_action_url: toDraftString(data.class_action_url),
+    claim_submitted_on: toDraftString(data.claim_submitted_on),
+    claim_deadline: toDraftString(data.claim_deadline),
+    final_approval_hearing_on: toDraftString(data.final_approval_hearing_on),
+    payment_election_submitted_on: toDraftString(data.payment_election_submitted_on),
+    expected_payment_on: toDraftString(data.expected_payment_on),
+    expected_payment_amount: toDraftMoneyString(data.expected_payment_amount),
+    notes: toDraftString(data.notes),
+  }
+}
+
+function findBestImportClaimMatch(
+  claims: ClassActionClaim[],
+  draft: Partial<Record<ImportFieldKey, string>>,
+): ClassActionClaim | null {
+  const claimId = draft.claim_id?.trim().toLowerCase()
+  if (claimId) {
+    const byClaimId = claims.find((claim) => claim.claim_id?.trim().toLowerCase() === claimId)
+    if (byClaimId) {
+      return byClaimId
+    }
+  }
+
+  const name = draft.name?.trim().toLowerCase()
+  if (name) {
+    const byName = claims.find((claim) => claim.name.trim().toLowerCase() === name)
+    if (byName) {
+      return byName
+    }
+  }
+
+  return null
+}
+
+function fieldValueForReview(claim: ClassActionClaim | null, field: ImportFieldKey): string {
+  if (!claim) {
+    return ''
+  }
+
+  const form = formFromClaim(claim)
+
+  return form[field]
+}
+
+function toDraftString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function toDraftMoneyString(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return currency(value).value.toFixed(2)
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value
+  }
+
+  return ''
+}
+
 function isValidUrl(value: string): boolean {
   try {
-    new URL(value)
+    void new URL(value)
 
     return true
   } catch {
