@@ -1,3 +1,11 @@
+import * as THREE from 'three'
+
+import {
+  BOX_MARBLE_COUNT,
+  generateLevel,
+  isBoxOpenable,
+  openBox,
+} from '../gameEngine'
 import {
   conveyorPhaseForTick,
   conveyorSlotProgress,
@@ -7,7 +15,9 @@ import {
   sortingStackDropProgress,
 } from '../scene/conveyorProgress'
 import { CONVEYOR_PATH_SOUTH_Z } from '../scene/sceneConstants'
+import { computeOpenedBoxEvents } from '../scene/sceneEvents'
 import { conveyorPositionAt, sortingStackColumnPosition } from '../scene/sceneGeometry'
+import { disposeObject } from '../scene/threeUtils'
 
 describe('MarbleSortScene conveyor animation bookkeeping', () => {
   it('keeps existing marbles in place while the belt advances to the next physical slot', () => {
@@ -94,6 +104,36 @@ describe('MarbleSortScene conveyor animation bookkeeping', () => {
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(5, 27), 27, 0, 3)).toBe(1)
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(8, 27), 27, 0, 3)).toBe(2)
     expect(passingSortingStackIndexForSlot(conveyorPhaseForTick(0, 27), 27, 0, 3)).toBeUndefined()
+  })
+
+  it('disposes texture maps during object cleanup', () => {
+    const texture = new THREE.Texture()
+    const textureDispose = jest.spyOn(texture, 'dispose')
+    const material = new THREE.MeshBasicMaterial({ map: texture })
+    const materialDispose = jest.spyOn(material, 'dispose')
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+
+    disposeObject(mesh)
+
+    expect(textureDispose).toHaveBeenCalledTimes(1)
+    expect(materialDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports removed boxes as burst events for the scene effect layer', () => {
+    const state = generateLevel(1, 41_004)
+    const box = state.boxes.find((candidate) => isBoxOpenable(candidate, state.boxes))
+    if (!box) {
+      throw new Error('Expected generated level to include an openable box.')
+    }
+
+    const next = openBox(state, box.id)
+
+    expect(next.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT)
+    expect(computeOpenedBoxEvents(state, next)).toEqual([{
+      color: box.color,
+      position: box.position,
+    }])
+    expect(computeOpenedBoxEvents(null, next)).toEqual([])
   })
 
   it('drops marbles from the belt side closest to the target sorting stack', () => {

@@ -168,6 +168,13 @@ export function openBox(state: GameState, boxId: string): GameState {
     }
   }
 
+  if (availableConveyorSlots(state) < BOX_MARBLE_COUNT) {
+    return {
+      ...state,
+      lastMessage: `The conveyor needs ${BOX_MARBLE_COUNT.toLocaleString()} open slots before opening a box.`,
+    }
+  }
+
   const next = cloneState(state)
   next.boxes = next.boxes.filter((candidate) => candidate.id !== boxId)
   next.moves += 1

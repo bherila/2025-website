@@ -86,6 +86,23 @@ describe('marble sort game engine', () => {
     expect(remainingChuteBoxes(next)).toBe(remainingChuteBoxes(state) - 1)
   })
 
+  it('rejects opening a box unless the conveyor has room for every marble in it', () => {
+    const box = makeBox('box-1', 'blue', 1, GRID_ROWS - 1)
+    const state = createState({
+      boxes: [box],
+      conveyor: [{ color: 'red', id: 'marble-on-belt', sequence: 99 }],
+      conveyorCapacity: BOX_MARBLE_COUNT,
+      sortingStacks: stacksForOpenColors(['blue']),
+    })
+
+    const next = openBox(state, box.id)
+
+    expect(next.moves).toBe(state.moves)
+    expect(next.boxes).toEqual(state.boxes)
+    expect(next.fallingMarbles).toHaveLength(0)
+    expect(next.lastMessage).toBe('The conveyor needs 9 open slots before opening a box.')
+  })
+
   it('randomizes receptacle block order across stack colors', () => {
     const state = generateLevel(5, 45_000)
 
@@ -96,7 +113,7 @@ describe('marble sort game engine', () => {
     })).toBe(true)
   })
 
-  it('ends the level when falling marbles fill the conveyor', () => {
+  it('ends the level when a full conveyor has no sortable marbles', () => {
     const state = generateLevel(1, 41_000)
     const box = findBoxForOpenReceptacle(state)
     if (!box) {
@@ -105,40 +122,37 @@ describe('marble sort game engine', () => {
 
     const opened = openBox({
       ...state,
-      conveyorCapacity: 3,
+      conveyorCapacity: BOX_MARBLE_COUNT,
       sortingStacks: blockReceptaclesForColor(state, box.color),
     }, box.id)
-    const next = processConveyorTick(processConveyorTick(processConveyorTick(opened)))
+    const next = processTicks(opened, BOX_MARBLE_COUNT)
 
     expect(next.gameOver?.reason).toBe('belt_full')
-    expect(next.conveyor).toHaveLength(3)
+    expect(next.conveyor).toHaveLength(BOX_MARBLE_COUNT)
+    expect(next.fallingMarbles).toHaveLength(0)
     expect(next.lastMessage).toMatch(/conveyor is full/i)
   })
 
   it('lets a full conveyor sort before declaring belt full', () => {
-    const state = {
-      ...generateLevel(1, 41_001),
-      conveyorCapacity: 3,
-    }
-    const box = findBoxForOpenReceptacle(state)
-    if (!box) {
-      throw new Error('Expected generated level to include a box matching an open receptacle.')
-    }
+    const box = makeBox('box-1', 'blue', 1, GRID_ROWS - 1)
+    const state = createState({
+      boxes: [box],
+      conveyorCapacity: BOX_MARBLE_COUNT,
+      sortingStacks: stacksForOpenColors(['blue']),
+    })
 
     const opened = openBox(state, box.id)
-    const settled = processConveyorTick(processConveyorTick(processConveyorTick(opened)))
+    const settled = processTicks(opened, BOX_MARBLE_COUNT)
 
-    expect(settled.conveyor).toHaveLength(3)
-    expect(settled.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 3)
+    expect(settled.conveyor).toHaveLength(BOX_MARBLE_COUNT)
+    expect(settled.fallingMarbles).toHaveLength(0)
     expect(settled.gameOver).toBeNull()
 
-    const advanced = processConveyorTick(settled)
+    const advanced = drainConveyor(settled)
 
     expect(advanced.gameOver).toBeNull()
-    // Multi-sort: any marble whose slot is in a stack drop window this tick
-    // gets sorted, so length can drop by 1+ but must drop below capacity.
-    expect(advanced.conveyor.length).toBeLessThan(3)
-    expect(advanced.fallingMarbles).toHaveLength(BOX_MARBLE_COUNT - 3)
+    expect(advanced.conveyor).toHaveLength(0)
+    expect(advanced.completedLevel?.level).toBe(1)
   })
 
   it('keeps the conveyor array in physical order when a passing marble cannot sort', () => {
@@ -576,4 +590,13 @@ function openableBoxIds(state: GameState): string[] {
   return state.boxes
     .filter((box) => isBoxOpenable(box, state.boxes))
     .map((box) => box.id)
+}
+
+function processTicks(state: GameState, count: number): GameState {
+  let next = state
+  for (let index = 0; index < count; index += 1) {
+    next = processConveyorTick(next)
+  }
+
+  return next
 }

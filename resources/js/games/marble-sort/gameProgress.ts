@@ -1,5 +1,4 @@
 import {
-  BASE_CONVEYOR_CAPACITY,
   BOX_MARBLE_COUNT,
   type Chute,
   type CompletedLevel,
@@ -248,7 +247,7 @@ function parseGameState(value: unknown): GameState | null {
     sortingStacks,
     activeColors,
     conveyorCapacity: Math.max(BOX_MARBLE_COUNT, conveyorCapacity),
-    baseConveyorCapacity: Math.max(BASE_CONVEYOR_CAPACITY, baseConveyorCapacity),
+    baseConveyorCapacity: Math.max(BOX_MARBLE_COUNT, baseConveyorCapacity),
     levelScore,
     totalScore,
     highScore,

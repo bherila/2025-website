@@ -8,7 +8,7 @@ import { type PhysicsWorld, spawnMarbleBody } from './world'
 export interface MarbleBodyManager {
   ensure: (marbles: FallingMarble[]) => void
   release: (id: string) => CANNON.Body | undefined
-  release_all: () => void
+  releaseAll: () => void
   get: (id: string) => CANNON.Body | undefined
   applyToMesh: (id: string, mesh: THREE.Object3D) => void
 }
@@ -41,7 +41,7 @@ export function createMarbleBodyManager(physics: PhysicsWorld): MarbleBodyManage
       }
       return body
     },
-    release_all() {
+    releaseAll() {
       for (const body of bodies.values()) {
         physics.world.removeBody(body)
       }

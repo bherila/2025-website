@@ -11,6 +11,7 @@ import {
   applyShufflePowerUp,
   arriveFallingMarble,
   availableConveyorSlots,
+  BOX_MARBLE_COUNT,
   clearLevelSnapshot,
   type GameState,
   loadLevelSnapshot,
@@ -138,7 +139,7 @@ export function MarbleSortGame(): ReactElement {
             <span
               className={cn(
                 'size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-950/20',
-                availableConveyorSlots(state) < 9 && 'bg-amber-400',
+                availableConveyorSlots(state) < BOX_MARBLE_COUNT && 'bg-amber-400',
                 state.completedLevel && 'bg-sky-400',
                 state.gameOver && 'bg-rose-500',
               )}

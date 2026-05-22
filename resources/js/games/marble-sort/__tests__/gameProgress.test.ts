@@ -55,6 +55,17 @@ describe('marble sort progress persistence', () => {
     expect(window.localStorage.getItem(MARBLE_SORT_SNAPSHOT_STORAGE_KEY)).toBeNull()
   })
 
+  it('preserves generated base conveyor capacity below the level-one default', () => {
+    const state = generateLevel(12, 42_012)
+
+    saveLevelSnapshot(state)
+
+    expect(loadLevelSnapshot(undefined, {
+      ...createInitialProgress(),
+      level: state.level,
+    })?.baseConveyorCapacity).toBe(state.baseConveyorCapacity)
+  })
+
   it('preserves a belt-full game over snapshot until reset', () => {
     const state = {
       ...generateLevel(1, 42_001),

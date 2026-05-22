@@ -10,6 +10,12 @@ import {
   type SortingStack,
 } from './gameEngine'
 import {
+  type BoxBurst,
+  createBoxBurst,
+  disposeBoxBurst,
+  updateBoxBurst,
+} from './scene/animation/boxBurst'
+import {
   type ConfettiBurst,
   createConfettiBurst,
   disposeConfettiBurst,
@@ -56,7 +62,8 @@ import {
   stepPhysics,
 } from './scene/physics/world'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
-import { CONVEYOR_ENTRY_PROGRESS, conveyorPositionAt } from './scene/sceneGeometry'
+import { computeOpenedBoxEvents } from './scene/sceneEvents'
+import { CONVEYOR_ENTRY_PROGRESS, conveyorPositionAt, gridCellPosition } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -115,6 +122,7 @@ export function MarbleSortScene({
   const conveyorPhaseRef = useRef(0)
   const beltMarkerPhaseRef = useRef(0)
   const confettiBurstsRef = useRef<ConfettiBurst[]>([])
+  const boxBurstsRef = useRef<BoxBurst[]>([])
   const stackTweensRef = useRef<StackRiseTween[]>([])
   const stackGroupsRef = useRef<Map<string, THREE.Group>>(new Map())
   const slotDropTweensRef = useRef<Map<string, SlotDropTween>>(new Map())
@@ -472,6 +480,15 @@ export function MarbleSortScene({
         return !done
       })
 
+      boxBurstsRef.current = boxBurstsRef.current.filter((burst) => {
+        const done = updateBoxBurst(burst, now)
+        if (done) {
+          effectGroup.remove(burst.group)
+          disposeBoxBurst(burst)
+        }
+        return !done
+      })
+
       stackTweensRef.current = stackTweensRef.current.filter((tween) => {
         const done = updateStackRiseTween(tween, now)
         return !done
@@ -487,7 +504,7 @@ export function MarbleSortScene({
       timer.dispose()
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown)
-      bodiesRef.current?.release_all()
+      bodiesRef.current?.releaseAll()
       if (physicsRef.current) {
         disposePhysicsWorld(physicsRef.current)
       }
@@ -522,6 +539,7 @@ export function MarbleSortScene({
       beltMarkerPhaseRef.current = 0
       beltMarkersRef.current = []
       confettiBurstsRef.current = []
+      boxBurstsRef.current = []
       stackTweensRef.current = []
       slotDropTweens.clear()
       arrivedAttempts.clear()
@@ -541,6 +559,7 @@ export function MarbleSortScene({
 
     const previous = previousStateRef.current
     const clearEvents = computeClearedBlockEvents(previous, state)
+    const openedBoxEvents = computeOpenedBoxEvents(previous, state)
     const shouldRebuildDynamicObjects = (
       !previous
       || previousColorblindModeRef.current !== colorblindMode
@@ -582,6 +601,12 @@ export function MarbleSortScene({
       const confetti = createConfettiBurst(new THREE.Vector3(x, 0.4, z), stack?.color ?? event.color)
       effectGroup.add(confetti.group)
       confettiBurstsRef.current.push(confetti)
+    }
+
+    for (const event of openedBoxEvents) {
+      const burst = createBoxBurst(gridCellPosition(event.position), event.color)
+      effectGroup.add(burst.group)
+      boxBurstsRef.current.push(burst)
     }
 
     previousStateRef.current = state
