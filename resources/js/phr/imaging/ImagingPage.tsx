@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
-import { formatBytes } from '@/lib/utils'
+import { cn, formatBytes } from '@/lib/utils'
 import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
@@ -260,10 +260,13 @@ export default function ImagingPage({ patientId, onDrill }: PhrListPageProps) {
           {studies.map((study) => (
             <div
               key={study.id}
-              className={`flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between${onDrill ? ' cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/40' : ''}`}
+              className={cn(
+                'flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between',
+                onDrill && 'cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/40',
+              )}
               onClick={onDrill ? () => onDrill({ id: 'imaging-study-detail', instance: String(study.id) }) : undefined}
               tabIndex={onDrill ? 0 : undefined}
-              onKeyDown={onDrill ? (e) => { if (e.key === 'Enter' || e.key === ' ') onDrill({ id: 'imaging-study-detail', instance: String(study.id) }) } : undefined}
+              onKeyDown={onDrill ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDrill({ id: 'imaging-study-detail', instance: String(study.id) }) } } : undefined}
             >
               <div className="min-w-0">
                 <p className="break-words font-medium text-card-foreground">{study.description || 'DICOM Study'}</p>
