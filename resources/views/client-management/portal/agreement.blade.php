@@ -17,5 +17,5 @@
 <div id="ClientPortalAgreementPage"></div>
 @endsection
 @push('scripts')
-  @vite('resources/js/client-management/portal.tsx')
+  @vite('resources/js/client-management/portal/agreement.tsx')
 @endpush

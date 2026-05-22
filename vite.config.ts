@@ -40,12 +40,23 @@ export default defineConfig({
         'resources/js/markdown-renderer/index.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/class-action-tracker.tsx',
-        'resources/js/client-management/admin.tsx',
-        'resources/js/client-management/portal.tsx',
+        'resources/js/client-management/admin/agreement.tsx',
+        'resources/js/client-management/admin/create.tsx',
+        'resources/js/client-management/admin/index.tsx',
+        'resources/js/client-management/admin/show.tsx',
+        'resources/js/client-management/portal/agreement.tsx',
+        'resources/js/client-management/portal/billing.tsx',
+        'resources/js/client-management/portal/expenses.tsx',
+        'resources/js/client-management/portal/index.tsx',
+        'resources/js/client-management/portal/invoice.tsx',
+        'resources/js/client-management/portal/invoices.tsx',
+        'resources/js/client-management/portal/project.tsx',
+        'resources/js/client-management/portal/time.tsx',
         'resources/js/user-management.tsx',
         'resources/js/admin-genai-jobs.tsx',
         'resources/js/admin-tax-normalization.tsx',
-        'resources/js/utility-bill-tracker.tsx',
+        'resources/js/utility-bill-tracker/accounts.tsx',
+        'resources/js/utility-bill-tracker/bills.tsx',
         'resources/js/login-passkey.tsx',
       ],
       refresh: true,
@@ -74,9 +85,6 @@ export default defineConfig({
             ) {
               return 'ui-core';
             }
-            if (id.includes('@radix-ui/react-')) {
-              return 'ui-components';
-            }
             if (
               id.includes('lucide-react') ||
               id.includes('date-fns') ||
@@ -91,10 +99,6 @@ export default defineConfig({
             if (id.includes('react-markdown')) {
               return 'markdown';
             }
-          }
-
-          if (id.includes('resources/js/components/ui/')) {
-            return 'ui-components';
           }
         }
       }

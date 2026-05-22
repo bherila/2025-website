@@ -5,5 +5,5 @@
 @endsection
 
 @push('scripts')
-  @vite('resources/js/client-management/admin.tsx')
+  @vite('resources/js/client-management/admin/show.tsx')
 @endpush

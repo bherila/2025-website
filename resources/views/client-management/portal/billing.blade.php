@@ -18,5 +18,5 @@
 @endsection
 
 @push('scripts')
-  @vite('resources/js/client-management/portal.tsx')
+  @vite('resources/js/client-management/portal/billing.tsx')
 @endpush
