@@ -286,6 +286,7 @@ Route::middleware(['web', 'auth'])
         Route::get('/patients/{patient}/lab-results', [PHRLabResultController::class, 'index'])->whereNumber('patient')->name('patients.lab-results.index');
         Route::post('/patients/{patient}/lab-results', [PHRLabResultController::class, 'store'])->whereNumber('patient')->name('patients.lab-results.store');
         Route::get('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'show'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.show');
+        Route::get('/patients/{patient}/labs/{labResult}', [PHRLabResultController::class, 'showPanel'])->whereNumber(['patient', 'labResult'])->name('patients.labs.show');
         Route::patch('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'update'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.update');
         Route::delete('/patients/{patient}/lab-results/{labResult}', [PHRLabResultController::class, 'destroy'])->whereNumber(['patient', 'labResult'])->name('patients.lab-results.destroy');
         Route::get('/patients/{patient}/vitals', [PHRVitalController::class, 'index'])->whereNumber('patient')->name('patients.vitals.index');
