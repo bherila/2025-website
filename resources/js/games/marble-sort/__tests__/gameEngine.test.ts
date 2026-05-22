@@ -90,7 +90,7 @@ describe('marble sort game engine', () => {
     const box = makeBox('box-1', 'blue', 1, GRID_ROWS - 1)
     const state = createState({
       boxes: [box],
-      conveyor: [{ color: 'red', id: 'marble-on-belt', sequence: 99 }],
+      conveyor: [{ color: 'red', id: 'marble-on-belt', sequence: 99, slotIndex: 0 }],
       conveyorCapacity: BOX_MARBLE_COUNT,
       sortingStacks: stacksForOpenColors(['blue']),
     })
@@ -166,8 +166,8 @@ describe('marble sort game engine', () => {
     const queued = {
       ...state,
       conveyor: [
-        { id: 'blocked', color: blockedColor, sequence: 1 },
-        { id: 'matching', color: matchingColor, sequence: 2 },
+        { id: 'blocked', color: blockedColor, sequence: 1, slotIndex: 0 },
+        { id: 'matching', color: matchingColor, sequence: 2, slotIndex: 1 },
       ],
       conveyorTicks: 0,
       fallingMarbles: [],
@@ -195,7 +195,7 @@ describe('marble sort game engine', () => {
     let queued: GameState = {
       ...state,
       conveyor: [
-        { id: 'matching', color: matchingColor, sequence: 1 },
+        { id: 'matching', color: matchingColor, sequence: 1, slotIndex: 0 },
       ],
       conveyorCapacity: 27,
       conveyorTicks: 0,
@@ -234,6 +234,7 @@ describe('marble sort game engine', () => {
         id: `match-${index}`,
         color: matchingColor,
         sequence: index + 1,
+        slotIndex: index,
       })),
       conveyorCapacity: 27,
       conveyorTicks: 0,
@@ -271,8 +272,8 @@ describe('marble sort game engine', () => {
     const queued: GameState = {
       ...state,
       conveyor: [
-        { id: 'm1', color: matchingColor, sequence: 1 },
-        { id: 'm2', color: matchingColor, sequence: 2 },
+        { id: 'm1', color: matchingColor, sequence: 1, slotIndex: 0 },
+        { id: 'm2', color: matchingColor, sequence: 2, slotIndex: 1 },
       ],
       conveyorCapacity: 27,
       conveyorTicks: 0,

@@ -26,7 +26,7 @@ import {
 
 export { safeProgressNumber }
 
-export const MARBLE_SORT_SNAPSHOT_STORAGE_KEY = 'bwh.marble-sort.snapshot.v1'
+export const MARBLE_SORT_SNAPSHOT_STORAGE_KEY = 'bwh.marble-sort.snapshot.v2'
 
 interface SavedLevelSnapshot {
   version: 1
@@ -235,6 +235,18 @@ function parseGameState(value: unknown): GameState | null {
     return null
   }
 
+  if (conveyor.some((marble) => marble.slotIndex >= conveyorCapacity)) {
+    return null
+  }
+
+  const slotsSeen = new Set<number>()
+  for (const marble of conveyor) {
+    if (slotsSeen.has(marble.slotIndex)) {
+      return null
+    }
+    slotsSeen.add(marble.slotIndex)
+  }
+
   return {
     version: 1,
     level,
@@ -319,21 +331,27 @@ function parseConveyorMarble(value: unknown): ConveyorMarble | null {
 
   const color = parseMarbleColor(value.color)
   const sequence = parseInteger(value.sequence)
-  if (!color || sequence === null) {
+  const slotIndex = parseInteger(value.slotIndex)
+  if (!color || sequence === null || slotIndex === null || slotIndex < 0) {
     return null
   }
 
-  return { id: value.id, color, sequence }
+  return { id: value.id, color, sequence, slotIndex }
 }
 
 function parseFallingMarble(value: unknown): FallingMarble | null {
-  const marble = parseConveyorMarble(value)
-  if (!marble || !isRecord(value)) {
+  if (!isRecord(value) || typeof value.id !== 'string') {
     return null
   }
 
+  const color = parseMarbleColor(value.color)
+  const sequence = parseInteger(value.sequence)
   const from = parseGridPosition(value.from)
-  return from ? { ...marble, from } : null
+  if (!color || sequence === null || !from) {
+    return null
+  }
+
+  return { id: value.id, color, sequence, from }
 }
 
 function parseSortingStack(value: unknown): SortingStack | null {
