@@ -284,6 +284,10 @@ export const PhrDocumentsResponseSchema = z.object({
   can_manage: z.boolean().default(false),
 })
 
+export const PhrDocumentResponseSchema = z.object({
+  document: PhrDocumentSchema,
+})
+
 export const PhrDocumentMetadataFormSchema = z.object({
   title: z.string().trim().max(255).optional(),
   document_type: z.enum(['lab_report', 'office_visit_note', 'discharge_summary', 'imaging_report', 'prescription', 'insurance', 'consent', 'other']),

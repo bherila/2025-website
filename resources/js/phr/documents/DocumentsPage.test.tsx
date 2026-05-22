@@ -91,4 +91,13 @@ describe('DocumentsPage', () => {
       expect(mockPost).toHaveBeenCalledWith('/api/phr/patients/42/documents/10/process', {})
     })
   })
+
+  it('drills into the document viewer when a document row is selected', async () => {
+    const onDrill = jest.fn()
+    render(<DocumentsPage patientId={42} onDrill={onDrill} />)
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /january labs/i }))[0]!)
+
+    expect(onDrill).toHaveBeenCalledWith({ id: 'document-viewer', instance: '10' })
+  })
 })
