@@ -183,14 +183,25 @@ class LabResultController extends Controller
             return null;
         }
 
-        $current = (float) $result->value_numeric;
-        $prior = (float) $previous->value_numeric;
+        $comparison = $this->compareNumericStrings($result->value_numeric, $previous->value_numeric);
 
         return match (true) {
-            $current > $prior => 'up',
-            $current < $prior => 'down',
+            $comparison > 0 => 'up',
+            $comparison < 0 => 'down',
             default => 'flat',
         };
+    }
+
+    private function compareNumericStrings(string $current, string $prior): int
+    {
+        if (function_exists('bccomp')) {
+            return bccomp($current, $prior, 10);
+        }
+
+        $currentFloat = (float) $current;
+        $priorFloat = (float) $prior;
+
+        return $currentFloat <=> $priorFloat;
     }
 
     private function isOlderResult(PhrLabResult $candidate, PhrLabResult $current): bool

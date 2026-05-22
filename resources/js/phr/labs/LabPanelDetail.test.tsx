@@ -4,52 +4,49 @@ import { render, screen } from '@testing-library/react'
 
 import LabPanelDetail from '@/phr/labs/LabPanelDetail'
 
-function mockJsonResponse(payload: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 404 ? 'Not Found' : 'OK',
-    json: async () => payload,
-  } as Response
-}
+const mockGet = jest.fn()
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: (...args: unknown[]) => mockGet(...args),
+  },
+}))
 
 describe('LabPanelDetail', () => {
-  afterEach(() => {
-    jest.restoreAllMocks()
+  beforeEach(() => {
+    mockGet.mockReset()
   })
 
   it('renders panel metadata, row table, abnormal flag, trend, and source link', async () => {
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      mockJsonResponse({
-        panel: {
-          id: 321,
-          panel_name: 'Comprehensive Metabolic Panel',
-          collection_datetime: '2026-05-19 08:00:00',
-          ordering_provider: 'Dr. Rivera',
-          resulting_lab: 'Quest Diagnostics',
-          source: 'MyChart',
-          source_document_id: 77,
-          source_document_url: '/api/phr/patients/42/documents/77/file',
-          rows: [
-            {
-              id: 1,
-              analyte: 'Glucose',
-              value: '111',
-              value_numeric: '111',
-              unit: 'mg/dL',
-              range_min: '70',
-              range_max: '99',
-              range_unit: 'mg/dL',
-              reference_range_text: null,
-              abnormal_flag: 'H',
-              result_datetime: '2026-05-19 09:00:00',
-              collection_datetime: '2026-05-19 08:00:00',
-              trend: 'up',
-            },
-          ],
-        },
-      }),
-    )
+    mockGet.mockResolvedValue({
+      panel: {
+        id: 321,
+        panel_name: 'Comprehensive Metabolic Panel',
+        collection_datetime: '2026-05-19 08:00:00',
+        ordering_provider: 'Dr. Rivera',
+        resulting_lab: 'Quest Diagnostics',
+        source: 'MyChart',
+        source_document_id: 77,
+        source_document_url: '/api/phr/patients/42/documents/77/file',
+        rows: [
+          {
+            id: 1,
+            analyte: 'Glucose',
+            value: '111',
+            value_numeric: '111',
+            unit: 'mg/dL',
+            range_min: '70',
+            range_max: '99',
+            range_unit: 'mg/dL',
+            reference_range_text: null,
+            abnormal_flag: 'H',
+            result_datetime: '2026-05-19 09:00:00',
+            collection_datetime: '2026-05-19 08:00:00',
+            trend: 'up',
+          },
+        ],
+      },
+    })
 
     render(<LabPanelDetail patientId={42} recordId="321" />)
 
@@ -65,7 +62,7 @@ describe('LabPanelDetail', () => {
   })
 
   it('renders shared not-found column on 404', async () => {
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(mockJsonResponse({ message: 'Not Found' }, 404))
+    mockGet.mockRejectedValue('Not Found')
 
     render(<LabPanelDetail patientId={42} recordId="999" />)
 
