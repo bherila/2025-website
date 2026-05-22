@@ -15,10 +15,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
 import { formatBytes } from '@/lib/utils'
-import type { PhrModuleId } from '@/phr/miller'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDocument,
@@ -70,11 +69,6 @@ const SOURCE_LABELS: Record<DocumentSource, string> = {
   mychart_zip: 'MyChart ZIP',
 }
 
-interface DocumentsPageProps {
-  patientId: number
-  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
-}
-
 interface UploadFormState {
   title: string
   document_type: DocumentType
@@ -107,7 +101,7 @@ const emptyFilters: FilterState = {
   date_to: '',
 }
 
-export default function DocumentsPage({ patientId }: DocumentsPageProps) {
+export default function DocumentsPage({ patientId }: PhrListPageProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [documents, setDocuments] = useState<PhrDocument[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)

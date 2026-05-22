@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { PhrModuleId } from '@/phr/miller'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload, errorMessage } from '@/phr/shared'
 import { type PhrOfficeVisit, PhrOfficeVisitsResponseSchema } from '@/phr/types'
 
@@ -74,12 +73,7 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
   )
 }
 
-interface OfficeVisitsPageProps {
-  patientId: number
-  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
-}
-
-export default function OfficeVisitsPage({ patientId }: OfficeVisitsPageProps) {
+export default function OfficeVisitsPage({ patientId }: PhrListPageProps) {
   const [visits, setVisits] = useState<PhrOfficeVisit[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)

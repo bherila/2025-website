@@ -3,11 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import type { MillerDrillTarget } from '@/components/ui/miller'
 import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
 import { formatBytes } from '@/lib/utils'
-import type { PhrModuleId } from '@/phr/miller'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDicomSignedUploadBatchItem,
@@ -48,12 +47,7 @@ interface UploadSummary {
   failures: FileFailure[]
 }
 
-interface ImagingPageProps {
-  patientId: number
-  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
-}
-
-export default function ImagingPage({ patientId }: ImagingPageProps) {
+export default function ImagingPage({ patientId }: PhrListPageProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [canManage, setCanManage] = useState(false)
   const [studies, setStudies] = useState<PhrDicomStudy[]>([])

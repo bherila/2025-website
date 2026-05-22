@@ -82,7 +82,7 @@ export type PhrModuleMeta = Record<string, never>
 export type PhrRegistryEntry = MillerRegistryEntry<PhrShellState, PhrModuleId, PhrModuleMeta>
 export type PhrRenderProps = MillerRenderProps<PhrShellState, PhrModuleId>
 
-interface PhrListPageProps {
+export interface PhrListPageProps {
   patientId: number
   onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
 }

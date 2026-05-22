@@ -4,9 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { PhrModuleId } from '@/phr/miller'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrVital,
@@ -138,12 +137,7 @@ function displayValue(v: PhrVital): string {
   return '—'
 }
 
-interface VitalsPageProps {
-  patientId: number
-  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
-}
-
-export default function VitalsPage({ patientId }: VitalsPageProps) {
+export default function VitalsPage({ patientId }: PhrListPageProps) {
   const [vitals, setVitals] = useState<PhrVital[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)
