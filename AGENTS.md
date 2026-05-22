@@ -30,6 +30,24 @@ php artisan serve          # Laravel :8000
 pnpm dev                   # Vite :5173
 ```
 
+## Worktrees & Dependency Bootstrap
+
+This repo supports multiple concurrent Git worktrees for parallel agent work. **Do not run `git worktree add` directly** — use the wrapper scripts so dependencies are reconciled and `.env` is seeded automatically.
+
+```bash
+scripts/wt/create.sh <name> [base-ref]     # create + CoW-clone vendor/ + seed .env + install deps
+scripts/wt/bootstrap.sh                     # reconcile deps + .env for the current worktree
+scripts/wt/remove.sh <path> [--force]       # safe cleanup; refuses dirty worktrees without --force
+```
+
+Worktrees default to `~/dev/worktrees/<repo>/`; dependency caches default to `~/dev/worktree-cache/<repo>/` (override with `WORKTREE_ROOT` / `WORKTREE_CACHE_ROOT`).
+
+**Claude Code** runs `scripts/wt/create.sh` automatically when a subagent requests `isolation: worktree` (wired via `.claude/hooks/worktree-create.sh` and the matching remove hook).
+
+**JS dependencies**: use `pnpm install --frozen-lockfile --prefer-offline`. **Do not run `npm ci`** — it recreates `node_modules` and defeats the worktree optimization. `.npmrc` enables pnpm's global virtual store so `node_modules` in new worktrees is nearly free once the store is warm.
+
+**PHP dependencies**: use `composer install --no-interaction --prefer-dist`. Do not run `composer update` unless the task is specifically about dependency updates. The bootstrap script sets `COMPOSER_CACHE_DIR` per-repo for consistent cache reuse.
+
 ## Testing & Validation
 
 **IMPORTANT**: All validations below MUST pass before committing code.
