@@ -81,5 +81,5 @@ const testState: GameState = {
   seed: 1,
   totalScore: 0,
   tunnels: [],
-  version: 1,
+  version: 2,
 }

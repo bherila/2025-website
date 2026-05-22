@@ -99,6 +99,33 @@ interface BoardDimensions {
   boardHeight: number
 }
 
+export interface DecisionPoint {
+  step: number
+  intendedCarId: string
+  movableCarIds: string[]
+  queueSafeCarIds: string[]
+  decoyCarIds: string[]
+}
+
+export interface DifficultyMetrics {
+  plannedMaxOccupancy: number
+  decisionPointCount: number
+  averageSafeChoiceRatio: number
+  decoyMoveCount: number
+  wrongMoveTrapCount: number
+  requiresQueueAwareness: boolean
+}
+
+export interface PlannedSolution {
+  order: string[]
+  maxRegularSlotsUsed: number
+  passengerQueue: Passenger[]
+  carColors: Record<string, CarColor>
+  pressureScore: number
+  decisionPoints: DecisionPoint[]
+  metrics: DifficultyMetrics
+}
+
 export type LevelDifficultyKind = 'regular' | 'hard' | 'super-hard'
 
 export interface LevelDifficulty {
@@ -118,6 +145,7 @@ const HARD_MIN_LOOP_PASSENGERS = 10
 const SUPER_HARD_MIN_LOOP_PASSENGERS = 8
 
 const CAR_COLOR_KEYS = Object.keys(CAR_COLORS) as CarColor[]
+const QUEUE_SAFE_FEEDER_LOOKAHEAD = 12
 
 export function getLevelDifficulty(level: number): LevelDifficulty {
   if (level > 0 && level % SUPER_HARD_LEVEL_INTERVAL === 0) {
@@ -194,7 +222,7 @@ export function generateLevel(
   const rng = createRng(seed)
   const totalCars = Math.min(9 + Math.floor(level * 1.8), 40)
   const tunnelStacks = Math.min(Math.max(0, Math.floor((level - 1) / 2)), 6)
-  const maxAttempts = 180
+  const maxAttempts = 260
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const specs = createPlacementSpecs(totalCars, tunnelStacks, rng)
@@ -203,26 +231,56 @@ export function generateLevel(
     }
 
     const state = createStateFromSpecs(level, seed + attempt, specs, carry)
-    const order = findSolvingOrder(state)
+    const order = findStrategicSolvingOrder(state, rng)
     if (!order || order.length !== state.cars.length) {
       continue
     }
 
-    applySolvableColorsAndQueue(state, order, rng)
+    resequenceCarsForOrder(state, order)
+    const sequencedOrder = findSolvingOrder(state)
+    if (!sequencedOrder || sequencedOrder.length !== state.cars.length) {
+      continue
+    }
+
+    resequenceCarsForOrder(state, sequencedOrder)
+    const solution = applyStrategicColorsAndQueue(state, sequencedOrder, rng)
+    if (!solution || !meetsDifficultyTarget(level, solution.metrics)) {
+      continue
+    }
+
     assignInitialHiddenCarColors(state, rng)
     state.lastMessage = `Level ${level} is ready. Clear the cars without opening extra spaces.`
 
     return state
   }
 
-  const fallbackSpecs = createOpenLaneSpecs(totalCars, tunnelStacks, rng)
-  const fallbackState = createStateFromSpecs(level, seed, fallbackSpecs, carry)
-  const fallbackOrder = findSolvingOrder(fallbackState) ?? fallbackState.cars.map((car) => car.id)
-  applySolvableColorsAndQueue(fallbackState, fallbackOrder, rng)
-  assignInitialHiddenCarColors(fallbackState, rng)
-  fallbackState.lastMessage = `Level ${level} is ready.`
+  for (let fallbackAttempt = 0; fallbackAttempt < maxAttempts; fallbackAttempt += 1) {
+    const fallbackSpecs = createOpenLaneSpecs(totalCars, tunnelStacks, rng)
+    const fallbackState = createStateFromSpecs(level, seed + maxAttempts + fallbackAttempt, fallbackSpecs, carry)
+    const fallbackOrder = findStrategicSolvingOrder(fallbackState, rng) ?? findSolvingOrder(fallbackState)
+    if (!fallbackOrder || fallbackOrder.length !== fallbackState.cars.length) {
+      continue
+    }
 
-  return fallbackState
+    resequenceCarsForOrder(fallbackState, fallbackOrder)
+    const sequencedOrder = findSolvingOrder(fallbackState)
+    if (!sequencedOrder || sequencedOrder.length !== fallbackState.cars.length) {
+      continue
+    }
+
+    resequenceCarsForOrder(fallbackState, sequencedOrder)
+    const solution = applyStrategicColorsAndQueue(fallbackState, sequencedOrder, rng)
+    if (!solution) {
+      continue
+    }
+
+    assignInitialHiddenCarColors(fallbackState, rng)
+    fallbackState.lastMessage = `Level ${level} is ready.`
+
+    return fallbackState
+  }
+
+  throw new Error(`Unable to generate a solvable Parking Pickup level ${level}.`)
 }
 
 export function getCarCells(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition[] {
@@ -608,10 +666,7 @@ export function findSolvingOrder(state: GameState): string[] | null {
       return order
     }
 
-    const movable = state.cars
-      .filter((car) => statuses.get(car.id) === 'field')
-      .filter((car) => canMoveCarInSnapshot(state, statuses, car.id))
-      .sort((left, right) => left.sequence - right.sequence)
+    const movable = getMovableFieldCarsInSnapshot(state, statuses)
 
     if (movable.length === 0) {
       return null
@@ -626,6 +681,109 @@ export function findSolvingOrder(state: GameState): string[] | null {
     order.push(car.id)
     revealNextTunnelCarInSnapshot(state, statuses, car.tunnelId)
   }
+}
+
+function findStrategicSolvingOrder(state: GameState, rng: RandomGenerator): string[] | null {
+  const statuses = new Map<string, CarStatus>()
+  for (const car of state.cars) {
+    statuses.set(car.id, car.status)
+  }
+
+  const order: string[] = []
+  const groupSize = serviceGroupSizeForLevel(state.level)
+  let groupCapacity = 0
+  let groupCars = 0
+
+  while (true) {
+    const remaining = state.cars.filter((car) => {
+      const status = statuses.get(car.id)
+
+      return status !== 'departed' && status !== 'parked'
+    })
+    if (remaining.length === 0) {
+      return order
+    }
+
+    const movable = getMovableFieldCarsInSnapshot(state, statuses)
+    if (movable.length === 0) {
+      return null
+    }
+
+    const car = chooseStrategicMovableCar(state, statuses, movable, {
+      groupCapacity,
+      groupCars,
+      groupSize,
+      rng,
+    })
+
+    statuses.set(car.id, 'departed')
+    order.push(car.id)
+    revealNextTunnelCarInSnapshot(state, statuses, car.tunnelId)
+
+    groupCapacity += car.capacity
+    groupCars += 1
+    if (groupCars >= groupSize || groupCapacity > loopPassengerCapacityForCount(state.level, totalPassengerCapacity(state))) {
+      groupCapacity = 0
+      groupCars = 0
+    }
+  }
+}
+
+function chooseStrategicMovableCar(
+  state: GameState,
+  statuses: Map<string, CarStatus>,
+  movable: Car[],
+  context: {
+    groupCapacity: number
+    groupCars: number
+    groupSize: number
+    rng: RandomGenerator
+  },
+): Car {
+  if (state.level < 4 || movable.length === 1) {
+    return movable[0] as Car
+  }
+
+  const loopCapacity = loopPassengerCapacityForCount(state.level, totalPassengerCapacity(state))
+  const pressureNeedsCapacity = context.groupCars > 0
+    && context.groupCars < context.groupSize
+    && context.groupCapacity <= loopCapacity
+
+  const best = movable
+    .map((car) => ({
+      car,
+      score: strategicCarScore(state, statuses, car, pressureNeedsCapacity, context.rng),
+    }))
+    .sort((left, right) => right.score - left.score || left.car.sequence - right.car.sequence)[0]
+
+  return best?.car ?? (movable[0] as Car)
+}
+
+function strategicCarScore(
+  state: GameState,
+  statuses: Map<string, CarStatus>,
+  car: Car,
+  pressureNeedsCapacity: boolean,
+  rng: RandomGenerator,
+): number {
+  const unlocksTunnel = car.tunnelId
+    ? state.tunnels
+      .find((tunnel) => tunnel.id === car.tunnelId)
+      ?.carIds
+      .some((id) => statuses.get(id) === 'hidden') === true
+    : false
+  const capacityScore = pressureNeedsCapacity ? car.capacity * 5 : car.capacity
+  const tunnelScore = unlocksTunnel ? 40 : 0
+  const reliefScore = pressureNeedsCapacity ? 0 : Math.max(0, 10 - car.capacity)
+
+  return tunnelScore + capacityScore + reliefScore + rng.next()
+}
+
+function getMovableFieldCarsInSnapshot(state: GameState, statuses: Map<string, CarStatus>): Car[] {
+  return state.cars
+    .filter((car) => statuses.get(car.id) === 'field')
+    .filter((car) => canMoveCarInSnapshot(state, statuses, car.id))
+    .sort((left, right) => left.sequence - right.sequence)
 }
 
 export function solverCompletesLevel(state: GameState): boolean {
@@ -739,33 +897,29 @@ function createPlacementSpecs(totalCars: number, tunnelStacks: number, rng: Rand
 
 function createOpenLaneSpecs(totalCars: number, tunnelStacks: number, rng: RandomGenerator): PlacementSpec[] {
   const specs: PlacementSpec[] = []
-  const occupied = new Set<string>()
   let sequence = 0
-  let row = 0
-  let column = 0
   let carsRemaining = totalCars
+  const nextOpenXByRow = Array.from({ length: BOARD_HEIGHT }, () => BOARD_WIDTH)
 
   for (let tunnelIndex = 0; tunnelIndex < tunnelStacks && carsRemaining >= 2; tunnelIndex += 1) {
-    const capacity = 4
+    const capacity = rng.pick(CAPACITIES)
     const direction: Direction = 'right'
     const length = lengthForCapacity(capacity)
-    const placement = findFirstFreeGaragePlacement(length, direction, occupied) ?? {
-      position: { x: 1, y: row },
-      garagePosition: { x: 0, y: row },
-    }
+    const row = tunnelIndex % BOARD_HEIGHT
+    const nextOpenX = nextOpenXByRow[row] ?? BOARD_WIDTH
+    const x = Math.max(0, nextOpenX - length)
     const tunnelId = `tunnel-${tunnelIndex + 1}`
-
-    reserveCells(occupied, garagePlacementCells(length, direction, placement))
+    const position = { x, y: row }
 
     for (let stackIndex = 0; stackIndex < 2; stackIndex += 1) {
       specs.push({
         id: `car-${sequence + 1}`,
         tunnelId,
-        garagePosition: { ...placement.garagePosition },
+        garagePosition: { ...position },
         capacity,
         length,
         direction,
-        position: { ...placement.position },
+        position: { ...position },
         sequence,
         status: stackIndex === 0 ? 'field' : 'hidden',
       })
@@ -773,18 +927,17 @@ function createOpenLaneSpecs(totalCars: number, tunnelStacks: number, rng: Rando
       carsRemaining -= 1
     }
 
-    row = (row + 2) % BOARD_HEIGHT
+    nextOpenXByRow[row] = x
   }
 
+  let rowCursor = 0
   while (carsRemaining > 0) {
     const capacity = rng.pick(CAPACITIES)
-    const direction: Direction = column % 2 === 0 ? 'right' : 'left'
+    const direction: Direction = 'right'
     const length = lengthForCapacity(capacity)
-    const position = findFirstFreePlacement(length, direction, occupied) ?? {
-      x: direction === 'right' ? 0 : Math.max(0, BOARD_WIDTH - length),
-      y: row,
-    }
-    reserveCells(occupied, getCarOccupiedCells({ direction, length, position }))
+    const row = rowCursor % BOARD_HEIGHT
+    const nextOpenX = nextOpenXByRow[row] ?? BOARD_WIDTH
+    const x = Math.max(0, nextOpenX - length)
 
     specs.push({
       id: `car-${sequence + 1}`,
@@ -793,17 +946,14 @@ function createOpenLaneSpecs(totalCars: number, tunnelStacks: number, rng: Rando
       capacity,
       length,
       direction,
-      position,
+      position: { x, y: row },
       sequence,
       status: 'field',
     })
     sequence += 1
     carsRemaining -= 1
-    column += 1
-    if (column >= 2) {
-      column = 0
-      row = (row + 1) % BOARD_HEIGHT
-    }
+    nextOpenXByRow[row] = x
+    rowCursor += 1
   }
 
   return specs
@@ -851,7 +1001,7 @@ function createStateFromSpecs(
   })
 
   const state: GameState = {
-    version: 1,
+    version: 2,
     level,
     seed,
     boardWidth: BOARD_WIDTH,
@@ -876,8 +1026,151 @@ function createStateFromSpecs(
   return state
 }
 
-function applySolvableColorsAndQueue(state: GameState, order: string[], rng: RandomGenerator): void {
+function applyStrategicColorsAndQueue(state: GameState, order: string[], rng: RandomGenerator): PlannedSolution | null {
+  const groups = serviceGroupsForOrder(state, order)
   const passengers: Passenger[] = []
+  const loopCapacity = loopPassengerCapacityForCount(state.level, totalPassengerCapacity(state))
+
+  groups.forEach((group, groupIndex) => {
+    const colors = colorPaletteForServiceGroup(groupIndex, rng)
+    group.forEach((car, index) => {
+      car.color = colors[index % colors.length] as CarColor
+    })
+  })
+
+  for (const group of groups) {
+    appendPressurePassengers(passengers, group, loopCapacity, rng)
+  }
+
+  assignFeederSides(state.level, passengers)
+  state.passengerQueue = passengers
+
+  return validateParkingSolution(state, order, {
+    allowOpeningSlots: false,
+    allowPowerUps: false,
+    slotBudget: STARTING_REGULAR_SLOTS,
+  })
+}
+
+export function validateParkingSolution(
+  state: GameState,
+  order: string[] = findSolvingOrder(state) ?? [],
+  options: {
+    allowOpeningSlots: false
+    allowPowerUps: false
+    slotBudget: number
+  } = {
+    allowOpeningSlots: false,
+    allowPowerUps: false,
+    slotBudget: STARTING_REGULAR_SLOTS,
+  },
+): PlannedSolution | null {
+  if (options.allowOpeningSlots || options.allowPowerUps || options.slotBudget < 1) {
+    return null
+  }
+
+  const next = cloneState(state)
+  next.powerUps = { vip: 0, shuffle: 0, fill: 0 }
+  next.maxRegularSlotsUnlocked = Math.min(next.maxRegularSlotsUnlocked, options.slotBudget)
+  for (const slot of next.parkingSlots) {
+    if (slot.kind === 'regular' && slot.index >= options.slotBudget) {
+      slot.unlocked = false
+      slot.occupiedCarId = null
+    }
+  }
+
+  const decisionPoints: DecisionPoint[] = []
+  let safeChoiceRatioTotal = 0
+  let safeChoiceRatioSamples = 0
+  let decoyMoveCount = 0
+  let wrongMoveTrapCount = 0
+
+  drainVisibleBoarding(next)
+
+  for (let step = 0; step < order.length; step += 1) {
+    const carId = order[step]
+    if (!carId) {
+      return null
+    }
+
+    const movableCars = getMovableFieldCars(next)
+    const movableCarIds = movableCars.map((car) => car.id)
+    if (!movableCarIds.includes(carId)) {
+      return null
+    }
+
+    const queueSafeCarIds = movableCars
+      .filter((car) => carHasNearQueueService(next, car))
+      .map((car) => car.id)
+    const decoyCarIds = movableCarIds.filter((id) => !queueSafeCarIds.includes(id))
+
+    if (movableCarIds.length > 1) {
+      safeChoiceRatioTotal += queueSafeCarIds.length / movableCarIds.length
+      safeChoiceRatioSamples += 1
+    }
+
+    if (movableCarIds.length > 1 && queueSafeCarIds.length > 0 && decoyCarIds.length > 0) {
+      decisionPoints.push({
+        step,
+        intendedCarId: carId,
+        movableCarIds,
+        queueSafeCarIds,
+        decoyCarIds,
+      })
+      decoyMoveCount += decoyCarIds.length
+      wrongMoveTrapCount += decoyCarIds.filter((decoyCarId) => moveWouldCreateQueueTrap(next, decoyCarId, options.slotBudget)).length
+    }
+
+    let openSlot = firstOpenRegularSlot(next)
+    if (!openSlot || openSlot.index >= options.slotBudget) {
+      drainVisibleBoarding(next)
+      openSlot = firstOpenRegularSlot(next)
+    }
+
+    if (!openSlot || openSlot.index >= options.slotBudget) {
+      return null
+    }
+
+    const moved = moveCarToParking(next, carId, openSlot.id)
+    Object.assign(next, moved)
+    if (next.failedLevel || next.maxRegularSlotsUnlocked > options.slotBudget || next.maxRegularSlotsUsed > options.slotBudget) {
+      return null
+    }
+  }
+
+  drainVisibleBoarding(next)
+
+  if (!next.completedLevel || next.passengerQueue.length > 0 || next.cars.some((car) => car.status !== 'departed')) {
+    return null
+  }
+
+  const averageSafeChoiceRatio = safeChoiceRatioSamples > 0
+    ? safeChoiceRatioTotal / safeChoiceRatioSamples
+    : 1
+  const metrics: DifficultyMetrics = {
+    plannedMaxOccupancy: next.maxRegularSlotsUsed,
+    decisionPointCount: decisionPoints.length,
+    averageSafeChoiceRatio,
+    decoyMoveCount,
+    wrongMoveTrapCount,
+    requiresQueueAwareness: decisionPoints.length > 0 && decoyMoveCount > 0 && next.maxRegularSlotsUsed > 1,
+  }
+
+  return {
+    order: [...order],
+    maxRegularSlotsUsed: next.maxRegularSlotsUsed,
+    passengerQueue: state.passengerQueue.map((passenger) => ({ ...passenger })),
+    carColors: Object.fromEntries(state.cars.map((car) => [car.id, car.color])),
+    pressureScore: calculatePressureScore(metrics),
+    decisionPoints,
+    metrics,
+  }
+}
+
+function serviceGroupsForOrder(state: GameState, order: string[]): Car[][] {
+  const groupSize = serviceGroupSizeForLevel(state.level)
+  const groups: Car[][] = []
+  let currentGroup: Car[] = []
 
   for (const carId of order) {
     const car = findCar(state, carId)
@@ -885,18 +1178,220 @@ function applySolvableColorsAndQueue(state: GameState, order: string[], rng: Ran
       continue
     }
 
-    car.color = rng.pick(CAR_COLOR_KEYS)
-    for (let seat = 0; seat < car.capacity; seat += 1) {
-      passengers.push({
-        id: `passenger-${passengers.length + 1}`,
-        color: car.color,
-        feederSide: 'left',
-      })
+    currentGroup.push(car)
+    if (currentGroup.length >= groupSize) {
+      groups.push(currentGroup)
+      currentGroup = []
     }
   }
 
-  assignFeederSides(state.level, passengers)
-  state.passengerQueue = passengers
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup)
+  }
+
+  return groups
+}
+
+function serviceGroupSizeForLevel(level: number): number {
+  if (level < 4) {
+    return 1
+  }
+
+  return STARTING_REGULAR_SLOTS
+}
+
+function colorPaletteForServiceGroup(groupIndex: number, rng: RandomGenerator): CarColor[] {
+  const paletteSize = STARTING_REGULAR_SLOTS
+  const offset = (groupIndex % Math.ceil(CAR_COLOR_KEYS.length / paletteSize)) * paletteSize
+  const palette = CAR_COLOR_KEYS.slice(offset, offset + paletteSize)
+  const colors = palette.length >= paletteSize ? palette : CAR_COLOR_KEYS.slice(0, paletteSize)
+
+  return shuffleItems(colors, rng)
+}
+
+function appendPressurePassengers(
+  passengers: Passenger[],
+  group: Car[],
+  loopCapacity: number,
+  rng: RandomGenerator,
+): void {
+  if (group.length === 0) {
+    return
+  }
+
+  const remainingSeats = new Map(group.map((car) => [car.id, car.capacity]))
+  const totalGroupPassengers = group.reduce((total, car) => total + car.capacity, 0)
+  const pressurePrefixLength = group.length > 1
+    ? Math.min(loopCapacity, Math.max(0, totalGroupPassengers - group.length))
+    : totalGroupPassengers
+  const orderedCars = rotateItems(group, rng.int(0, Math.max(0, group.length - 1)))
+
+  for (const car of orderedCars) {
+    if (passengersAddedForGroup(totalGroupPassengers, remainingSeats) >= pressurePrefixLength) {
+      break
+    }
+
+    if ((remainingSeats.get(car.id) ?? 0) > 1) {
+      addPassengerForCar(passengers, car)
+      remainingSeats.set(car.id, (remainingSeats.get(car.id) ?? 0) - 1)
+    }
+  }
+
+  let cursor = 0
+  while (passengersAddedForGroup(totalGroupPassengers, remainingSeats) < pressurePrefixLength) {
+    const eligibleCars = orderedCars.filter((car) => (remainingSeats.get(car.id) ?? 0) > 1)
+    if (eligibleCars.length === 0) {
+      break
+    }
+
+    const car = eligibleCars[cursor % eligibleCars.length] as Car
+    addPassengerForCar(passengers, car)
+    remainingSeats.set(car.id, (remainingSeats.get(car.id) ?? 0) - 1)
+    cursor += 1
+  }
+
+  cursor = 0
+  while ([...remainingSeats.values()].some((seats) => seats > 0)) {
+    const eligibleCars = orderedCars.filter((car) => (remainingSeats.get(car.id) ?? 0) > 0)
+    const car = eligibleCars[cursor % eligibleCars.length]
+    if (!car) {
+      break
+    }
+
+    addPassengerForCar(passengers, car)
+    remainingSeats.set(car.id, (remainingSeats.get(car.id) ?? 0) - 1)
+    cursor += 1
+  }
+}
+
+function passengersAddedForGroup(totalGroupPassengers: number, remainingSeats: Map<string, number>): number {
+  return totalGroupPassengers - [...remainingSeats.values()].reduce((total, seats) => total + seats, 0)
+}
+
+function addPassengerForCar(passengers: Passenger[], car: Car): void {
+  passengers.push({
+    id: `passenger-${passengers.length + 1}`,
+    color: car.color,
+    feederSide: 'left',
+  })
+}
+
+function drainVisibleBoarding(state: GameState): void {
+  while (true) {
+    const passenger = visibleQueuePassengers(state).find((candidate) => canBoardPassengerAtParkingGate(state, candidate.id))
+    if (!passenger) {
+      return
+    }
+
+    const next = processBoardingAtParkingGate(state, passenger.id)
+    Object.assign(state, next)
+  }
+}
+
+function getMovableFieldCars(state: GameState): Car[] {
+  return state.cars
+    .filter((car) => car.status === 'field')
+    .filter((car) => canMoveCar(state, car.id))
+    .sort((left, right) => left.sequence - right.sequence)
+}
+
+function carHasNearQueueService(state: GameState, car: Car): boolean {
+  const passengerWindow = state.passengerQueue.slice(
+    0,
+    loopPassengerCapacity(state) + QUEUE_SAFE_FEEDER_LOOKAHEAD,
+  )
+  const matchingPassengers = passengerWindow.filter((passenger) => passenger.color === car.color).length
+
+  return matchingPassengers >= Math.min(car.capacity, Math.max(2, car.capacity - 1))
+}
+
+function moveWouldCreateQueueTrap(state: GameState, carId: string, slotBudget: number): boolean {
+  const car = findCar(state, carId)
+  const slot = firstOpenRegularSlot(state)
+  if (!car || !slot || slot.index >= slotBudget || !canMoveCar(state, carId)) {
+    return false
+  }
+
+  const next = moveCarToParking(state, carId, slot.id)
+  drainVisibleBoarding(next)
+  const movedCar = findCar(next, carId)
+  const occupiedRegularSlots = next.parkingSlots.filter((candidate) => candidate.kind === 'regular' && candidate.occupiedCarId).length
+  const visibleMatches = visibleQueuePassengers(next).filter((passenger) => passenger.color === car.color).length
+
+  return Boolean(movedCar && movedCar.status === 'parked')
+    && (occupiedRegularSlots >= slotBudget - 1 || car.capacity >= 10 || visibleMatches === 0)
+}
+
+function calculatePressureScore(metrics: DifficultyMetrics): number {
+  return metrics.plannedMaxOccupancy * 10
+    + metrics.decisionPointCount * 6
+    + metrics.decoyMoveCount * 2
+    + metrics.wrongMoveTrapCount * 5
+    - Math.round(metrics.averageSafeChoiceRatio * 4)
+}
+
+function meetsDifficultyTarget(level: number, metrics: DifficultyMetrics): boolean {
+  if (level < 4) {
+    return true
+  }
+
+  if (!metrics.requiresQueueAwareness) {
+    return false
+  }
+
+  if (level >= 20 && getLevelDifficulty(level).kind === 'super-hard') {
+    return metrics.plannedMaxOccupancy >= 4
+      && metrics.decisionPointCount >= 3
+      && metrics.wrongMoveTrapCount >= 2
+  }
+
+  if (level >= 10) {
+    return metrics.plannedMaxOccupancy >= 3
+      && metrics.decisionPointCount >= 2
+      && metrics.wrongMoveTrapCount >= 1
+  }
+
+  return metrics.plannedMaxOccupancy >= 2
+    && metrics.decisionPointCount >= 1
+}
+
+function resequenceCarsForOrder(state: GameState, order: string[]): void {
+  order.forEach((carId, sequence) => {
+    const car = findCar(state, carId)
+    if (car) {
+      car.sequence = sequence
+    }
+  })
+}
+
+function totalPassengerCapacity(state: GameState): number {
+  return state.cars.reduce((total, car) => total + car.capacity, 0)
+}
+
+function shuffleItems<T>(items: readonly T[], rng: RandomGenerator): T[] {
+  const shuffled = [...items]
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = rng.int(0, index)
+    const current = shuffled[index] as T
+    shuffled[index] = shuffled[swapIndex] as T
+    shuffled[swapIndex] = current
+  }
+
+  return shuffled
+}
+
+function rotateItems<T>(items: readonly T[], offset: number): T[] {
+  if (items.length === 0) {
+    return []
+  }
+
+  const normalizedOffset = offset % items.length
+
+  return [
+    ...items.slice(normalizedOffset),
+    ...items.slice(0, normalizedOffset),
+  ]
 }
 
 function assignInitialHiddenCarColors(state: GameState, rng: RandomGenerator): void {

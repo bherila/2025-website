@@ -22,11 +22,14 @@ import {
   openParkingSlot,
   type ParkingSlot,
   pathCellsToExit,
+  type PlannedSolution,
   processBoardingAtParkingGate,
   resetGame,
   saveProgress,
   solverCompletesLevel,
+  STARTING_REGULAR_SLOTS,
   type Tunnel,
+  validateParkingSolution,
   visibleQueuePassengers,
 } from '../gameEngine'
 
@@ -35,15 +38,51 @@ describe('cars game engine', () => {
     window.localStorage.clear()
   })
 
-  it('generates definitely winnable levels', () => {
-    for (let level = 1; level <= 10; level += 1) {
-      const state = generateLevel(level, 10_000 + level)
+  it('generates levels with queue-aware solutions that do not need extra slots', () => {
+    for (let level = 1; level <= 100; level += 1) {
+      const state = generateLevel(level)
+      const order = findSolvingOrder(state)
+      const solution = validateParkingSolution(state, order ?? [])
 
-      expect(solverCompletesLevel(state)).toBe(true)
+      if (!solverCompletesLevel(state)) {
+        throw new Error(`Generated level ${level} is not board-solvable: ${state.lastMessage}`)
+      }
+      expect(order).not.toBeNull()
+      if (!solution) {
+        throw new Error(`Generated level ${level} has no queue-aware parking solution`)
+      }
+      expect(solution?.maxRegularSlotsUsed).toBeLessThanOrEqual(STARTING_REGULAR_SLOTS)
       expect(state.passengerQueue.length).toBe(
         state.cars.reduce((total, car) => total + car.capacity, 0),
       )
     }
+  })
+
+  it('adds strategic queue pressure after the tutorial levels', () => {
+    const sampledSolutions = new Map<number, PlannedSolution>()
+
+    for (const level of [4, 5, 9, 10, 15, 20, 40]) {
+      const state = generateLevel(level)
+      const order = findSolvingOrder(state)
+      const solution = validateParkingSolution(state, order ?? [])
+
+      if (!solution) {
+        throw new Error(`Generated level ${level} has no strategic pressure solution`)
+      }
+      sampledSolutions.set(level, solution as PlannedSolution)
+      expect(queueExactlyMirrorsSolvingBlocks(state, order ?? [])).toBe(false)
+    }
+
+    expect(sampledSolutions.get(4)?.metrics.decisionPointCount).toBeGreaterThanOrEqual(1)
+    expect(sampledSolutions.get(4)?.metrics.plannedMaxOccupancy).toBeGreaterThanOrEqual(2)
+
+    expect(sampledSolutions.get(10)?.metrics.decisionPointCount).toBeGreaterThanOrEqual(2)
+    expect(sampledSolutions.get(10)?.metrics.plannedMaxOccupancy).toBeGreaterThanOrEqual(3)
+    expect(sampledSolutions.get(10)?.metrics.wrongMoveTrapCount).toBeGreaterThanOrEqual(1)
+
+    expect(sampledSolutions.get(20)?.metrics.decisionPointCount).toBeGreaterThanOrEqual(3)
+    expect(sampledSolutions.get(20)?.metrics.plannedMaxOccupancy).toBeGreaterThanOrEqual(4)
+    expect(sampledSolutions.get(20)?.metrics.wrongMoveTrapCount).toBeGreaterThanOrEqual(2)
   })
 
   it('maps capacity to the intended grid length', () => {
@@ -515,7 +554,7 @@ describe('cars game engine', () => {
 
   it('saves, loads, and repairs local progress', () => {
     saveProgress({
-      version: 1,
+      version: 2,
       level: 9,
       totalScore: 1200,
       highScore: 1800,
@@ -523,16 +562,16 @@ describe('cars game engine', () => {
     })
 
     expect(loadProgress()).toEqual({
-      version: 1,
+      version: 2,
       level: 9,
       totalScore: 1200,
       highScore: 1800,
       powerUps: { vip: 1, shuffle: 2, fill: 3 },
     })
 
-    window.localStorage.setItem('bwh.cars-game.progress.v1', 'not json')
+    window.localStorage.setItem('bwh.cars-game.progress.v2', 'not json')
     expect(loadProgress()).toEqual({
-      version: 1,
+      version: 2,
       level: 1,
       totalScore: 0,
       highScore: 0,
@@ -545,7 +584,7 @@ describe('cars game engine', () => {
 
 function makeState(overrides: Partial<GameState> = {}): GameState {
   const state: GameState = {
-    version: 1,
+    version: 2,
     level: 1,
     seed: 1,
     boardWidth: 5,
@@ -577,6 +616,25 @@ function makeState(overrides: Partial<GameState> = {}): GameState {
     completedLevel: overrides.completedLevel ?? state.completedLevel,
     failedLevel: overrides.failedLevel ?? state.failedLevel,
   }
+}
+
+function queueExactlyMirrorsSolvingBlocks(state: GameState, order: string[]): boolean {
+  let passengerOffset = 0
+
+  for (const carId of order) {
+    const car = state.cars.find((candidate) => candidate.id === carId)
+    if (!car) {
+      return false
+    }
+
+    const passengerBlock = state.passengerQueue.slice(passengerOffset, passengerOffset + car.capacity)
+    passengerOffset += car.capacity
+    if (passengerBlock.length !== car.capacity || passengerBlock.some((passenger) => passenger.color !== car.color)) {
+      return false
+    }
+  }
+
+  return passengerOffset === state.passengerQueue.length
 }
 
 function makeNoRescueState(overrides: Partial<GameState> = {}): GameState {
