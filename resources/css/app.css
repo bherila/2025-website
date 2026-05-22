@@ -3,6 +3,33 @@
 @plugin "tailwindcss-animate";
 @plugin "@tailwindcss/typography";
 
+.animate__animated {
+  animation-duration: var(--animate-duration, 1s);
+  animation-fill-mode: both;
+}
+
+.animate__fadeIn {
+  animation-name: animate-fade-in;
+}
+
+@keyframes animate-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media print, (prefers-reduced-motion: reduce) {
+  .animate__animated {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
 @theme {
   --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
