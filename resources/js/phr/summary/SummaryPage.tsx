@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
-import { patientTabUrl } from '@/lib/phrRouteBuilder'
+import { patientUrl } from '@/lib/phrRouteBuilder'
 import { errorMessage } from '@/phr/shared'
 import {
   PhrDicomStudiesResponseSchema,
@@ -172,7 +172,7 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
           <AlertTriangle className="size-4 shrink-0" />
           <span>
             {allAbnormalLabs.length} abnormal lab result{allAbnormalLabs.length === 1 ? '' : 's'} — check the{' '}
-            <a href={patientTabUrl('labs', patientId)} className="underline">
+            <a href={patientUrl(patientId) + '#/labs'} className="underline">
               Labs tab
             </a>
             .
@@ -230,7 +230,7 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Tile icon={<FlaskConical className="size-4" />} title="Labs" href={patientTabUrl('labs', patientId)}>
+        <Tile icon={<FlaskConical className="size-4" />} title="Labs" href={patientUrl(patientId) + '#/labs'}>
           {labs.length === 0 ? (
             'No lab results recorded.'
           ) : (
@@ -248,7 +248,7 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
           )}
         </Tile>
 
-        <Tile icon={<HeartPulse className="size-4" />} title="Vitals" href={patientTabUrl('vitals', patientId)}>
+        <Tile icon={<HeartPulse className="size-4" />} title="Vitals" href={patientUrl(patientId) + '#/vitals'}>
           {vitals.length === 0 ? (
             'No vitals recorded.'
           ) : (
@@ -261,7 +261,7 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
           )}
         </Tile>
 
-        <Tile icon={<ImageIcon className="size-4" />} title="Imaging" href={patientTabUrl('imaging', patientId)}>
+        <Tile icon={<ImageIcon className="size-4" />} title="Imaging" href={patientUrl(patientId) + '#/imaging'}>
           {studies.length === 0 ? (
             'No imaging studies recorded.'
           ) : (
@@ -274,15 +274,15 @@ export default function SummaryPage({ patientId }: { patientId: number }) {
           )}
         </Tile>
 
-        <Tile icon={<Stethoscope className="size-4" />} title="Conditions" href={patientTabUrl('conditions', patientId)}>
+        <Tile icon={<Stethoscope className="size-4" />} title="Conditions" href={patientUrl(patientId) + '#/conditions'}>
           Coming soon.
         </Tile>
 
-        <Tile icon={<Pill className="size-4" />} title="Medications" href={patientTabUrl('medications', patientId)}>
+        <Tile icon={<Pill className="size-4" />} title="Medications" href={patientUrl(patientId) + '#/medications'}>
           Coming soon.
         </Tile>
 
-        <Tile icon={<Users className="size-4" />} title="Access" href={patientTabUrl('access', patientId)}>
+        <Tile icon={<Users className="size-4" />} title="Access" href={patientUrl(patientId) + '#/access'}>
           {patient?.can_share === false ? (
             'Shared with you.'
           ) : accessGrants.length <= 1 ? (

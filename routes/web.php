@@ -107,22 +107,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/phr/patients/manage', [PHRPageController::class, 'managePatients'])->name('phr.patients.manage');
     Route::get('/phr/imports', [PHRPageController::class, 'imports'])->name('phr.imports');
     Route::get('/phr/config', [PHRPageController::class, 'config'])->name('phr.config');
-    Route::get('/phr/patient/{patient}/{tab}', [PHRPageController::class, 'patientTab'])
+    Route::get('/phr/patient/{patient}', [PHRPageController::class, 'patient'])
         ->whereNumber('patient')
-        ->whereIn('tab', [
-            'summary',
-            'labs',
-            'vitals',
-            'imaging',
-            'office-visits',
-            'medications',
-            'conditions',
-            'procedures',
-            'immunizations',
-            'allergies',
-            'documents',
-            'access',
-        ])->name('phr.patient.tab');
+        ->name('phr.patient');
 
     // User Management Routes (Admin only)
     Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');

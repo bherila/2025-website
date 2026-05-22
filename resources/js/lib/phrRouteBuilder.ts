@@ -1,21 +1,7 @@
-export type PhrPatientTab =
-  | 'summary'
-  | 'labs'
-  | 'vitals'
-  | 'imaging'
-  | 'office-visits'
-  | 'medications'
-  | 'conditions'
-  | 'procedures'
-  | 'immunizations'
-  | 'allergies'
-  | 'documents'
-  | 'access'
-
 export type PhrSection = 'patients' | 'manage-patients' | 'imports' | 'config'
 
-export function patientTabUrl(tab: PhrPatientTab, patientId: number): string {
-  return `/phr/patient/${patientId}/${tab}`
+export function patientUrl(patientId: number): string {
+  return `/phr/patient/${patientId}`
 }
 
 export function patientsListUrl(): string {
