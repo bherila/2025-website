@@ -103,15 +103,18 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 ## Level Generation
 
 - Levels are randomly generated from a deterministic seed for the level number.
-- Generated levels must be provably winnable.
-- A solver order is computed during generation.
+- Generated levels must be provably winnable without power-ups or opening extra regular parking spaces.
+- Generation is validated in two stages: first the board solver proves that every car can physically leave the field, then a parking/queue simulator proves that a scripted solution can finish with only the four starting regular slots.
+- A target solver order is computed during generation and resequenced so later recovery tools can still reason from the same board order.
 - The solver treats active garage cells as blockers and removes a garage blocker only after the last hidden car has popped out.
 - The solver and placement checks support cardinal and diagonal car footprints, so diagonal cars are part of normal generated levels.
-- Car colors and passenger queue order are assigned from that solving order so there is always at least one intended completion path.
+- Car colors and passenger queue order are planned as service windows instead of simple same-color blocks. Intended cars get passengers close enough to clear on the scripted path, while tempting movable decoys can have passengers delayed beyond the active loop.
+- The queue planner accepts post-tutorial candidates only when the generated level has strategic pressure: multiple movable choices, delayed decoys, and a planned solution that uses multiple starting slots without requiring rescue actions.
+- Ten-seat cars are useful anchors because parking one too early can occupy a slot until its passengers feed into the active loop. Four-seat cars are used as relief valves because they can clear slots quickly when they are part of the intended window.
 - Hidden-color cars are selected only from obstructed visible cars after the solvable order has been established, so hiding color information does not change the underlying solution.
 - The active loop is smaller than the total passenger queue on normal levels, so the full passenger queue is not available immediately. The loop sizes itself to the active capacity so it never has wrap-around overlap — when capacity shrinks (late-level cleanup), excess empty slots are pruned so passengers never land in near-duplicate positions.
 - Feeder passengers are persistent render items: when one boards or shifts forward in the queue, the rest interpolate to their new positions instead of teleporting between rebuilds.
-- Difficulty ramps gradually with level: car count climbs from a small starting set up to a hard cap, and tunnel stacks are introduced and gradually multiplied as the level rises. The progression is intended to be felt over many levels rather than maxed out quickly.
+- Difficulty ramps gradually with level: levels 1–3 remain tutorial-like, levels 4–9 introduce at least one queue-aware decoy choice, level 10+ requires more decision pressure, and super-hard levels require several wrong-choice traps while still preserving a no-rescue solution.
 
 ## Scoring And Progress
 
@@ -138,7 +141,7 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 - Game engine: `resources/js/games/cars/gameEngine.ts`
 - Shared game contracts: `resources/js/games/cars/gameTypes.ts`
 - Progress persistence: `resources/js/games/cars/gameProgress.ts`
-- Progress key: `bwh.cars-game.progress.v1`
+- Progress key: `bwh.cars-game.progress.v2`
 - Rendering uses Three.js through Vite.
 - The active loop capacity is intentionally capped in the game engine; remaining visible passengers render on feeder lanes and are not eligible to board until they enter the loop.
 - The interface should be playable on a smartphone in portrait orientation, with compact controls and a camera framing that keeps the queue, parking row, and board visible without horizontal scrolling. Landscape support is best-effort with wider aspect ratios.

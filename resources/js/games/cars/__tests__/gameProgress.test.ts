@@ -59,7 +59,8 @@ describe('cars game level snapshots', () => {
     const state = generateLevel(4, 20_004)
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-      version: 2,
+      // v1 is intentionally stale here; v2 is the current snapshot schema.
+      version: 1,
       state,
     }))
 
@@ -80,7 +81,7 @@ describe('cars game level snapshots', () => {
     const state = generateLevel(2, 20_002)
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-      version: 1,
+      version: 2,
       state: {
         ...state,
         cars: undefined,
@@ -93,7 +94,7 @@ describe('cars game level snapshots', () => {
     })).toBeNull()
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-      version: 1,
+      version: 2,
       state: {
         ...state,
         failedLevel: {
@@ -113,7 +114,7 @@ describe('cars game level snapshots', () => {
     const state = generateLevel(5, 20_005)
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-      version: 1,
+      version: 2,
       state: {
         ...state,
         boardHeight: state.boardHeight - 2,
@@ -126,7 +127,7 @@ describe('cars game level snapshots', () => {
     })).toBeNull()
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-      version: 1,
+      version: 2,
       state: {
         ...state,
         cars: state.cars.map((car, index) => index === 0

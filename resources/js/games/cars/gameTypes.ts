@@ -1,4 +1,4 @@
-export const GAME_PROGRESS_STORAGE_KEY = 'bwh.cars-game.progress.v1'
+export const GAME_PROGRESS_STORAGE_KEY = 'bwh.cars-game.progress.v2'
 
 export const CAR_COLORS = {
   red: { label: 'Red', hex: '#ef4444' },
@@ -109,7 +109,7 @@ export interface FailedLevel {
 }
 
 export interface GameState {
-  version: 1
+  version: 2
   level: number
   seed: number
   boardWidth: number
@@ -131,7 +131,7 @@ export interface GameState {
 }
 
 export interface SavedGameProgress {
-  version: 1
+  version: 2
   level: number
   totalScore: number
   highScore: number

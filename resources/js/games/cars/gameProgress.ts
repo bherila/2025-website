@@ -21,10 +21,10 @@ import {
   type Tunnel,
 } from './gameTypes'
 
-export const LEVEL_SNAPSHOT_STORAGE_KEY = 'bwh.cars-game.snapshot.v1'
+export const LEVEL_SNAPSHOT_STORAGE_KEY = 'bwh.cars-game.snapshot.v2'
 
 interface SavedLevelSnapshot {
-  version: 1
+  version: 2
   state: GameState
 }
 
@@ -38,7 +38,7 @@ export function createInitialPowerUps(): PowerUpInventory {
 
 export function createInitialProgress(): SavedGameProgress {
   return {
-    version: 1,
+    version: 2,
     level: 1,
     totalScore: 0,
     highScore: 0,
@@ -59,12 +59,12 @@ export function loadProgress(storage: Storage | null = safeLocalStorage()): Save
 
     const parsed = JSON.parse(raw) as Partial<SavedGameProgress>
     const parsedLevel = parsed.level
-    if (parsed.version !== 1 || typeof parsedLevel !== 'number' || !Number.isInteger(parsedLevel) || parsedLevel < 1) {
+    if (parsed.version !== 2 || typeof parsedLevel !== 'number' || !Number.isInteger(parsedLevel) || parsedLevel < 1) {
       return createInitialProgress()
     }
 
     return {
-      version: 1,
+      version: 2,
       level: parsedLevel,
       totalScore: safeProgressNumber(parsed.totalScore),
       highScore: safeProgressNumber(parsed.highScore),
@@ -89,7 +89,7 @@ export function saveLevelSnapshot(state: GameState, storage: Storage | null = sa
   }
 
   const snapshot: SavedLevelSnapshot = {
-    version: 1,
+    version: 2,
     state: cloneSerializableState(state),
   }
   storage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
@@ -110,7 +110,7 @@ export function loadLevelSnapshot(
     }
 
     const parsed = JSON.parse(raw) as unknown
-    if (!isRecord(parsed) || parsed.version !== 1) {
+    if (!isRecord(parsed) || parsed.version !== 2) {
       return null
     }
 
@@ -131,7 +131,7 @@ export function clearLevelSnapshot(storage: Storage | null = safeLocalStorage())
 
 export function progressFromState(state: GameState): SavedGameProgress {
   return {
-    version: 1,
+    version: 2,
     level: state.completedLevel ? state.level + 1 : state.level,
     totalScore: state.totalScore,
     highScore: state.highScore,
@@ -183,7 +183,7 @@ function cloneSerializableState(state: GameState): GameState {
 }
 
 function parseGameState(value: unknown): GameState | null {
-  if (!isRecord(value) || value.version !== 1) {
+  if (!isRecord(value) || value.version !== 2) {
     return null
   }
 
@@ -234,7 +234,7 @@ function parseGameState(value: unknown): GameState | null {
   }
 
   return {
-    version: 1,
+    version: 2,
     level,
     seed,
     boardWidth,

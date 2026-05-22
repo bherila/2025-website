@@ -34,7 +34,7 @@ describe('CarsGame', () => {
       level: 5,
       powerUps: { fill: 0, shuffle: 0, vip: 0 },
       totalScore: 0,
-      version: 1,
+      version: 2,
     }))
 
     render(<CarsGame />)
@@ -48,7 +48,7 @@ describe('CarsGame', () => {
       level: 20,
       powerUps: { fill: 0, shuffle: 0, vip: 0 },
       totalScore: 0,
-      version: 1,
+      version: 2,
     }))
 
     render(<CarsGame />)
@@ -62,7 +62,7 @@ describe('CarsGame', () => {
       level: 1,
       powerUps: { fill: 1, shuffle: 1, vip: 1 },
       totalScore: 0,
-      version: 1,
+      version: 2,
     }))
 
     render(<CarsGame />)
