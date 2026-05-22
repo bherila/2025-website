@@ -14,5 +14,5 @@
 @endsection
 
 @push('scripts')
-  @vite('resources/js/finance.tsx')
+  @vite('resources/js/finance/pages/lot-reconciliation.tsx')
 @endpush

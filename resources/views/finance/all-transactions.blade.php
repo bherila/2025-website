@@ -14,9 +14,9 @@
 @endphp
 
 @section('content')
-  <div id="AllTransactionsPage" data-available-years="{{ json_encode($years) }}"></div>
+  <div id="TransactionsPage" data-account-id="all" data-available-years="{{ json_encode($years) }}"></div>
 @endsection
 
 @push('scripts')
-  @vite('resources/js/finance.tsx')
+  @vite('resources/js/finance/pages/account-transactions.tsx')
 @endpush
