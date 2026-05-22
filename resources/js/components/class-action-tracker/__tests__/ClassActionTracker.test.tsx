@@ -18,6 +18,20 @@ const mockGet = fetchWrapper.get as jest.Mock
 const mockPost = fetchWrapper.post as jest.Mock
 const mockPut = fetchWrapper.put as jest.Mock
 
+const NO_IN_FLIGHT_JOBS = { data: [] }
+
+function mockGetWithClaims(claims: unknown[]): void {
+  mockGet.mockImplementation((url: string) => {
+    if (url === '/api/class-action-claims') {
+      return Promise.resolve(claims)
+    }
+    if (url === '/api/genai/import/jobs?job_type=class_action_email') {
+      return Promise.resolve(NO_IN_FLIGHT_JOBS)
+    }
+    return Promise.reject(new Error(`Unexpected GET ${url}`))
+  })
+}
+
 describe('ClassActionTracker', () => {
   beforeEach(() => {
     mockGet.mockReset()
@@ -26,7 +40,7 @@ describe('ClassActionTracker', () => {
   })
 
   it('loads class action claims through fetchWrapper', async () => {
-    mockGet.mockResolvedValue([
+    mockGetWithClaims([
       {
         id: 7,
         name: 'Example Settlement',
@@ -73,7 +87,7 @@ describe('ClassActionTracker', () => {
   })
 
   it('posts a new class action claim payload', async () => {
-    mockGet.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mockGetWithClaims([])
     mockPost.mockResolvedValue({
       id: 9,
       name: 'New Settlement',
@@ -128,7 +142,7 @@ describe('ClassActionTracker', () => {
   })
 
   it('rejects non-numeric money input', async () => {
-    mockGet.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mockGetWithClaims([])
 
     render(<ClassActionTracker />)
 
@@ -142,7 +156,7 @@ describe('ClassActionTracker', () => {
   })
 
   it('nulls actual payment details when payment is not received', async () => {
-    mockGet.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mockGetWithClaims([])
     mockPost.mockResolvedValue({
       id: 10,
       name: 'Unpaid Settlement',
@@ -204,18 +218,22 @@ describe('ClassActionTracker', () => {
         return Promise.resolve([...claimsResponse])
       }
 
+      if (url === '/api/genai/import/jobs?job_type=class_action_email') {
+        return Promise.resolve(NO_IN_FLIGHT_JOBS)
+      }
+
       if (url === '/api/genai/import/jobs/55') {
         return Promise.resolve({
           id: 55,
           status: 'parsed',
           error_message: null,
-        results: [{
-          result_json: JSON.stringify({
-            name: 'Google Assistant Privacy Settlement',
-            claim_id: '3GHJCKGF',
-            pin: 'JRXCXP',
-            administrator: 'A.B. Data, Ltd.',
-            defendant: 'Google LLC',
+          results: [{
+            result_json: JSON.stringify({
+              name: 'Google Assistant Privacy Settlement',
+              claim_id: '3GHJCKGF',
+              pin: 'JRXCXP',
+              administrator: 'A.B. Data, Ltd.',
+              defendant: 'Google LLC',
               claim_deadline: '2026-08-27',
             }),
           }],
@@ -247,5 +265,91 @@ describe('ClassActionTracker', () => {
       expect(mockGet.mock.calls.filter(([url]) => url === '/api/class-action-claims')).toHaveLength(2)
     })
     expect(screen.queryByText('Review extracted claim details')).not.toBeInTheDocument()
+  })
+
+  it('shows the in-flight banner and processing UI when an import job is restored on mount', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/class-action-claims') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/genai/import/jobs?job_type=class_action_email') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 77,
+              status: 'processing',
+              job_type: 'class_action_email',
+              results: [],
+            },
+          ],
+        })
+      }
+
+      if (url === '/api/genai/import/jobs/77') {
+        return Promise.resolve({
+          id: 77,
+          status: 'processing',
+          error_message: null,
+          results: [],
+        })
+      }
+
+      return Promise.reject(new Error(`Unexpected GET ${url}`))
+    })
+
+    render(<ClassActionTracker />)
+
+    expect(await screen.findByText('AI import in progress')).toBeInTheDocument()
+    expect(await screen.findByText('Extracting claim details from your notification email…')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /view/i }))
+
+    expect(await screen.findByText('Processing with AI…')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Notification email text')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /extract claim/i })).not.toBeInTheDocument()
+  })
+
+  it('opens the review dialog automatically when a parsed import job is restored on mount', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/class-action-claims') {
+        return Promise.resolve([])
+      }
+
+      if (url === '/api/genai/import/jobs?job_type=class_action_email') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 88,
+              status: 'parsed',
+              job_type: 'class_action_email',
+              results: [],
+            },
+          ],
+        })
+      }
+
+      if (url === '/api/genai/import/jobs/88') {
+        return Promise.resolve({
+          id: 88,
+          status: 'parsed',
+          error_message: null,
+          results: [{
+            result_json: JSON.stringify({
+              name: 'Restored Settlement',
+              claim_id: 'RESTORE-1',
+            }),
+          }],
+        })
+      }
+
+      return Promise.reject(new Error(`Unexpected GET ${url}`))
+    })
+
+    render(<ClassActionTracker />)
+
+    expect(await screen.findByText('Review extracted claim details')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Restored Settlement')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('RESTORE-1')).toBeInTheDocument()
   })
 })

@@ -38,6 +38,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -48,6 +49,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { GenAiImportJobData } from '@/genai-processor/types'
 import { useGenAiJobPolling } from '@/genai-processor/useGenAiJobPolling'
 
 interface PaymentTransaction {
@@ -218,7 +220,13 @@ function ClassActionTracker(): React.ReactElement {
   const [reviewTarget, setReviewTarget] = useState<ImportAction>('create')
   const [reviewMergeClaimId, setReviewMergeClaimId] = useState<number | null>(null)
 
-  const { status: importJobStatus, results: importJobResults, error: importJobError } = useGenAiJobPolling(importJobId)
+  const { status: importJobStatus, results: importJobResults, error: importJobError, estimatedWait: importEstimatedWait } = useGenAiJobPolling(importJobId)
+
+  const importInFlight = importJobId !== null
+    && (importJobStatus === null
+      || importJobStatus === 'pending'
+      || importJobStatus === 'processing'
+      || importJobStatus === 'queued_tomorrow')
 
   const loadClaims = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -238,6 +246,34 @@ function ClassActionTracker(): React.ReactElement {
   useEffect(() => {
     void loadClaims()
   }, [loadClaims])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function restoreInFlightJob(): Promise<void> {
+      try {
+        const response = await fetchWrapper.get('/api/genai/import/jobs?job_type=class_action_email') as { data: GenAiImportJobData[] }
+        if (cancelled) {
+          return
+        }
+
+        const resumable = response.data.find(
+          (job) => job.status === 'pending' || job.status === 'processing' || job.status === 'parsed',
+        )
+        if (resumable) {
+          setImportJobId(resumable.id)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    void restoreInFlightJob()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!importJobError) {
@@ -445,8 +481,10 @@ function ClassActionTracker(): React.ReactElement {
             variant="outline"
             onClick={() => {
               setImportDialogOpen(true)
-              setImportText('')
-              setImportJobId(null)
+              if (!importInFlight) {
+                setImportText('')
+                setImportJobId(null)
+              }
             }}
           >
             Import from email…
@@ -458,6 +496,27 @@ function ClassActionTracker(): React.ReactElement {
         <Alert variant="destructive">
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {importInFlight && !importDialogOpen && (
+        <Alert>
+          <AlertTitle className="flex items-center gap-2">
+            <Spinner size="small" />
+            AI import in progress
+          </AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>
+              {importJobStatus === 'processing'
+                ? 'Extracting claim details from your notification email…'
+                : importJobStatus === 'queued_tomorrow'
+                  ? (importEstimatedWait ?? 'Your import is deferred until quota resets.')
+                  : 'Queued for AI processing…'}
+            </span>
+            <Button type="button" size="sm" variant="outline" onClick={() => setImportDialogOpen(true)}>
+              View
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
@@ -602,24 +661,70 @@ function ClassActionTracker(): React.ReactElement {
       </div>
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Import from notification email</DialogTitle>
             <DialogDescription>Paste an email and we&apos;ll extract a candidate claim for review.</DialogDescription>
           </DialogHeader>
-          <Textarea
-            aria-label="Notification email text"
-            rows={12}
-            value={importText}
-            onChange={(event) => setImportText(event.target.value)}
-          />
+          {importInFlight ? (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
+              {importJobStatus === 'queued_tomorrow' ? (
+                <>
+                  <p className="font-medium text-yellow-700 dark:text-yellow-300">Processing deferred</p>
+                  <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
+                    {importEstimatedWait ?? 'Your email will be processed when quota resets.'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="mb-2 flex items-center gap-2">
+                    <Spinner size="small" />
+                    <span className="font-medium text-blue-700 dark:text-blue-300">
+                      {importJobStatus === 'processing' ? 'Processing with AI…' : 'Queued for AI processing…'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    Your email is being analyzed. You can close this dialog and come back later — we&apos;ll keep processing in the background.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : importJobId !== null && importJobStatus === 'failed' ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
+              <p className="mb-2 font-medium text-red-700 dark:text-red-300">AI processing failed</p>
+              <p className="mb-3 text-sm text-red-600 dark:text-red-400">
+                {importJobError ?? 'Something went wrong while processing your email. Please try again.'}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setImportJobId(null)
+                  setError(null)
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <Textarea
+              aria-label="Notification email text"
+              rows={12}
+              className="max-h-[40vh] resize-y overflow-auto"
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+            />
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setImportDialogOpen(false)} disabled={importSubmitting}>
-              Cancel
+              {importInFlight ? 'Close' : 'Cancel'}
             </Button>
-            <Button type="button" onClick={() => void submitEmailImport()} disabled={importSubmitting}>
-              {importSubmitting ? 'Submitting…' : 'Extract claim'}
-            </Button>
+            {!importInFlight && importJobStatus !== 'failed' && (
+              <Button type="button" onClick={() => void submitEmailImport()} disabled={importSubmitting}>
+                {importSubmitting ? 'Submitting…' : 'Extract claim'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
