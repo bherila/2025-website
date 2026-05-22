@@ -1,6 +1,17 @@
+import {
+  type MillerColumnSpec,
+  type MillerRoute,
+  parseHash as parseMillerHash,
+  pushColumn as pushMillerColumn,
+  replaceFrom as replaceMillerFrom,
+  routesEqual as millerRoutesEqual,
+  serializeRoute as serializeMillerRoute,
+  truncateTo as truncateMillerTo,
+} from '@/components/ui/miller'
+
 import type { FormId } from './formRegistry'
 
-const FORM_IDS: ReadonlySet<string> = new Set<FormId>([
+export const FORM_IDS: ReadonlySet<string> = new Set<FormId>([
   'home',
   'estimate',
   'action-items',
@@ -41,114 +52,42 @@ export interface TaxRoute {
 
 export const EMPTY_ROUTE: TaxRoute = { columns: [] }
 
-/**
- * Parse a hash string into a TaxRoute. Accepts forms like:
- *   ""                                    → home (empty route)
- *   "#/"                                  → home
- *   "#/form-1040"                         → 1040
- *   "#/form-1040/sch-1/form-1116:passive" → 1040 → Sch 1 → 1116 (passive)
- *   "#/form-1040/sch-e:3"                 → 1040 → Sch E (DB id 3)
- *
- * Unknown form ids are silently dropped to prevent crashes from stale links.
- */
+function toMillerColumn(column: ColumnSpec): MillerColumnSpec<FormId> {
+  return column.instance ? { id: column.form, instance: column.instance } : { id: column.form }
+}
+
+function fromMillerColumn(column: MillerColumnSpec<FormId>): ColumnSpec {
+  return column.instance ? { form: column.id, instance: column.instance } : { form: column.id }
+}
+
+function toMillerRoute(route: TaxRoute): MillerRoute<FormId> {
+  return { columns: route.columns.map(toMillerColumn) }
+}
+
+function fromMillerRoute(route: MillerRoute<FormId>): TaxRoute {
+  return { columns: route.columns.map(fromMillerColumn) }
+}
+
 export function parseHash(hash: string): TaxRoute {
-  if (!hash) {
-    return EMPTY_ROUTE
-  }
-  const trimmed = hash.startsWith('#') ? hash.slice(1) : hash
-  const path = trimmed.startsWith('/') ? trimmed.slice(1) : trimmed
-  if (!path) {
-    return EMPTY_ROUTE
-  }
-  const segments = path.split('/').filter(Boolean)
-  const columns: ColumnSpec[] = []
-  for (const segment of segments) {
-    const [rawForm, rawInstance] = segment.split(':')
-    if (rawForm === undefined || !FORM_IDS.has(rawForm)) {
-      continue
-    }
-    const column: ColumnSpec = { form: rawForm as FormId }
-    if (rawInstance) {
-      column.instance = decodeURIComponent(rawInstance)
-    }
-    columns.push(column)
-  }
-  return { columns }
+  return fromMillerRoute(parseMillerHash<FormId>(hash, FORM_IDS))
 }
 
-/**
- * Serialize a TaxRoute back into a hash string. Empty route → "".
- */
 export function serializeRoute(route: TaxRoute): string {
-  if (route.columns.length === 0) {
-    return ''
-  }
-  const segments = route.columns.map((col) => {
-    if (col.instance !== undefined) {
-      return `${col.form}:${encodeURIComponent(col.instance)}`
-    }
-    return col.form
-  })
-  return `#/${segments.join('/')}`
+  return serializeMillerRoute(toMillerRoute(route))
 }
 
-/**
- * Push a new column onto the route, appending to the rightmost position.
- * If the same form (and instance) is already in the stack, truncates to that
- * depth instead of adding a duplicate.
- */
 export function pushColumn(route: TaxRoute, column: ColumnSpec): TaxRoute {
-  const existing = route.columns.findIndex(
-    (c) => c.form === column.form && c.instance === column.instance,
-  )
-  if (existing !== -1) {
-    return { columns: route.columns.slice(0, existing + 1) }
-  }
-  return { columns: [...route.columns, column] }
+  return fromMillerRoute(pushMillerColumn(toMillerRoute(route), toMillerColumn(column)))
 }
 
-/**
- * Truncate the route to the first `depth` columns.
- * truncateTo({columns: [a,b,c]}, 1) → {columns: [a]}
- * truncateTo({columns: [a,b,c]}, 0) → {columns: []}
- */
 export function truncateTo(route: TaxRoute, depth: number): TaxRoute {
-  if (depth < 0) {
-    return EMPTY_ROUTE
-  }
-  if (depth >= route.columns.length) {
-    return route
-  }
-  return { columns: route.columns.slice(0, depth) }
+  return fromMillerRoute(truncateMillerTo(toMillerRoute(route), depth))
 }
 
-/**
- * Replace the column at `depth`, dropping everything to the right of it.
- * Used when the user drills into a different child from a parent column.
- */
 export function replaceFrom(route: TaxRoute, depth: number, column: ColumnSpec): TaxRoute {
-  if (depth < 0) {
-    return { columns: [column] }
-  }
-  return { columns: [...route.columns.slice(0, depth), column] }
+  return fromMillerRoute(replaceMillerFrom(toMillerRoute(route), depth, toMillerColumn(column)))
 }
 
-/**
- * Returns true when the two routes describe the same column stack.
- */
 export function routesEqual(a: TaxRoute, b: TaxRoute): boolean {
-  if (a.columns.length !== b.columns.length) {
-    return false
-  }
-  for (let i = 0; i < a.columns.length; i++) {
-    const colA = a.columns[i]!
-    const colB = b.columns[i]!
-    if (colA.form !== colB.form) {
-      return false
-    }
-    if (colA.instance !== colB.instance) {
-      return false
-    }
-  }
-  return true
+  return millerRoutesEqual(toMillerRoute(a), toMillerRoute(b))
 }

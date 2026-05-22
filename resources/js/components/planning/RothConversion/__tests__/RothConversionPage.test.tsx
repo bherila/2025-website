@@ -25,6 +25,16 @@ jest.mock('../RothConversionForm', () => ({
       icon: function MockIcon(): ReactElement {
         return <svg aria-hidden="true" />
       },
+      presentation: 'column',
+      component: function MockColumnComponent(): ReactElement {
+        return <div />
+      },
+      meta: {
+        description: 'People inputs',
+        icon: function MockIconMeta(): ReactElement {
+          return <svg aria-hidden="true" />
+        },
+      },
     },
   ],
   RothConversionFormSection: function MockRothConversionFormSection({

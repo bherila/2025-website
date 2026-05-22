@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { MillerColumnShell, type MillerColumnShellColumn } from '@/components/ui/miller-column-shell'
+import { MillerColumnShell, type MillerColumnShellColumn, type MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
@@ -36,15 +36,11 @@ interface RothConversionPageProps {
 }
 
 type RothConversionResultViewId = 'overview' | 'years' | 'balances' | 'social-security' | 'tax-detail' | 'compare'
+type RothConversionColumnId = RothConversionFormSectionId | RothConversionResultViewId
 
-interface RothConversionResultViewMeta {
-  id: RothConversionResultViewId
-  label: string
-  shortLabel: string
+interface RothConversionColumnMeta {
   description: string
   icon: LucideIcon
-  wide?: boolean
-  render: (context: RothConversionResultViewContext) => ReactElement
 }
 
 type RothConversionColumnState =
@@ -56,13 +52,25 @@ interface RothConversionResultViewContext {
   scenario: RothConversionScenarioProjection
 }
 
-const RESULT_VIEWS: RothConversionResultViewMeta[] = [
+function EmptyColumnComponent(): ReactElement {
+  return <></>
+}
+
+interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, RothConversionResultViewId, RothConversionColumnMeta> {
+  render: (context: RothConversionResultViewContext) => ReactElement
+}
+
+const RESULT_VIEWS: ResultViewRegistryEntry[] = [
   {
     id: 'overview',
     label: 'Projection Overview',
     shortLabel: 'Overview',
-    description: 'Summary cards, income stack, RMD rates, and conversion window.',
-    icon: BarChart3,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'Summary cards, income stack, RMD rates, and conversion window.',
+      icon: BarChart3,
+    },
     wide: true,
     render: ({ projection, scenario }) => <ProjectionOverview projection={projection} scenario={scenario} />,
   },
@@ -70,8 +78,12 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     id: 'years',
     label: 'Year-by-Year Income',
     shortLabel: 'Years',
-    description: 'Annual income stack used by the tax calculation.',
-    icon: LineChart,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'Annual income stack used by the tax calculation.',
+      icon: LineChart,
+    },
     wide: true,
     render: ({ scenario }) => <ProjectionYears scenario={scenario} />,
   },
@@ -79,8 +91,12 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     id: 'balances',
     label: 'Balance Projection',
     shortLabel: 'Balances',
-    description: 'Ending balances after conversions, taxes, and withdrawals.',
-    icon: PiggyBank,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'Ending balances after conversions, taxes, and withdrawals.',
+      icon: PiggyBank,
+    },
     wide: true,
     render: ({ scenario }) => <ProjectionBalances scenario={scenario} />,
   },
@@ -88,16 +104,24 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     id: 'social-security',
     label: 'Social Security',
     shortLabel: 'Social Security',
-    description: 'Claiming comparison for the selected scenario.',
-    icon: Users,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'Claiming comparison for the selected scenario.',
+      icon: Users,
+    },
     render: ({ scenario }) => <ProjectionSocialSecurity scenario={scenario} />,
   },
   {
     id: 'tax-detail',
     label: 'Tax Detail',
     shortLabel: 'Tax Detail',
-    description: 'IRMAA tiers and annual tax table.',
-    icon: Table2,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'IRMAA tiers and annual tax table.',
+      icon: Table2,
+    },
     wide: true,
     render: ({ projection, scenario }) => <ProjectionTaxDetail projection={projection} scenario={scenario} />,
   },
@@ -105,8 +129,12 @@ const RESULT_VIEWS: RothConversionResultViewMeta[] = [
     id: 'compare',
     label: 'Scenario Compare',
     shortLabel: 'Compare',
-    description: 'Side-by-side lifetime tax and estate outcomes.',
-    icon: Table2,
+    presentation: 'column',
+    component: EmptyColumnComponent,
+    meta: {
+      description: 'Side-by-side lifetime tax and estate outcomes.',
+      icon: Table2,
+    },
     wide: true,
     render: ({ projection }) => <ProjectionCompare projection={projection} />,
   },
@@ -185,15 +213,16 @@ function ColumnOpenButton({
 }
 
 function renderColumnLauncher(
-  meta: { id: string; shortLabel: string; description: string; icon: LucideIcon },
+  entry: Pick<MillerRegistryEntry<unknown, RothConversionColumnId, RothConversionColumnMeta>, 'id' | 'shortLabel' | 'meta'>,
   onOpen: () => void,
 ): ReactElement {
+  const details = entry.meta!
   return (
     <ColumnOpenButton
-      key={meta.id}
-      label={meta.shortLabel}
-      description={meta.description}
-      icon={meta.icon}
+      key={entry.id}
+      label={entry.shortLabel}
+      description={details.description}
+      icon={details.icon}
       onClick={onOpen}
     />
   )

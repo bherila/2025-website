@@ -36,7 +36,7 @@ import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 
 import { useDockActions } from './DockActions'
-import type { DrillTarget, FormId, FormRegistry, FormRenderProps } from './formRegistry'
+import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps,getTaxFormMeta } from './formRegistry'
 import { summarizeTaxEstimate, TaxEstimateFullDetail } from './TaxEstimateHeader'
 
 /**
@@ -48,7 +48,7 @@ function tabToDrill(onDrill: (t: DrillTarget) => void): (tab: TaxTabId) => void 
   return (tab) => {
     const formId = TAB_TO_FORM_ID[tab] as FormId | undefined
     if (formId) {
-      onDrill({ form: formId })
+      onDrill({ id: formId })
     }
   }
 }
@@ -119,7 +119,7 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
       availableYears={state.availableYears}
       priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
       onOpenDoc={openTaxDocumentDetail}
-      onGoToForm1040={() => onDrill({ form: 'form-1040', placement: 'left-of-current' })}
+      onGoToForm1040={() => onDrill({ id: 'form-1040', placement: 'left-of-current' })}
       onCarryoverSaved={() => state.refreshAll({ includeTaxFacts: true })}
     />
   )
@@ -145,7 +145,7 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
       selectedYear={state.year}
       isMarried={state.isMarried}
       onOpenDoc={reviewK1Doc}
-      onGoToScheduleC={() => onDrill({ form: 'sch-c' })}
+      onGoToScheduleC={() => onDrill({ id: 'sch-c' })}
     />
   )
 }
@@ -240,7 +240,7 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
       selectedYear={state.year}
       onReviewNow={reviewK1Doc}
       onBulkSetSbpElection={bulkSetSbpElection}
-      onOpenWorksheet={() => onDrill({ form: 'wks-1116-apportionment' })}
+      onOpenWorksheet={() => onDrill({ id: 'wks-1116-apportionment' })}
       {...(category ? { category } : {})}
     />
   )
@@ -551,6 +551,12 @@ function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.Re
   return <CapitalGainsReconciliationPanel selectedYear={state.year} />
 }
 
+function withTaxFormMeta(registry: FormRegistry): FormRegistry {
+  const entries = Object.entries(registry) as [FormId, FormRegistryEntry][]
+  return Object.fromEntries(
+    entries.map(([id, entry]) => [id, { ...entry, meta: getTaxFormMeta(entry) }]),
+  ) as FormRegistry
+}
 
 /**
  * Registry of all forms. Read-only forms have full adapters wired to
@@ -558,7 +564,7 @@ function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.Re
  * etc.) and worksheets currently render placeholder StubCards pending
  * full migration.
  */
-export const formRegistry: FormRegistry = {
+const rawFormRegistry: FormRegistry = {
   home: {
     id: 'home',
     label: 'Home',
@@ -994,3 +1000,5 @@ export const formRegistry: FormRegistry = {
     relatedForms: ['form-1116'],
   },
 }
+
+export const formRegistry: FormRegistry = withTaxFormMeta(rawFormRegistry)
