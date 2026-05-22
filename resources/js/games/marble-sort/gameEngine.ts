@@ -385,8 +385,8 @@ export function applyShufflePowerUp(state: GameState): GameState {
     }
   }
 
-  const offset = (next.seed + next.moves + next.powerUpsUsed + 1) % colors.length
-  const shuffledColors = [...colors.slice(offset), ...colors.slice(0, offset)].reverse()
+  const shuffleRng = createRng(next.seed + next.moves * 31 + next.powerUpsUsed * 97 + 1)
+  const shuffledColors = shuffle(colors, shuffleRng)
   let colorIndex = 0
 
   next.boxes = next.boxes.map((box) => {

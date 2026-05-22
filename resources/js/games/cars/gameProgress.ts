@@ -1,4 +1,13 @@
 import {
+  isRecord,
+  parseArray,
+  parseInteger,
+  parseNumber,
+  parseString,
+  safeLocalStorage,
+  safeProgressNumber,
+} from '../_shared/progressParsers'
+import {
   BOARD_HEIGHT,
   BOARD_WIDTH,
   type Car,
@@ -20,6 +29,8 @@ import {
   type SavedGameProgress,
   type Tunnel,
 } from './gameTypes'
+
+export { safeProgressNumber }
 
 export const LEVEL_SNAPSHOT_STORAGE_KEY = 'bwh.cars-game.snapshot.v2'
 
@@ -139,14 +150,6 @@ export function progressFromState(state: GameState): SavedGameProgress {
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  return window.localStorage
-}
-
 export function sanitizePowerUps(powerUps: unknown): PowerUpInventory {
   const candidate = powerUps as Partial<PowerUpInventory> | undefined
 
@@ -155,10 +158,6 @@ export function sanitizePowerUps(powerUps: unknown): PowerUpInventory {
     shuffle: Math.max(0, safeProgressNumber(candidate?.shuffle)),
     fill: Math.max(0, safeProgressNumber(candidate?.fill)),
   }
-}
-
-export function safeProgressNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
 function cloneSerializableState(state: GameState): GameState {
@@ -412,43 +411,6 @@ function parseGridPosition(value: unknown): GridPosition | null {
   return { x, y }
 }
 
-function parseArray<T>(value: unknown, parser: (item: unknown) => T | null): T[] | null {
-  if (!Array.isArray(value)) {
-    return null
-  }
-
-  const parsed: T[] = []
-  for (const item of value) {
-    const next = parser(item)
-    if (next === null) {
-      return null
-    }
-    parsed.push(next)
-  }
-
-  return parsed
-}
-
-function parseString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-function parseInteger(value: unknown, minimum: number | null = null): number | null {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    return null
-  }
-
-  if (minimum !== null && value < minimum) {
-    return null
-  }
-
-  return value
-}
-
-function parseNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
 function parseCarColor(value: unknown): CarColor | null {
   return typeof value === 'string' && value in CAR_COLORS ? value as CarColor : null
 }
@@ -475,8 +437,4 @@ function parseParkingSlotKind(value: unknown): ParkingSlotKind | null {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

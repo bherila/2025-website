@@ -200,7 +200,7 @@ export function spawnMarbleBody(
 
 export function stepPhysics(world: CANNON.World, dt: number): void {
   const clamped = Math.min(dt, 0.05)
-  world.step(1 / 60, clamped, 3)
+  world.step(1 / 60, clamped, 6)
 }
 
 export function disposePhysicsWorld(physics: PhysicsWorld): void {
