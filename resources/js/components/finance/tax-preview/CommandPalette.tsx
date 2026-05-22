@@ -11,7 +11,7 @@ import {
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import { type FormCategory, type FormId, type FormRegistry, type FormRegistryEntry } from './formRegistry'
+import { type FormCategory, type FormId, type FormRegistry, type FormRegistryEntry,getTaxFormMeta } from './formRegistry'
 import { useTaxRoute } from './useTaxRoute'
 
 const GROUP_ORDER: FormCategory[] = ['Schedule', 'Form', 'Worksheet', 'App']
@@ -141,12 +141,14 @@ export function useCommandPaletteShortcut(setOpen: (next: boolean | ((prev: bool
 function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPreview>): PaletteRow[] {
   const rows: PaletteRow[] = []
   for (const entry of Object.values(registry)) {
-    if (entry.id === 'home' && entry.category === 'App') {
+    const meta = getTaxFormMeta(entry)
+
+    if (entry.id === 'home' && meta.category === 'App') {
       // Home is a real navigation target — keep it.
     }
     const baseLabel = entry.label
-    const formNumber = entry.formNumber ? [entry.formNumber] : []
-    const baseKeywords = [...entry.keywords, ...formNumber, entry.shortLabel, entry.id]
+    const formNumber = meta.formNumber ? [meta.formNumber] : []
+    const baseKeywords = [...meta.keywords, ...formNumber, entry.shortLabel, entry.id]
 
     if (entry.instances) {
       const instances = entry.instances.list(state)
@@ -157,7 +159,7 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
           instanceKey: inst.key,
           label: `${entry.shortLabel} — ${inst.label}`,
           keywords: [...baseKeywords, inst.label, inst.key],
-          category: entry.category,
+          category: meta.category,
           presentation: entry.presentation,
         })
       }
@@ -168,7 +170,7 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
           isCreate: true,
           label: `${entry.shortLabel} — + Create new instance`,
           keywords: [...baseKeywords, 'new', 'create', 'add'],
-          category: entry.category,
+          category: meta.category,
           presentation: entry.presentation,
         })
       }
@@ -180,7 +182,7 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
       formId: entry.id,
       label: baseLabel,
       keywords: baseKeywords,
-      category: entry.category,
+      category: meta.category,
       presentation: entry.presentation,
     })
   }

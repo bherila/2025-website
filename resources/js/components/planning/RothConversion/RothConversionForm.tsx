@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
+import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +22,12 @@ export interface RothConversionFormSectionMeta {
   shortLabel: string
   description: string
   icon: LucideIcon
+  presentation: 'column'
+  component: MillerRegistryEntry<unknown, RothConversionFormSectionId>['component']
+  meta: {
+    description: string
+    icon: LucideIcon
+  }
 }
 
 interface RothConversionFormProps {
@@ -69,6 +76,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'People',
     description: 'Birth years, projection window, and survivor transition.',
     icon: Users,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Birth years, projection window, and survivor transition.', icon: Users },
   },
   {
     id: 'income',
@@ -76,6 +86,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Income',
     description: 'Recurring income, retirement ages, and claiming ages.',
     icon: Landmark,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Recurring income, retirement ages, and claiming ages.', icon: Landmark },
   },
   {
     id: 'expenses',
@@ -83,6 +96,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Expenses',
     description: 'Annual spending needs and Schedule A expense inputs.',
     icon: Receipt,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Annual spending needs and Schedule A expense inputs.', icon: Receipt },
   },
   {
     id: 'balances',
@@ -90,6 +106,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Balances',
     description: 'Current account balances used by the projection.',
     icon: PiggyBank,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Current account balances used by the projection.', icon: PiggyBank },
   },
   {
     id: 'strategy',
@@ -97,6 +116,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Strategy',
     description: 'Conversion mode, bracket target, and harvesting rules.',
     icon: Calculator,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Conversion mode, bracket target, and harvesting rules.', icon: Calculator },
   },
   {
     id: 'assumptions',
@@ -104,6 +126,9 @@ export const ROTH_CONVERSION_FORM_SECTIONS: RothConversionFormSectionMeta[] = [
     shortLabel: 'Assumptions',
     description: 'Growth, inflation, state tax, and IRMAA lookback assumptions.',
     icon: SlidersHorizontal,
+    presentation: 'column',
+    component: () => <></>,
+    meta: { description: 'Growth, inflation, state tax, and IRMAA lookback assumptions.', icon: SlidersHorizontal },
   },
 ]
 

@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { MillerDrillTarget, MillerRegistryEntry, MillerRenderProps } from '@/components/ui/miller'
 
 import type { useTaxPreview } from '../TaxPreviewContext'
 
@@ -40,60 +40,51 @@ export type Presentation = 'column' | 'modal' | 'app'
 
 export type FormCategory = 'Schedule' | 'Form' | 'Worksheet' | 'App'
 
-export interface InstanceRef {
-  key: string
-  label: string
-}
+export type InstanceRef = { key: string; label: string }
 
-export interface DrillTarget {
-  form: FormId
-  instance?: string
-  placement?: 'right' | 'left-of-current'
-}
+export type DrillTarget = MillerDrillTarget<FormId>
 
-export interface FormRenderProps {
-  state: TaxPreviewState
-  instance?: InstanceRef
-  onDrill: (target: DrillTarget) => void
-}
+export type FormRenderProps = MillerRenderProps<TaxPreviewState, FormId>
 
 export interface KeyAmount {
   label: string
   value: number
 }
 
-export interface FormRegistryEntry {
-  id: FormId
-  label: string
-  shortLabel: string
+export interface TaxFormMeta {
+  category: FormCategory
+  keywords: string[]
   formNumber?: string
+  relatedForms?: FormId[]
+  keyAmounts?: (state: TaxPreviewState) => KeyAmount[] | null
+  hasData?: (state: TaxPreviewState) => boolean
+}
+
+export interface FormRegistryEntry extends MillerRegistryEntry<TaxPreviewState, FormId, TaxFormMeta> {
   keywords: string[]
   category: FormCategory
-  presentation: Presentation
-  instances?: {
-    list: (state: TaxPreviewState) => InstanceRef[]
-    create: (state: TaxPreviewState) => InstanceRef
-    allowCreate: boolean
-  }
-  component: ComponentType<FormRenderProps>
+  formNumber?: string
   relatedForms?: FormId[]
-  /** When true, the column renders at double width (960px) in the Miller shell. */
-  wide?: boolean
-  /**
-   * Returns key amounts to display on the form button in the home view.
-   * Return null when the form has no data yet.
-   */
   keyAmounts?: (state: TaxPreviewState) => KeyAmount[] | null
-  /**
-   * Returns true when the form has data for the current return.
-   * Used to fade and sort N/A forms to the end of the home view grid.
-   * When absent and keyAmounts is defined, derives from keyAmounts !== null.
-   * When both are absent, always considered active.
-   */
   hasData?: (state: TaxPreviewState) => boolean
 }
 
 export type FormRegistry = Record<FormId, FormRegistryEntry>
+
+export function getTaxFormMeta(entry: FormRegistryEntry): TaxFormMeta {
+  if (entry.meta) {
+    return entry.meta
+  }
+
+  return {
+    category: entry.category,
+    keywords: entry.keywords,
+    ...(entry.formNumber ? { formNumber: entry.formNumber } : {}),
+    ...(entry.relatedForms ? { relatedForms: entry.relatedForms } : {}),
+    ...(entry.keyAmounts ? { keyAmounts: entry.keyAmounts } : {}),
+    ...(entry.hasData ? { hasData: entry.hasData } : {}),
+  }
+}
 
 export function getEntry(registry: FormRegistry, id: FormId): FormRegistryEntry {
   const entry = registry[id]

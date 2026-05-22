@@ -8,7 +8,7 @@ import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import type { FormCategory, FormId, FormRegistryEntry, KeyAmount, TaxPreviewState } from './formRegistry'
+import { type FormCategory, type FormId, type FormRegistryEntry, getTaxFormMeta, type KeyAmount, type TaxPreviewState } from './formRegistry'
 import { formRegistry } from './registry'
 import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
@@ -52,9 +52,9 @@ export function DockHomeView(): React.ReactElement {
   const columnEntries = Object.values(formRegistry).filter((e) => e.presentation === 'column')
   const worksheets = Object.values(formRegistry).filter((e) => e.presentation === 'modal')
 
-  const schedules = columnEntries.filter((e) => e.category === 'Schedule')
-  const forms = columnEntries.filter((e) => e.category === 'Form')
-  const apps = Object.values(formRegistry).filter((e) => e.category === 'App' && e.id !== 'home')
+  const schedules = columnEntries.filter((e) => getTaxFormMeta(e).category === 'Schedule')
+  const forms = columnEntries.filter((e) => getTaxFormMeta(e).category === 'Form')
+  const apps = Object.values(formRegistry).filter((e) => getTaxFormMeta(e).category === 'App' && e.id !== 'home')
 
   const pinnedEntries = resolveEntries(pinned).filter((e) => isPinnable(e))
   const recentEntries = resolveEntries(recent).filter((e) => !pinned.includes(e.id))
@@ -86,7 +86,7 @@ export function DockHomeView(): React.ReactElement {
                   id={entry.id}
                   label={entry.label}
                   shortLabel={entry.shortLabel}
-                  keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+                  keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
                   onOpen={openForm}
                   pinned
                   onTogglePin={() => togglePin(entry.id)}
@@ -119,7 +119,7 @@ export function DockHomeView(): React.ReactElement {
                   id={entry.id}
                   label={entry.label}
                   shortLabel={entry.shortLabel}
-                  keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+                  keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
                   onOpen={openForm}
                   pinned={false}
                   {...(isPinnable(entry) ? { onTogglePin: () => togglePin(entry.id) } : {})}
@@ -209,15 +209,17 @@ export function DockHomeView(): React.ReactElement {
 }
 
 function isPinnable(entry: FormRegistryEntry): boolean {
-  return entry.category === 'Schedule' || entry.category === 'Form'
+  const category = getTaxFormMeta(entry).category
+  return category === 'Schedule' || category === 'Form'
 }
 
 function formHasData(entry: FormRegistryEntry, state: TaxPreviewState): boolean {
-  if (entry.keyAmounts) {
-    return entry.keyAmounts(state) !== null
+  const meta = getTaxFormMeta(entry)
+  if (meta.keyAmounts) {
+    return meta.keyAmounts(state) !== null
   }
-  if (entry.hasData) {
-    return entry.hasData(state)
+  if (meta.hasData) {
+    return meta.hasData(state)
   }
   return true
 }
@@ -256,7 +258,7 @@ function FormGrid({ label, entries, taxPreview, onOpen, isPinned, onTogglePin }:
             id={entry.id}
             label={entry.label}
             shortLabel={entry.shortLabel}
-            keyAmounts={entry.keyAmounts?.(taxPreview) ?? null}
+            keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
             inactive={!formHasData(entry, taxPreview)}
             onOpen={onOpen}
             pinned={isPinned(entry.id)}
