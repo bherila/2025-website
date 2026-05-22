@@ -1,6 +1,12 @@
 import * as CANNON from 'cannon-es'
 
-import { createPhysicsWorld } from '../scene/physics/world'
+import {
+  createPhysicsWorld,
+  PHYSICS_FIXED_TIME_STEP_SECONDS,
+  PHYSICS_MAX_FRAME_DELTA_SECONDS,
+  PHYSICS_MAX_SUBSTEPS,
+  stepPhysics,
+} from '../scene/physics/world'
 import {
   BASIN_EXIT_HALF_WIDTH,
   BASIN_NORTH_Z,
@@ -65,4 +71,18 @@ describe('addAngledWall funnel taper', () => {
       expect(Math.abs(north.x)).toBeGreaterThan(Math.abs(south.x))
     },
   )
+})
+
+describe('stepPhysics', () => {
+  it('clamps slow frames to the configured substep budget', () => {
+    const world = { step: jest.fn() } as unknown as CANNON.World
+
+    stepPhysics(world, 1)
+
+    expect(world.step).toHaveBeenCalledWith(
+      PHYSICS_FIXED_TIME_STEP_SECONDS,
+      PHYSICS_MAX_FRAME_DELTA_SECONDS,
+      PHYSICS_MAX_SUBSTEPS,
+    )
+  })
 })
