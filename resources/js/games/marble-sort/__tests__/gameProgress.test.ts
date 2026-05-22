@@ -92,4 +92,46 @@ describe('marble sort progress persistence', () => {
       totalScore: 100,
     })
   })
+
+  it('preserves slotIndex on conveyor marbles across save/load', () => {
+    const base = generateLevel(1, 42_010)
+    const state = {
+      ...base,
+      conveyor: [
+        { id: 'm1', color: base.activeColors[0]!, sequence: 1, slotIndex: 0 },
+        { id: 'm2', color: base.activeColors[1]!, sequence: 2, slotIndex: 7 },
+      ],
+    }
+
+    saveLevelSnapshot(state)
+    const loaded = loadLevelSnapshot()
+
+    expect(loaded?.conveyor.map((marble) => ({ id: marble.id, slotIndex: marble.slotIndex }))).toEqual([
+      { id: 'm1', slotIndex: 0 },
+      { id: 'm2', slotIndex: 7 },
+    ])
+  })
+
+  it('rejects a snapshot whose conveyor marbles are missing slotIndex', () => {
+    const state = generateLevel(1, 42_011)
+    const malformed = {
+      version: 1,
+      state: {
+        ...state,
+        conveyor: [{ id: 'm1', color: state.activeColors[0], sequence: 1 }],
+      },
+    }
+    window.localStorage.setItem(MARBLE_SORT_SNAPSHOT_STORAGE_KEY, JSON.stringify(malformed))
+
+    expect(loadLevelSnapshot()).toBeNull()
+  })
+
+  it('does not read from the legacy v1 snapshot key', () => {
+    window.localStorage.setItem('bwh.marble-sort.snapshot.v1', JSON.stringify({
+      version: 1,
+      state: generateLevel(1, 42_013),
+    }))
+
+    expect(loadLevelSnapshot()).toBeNull()
+  })
 })

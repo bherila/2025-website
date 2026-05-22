@@ -1,4 +1,12 @@
 import {
+  isRecord,
+  parseArray,
+  parseInteger,
+  parseNumber,
+  safeLocalStorage,
+  safeProgressNumber,
+} from '../_shared/progressParsers'
+import {
   BOX_MARBLE_COUNT,
   type Chute,
   type CompletedLevel,
@@ -15,6 +23,8 @@ import {
   type SavedGameProgress,
   type SortingStack,
 } from './gameTypes'
+
+export { safeProgressNumber }
 
 export const MARBLE_SORT_SNAPSHOT_STORAGE_KEY = 'bwh.marble-sort.snapshot.v2'
 
@@ -53,13 +63,14 @@ export function loadProgress(storage: Storage | null = safeLocalStorage()): Save
     }
 
     const parsed = JSON.parse(raw) as Partial<SavedGameProgress>
-    if (parsed.version !== 1 || !isPositiveInteger(parsed.level)) {
+    const parsedLevel = parseInteger(parsed.level, 1)
+    if (parsed.version !== 1 || parsedLevel === null) {
       return createInitialProgress()
     }
 
     return {
       version: 1,
-      level: parsed.level,
+      level: parsedLevel,
       totalScore: safeProgressNumber(parsed.totalScore),
       highScore: safeProgressNumber(parsed.highScore),
       powerUps: sanitizePowerUps(parsed.powerUps),
@@ -143,18 +154,6 @@ export function sanitizePowerUps(powerUps: unknown): PowerUpInventory {
   }
 }
 
-export function safeProgressNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
-}
-
-function safeLocalStorage(): Storage | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  return window.localStorage
-}
-
 function cloneSerializableState(state: GameState): GameState {
   return {
     ...state,
@@ -236,6 +235,18 @@ function parseGameState(value: unknown): GameState | null {
     return null
   }
 
+  if (conveyor.some((marble) => marble.slotIndex >= conveyorCapacity)) {
+    return null
+  }
+
+  const slotsSeen = new Set<number>()
+  for (const marble of conveyor) {
+    if (slotsSeen.has(marble.slotIndex)) {
+      return null
+    }
+    slotsSeen.add(marble.slotIndex)
+  }
+
   return {
     version: 1,
     level,
@@ -299,14 +310,15 @@ function parseChute(value: unknown): Chute | null {
     return color ? { color, hidden: item.hidden === true } : null
   })
 
-  if (row === null || row >= GRID_ROWS || queue === null) {
+  const side = value.side === 'right' || value.side === 'left' ? value.side : null
+  if (row === null || row >= GRID_ROWS || queue === null || side === null) {
     return null
   }
 
   return {
     id: value.id,
     row,
-    side: value.side === 'right' ? 'right' : 'left',
+    side,
     remaining: Math.max(0, parseInteger(value.remaining, 0) ?? 0),
     queue,
   }
@@ -319,21 +331,27 @@ function parseConveyorMarble(value: unknown): ConveyorMarble | null {
 
   const color = parseMarbleColor(value.color)
   const sequence = parseInteger(value.sequence)
-  if (!color || sequence === null) {
+  const slotIndex = parseInteger(value.slotIndex)
+  if (!color || sequence === null || slotIndex === null || slotIndex < 0) {
     return null
   }
 
-  return { id: value.id, color, sequence }
+  return { id: value.id, color, sequence, slotIndex }
 }
 
 function parseFallingMarble(value: unknown): FallingMarble | null {
-  const marble = parseConveyorMarble(value)
-  if (!marble || !isRecord(value)) {
+  if (!isRecord(value) || typeof value.id !== 'string') {
     return null
   }
 
+  const color = parseMarbleColor(value.color)
+  const sequence = parseInteger(value.sequence)
   const from = parseGridPosition(value.from)
-  return from ? { ...marble, from } : null
+  if (!color || sequence === null || !from) {
+    return null
+  }
+
+  return { id: value.id, color, sequence, from }
 }
 
 function parseSortingStack(value: unknown): SortingStack | null {
@@ -380,12 +398,15 @@ function parseCompletedLevel(value: unknown): CompletedLevel | null {
 
   const level = parseInteger(value.level, 1)
   const score = parseNumber(value.score)
-  if (level === null || score === null) {
+  const awardedPowerUp = value.awardedPowerUp === 'shuffle' || value.awardedPowerUp === 'extraBelt' || value.awardedPowerUp === 'magnet'
+    ? value.awardedPowerUp
+    : null
+  if (level === null || score === null || awardedPowerUp === null) {
     return null
   }
 
   return {
-    awardedPowerUp: value.awardedPowerUp === 'shuffle' || value.awardedPowerUp === 'extraBelt' ? value.awardedPowerUp : 'magnet',
+    awardedPowerUp,
     level,
     score,
   }
@@ -422,44 +443,3 @@ function parseMarbleColor(value: unknown): keyof typeof MARBLE_COLORS | null {
   return typeof value === 'string' && value in MARBLE_COLORS ? value as keyof typeof MARBLE_COLORS : null
 }
 
-function parseArray<T>(value: unknown, parser: (item: unknown) => T | null): T[] | null {
-  if (!Array.isArray(value)) {
-    return null
-  }
-
-  const parsed: T[] = []
-  for (const item of value) {
-    const parsedItem = parser(item)
-    if (parsedItem === null) {
-      return null
-    }
-
-    parsed.push(parsedItem)
-  }
-
-  return parsed
-}
-
-function parseInteger(value: unknown, min?: number): number | null {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    return null
-  }
-
-  if (min !== undefined && value < min) {
-    return null
-  }
-
-  return value
-}
-
-function parseNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}

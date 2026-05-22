@@ -69,7 +69,8 @@ export function createConveyorTrack(): THREE.Group {
   return group
 }
 
-export function createConveyorBeltMarkers(count = 38): { group: THREE.Group, markers: BeltMarkerRenderItem[] } {
+export function createConveyorBeltMarkers(slotCount: number): { group: THREE.Group, markers: BeltMarkerRenderItem[] } {
+  const safeSlotCount = Math.max(1, slotCount)
   const group = new THREE.Group()
   const markers: BeltMarkerRenderItem[] = []
   const markerGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.025, 18)
@@ -79,14 +80,14 @@ export function createConveyorBeltMarkers(count = 38): { group: THREE.Group, mar
     roughness: 0.7,
   })
 
-  for (let index = 0; index < count; index += 1) {
+  for (let slotIndex = 0; slotIndex < safeSlotCount; slotIndex += 1) {
     const marker = new THREE.Mesh(markerGeometry, markerMaterial)
     marker.rotation.x = Math.PI / 2
     marker.receiveShadow = true
-    const position = conveyorPositionAt(index / count)
+    const position = conveyorPositionAt(slotIndex / safeSlotCount)
     marker.position.set(position.x, 0.18, position.z)
     group.add(marker)
-    markers.push({ index, mesh: marker, total: count })
+    markers.push({ index: slotIndex, mesh: marker, total: safeSlotCount })
   }
 
   return { group, markers }

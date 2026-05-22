@@ -1,19 +1,21 @@
 import {
   CONVEYOR_PATH_HEIGHT,
   CONVEYOR_PATH_PERIMETER,
+  CONVEYOR_PATH_RADIUS,
   CONVEYOR_PATH_WIDTH,
 } from './sceneConstants'
+
+// Progress value on the path's north (upper) straight run, centred at x = 0.
+// This is the point where the funnel throat meets the inner belt lane — every
+// accepted marble enters the conveyor here, regardless of its canonical slot.
+export const CONVEYOR_ENTRY_PROGRESS = (
+  (CONVEYOR_PATH_WIDTH - CONVEYOR_PATH_HEIGHT) * 1.5 + Math.PI * CONVEYOR_PATH_RADIUS
+) / CONVEYOR_PATH_PERIMETER
 
 const BASE_CONVEYOR_TICK_INTERVAL_MS = 220
 const CONVEYOR_SPEED_MULTIPLIER = 1.15
 
 export const CONVEYOR_TICK_INTERVAL_MS = Math.round(BASE_CONVEYOR_TICK_INTERVAL_MS / CONVEYOR_SPEED_MULTIPLIER)
-export const CONVEYOR_PROGRESS_SPEED = 0.06 * CONVEYOR_SPEED_MULTIPLIER
-export const CONVEYOR_SHIFT_DURATION = 0.18
-
-export function conveyorSlotCountFor(capacity: number, orderLength: number): number {
-  return Math.max(1, capacity, orderLength)
-}
 
 export function conveyorPhaseForTick(tick: number, slotCount: number): number {
   return tick / Math.max(1, slotCount)
@@ -66,56 +68,6 @@ export function sortingStackIndexAtConveyorProgress(
   }
 
   return closestIndex
-}
-
-export function preserveConveyorOffsetsForOrderChange(
-  offsetsById: Map<string, number>,
-  previousOrder: string[],
-  nextOrder: string[],
-  previousPhase: number,
-  nextPhase: number,
-  previousSlotCount: number,
-  nextSlotCount: number,
-): void {
-  const previousIndexById = new Map(previousOrder.map((id, index) => [id, index]))
-  const nextIds = new Set(nextOrder)
-
-  for (const id of offsetsById.keys()) {
-    if (!nextIds.has(id)) {
-      offsetsById.delete(id)
-    }
-  }
-
-  for (let index = 0; index < nextOrder.length; index += 1) {
-    const id = nextOrder[index]
-    if (!id) {
-      continue
-    }
-
-    const previousIndex = previousIndexById.get(id)
-    if (previousIndex === undefined) {
-      offsetsById.set(id, 0)
-      continue
-    }
-
-    const previousOffset = offsetsById.get(id) ?? 0
-    const previousProgress = conveyorSlotProgress(previousPhase, previousSlotCount, previousIndex) + previousOffset
-    const nextProgress = conveyorSlotProgress(nextPhase, nextSlotCount, index)
-    offsetsById.set(id, centeredProgressDelta(previousProgress - nextProgress))
-  }
-}
-
-export function easeConveyorOffset(offset: number, deltaSeconds: number): number {
-  if (offset === 0) {
-    return 0
-  }
-
-  const step = deltaSeconds / CONVEYOR_SHIFT_DURATION
-  if (Math.abs(offset) <= step) {
-    return 0
-  }
-
-  return offset > 0 ? offset - step : offset + step
 }
 
 export function sortingStackDropProgress(index: number, total: number): number {

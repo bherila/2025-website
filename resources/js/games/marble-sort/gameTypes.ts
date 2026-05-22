@@ -72,13 +72,17 @@ export interface Chute {
   queue: QueuedChuteBox[]
 }
 
-export interface ConveyorMarble {
+interface MarbleBase {
   id: string
   color: MarbleColor
   sequence: number
 }
 
-export interface FallingMarble extends ConveyorMarble {
+export interface ConveyorMarble extends MarbleBase {
+  slotIndex: number
+}
+
+export interface FallingMarble extends MarbleBase {
   from: GridPosition
 }
 

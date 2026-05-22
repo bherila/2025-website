@@ -40,16 +40,12 @@ import { createMarbleMesh } from './scene/builders/marbleMesh'
 import { createPlayfield } from './scene/builders/playfield'
 import { createSortingStackMesh } from './scene/builders/sortingBlockMesh'
 import {
-  centeredProgressDelta,
-  CONVEYOR_PROGRESS_SPEED,
   conveyorPhaseForTick,
   conveyorProgressSpeedForSlotCount,
-  conveyorSlotCountFor,
   conveyorSlotProgress,
-  easeConveyorOffset,
-  preserveConveyorOffsetsForOrderChange,
   sortingStackDropProgress,
 } from './scene/conveyorProgress'
+import { slotProgressDistance } from './scene/conveyorSlots'
 import { createPhysicsDebugOverlay, physicsDebugOverlayEnabled } from './scene/physics/debugOverlay'
 import {
   createMarbleBodyManager,
@@ -63,7 +59,7 @@ import {
 } from './scene/physics/world'
 import { SCENE_BACKGROUND } from './scene/sceneConstants'
 import { computeOpenedBoxEvents } from './scene/sceneEvents'
-import { CONVEYOR_ENTRY_PROGRESS, conveyorPositionAt, gridCellPosition } from './scene/sceneGeometry'
+import { conveyorPositionAt, gridCellPosition } from './scene/sceneGeometry'
 import type { BeltMarkerRenderItem } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findBoxId } from './scene/threeUtils'
 
@@ -105,13 +101,14 @@ export function MarbleSortScene({
   const marbleGroupRef = useRef<THREE.Group | null>(null)
   const effectGroupRef = useRef<THREE.Group | null>(null)
   const beltMarkersRef = useRef<BeltMarkerRenderItem[]>([])
+  const beltMarkerGroupRef = useRef<THREE.Group | null>(null)
+  const beltMarkerCapacityRef = useRef(0)
   const physicsRef = useRef<PhysicsWorld | null>(null)
   const bodiesRef = useRef<MarbleBodyManager | null>(null)
   const marbleEntriesRef = useRef<Map<string, MarbleEntry>>(new Map())
   const transitRef = useRef<Map<string, TransitData>>(new Map())
-  const conveyorOffsetsRef = useRef<Map<string, number>>(new Map())
-  const conveyorOrderRef = useRef<string[]>([])
-  const conveyorSlotCountRef = useRef(1)
+  const marbleSlotByIdRef = useRef<Map<string, number>>(new Map())
+  const conveyorCapacityRef = useRef(1)
   const onBoxClickRef = useRef(onBoxClick)
   const onMarbleArrivedRef = useRef(onMarbleArrived)
   const arrivedAttemptsRef = useRef<Map<string, number>>(new Map())
@@ -119,8 +116,11 @@ export function MarbleSortScene({
   const stateRef = useRef(state)
   const previousStateRef = useRef<GameState | null>(null)
   const previousColorblindModeRef = useRef(colorblindMode)
-  const conveyorPhaseRef = useRef(0)
-  const beltMarkerPhaseRef = useRef(0)
+  // Phase is anchored on (conveyorTicks, conveyorCapacity) and advances linearly
+  // with wall-clock time between state updates. This guarantees one source of
+  // truth: belt markers, marbles, and matching all derive from the same phase.
+  const phaseBaseRef = useRef(0)
+  const phaseBaseTimeRef = useRef(0)
   const confettiBurstsRef = useRef<ConfettiBurst[]>([])
   const boxBurstsRef = useRef<BoxBurst[]>([])
   const stackTweensRef = useRef<StackRiseTween[]>([])
@@ -132,36 +132,45 @@ export function MarbleSortScene({
     previousState: GameState | null,
     marbleGroup: THREE.Group,
     bodies: MarbleBodyManager,
+    now: number,
   ): void => {
     const entries = marbleEntriesRef.current
     const fallingIds = new Set(nextState.fallingMarbles.map((marble) => marble.id))
     fallingIdsRef.current = fallingIds
     const conveyorIds = new Set(nextState.conveyor.map((marble) => marble.id))
-    const conveyorOffsets = conveyorOffsetsRef.current
-    const previousOrder = conveyorOrderRef.current
-    const previousSlotCount = conveyorSlotCountRef.current
-    const previousPhase = conveyorPhaseRef.current
-    const nextOrder = nextState.conveyor.map((marble) => marble.id)
-    const nextSlotCount = conveyorSlotCountFor(nextState.conveyorCapacity, nextOrder.length)
-    const nextPhase = previousOrder.length > 0
-      ? previousPhase
-      : conveyorPhaseForTick(nextState.conveyorTicks, nextSlotCount)
 
-    preserveConveyorOffsetsForOrderChange(
-      conveyorOffsets,
-      previousOrder,
-      nextOrder,
-      previousPhase,
-      nextPhase,
-      previousSlotCount,
-      nextSlotCount,
-    )
-    conveyorPhaseRef.current = nextPhase
-    conveyorOrderRef.current = nextOrder
-    conveyorSlotCountRef.current = nextSlotCount
+    const slotsById = marbleSlotByIdRef.current
+    slotsById.clear()
+    for (const marble of nextState.conveyor) {
+      slotsById.set(marble.id, marble.slotIndex)
+    }
+
+    const ticksChanged = !previousState
+      || previousState.conveyorTicks !== nextState.conveyorTicks
+      || previousState.conveyorCapacity !== nextState.conveyorCapacity
+    if (ticksChanged) {
+      phaseBaseRef.current = conveyorPhaseForTick(nextState.conveyorTicks, nextState.conveyorCapacity)
+      phaseBaseTimeRef.current = now
+    }
+    conveyorCapacityRef.current = Math.max(1, nextState.conveyorCapacity)
+
+    if (beltMarkerCapacityRef.current !== conveyorCapacityRef.current && staticGroupRef.current) {
+      const oldGroup = beltMarkerGroupRef.current
+      if (oldGroup) {
+        staticGroupRef.current.remove(oldGroup)
+        disposeObject(oldGroup)
+      }
+      const rebuilt = createConveyorBeltMarkers(conveyorCapacityRef.current)
+      staticGroupRef.current.add(rebuilt.group)
+      beltMarkersRef.current = rebuilt.markers
+      beltMarkerGroupRef.current = rebuilt.group
+      beltMarkerCapacityRef.current = conveyorCapacityRef.current
+    }
 
     const sortTargets = collectSortTargets(previousState, nextState)
-    const now = performance.now() / 1000
+    const livePhase = currentConveyorPhase(now)
+    const liveCapacity = conveyorCapacityRef.current
+    const stackCount = nextState.sortingStacks.length
 
     for (const [id, entry] of Array.from(entries.entries())) {
       if (entry.phase === 'slotDrop') {
@@ -181,14 +190,6 @@ export function MarbleSortScene({
             duration: TRANSIT_DURATION,
             from,
           })
-          // Park the marble at the conveyor entry point so it appears at the
-          // funnel mouth, then easeConveyorOffset slides it into its canonical
-          // belt slot rather than teleporting to an arbitrary slot location.
-          const slotIndex = nextOrder.indexOf(id)
-          if (slotIndex >= 0) {
-            const slotProgress = conveyorSlotProgress(nextPhase, nextSlotCount, slotIndex)
-            conveyorOffsets.set(id, centeredProgressDelta(CONVEYOR_ENTRY_PROGRESS - slotProgress))
-          }
           entry.phase = 'transit'
           bodies.release(id)
         }
@@ -200,15 +201,29 @@ export function MarbleSortScene({
         const stackGroup = stackGroupsRef.current.get(targetStackId)
         const targetStack = nextState.sortingStacks.find((stack) => stack.id === targetStackId)
         if (stackGroup && targetStack) {
-          entry.mesh.position.copy(conveyorPositionAt(sortingStackDropProgress(
-            targetStack.index,
-            nextState.sortingStacks.length,
-          )))
+          // Drop tween starts from the marble's current rendered position. If
+          // the slot is inside the stack's drop window we trust the engine's
+          // matching decision; otherwise we still start from the current pose
+          // rather than teleporting to a canonical position. This preserves
+          // continuity of motion through the sort.
+          const previousSlotIndex = previousState?.conveyor.find((marble) => marble.id === id)?.slotIndex
+          if (previousSlotIndex !== undefined) {
+            const distance = slotProgressDistance(
+              livePhase,
+              liveCapacity,
+              previousSlotIndex,
+              sortingStackDropProgress(targetStack.index, stackCount),
+            )
+            if (distance > 0.5 / Math.max(1, liveCapacity) + 0.001) {
+              entry.mesh.position.copy(conveyorPositionAt(
+                conveyorSlotProgress(livePhase, liveCapacity, previousSlotIndex),
+              ))
+            }
+          }
           const targetPosition = stackGroup.position.clone().add(new THREE.Vector3(0, 0.55, 0))
           slotDropTweensRef.current.set(id, createSlotDropTween(id, entry.mesh, targetPosition, now))
           entry.phase = 'slotDrop'
           transitRef.current.delete(id)
-          conveyorOffsets.delete(id)
           bodies.release(id)
           continue
         }
@@ -217,7 +232,6 @@ export function MarbleSortScene({
       disposeObject(entry.mesh)
       entries.delete(id)
       transitRef.current.delete(id)
-      conveyorOffsets.delete(id)
       bodies.release(id)
     }
 
@@ -238,12 +252,6 @@ export function MarbleSortScene({
       }
     }
 
-    for (const id of Array.from(conveyorOffsets.keys())) {
-      if (!conveyorIds.has(id)) {
-        conveyorOffsets.delete(id)
-      }
-    }
-
     const attempts = arrivedAttemptsRef.current
     for (const id of Array.from(attempts.keys())) {
       if (!fallingIds.has(id)) {
@@ -252,20 +260,19 @@ export function MarbleSortScene({
     }
   }
 
-  const updateMarbleMeshes = (now: number, delta: number): void => {
+  const currentConveyorPhase = (now: number): number => {
+    const capacity = conveyorCapacityRef.current
+    const elapsed = now - phaseBaseTimeRef.current
+    return phaseBaseRef.current + elapsed * conveyorProgressSpeedForSlotCount(capacity)
+  }
+
+  const updateMarbleMeshes = (now: number, _delta: number): void => {
     const entries = marbleEntriesRef.current
     const bodies = bodiesRef.current
     const transit = transitRef.current
-    const conveyorOffsets = conveyorOffsetsRef.current
-    const order = conveyorOrderRef.current
-    const slotCount = conveyorSlotCountRef.current
-
-    for (const [id, offset] of conveyorOffsets) {
-      const entry = entries.get(id)
-      if (entry && entry.phase !== 'falling') {
-        conveyorOffsets.set(id, easeConveyorOffset(offset, delta))
-      }
-    }
+    const slotsById = marbleSlotByIdRef.current
+    const capacity = conveyorCapacityRef.current
+    const phase = currentConveyorPhase(now)
 
     const slotDrops = slotDropTweensRef.current
     for (const [id, tween] of Array.from(slotDrops.entries())) {
@@ -303,16 +310,21 @@ export function MarbleSortScene({
         continue
       }
 
+      const slotIndex = slotsById.get(id)
+      if (slotIndex === undefined) {
+        continue
+      }
+      const target = conveyorPositionAt(conveyorSlotProgress(phase, capacity, slotIndex))
+
       if (entry.phase === 'transit') {
         const data = transit.get(id)
-        const progress = conveyorProgressFor(id, order, slotCount, conveyorPhaseRef.current, conveyorOffsets)
-        if (!data || progress === null) {
+        if (!data) {
           entry.phase = 'conveyor'
+          entry.mesh.position.copy(target)
           continue
         }
         const t = Math.min(1, Math.max(0, (now - data.startedAt) / data.duration))
         const eased = easeOutCubic(t)
-        const target = conveyorPositionAt(progress)
         entry.mesh.position.set(
           data.from.x + (target.x - data.from.x) * eased,
           data.from.y + (target.y - data.from.y) * eased,
@@ -326,11 +338,7 @@ export function MarbleSortScene({
         continue
       }
 
-      const progress = conveyorProgressFor(id, order, slotCount, conveyorPhaseRef.current, conveyorOffsets)
-      if (progress === null) {
-        continue
-      }
-      entry.mesh.position.copy(conveyorPositionAt(progress))
+      entry.mesh.position.copy(target)
       entry.mesh.rotation.x += 0.08
     }
   }
@@ -372,7 +380,7 @@ export function MarbleSortScene({
     const stackGroups = stackGroupsRef.current
     const marbleEntries = marbleEntriesRef.current
     const transitEntries = transitRef.current
-    const conveyorOffsets = conveyorOffsetsRef.current
+    const marbleSlots = marbleSlotByIdRef.current
     const slotDropTweens = slotDropTweensRef.current
     const arrivedAttempts = arrivedAttemptsRef.current
     const fallingIds = fallingIdsRef.current
@@ -393,9 +401,13 @@ export function MarbleSortScene({
     const staticGroup = new THREE.Group()
     staticGroup.add(createPlayfield())
     staticGroup.add(createConveyorTrack())
-    const beltMarkers = createConveyorBeltMarkers()
+    const initialCapacity = Math.max(1, stateRef.current.conveyorCapacity)
+    const beltMarkers = createConveyorBeltMarkers(initialCapacity)
     staticGroup.add(beltMarkers.group)
     beltMarkersRef.current = beltMarkers.markers
+    beltMarkerGroupRef.current = beltMarkers.group
+    beltMarkerCapacityRef.current = initialCapacity
+    conveyorCapacityRef.current = initialCapacity
     scene.add(staticGroup)
     staticGroupRef.current = staticGroup
 
@@ -464,11 +476,10 @@ export function MarbleSortScene({
       timer.update(timestamp)
       const delta = timer.getDelta()
       const now = performance.now() / 1000
-      conveyorPhaseRef.current += delta * conveyorProgressSpeedForSlotCount(conveyorSlotCountRef.current)
-      beltMarkerPhaseRef.current += delta * CONVEYOR_PROGRESS_SPEED
+      const phase = currentConveyorPhase(now)
 
       stepPhysics(physics.world, delta)
-      animateConveyorBeltMarkers(beltMarkersRef.current, beltMarkerPhaseRef.current)
+      animateConveyorBeltMarkers(beltMarkersRef.current, phase)
       updateMarbleMeshes(now, delta)
 
       confettiBurstsRef.current = confettiBurstsRef.current.filter((burst) => {
@@ -533,11 +544,13 @@ export function MarbleSortScene({
       bodiesRef.current = null
       marbleEntries.clear()
       transitEntries.clear()
-      conveyorOffsets.clear()
-      conveyorOrderRef.current = []
-      conveyorSlotCountRef.current = 1
-      beltMarkerPhaseRef.current = 0
+      marbleSlots.clear()
+      conveyorCapacityRef.current = 1
+      phaseBaseRef.current = 0
+      phaseBaseTimeRef.current = 0
       beltMarkersRef.current = []
+      beltMarkerGroupRef.current = null
+      beltMarkerCapacityRef.current = 0
       confettiBurstsRef.current = []
       boxBurstsRef.current = []
       stackTweensRef.current = []
@@ -587,7 +600,7 @@ export function MarbleSortScene({
       }
     }
 
-    syncMarbles(state, previous, marbleGroup, bodies)
+    syncMarbles(state, previous, marbleGroup, bodies, performance.now() / 1000)
 
     for (const event of clearEvents) {
       const stackGroup = stackGroupsRef.current.get(event.stackId)
@@ -623,21 +636,6 @@ export function MarbleSortScene({
 
 function easeOutCubic(t: number): number {
   return 1 - ((1 - t) ** 3)
-}
-
-function conveyorProgressFor(
-  id: string,
-  order: string[],
-  slotCount: number,
-  phase: number,
-  offsets: Map<string, number>,
-): number | null {
-  const index = order.indexOf(id)
-  if (index < 0) {
-    return null
-  }
-
-  return conveyorSlotProgress(phase, slotCount, index) + (offsets.get(id) ?? 0)
 }
 
 interface ClearEvent {

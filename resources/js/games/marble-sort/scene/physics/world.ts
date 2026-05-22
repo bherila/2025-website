@@ -39,6 +39,9 @@ const WALL_CENTER_Y = FLOOR_TOP_Y + WALL_HEIGHT / 2
 const CEILING_THICKNESS = 0.2
 const CEILING_BOTTOM_Y = BASIN_FLOOR_Y + MARBLE_RADIUS + 0.08
 const CEILING_CENTER_Y = CEILING_BOTTOM_Y + CEILING_THICKNESS / 2
+export const PHYSICS_FIXED_TIME_STEP_SECONDS = 1 / 60
+export const PHYSICS_MAX_SUBSTEPS = 6
+export const PHYSICS_MAX_FRAME_DELTA_SECONDS = PHYSICS_FIXED_TIME_STEP_SECONDS * PHYSICS_MAX_SUBSTEPS
 
 export function createPhysicsWorld(): PhysicsWorld {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -2.6, 6.2) })
@@ -199,8 +202,8 @@ export function spawnMarbleBody(
 }
 
 export function stepPhysics(world: CANNON.World, dt: number): void {
-  const clamped = Math.min(dt, 0.05)
-  world.step(1 / 60, clamped, 3)
+  const clamped = Math.min(dt, PHYSICS_MAX_FRAME_DELTA_SECONDS)
+  world.step(PHYSICS_FIXED_TIME_STEP_SECONDS, clamped, PHYSICS_MAX_SUBSTEPS)
 }
 
 export function disposePhysicsWorld(physics: PhysicsWorld): void {

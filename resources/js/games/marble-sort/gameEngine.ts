@@ -25,9 +25,9 @@ import {
 } from './gameTypes'
 import {
   conveyorPhaseForTick,
-  conveyorSlotCountFor,
   passingSortingStackIndexForSlot,
 } from './scene/conveyorProgress'
+import { entrySlotIndexForPhase } from './scene/conveyorSlots'
 
 export {
   clearLevelSnapshot,
@@ -205,7 +205,20 @@ export function processConveyorTick(state: GameState): GameState {
   if (state.fallingMarbles.length > 0) {
     const freeSlots = Math.max(0, state.conveyorCapacity - state.conveyor.length)
     if (freeSlots > 0) {
-      return settleFallingMarbles(state, freeSlots)
+      // settleFallingMarbles bumps conveyorTicks and computes the entry slot at
+      // the resulting phase. If that slot is already occupied, settling no-ops
+      // for that tick and no sorting runs — diverging from runtime, where
+      // processBeltTick always sorts. Detect the blocked case here so the belt
+      // still sorts (and ticks advance) when the funnel mouth is full;
+      // otherwise sortable marbles can miss their drop window and the solver
+      // wrongly rejects solvable generations.
+      const slotCount = state.conveyorCapacity
+      const nextPhase = conveyorPhaseForTick(state.conveyorTicks + 1, slotCount)
+      const nextEntrySlot = entrySlotIndexForPhase(nextPhase, slotCount)
+      const entryBlocked = state.conveyor.some((m) => m.slotIndex === nextEntrySlot)
+      if (!entryBlocked) {
+        return settleFallingMarbles(state, freeSlots)
+      }
     }
   }
 
@@ -233,8 +246,10 @@ export function arriveFallingMarble(state: GameState, marbleId: string): GameSta
     return state
   }
 
-  const freeSlots = state.conveyorCapacity - state.conveyor.length
-  if (freeSlots < 1) {
+  const slotCount = state.conveyorCapacity
+  const phase = conveyorPhaseForTick(state.conveyorTicks, slotCount)
+  const entrySlot = entrySlotIndexForPhase(phase, slotCount)
+  if (state.conveyor.some((candidate) => candidate.slotIndex === entrySlot)) {
     return state
   }
 
@@ -247,24 +262,40 @@ export function arriveFallingMarble(state: GameState, marbleId: string): GameSta
     ...next.fallingMarbles.slice(0, index),
     ...next.fallingMarbles.slice(index + 1),
   ]
-  const { from: _from, ...conveyorMarble } = marble
-  next.conveyor = [...next.conveyor, conveyorMarble]
-  next.conveyorTicks += 1
+  const { from: _from, ...marbleBase } = marble
+  next.conveyor = [...next.conveyor, { ...marbleBase, slotIndex: entrySlot }]
 
   return checkBeltFull(checkLevelComplete(next))
 }
 
-function settleFallingMarbles(state: GameState, freeSlots: number): GameState {
+// Synchronous fallback path (used by the solver / drainConveyor). Advances the
+// belt by one tick AND, if the resulting entry slot is open, accepts one
+// waiting falling marble into it. The scene-driven path uses arriveFallingMarble
+// instead — that path does not bump conveyorTicks because the belt motion is
+// driven separately by processBeltTick / advanceConveyor.
+function settleFallingMarbles(state: GameState, _freeSlots: number): GameState {
   const next = cloneState(state)
-  const settledCount = Math.min(freeSlots, MARBLES_SETTLED_PER_TICK)
-  const settled = next.fallingMarbles.slice(0, settledCount)
-  const waiting = next.fallingMarbles.slice(settledCount)
-  next.conveyor = [...next.conveyor, ...settled.map(({ from: _from, ...marble }) => marble)]
-  next.fallingMarbles = waiting
   next.conveyorTicks += 1
-  next.lastMessage = waiting.length > 0
+  const slotCount = next.conveyorCapacity
+  const phase = conveyorPhaseForTick(next.conveyorTicks, slotCount)
+  const entrySlot = entrySlotIndexForPhase(phase, slotCount)
+  const slotTaken = next.conveyor.some((marble) => marble.slotIndex === entrySlot)
+  const settledCount = !slotTaken && next.fallingMarbles.length > 0 ? Math.min(1, MARBLES_SETTLED_PER_TICK) : 0
+
+  if (settledCount > 0) {
+    const settled = next.fallingMarbles.slice(0, settledCount)
+    next.fallingMarbles = next.fallingMarbles.slice(settledCount)
+    next.conveyor = [
+      ...next.conveyor,
+      ...settled.map(({ from: _from, ...marble }) => ({ ...marble, slotIndex: entrySlot })),
+    ]
+  }
+
+  next.lastMessage = next.fallingMarbles.length > 0
     ? 'Some marbles are waiting for space on the conveyor.'
-    : 'Marbles joined the conveyor.'
+    : settledCount > 0
+      ? 'Marbles joined the conveyor.'
+      : next.lastMessage
 
   return checkBeltFull(checkLevelComplete(next))
 }
@@ -385,8 +416,8 @@ export function applyShufflePowerUp(state: GameState): GameState {
     }
   }
 
-  const offset = (next.seed + next.moves + next.powerUpsUsed + 1) % colors.length
-  const shuffledColors = [...colors.slice(offset), ...colors.slice(0, offset)].reverse()
+  const shuffleRng = createRng(next.seed + next.moves * 31 + next.powerUpsUsed * 97 + 1)
+  const shuffledColors = shuffle(colors, shuffleRng)
   let colorIndex = 0
 
   next.boxes = next.boxes.map((box) => {
@@ -880,16 +911,15 @@ interface PassingSortableMarble {
 }
 
 function findPassingSortableConveyorMarble(state: GameState): PassingSortableMarble | null {
-  const slotCount = conveyorSlotCountFor(state.conveyorCapacity, state.conveyor.length)
+  const slotCount = state.conveyorCapacity
   const phase = conveyorPhaseForTick(state.conveyorTicks, slotCount)
 
-  for (let index = 0; index < state.conveyor.length; index += 1) {
-    const marble = state.conveyor[index]
+  for (const marble of state.conveyor) {
     if (!marble) {
       continue
     }
 
-    const stackIndex = passingSortingStackIndexForSlot(phase, slotCount, index, state.sortingStacks.length)
+    const stackIndex = passingSortingStackIndexForSlot(phase, slotCount, marble.slotIndex, state.sortingStacks.length)
     if (stackIndex === undefined) {
       continue
     }
@@ -939,12 +969,12 @@ function leftmostOpenStackIndexForColor(state: GameState, color: MarbleColor): n
 }
 
 function signatureForDrain(state: GameState): string {
-  const slotCount = conveyorSlotCountFor(state.conveyorCapacity, state.conveyor.length)
+  const slotCount = Math.max(1, state.conveyorCapacity)
 
   return [
     state.fallingMarbles.length,
     state.conveyor.length > 0 ? state.conveyorTicks % slotCount : 0,
-    state.conveyor.map((marble) => marble.id).join(','),
+    state.conveyor.map((marble) => `${marble.id}@${marble.slotIndex}`).join(','),
     state.sortingStacks.map((stack) => `${stack.id}:${stack.blocks.length}:${stack.blocks[0]?.slotsFilled ?? 0}`).join('|'),
   ].join('/')
 }
