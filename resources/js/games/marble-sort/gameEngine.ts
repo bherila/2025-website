@@ -205,7 +205,20 @@ export function processConveyorTick(state: GameState): GameState {
   if (state.fallingMarbles.length > 0) {
     const freeSlots = Math.max(0, state.conveyorCapacity - state.conveyor.length)
     if (freeSlots > 0) {
-      return settleFallingMarbles(state, freeSlots)
+      // settleFallingMarbles bumps conveyorTicks and computes the entry slot at
+      // the resulting phase. If that slot is already occupied, settling no-ops
+      // for that tick and no sorting runs — diverging from runtime, where
+      // processBeltTick always sorts. Detect the blocked case here so the belt
+      // still sorts (and ticks advance) when the funnel mouth is full;
+      // otherwise sortable marbles can miss their drop window and the solver
+      // wrongly rejects solvable generations.
+      const slotCount = state.conveyorCapacity
+      const nextPhase = conveyorPhaseForTick(state.conveyorTicks + 1, slotCount)
+      const nextEntrySlot = entrySlotIndexForPhase(nextPhase, slotCount)
+      const entryBlocked = state.conveyor.some((m) => m.slotIndex === nextEntrySlot)
+      if (!entryBlocked) {
+        return settleFallingMarbles(state, freeSlots)
+      }
     }
   }
 

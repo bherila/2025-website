@@ -15,11 +15,14 @@ import {
   type MarbleBox,
   type MarbleColor,
   openBox,
+  processBeltTick,
   processConveyorTick,
   remainingChuteBoxes,
   remainingSortingBlocks,
   solverCompletesLevel,
 } from '../gameEngine'
+import { conveyorPhaseForTick } from '../scene/conveyorProgress'
+import { entrySlotIndexForPhase } from '../scene/conveyorSlots'
 
 const REFERENCE_COLORS = ['blue', 'yellow', 'purple', 'green', 'red', 'orange', 'black', 'white'] as const satisfies readonly MarbleColor[]
 
@@ -294,6 +297,36 @@ describe('marble sort game engine', () => {
     expect(rightStack?.blocks[0]?.slotsFilled ?? 0).toBe(0)
     // The magnet should have sorted both marbles via the leftmost matching stack.
     expect(result.conveyor).toHaveLength(0)
+  })
+
+  it('runs the belt-sort path when the funnel-mouth slot is blocked (solver/runtime parity)', () => {
+    // Regression for #605 review: when settleFallingMarbles can't settle
+    // (funnel-mouth slot occupied), the solver path must still sort the belt
+    // that tick — otherwise processConveyorTick diverges from runtime's
+    // processBeltTick and the solver wrongly rejects solvable generations.
+    const state = generateLevel(1, 41_020)
+    const slotCount = state.conveyorCapacity
+    const nextEntrySlot = entrySlotIndexForPhase(conveyorPhaseForTick(1, slotCount), slotCount)
+    const blockerColor = state.activeColors[0]
+    if (!blockerColor) {
+      throw new Error('Expected at least one active color.')
+    }
+
+    const queued: GameState = {
+      ...state,
+      conveyor: [{ id: 'blocker', color: blockerColor, sequence: 1, slotIndex: nextEntrySlot }],
+      conveyorTicks: 0,
+      fallingMarbles: [{ id: 'falling', color: blockerColor, sequence: 2, from: { column: 0, row: 0 } }],
+    }
+
+    const viaProcess = processConveyorTick(queued)
+    const viaBelt = processBeltTick(queued)
+
+    // Belt motion + sorting must match the dedicated belt-tick path.
+    expect(viaProcess.conveyor).toEqual(viaBelt.conveyor)
+    expect(viaProcess.conveyorTicks).toBe(viaBelt.conveyorTicks)
+    // Settling is impossible (entry slot blocked), so falling marbles stay queued.
+    expect(viaProcess.fallingMarbles).toEqual(queued.fallingMarbles)
   })
 
   it('settles falling marbles onto the conveyor in batches and sorts matching receptacles', () => {
