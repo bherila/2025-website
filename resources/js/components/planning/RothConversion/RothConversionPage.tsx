@@ -13,6 +13,7 @@ import { DEFAULT_ROTH_CONVERSION_INPUTS } from './defaults'
 import { findMeta, normalizeRothConversionInputs, reconcileLegacyBirthYears } from './inputUtils'
 import { computeRothConversion, saveRothConversionScenario, updateRothConversionScenario } from './rothConversionApi'
 import {
+  notRenderedViaMillerShell,
   ROTH_CONVERSION_FORM_SECTIONS,
   RothConversionFormSection,
   type RothConversionFormSectionId,
@@ -52,10 +53,6 @@ interface RothConversionResultViewContext {
   scenario: RothConversionScenarioProjection
 }
 
-function EmptyColumnComponent(): ReactElement {
-  return <></>
-}
-
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, RothConversionResultViewId, RothConversionColumnMeta> {
   render: (context: RothConversionResultViewContext) => ReactElement
 }
@@ -66,7 +63,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Projection Overview',
     shortLabel: 'Overview',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'Summary cards, income stack, RMD rates, and conversion window.',
       icon: BarChart3,
@@ -79,7 +76,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Year-by-Year Income',
     shortLabel: 'Years',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'Annual income stack used by the tax calculation.',
       icon: LineChart,
@@ -92,7 +89,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Balance Projection',
     shortLabel: 'Balances',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'Ending balances after conversions, taxes, and withdrawals.',
       icon: PiggyBank,
@@ -105,7 +102,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Social Security',
     shortLabel: 'Social Security',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'Claiming comparison for the selected scenario.',
       icon: Users,
@@ -117,7 +114,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Tax Detail',
     shortLabel: 'Tax Detail',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'IRMAA tiers and annual tax table.',
       icon: Table2,
@@ -130,7 +127,7 @@ const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     label: 'Scenario Compare',
     shortLabel: 'Compare',
     presentation: 'column',
-    component: EmptyColumnComponent,
+    component: notRenderedViaMillerShell,
     meta: {
       description: 'Side-by-side lifetime tax and estate outcomes.',
       icon: Table2,

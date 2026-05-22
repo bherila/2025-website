@@ -36,7 +36,7 @@ import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 
 import { useDockActions } from './DockActions'
-import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps,getTaxFormMeta } from './formRegistry'
+import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps, getTaxFormMeta } from './formRegistry'
 import { summarizeTaxEstimate, TaxEstimateFullDetail } from './TaxEstimateHeader'
 
 /**

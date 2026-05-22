@@ -11,7 +11,7 @@ import {
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import { type FormCategory, type FormId, type FormRegistry, type FormRegistryEntry,getTaxFormMeta } from './formRegistry'
+import { type FormCategory, type FormId, type FormRegistry, type FormRegistryEntry, getTaxFormMeta } from './formRegistry'
 import { useTaxRoute } from './useTaxRoute'
 
 const GROUP_ORDER: FormCategory[] = ['Schedule', 'Form', 'Worksheet', 'App']
@@ -143,9 +143,6 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
   for (const entry of Object.values(registry)) {
     const meta = getTaxFormMeta(entry)
 
-    if (entry.id === 'home' && meta.category === 'App') {
-      // Home is a real navigation target — keep it.
-    }
     const baseLabel = entry.label
     const formNumber = meta.formNumber ? [meta.formNumber] : []
     const baseKeywords = [...meta.keywords, ...formNumber, entry.shortLabel, entry.id]
