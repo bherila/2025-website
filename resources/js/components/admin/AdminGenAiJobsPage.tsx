@@ -200,7 +200,7 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
           {job.error_message && (
             <div>
               <div className="font-semibold text-muted-foreground mb-1">Error</div>
-              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded p-3 text-sm text-red-700 dark:text-red-300 font-mono">
+              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded p-3 text-sm text-red-700 dark:text-red-300 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 {job.error_message}
               </div>
             </div>
@@ -213,7 +213,7 @@ function JobDetailModal({ job, open, onClose }: JobDetailModalProps) {
                 <div className="font-semibold text-muted-foreground">Context (Request Input)</div>
                 <CopyToClipboard text={JSON.stringify(JSON.parse(job.context_json), null, 2)} />
               </div>
-              <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-40">
+              <pre className="bg-gray-50 dark:bg-gray-900 border rounded p-3 text-xs overflow-auto max-h-40 font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 {JSON.stringify(JSON.parse(job.context_json), null, 2)}
               </pre>
             </div>
