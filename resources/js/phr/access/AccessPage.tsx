@@ -3,7 +3,9 @@ import type { FormEvent } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrModuleId } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrAccessGrant,
@@ -24,7 +26,12 @@ const LEVEL_CLASS: Record<string, string> = {
   viewer: 'bg-muted text-muted-foreground',
 }
 
-export default function AccessPage({ patientId }: { patientId: number }) {
+interface AccessPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+export default function AccessPage({ patientId }: AccessPageProps) {
   const [patient, setPatient] = useState<PhrPatient | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

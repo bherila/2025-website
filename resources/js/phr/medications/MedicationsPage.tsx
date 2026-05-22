@@ -4,8 +4,10 @@ import { Fragment, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import type { PhrModuleId } from '@/phr/miller'
 import { compactPayload } from '@/phr/shared'
 import {
   type PhrMedication,
@@ -446,7 +448,12 @@ function MedicationTable({
   )
 }
 
-export default function MedicationsPage({ patientId }: { patientId: number }) {
+interface MedicationsPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+export default function MedicationsPage({ patientId }: MedicationsPageProps) {
   const [statusFilter, setStatusFilter] = useState<MedicationFilter>('all')
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/medications`

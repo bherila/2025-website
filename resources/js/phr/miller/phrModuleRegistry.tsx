@@ -1,7 +1,7 @@
 import type React from 'react'
 import { lazy } from 'react'
 
-import type { MillerRegistryEntry, MillerRenderProps } from '@/components/ui/miller'
+import type { MillerDrillTarget, MillerRegistryEntry, MillerRenderProps } from '@/components/ui/miller'
 
 export type PhrModuleId =
   | 'summary'
@@ -82,6 +82,11 @@ export type PhrModuleMeta = Record<string, never>
 export type PhrRegistryEntry = MillerRegistryEntry<PhrShellState, PhrModuleId, PhrModuleMeta>
 export type PhrRenderProps = MillerRenderProps<PhrShellState, PhrModuleId>
 
+interface PhrListPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
 const SummaryPage = lazy(() => import('@/phr/summary/SummaryPage'))
 const LabsPage = lazy(() => import('@/phr/labs/LabsPage'))
 const LabPanelDetail = lazy(() => import('@/phr/labs/LabPanelDetail'))
@@ -119,11 +124,11 @@ function makeListEntry(
   id: PhrModuleId,
   label: string,
   shortLabel: string,
-  PageComponent: React.ComponentType<any>,
+  PageComponent: React.ComponentType<PhrListPageProps>,
 ): PhrRegistryEntry {
-  function ListColumn({ state }: PhrRenderProps) {
+  function ListColumn({ state, onDrill }: PhrRenderProps) {
     if (state.patientId === undefined) return noPatientState()
-    return <PageComponent patientId={state.patientId} />
+    return <PageComponent patientId={state.patientId} onDrill={onDrill} />
   }
   ListColumn.displayName = `${id}ListColumn`
   return { id, label, shortLabel, presentation: 'column', component: ListColumn }

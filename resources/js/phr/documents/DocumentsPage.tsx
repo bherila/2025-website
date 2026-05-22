@@ -15,8 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
 import { formatBytes } from '@/lib/utils'
+import type { PhrModuleId } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDocument,
@@ -70,6 +72,7 @@ const SOURCE_LABELS: Record<DocumentSource, string> = {
 
 interface DocumentsPageProps {
   patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
 }
 
 interface UploadFormState {

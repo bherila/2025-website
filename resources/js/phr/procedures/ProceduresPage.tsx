@@ -4,9 +4,11 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { classBadge, codeChip } from '@/phr/clinical/ui'
+import type { PhrModuleId } from '@/phr/miller'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrProcedure,
@@ -210,7 +212,12 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ProceduresPage({ patientId }: { patientId: number }) {
+interface ProceduresPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+export default function ProceduresPage({ patientId }: ProceduresPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/procedures`
   const crud = useClinicalCrud<PhrProcedure, PhrProcedureFormData>({
     endpoint,

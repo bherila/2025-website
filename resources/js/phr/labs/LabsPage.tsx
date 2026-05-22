@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrModuleId } from '@/phr/miller'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrLabResult,
@@ -39,6 +41,11 @@ const emptyForm: PhrLabResultFormData = {
   range_max: '',
   abnormal_flag: '',
   notes: '',
+}
+
+interface LabsPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
 }
 
 interface LabeledInputProps extends Omit<ComponentProps<typeof Input>, 'onChange'> {
@@ -135,7 +142,7 @@ function referenceRange(result: PhrLabResult): string | null {
   return result.reference_range_text
 }
 
-export default function LabsPage({ patientId }: { patientId: number }) {
+export default function LabsPage({ patientId }: LabsPageProps) {
   const [results, setResults] = useState<PhrLabResult[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)

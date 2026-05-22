@@ -4,9 +4,11 @@ import { Fragment, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { codeChip } from '@/phr/clinical/ui'
+import type { PhrModuleId } from '@/phr/miller'
 import { numericPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrImmunization,
@@ -176,7 +178,12 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ImmunizationsPage({ patientId }: { patientId: number }) {
+interface ImmunizationsPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+export default function ImmunizationsPage({ patientId }: ImmunizationsPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/immunizations`
   const crud = useClinicalCrud<PhrImmunization, PhrImmunizationFormData>({
     endpoint,

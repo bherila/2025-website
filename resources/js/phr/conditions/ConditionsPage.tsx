@@ -4,9 +4,11 @@ import { Fragment, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { MillerDrillTarget } from '@/components/ui/miller'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { classBadge, codeChip, labelize } from '@/phr/clinical/ui'
+import type { PhrModuleId } from '@/phr/miller'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrCondition,
@@ -418,7 +420,12 @@ function ConditionsTable({
   )
 }
 
-export default function ConditionsPage({ patientId }: { patientId: number }) {
+interface ConditionsPageProps {
+  patientId: number
+  onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+export default function ConditionsPage({ patientId }: ConditionsPageProps) {
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/conditions`
 
