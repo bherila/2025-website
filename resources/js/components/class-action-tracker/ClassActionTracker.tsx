@@ -1271,7 +1271,7 @@ function toDraftMoneyString(value: unknown): string {
 
 function isValidUrl(value: string): boolean {
   try {
-    new URL(value)
+    void new URL(value)
 
     return true
   } catch {

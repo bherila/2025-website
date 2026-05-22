@@ -88,7 +88,7 @@ class ClassActionClaimControllerTest extends TestCase
             ->assertJsonCount(1)
             ->assertJsonPath('0.name', 'Example Privacy Settlement');
 
-        $this->actingAs($user)->getJson('/api/class-action-claims?q=epiq')
+        $this->actingAs($user)->getJson('/api/class-action-claims?q=Epiq')
             ->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.name', 'Example Privacy Settlement');

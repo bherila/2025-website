@@ -569,7 +569,23 @@ class ParseImportJob implements ShouldQueue
             return null;
         }
 
-        $text = trim(preg_replace('/\s+/', ' ', strip_tags($response->body())) ?? '');
+        $contentType = strtolower((string) $response->header('Content-Type', ''));
+        if (! str_contains($contentType, 'text/html') && ! str_contains($contentType, 'application/xhtml+xml')) {
+            return null;
+        }
+
+        $html = $response->body();
+        if (strlen($html) > 1_000_000) {
+            return null;
+        }
+
+        $dom = new \DOMDocument;
+        $loaded = @$dom->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET);
+        if (! $loaded) {
+            return null;
+        }
+
+        $text = trim(preg_replace('/\s+/', ' ', $dom->textContent ?? ''));
         if ($text === '') {
             return null;
         }
