@@ -4,13 +4,13 @@ import { PreviewRenderRegistryContext } from '../PreviewContext'
 import { createPreviewRenderRegistry } from '../previewRenderRegistry'
 import { ShikiBlock } from '../ShikiBlock'
 
-jest.mock('../shikiLoader', () => ({
-  loadShiki: jest.fn(),
-  resetShikiForTests: jest.fn(),
+jest.mock('shiki', () => ({
+  bundledLanguages: { js: {} },
+  codeToTokens: jest.fn(),
 }))
 
-const shikiLoader = jest.requireMock('../shikiLoader') as {
-  loadShiki: jest.Mock
+const shiki = jest.requireMock('shiki') as {
+  codeToTokens: jest.Mock
 }
 
 function renderWithRegistry(ui: React.ReactNode) {
@@ -26,20 +26,17 @@ function renderWithRegistry(ui: React.ReactNode) {
 
 describe('ShikiBlock', () => {
   beforeEach(() => {
-    shikiLoader.loadShiki.mockReset()
+    shiki.codeToTokens.mockReset()
   })
 
   it('renders highlighted tokens when shiki resolves', async () => {
-    shikiLoader.loadShiki.mockResolvedValue({
-      bundledLanguages: { js: {} },
-      codeToTokens: async () => ({
-        tokens: [
-          [
-            { content: 'const', color: '#abcdef' },
-            { content: ' x', color: '#123456' },
-          ],
+    shiki.codeToTokens.mockResolvedValue({
+      tokens: [
+        [
+          { content: 'const', color: '#abcdef' },
+          { content: ' x', color: '#123456' },
         ],
-      }),
+      ],
     })
 
     const { registry } = renderWithRegistry(<ShikiBlock code="const x" lang="js" />)
@@ -50,8 +47,8 @@ describe('ShikiBlock', () => {
     expect(screen.getByText('const')).toBeInTheDocument()
   })
 
-  it('falls back to plain code and settles the registry when the loader rejects', async () => {
-    shikiLoader.loadShiki.mockRejectedValue(new Error('CDN unavailable'))
+  it('falls back to plain code and settles the registry when highlighting fails', async () => {
+    shiki.codeToTokens.mockRejectedValue(new Error('highlight unavailable'))
 
     const { registry, container } = renderWithRegistry(<ShikiBlock code="plain code" lang="js" />)
 

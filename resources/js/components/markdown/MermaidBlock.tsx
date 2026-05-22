@@ -1,6 +1,6 @@
+import mermaid from 'mermaid'
 import { useContext, useEffect, useId, useState } from 'react'
 
-import { loadMermaid } from './mermaidLoader'
 import { PreviewRenderRegistryContext } from './PreviewContext'
 import { sanitizeSvgMarkup } from './sanitizeSvg'
 
@@ -14,6 +14,7 @@ type State =
   | { kind: 'error'; message: string }
 
 let renderCounter = 0
+let mermaidInitialized = false
 
 export function MermaidBlock({ code }: MermaidBlockProps): React.JSX.Element {
   const registry = useContext(PreviewRenderRegistryContext)
@@ -27,7 +28,11 @@ export function MermaidBlock({ code }: MermaidBlockProps): React.JSX.Element {
 
     ;(async () => {
       try {
-        const mermaid = await loadMermaid()
+        if (!mermaidInitialized) {
+          mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' })
+          mermaidInitialized = true
+        }
+
         renderCounter += 1
         const renderId = `mermaid-${Date.now()}-${renderCounter}`
         const { svg } = await mermaid.render(renderId, code)

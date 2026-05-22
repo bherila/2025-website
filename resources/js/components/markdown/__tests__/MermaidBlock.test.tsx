@@ -4,13 +4,19 @@ import { MermaidBlock } from '../MermaidBlock'
 import { PreviewRenderRegistryContext } from '../PreviewContext'
 import { createPreviewRenderRegistry } from '../previewRenderRegistry'
 
-jest.mock('../mermaidLoader', () => ({
-  loadMermaid: jest.fn(),
-  resetMermaidForTests: jest.fn(),
+jest.mock('mermaid', () => ({
+  __esModule: true,
+  default: {
+    initialize: jest.fn(),
+    render: jest.fn(),
+  },
 }))
 
-const mermaidLoader = jest.requireMock('../mermaidLoader') as {
-  loadMermaid: jest.Mock
+const mermaid = jest.requireMock('mermaid') as {
+  default: {
+    initialize: jest.Mock
+    render: jest.Mock
+  }
 }
 
 function renderWithRegistry(ui: React.ReactNode) {
@@ -26,14 +32,12 @@ function renderWithRegistry(ui: React.ReactNode) {
 
 describe('MermaidBlock', () => {
   beforeEach(() => {
-    mermaidLoader.loadMermaid.mockReset()
+    mermaid.default.initialize.mockReset()
+    mermaid.default.render.mockReset()
   })
 
   it('renders sanitized SVG when mermaid succeeds', async () => {
-    mermaidLoader.loadMermaid.mockResolvedValue({
-      initialize: jest.fn(),
-      render: jest.fn().mockResolvedValue({ svg: '<svg><script>alert(1)</script><g></g></svg>' }),
-    })
+    mermaid.default.render.mockResolvedValue({ svg: '<svg><script>alert(1)</script><g></g></svg>' })
 
     const { registry, container } = renderWithRegistry(<MermaidBlock code="graph TD; A-->B" />)
     await act(async () => {
@@ -47,10 +51,7 @@ describe('MermaidBlock', () => {
   })
 
   it('renders an error placeholder and settles the registry on render failure', async () => {
-    mermaidLoader.loadMermaid.mockResolvedValue({
-      initialize: jest.fn(),
-      render: jest.fn().mockRejectedValue(new Error('bad diagram')),
-    })
+    mermaid.default.render.mockRejectedValue(new Error('bad diagram'))
 
     const { registry, container } = renderWithRegistry(<MermaidBlock code="not valid" />)
     await act(async () => {
@@ -61,13 +62,5 @@ describe('MermaidBlock', () => {
       expect(container.querySelector('[data-mermaid-error="true"]')).not.toBeNull()
     })
     expect(screen.getByText('Mermaid diagram error')).toBeInTheDocument()
-  })
-
-  it('settles the registry even when the loader itself rejects', async () => {
-    mermaidLoader.loadMermaid.mockRejectedValue(new Error('CDN unavailable'))
-
-    const { registry } = renderWithRegistry(<MermaidBlock code="graph TD; A-->B" />)
-
-    await expect(registry.waitUntilSettled()).resolves.toBeUndefined()
   })
 })

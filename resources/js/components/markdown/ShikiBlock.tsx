@@ -1,7 +1,7 @@
 import { useContext, useEffect, useId, useState } from 'react'
+import { type BundledLanguage, bundledLanguages, type BundledTheme, codeToTokens } from 'shiki'
 
 import { PreviewRenderRegistryContext } from './PreviewContext'
-import { loadShiki, type ShikiToken, type ShikiTokenLine } from './shikiLoader'
 
 function normalizeTokenLines(input: { tokens: ShikiToken[][] } | { tokens: ShikiTokenLine[] }): ShikiToken[][] {
   const lines = input.tokens
@@ -43,6 +43,17 @@ function tokenStyle(token: ShikiToken): React.CSSProperties {
   return style
 }
 
+interface ShikiToken {
+  content: string
+  color?: string
+  fontStyle?: number
+  bgColor?: string
+}
+
+interface ShikiTokenLine {
+  tokens: ShikiToken[]
+}
+
 interface ShikiBlockProps {
   code: string
   lang: string
@@ -65,11 +76,10 @@ export function ShikiBlock({ code, lang }: ShikiBlockProps): React.JSX.Element {
 
     ;(async () => {
       try {
-        const shiki = await loadShiki()
-        const supported = lang && lang in (shiki.bundledLanguages ?? {})
-        const result = await shiki.codeToTokens(code, {
-          lang: supported ? lang : 'text',
-          theme: 'github-light',
+        const supported = lang !== '' && lang in bundledLanguages
+        const result = await codeToTokens(code, {
+          lang: (supported ? lang : 'text') as BundledLanguage,
+          theme: 'github-light' as BundledTheme,
         })
         if (!cancelled) {
           setState({ kind: 'rendered', lines: normalizeTokenLines(result) })
