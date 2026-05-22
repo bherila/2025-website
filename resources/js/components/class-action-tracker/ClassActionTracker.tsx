@@ -220,13 +220,19 @@ function ClassActionTracker(): React.ReactElement {
   const [reviewTarget, setReviewTarget] = useState<ImportAction>('create')
   const [reviewMergeClaimId, setReviewMergeClaimId] = useState<number | null>(null)
 
-  const { status: importJobStatus, results: importJobResults, error: importJobError, estimatedWait: importEstimatedWait } = useGenAiJobPolling(importJobId)
+  const { status: importJobStatus, results: importJobResults, error: importJobError, job: importJob } = useGenAiJobPolling(importJobId)
 
   const importInFlight = importJobId !== null
     && (importJobStatus === null
       || importJobStatus === 'pending'
       || importJobStatus === 'processing'
       || importJobStatus === 'queued_tomorrow')
+
+  const importFailed = importJobId !== null && importJobStatus === 'failed'
+
+  const importDeferredMessage = importJob?.scheduled_for
+    ? `Your email will be processed on ${importJob.scheduled_for}.`
+    : 'Your email is deferred until quota resets.'
 
   const loadClaims = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -258,7 +264,10 @@ function ClassActionTracker(): React.ReactElement {
         }
 
         const resumable = response.data.find(
-          (job) => job.status === 'pending' || job.status === 'processing' || job.status === 'parsed',
+          (job) => job.status === 'pending'
+            || job.status === 'processing'
+            || job.status === 'queued_tomorrow'
+            || job.status === 'parsed',
         )
         if (resumable) {
           setImportJobId(resumable.id)
@@ -510,7 +519,7 @@ function ClassActionTracker(): React.ReactElement {
               {importJobStatus === 'processing'
                 ? 'Extracting claim details from your notification email…'
                 : importJobStatus === 'queued_tomorrow'
-                  ? (importEstimatedWait ?? 'Your import is deferred until quota resets.')
+                  ? importDeferredMessage
                   : 'Queued for AI processing…'}
             </span>
             <Button type="button" size="sm" variant="outline" onClick={() => setImportDialogOpen(true)}>
@@ -672,7 +681,7 @@ function ClassActionTracker(): React.ReactElement {
                 <>
                   <p className="font-medium text-yellow-700 dark:text-yellow-300">Processing deferred</p>
                   <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
-                    {importEstimatedWait ?? 'Your email will be processed when quota resets.'}
+                    {importDeferredMessage}
                   </p>
                 </>
               ) : (
@@ -689,7 +698,7 @@ function ClassActionTracker(): React.ReactElement {
                 </>
               )}
             </div>
-          ) : importJobId !== null && importJobStatus === 'failed' ? (
+          ) : importFailed ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
               <p className="mb-2 font-medium text-red-700 dark:text-red-300">AI processing failed</p>
               <p className="mb-3 text-sm text-red-600 dark:text-red-400">
@@ -720,7 +729,7 @@ function ClassActionTracker(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setImportDialogOpen(false)} disabled={importSubmitting}>
               {importInFlight ? 'Close' : 'Cancel'}
             </Button>
-            {!importInFlight && importJobStatus !== 'failed' && (
+            {!importInFlight && !importFailed && (
               <Button type="button" onClick={() => void submitEmailImport()} disabled={importSubmitting}>
                 {importSubmitting ? 'Submitting…' : 'Extract claim'}
               </Button>
