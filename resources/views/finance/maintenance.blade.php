@@ -13,6 +13,5 @@
 @endsection
 
 @push('scripts')
-  @vite('resources/js/finance.tsx')
-  @vite('resources/js/finance-account-maintenance.tsx')
+  @vite('resources/js/finance/pages/account-maintenance.tsx')
 @endpush
