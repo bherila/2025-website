@@ -67,7 +67,7 @@ class VitalController extends Controller
 
                 $points[] = [
                     'reading_id' => $vital->id,
-                    'recorded_at' => $vital->observed_at?->toDateTimeString() ?? $vital->vital_date?->toDateString(),
+                    'recorded_at' => $vital->observed_at?->toDateTimeString() ?? $vital->vital_date?->startOfDay()->toDateTimeString(),
                     'value' => $candidate['value'],
                 ];
             }

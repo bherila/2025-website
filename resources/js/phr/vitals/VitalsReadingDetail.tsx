@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { PhrNotFoundColumn } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
-import { type PhrVital,PhrVitalReadingDetailResponseSchema } from '@/phr/types'
+import { type PhrVital, PhrVitalReadingDetailResponseSchema } from '@/phr/types'
 import { isPhrApiError, phrGetJson } from '@/phr/vitals/api'
 
 interface VitalsReadingDetailProps {

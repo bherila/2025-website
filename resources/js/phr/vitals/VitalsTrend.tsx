@@ -5,7 +5,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { Button } from '@/components/ui/button'
 import { PhrNotFoundColumn } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
-import { type PhrVitalTrendPoint,PhrVitalTrendResponseSchema } from '@/phr/types'
+import { type PhrVitalTrendPoint, PhrVitalTrendResponseSchema } from '@/phr/types'
 import { isPhrApiError, phrGetJson } from '@/phr/vitals/api'
 
 interface VitalsTrendProps {
@@ -59,7 +59,12 @@ export default function VitalsTrend({ patientId, recordId }: VitalsTrendProps) {
   const filteredPoints = useMemo(() => {
     if (range === 'all') return points
     const now = new Date()
-    const boundary = range === '30d' ? addDays(now, -30) : range === '90d' ? addDays(now, -90) : addDays(now, -365)
+    const offsets: Record<'30d' | '90d' | '1y', number> = {
+      '30d': -30,
+      '90d': -90,
+      '1y': -365,
+    }
+    const boundary = addDays(now, offsets[range])
     return points.filter((point) => {
       if (!point.recorded_at) return false
       const parsed = new Date(point.recorded_at)
