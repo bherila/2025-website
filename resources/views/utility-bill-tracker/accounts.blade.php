@@ -7,5 +7,5 @@
 @endsection
 
 @push('scripts')
-  @vite('resources/js/utility-bill-tracker.tsx')
+  @vite('resources/js/utility-bill-tracker/accounts.tsx')
 @endpush
