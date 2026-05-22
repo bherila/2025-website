@@ -551,6 +551,7 @@ Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);
 Route::middleware(['web', 'auth'])->post('/genai/import/jobs', [GenAiImportController::class, 'createJob']);
+Route::middleware(['web', 'auth'])->post('/genai/import/paste', [GenAiImportController::class, 'paste']);
 Route::middleware(['web', 'auth'])->get('/genai/import/jobs', [GenAiImportController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/genai/import/jobs/{job_id}', [GenAiImportController::class, 'show']);
 Route::middleware(['web', 'auth'])->post('/genai/import/jobs/{job_id}/retry', [GenAiImportController::class, 'retry']);

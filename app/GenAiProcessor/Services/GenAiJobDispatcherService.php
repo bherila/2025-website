@@ -4,6 +4,7 @@ namespace App\GenAiProcessor\Services;
 
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Services\Prompts\ClassActionEmailPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\FinanceTransactionsPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\MultiAccountTaxImportPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
@@ -247,6 +248,7 @@ PROMPT;
     {
         $template = match ($jobType) {
             'finance_transactions' => new FinanceTransactionsPromptTemplate,
+            'class_action_email' => new ClassActionEmailPromptTemplate,
             'finance_payslip' => new PayslipPromptTemplate,
             'utility_bill' => new UtilityBillPromptTemplate,
             'document_extract' => $this->isMultiAccountDocumentContext($context)
@@ -457,6 +459,7 @@ PROMPT;
 
         $allowedKeys = match ($jobType) {
             'finance_transactions' => ['accounts'],
+            'class_action_email' => ['pasted_text', 'reference_page_text'],
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
             'document_extract' => ['document_id', 'document_kind', 'tax_year', 'form_type', 'accounts', 'input_kind', 'source_form_type'],
