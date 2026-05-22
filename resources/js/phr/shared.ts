@@ -4,7 +4,7 @@ export interface ApiError {
   message?: string
 }
 
-interface DetailFetchResult<T> {
+export interface DetailFetchResult<T> {
   data: T | null
   notFound: boolean
 }
