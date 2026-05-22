@@ -148,7 +148,6 @@ function renderViewer(document: PhrDocument) {
         title="Document viewer"
         src={document.file_url}
         className="h-[70vh] w-full rounded-md border border-border bg-background"
-        sandbox=""
       />
     )
   }
