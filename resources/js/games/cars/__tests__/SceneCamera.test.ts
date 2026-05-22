@@ -110,9 +110,11 @@ describe('sceneCamera bounds and fitting', () => {
     // A "departure" route exits the playfield far offscreen on +X / -Z.
     const farOffscreen = new THREE.Vector3(200, 0, -200)
     const onscreenStart = new THREE.Vector3(0, 0, 0)
+    const mesh = new THREE.Group()
+    mesh.position.set(baseBounds.maxX + 4, 0, baseBounds.minZ - 4)
     const departure = {
       movementKind: 'departure' as const,
-      mesh: new THREE.Group(),
+      mesh,
       route: [
         { position: onscreenStart, rotationY: 0 },
         { position: farOffscreen, rotationY: 0 },
@@ -125,8 +127,10 @@ describe('sceneCamera bounds and fitting', () => {
     const withDeparture = gameplayBoundsForState(state, [departure])
 
     expect(withDeparture.minX).toBeCloseTo(baseBounds.minX)
-    expect(withDeparture.maxX).toBeCloseTo(baseBounds.maxX)
-    expect(withDeparture.minZ).toBeCloseTo(baseBounds.minZ)
+    expect(withDeparture.maxX).toBeGreaterThan(baseBounds.maxX)
+    expect(withDeparture.maxX).toBeLessThan(farOffscreen.x)
+    expect(withDeparture.minZ).toBeLessThan(baseBounds.minZ)
+    expect(withDeparture.minZ).toBeGreaterThan(farOffscreen.z)
     expect(withDeparture.maxZ).toBeCloseTo(baseBounds.maxZ)
   })
 

@@ -110,12 +110,6 @@ export function notifyPassengerGate(
 ): void {
   let boardingsThisFrame = 0
   const unavailableCarIds = activeParkingCarIds(movingCars, elapsed)
-  const eligiblePassengerIds = new Set<string>()
-  for (const passenger of passengers) {
-    if (!passenger.fixedTarget) {
-      eligiblePassengerIds.add(passenger.id)
-    }
-  }
   for (const passenger of passengers) {
     if (passenger.fixedTarget) {
       continue
@@ -128,7 +122,7 @@ export function notifyPassengerGate(
     const previousCycle = passengerGateCycles.get(passenger.id) ?? currentCycle
     const crossedGate = currentCycle > previousCycle
     const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * 0.9
-    const canBoard = canBoardPassengerAtParkingGate(state, passenger.id, unavailableCarIds, eligiblePassengerIds)
+    const canBoard = canBoardPassengerAtParkingGate(state, passenger.id, unavailableCarIds)
 
     if ((crossedGate || nearGate) && canBoard) {
       passengerGateCycles.set(passenger.id, currentCycle)

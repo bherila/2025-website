@@ -6,6 +6,7 @@ import {
   CAR_PATTERNS,
   type GameState,
   loopPassengerCapacity,
+  type Passenger,
 } from './gameEngine'
 import { startBlockedCarAnimation } from './scene/animation/blockedCar'
 import { animateBoardingPassengers, startBoardingPassengerAnimations } from './scene/animation/boardingPassengers'
@@ -55,6 +56,10 @@ import type {
 import { clearGroup, disposeObject, findCarId } from './scene/threeUtils'
 
 export { retainPersistentMovingCarsImpl as retainPersistentMovingCars }
+
+export function selectFeederPassengersForRendering(feederPassengers: Passenger[]): Passenger[] {
+  return feederPassengers
+}
 
 interface CarsSceneProps {
   blockedCarAttempt: { carId: string, nonce: number } | null
@@ -536,7 +541,7 @@ function buildDynamicScene(
     gatePassengers.push(passengerRenderItem)
   }
 
-  const feederPassengers = loopPlan.feederPassengers
+  const feederPassengers = selectFeederPassengersForRendering(loopPlan.feederPassengers)
   const feederIds = new Set(feederPassengers.map((passenger) => passenger.id))
   for (const id of feederPositions.keys()) {
     if (!feederIds.has(id)) {

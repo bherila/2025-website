@@ -109,8 +109,9 @@ export function gameplayBoundsForState(state: GameState, movingCars: MovingCarRe
   for (const moving of movingCars) {
     // Departure routes intentionally exit the playfield. Including their offscreen
     // endpoints would pull the camera target sideways and shrink the visible area
-    // mid-animation, so we skip them and rely on the car's current position only.
+    // mid-animation, so only the car's current visible position participates.
     if (moving.movementKind === 'departure') {
+      include(moving.mesh.position.x, moving.mesh.position.z)
       continue
     }
     for (const point of moving.route) {

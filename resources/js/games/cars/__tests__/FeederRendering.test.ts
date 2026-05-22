@@ -1,3 +1,4 @@
+import { selectFeederPassengersForRendering } from '../CarsScene'
 import { generateLevel, loopPassengerCapacity, type Passenger } from '../gameEngine'
 import { planPassengerLoopSlots } from '../scene/passengerLoopSlots'
 import { passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
@@ -26,16 +27,19 @@ describe('feeder passenger rendering plan', () => {
     expect(leftCount).toBeGreaterThan(0)
     expect(rightCount).toBeGreaterThan(0)
 
-    // The legacy render path truncated to .slice(0, 40); regression-guard that
-    // the planner itself does not silently drop the right-side feeder when the
-    // total exceeds that window.
-    if (feederPassengers.length > 40) {
-      const within40 = feederPassengers.slice(0, 40)
-      const rightWithin40 = within40.filter((p) => p.feederSide === 'right').length
-      // The right side may legitimately not appear in the first 40; this is
-      // the exact case the render fix addresses by rendering all feeder items.
-      expect(within40.length).toBe(40)
-      expect(rightWithin40 + within40.filter((p) => p.feederSide === 'left').length).toBe(40)
-    }
+    const renderedFeederPassengers = selectFeederPassengersForRendering(feederPassengers)
+    const legacyCap = feederPassengers.slice(0, 40)
+    const rightSideBeyondLegacyCap = feederPassengers.filter((passenger, index) => (
+      passenger.feederSide === 'right' && index >= 40
+    ))
+
+    expect(feederPassengers.length).toBeGreaterThan(40)
+    expect(rightSideBeyondLegacyCap.length).toBeGreaterThan(0)
+    expect(renderedFeederPassengers.map((passenger) => passenger.id)).toEqual(
+      feederPassengers.map((passenger) => passenger.id),
+    )
+    expect(
+      rightSideBeyondLegacyCap.some((passenger) => !legacyCap.some((candidate) => candidate.id === passenger.id)),
+    ).toBe(true)
   })
 })
