@@ -102,4 +102,53 @@ describe('sceneCamera bounds and fitting', () => {
     // Feeder curves extend below the queue loop on the negative-Z side.
     expect(bounds.minZ).toBeLessThan(-11)
   })
+
+  it('ignores departure route endpoints when fitting bounds', () => {
+    const state = generateLevel(5, 90_005)
+    const baseBounds = gameplayBoundsForState(state, [])
+
+    // A "departure" route exits the playfield far offscreen on +X / -Z.
+    const farOffscreen = new THREE.Vector3(200, 0, -200)
+    const onscreenStart = new THREE.Vector3(0, 0, 0)
+    const departure = {
+      movementKind: 'departure' as const,
+      mesh: new THREE.Group(),
+      route: [
+        { position: onscreenStart, rotationY: 0 },
+        { position: farOffscreen, rotationY: 0 },
+      ],
+      segmentLengths: [farOffscreen.length()],
+      totalLength: farOffscreen.length(),
+      startedAt: 0,
+      duration: 1000,
+    }
+    const withDeparture = gameplayBoundsForState(state, [departure])
+
+    expect(withDeparture.minX).toBeCloseTo(baseBounds.minX)
+    expect(withDeparture.maxX).toBeCloseTo(baseBounds.maxX)
+    expect(withDeparture.minZ).toBeCloseTo(baseBounds.minZ)
+    expect(withDeparture.maxZ).toBeCloseTo(baseBounds.maxZ)
+  })
+
+  it('includes non-departure moving-car routes in the gameplay bounds', () => {
+    const state = generateLevel(5, 90_005)
+    const baseBounds = gameplayBoundsForState(state, [])
+
+    const farPoint = new THREE.Vector3(baseBounds.maxX + 50, 0, 0)
+    const parking = {
+      movementKind: 'parking' as const,
+      mesh: new THREE.Group(),
+      route: [
+        { position: new THREE.Vector3(0, 0, 0), rotationY: 0 },
+        { position: farPoint, rotationY: 0 },
+      ],
+      segmentLengths: [farPoint.x],
+      totalLength: farPoint.x,
+      startedAt: 0,
+      duration: 1000,
+    }
+    const withParking = gameplayBoundsForState(state, [parking])
+
+    expect(withParking.maxX).toBeGreaterThan(baseBounds.maxX)
+  })
 })
