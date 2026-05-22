@@ -328,6 +328,7 @@ Route::middleware(['web', 'auth'])
         Route::patch('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'update'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.update');
         Route::delete('/patients/{patient}/allergies/{allergy}', [PHRAllergyController::class, 'destroy'])->whereNumber(['patient', 'allergy'])->name('patients.allergies.destroy');
         Route::get('/patients/{patient}/dicom/studies', [PHRDicomStudyController::class, 'index'])->whereNumber('patient')->name('patients.dicom.studies.index');
+        Route::get('/patients/{patient}/dicom/studies/{study}', [PHRDicomStudyController::class, 'show'])->whereNumber(['patient', 'study'])->name('patients.dicom.studies.show');
         Route::post('/patients/{patient}/dicom/uploads', [PHRDicomUploadController::class, 'open'])->whereNumber('patient')->name('patients.dicom.uploads.open');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-url', [PHRDicomUploadController::class, 'requestUploadUrl'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-url');
         Route::post('/patients/{patient}/dicom/uploads/{upload}/signed-urls', [PHRDicomUploadController::class, 'requestUploadUrls'])->whereNumber(['patient', 'upload'])->name('patients.dicom.uploads.signed-urls');

@@ -252,6 +252,46 @@ export const PhrDicomStudiesResponseSchema = z.object({
   studies: z.array(PhrDicomStudySchema),
 })
 
+export const PhrDicomStudyResponseSchema = z.object({
+  study: PhrDicomStudySchema,
+})
+
+export const PhrDicomViewerInstanceSchema = z.object({
+  metadata: z.record(z.string(), z.unknown()),
+  url: z.string(),
+})
+
+export const PhrDicomViewerSeriesSchema = z.object({
+  SeriesInstanceUID: z.string(),
+  SeriesNumber: z.number().nullable(),
+  Modality: z.string(),
+  SeriesDescription: z.string(),
+  instances: z.array(PhrDicomViewerInstanceSchema),
+})
+
+export type PhrDicomViewerSeries = z.infer<typeof PhrDicomViewerSeriesSchema>
+
+export const PhrDicomViewerStudySchema = z.object({
+  StudyInstanceUID: z.string(),
+  StudyDate: z.string(),
+  StudyTime: z.string(),
+  PatientName: z.string(),
+  PatientID: z.string(),
+  AccessionNumber: z.string(),
+  PatientAge: z.string(),
+  PatientSex: z.string(),
+  StudyDescription: z.string(),
+  series: z.array(PhrDicomViewerSeriesSchema),
+  NumInstances: z.number(),
+  Modalities: z.string(),
+})
+
+export type PhrDicomViewerStudy = z.infer<typeof PhrDicomViewerStudySchema>
+
+export const PhrDicomViewerResponseSchema = z.object({
+  studies: z.array(PhrDicomViewerStudySchema),
+})
+
 export const PhrDicomUploadResponseSchema = z.object({
   upload: PhrDicomUploadSchema,
   limits: z.object({

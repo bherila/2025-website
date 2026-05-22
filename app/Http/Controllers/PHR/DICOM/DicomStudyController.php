@@ -45,6 +45,27 @@ class DicomStudyController extends Controller
         return response()->json(['studies' => $studies]);
     }
 
+    public function show(Request $request, int $patient, int $study): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
+
+        $resolvedStudy = PhrDicomStudy::query()
+            ->select('phr_dicom_studies.*')
+            ->selectSub(
+                PhrDicomInstance::query()
+                    ->join('phr_dicom_files', 'phr_dicom_files.id', '=', 'phr_dicom_instances.file_id')
+                    ->selectRaw('COALESCE(SUM(phr_dicom_files.file_size_bytes), 0)')
+                    ->whereColumn('phr_dicom_instances.study_id', 'phr_dicom_studies.id'),
+                'file_size_bytes',
+            )
+            ->forPatient((int) $resolvedPatient->id)
+            ->withCount(['series', 'instances'])
+            ->findOrFail($study);
+
+        return response()->json(['study' => $this->studyPayload($resolvedStudy)]);
+    }
+
     public function viewerJson(Request $request, int $patient, int $study): JsonResponse
     {
         $userId = (int) $request->user()?->id;

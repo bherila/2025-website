@@ -112,4 +112,13 @@ describe('MillerRegistryShell', () => {
     expect(onUnhandled).toHaveBeenCalledWith('worksheet')
     expect(window.location.hash).toBe('#/form-1040')
   })
+
+  it('passes a synthetic instance to entries without entry.instances when col.instance is set', () => {
+    // 'sch-1' has no `instances` defined — it is a simple singleton detail page.
+    // When the hash encodes an instance key (e.g. ':42'), the component should
+    // receive instance.key === '42' via the synthetic-instance path.
+    window.location.hash = '#/sch-1:42'
+    render(<ShellHarness />)
+    expect(screen.getByText('instance:42')).toBeInTheDocument()
+  })
 })
