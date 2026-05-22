@@ -643,7 +643,7 @@ function ClassActionTracker(): React.ReactElement {
               <div>
                 <Label htmlFor="review-merge-claim">Existing claim</Label>
                 <Select
-                  value={reviewMergeClaimId?.toString()}
+                  value={reviewMergeClaimId === null ? null : reviewMergeClaimId.toString()}
                   onValueChange={(value) => setReviewMergeClaimId(Number(value))}
                 >
                   <SelectTrigger id="review-merge-claim">

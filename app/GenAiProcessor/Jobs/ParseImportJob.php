@@ -25,8 +25,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -569,7 +569,7 @@ class ParseImportJob implements ShouldQueue
             return null;
         }
 
-        $contentType = strtolower((string) $response->header('Content-Type', ''));
+        $contentType = strtolower($response->header('Content-Type'));
         if (! str_contains($contentType, 'text/html') && ! str_contains($contentType, 'application/xhtml+xml')) {
             return null;
         }
