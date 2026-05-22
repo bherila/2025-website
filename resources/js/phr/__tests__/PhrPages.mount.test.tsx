@@ -606,6 +606,51 @@ describe('PHR page mounts', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /add allergy/i })).toBeInTheDocument())
     expect(screen.getByText(/extracted as part of office-visit review/i)).toBeInTheDocument()
   })
+
+  it('calls onDrill when an imaging study row is clicked', async () => {
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient: makePatient() }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies`) {
+        return { studies: [makeDicomStudy()] }
+      }
+      return {}
+    })
+
+    const onDrill = jest.fn()
+    render(<ImagingPage patientId={PATIENT_ID} onDrill={onDrill} />)
+
+    // Click on the study title — the click bubbles up to the card's onClick handler
+    const studyTitle = await screen.findByText('Cardiac CT')
+    fireEvent.click(studyTitle)
+
+    expect(onDrill).toHaveBeenCalledWith({ id: 'imaging-study-detail', instance: '7001' })
+  })
+
+  it('Viewer button does not trigger onDrill when study row is clicked via Viewer button', async () => {
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === `/api/phr/patients/${PATIENT_ID}`) return { patient: makePatient() }
+      if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies`) {
+        return { studies: [makeDicomStudy()] }
+      }
+      return {}
+    })
+
+    const openSpy = jest.fn()
+    const originalOpen = window.open
+    window.open = openSpy as unknown as typeof window.open
+
+    const onDrill = jest.fn()
+    try {
+      render(<ImagingPage patientId={PATIENT_ID} onDrill={onDrill} />)
+
+      fireEvent.click(await screen.findByRole('button', { name: /viewer/i }))
+
+      expect(openSpy).toHaveBeenCalled()
+      expect(onDrill).not.toHaveBeenCalled()
+    } finally {
+      window.open = originalOpen
+    }
+  })
 })
 
 function makeDicomUpload(status: string, overrides: Record<string, unknown> = {}) {

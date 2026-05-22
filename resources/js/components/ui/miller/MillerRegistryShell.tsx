@@ -69,6 +69,13 @@ export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
     const instances = entry.instances ? entry.instances.list(state) : []
     const resolvedInstanceKey = col.instance ?? (instances.length > 0 ? instances[0]!.key : undefined)
     const activeInstance = resolvedInstanceKey ? instances.find((instance) => instance.key === resolvedInstanceKey) : undefined
+    // For entries without entry.instances (simple detail pages), synthesise a
+    // MillerInstanceRef from col.instance so that detail components receive
+    // instance.key and can look up the correct record.
+    const syntheticInstance = !entry.instances && resolvedInstanceKey
+      ? { key: resolvedInstanceKey, label: resolvedInstanceKey }
+      : undefined
+    const passedInstance = activeInstance ?? syntheticInstance
 
     return {
       key: `${depth}-${col.id}-${col.instance ?? ''}`,
@@ -113,7 +120,7 @@ export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
           ) : (
             <Component
               state={state}
-              {...(activeInstance ? { instance: activeInstance } : {})}
+              {...(passedInstance ? { instance: passedInstance } : {})}
               onDrill={dispatchDrill(depth)}
             />
           )}
