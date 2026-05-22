@@ -18,8 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const parsedAgreement = AgreementSchema.safeParse(serverData.agreement ?? {})
     if (!parsedAgreement.success) {
-      console.error('Invalid hydrated agreement payload - aborting to allow API fallback.', parsedAgreement.error)
-      console.error('Invalid or missing hydrated agreement - aborting mount.')
+      console.error('Invalid or missing hydrated agreement - aborting mount.', parsedAgreement.error)
 
       return null
     }
