@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { classBadge, codeChip, labelize } from '@/phr/clinical/ui'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   PhrAllergiesResponseSchema,
@@ -448,7 +449,7 @@ function AllergiesTable({
   )
 }
 
-export default function AllergiesPage({ patientId }: { patientId: number }) {
+export default function AllergiesPage({ patientId }: PhrListPageProps) {
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/allergies`
   const crud = useClinicalCrud<PhrAllergy, PhrAllergyFormData>({

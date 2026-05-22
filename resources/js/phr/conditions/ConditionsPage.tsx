@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { classBadge, codeChip, labelize } from '@/phr/clinical/ui'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrCondition,
@@ -418,7 +419,7 @@ function ConditionsTable({
   )
 }
 
-export default function ConditionsPage({ patientId }: { patientId: number }) {
+export default function ConditionsPage({ patientId }: PhrListPageProps) {
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/conditions`
 

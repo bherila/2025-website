@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload } from '@/phr/shared'
 import {
   type PhrMedication,
@@ -446,7 +447,7 @@ function MedicationTable({
   )
 }
 
-export default function MedicationsPage({ patientId }: { patientId: number }) {
+export default function MedicationsPage({ patientId }: PhrListPageProps) {
   const [statusFilter, setStatusFilter] = useState<MedicationFilter>('all')
   const [historicalOpen, setHistoricalOpen] = useState(false)
   const endpoint = `/api/phr/patients/${patientId}/medications`

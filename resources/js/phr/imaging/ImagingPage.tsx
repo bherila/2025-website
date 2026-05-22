@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from '@/components/ui/progress'
 import { fetchWrapper } from '@/fetchWrapper'
 import { formatBytes } from '@/lib/utils'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrDicomSignedUploadBatchItem,
@@ -46,7 +47,7 @@ interface UploadSummary {
   failures: FileFailure[]
 }
 
-export default function ImagingPage({ patientId }: { patientId: number }) {
+export default function ImagingPage({ patientId }: PhrListPageProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [canManage, setCanManage] = useState(false)
   const [studies, setStudies] = useState<PhrDicomStudy[]>([])

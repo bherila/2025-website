@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrLabResult,
@@ -135,7 +136,7 @@ function referenceRange(result: PhrLabResult): string | null {
   return result.reference_range_text
 }
 
-export default function LabsPage({ patientId }: { patientId: number }) {
+export default function LabsPage({ patientId }: PhrListPageProps) {
   const [results, setResults] = useState<PhrLabResult[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)

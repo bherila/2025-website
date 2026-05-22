@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload, errorMessage } from '@/phr/shared'
 import { type PhrOfficeVisit, PhrOfficeVisitsResponseSchema } from '@/phr/types'
 
@@ -72,7 +73,7 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
   )
 }
 
-export default function OfficeVisitsPage({ patientId }: { patientId: number }) {
+export default function OfficeVisitsPage({ patientId }: PhrListPageProps) {
   const [visits, setVisits] = useState<PhrOfficeVisit[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)

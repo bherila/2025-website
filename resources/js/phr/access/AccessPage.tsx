@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage } from '@/phr/shared'
 import {
   type PhrAccessGrant,
@@ -24,7 +25,7 @@ const LEVEL_CLASS: Record<string, string> = {
   viewer: 'bg-muted text-muted-foreground',
 }
 
-export default function AccessPage({ patientId }: { patientId: number }) {
+export default function AccessPage({ patientId }: PhrListPageProps) {
   const [patient, setPatient] = useState<PhrPatient | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

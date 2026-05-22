@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { classBadge, codeChip } from '@/phr/clinical/ui'
+import type { PhrListPageProps } from '@/phr/miller'
 import { compactPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrProcedure,
@@ -210,7 +211,7 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ProceduresPage({ patientId }: { patientId: number }) {
+export default function ProceduresPage({ patientId }: PhrListPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/procedures`
   const crud = useClinicalCrud<PhrProcedure, PhrProcedureFormData>({
     endpoint,

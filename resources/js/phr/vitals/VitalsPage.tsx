@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
   type PhrVital,
@@ -136,7 +137,7 @@ function displayValue(v: PhrVital): string {
   return '—'
 }
 
-export default function VitalsPage({ patientId }: { patientId: number }) {
+export default function VitalsPage({ patientId }: PhrListPageProps) {
   const [vitals, setVitals] = useState<PhrVital[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)

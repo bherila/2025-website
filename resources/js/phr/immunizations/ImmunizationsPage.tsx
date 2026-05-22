@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClinicalCrud } from '@/phr/clinical/crud'
 import { codeChip } from '@/phr/clinical/ui'
+import type { PhrListPageProps } from '@/phr/miller'
 import { numericPayload, zodErrorMessage } from '@/phr/shared'
 import {
   type PhrImmunization,
@@ -176,7 +177,7 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ImmunizationsPage({ patientId }: { patientId: number }) {
+export default function ImmunizationsPage({ patientId }: PhrListPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/immunizations`
   const crud = useClinicalCrud<PhrImmunization, PhrImmunizationFormData>({
     endpoint,
