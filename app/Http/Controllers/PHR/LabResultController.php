@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\PHR\Concerns\HandlesClinicalResourceRequests;
 use App\Http\Requests\PHR\StoreLabResultRequest;
 use App\Http\Resources\PHR\LabResultResource;
-use App\Models\PhrPatient;
 use App\Models\PhrLabResult;
+use App\Models\PhrPatient;
 use App\Services\PHR\Access\PhrPatientAccessService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -69,21 +69,45 @@ class LabResultController extends Controller
             })
             ->values();
 
+        $orderingProvider = $this->firstNonNull($panelRows, 'ordering_provider');
+        $resultingLab = $this->firstNonNull($panelRows, 'resulting_lab');
+        $source = $this->firstNonNull($panelRows, 'source');
+        $sourceDocumentId = $this->firstNonNull($panelRows, 'source_document_id');
+        $panelName = $this->firstNonNull($panelRows, 'test_name');
+        $collectionDatetime = $this->firstNonNull($panelRows, 'collection_datetime');
+
         return response()->json([
             'panel' => [
                 'id' => $anchor->id,
-                'panel_name' => $anchor->test_name,
-                'collection_datetime' => $anchor->collection_datetime?->toDateTimeString(),
-                'ordering_provider' => $anchor->ordering_provider,
-                'resulting_lab' => $anchor->resulting_lab,
-                'source' => $anchor->source,
-                'source_document_id' => $anchor->source_document_id,
-                'source_document_url' => $anchor->source_document_id
-                    ? url("/api/phr/patients/{$resolvedPatient->id}/documents/{$anchor->source_document_id}/file")
+                'panel_name' => $panelName,
+                'collection_datetime' => $collectionDatetime instanceof Carbon
+                    ? $collectionDatetime->toDateTimeString()
+                    : $collectionDatetime,
+                'ordering_provider' => $orderingProvider,
+                'resulting_lab' => $resultingLab,
+                'source' => $source,
+                'source_document_id' => $sourceDocumentId,
+                'source_document_url' => $sourceDocumentId
+                    ? url("/api/phr/patients/{$resolvedPatient->id}/documents/{$sourceDocumentId}/file")
                     : null,
                 'rows' => $rows,
             ],
         ]);
+    }
+
+    /**
+     * @param  Collection<int, PhrLabResult>  $rows
+     */
+    private function firstNonNull(Collection $rows, string $attribute): mixed
+    {
+        foreach ($rows as $row) {
+            $value = $row->{$attribute};
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     public function update(StoreLabResultRequest $request, int $patient, int $labResult): JsonResponse
@@ -137,7 +161,7 @@ class LabResultController extends Controller
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, PhrLabResult>
+     * @return Collection<int, PhrLabResult>
      */
     private function panelRowsForAnchor(PhrPatient $patient, PhrLabResult $anchor): Collection
     {
@@ -169,11 +193,19 @@ class LabResultController extends Controller
             return null;
         }
 
-        $previous = PhrLabResult::query()
+        $query = PhrLabResult::query()
             ->where('patient_id', $patient->id)
             ->where('analyte', $result->analyte)
             ->whereNotNull('value_numeric')
-            ->where('id', '!=', $result->id)
+            ->where('id', '!=', $result->id);
+
+        if ($result->unit === null) {
+            $query->whereNull('unit');
+        } else {
+            $query->where('unit', $result->unit);
+        }
+
+        $previous = $query
             ->orderByDesc('result_datetime')
             ->orderByDesc('collection_datetime')
             ->orderByDesc('id')
