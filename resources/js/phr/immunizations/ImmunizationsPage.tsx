@@ -177,7 +177,7 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ImmunizationsPage({ patientId }: PhrListPageProps) {
+export default function ImmunizationsPage({ patientId, onDrill }: PhrListPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/immunizations`
   const crud = useClinicalCrud<PhrImmunization, PhrImmunizationFormData>({
     endpoint,
@@ -272,7 +272,10 @@ export default function ImmunizationsPage({ patientId }: PhrListPageProps) {
 
                   return (
                     <Fragment key={immunization.id}>
-                      <tr className="align-top">
+                      <tr
+                        className={`align-top ${onDrill ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+                        onClick={() => onDrill?.({ id: 'immunization-detail', instance: String(immunization.id) })}
+                      >
                         <td className="px-4 py-3">
                           <div className="font-medium text-card-foreground">{immunization.vaccine_name}</div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -300,7 +303,7 @@ export default function ImmunizationsPage({ patientId }: PhrListPageProps) {
                           {immunization.administered_by && <div>{immunization.administered_by}</div>}
                         </td>
                         {crud.canManage && (
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                             <div className="flex justify-end gap-2">
                               <Button
                                 type="button"

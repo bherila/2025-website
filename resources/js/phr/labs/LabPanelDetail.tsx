@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { fetchWrapper } from '@/fetchWrapper'
 import { PhrNotFoundColumn } from '@/phr/miller'
-import { errorMessage } from '@/phr/shared'
+import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import {
   type PhrLabPanel,
   PhrLabPanelDetailResponseSchema,
@@ -39,19 +38,6 @@ function referenceRange(result: PhrLabPanelResultRow): string | null {
   return result.reference_range_text
 }
 
-async function fetchPanel(patientId: number, recordId: string): Promise<{ notFound: boolean; panel: PhrLabPanel | null }> {
-  try {
-    const raw = await fetchWrapper.get(`/api/phr/patients/${patientId}/labs/${recordId}`)
-    return { notFound: false, panel: PhrLabPanelDetailResponseSchema.parse(raw).panel }
-  } catch (err) {
-    const message = errorMessage(err).toLowerCase()
-    if (message.includes('not found') || message.includes('no query results')) {
-      return { notFound: true, panel: null }
-    }
-    throw err
-  }
-}
-
 export default function LabPanelDetail({ patientId, recordId }: LabPanelDetailProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,9 +50,12 @@ export default function LabPanelDetail({ patientId, recordId }: LabPanelDetailPr
     setNotFound(false)
 
     try {
-      const result = await fetchPanel(patientId, recordId)
+      const result = await fetchPhrDetail(
+        `/api/phr/patients/${patientId}/labs/${recordId}`,
+        PhrLabPanelDetailResponseSchema,
+      )
       setNotFound(result.notFound)
-      setPanel(result.panel)
+      setPanel(result.data?.panel ?? null)
     } catch (err) {
       setError(errorMessage(err))
     } finally {

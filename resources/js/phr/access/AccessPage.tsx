@@ -25,7 +25,7 @@ const LEVEL_CLASS: Record<string, string> = {
   viewer: 'bg-muted text-muted-foreground',
 }
 
-export default function AccessPage({ patientId }: PhrListPageProps) {
+export default function AccessPage({ patientId, onDrill }: PhrListPageProps) {
   const [patient, setPatient] = useState<PhrPatient | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -111,7 +111,10 @@ export default function AccessPage({ patientId }: PhrListPageProps) {
       {!busy && patient && (
         <>
           {ownerGrant && (
-            <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+            <div
+              className={`mb-4 flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 ${onDrill ? 'cursor-pointer transition-colors hover:bg-muted/30' : ''}`}
+              onClick={() => onDrill?.({ id: 'access-grant-detail', instance: String(ownerGrant.id) })}
+            >
               <Shield className="size-4 shrink-0 text-primary" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{ownerGrant.user_name ?? ownerGrant.user_email}</p>
@@ -168,7 +171,8 @@ export default function AccessPage({ patientId }: PhrListPageProps) {
               {sharedGrants.map((access) => (
                 <div
                   key={access.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
+                  className={`flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 ${onDrill ? 'cursor-pointer transition-colors hover:bg-muted/30' : ''}`}
+                  onClick={() => onDrill?.({ id: 'access-grant-detail', instance: String(access.id) })}
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
@@ -179,7 +183,7 @@ export default function AccessPage({ patientId }: PhrListPageProps) {
                       {access.granted_at && ` · granted ${access.granted_at.slice(0, 10)}`}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2" onClick={(event) => event.stopPropagation()}>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_CLASS[access.access_level] ?? LEVEL_CLASS.viewer}`}>
                       {LEVEL_LABEL[access.access_level] ?? access.access_level}
                     </span>

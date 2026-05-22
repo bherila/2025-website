@@ -8,13 +8,7 @@ import type { PhrDicomStudy } from '@/phr/types'
 const PATIENT_ID = 101
 const STUDY_ID = '7001'
 
-const mockGet = jest.fn()
-
-jest.mock('@/fetchWrapper', () => ({
-  fetchWrapper: {
-    get: (...args: unknown[]) => mockGet(...args),
-  },
-}))
+const mockFetch = jest.fn()
 
 function makeStudy(overrides: Partial<PhrDicomStudy> = {}): PhrDicomStudy {
   return {
@@ -64,23 +58,33 @@ function makeViewerResponse(seriesCount = 1) {
   }
 }
 
+function jsonResponse(body: unknown, init: { ok?: boolean; status?: number; statusText?: string } = {}): Response {
+  return {
+    ok: init.ok ?? true,
+    status: init.status ?? 200,
+    statusText: init.statusText ?? 'OK',
+    text: async () => JSON.stringify(body),
+  } as Response
+}
+
 beforeEach(() => {
-  mockGet.mockClear()
-  mockGet.mockImplementation(async (url: string) => {
+  mockFetch.mockReset()
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+  mockFetch.mockImplementation(async (url: string) => {
     if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies/${STUDY_ID}`) {
-      return { study: makeStudy() }
+      return jsonResponse({ study: makeStudy() })
     }
     if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies/${STUDY_ID}/viewer-json`) {
-      return makeViewerResponse()
+      return jsonResponse(makeViewerResponse())
     }
-    return {}
+    return jsonResponse({})
   })
 })
 
 describe('ImagingStudyDetail', () => {
   it('shows a loading state before data arrives', () => {
     // Never resolves so loading state stays visible
-    mockGet.mockReturnValue(new Promise(() => {}))
+    mockFetch.mockReturnValue(new Promise(() => {}))
     render(<ImagingStudyDetail patientId={PATIENT_ID} recordId={STUDY_ID} />)
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })
@@ -97,14 +101,14 @@ describe('ImagingStudyDetail', () => {
   })
 
   it('renders series list', async () => {
-    mockGet.mockImplementation(async (url: string) => {
+    mockFetch.mockImplementation(async (url: string) => {
       if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies/${STUDY_ID}`) {
-        return { study: makeStudy() }
+        return jsonResponse({ study: makeStudy() })
       }
       if (url === `/api/phr/patients/${PATIENT_ID}/dicom/studies/${STUDY_ID}/viewer-json`) {
-        return makeViewerResponse(2)
+        return jsonResponse(makeViewerResponse(2))
       }
-      return {}
+      return jsonResponse({})
     })
 
     render(<ImagingStudyDetail patientId={PATIENT_ID} recordId={STUDY_ID} />)
@@ -114,14 +118,14 @@ describe('ImagingStudyDetail', () => {
   })
 
   it('renders PhrNotFoundColumn on 404', async () => {
-    mockGet.mockRejectedValue({ status: 404 })
+    mockFetch.mockResolvedValue(jsonResponse({ message: 'Not Found' }, { ok: false, status: 404, statusText: 'Not Found' }))
     render(<ImagingStudyDetail patientId={PATIENT_ID} recordId={STUDY_ID} />)
 
     await waitFor(() => expect(screen.getByText(/record not found/i)).toBeInTheDocument())
   })
 
   it('renders an error message on unexpected fetch failure', async () => {
-    mockGet.mockRejectedValue(new Error('Network error'))
+    mockFetch.mockRejectedValue(new Error('Network error'))
     render(<ImagingStudyDetail patientId={PATIENT_ID} recordId={STUDY_ID} />)
 
     await waitFor(() => expect(screen.getByText(/network error/i)).toBeInTheDocument())

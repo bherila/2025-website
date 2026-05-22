@@ -116,4 +116,25 @@ describe('MedicationsPage', () => {
     expect(await screen.findByText('Metformin')).toBeInTheDocument()
     expect(screen.getByText('discontinued')).toBeInTheDocument()
   })
+
+  it('drills to medication detail when a row is clicked', async () => {
+    const onDrill = jest.fn()
+
+    mockPatch.mockResolvedValue({
+      medication: makeMedication({
+        id: 1,
+      }),
+    })
+
+    render(<MedicationsPage patientId={42} onDrill={onDrill} />)
+
+    await waitFor(() => expect(screen.getByText('Metformin')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Metformin'))
+
+    expect(onDrill).toHaveBeenCalledWith({ id: 'medication-detail', instance: '1' })
+
+    onDrill.mockClear()
+    fireEvent.click(screen.getByTitle('Edit medication'))
+    expect(onDrill).not.toHaveBeenCalled()
+  })
 })

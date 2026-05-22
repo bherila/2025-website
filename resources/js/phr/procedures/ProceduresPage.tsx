@@ -211,7 +211,7 @@ function AddForm({ busy, onSubmit }: AddFormProps) {
   )
 }
 
-export default function ProceduresPage({ patientId }: PhrListPageProps) {
+export default function ProceduresPage({ patientId, onDrill }: PhrListPageProps) {
   const endpoint = `/api/phr/patients/${patientId}/procedures`
   const crud = useClinicalCrud<PhrProcedure, PhrProcedureFormData>({
     endpoint,
@@ -298,7 +298,10 @@ export default function ProceduresPage({ patientId }: PhrListPageProps) {
             return (
               <li key={procedure.id} className="relative">
                 <span className="absolute -left-[1.65rem] top-4 size-3 rounded-full border-2 border-background bg-primary" />
-                <div className="rounded-lg border border-border bg-card">
+                <div
+                  className={`rounded-lg border border-border bg-card ${onDrill ? 'cursor-pointer transition-colors hover:bg-muted/30' : ''}`}
+                  onClick={() => onDrill?.({ id: 'procedure-detail', instance: String(procedure.id) })}
+                >
                   <div className="grid gap-3 px-4 py-3 md:grid-cols-[150px_minmax(0,1fr)_auto] md:items-start">
                     <div className="text-sm font-medium text-muted-foreground">{displayProcedureDate(procedure)}</div>
                     <div className="min-w-0">
@@ -324,7 +327,7 @@ export default function ProceduresPage({ patientId }: PhrListPageProps) {
                       )}
                     </div>
                     {crud.canManage && (
-                      <div className="flex justify-end gap-2">
+                       <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                         <Button
                           type="button"
                           size="icon-sm"

@@ -1,7 +1,12 @@
-import type { ZodError } from 'zod'
+import type { ZodError, ZodType } from 'zod'
 
 export interface ApiError {
   message?: string
+}
+
+export interface DetailFetchResult<T> {
+  data: T | null
+  notFound: boolean
 }
 
 export function errorMessage(caught: unknown): string {
@@ -14,6 +19,37 @@ export function errorMessage(caught: unknown): string {
   }
 
   return 'Request failed.'
+}
+
+export async function fetchPhrDetail<T>(url: string, schema: ZodType<T>): Promise<DetailFetchResult<T>> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    credentials: 'include',
+  })
+
+  if (response.status === 404) {
+    return { data: null, notFound: true }
+  }
+
+  const text = await response.text()
+  let payload: unknown = null
+
+  if (text) {
+    try {
+      payload = JSON.parse(text)
+    } catch {
+      payload = text
+    }
+  }
+
+  if (!response.ok) {
+    throw (payload && typeof payload === 'object' && 'message' in payload)
+      ? String((payload as ApiError).message)
+      : response.statusText
+  }
+
+  return { data: schema.parse(payload), notFound: false }
 }
 
 export function compactPayload<T extends Record<string, unknown>>(data: T): Record<string, unknown> {

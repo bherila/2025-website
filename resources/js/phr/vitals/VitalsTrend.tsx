@@ -4,9 +4,8 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { Button } from '@/components/ui/button'
 import { PhrNotFoundColumn } from '@/phr/miller'
-import { errorMessage } from '@/phr/shared'
+import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import { type PhrVitalTrendPoint, PhrVitalTrendResponseSchema } from '@/phr/types'
-import { isPhrApiError, phrGetJson } from '@/phr/vitals/api'
 
 interface VitalsTrendProps {
   patientId: number
@@ -37,20 +36,23 @@ export default function VitalsTrend({ patientId, recordId }: VitalsTrendProps) {
       setError(null)
       setNotFound(false)
       try {
-        const raw = await phrGetJson(`/api/phr/patients/${patientId}/vitals/trend/${recordId}`)
+        const result = await fetchPhrDetail(
+          `/api/phr/patients/${patientId}/vitals/trend/${recordId}`,
+          PhrVitalTrendResponseSchema,
+        )
         if (!active) return
-        const parsed = PhrVitalTrendResponseSchema.parse(raw)
-        setMetricLabel(parsed.metric_label)
-        setUnit(parsed.unit)
-        setPoints(parsed.points)
+        if (result.notFound || !result.data) {
+          setNotFound(true)
+          setPoints([])
+          return
+        }
+        setMetricLabel(result.data.metric_label)
+        setUnit(result.data.unit)
+        setPoints(result.data.points)
       } catch (caught) {
         if (!active) return
         setPoints([])
-        if (isPhrApiError(caught) && caught.status === 404) {
-          setNotFound(true)
-        } else {
-          setError(errorMessage(caught))
-        }
+        setError(errorMessage(caught))
       } finally {
         if (active) setLoading(false)
       }

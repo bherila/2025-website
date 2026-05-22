@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import PdfViewer from '@/components/finance/statements/PdfViewer'
 import { Button } from '@/components/ui/button'
 import { PhrNotFoundColumn } from '@/phr/miller/PhrNotFoundColumn'
-import { errorMessage } from '@/phr/shared'
+import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import { type PhrDocument, PhrDocumentResponseSchema } from '@/phr/types'
 
 interface DocumentViewerProps {
@@ -35,41 +35,13 @@ export default function DocumentViewer({ patientId, recordId }: DocumentViewerPr
       setNotFound(false)
 
       try {
-        const response = await fetch(`/api/phr/patients/${patientId}/documents/${recordId}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-          credentials: 'include',
-        })
-
-        if (response.status === 404) {
-          if (!cancelled) {
-            setDocument(null)
-            setNotFound(true)
-          }
-          return
-        }
-
-        const raw = await response.text()
-        let payload: unknown = null
-        if (raw !== '') {
-          try {
-            payload = JSON.parse(raw)
-          } catch {
-            payload = raw
-          }
-        }
-
-        if (!response.ok) {
-          const message = (payload && typeof payload === 'object' && 'message' in payload)
-            ? String((payload as { message?: string }).message)
-            : response.statusText
-          throw new Error(message || 'Request failed.')
-        }
-
-        const parsed = PhrDocumentResponseSchema.parse(payload)
-        if (!cancelled) {
-          setDocument(parsed.document)
-        }
+        const result = await fetchPhrDetail(
+          `/api/phr/patients/${patientId}/documents/${recordId}`,
+          PhrDocumentResponseSchema,
+        )
+        if (cancelled) return
+        setNotFound(result.notFound)
+        setDocument(result.data?.document ?? null)
       } catch (caught) {
         if (!cancelled) {
           setDocument(null)
