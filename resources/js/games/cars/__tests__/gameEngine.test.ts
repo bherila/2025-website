@@ -33,6 +33,8 @@ import {
   visibleQueuePassengers,
 } from '../gameEngine'
 
+const QUEUE_SAFE_FEEDER_LOOKAHEAD_FOR_TEST = 12
+
 describe('cars game engine', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -83,6 +85,52 @@ describe('cars game engine', () => {
     expect(sampledSolutions.get(20)?.metrics.decisionPointCount).toBeGreaterThanOrEqual(3)
     expect(sampledSolutions.get(20)?.metrics.plannedMaxOccupancy).toBeGreaterThanOrEqual(4)
     expect(sampledSolutions.get(20)?.metrics.wrongMoveTrapCount).toBeGreaterThanOrEqual(2)
+  })
+
+  it('does not throw while generating a wide seed sweep', () => {
+    for (let level = 1; level <= 50; level += 1) {
+      for (const seedOffset of [0, 17, 113]) {
+        expect(() => generateLevel(level, 10_000 + level + seedOffset)).not.toThrow()
+      }
+    }
+  })
+
+  it('constructs delayed-color decoys at decision points', () => {
+    for (const level of [4, 10, 20, 40]) {
+      const state = generateLevel(level)
+      const order = findSolvingOrder(state) ?? []
+      const solution = validateParkingSolution(state, order)
+
+      if (!solution) {
+        throw new Error(`Generated level ${level} has no strategic pressure solution`)
+      }
+
+      for (const decisionPoint of solution.decisionPoints) {
+        const decisionState = stateAtDecisionStep(state, solution.order, decisionPoint.step)
+        const intendedCar = state.cars.find((car) => car.id === decisionPoint.intendedCarId)
+        if (!intendedCar) {
+          throw new Error(`Missing intended car ${decisionPoint.intendedCarId}`)
+        }
+
+        for (const decoyCarId of decisionPoint.decoyCarIds) {
+          const decoyCar = state.cars.find((car) => car.id === decoyCarId)
+          if (!decoyCar) {
+            throw new Error(`Missing decoy car ${decoyCarId}`)
+          }
+
+          const passengerWindow = decisionState.passengerQueue.slice(
+            0,
+            loopPassengerCapacity(decisionState) + QUEUE_SAFE_FEEDER_LOOKAHEAD_FOR_TEST,
+          )
+          const visibleDecoyMatches = passengerWindow.filter((passenger) => passenger.color === decoyCar.color).length
+
+          if (decoyCar.color === intendedCar.color) {
+            throw new Error(`Level ${level} decision ${decisionPoint.step} decoy ${decoyCar.id} shares ${decoyCar.color} with intended ${intendedCar.id}`)
+          }
+          expect(visibleDecoyMatches).toBeLessThan(Math.min(decoyCar.capacity, Math.max(2, decoyCar.capacity - 1)))
+        }
+      }
+    }
   })
 
   it('maps capacity to the intended grid length', () => {
@@ -635,6 +683,53 @@ function queueExactlyMirrorsSolvingBlocks(state: GameState, order: string[]): bo
   }
 
   return passengerOffset === state.passengerQueue.length
+}
+
+function stateAtDecisionStep(state: GameState, order: string[], targetStep: number): GameState {
+  let current = drainVisibleBoardingForTest(state)
+
+  for (let step = 0; step < targetStep; step += 1) {
+    const carId = order[step]
+    if (!carId) {
+      throw new Error(`Missing solution step ${step}`)
+    }
+
+    let slot = firstOpenRegularSlotForTest(current)
+    if (!slot || slot.index >= STARTING_REGULAR_SLOTS) {
+      current = drainVisibleBoardingForTest(current)
+      slot = firstOpenRegularSlotForTest(current)
+    }
+
+    if (!slot || slot.index >= STARTING_REGULAR_SLOTS) {
+      throw new Error(`No open slot before solution step ${step}`)
+    }
+
+    current = moveCarToParking(current, carId, slot.id)
+  }
+
+  return current
+}
+
+function drainVisibleBoardingForTest(state: GameState): GameState {
+  let current = state
+
+  while (true) {
+    const passenger = visibleQueuePassengers(current).find((candidate) => canBoardPassengerAtParkingGate(current, candidate.id))
+    if (!passenger) {
+      return current
+    }
+
+    const next = processBoardingAtParkingGate(current, passenger.id)
+    if (next === current) {
+      return current
+    }
+
+    current = next
+  }
+}
+
+function firstOpenRegularSlotForTest(state: GameState): ParkingSlot | null {
+  return state.parkingSlots.find((slot) => slot.kind === 'regular' && slot.unlocked && !slot.occupiedCarId) ?? null
 }
 
 function makeNoRescueState(overrides: Partial<GameState> = {}): GameState {

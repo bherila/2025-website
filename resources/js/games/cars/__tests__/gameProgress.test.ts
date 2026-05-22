@@ -59,6 +59,7 @@ describe('cars game level snapshots', () => {
     const state = generateLevel(4, 20_004)
 
     window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, JSON.stringify({
+      // v1 is intentionally stale here; v2 is the current snapshot schema.
       version: 1,
       state,
     }))
