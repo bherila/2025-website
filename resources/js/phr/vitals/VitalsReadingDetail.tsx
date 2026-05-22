@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import { PhrNotFoundColumn } from '@/phr/miller'
-import { errorMessage } from '@/phr/shared'
+import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import { type PhrVital, PhrVitalReadingDetailResponseSchema } from '@/phr/types'
-import { isPhrApiError, phrGetJson } from '@/phr/vitals/api'
 
 interface VitalsReadingDetailProps {
   patientId: number
@@ -25,17 +24,17 @@ export default function VitalsReadingDetail({ patientId, recordId }: VitalsReadi
       setNotFound(false)
 
       try {
-        const raw = await phrGetJson(`/api/phr/patients/${patientId}/vitals/${recordId}`)
+        const result = await fetchPhrDetail(
+          `/api/phr/patients/${patientId}/vitals/${recordId}`,
+          PhrVitalReadingDetailResponseSchema,
+        )
         if (!active) return
-        setVital(PhrVitalReadingDetailResponseSchema.parse(raw).vital)
+        setVital(result.data?.vital ?? null)
+        setNotFound(result.notFound)
       } catch (caught) {
         if (!active) return
         setVital(null)
-        if (isPhrApiError(caught) && caught.status === 404) {
-          setNotFound(true)
-        } else {
-          setError(errorMessage(caught))
-        }
+        setError(errorMessage(caught))
       } finally {
         if (active) setLoading(false)
       }

@@ -2,9 +2,8 @@ import { ExternalLink, Film, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { fetchWrapper } from '@/fetchWrapper'
 import { PhrNotFoundColumn } from '@/phr/miller/PhrNotFoundColumn'
-import { errorMessage } from '@/phr/shared'
+import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import {
   type PhrDicomStudy,
   PhrDicomStudyResponseSchema,
@@ -35,20 +34,24 @@ export default function ImagingStudyDetail({ patientId, recordId }: ImagingStudy
     setNotFound(false)
     setError(null)
     try {
-      const [rawStudy, rawViewer] = await Promise.all([
-        fetchWrapper.get(`/api/phr/patients/${patientId}/dicom/studies/${recordId}`),
-        fetchWrapper.get(`/api/phr/patients/${patientId}/dicom/studies/${recordId}/viewer-json`),
+      const [studyResult, viewerResult] = await Promise.all([
+        fetchPhrDetail(
+          `/api/phr/patients/${patientId}/dicom/studies/${recordId}`,
+          PhrDicomStudyResponseSchema,
+        ),
+        fetchPhrDetail(
+          `/api/phr/patients/${patientId}/dicom/studies/${recordId}/viewer-json`,
+          PhrDicomViewerResponseSchema,
+        ),
       ])
-      setStudy(PhrDicomStudyResponseSchema.parse(rawStudy).study)
-      const viewerStudies = PhrDicomViewerResponseSchema.parse(rawViewer).studies
-      setSeries(viewerStudies[0]?.series ?? [])
-    } catch (caught: unknown) {
-      const status = (caught as { status?: number } | null)?.status
-      if (status === 404) {
+      if (studyResult.notFound || !studyResult.data) {
         setNotFound(true)
-      } else {
-        setError(errorMessage(caught))
+        return
       }
+      setStudy(studyResult.data.study)
+      setSeries(viewerResult.data?.studies[0]?.series ?? [])
+    } catch (caught: unknown) {
+      setError(errorMessage(caught))
     } finally {
       setBusy(false)
     }
