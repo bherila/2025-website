@@ -7,7 +7,7 @@ import { PhrHomeView } from './PhrHomeView'
 import { phrModuleRegistry, type PhrShellState } from './phrModuleRegistry'
 import { usePhrRoute } from './usePhrRoute'
 
-const LOADING = <div className="p-8 text-sm text-muted-foreground">Loading…</div>
+const LOADING = <div role="status" aria-live="polite" className="p-8 text-sm text-muted-foreground">Loading…</div>
 
 interface PhrMillerShellProps {
   patientId: number | undefined

@@ -8,7 +8,7 @@ import { PhrMillerShell } from '@/phr/miller'
 const PatientsPage = lazy(() => import('@/phr/patients/PatientsPage'))
 const ManagePatientsPage = lazy(() => import('@/phr/patients-manage/PatientsManagePage'))
 
-const LOADING = <div className="px-4 py-8 text-sm text-muted-foreground">Loading…</div>
+const LOADING = <div role="status" aria-live="polite" className="px-4 py-8 text-sm text-muted-foreground">Loading…</div>
 
 function PageContent({
   section,
