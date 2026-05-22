@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import type { Car, GameState, ParkingSlot } from '../gameEngine'
+import { canBoardPassengerAtParkingGate, type Car, type GameState, type ParkingSlot } from '../gameEngine'
 import { notifyPassengerGate } from '../scene/animation/passengers'
 import type { PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
 
@@ -26,6 +26,64 @@ describe('passenger gate notifications', () => {
     notifyPassengerGate([passenger], 0, new Map([['p1', -1]]), testState, [], 11.1, onPassengerGate)
 
     expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
+  it('never boards a feeder passenger even when its colour matches a parked car', () => {
+    const mixedState: GameState = {
+      ...testState,
+      passengerQueue: [
+        { color: 'red', id: 'loop-red' },
+        { color: 'green', id: 'feeder-green' },
+      ],
+      cars: [parkedCar, parkedGreenCar],
+      parkingSlots: [parkingSlot, greenParkingSlot],
+    }
+    const loopPassenger: PassengerRenderItem = {
+      id: 'loop-red',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const feederPassenger: PassengerRenderItem = {
+      fixedTarget: new THREE.Vector3(3, 0, 0),
+      id: 'feeder-green',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const onPassengerGate = jest.fn()
+
+    for (let step = 0; step < 8; step += 1) {
+      const phase = step * testLayout.perimeter * 0.5
+      notifyPassengerGate(
+        [loopPassenger, feederPassenger],
+        phase,
+        new Map(),
+        mixedState,
+        [],
+        step + 0.1,
+        onPassengerGate,
+      )
+    }
+
+    expect(onPassengerGate).not.toHaveBeenCalledWith('feeder-green')
+    expect(onPassengerGate).toHaveBeenCalledWith('loop-red')
+  })
+
+  it('rejects ineligible passenger ids via canBoardPassengerAtParkingGate', () => {
+    const queueState: GameState = {
+      ...testState,
+      passengerQueue: [
+        { color: 'red', id: 'loop-red' },
+        { color: 'red', id: 'feeder-red' },
+      ],
+    }
+    const eligible = new Set(['loop-red'])
+
+    expect(canBoardPassengerAtParkingGate(queueState, 'loop-red', new Set(), eligible)).toBe(true)
+    expect(canBoardPassengerAtParkingGate(queueState, 'feeder-red', new Set(), eligible)).toBe(false)
+    // Without the eligibility set, the engine still treats the feeder id as boardable.
+    expect(canBoardPassengerAtParkingGate(queueState, 'feeder-red')).toBe(true)
   })
 })
 
@@ -59,6 +117,29 @@ const parkingSlot: ParkingSlot = {
   index: 0,
   kind: 'regular',
   occupiedCarId: 'car-1',
+  unlocked: true,
+}
+
+const parkedGreenCar: Car = {
+  boarded: 0,
+  capacity: 2,
+  color: 'green',
+  colorHidden: false,
+  direction: 'right',
+  id: 'car-2',
+  length: 2,
+  parkingSlotId: 'slot-2',
+  position: { x: 0, y: 0 },
+  sequence: 1,
+  status: 'parked',
+  tunnelId: null,
+}
+
+const greenParkingSlot: ParkingSlot = {
+  id: 'slot-2',
+  index: 1,
+  kind: 'regular',
+  occupiedCarId: 'car-2',
   unlocked: true,
 }
 

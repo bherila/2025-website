@@ -111,6 +111,9 @@ export function notifyPassengerGate(
   let boardingsThisFrame = 0
   const unavailableCarIds = activeParkingCarIds(movingCars, elapsed)
   for (const passenger of passengers) {
+    if (passenger.fixedTarget) {
+      continue
+    }
     if (passenger.entry && elapsed < passenger.entry.startedAt + passenger.entry.duration) {
       continue
     }

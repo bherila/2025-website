@@ -6,6 +6,7 @@ import {
   CAR_PATTERNS,
   type GameState,
   loopPassengerCapacity,
+  type Passenger,
 } from './gameEngine'
 import { startBlockedCarAnimation } from './scene/animation/blockedCar'
 import { animateBoardingPassengers, startBoardingPassengerAnimations } from './scene/animation/boardingPassengers'
@@ -29,6 +30,7 @@ import {
 } from './scene/builders/passengerMesh'
 import { createQueueTrack } from './scene/builders/queueTrack'
 import { type PassengerLoopSlot, planPassengerLoopSlots } from './scene/passengerLoopSlots'
+import { fitCameraToGameplayBounds, gameplayBoundsForState } from './scene/sceneCamera'
 import {
   CAR_MOVE_SECONDS_PER_UNIT,
   MIN_CAR_MOVE_DURATION,
@@ -54,6 +56,10 @@ import type {
 import { clearGroup, disposeObject, findCarId } from './scene/threeUtils'
 
 export { retainPersistentMovingCarsImpl as retainPersistentMovingCars }
+
+export function selectFeederPassengersForRendering(feederPassengers: Passenger[]): Passenger[] {
+  return feederPassengers
+}
 
 interface CarsSceneProps {
   blockedCarAttempt: { carId: string, nonce: number } | null
@@ -82,6 +88,7 @@ export function CarsScene({
   const staticSignatureRef = useRef<string>('')
   const effectsRef = useRef<THREE.Group | null>(null)
   const passengersRef = useRef<PassengerRenderItem[]>([])
+  const gatePassengersRef = useRef<PassengerRenderItem[]>([])
   const passengerLoopSlotsRef = useRef<PassengerLoopSlot[]>([])
   const passengerOffsetsRef = useRef<Map<string, number>>(new Map())
   const passengerGateCyclesRef = useRef<Map<string, number>>(new Map())
@@ -96,6 +103,7 @@ export function CarsScene({
   const passengerPhaseRef = useRef(0)
   const previousBlockedAttemptRef = useRef<number | null>(null)
   const previousLevelRef = useRef<number | null>(null)
+  const rendererResizeRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     onCarClickRef.current = onCarClick
@@ -121,7 +129,7 @@ export function CarsScene({
     const passengerGateCycles = passengerGateCyclesRef.current
     const fieldCarMeshes = fieldCarMeshesRef.current
 
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80)
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200)
     camera.position.set(0, 14.6, 4.2)
     camera.lookAt(0, 0, -3.6)
     cameraRef.current = camera
@@ -183,14 +191,15 @@ export function CarsScene({
       const width = Math.max(320, container.clientWidth)
       const height = Math.max(480, container.clientHeight)
       renderer.setSize(width, height)
-      const narrow = width < 640
-      camera.fov = narrow ? 50 : 42
-      camera.position.set(0, narrow ? 22.0 : 21.0, narrow ? 5.6 : 5.4)
-      camera.lookAt(0, 0, narrow ? -2.8 : -3.6)
-      camera.aspect = width / height
-      camera.updateProjectionMatrix()
+      fitCameraToGameplayBounds({
+        camera,
+        width,
+        height,
+        bounds: gameplayBoundsForState(stateRef.current, movingCarsRef.current),
+      })
     }
 
+    rendererResizeRef.current = resize
     const resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(container)
     resize()
@@ -206,7 +215,7 @@ export function CarsScene({
       animateBoardingPassengers(boardingPassengersRef.current, now)
       animateMovingCars(movingCarsRef.current, now)
       notifyPassengerGate(
-        passengersRef.current,
+        gatePassengersRef.current,
         passengerPhaseRef.current,
         passengerGateCyclesRef.current,
         stateRef.current,
@@ -236,11 +245,13 @@ export function CarsScene({
       staticSignatureRef.current = ''
       effectsRef.current = null
       passengersRef.current = []
+      gatePassengersRef.current = []
       passengerLoopSlotsRef.current = []
       boardingPassengersRef.current = []
       fieldCarMeshes.clear()
       passengerGateCycles.clear()
       movingCarsRef.current = []
+      rendererResizeRef.current = null
     }
   }, [])
 
@@ -289,7 +300,8 @@ export function CarsScene({
     }
 
     const nextSignature = staticSceneSignature(state)
-    if (nextSignature !== staticSignatureRef.current) {
+    const previousStaticSignature = staticSignatureRef.current
+    if (nextSignature !== previousStaticSignature) {
       clearGroup(staticGroup)
       buildStaticScene(staticGroup, state)
       staticSignatureRef.current = nextSignature
@@ -320,6 +332,7 @@ export function CarsScene({
     }
 
     passengersRef.current = []
+    gatePassengersRef.current = []
     fieldCarMeshesRef.current.clear()
     for (const [id, mesh] of retainedFieldCarMeshes) {
       fieldCarMeshesRef.current.set(id, mesh)
@@ -329,6 +342,7 @@ export function CarsScene({
       state,
       previousStateRef.current,
       passengersRef.current,
+      gatePassengersRef.current,
       passengerLoopSlotsRef.current,
       passengerOffsetsRef.current,
       passengerGateCyclesRef.current,
@@ -345,6 +359,9 @@ export function CarsScene({
         startBlockedCarAnimation(car, state, mesh, movingCarsRef.current, effects)
       }
       previousBlockedAttemptRef.current = blockedCarAttempt.nonce
+    }
+    if (nextSignature !== previousStaticSignature) {
+      rendererResizeRef.current?.()
     }
     previousStateRef.current = state
   }, [blockedCarAttempt, colorblindMode, state])
@@ -398,6 +415,7 @@ function buildDynamicScene(
   state: GameState,
   previousState: GameState | null,
   passengers: PassengerRenderItem[],
+  gatePassengers: PassengerRenderItem[],
   passengerLoopSlots: PassengerLoopSlot[],
   passengerOffsets: Map<string, number>,
   passengerGateCycles: Map<string, number>,
@@ -520,9 +538,10 @@ function buildDynamicScene(
       passengerRenderItem.entry = entry
     }
     passengers.push(passengerRenderItem)
+    gatePassengers.push(passengerRenderItem)
   }
 
-  const feederPassengers = loopPlan.feederPassengers.slice(0, 40)
+  const feederPassengers = selectFeederPassengersForRendering(loopPlan.feederPassengers)
   const feederIds = new Set(feederPassengers.map((passenger) => passenger.id))
   for (const id of feederPositions.keys()) {
     if (!feederIds.has(id)) {
