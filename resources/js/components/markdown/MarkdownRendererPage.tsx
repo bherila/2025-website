@@ -29,19 +29,15 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
   const [printPreparing, setPrintPreparing] = useState<boolean>(false)
+  const [ownsCurrentDocument, setOwnsCurrentDocument] = useState<boolean>(initialData.canEdit)
 
-  const registry = useMemo(() => createPreviewRenderRegistry(), [])
   const previewRef = useRef<HTMLDivElement | null>(null)
   const debouncedMarkdown = useDebouncedValue(markdown, PREVIEW_DEBOUNCE_MS)
+  const registry = useMemo(() => createPreviewRenderRegistry(), [debouncedMarkdown])
 
-  useEffect(() => {
-    registry.resetForRevision(`rev-${Date.now()}`)
-  }, [debouncedMarkdown, registry])
-
-  const isOwner = initialData.canEdit
   const hasDocument = document !== null
   const canSave = initialData.authenticated && !hasDocument
-  const canUpdate = initialData.authenticated && hasDocument && isOwner
+  const canUpdate = initialData.authenticated && hasDocument && ownsCurrentDocument
 
   const handleSave = async (): Promise<void> => {
     if (saving) {
@@ -63,6 +59,7 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
           shareUrl: response.shareUrl,
           ownerUserId: null,
         })
+        setOwnsCurrentDocument(true)
         window.history.replaceState(null, '', `/tools/markdown/s/${response.shortCode}`)
       }
     } catch (error) {
@@ -172,8 +169,9 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="markdown-editor-pane">
-          <label className="mb-2 block text-sm font-medium text-neutral-700">Markdown</label>
+          <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-neutral-700">Markdown</label>
           <textarea
+            id="markdown-content"
             value={markdown}
             onChange={(event) => setMarkdown(event.target.value)}
             spellCheck={false}
