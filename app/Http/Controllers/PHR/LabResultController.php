@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class LabResultController extends Controller
 {
@@ -138,7 +139,7 @@ class LabResultController extends Controller
     /**
      * @return \Illuminate\Support\Collection<int, PhrLabResult>
      */
-    private function panelRowsForAnchor(PhrPatient $patient, PhrLabResult $anchor)
+    private function panelRowsForAnchor(PhrPatient $patient, PhrLabResult $anchor): Collection
     {
         if ($anchor->test_name === null) {
             return collect([$anchor]);
