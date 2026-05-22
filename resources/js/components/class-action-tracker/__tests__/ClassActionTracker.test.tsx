@@ -127,6 +127,47 @@ describe('ClassActionTracker', () => {
     })
   })
 
+  it('rejects non-numeric money input', async () => {
+    mockGet.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+
+    render(<ClassActionTracker />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /add claim/i }))
+    fireEvent.change(screen.getByLabelText('Class Action'), { target: { value: 'Invalid Money Settlement' } })
+    fireEvent.change(screen.getByLabelText('Expected Payment Amount'), { target: { value: 'foo123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Claim' }))
+
+    expect(await screen.findByText('Use a valid amount.')).toBeInTheDocument()
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('nulls actual payment details when payment is not received', async () => {
+    mockGet.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mockPost.mockResolvedValue({
+      id: 10,
+      name: 'Unpaid Settlement',
+    })
+
+    render(<ClassActionTracker />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /add claim/i }))
+    fireEvent.change(screen.getByLabelText('Class Action'), { target: { value: 'Unpaid Settlement' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Payment received' }))
+    fireEvent.change(screen.getByLabelText('Payment Received Date'), { target: { value: '2026-05-17' } })
+    fireEvent.change(screen.getByLabelText('Actual Payment Amount'), { target: { value: '120.25' } })
+    fireEvent.change(screen.getByLabelText('Finance Transaction ID'), { target: { value: '123' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Payment received' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Claim' }))
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect(mockPost).toHaveBeenCalledWith('/api/class-action-claims', expect.objectContaining({
+      actual_payment_amount: null,
+      payment_received: false,
+      payment_received_on: null,
+      payment_fin_transaction_id: null,
+    }))
+  })
+
   it('imports from email and applies selected fields into the edit form', async () => {
     const claimsResponse = [
       {
@@ -157,9 +198,10 @@ describe('ClassActionTracker', () => {
     ]
 
     mockPost.mockResolvedValueOnce({ job_id: 55, status: 'pending' })
+    mockPut.mockResolvedValueOnce({})
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/class-action-claims') {
-        return Promise.resolve(claimsResponse)
+        return Promise.resolve([...claimsResponse])
       }
 
       if (url === '/api/genai/import/jobs/55') {
@@ -194,5 +236,16 @@ describe('ClassActionTracker', () => {
 
     expect(await screen.findByDisplayValue('3GHJCKGF')).toBeInTheDocument()
     expect(screen.getByDisplayValue('JRXCXP')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Claim' }))
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/api/class-action-claims/11', expect.objectContaining({
+      claim_id: '3GHJCKGF',
+      pin: 'JRXCXP',
+    })))
+    await waitFor(() => {
+      expect(mockGet.mock.calls.filter(([url]) => url === '/api/class-action-claims')).toHaveLength(2)
+    })
+    expect(screen.queryByText('Review extracted claim details')).not.toBeInTheDocument()
   })
 })

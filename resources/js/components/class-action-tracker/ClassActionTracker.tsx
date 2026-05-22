@@ -96,6 +96,8 @@ const optionalUrlSchema = z
   .trim()
   .refine((value) => value === '' || isValidUrl(value), 'Enter a valid URL.')
 
+const moneyInputPattern = /^\$?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/
+
 const optionalMoneySchema = z
   .string()
   .trim()
@@ -253,6 +255,7 @@ function ClassActionTracker(): React.ReactElement {
     const firstResult = importJobResults[0]
     if (!firstResult?.result_json) {
       setError('AI import returned an empty result.')
+      setImportJobId(null)
 
       return
     }
@@ -273,8 +276,10 @@ function ClassActionTracker(): React.ReactElement {
       setReviewMergeClaimId(matchedClaim?.id ?? null)
       setReviewDialogOpen(true)
       setImportDialogOpen(false)
+      setImportJobId(null)
     } catch {
       setError('Unable to parse AI import result.')
+      setImportJobId(null)
     }
   }, [claims, importJobId, importJobResults, importJobStatus])
 
@@ -1095,7 +1100,7 @@ function payloadFromForm(formValues: ClassActionClaimFormValues): Record<string,
     final_approval_hearing_on: blankToNull(formValues.final_approval_hearing_on),
     expected_payment_amount: moneyToNumber(formValues.expected_payment_amount),
     expected_payment_on: blankToNull(formValues.expected_payment_on),
-    actual_payment_amount: moneyToNumber(formValues.actual_payment_amount),
+    actual_payment_amount: paymentReceived ? moneyToNumber(formValues.actual_payment_amount) : null,
     payment_received: paymentReceived,
     payment_received_on: paymentReceived ? blankToNull(formValues.payment_received_on) : null,
     payment_fin_transaction_id: paymentReceived && formValues.payment_fin_transaction_id.trim() !== ''
@@ -1191,6 +1196,10 @@ function isValidMoney(value: string): boolean {
   try {
     if (value.trim() === '') {
       return true
+    }
+
+    if (!moneyInputPattern.test(value.trim())) {
+      return false
     }
 
     const parsed = currency(value)
