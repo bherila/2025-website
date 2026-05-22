@@ -119,7 +119,6 @@ function makeListEntry(
   id: PhrModuleId,
   label: string,
   shortLabel: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PageComponent: React.ComponentType<any>,
 ): PhrRegistryEntry {
   function ListColumn({ state }: PhrRenderProps) {
@@ -134,7 +133,6 @@ function makeDetailEntry(
   id: PhrModuleId,
   label: string,
   shortLabel: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   DetailComponent: React.ComponentType<any>,
   wide = false,
 ): PhrRegistryEntry {

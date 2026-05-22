@@ -1,5 +1,4 @@
 import { parseHash, serializeRoute } from '@/components/ui/miller'
-
 import { PHR_MODULE_IDS_SET, type PhrModuleId } from '@/phr/miller/phrModuleRegistry'
 
 describe('PHR route parsing', () => {

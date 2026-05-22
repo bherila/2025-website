@@ -11,6 +11,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
+import { parseHash, serializeRoute } from '@/components/ui/miller'
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -25,7 +26,6 @@ import { patientUrl, phrSectionUrl } from '@/lib/phrRouteBuilder'
 import { cn } from '@/lib/utils'
 import { PHR_MODULE_IDS_SET } from '@/phr/miller/phrModuleRegistry'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
-import { parseHash, serializeRoute } from '@/components/ui/miller'
 
 interface PhrNavbarProps {
   patientId?: number
