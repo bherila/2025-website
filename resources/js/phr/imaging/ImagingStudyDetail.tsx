@@ -8,8 +8,8 @@ import { errorMessage } from '@/phr/shared'
 import {
   type PhrDicomStudy,
   PhrDicomStudyResponseSchema,
-  type PhrDicomViewerSeries,
   PhrDicomViewerResponseSchema,
+  type PhrDicomViewerSeries,
 } from '@/phr/types'
 
 interface ImagingStudyDetailProps {
