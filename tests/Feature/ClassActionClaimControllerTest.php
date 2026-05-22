@@ -24,10 +24,20 @@ class ClassActionClaimControllerTest extends TestCase
 
         $createResponse = $this->actingAs($user)->postJson('/api/class-action-claims', [
             'name' => 'Example Privacy Settlement',
+            'claim_id' => '3GHJCKGF',
+            'pin' => 'JRXCXP',
             'notification_received_on' => '2026-05-10',
             'notification_email_copy' => 'You may be eligible to file a claim.',
             'class_action_url' => 'https://example.test/settlement',
             'payment_election_submitted_on' => '2026-05-12',
+            'claim_submitted_on' => '2026-05-15',
+            'claim_deadline' => '2026-08-27',
+            'administrator' => 'A.B. Data, Ltd.',
+            'defendant' => 'Google LLC',
+            'final_approval_hearing_on' => '2026-09-04',
+            'expected_payment_amount' => 42.50,
+            'expected_payment_on' => '2026-11-10',
+            'actual_payment_amount' => 42.50,
             'payment_received' => true,
             'payment_received_on' => '2026-05-17',
             'payment_fin_transaction_id' => $transaction->t_id,
@@ -37,6 +47,9 @@ class ClassActionClaimControllerTest extends TestCase
         $createResponse
             ->assertCreated()
             ->assertJsonPath('name', 'Example Privacy Settlement')
+            ->assertJsonPath('claim_id', '3GHJCKGF')
+            ->assertJsonPath('administrator', 'A.B. Data, Ltd.')
+            ->assertJsonPath('claim_deadline', '2026-08-27')
             ->assertJsonPath('payment_received', true)
             ->assertJsonPath('payment_transaction.t_id', $transaction->t_id)
             ->assertJsonPath('payment_transaction.account_name', 'Settlement Checking');
@@ -49,17 +62,33 @@ class ClassActionClaimControllerTest extends TestCase
             'notification_email_copy' => 'Updated notification copy.',
             'class_action_url' => 'https://example.test/settlement',
             'payment_election_submitted_on' => null,
+            'claim_submitted_on' => null,
+            'claim_deadline' => '2026-08-30',
+            'administrator' => 'Epiq',
+            'defendant' => 'Google LLC',
+            'final_approval_hearing_on' => '2026-09-07',
+            'expected_payment_amount' => 41.25,
+            'expected_payment_on' => '2026-11-12',
+            'actual_payment_amount' => null,
             'payment_received' => false,
             'payment_received_on' => '2026-05-17',
             'payment_fin_transaction_id' => $transaction->t_id,
             'notes' => 'Payment was entered by mistake.',
         ])
             ->assertOk()
+            ->assertJsonPath('administrator', 'Epiq')
+            ->assertJsonPath('claim_deadline', '2026-08-30')
+            ->assertJsonPath('expected_payment_amount', 41.25)
             ->assertJsonPath('payment_received', false)
             ->assertJsonPath('payment_received_on', null)
             ->assertJsonPath('payment_fin_transaction_id', null);
 
-        $this->actingAs($user)->getJson('/api/class-action-claims?q=privacy')
+        $this->actingAs($user)->getJson('/api/class-action-claims?q=3GHJCKGF')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.name', 'Example Privacy Settlement');
+
+        $this->actingAs($user)->getJson('/api/class-action-claims?q=epiq')
             ->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.name', 'Example Privacy Settlement');

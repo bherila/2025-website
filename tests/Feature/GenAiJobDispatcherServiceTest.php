@@ -169,6 +169,17 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertTrue($result);
     }
 
+    public function test_validate_context_accepts_class_action_email_context(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $result = $service->validateContext('class_action_email', [
+            'pasted_text' => 'Unique ID: ABC123',
+            'reference_page_text' => 'Settlement details',
+        ]);
+        $this->assertTrue($result);
+    }
+
     public function test_validate_context_rejects_unknown_job_type(): void
     {
         $service = new GenAiJobDispatcherService;
@@ -272,6 +283,18 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $prompt = $service->buildPrompt('utility_bill', ['account_type' => 'Water']);
         $this->assertStringContainsString('utility bill', $prompt);
         $this->assertStringNotContainsString('power_consumed_kwh', $prompt);
+    }
+
+    public function test_build_prompt_for_class_action_email(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('class_action_email', [
+            'pasted_text' => 'Unique ID: 3GHJCKGF',
+        ]);
+        $this->assertStringContainsString('claim_deadline', $prompt);
+        $this->assertStringContainsString('Unique ID', $prompt);
+        $this->assertStringContainsString('Return ONLY valid JSON', $prompt);
     }
 
     public function test_build_prompt_rejects_unknown_job_type(): void

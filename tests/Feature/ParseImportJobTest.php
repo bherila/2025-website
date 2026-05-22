@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\GenAiProcessor\Jobs\ParseImportJob;
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use Tests\TestCase;
 
@@ -258,5 +260,49 @@ class ParseImportJobTest extends TestCase
 
         $this->assertNull($input);
         $this->assertSame(99, $output);
+    }
+
+    public function test_create_results_sanitizes_class_action_email_output(): void
+    {
+        $user = $this->createUser();
+
+        $importJob = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'class_action_email',
+            'file_hash' => 'hash-1',
+            'original_filename' => 'pasted-import.txt',
+            's3_path' => 'inline://paste/test',
+            'mime_type' => 'text/plain',
+            'file_size_bytes' => 123,
+            'status' => 'processing',
+        ]);
+
+        $job = new ParseImportJob($importJob->id);
+        $method = new \ReflectionMethod($job, 'createResults');
+        $method->setAccessible(true);
+        $method->invoke($job, $importJob, [
+            'name' => '  Example Settlement  ',
+            'claim_id' => 'ABC123',
+            'pin' => 'PIN123',
+            'claim_deadline' => '2026-08-27',
+            'expected_payment_amount' => '42.50',
+            'confidence' => [
+                'claim_id' => 0.92,
+                'ignored_field' => 0.9,
+                'name' => 1.5,
+            ],
+            'unknown' => 'drop me',
+        ]);
+
+        $result = GenAiImportResult::query()->where('job_id', $importJob->id)->firstOrFail();
+        $decoded = json_decode($result->result_json, true);
+
+        $this->assertSame('Example Settlement', $decoded['name']);
+        $this->assertSame('ABC123', $decoded['claim_id']);
+        $this->assertSame('PIN123', $decoded['pin']);
+        $this->assertSame('2026-08-27', $decoded['claim_deadline']);
+        $this->assertSame(42.5, $decoded['expected_payment_amount']);
+        $this->assertSame(['claim_id' => 0.92], $decoded['confidence']);
+        $this->assertArrayNotHasKey('unknown', $decoded);
     }
 }

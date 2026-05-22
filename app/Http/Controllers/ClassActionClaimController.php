@@ -24,6 +24,8 @@ class ClassActionClaimController extends Controller
             $query->where(function (Builder $query) use ($search): void {
                 $query
                     ->where('name', 'like', "%{$search}%")
+                    ->orWhere('claim_id', 'like', "%{$search}%")
+                    ->orWhere('administrator', 'like', "%{$search}%")
                     ->orWhere('notes', 'like', "%{$search}%")
                     ->orWhere('notification_email_copy', 'like', "%{$search}%");
             });

@@ -1,5 +1,6 @@
 export type GenAiJobType =
   | 'finance_transactions'
+  | 'class_action_email'
   | 'finance_payslip'
   | 'utility_bill'
   | 'document_extract'
