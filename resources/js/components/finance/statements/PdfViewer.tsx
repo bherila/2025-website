@@ -1,54 +1,43 @@
-import { ChevronFirst,ChevronLast, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react'
+import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react'
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 
-// For TypeScript, we need to declare the global pdfjsLib
-declare global {
-  interface Window {
-    pdfjsLib: any;
-  }
-}
-
-// Set worker source if not already set globally
-const pdfjsLib = window.pdfjsLib;
-if (pdfjsLib && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
-}
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 interface PdfViewerProps {
   url: string
 }
 
+function isRenderingCancelledException(error: unknown): boolean {
+  return error instanceof Error && error.name === 'RenderingCancelledException'
+}
+
 export default function PdfViewer({ url }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [pdf, setPdf] = useState<any>(null) // Use any for PDFDocumentProxy if type not easily accessible globally
-  const [pageNum, setPageNumber] = useState(1)
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null)
+  const [pageNum, setPageNum] = useState(1)
   const [numPages, setNumPages] = useState(0)
   const [scale, setScale] = useState(1.5)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const renderTaskRef = useRef<any>(null)
+  const renderTaskRef = useRef<RenderTask | null>(null)
 
   useEffect(() => {
     const loadPdf = async () => {
       setIsLoading(true)
       setError(null)
 
-      if (!pdfjsLib) {
-        console.error('pdfjsLib not found on window')
-        setError('PDF viewer engine failed to load.')
-        setIsLoading(false)
-        return
-      }
-
       try {
         const loadingTask = pdfjsLib.getDocument(url)
         const pdfDoc = await loadingTask.promise
-        setPdf(pdfDoc)
+        setPdfDocument(pdfDoc)
         setNumPages(pdfDoc.numPages)
-        setPageNumber(1)
+        setPageNum(1)
       } catch (err) {
         console.error('Error loading PDF:', err)
         setError('Failed to load PDF. Please try downloading it instead.')
@@ -60,50 +49,43 @@ export default function PdfViewer({ url }: PdfViewerProps) {
   }, [url])
 
   const renderPage = useCallback(async (num: number, currentScale: number) => {
-    if (!pdf || !canvasRef.current) return
+    if (!pdfDocument || !canvasRef.current) {
+      return
+    }
 
-    // Cancel existing render task if any
     if (renderTaskRef.current) {
       renderTaskRef.current.cancel()
     }
 
     try {
-      const page = await pdf.getPage(num)
+      const page = await pdfDocument.getPage(num)
       const viewport = page.getViewport({ scale: currentScale })
       const canvas = canvasRef.current
-      const context = canvas.getContext('2d')
-
-      if (!context) return
 
       canvas.height = viewport.height
       canvas.width = viewport.width
 
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-        canvas: canvas,
-      }
-
-      const renderTask = page.render(renderContext)
+      const renderTask = page.render({
+        canvas,
+        viewport,
+      })
       renderTaskRef.current = renderTask
       await renderTask.promise
-    } catch (err: any) {
-      if (err.name === 'RenderingCancelledException') {
-        // Normal, ignore
-      } else {
+    } catch (err: unknown) {
+      if (!isRenderingCancelledException(err)) {
         console.error('Error rendering page:', err)
       }
     }
-  }, [pdf])
+  }, [pdfDocument])
 
   useEffect(() => {
-    if (pdf) {
+    if (pdfDocument) {
       renderPage(pageNum, scale)
     }
-  }, [pdf, pageNum, scale, renderPage])
+  }, [pdfDocument, pageNum, scale, renderPage])
 
   const changePage = (offset: number) => {
-    setPageNumber((prev) => Math.min(Math.max(1, prev + offset), numPages))
+    setPageNum((prev) => Math.min(Math.max(1, prev + offset), numPages))
   }
 
   const zoom = (factor: number) => {
@@ -132,7 +114,7 @@ export default function PdfViewer({ url }: PdfViewerProps) {
       {/* Controls */}
       <div className="flex items-center justify-between p-2 bg-muted/50 border-b mb-2 rounded-t-lg sticky top-0 z-10">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setPageNumber(1)} disabled={pageNum <= 1}>
+          <Button variant="ghost" size="icon" onClick={() => setPageNum(1)} disabled={pageNum <= 1}>
             <ChevronFirst className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" onClick={() => changePage(-1)} disabled={pageNum <= 1}>
@@ -144,7 +126,7 @@ export default function PdfViewer({ url }: PdfViewerProps) {
           <Button variant="ghost" size="icon" onClick={() => changePage(1)} disabled={pageNum >= numPages}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setPageNumber(numPages)} disabled={pageNum >= numPages}>
+          <Button variant="ghost" size="icon" onClick={() => setPageNum(numPages)} disabled={pageNum >= numPages}>
             <ChevronLast className="h-4 w-4" />
           </Button>
         </div>

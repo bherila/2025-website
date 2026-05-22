@@ -21,5 +21,6 @@ class CspPolicyTest extends TestCase
         $this->assertStringContainsString('https://460f679bfb0a7ee47cc561c1d08e154f.r2.cloudflarestorage.com', $csp);
         $this->assertStringContainsString('https://bhdicom.460f679bfb0a7ee47cc561c1d08e154f.r2.cloudflarestorage.com', $csp);
         $this->assertStringNotContainsString('https://esm.sh', $csp);
+        $this->assertStringNotContainsString('https://cdnjs.cloudflare.com', $csp);
     }
 }
