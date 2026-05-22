@@ -101,6 +101,12 @@ jest.mock('../AllStatementsView', () => {
   return { __esModule: true, default: Modal };
 });
 
+jest.mock('../PdfViewer', () => {
+  const PdfViewer = () => <div data-testid="pdf-viewer" />;
+  PdfViewer.displayName = 'PdfViewer';
+  return { __esModule: true, default: PdfViewer };
+});
+
 // --- Helpers ---------------------------------------------------------------
 
 const SAMPLE_STATEMENTS = [

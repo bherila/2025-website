@@ -35,7 +35,6 @@ class CloudflareCspPolicy implements Preset
             ])
             ->add(Directive::STYLE, [
                 Keyword::SELF,
-                'https://cdnjs.cloudflare.com',
             ])
             ->add(Directive::OBJECT, [Keyword::NONE])
             ->add(Directive::BASE, [Keyword::SELF])
