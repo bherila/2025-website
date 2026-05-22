@@ -8,6 +8,8 @@ use App\Http\Requests\PHR\StoreVitalRequest;
 use App\Http\Resources\PHR\VitalResource;
 use App\Models\PhrPatientVital;
 use App\Services\PHR\Access\PhrPatientAccessService;
+use App\Support\PHR\VitalMetricResolver;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,10 @@ class VitalController extends Controller
     /** @use HandlesClinicalResourceRequests<PhrPatientVital> */
     use HandlesClinicalResourceRequests;
 
-    public function __construct(private PhrPatientAccessService $accessService) {}
+    public function __construct(
+        private PhrPatientAccessService $accessService,
+        private VitalMetricResolver $metricResolver,
+    ) {}
 
     public function index(Request $request, int $patient): JsonResponse
     {
@@ -33,6 +38,51 @@ class VitalController extends Controller
     public function show(Request $request, int $patient, int $vital): JsonResponse
     {
         return $this->showClinicalResource($request, $patient, $vital);
+    }
+
+    public function trend(Request $request, int $patient, string $metricKey): JsonResponse
+    {
+        $userId = (int) $request->user()?->id;
+        $resolvedPatient = $this->accessService()->accessiblePatient($patient, $userId);
+        /** @var Collection<int, PhrPatientVital> $vitals */
+        $vitals = PhrPatientVital::query()
+            ->where('patient_id', $resolvedPatient->id)
+            ->orderBy('observed_at')
+            ->orderBy('vital_date')
+            ->orderBy('id')
+            ->get();
+
+        $points = [];
+        $label = null;
+        $unit = null;
+
+        foreach ($vitals as $vital) {
+            foreach ($this->metricResolver->metricCandidates($vital) as $candidate) {
+                if ($candidate['key'] !== $metricKey) {
+                    continue;
+                }
+
+                $label ??= $candidate['label'];
+                $unit ??= $candidate['unit'];
+
+                $points[] = [
+                    'reading_id' => $vital->id,
+                    'recorded_at' => $vital->observed_at?->toDateTimeString() ?? $vital->vital_date?->toDateString(),
+                    'value' => $candidate['value'],
+                ];
+            }
+        }
+
+        if ($points === []) {
+            abort(404);
+        }
+
+        return response()->json([
+            'metric_key' => $metricKey,
+            'metric_label' => $label ?? 'Vital',
+            'unit' => $unit,
+            'points' => $points,
+        ]);
     }
 
     public function update(StoreVitalRequest $request, int $patient, int $vital): JsonResponse
