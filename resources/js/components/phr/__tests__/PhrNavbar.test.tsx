@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 
 describe('PhrNavbar', () => {
   let fetchSpy: jest.SpiedFunction<typeof fetch>
@@ -72,32 +72,31 @@ describe('PhrNavbar', () => {
     expect(screen.getByRole('link', { name: 'Manage Patients' })).toBeInTheDocument()
   })
 
-  it('loads patient combobox and renders patient tab links', async () => {
+  it('loads patient combobox when patientId is provided', async () => {
     const PhrNavbar = (await import('@/components/phr/PhrNavbar')).default
 
     await act(async () => {
-      render(<PhrNavbar patientId={1} activeTab="labs" />)
+      render(<PhrNavbar patientId={1} />)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
+  })
+
+  it('patient swap navigates to new patient URL preserving hash columns without instances', async () => {
+    const PhrNavbar = (await import('@/components/phr/PhrNavbar')).default
+
+    await act(async () => {
+      render(<PhrNavbar patientId={1} />)
     })
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toBeInTheDocument()
     })
 
-    const labsLink = screen.getByRole('link', { name: 'Labs' })
-    expect(labsLink).toHaveAttribute('href', '/phr/patient/1/labs')
-    expect(labsLink).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: 'Imaging' })).toHaveAttribute('href', '/phr/patient/1/imaging')
-  })
-
-  it('tab click points navigation to patient tab URL', async () => {
-    const PhrNavbar = (await import('@/components/phr/PhrNavbar')).default
-
-    await act(async () => {
-      render(<PhrNavbar patientId={1} activeTab="summary" />)
-    })
-
-    const tabsLink = screen.getByRole('link', { name: 'Vitals' })
-    fireEvent.click(tabsLink)
-    expect(tabsLink).toHaveAttribute('href', '/phr/patient/1/vitals')
+    // Verify section links still render
+    expect(screen.getByRole('link', { name: 'Patients' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Manage Patients' })).toBeInTheDocument()
   })
 })

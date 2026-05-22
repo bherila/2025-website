@@ -12,21 +12,6 @@ class PageController extends Controller
 {
     public function __construct(private PhrPatientAccessService $accessService) {}
 
-    private const TAB_LABELS = [
-        'summary' => 'Summary',
-        'labs' => 'Labs',
-        'vitals' => 'Vitals',
-        'imaging' => 'Imaging',
-        'office-visits' => 'Office Visits',
-        'medications' => 'Medications',
-        'conditions' => 'Conditions',
-        'procedures' => 'Procedures',
-        'immunizations' => 'Immunizations',
-        'allergies' => 'Allergies',
-        'documents' => 'Documents',
-        'access' => 'Access',
-    ];
-
     public function index(): RedirectResponse
     {
         return redirect('/phr/patients');
@@ -52,18 +37,15 @@ class PageController extends Controller
         return view('phr.config');
     }
 
-    public function patientTab(Request $request, int $patient, string $tab): View
+    public function patient(Request $request, int $patient): View
     {
         $user = $request->user();
         abort_unless($user !== null, 403);
         $userId = (int) $user->id;
         $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
-        $tabLabel = self::TAB_LABELS[$tab] ?? 'PHR';
 
-        return view('phr.patient-tab', [
+        return view('phr.patient', [
             'patientId' => $resolvedPatient->id,
-            'tab' => $tab,
-            'tabLabel' => $tabLabel,
             'canManage' => $this->accessService->canWrite($resolvedPatient, $userId),
         ]);
     }

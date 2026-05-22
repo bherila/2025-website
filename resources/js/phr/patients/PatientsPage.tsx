@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
-import { patientTabUrl } from '@/lib/phrRouteBuilder'
+import { patientUrl } from '@/lib/phrRouteBuilder'
 import { errorMessage } from '@/phr/shared'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
 
@@ -77,7 +77,7 @@ export default function PatientsPage() {
         {patients.map((patient) => (
           <a
             key={patient.id}
-            href={patientTabUrl('summary', patient.id)}
+            href={patientUrl(patient.id)}
             className="group flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-accent/40"
           >
             <div className="flex items-start justify-between gap-2">
@@ -108,7 +108,7 @@ export default function PatientsPage() {
                   className="text-xs"
                   onClick={(e) => {
                     e.preventDefault()
-                    window.location.href = patientTabUrl(tab, patient.id)
+                    window.location.href = patientUrl(patient.id) + '#/' + tab
                   }}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}

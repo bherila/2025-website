@@ -11,6 +11,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
+import { parseHash, serializeRoute } from '@/components/ui/miller'
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -20,34 +21,19 @@ import {
 } from '@/components/ui/navigation-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { PhrPatientTab, PhrSection } from '@/lib/phrRouteBuilder'
-import { patientTabUrl, phrSectionUrl } from '@/lib/phrRouteBuilder'
+import type { PhrSection } from '@/lib/phrRouteBuilder'
+import { patientUrl, phrSectionUrl } from '@/lib/phrRouteBuilder'
 import { cn } from '@/lib/utils'
+import { PHR_MODULE_IDS_SET } from '@/phr/miller/phrModuleRegistry'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
-
-const PATIENT_TABS: { value: PhrPatientTab; label: string }[] = [
-  { value: 'summary', label: 'Summary' },
-  { value: 'labs', label: 'Labs' },
-  { value: 'vitals', label: 'Vitals' },
-  { value: 'imaging', label: 'Imaging' },
-  { value: 'office-visits', label: 'Office Visits' },
-  { value: 'medications', label: 'Medications' },
-  { value: 'conditions', label: 'Conditions' },
-  { value: 'procedures', label: 'Procedures' },
-  { value: 'immunizations', label: 'Immunizations' },
-  { value: 'allergies', label: 'Allergies' },
-  { value: 'documents', label: 'Documents' },
-  { value: 'access', label: 'Access' },
-]
 
 interface PhrNavbarProps {
   patientId?: number
-  activeTab?: PhrPatientTab
   activeSection?: PhrSection
   children?: React.ReactNode
 }
 
-export default function PhrNavbar({ patientId, activeTab, activeSection, children }: PhrNavbarProps) {
+export default function PhrNavbar({ patientId, activeSection, children }: PhrNavbarProps) {
   const [patients, setPatients] = useState<PhrPatient[]>([])
   const [searchValue, setSearchValue] = useState('')
   const [isComboboxOpen, setIsComboboxOpen] = useState(false)
@@ -86,10 +72,16 @@ export default function PhrNavbar({ patientId, activeTab, activeSection, childre
   )
 
   function handlePatientSelect(patient: PhrPatient): void {
-    const targetTab = activeTab ?? 'summary'
     setSearchValue('')
     setIsComboboxOpen(false)
-    window.location.href = patientTabUrl(targetTab, patient.id)
+    const currentHash = typeof window !== 'undefined' ? window.location.hash : ''
+    let newHash = ''
+    if (currentHash) {
+      const parsed = parseHash(currentHash, PHR_MODULE_IDS_SET)
+      const stripped = { columns: parsed.columns.map((col) => ({ id: col.id })) }
+      newHash = serializeRoute(stripped)
+    }
+    window.location.href = patientUrl(patient.id) + newHash
   }
 
   return (
@@ -155,29 +147,6 @@ export default function PhrNavbar({ patientId, activeTab, activeSection, childre
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
-          )}
-
-          {patientId !== undefined && (
-            <div className="flex items-center gap-1">
-              {PATIENT_TABS.map((tab) => {
-                const isActive = activeTab === tab.value
-
-                return (
-                  <a
-                    key={tab.value}
-                    href={patientTabUrl(tab.value, patientId)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={cn(
-                      navigationMenuTriggerStyle(),
-                      'h-8 px-3 text-sm',
-                      isActive ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    {tab.label}
-                  </a>
-                )
-              })}
-            </div>
           )}
 
           <NavigationMenu viewport={false} className="ml-auto">

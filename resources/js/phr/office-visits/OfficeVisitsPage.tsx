@@ -31,7 +31,6 @@ function AddForm({ patientId, onAdded }: AddFormProps) {
         `/api/phr/patients/${patientId}/office-visits`,
         compactPayload({ visit_date: visitDate, visit_type: visitType, provider_name: providerName, chief_complaint: chiefComplaint }),
       )
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const visit = (raw as any)?.office_visit as PhrOfficeVisit
       onAdded(visit)
       setVisitDate('')
