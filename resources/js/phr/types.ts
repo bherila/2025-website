@@ -184,6 +184,42 @@ export const PhrLabResultResponseSchema = z.object({
   lab_result: PhrLabResultSchema,
 })
 
+export const PhrLabPanelResultRowSchema = z.object({
+  id: z.number(),
+  analyte: nullableString,
+  value: nullableString,
+  value_numeric: nullableString,
+  unit: nullableString,
+  range_min: nullableString,
+  range_max: nullableString,
+  range_unit: nullableString,
+  reference_range_text: nullableString,
+  abnormal_flag: nullableString,
+  result_datetime: nullableString,
+  collection_datetime: nullableString,
+  trend: z.enum(['up', 'down', 'flat']).nullable(),
+})
+
+export type PhrLabPanelResultRow = z.infer<typeof PhrLabPanelResultRowSchema>
+
+export const PhrLabPanelSchema = z.object({
+  id: z.number(),
+  panel_name: nullableString,
+  collection_datetime: nullableString,
+  ordering_provider: nullableString,
+  resulting_lab: nullableString,
+  source: nullableString,
+  source_document_id: z.number().nullable(),
+  source_document_url: nullableString,
+  rows: z.array(PhrLabPanelResultRowSchema),
+})
+
+export type PhrLabPanel = z.infer<typeof PhrLabPanelSchema>
+
+export const PhrLabPanelDetailResponseSchema = z.object({
+  panel: PhrLabPanelSchema,
+})
+
 export const PhrVitalsResponseSchema = z.object({
   vitals: z.array(PhrVitalSchema),
   can_manage: z.boolean().default(false),

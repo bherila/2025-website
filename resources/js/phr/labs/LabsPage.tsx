@@ -136,7 +136,7 @@ function referenceRange(result: PhrLabResult): string | null {
   return result.reference_range_text
 }
 
-export default function LabsPage({ patientId }: PhrListPageProps) {
+export default function LabsPage({ patientId, onDrill }: PhrListPageProps) {
   const [results, setResults] = useState<PhrLabResult[]>([])
   const [canManage, setCanManage] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -278,7 +278,11 @@ export default function LabsPage({ patientId }: PhrListPageProps) {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                <tr
+                  key={r.id}
+                  className={`border-b border-border last:border-0 hover:bg-muted/20 ${onDrill ? 'cursor-pointer' : ''}`}
+                  onClick={() => onDrill?.({ id: 'lab-panel-detail', instance: String(r.id) })}
+                >
                   <td className="px-3 py-2 font-medium text-foreground">{r.analyte ?? '—'}</td>
                   <td className="px-3 py-2 text-muted-foreground">{r.test_name ?? '—'}</td>
                   <td className={`px-3 py-2 text-right ${flagClass(r.abnormal_flag)}`}>
