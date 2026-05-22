@@ -652,8 +652,13 @@ export function canBoardPassengerAtParkingGate(
   state: GameState,
   passengerId: string,
   unavailableCarIds: ReadonlySet<string> = new Set(),
+  eligiblePassengerIds?: ReadonlySet<string>,
 ): boolean {
   if (levelHasEnded(state)) {
+    return false
+  }
+
+  if (eligiblePassengerIds && !eligiblePassengerIds.has(passengerId)) {
     return false
   }
 
