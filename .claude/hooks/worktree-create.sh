@@ -9,8 +9,11 @@ PAYLOAD="$(cat || true)"
 
 NAME=""
 if command -v jq >/dev/null 2>&1 && [[ -n "$PAYLOAD" ]]; then
+  # Prefer the dedicated `.name` slug Claude Code ships with WorktreeCreate —
+  # it's unique per event, so two subagents of the same type (e.g. two Explore
+  # invocations) don't collide on the same worktree directory.
   NAME="$(printf '%s' "$PAYLOAD" | jq -r '
-    .subagent_name // .agent_type // .agent_id // .name // empty
+    .name // .subagent_name // .agent_id // .agent_type // empty
   ' 2>/dev/null || true)"
 fi
 NAME="${NAME:-claude-$(date +%Y%m%d-%H%M%S)}"
