@@ -12,12 +12,18 @@ class FinanceViteEntrypointsTest extends TestCase
         $viteConfig = File::get(base_path('vite.config.ts'));
         $financeViews = File::glob(resource_path('views/finance/*.blade.php'));
 
-        $this->assertIsArray($financeViews);
         $this->assertNotEmpty($financeViews);
 
         foreach ($financeViews as $view) {
             $contents = File::get($view);
-            preg_match_all("/@vite\\('([^']+)'\\)/", $contents, $matches);
+            // Extract all @vite(...) call bodies, then pull out every quoted path within them.
+            preg_match_all("/@vite\s*\(([^)]+)\)/", $contents, $viteCalls);
+            $entrypoints = [];
+            foreach ($viteCalls[1] as $callArgs) {
+                preg_match_all('/[\'"]([^\'"]+)[\'"]/', $callArgs, $pathMatches);
+                $entrypoints = array_merge($entrypoints, $pathMatches[1]);
+            }
+            $matches = [[], $entrypoints];
 
             $this->assertStringNotContainsString(
                 'resources/js/finance.tsx',
@@ -36,8 +42,8 @@ class FinanceViteEntrypointsTest extends TestCase
                 }
 
                 $this->assertFileExists(base_path($entrypoint));
-                $this->assertStringContainsString(
-                    "'{$entrypoint}'",
+                $this->assertMatchesRegularExpression(
+                    '/[\'"]'.preg_quote($entrypoint, '/').'[\'"]/',
                     $viteConfig,
                     "{$entrypoint} is referenced by {$view} but is not registered in vite.config.ts.",
                 );

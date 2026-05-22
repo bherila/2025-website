@@ -23,7 +23,8 @@ export function readRequiredIntDataset(element: HTMLElement, key: string): numbe
   const value = element.dataset[key]
 
   if (!value) {
-    throw new Error(`Missing data-${key} value on #${element.id}`)
+    const kebabKey = key.replace(/([A-Z])/g, (c) => `-${c.toLowerCase()}`)
+    throw new Error(`Missing data-${kebabKey} value on #${element.id}`)
   }
 
   return parseInt(value, 10)
