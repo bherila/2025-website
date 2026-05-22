@@ -266,7 +266,13 @@ export default function ImagingPage({ patientId, onDrill }: PhrListPageProps) {
               )}
               onClick={onDrill ? () => onDrill({ id: 'imaging-study-detail', instance: String(study.id) }) : undefined}
               tabIndex={onDrill ? 0 : undefined}
-              onKeyDown={onDrill ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDrill({ id: 'imaging-study-detail', instance: String(study.id) }) } } : undefined}
+              onKeyDown={onDrill ? (e) => {
+                if (e.target !== e.currentTarget) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onDrill({ id: 'imaging-study-detail', instance: String(study.id) })
+                }
+              } : undefined}
             >
               <div className="min-w-0">
                 <p className="break-words font-medium text-card-foreground">{study.description || 'DICOM Study'}</p>
