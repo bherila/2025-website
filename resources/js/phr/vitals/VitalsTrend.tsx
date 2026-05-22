@@ -13,6 +13,13 @@ interface VitalsTrendProps {
   recordId: string
 }
 
+function parseRecordedAt(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+  const parsed = new Date(normalized)
+  return Number.isFinite(parsed.getTime()) ? parsed : null
+}
+
 export default function VitalsTrend({ patientId, recordId }: VitalsTrendProps) {
   const [range, setRange] = useState<'30d' | '90d' | '1y' | 'all'>('90d')
   const [loading, setLoading] = useState(true)
@@ -66,17 +73,19 @@ export default function VitalsTrend({ patientId, recordId }: VitalsTrendProps) {
     }
     const boundary = addDays(now, offsets[range])
     return points.filter((point) => {
-      if (!point.recorded_at) return false
-      const parsed = new Date(point.recorded_at)
-      return Number.isFinite(parsed.getTime()) && parsed >= boundary
+      const parsed = parseRecordedAt(point.recorded_at)
+      return parsed !== null && parsed >= boundary
     })
   }, [points, range])
 
   const chartRows = useMemo(
-    () => filteredPoints.map((point) => ({
-      ...point,
-      label: point.recorded_at ? format(new Date(point.recorded_at), 'MMM d, yyyy') : 'Unknown',
-    })),
+    () => filteredPoints.map((point) => {
+      const parsed = parseRecordedAt(point.recorded_at)
+      return {
+        ...point,
+        label: parsed ? format(parsed, 'MMM d, yyyy') : 'Unknown',
+      }
+    }),
     [filteredPoints],
   )
 
