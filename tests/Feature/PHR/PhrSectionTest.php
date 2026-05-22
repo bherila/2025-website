@@ -32,7 +32,7 @@ class PhrSectionTest extends TestCase
         $this->actingAs($user)->get('/phr/config')->assertOk();
     }
 
-    public function test_patient_tab_pages_require_patient_access(): void
+    public function test_patient_page_requires_patient_access(): void
     {
         $this->withoutVite();
         $owner = $this->createUser();
@@ -45,12 +45,8 @@ class PhrSectionTest extends TestCase
         $patientResponse->assertCreated();
         $patientId = (int) $patientResponse->json('patient.id');
 
-        $tabs = ['summary', 'labs', 'vitals', 'imaging', 'office-visits', 'medications', 'conditions', 'procedures', 'immunizations', 'allergies', 'documents', 'access'];
-
-        foreach ($tabs as $tab) {
-            $this->actingAs($owner)->get("/phr/patient/{$patientId}/{$tab}")->assertOk();
-            $this->actingAs($other)->get("/phr/patient/{$patientId}/{$tab}")->assertNotFound();
-        }
+        $this->actingAs($owner)->get("/phr/patient/{$patientId}")->assertOk();
+        $this->actingAs($other)->get("/phr/patient/{$patientId}")->assertNotFound();
     }
 
     public function test_patient_api_supports_owner_manager_viewer_and_unshared_access(): void

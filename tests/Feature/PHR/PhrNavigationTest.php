@@ -16,7 +16,7 @@ class PhrNavigationTest extends TestCase
         $response->assertSee('PhrNavbar');
     }
 
-    public function test_patient_labs_tab_renders_for_authorized_user(): void
+    public function test_patient_page_renders_for_authorized_user(): void
     {
         $this->withoutVite();
         $owner = $this->createUser();
@@ -26,14 +26,14 @@ class PhrNavigationTest extends TestCase
         ]);
         $patientId = (int) $patientResponse->json('patient.id');
 
-        $response = $this->actingAs($owner)->get("/phr/patient/{$patientId}/labs");
+        $response = $this->actingAs($owner)->get("/phr/patient/{$patientId}");
 
         $response->assertOk();
-        $response->assertViewIs('phr.patient-tab');
-        $response->assertSee('data-active-tab="labs"', false);
+        $response->assertViewIs('phr.patient');
+        $response->assertSee("data-patient-id=\"{$patientId}\"", false);
     }
 
-    public function test_patient_labs_tab_is_not_accessible_to_unshared_user(): void
+    public function test_patient_page_is_not_accessible_to_unshared_user(): void
     {
         $owner = $this->createUser();
         $otherUser = $this->createUser();
@@ -43,7 +43,7 @@ class PhrNavigationTest extends TestCase
         ]);
         $patientId = (int) $patientResponse->json('patient.id');
 
-        $this->actingAs($otherUser)->get("/phr/patient/{$patientId}/labs")->assertNotFound();
+        $this->actingAs($otherUser)->get("/phr/patient/{$patientId}")->assertNotFound();
     }
 
     public function test_phr_root_redirects_to_patients_page(): void
@@ -51,21 +51,5 @@ class PhrNavigationTest extends TestCase
         $response = $this->actingAs($this->createUser())->get('/phr');
 
         $response->assertRedirect('/phr/patients');
-    }
-
-    public function test_patient_summary_tab_renders_for_authorized_user(): void
-    {
-        $this->withoutVite();
-        $owner = $this->createUser();
-        $patientId = (int) $this->actingAs($owner)->postJson('/api/phr/patients', [
-            'display_name' => 'Primary',
-            'relationship' => 'self',
-        ])->json('patient.id');
-
-        $response = $this->actingAs($owner)->get("/phr/patient/{$patientId}/summary");
-
-        $response->assertOk();
-        $response->assertViewIs('phr.patient-tab');
-        $response->assertSee('data-active-tab="summary"', false);
     }
 }
