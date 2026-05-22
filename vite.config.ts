@@ -47,6 +47,7 @@ export default defineConfig({
         'resources/js/components/rsu/add-grant.tsx',
         'resources/js/bingo/index.tsx',
         'resources/js/games/cars/index.tsx',
+        'resources/js/games/marble-sort/index.tsx',
         'resources/js/irsf461/irsf461.tsx',
         'resources/js/financial-planning/index.tsx',
         'resources/js/financial-planning/retirement-contribution-calculator.tsx',
