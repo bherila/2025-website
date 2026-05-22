@@ -85,6 +85,49 @@ class PhrClinicalDataTest extends TestCase
         $this->actingAs($manager)->deleteJson("/api/phr/patients/{$patientId}/vitals/{$vitalId}")->assertNoContent();
     }
 
+    public function test_manager_can_fetch_vital_trend_by_metric_key(): void
+    {
+        ['manager' => $manager, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/vitals", [
+            'vital_name' => 'Blood Pressure',
+            'vital_date' => '2026-01-01',
+            'value_numeric' => 120,
+            'value_numeric_secondary' => 80,
+            'unit' => 'mmHg',
+            'secondary_unit' => 'mmHg',
+        ])->assertCreated();
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/vitals", [
+            'vital_name' => 'Blood Pressure',
+            'vital_date' => '2026-01-10',
+            'value_numeric' => 125,
+            'value_numeric_secondary' => 82,
+            'unit' => 'mmHg',
+            'secondary_unit' => 'mmHg',
+        ])->assertCreated();
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/vitals/trend/systolic_bp")
+            ->assertOk()
+            ->assertJsonPath('metric_key', 'systolic_bp')
+            ->assertJsonPath('metric_label', 'Systolic BP')
+            ->assertJsonPath('unit', 'mmHg')
+            ->assertJsonCount(2, 'points');
+    }
+
+    public function test_vital_trend_returns_not_found_for_unknown_metric_key(): void
+    {
+        ['manager' => $manager, 'patientId' => $patientId] = $this->createPatientWithAccess();
+
+        $this->actingAs($manager)->postJson("/api/phr/patients/{$patientId}/vitals", [
+            'vital_name' => 'Heart Rate',
+            'vital_value' => '72',
+            'unit' => 'bpm',
+        ])->assertCreated();
+
+        $this->actingAs($manager)->getJson("/api/phr/patients/{$patientId}/vitals/trend/not_a_metric")->assertNotFound();
+    }
+
     // ── Office Visits ──────────────────────────────────────────────────────────
 
     public function test_manager_can_create_and_list_office_visits(): void

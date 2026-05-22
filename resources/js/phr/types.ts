@@ -229,6 +229,25 @@ export const PhrVitalResponseSchema = z.object({
   vital: PhrVitalSchema,
 })
 
+export const PhrVitalReadingDetailResponseSchema = z.object({
+  vital: PhrVitalSchema,
+})
+
+export const PhrVitalTrendPointSchema = z.object({
+  reading_id: z.number(),
+  recorded_at: nullableString,
+  value: z.number(),
+})
+export type PhrVitalTrendPoint = z.infer<typeof PhrVitalTrendPointSchema>
+
+export const PhrVitalTrendResponseSchema = z.object({
+  metric_key: z.string().trim().min(1),
+  metric_label: z.string().trim().min(1),
+  unit: nullableString,
+  points: z.array(PhrVitalTrendPointSchema),
+})
+export type PhrVitalTrendResponse = z.infer<typeof PhrVitalTrendResponseSchema>
+
 export const PhrDicomStudiesResponseSchema = z.object({
   studies: z.array(PhrDicomStudySchema),
 })
