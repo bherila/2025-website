@@ -9,11 +9,12 @@ The RSU (Restricted Stock Unit) management system allows users to track equity a
 - **Route**: `/finance/rsu`
 - **Description**: View all RSU awards with detailed vesting information
 - **Capabilities**:
-  - Chart visualization (shares or value over time)
-  - Three view modes:
+  - Stacked bar chart (shares or value over time) with formatted axes and a custom tooltip that sorts grants by size and shows a total
+  - Three view modes (top-left tabs):
     - **All vests**: Comprehensive list of all vesting events
     - **Per vest date**: Aggregated by vest dates
     - **Per award**: Aggregated by award ID
+  - **"Only show unvested" toggle** (top-right switch): filters the table to future vests only; persists across the three view modes. Per-award view hides awards that have fully vested. The chart is intentionally not filtered so historical context remains visible.
   - Track grant prices, vest prices, and total values
   - Distinguish between vested and unvested shares
 
@@ -164,8 +165,9 @@ Delete a specific RSU award.
 
 ### Supporting Components
 - `RsuChart`: Visualization component
-- `RsuByAward`: Award-grouped view
+- `RsuByAward`: Award-grouped view (accepts `hideFullyVested` to drop awards with no unvested shares)
 - `RsuByVestDate`: Vest date-grouped view
+- `helpers.ts`: Shared utilities — `todayIso()`, `isVested()`, `getShares()`, `shareValue()` — used across all RSU components to keep the vested predicate and `share_count` (currency-or-number) normalization in one place
 
 ## Security
 

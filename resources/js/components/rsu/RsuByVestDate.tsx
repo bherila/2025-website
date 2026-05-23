@@ -1,5 +1,6 @@
 import currency from 'currency.js'
 
+import { getShares, todayIso } from '@/components/rsu/helpers'
 import { vestStyle } from '@/components/rsu/vestStyle'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { groupBy } from '@/lib/arrayUtils'
@@ -8,7 +9,7 @@ import type { IAward } from '@/types/finance'
 export function RsuByVestDate(props: { rsu: IAward[] }) {
   const { rsu } = props
   const grouped = groupBy(rsu, (r) => r.vest_date)
-  const now = new Date().toISOString().slice(0, 10)
+  const now = todayIso()
   return (
     <Table>
       <TableHeader>
@@ -30,11 +31,11 @@ export function RsuByVestDate(props: { rsu: IAward[] }) {
           const totalShares = lRSU.reduce((p, c) => p.add(c.share_count!), currency(0))
           // Compute weighted average price and total value using currency.js
           const totalValue = lRSU.reduce((sum, c) => {
-            const shares = typeof c.share_count === 'object' ? c.share_count.value : c.share_count
+            const shares = getShares(c)
             return sum.add(shares && c.vest_price ? currency(shares).multiply(c.vest_price) : currency(0))
           }, currency(0))
           const totalGrantValue = lRSU.reduce((sum, c) => {
-            const shares = typeof c.share_count === 'object' ? c.share_count.value : c.share_count
+            const shares = getShares(c)
             return sum.add(shares && c.grant_price ? currency(shares).multiply(c.grant_price) : currency(0))
           }, currency(0))
           // If all have vest_price, show average price

@@ -1,13 +1,14 @@
 import currency from 'currency.js'
 
+import { getShares, isVested, todayIso } from '@/components/rsu/helpers'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { groupBy, maxValue, minValue } from '@/lib/arrayUtils'
 import type { IAward } from '@/types/finance'
 
-export function RsuByAward(props: { rsu: IAward[] }) {
-  const { rsu } = props
+export function RsuByAward(props: { rsu: IAward[]; hideFullyVested?: boolean }) {
+  const { rsu, hideFullyVested = false } = props
   const grouped = groupBy(rsu, (r) => r.award_id)
-  const now = new Date().toISOString().slice(0, 10)
+  const now = todayIso()
   return (
     <Table>
       <TableHeader>
@@ -26,6 +27,7 @@ export function RsuByAward(props: { rsu: IAward[] }) {
         {Object.keys(grouped).map((k, i) => {
           const lRSU = grouped[k]
           if (!lRSU) return null
+          if (hideFullyVested && lRSU.every((r) => isVested(r, now))) return null
 
           const minDate = minValue(lRSU.map((x) => x.vest_date))
           const maxDate = maxValue(lRSU.map((x) => x.vest_date))
@@ -41,11 +43,11 @@ export function RsuByAward(props: { rsu: IAward[] }) {
           let weightedGrantSum = currency(0)
           let weightedGrantShares = 0
           for (const share of lRSU) {
-            const shares = typeof share.share_count === 'object' ? share.share_count.value : share.share_count
+            const shares = getShares(share)
             const price = share.vest_price ?? null
             if (shares != null) {
               total += shares
-              if (share.vest_date! < now) {
+              if (isVested(share, now)) {
                 totalVested += shares
                 if (price != null) vestedValue = vestedValue.add(currency(shares).multiply(price))
               } else {
