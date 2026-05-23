@@ -108,11 +108,18 @@ export function UtilityBillJobCard({ jobId, filename, accountId, accountType, on
     setBusyResultId(result.id)
     setActionError(null)
     try {
+      const totalCost = toNumberOrNull(draft.total_cost)
+      if (totalCost === null) {
+        // Catch the blank/zero case client-side so the user gets a clear message
+        // rather than the generic "the given data was invalid" 422 from the server.
+        setActionError('Total is required. Enter the bill amount before importing.')
+        return
+      }
       const body: Record<string, unknown> = {
         bill_start_date: draft.bill_start_date,
         bill_end_date: draft.bill_end_date,
         due_date: draft.due_date,
-        total_cost: toNumberOrNull(draft.total_cost) ?? 0,
+        total_cost: totalCost,
         status: draft.status,
         notes: draft.notes || null,
         taxes: toNumberOrNull(draft.taxes),
