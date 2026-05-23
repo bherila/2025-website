@@ -16,17 +16,12 @@ const toolsDropdown = {
   ],
 };
 
-const toolsDropdownWithAdmin = {
-  type: 'dropdown' as const,
-  label: 'Tools',
-  items: [
-    { type: 'group' as const, label: 'Utilities' },
-    { type: 'link' as const, label: 'License Manager', href: '/tools/license-manager' },
-    { type: 'group' as const, label: 'Admin' },
-    { type: 'link' as const, label: 'User Management', href: '/admin/users' },
-    { type: 'link' as const, label: 'Client Management', href: '/client/mgmt' },
-  ],
-};
+const adminAccountMenuItems = [
+  { type: 'link' as const, label: 'User Settings', href: '/dashboard' },
+  { type: 'group' as const, label: 'Admin' },
+  { type: 'link' as const, label: 'User Management', href: '/admin/users' },
+  { type: 'link' as const, label: 'Client Management', href: '/client/mgmt' },
+];
 
 describe('Navbar', () => {
   const defaultProps = {
@@ -77,18 +72,30 @@ describe('Navbar', () => {
     expect(screen.getByText('My Account')).toBeInTheDocument();
   });
 
-  it('shows admin options in mobile menu when navItems includes them', () => {
-    render(<Navbar {...defaultProps} authenticated={true} isAdmin={true} navItems={[...baseNavItems, toolsDropdownWithAdmin]} />);
+  it('shows admin options in mobile account section when accountMenuItems includes them', () => {
+    render(<Navbar {...defaultProps} authenticated={true} isAdmin={true} accountMenuItems={adminAccountMenuItems} />);
     const menuButton = screen.getByLabelText('Toggle menu');
     fireEvent.click(menuButton);
 
-    // Find and expand Tools section first
-    const toolsButtons = screen.getAllByText('Tools');
-    const toolsButton = toolsButtons[toolsButtons.length - 1]; // Get the mobile one
-    if (toolsButton) {
-      fireEvent.click(toolsButton);
-    }
+    expect(screen.getByText('User Management')).toBeInTheDocument();
+    expect(screen.getByText('Client Management')).toBeInTheDocument();
+  });
 
+  it('shows admin options in desktop account menu instead of tools', () => {
+    render(
+      <Navbar
+        {...defaultProps}
+        authenticated={true}
+        isAdmin={true}
+        accountMenuItems={adminAccountMenuItems}
+        currentUser={{ id: 5, name: 'Admin User', email: 'admin@example.com' }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /tools/i }));
+    expect(screen.queryByText('User Management')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /admin user/i }));
     expect(screen.getByText('User Management')).toBeInTheDocument();
     expect(screen.getByText('Client Management')).toBeInTheDocument();
   });
@@ -119,6 +126,17 @@ describe('Navbar', () => {
       fireEvent.click(mobileClientPortalButton);
     }
     expect(screen.getByText('Test Company')).toBeInTheDocument();
+  });
+
+  it('submits the logout form from the mobile account section', () => {
+    const submitSpy = jest.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+
+    render(<Navbar {...defaultProps} authenticated={true} />);
+    fireEvent.click(screen.getByLabelText('Toggle menu'));
+    fireEvent.click(screen.getByText('Sign out'));
+
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+    submitSpy.mockRestore();
   });
 
   it('accepts a hydrated currentUser prop and shows the user name', () => {

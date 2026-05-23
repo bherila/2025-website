@@ -112,8 +112,21 @@ describe('hydration zod schemas', () => {
       isAdmin: false,
       clientCompanies: [{ id: 1, company_name: 'Acme', slug: 'acme' }],
       currentUser: { id: 2, name: 'Bob', email: 'b@e.com' },
+      accountMenuItems: [
+        { type: 'link', label: 'User Settings', href: '/dashboard' },
+        { type: 'group', label: 'Admin' },
+        { type: 'link', label: 'User Management', href: '/admin/users' },
+      ],
     }
-    expect(AppInitialDataSchema.parse(payload)).toMatchObject({ authenticated: true, isAdmin: false })
+    expect(AppInitialDataSchema.parse(payload)).toMatchObject({
+      authenticated: true,
+      isAdmin: false,
+      accountMenuItems: [
+        { type: 'link', label: 'User Settings', href: '/dashboard' },
+        { type: 'group', label: 'Admin' },
+        { type: 'link', label: 'User Management', href: '/admin/users' },
+      ],
+    })
   })
 
   it('AppInitialDataSchema rejects invalid currentUser', () => {
