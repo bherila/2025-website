@@ -2,8 +2,19 @@ import currency from 'currency.js'
 
 import type { IAward } from '@/types/finance'
 
+// Format a Date as YYYY-MM-DD using its local components.
+// Don't use `.toISOString().slice(0, 10)` — that's UTC, which rolls over hours
+// early/late depending on offset and would mis-flag a same-day vest as vested
+// for users west of UTC (e.g. US locales after late afternoon).
+export function toLocalIsoDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalIsoDate(new Date())
 }
 
 export function isVested(award: Pick<IAward, 'vest_date'>, today: string = todayIso()): boolean {

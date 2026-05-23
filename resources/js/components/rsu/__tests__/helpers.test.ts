@@ -1,12 +1,26 @@
 import currency from 'currency.js'
 
-import { getShares, isVested, shareValue, todayIso } from '@/components/rsu/helpers'
+import { getShares, isVested, shareValue, toLocalIsoDate,todayIso } from '@/components/rsu/helpers'
 
 describe('rsu/helpers', () => {
   describe('todayIso', () => {
     it('returns a YYYY-MM-DD string for today', () => {
-      const s = todayIso()
-      expect(s).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      expect(todayIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    })
+  })
+
+  describe('toLocalIsoDate', () => {
+    it('formats a Date using its local calendar components', () => {
+      // `new Date(y, mIndex, d, h, m)` builds a Date in the local zone, so the
+      // local components are deterministic regardless of the test runner's TZ.
+      // June (month index 5) 15 at 23:30 local would shift to June 16 if we
+      // used `.toISOString()` in any zone east of UTC — this asserts we don't.
+      const d = new Date(2025, 5, 15, 23, 30, 0)
+      expect(toLocalIsoDate(d)).toBe('2025-06-15')
+    })
+
+    it('zero-pads single-digit months and days', () => {
+      expect(toLocalIsoDate(new Date(2025, 0, 3, 12, 0))).toBe('2025-01-03')
     })
   })
 
