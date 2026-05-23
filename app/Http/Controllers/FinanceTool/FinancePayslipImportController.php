@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinPayslips;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -39,7 +40,7 @@ class FinancePayslipImportController extends Controller
             array_filter([
                 'employment_entity_id' => $job->getContextArray()['employment_entity_id'] ?? null,
             ], static fn ($value) => $value !== null),
-            $request->all(),
+            $request->only(array_keys($this->payslipRules((int) $user->id))),
             ['ps_is_estimated' => true],
         );
 
@@ -48,8 +49,7 @@ class FinancePayslipImportController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $validated = $validator->validated();
-        unset($validated['payslip_id'], $validated['uid'], $validated['original_filename']);
+        $validated = Arr::except($validator->validated(), ['payslip_id', 'uid', 'original_filename']);
 
         $payslip = FinPayslips::create($validated);
 

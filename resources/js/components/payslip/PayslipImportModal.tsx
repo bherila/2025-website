@@ -101,7 +101,11 @@ export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps)
     const errors: string[] = []
 
     Array.from(picked).forEach((file) => {
-      if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      const lowerName = file.name.toLowerCase()
+      const isPdfMime = file.type === 'application/pdf'
+      const hasPdfExtension = lowerName.endsWith('.pdf')
+
+      if (!isPdfMime && !hasPdfExtension) {
         errors.push(`${file.name}: not a PDF`)
         return
       }
