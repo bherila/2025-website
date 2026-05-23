@@ -1,0 +1,115 @@
+name: Cleanup Actions caches
+
+on:
+  pull_request_target:
+    types:
+      - closed
+  workflow_dispatch:
+    inputs:
+      sweep_closed_prs:
+        description: 'Delete caches for PR refs that no longer have an open PR'
+        type: boolean
+        default: false
+      prune_main_codeql:
+        description: 'Delete older CodeQL overlay caches on main'
+        type: boolean
+        default: false
+      codeql_keep_latest:
+        description: 'Number of recent CodeQL overlay caches to keep on main'
+        type: number
+        default: 10
+      dry_run:
+        description: 'List matching caches without deleting them'
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    name: Delete stale Actions caches
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Delete caches for closed PR
+        if: github.event_name == 'pull_request_target'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+
+          delete_caches_for_ref() {
+            local ref="$1"
+            local ids
+            ids=$(gh api --paginate "/repos/${GH_REPO}/actions/caches?ref=${ref}&per_page=100" --jq '.actions_caches[].id')
+
+            if [ -z "$ids" ]; then
+              echo "No caches found for ${ref}"
+              return
+            fi
+
+            for id in $ids; do
+              echo "Deleting cache ${id} from ${ref}"
+              gh api --method DELETE "/repos/${GH_REPO}/actions/caches/${id}" >/dev/null
+            done
+          }
+
+          delete_caches_for_ref "$PR_REF"
+
+      - name: Sweep stale caches
+        if: github.event_name == 'workflow_dispatch' && (inputs.sweep_closed_prs || inputs.prune_main_codeql)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SWEEP_CLOSED_PRS: ${{ inputs.sweep_closed_prs }}
+          PRUNE_MAIN_CODEQL: ${{ inputs.prune_main_codeql }}
+          CODEQL_KEEP_LATEST: ${{ inputs.codeql_keep_latest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          delete_cache() {
+            local id="$1"
+            local label="$2"
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Would delete cache ${id} (${label})"
+              return
+            fi
+
+            echo "Deleting cache ${id} (${label})"
+            gh api --method DELETE "/repos/${GH_REPO}/actions/caches/${id}" >/dev/null
+          }
+
+          if [ "$SWEEP_CLOSED_PRS" = "true" ]; then
+            open_prs=$(mktemp)
+            gh pr list --state open --limit 1000 --json number --jq '.[].number' > "$open_prs"
+
+            gh api --paginate "/repos/${GH_REPO}/actions/caches?per_page=100" \
+              --jq '.actions_caches[] | select(.ref | startswith("refs/pull/")) | [.id, .ref, .key] | @tsv' \
+              | while IFS=$'\t' read -r id ref key; do
+                  pr="${ref#refs/pull/}"
+                  pr="${pr%%/*}"
+
+                  if grep -qx "$pr" "$open_prs"; then
+                    echo "Keeping cache ${id} for open PR #${pr}"
+                    continue
+                  fi
+
+                  delete_cache "$id" "${ref} ${key}"
+                done
+          fi
+
+          if [ "$PRUNE_MAIN_CODEQL" = "true" ]; then
+            gh api --paginate "/repos/${GH_REPO}/actions/caches?ref=refs/heads/main&per_page=100" \
+              --jq '.actions_caches[] | select(.key | startswith("codeql-overlay")) | [.id, .last_accessed_at, .key] | @tsv' \
+              | sort -r -k2,2 \
+              | tail -n +"$((CODEQL_KEEP_LATEST + 1))" \
+              | while IFS=$'\t' read -r id last_accessed_at key; do
+                  delete_cache "$id" "main ${last_accessed_at} ${key}"
+                done
+          fi
