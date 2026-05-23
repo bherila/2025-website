@@ -24,7 +24,6 @@
 
       // Build Finance submenu (public calculators plus authenticated account tools)
       $__financeItems = array_values(array_filter([
-        $__isAuthenticated ? ['type' => 'group', 'label' => 'Accounts'] : null,
         $__isAuthenticated ? ['type' => 'link', 'label' => 'Accounts', 'href' => '/finance/accounts'] : null,
         $__isAuthenticated ? ['type' => 'link', 'label' => 'Transactions', 'href' => '/finance/all-transactions'] : null,
         $__isAuthenticated ? ['type' => 'link', 'label' => 'RSU', 'href' => '/finance/rsu'] : null,
