@@ -86,21 +86,19 @@ jobs:
           }
 
           if [ "$SWEEP_CLOSED_PRS" = "true" ]; then
-            open_prs=$(mktemp)
-            gh pr list --state open --limit 1000 --json number --jq '.[].number' > "$open_prs"
-
             gh api --paginate "/repos/${GH_REPO}/actions/caches?per_page=100" \
               --jq '.actions_caches[] | select(.ref | startswith("refs/pull/")) | [.id, .ref, .key] | @tsv' \
               | while IFS=$'\t' read -r id ref key; do
                   pr="${ref#refs/pull/}"
                   pr="${pr%%/*}"
+                  state=$(gh pr view "$pr" --repo "$GH_REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
 
-                  if grep -qx "$pr" "$open_prs"; then
+                  if [ "$state" = "OPEN" ]; then
                     echo "Keeping cache ${id} for open PR #${pr}"
                     continue
                   fi
 
-                  delete_cache "$id" "${ref} ${key}"
+                  delete_cache "$id" "${ref} PR #${pr} state=${state} ${key}"
                 done
           fi
 
