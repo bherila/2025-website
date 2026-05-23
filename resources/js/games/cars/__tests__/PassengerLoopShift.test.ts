@@ -76,6 +76,45 @@ describe('passenger loop shift on boarding', () => {
     expect(afterBoarding.slots.map((slot) => slot.passengerId)).toEqual(['p4', 'p5', 'p6', 'p7', 'p8'])
   })
 
+  it('recomputes a pending feeder entryStartedAt against the new offset when the passenger is shifted again before joining', () => {
+    const slots: PassengerLoopSlot[] = makeSlots(3)
+    const firstBoarding = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: 0,
+      passengers: makePassengers(4).slice(1), // p1 boarded
+      phase: 0,
+      slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+
+    const p4SlotAfterFirst = firstBoarding.slots.find((slot) => slot.passengerId === 'p4')
+    expect(p4SlotAfterFirst?.offset).toBeCloseTo(-1.02)
+    const pendingEntryAfterFirst = p4SlotAfterFirst?.entryStartedAt
+    expect(typeof pendingEntryAfterFirst).toBe('number')
+    expect(pendingEntryAfterFirst as number).toBeGreaterThan(0)
+
+    // Now p2 (currently at front) boards before p4 has joined.
+    const secondBoarding = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: 0.4,
+      passengers: makePassengers(4).slice(2), // p1, p2 boarded
+      phase: 0.4,
+      slots: firstBoarding.slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+
+    const p4SlotAfterSecond = secondBoarding.slots.find((slot) => slot.passengerId === 'p4')
+    expect(p4SlotAfterSecond?.offset).toBeCloseTo(-0.68)
+    // entryStartedAt must be recomputed against the new (slot 1) offset and the
+    // new `now`, not the stale slot-2 timestamp carried over from firstBoarding.
+    expect(p4SlotAfterSecond?.entryStartedAt).not.toBe(pendingEntryAfterFirst)
+    expect(p4SlotAfterSecond?.entryStartedAt as number).toBeGreaterThanOrEqual(0.4)
+  })
+
   it('does not record a shift on the initial fill', () => {
     const plan = planPassengerLoopSlots({
       capacity: 3,

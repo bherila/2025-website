@@ -80,7 +80,9 @@ export function planPassengerLoopSlots({
           startedAt: now,
         })
         writeSlot.passengerId = slot.passengerId
-        writeSlot.entryStartedAt = slot.entryStartedAt
+        writeSlot.entryStartedAt = slot.entryStartedAt !== null && slot.entryStartedAt > now
+          ? now + timeUntilFeederJoin(phase, writeSlot.offset, layout, speed)
+          : slot.entryStartedAt
         slot.passengerId = null
         slot.entryStartedAt = null
       }
