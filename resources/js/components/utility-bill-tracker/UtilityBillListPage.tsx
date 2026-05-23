@@ -446,6 +446,7 @@ export function UtilityBillListPage({ accountId, accountName, accountType }: Uti
         open={showImportModal}
         onOpenChange={setShowImportModal}
         accountId={accountId}
+        accountType={accountType}
         onImported={fetchData}
       />
 

@@ -2,264 +2,213 @@
 
 namespace App\Http\Controllers\UtilityBillTracker;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
 use App\Services\FileStorageService;
-use App\Services\GenAiFileHelper;
-use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
 
+/**
+ * Persist GenAI-parsed utility-bill results into the utility_bill table.
+ *
+ * The upload + parse path itself lives in the shared GenAi import pipeline
+ * (see app/GenAiProcessor + docs/genai-import.md). This controller only owns
+ * the per-feature confirm/skip step that turns a reviewed GenAiImportResult
+ * into a UtilityBill row.
+ */
 class UtilityBillImportController extends Controller
 {
-    protected FileStorageService $fileService;
+    public function __construct(
+        private FileStorageService $fileService,
+    ) {}
 
-    public function __construct(FileStorageService $fileService)
+    /**
+     * Confirm a parsed result and create the matching UtilityBill row.
+     * POST /api/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/confirm
+     */
+    public function confirm(Request $request, int $accountId, int $jobId, int $resultId): JsonResponse
     {
-        $this->fileService = $fileService;
-    }
+        $user = Auth::user();
+        $account = UtilityAccount::findOrFail($accountId);
 
-    public function import(Request $request, int $accountId): JsonResponse
-    {
-        // Validate files. Use a tolerant validator closure because some clients or proxies
-        // may present PDFs with an unexpected MIME type (e.g. application/octet-stream).
-        $validator = Validator::make($request->all(), [
-            'files' => 'required|array|max:100',
-            'files.*' => [
-                'required',
-                'file',
-                'max:10240', // 10MB max per file
-                function ($attribute, $value, $fail) {
-                    if (! $value || ! $value->isValid()) {
-                        return $fail('The '.$attribute.' upload is invalid.');
-                    }
+        $job = GenAiImportJob::query()
+            ->where('id', $jobId)
+            ->where('user_id', $user->id)
+            ->where('job_type', 'utility_bill')
+            ->firstOrFail();
 
-                    $ext = strtolower($value->getClientOriginalExtension() ?? '');
-                    $clientMime = $value->getClientMimeType() ?? '';
-                    $guessMime = $value->getMimeType() ?? '';
+        $context = $job->getContextArray();
+        $contextAccountId = (int) ($context['utility_account_id'] ?? 0);
+        if ($contextAccountId !== $accountId) {
+            return response()->json(['error' => 'Job does not belong to this utility account.'], 403);
+        }
 
-                    // Accept if extension is pdf, or either the client-supplied or guessed MIME contains 'pdf',
-                    // or if it's application/octet-stream (some uploads are detected as that).
-                    if ($ext !== 'pdf' && stripos($clientMime, 'pdf') === false && stripos($guessMime, 'pdf') === false && $clientMime !== 'application/octet-stream' && $guessMime !== 'application/octet-stream') {
-                        return $fail('The '.$attribute.' must be a PDF file. Detected extension: '.$ext.', clientMime: '.$clientMime.', guessedMime: '.$guessMime);
-                    }
-                },
-            ],
-        ]);
+        $result = GenAiImportResult::query()
+            ->where('id', $resultId)
+            ->where('job_id', $job->id)
+            ->firstOrFail();
 
+        if ($result->status === 'imported') {
+            return response()->json(['error' => 'This result has already been imported.'], 409);
+        }
+
+        $rules = [
+            'bill_start_date' => 'required|date',
+            'bill_end_date' => 'required|date|after_or_equal:bill_start_date',
+            'due_date' => 'required|date',
+            'total_cost' => 'required|numeric|min:0',
+            'status' => 'required|in:Paid,Unpaid',
+            'notes' => 'nullable|string',
+            'taxes' => 'nullable|numeric|min:0',
+            'fees' => 'nullable|numeric|min:0',
+            'discounts' => 'nullable|numeric|min:0',
+            'credits' => 'nullable|numeric|min:0',
+            'payments_received' => 'nullable|numeric|min:0',
+            'previous_unpaid_balance' => 'nullable|numeric|min:0',
+        ];
+
+        if ($account->account_type === 'Electricity') {
+            $rules['power_consumed_kwh'] = 'nullable|numeric|min:0';
+            $rules['total_generation_fees'] = 'nullable|numeric|min:0';
+            $rules['total_delivery_fees'] = 'nullable|numeric|min:0';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
-            // Add diagnostic logging about the uploaded files to help debug client-side issues.
-            try {
-                $fileDebug = [];
-                $allFiles = $request->allFiles();
-                $filesArr = $allFiles['files'] ?? [];
-                foreach ($filesArr as $i => $f) {
-                    if (! $f) {
-                        $fileDebug[] = ['index' => $i, 'file' => null];
-
-                        continue;
-                    }
-                    $fileDebug[] = [
-                        'index' => $i,
-                        'original_name' => $f->getClientOriginalName(),
-                        'original_extension' => $f->getClientOriginalExtension(),
-                        'client_mime' => $f->getClientMimeType(),
-                        'guessed_mime' => $f->getMimeType(),
-                        'size' => $f->getSize(),
-                        'is_valid' => $f->isValid(),
-                    ];
-                }
-
-                Log::warning('Utility bill import validation failed; file diagnostics attached', [
-                    'validation_errors' => $validator->errors()->toArray(),
-                    'files' => $fileDebug,
-                ]);
-            } catch (Throwable $e) {
-                Log::warning('Utility bill import validation failed, additionally failed to gather file diagnostics: '.$e->getMessage());
-            }
-
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Verify account exists and belongs to user
-        $account = UtilityAccount::findOrFail($accountId);
+        $billData = [
+            'utility_account_id' => $accountId,
+            'bill_start_date' => $request->input('bill_start_date'),
+            'bill_end_date' => $request->input('bill_end_date'),
+            'due_date' => $request->input('due_date'),
+            'total_cost' => $request->input('total_cost'),
+            'status' => $request->input('status'),
+            'notes' => $request->input('notes'),
+            'taxes' => $request->input('taxes'),
+            'fees' => $request->input('fees'),
+            'discounts' => $request->input('discounts'),
+            'credits' => $request->input('credits'),
+            'payments_received' => $request->input('payments_received'),
+            'previous_unpaid_balance' => $request->input('previous_unpaid_balance'),
+        ];
 
-        $user = Auth::user();
-        $client = $user->resolvedAiClient();
-
-        if (! $client) {
-            return response()->json(['error' => 'No AI configuration found. Please add one in Settings.'], 400);
+        if ($account->account_type === 'Electricity') {
+            $billData['power_consumed_kwh'] = $request->input('power_consumed_kwh');
+            $billData['total_generation_fees'] = $request->input('total_generation_fees');
+            $billData['total_delivery_fees'] = $request->input('total_delivery_fees');
         }
 
-        $files = $request->file('files');
-        $prompt = $this->getPrompt($account->account_type, 1);
-
-        $results = [];
-
-        foreach ($files as $file) {
-            $originalFilename = $file->getClientOriginalName();
-            $fileSize = $file->getSize();
-
-            if (! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
-                Log::warning('Utility bill file exceeds provider size limit', ['filename' => $originalFilename, 'size' => $fileSize, 'user_id' => $user->id]);
-                $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'File exceeds the size limit for your configured AI provider.'];
-
-                continue;
-            }
-
-            try {
-                $fileStream = @fopen($file->getRealPath(), 'r');
-
-                if (! is_resource($fileStream)) {
-                    Log::error('Failed to open uploaded utility bill file for reading', ['filename' => $originalFilename, 'user_id' => $user->id]);
-                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to open uploaded file for reading.'];
-
-                    continue;
-                }
-
-                try {
-                    $filePrompt = "Filename: {$originalFilename}\n\n{$prompt}";
-                    $response = GenAiFileHelper::send($client, $fileStream, 'application/pdf', 'utility-bill-import-'.time(), $filePrompt);
-                } catch (GenAiRateLimitException $e) {
-                    throw $e; // let the outer catch handle rate limits globally
-                } catch (Throwable $e) {
-                    Log::error('Failed to send utility bill to AI service', ['filename' => $originalFilename, 'user_id' => $user->id, 'error' => $e->getMessage()]);
-                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to process file with AI service.'];
-
-                    continue;
-                } finally {
-                    if (is_resource($fileStream)) {
-                        fclose($fileStream);
-                    }
-                }
-
-                $extractedData = json_decode($client->extractText($response), true);
-
-                if (! is_array($extractedData)) {
-                    Log::error('Failed to decode AI JSON for utility bill import', ['filename' => $originalFilename, 'user_id' => $user->id, 'account_id' => $accountId]);
-                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to parse the extracted data from the response.'];
-
-                    continue;
-                }
-
-                // Normalize: single object or single-element array both accepted
-                $data = isset($extractedData[0]) ? $extractedData[0] : $extractedData;
-
-                try {
-                    // Store the PDF file in S3
-                    $storedFilename = UtilityBill::generateStoredFilename($originalFilename);
-                    $s3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
-                    $fileContent = $file->get();
-
-                    $uploaded = $this->fileService->uploadContent($fileContent, $s3Path);
-
-                    // Create the bill with extracted data
-                    $billData = [
-                        'utility_account_id' => $accountId,
-                        'bill_start_date' => $data['bill_start_date'] ?? null,
-                        'bill_end_date' => $data['bill_end_date'] ?? null,
-                        'due_date' => $data['due_date'] ?? null,
-                        'total_cost' => $data['total_cost'] ?? 0,
-                        'taxes' => $data['taxes'] ?? null,
-                        'fees' => $data['fees'] ?? null,
-                        'discounts' => $data['discounts'] ?? null,
-                        'credits' => $data['credits'] ?? null,
-                        'payments_received' => $data['payments_received'] ?? null,
-                        'previous_unpaid_balance' => $data['previous_unpaid_balance'] ?? null,
-                        'status' => 'Unpaid',
-                        'notes' => $data['notes'] ?? null,
-                    ];
-
-                    if ($account->account_type === 'Electricity') {
-                        $billData['power_consumed_kwh'] = $data['power_consumed_kwh'] ?? null;
-                        $billData['total_generation_fees'] = $data['total_generation_fees'] ?? null;
-                        $billData['total_delivery_fees'] = $data['total_delivery_fees'] ?? null;
-                    }
-
-                    if ($uploaded) {
-                        $billData['pdf_original_filename'] = $originalFilename;
-                        $billData['pdf_stored_filename'] = $storedFilename;
-                        $billData['pdf_s3_path'] = $s3Path;
-                        $billData['pdf_file_size_bytes'] = $file->getSize();
-                    }
-
-                    $bill = UtilityBill::create($billData);
-
-                    $results[] = ['filename' => $originalFilename, 'status' => 'success', 'bill' => $bill];
-                } catch (\Exception $e) {
-                    Log::error("Failed to process file {$originalFilename}: ".$e->getMessage());
-                    $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'Failed to save bill: '.$e->getMessage()];
-                }
-            } catch (GenAiRateLimitException) {
-                return response()->json(['error' => 'API rate limit exceeded. Please wait and try again.'], 429);
-            } catch (Throwable $e) {
-                Log::error('Error during utility bill import: '.$e->getMessage(), ['user_id' => $user->id, 'account_id' => $accountId, 'filename' => $originalFilename]);
-                $results[] = ['filename' => $originalFilename, 'status' => 'error', 'error' => 'An unexpected error occurred during import: '.$e->getMessage()];
-
-                continue;
-            }
+        // Copy the PDF from the genai-import staging path into the canonical utility-bills
+        // location so the bill's pdf_s3_path is independent of the import job's lifecycle.
+        $copied = $this->copyStagedPdfToBillStorage($job, $accountId);
+        if ($copied !== null) {
+            $billData['pdf_original_filename'] = $job->original_filename;
+            $billData['pdf_stored_filename'] = $copied['stored_filename'];
+            $billData['pdf_s3_path'] = $copied['s3_path'];
+            $billData['pdf_file_size_bytes'] = $job->file_size_bytes;
         }
 
-        Log::info('Utility bill batch import completed for user ID '.$user->id, [
-            'account_id' => $accountId,
-            'total_files' => count($files),
-            'results' => $results,
-        ]);
+        $bill = UtilityBill::create($billData);
+
+        $result->markImported();
+        $this->maybeMarkJobImported($job);
 
         return response()->json([
-            'success' => true,
-            'message' => 'Batch import completed',
-            'results' => $results,
+            'bill' => $bill->load('linkedTransaction:t_id,t_description,t_amt,t_date'),
+            'result' => $result->refresh(),
+            'job_status' => $job->refresh()->status,
+        ], 201);
+    }
+
+    /**
+     * Skip a parsed result without creating a bill.
+     * POST /api/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/skip
+     */
+    public function skip(int $accountId, int $jobId, int $resultId): JsonResponse
+    {
+        $user = Auth::user();
+        UtilityAccount::findOrFail($accountId);
+
+        $job = GenAiImportJob::query()
+            ->where('id', $jobId)
+            ->where('user_id', $user->id)
+            ->where('job_type', 'utility_bill')
+            ->firstOrFail();
+
+        $context = $job->getContextArray();
+        $contextAccountId = (int) ($context['utility_account_id'] ?? 0);
+        if ($contextAccountId !== $accountId) {
+            return response()->json(['error' => 'Job does not belong to this utility account.'], 403);
+        }
+
+        $result = GenAiImportResult::query()
+            ->where('id', $resultId)
+            ->where('job_id', $job->id)
+            ->firstOrFail();
+
+        if ($result->status === 'imported') {
+            return response()->json(['error' => 'This result has already been imported.'], 409);
+        }
+
+        $result->markSkipped();
+        $this->maybeMarkJobImported($job);
+
+        return response()->json([
+            'result' => $result->refresh(),
+            'job_status' => $job->refresh()->status,
         ]);
     }
 
-    private function getPrompt(string $accountType, int $fileCount): string
+    /**
+     * @return array{stored_filename: string, s3_path: string}|null
+     */
+    private function copyStagedPdfToBillStorage(GenAiImportJob $job, int $accountId): ?array
     {
-        $basePrompt = <<<PROMPT
-Analyze the provided {$fileCount} utility bill PDF document(s).
-I have provided each file preceded by "Filename: [name]".
-
-For EACH file, extract the following fields.
-Return a SINGLE JSON ARRAY containing {$fileCount} objects, one for each file.
-Each object MUST include the `original_filename` to identify which file it belongs to.
-
-**JSON Fields per object:**
-- `original_filename`: The filename provided in the text preceding the file.
-- `bill_start_date`: Billing period start date (YYYY-MM-DD)
-- `bill_end_date`: Billing period end date (YYYY-MM-DD)
-- `due_date`: Payment due date (YYYY-MM-DD)
-- `total_cost`: Total amount due (numeric, in dollars)
-- `taxes`: Total taxes charged on the bill (numeric, in dollars)
-- `fees`: Total fees charged on the bill, excluding taxes (numeric, in dollars)
-- `discounts`: Total discounts applied to the bill (numeric, in dollars). Only include realized discounts, not potential ones.
-- `credits`: Total credits applied to the bill (numeric, in dollars)
-- `payments_received`: Total payments received during the period (numeric, in dollars)
-- `previous_unpaid_balance`: Previous unpaid balance carried over (numeric, in dollars)
-- `notes`: Any relevant notes or account information extracted from the bill (optional, string)
-PROMPT;
-
-        if ($accountType === 'Electricity') {
-            $basePrompt .= <<<'PROMPT'
-
-**Additional Electricity-Specific Fields:**
-- `power_consumed_kwh`: Total power consumed in kilowatt-hours (numeric)
-- `total_generation_fees`: Total generation/supply charges (numeric, in dollars)
-- `total_delivery_fees`: Total delivery/distribution charges (numeric, in dollars)
-
-Please ensure you extract all electricity-specific metrics from the bill, including usage in kWh and the breakdown of generation vs delivery fees if available.
-PROMPT;
+        if (empty($job->s3_path)) {
+            return null;
         }
 
-        $basePrompt .= <<<'PROMPT'
+        try {
+            $disk = Storage::disk('s3');
+            if (! $disk->exists($job->s3_path)) {
+                return null;
+            }
 
-Return ONLY the JSON array.
-PROMPT;
+            $storedFilename = UtilityBill::generateStoredFilename($job->original_filename ?: 'bill.pdf');
+            $billS3Path = UtilityBill::generateS3Path($accountId, $storedFilename);
 
-        return $basePrompt;
+            $contents = $disk->get($job->s3_path);
+            if ($contents === null || ! $this->fileService->uploadContent($contents, $billS3Path)) {
+                return null;
+            }
+
+            return ['stored_filename' => $storedFilename, 's3_path' => $billS3Path];
+        } catch (Throwable $e) {
+            Log::warning('Failed to copy staged PDF for utility bill import', [
+                'job_id' => $job->id,
+                'staged_path' => $job->s3_path,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    private function maybeMarkJobImported(GenAiImportJob $job): void
+    {
+        $stillPending = $job->results()->where('status', 'pending_review')->exists();
+        if (! $stillPending && $job->status !== 'imported') {
+            $job->markImported();
+        }
     }
 }

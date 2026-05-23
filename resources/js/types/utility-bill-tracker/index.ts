@@ -90,13 +90,6 @@ export interface CreateUtilityBillRequest {
 // UpdateUtilityBillRequest has the same shape as CreateUtilityBillRequest
 export type UpdateUtilityBillRequest = CreateUtilityBillRequest;
 
-export interface ImportBillResponse {
-  success: boolean;
-  message: string;
-  bill: UtilityBill;
-  extracted_data: Record<string, unknown>;
-}
-
 export interface ToggleStatusResponse {
   success: boolean;
   bill: UtilityBill;

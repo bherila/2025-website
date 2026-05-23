@@ -510,7 +510,8 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{accountId}/bills/{billId}', [UtilityBillApiController::class, 'destroy']);
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/download-pdf', [UtilityBillApiController::class, 'downloadPdf']);
 Route::middleware(['web', 'auth'])->delete('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/pdf', [UtilityBillApiController::class, 'deletePdf']);
-Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/import-pdf', [UtilityBillImportController::class, 'import']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/confirm', [UtilityBillImportController::class, 'confirm']);
+Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/skip', [UtilityBillImportController::class, 'skip']);
 
 // Utility Bill Linking routes
 Route::middleware(['web', 'auth'])->get('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/linkable', [UtilityBillLinkingController::class, 'findLinkableTransactions']);

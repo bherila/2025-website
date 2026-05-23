@@ -1,321 +1,209 @@
-import { CheckCircle, FileText, Loader2, Upload, X,XCircle } from 'lucide-react';
-import * as React from 'react';
-import { useRef,useState } from 'react';
+import { Upload } from 'lucide-react'
+import * as React from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { useGenAiFileUpload } from '@/genai-processor/useGenAiFileUpload'
 
-interface FileImportStatus {
-  file: File;
-  status: 'pending' | 'importing' | 'success' | 'error';
-  error?: string;
-}
+import { UtilityBillJobCard } from './UtilityBillJobCard'
 
 interface ImportBillModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  accountId: number;
-  onImported: () => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  accountId: number
+  accountType: 'Electricity' | 'General'
+  onImported: () => void
 }
 
-export function ImportBillModal({ open, onOpenChange, accountId, onImported }: ImportBillModalProps) {
-  const [files, setFiles] = useState<FileImportStatus[]>([]);
-  const [importing, setImporting] = useState(false);
-  const [importComplete, setImportComplete] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+interface PendingJob {
+  jobId: number
+  filename: string
+}
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024 // 50 MB request-upload limit
+
+export function ImportBillModal({ open, onOpenChange, accountId, accountType, onImported }: ImportBillModalProps) {
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [jobs, setJobs] = useState<PendingJob[]>([])
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { upload } = useGenAiFileUpload({
+    jobType: 'utility_bill',
+    context: {
+      account_type: accountType,
+      utility_account_id: accountId,
+      file_count: 1,
+    },
+  })
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedFiles([])
+      setJobs([])
+      setUploadError(null)
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }, [open])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles) return;
+    setUploadError(null)
+    const picked = e.target.files
+    if (!picked) return
 
-    const newFiles: FileImportStatus[] = [];
-    const errors: string[] = [];
-
-    Array.from(selectedFiles).forEach((file) => {
-      if (file.type !== 'application/pdf') {
-        errors.push(`${file.name}: Not a PDF file`);
-        return;
+    const added: File[] = []
+    const errors: string[] = []
+    Array.from(picked).forEach((file) => {
+      if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        errors.push(`${file.name}: not a PDF`)
+        return
       }
-      // Warn if > 10MB but don't block here, let backend or chunking handle (though backend limit is 6MB now)
-      // Actually backend limit is 6MB per request. If a single file is > 6MB, it will fail.
-      if (file.size > 6 * 1024 * 1024) {
-        errors.push(`${file.name}: File size exceeds 6MB`);
-        return;
+      if (file.size > MAX_FILE_BYTES) {
+        errors.push(`${file.name}: exceeds 50 MB`)
+        return
       }
-      newFiles.push({ file, status: 'pending' });
-    });
+      added.push(file)
+    })
 
     if (errors.length > 0) {
-      console.warn('File validation errors:', errors);
-      // Optional: show toast
+      setUploadError(errors.join('; '))
     }
-
-    setFiles(prev => [...prev, ...newFiles]);
-  };
-
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleImport = async () => {
-    if (files.length === 0) return;
-
-    setImporting(true);
-    setImportComplete(false);
-
-    // Reset status
-    setFiles(prev => prev.map(f => {
-      const { error, ...rest } = f;
-      return { ...rest, status: 'importing' } as FileImportStatus;
-    }));
-
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-    
-    // Chunk logic
-    const MAX_CHUNK_SIZE_MB = 5.9;
-    const maxSizeBytes = MAX_CHUNK_SIZE_MB * 1024 * 1024;
-    const chunks: FileImportStatus[][] = [];
-    let currentChunk: FileImportStatus[] = [];
-    let currentChunkSize = 0;
-
-    for (const f of files) {
-       if (currentChunk.length > 0 && currentChunkSize + f.file.size > maxSizeBytes) {
-           chunks.push(currentChunk);
-           currentChunk = [];
-           currentChunkSize = 0;
-       }
-       currentChunk.push(f);
-       currentChunkSize += f.file.size;
+    if (added.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...added])
     }
-    if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
-    }
+  }
 
-    setProgress({ current: 0, total: chunks.length });
+  const removeSelected = (idx: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))
+  }
 
-    try {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        if (!chunk) continue;
-        setProgress({ current: i + 1, total: chunks.length });
+  const startUpload = useCallback(async () => {
+    if (selectedFiles.length === 0) return
 
-        // Update status of current chunk to processing (if we wanted to be granular)
-        
-        const formData = new FormData();
-        chunk.forEach((f) => {
-          formData.append('files[]', f.file);
-        });
+    setUploading(true)
+    setUploadError(null)
 
-        try {
-          const response = await fetch(`/api/utility-bill-tracker/accounts/${accountId}/bills/import-pdf`, {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': csrfToken,
-            },
-            body: formData,
-          });
+    const files = [...selectedFiles]
+    setSelectedFiles([])
 
-          const data = await response.json();
-
-          if (!response.ok) {
-            const errorMsg = data.error || `Batch ${i+1} failed`;
-            // Mark all in this chunk as error
-            setFiles(prev => prev.map(f => {
-                if (chunk.some(c => c.file === f.file)) {
-                    return { ...f, status: 'error', error: errorMsg };
-                }
-                return f;
-            }));
-          } else {
-            // Success
-            if (data.results && Array.isArray(data.results)) {
-               setFiles(prev => prev.map(f => {
-                  const result = data.results.find((r: any) => r.filename === f.file.name);
-                  if (result) {
-                      const newStatus = result.status === 'success' ? 'success' : 'error';
-                      const { error, ...cleanF } = f;
-                      return { ...cleanF, status: newStatus, ...(result.error ? { error: result.error } : {}) } as FileImportStatus;
-                  }
-                  // If not in results but was in chunk? (Shouldn't happen if API is correct)
-                  if (chunk.some(c => c.file === f.file)) {
-                      // Maybe keep as is or mark error?
-                  }
-                  return f;
-               }));
-            }
-          }
-        } catch (err) {
-             const errorMsg = err instanceof Error ? err.message : 'Network error';
-             setFiles(prev => prev.map(f => {
-                if (chunk.some(c => c.file === f.file)) {
-                    return { ...f, status: 'error', error: errorMsg };
-                }
-                return f;
-            }));
-        }
+    for (const file of files) {
+      try {
+        const result = await upload(file)
+        setJobs((prev) => [...prev, { jobId: result.jobId, filename: file.name }])
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : `Upload failed for ${file.name}`)
       }
-    } catch (err) {
-        // Global error (should be caught inside loop but just in case)
-        console.error("Global import error", err);
     }
 
-    setImportComplete(true);
-    setImporting(false);
-    onImported();
-  };
+    setUploading(false)
+  }, [selectedFiles, upload])
+
+  const handleJobFinalized = useCallback(() => {
+    // A result was imported — refresh the parent list so the new bill shows up.
+    onImported()
+  }, [onImported])
 
   const handleClose = () => {
-    if (importing) return;
-    
-    setFiles([]);
-    setImportComplete(false);
-    setProgress({ current: 0, total: 0 });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    onOpenChange(false);
-  };
-
-  const successCount = files.filter(f => f.status === 'success').length;
-  const errorCount = files.filter(f => f.status === 'error').length;
+    if (uploading) return
+    onOpenChange(false)
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent showCloseButton={!importing} className="max-w-lg">
+      <DialogContent showCloseButton={!uploading} className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Import Bills from PDF</DialogTitle>
           <DialogDescription>
-            Upload one or more utility bill PDFs. They will be processed in batches.
+            Uploads run in the background. Files are queued for AI parsing — you can leave this dialog open or
+            close it; in-flight jobs continue server-side and remain visible in{' '}
+            <a className="underline" href="/admin/genai-jobs">Admin → GenAI Jobs</a> (admins) or via the queue.
           </DialogDescription>
         </DialogHeader>
 
-        {importing ? (
-          <div className="py-6 space-y-4">
-            <div className="flex items-center justify-center space-x-2">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <span className="font-medium">
-                Processing batch {progress.current} of {progress.total}...
-              </span>
+        <div className="space-y-4 py-2">
+          <div
+            className="cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors hover:border-primary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="flex flex-col items-center space-y-2">
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <p className="font-medium">Click to select PDF files</p>
+              <p className="text-xs text-muted-foreground">Up to 50 MB per file. Each file becomes its own job.</p>
             </div>
-            <Progress value={(progress.current / progress.total) * 100} className="w-full" />
-            
-            {/* File status list */}
-            <div className="max-h-40 overflow-y-auto space-y-2 mt-4">
-              {files.map((f, idx) => (
-                <div key={idx} className="flex items-center space-x-2 text-sm">
-                  {f.status === 'importing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                  {f.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                  {f.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
-                  <span>{f.file.name}</span>
-                </div>
-              ))}
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+            />
           </div>
-        ) : importComplete ? (
-          <div className="py-6 space-y-4">
-            <div className="text-center">
-              <div className="flex items-center justify-center space-x-4 mb-4">
-                {successCount > 0 && (
-                  <div className="flex items-center space-x-1 text-green-600">
-                    <CheckCircle className="h-5 w-5" />
-                    <span className="font-medium">{successCount} imported</span>
-                  </div>
-                )}
-                {errorCount > 0 && (
-                  <div className="flex items-center space-x-1 text-destructive">
-                    <XCircle className="h-5 w-5" />
-                    <span className="font-medium">{errorCount} failed</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Final file status list */}
-            <div className="max-h-60 overflow-y-auto space-y-2">
-              {files.map((f, idx) => (
-                <div key={idx} className="flex items-center space-x-2 text-sm p-2 rounded bg-muted/50">
-                  {f.status === 'success' && <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />}
-                  {f.status === 'error' && <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />}
-                  <span className={`truncate ${f.status === 'error' ? 'text-destructive' : ''}`}>{f.file.name}</span>
-                  {f.error && <span className="text-xs text-destructive flex-shrink-0">- {f.error}</span>}
-                </div>
-              ))}
-            </div>
 
-            <DialogFooter>
-              <Button type="button" onClick={handleClose}>
-                Close
+          {selectedFiles.length > 0 && (
+            <div className="space-y-2 rounded border p-3">
+              <p className="text-sm font-medium">{selectedFiles.length} file(s) ready to upload:</p>
+              <ul className="max-h-32 space-y-1 overflow-y-auto text-sm">
+                {selectedFiles.map((file, idx) => (
+                  <li key={`${file.name}-${idx}`} className="flex items-center justify-between rounded bg-muted/40 px-2 py-1">
+                    <span className="truncate">{file.name}</span>
+                    <Button variant="ghost" size="sm" disabled={uploading} onClick={() => removeSelected(idx)}>
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <Button onClick={startUpload} disabled={uploading} className="w-full">
+                {uploading ? 'Uploading…' : `Upload ${selectedFiles.length} file(s)`}
               </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <>
-            <div className="py-4">
-              <div 
-                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="flex flex-col items-center space-y-2">
-                  <Upload className="h-12 w-12 text-muted-foreground" />
-                  <p className="font-medium">Click to select PDF files</p>
-                  <p className="text-sm text-muted-foreground">
-                    Maximum 6MB per file. Select multiple files.
-                  </p>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
+            </div>
+          )}
+
+          {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+
+          {jobs.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">In-flight imports</p>
+              {jobs.map((j) => (
+                <UtilityBillJobCard
+                  key={j.jobId}
+                  jobId={j.jobId}
+                  filename={j.filename}
+                  accountId={accountId}
+                  accountType={accountType}
+                  onResultFinalized={handleJobFinalized}
                 />
-              </div>
-
-              {files.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-sm font-medium">{files.length} file(s) selected:</p>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {files.map((f, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 rounded bg-muted/50">
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="text-sm truncate">{f.file.name}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            ({(f.file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <p className="mt-4 text-xs text-muted-foreground">
-                Note: You must have a Gemini API key configured in your <a href="/dashboard" className="underline">account settings</a> to use this feature.
-              </p>
+              ))}
             </div>
+          )}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={handleImport} disabled={files.length === 0}>
-                Import {files.length > 0 ? `${files.length} Bill(s)` : 'Bills'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+          {jobs.length === 0 && selectedFiles.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              You need an AI provider configured in your{' '}
+              <a href="/dashboard" className="underline">account settings</a> to use this feature. Parsing uses whichever
+              provider you have set as active (Anthropic, Bedrock, or Gemini).
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={uploading}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
