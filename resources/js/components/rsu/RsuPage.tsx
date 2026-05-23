@@ -4,14 +4,16 @@ import currency from 'currency.js'
 import { useEffect, useState } from 'react'
 
 import Container from '@/components/container'
+import { getShares, isVested, shareValue, todayIso } from '@/components/rsu/helpers'
 import { RsuByAward } from '@/components/rsu/RsuByAward'
 import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
 import RsuChart from '@/components/rsu/RsuChart'
 import RsuSubNav from '@/components/rsu/RsuSubNav'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsContent,TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { IAward } from '@/types/finance'
 
@@ -19,6 +21,7 @@ export default function RsuPage() {
   const [loading, setLoading] = useState(true)
   const [rsu, setRsu] = useState<IAward[]>([])
   const [chartMode, setChartMode] = useState<'shares' | 'value'>('shares')
+  const [showOnlyUnvested, setShowOnlyUnvested] = useState(false)
   useEffect(() => {
     fetchWrapper
       .get('/api/rsu')
@@ -31,7 +34,8 @@ export default function RsuPage() {
     return null
   }
 
-  const now = new Date().toISOString().slice(0, 10)
+  const now = todayIso()
+  const filteredRsu = showOnlyUnvested ? rsu.filter((r) => !isVested(r, now)) : rsu
   return (
     <Container>
       <RsuSubNav />
@@ -45,11 +49,17 @@ export default function RsuPage() {
         <RsuChart rsu={rsu} mode={chartMode} />
       </div>
       <Tabs defaultValue="all-vests">
-        <TabsList className="mb-4">
-          <TabsTrigger value="all-vests">All vests</TabsTrigger>
-          <TabsTrigger value="per-vest-date">Per vest date</TabsTrigger>
-          <TabsTrigger value="per-award">Per award</TabsTrigger>
-        </TabsList>
+        <div className="mb-4 flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="all-vests">All vests</TabsTrigger>
+            <TabsTrigger value="per-vest-date">Per vest date</TabsTrigger>
+            <TabsTrigger value="per-award">Per award</TabsTrigger>
+          </TabsList>
+          <label className="flex items-center gap-2 text-sm select-none cursor-pointer">
+            <Switch checked={showOnlyUnvested} onCheckedChange={setShowOnlyUnvested} />
+            Only show unvested
+          </label>
+        </div>
         <TabsContent value="all-vests">
           <Card className="mb-8">
             <div className="p-6">
@@ -68,13 +78,13 @@ export default function RsuPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rsu.map((r, i) => {
-                    const vested = r.vest_date! < now
-                    const shares = typeof r.share_count === 'object' ? r.share_count.value : r.share_count
+                  {filteredRsu.map((r, i) => {
+                    const vested = isVested(r, now)
+                    const shares = getShares(r)
                     const price = r.vest_price ?? null
-                    const total = price != null && shares != null ? currency(shares).multiply(price) : null
+                    const total = shareValue(shares, price)
                     const grantPrice = r.grant_price ?? null
-                    const grantValue = grantPrice != null && shares != null ? currency(shares).multiply(grantPrice) : null
+                    const grantValue = shareValue(shares, grantPrice)
                     return (
                       <TableRow key={i} className={vested ? 'opacity-50 line-through' : ''}>
                         <TableCell>
@@ -107,7 +117,7 @@ export default function RsuPage() {
           <Card className="mb-8">
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-4">Per vest date</h3>
-              <RsuByVestDate rsu={rsu} />
+              <RsuByVestDate rsu={filteredRsu} />
             </div>
           </Card>
         </TabsContent>
@@ -115,7 +125,7 @@ export default function RsuPage() {
           <Card className="mb-8">
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-4">Per award</h3>
-              <RsuByAward rsu={rsu} />
+              <RsuByAward rsu={rsu} hideFullyVested={showOnlyUnvested} />
             </div>
           </Card>
         </TabsContent>
