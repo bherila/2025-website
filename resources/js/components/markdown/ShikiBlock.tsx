@@ -1,7 +1,19 @@
 import { useContext, useEffect, useId, useState } from 'react'
-import { type BundledLanguage, bundledLanguages, type BundledTheme, codeToTokens } from 'shiki'
+import { type BundledLanguage, bundledLanguages, codeToTokens } from 'shiki'
 
 import { PreviewRenderRegistryContext } from './PreviewContext'
+
+interface ShikiTokenStyle {
+  htmlStyle?: Record<string, string>
+}
+
+interface ShikiTokenLine {
+  tokens: ShikiTokenStyle[]
+}
+
+interface ShikiToken extends ShikiTokenStyle {
+  content: string
+}
 
 function normalizeTokenLines(input: { tokens: ShikiToken[][] } | { tokens: ShikiTokenLine[] }): ShikiToken[][] {
   const lines = input.tokens
@@ -12,46 +24,23 @@ function normalizeTokenLines(input: { tokens: ShikiToken[][] } | { tokens: Shiki
   if (Array.isArray(first)) {
     return lines as ShikiToken[][]
   }
-  return (lines as ShikiTokenLine[]).map((line) => line.tokens)
+  return (lines as ShikiTokenLine[]).map((line) => line.tokens as ShikiToken[])
 }
 
-const FONT_STYLE_BITS = {
-  Italic: 1,
-  Bold: 2,
-  Underline: 4,
-}
-
-function tokenStyle(token: ShikiToken): React.CSSProperties {
-  const style: React.CSSProperties = {}
-  if (token.color) {
-    style.color = token.color
+function htmlStyleToReact(htmlStyle: Record<string, string> | undefined): React.CSSProperties {
+  if (!htmlStyle) {
+    return {}
   }
-  if (token.bgColor) {
-    style.backgroundColor = token.bgColor
-  }
-  if (token.fontStyle) {
-    if ((token.fontStyle & FONT_STYLE_BITS.Italic) !== 0) {
-      style.fontStyle = 'italic'
-    }
-    if ((token.fontStyle & FONT_STYLE_BITS.Bold) !== 0) {
-      style.fontWeight = 'bold'
-    }
-    if ((token.fontStyle & FONT_STYLE_BITS.Underline) !== 0) {
-      style.textDecoration = 'underline'
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(htmlStyle)) {
+    if (key.startsWith('--')) {
+      result[key] = value
+    } else {
+      const camel = key.replace(/-([a-z])/g, (_match, char: string) => char.toUpperCase())
+      result[camel] = value
     }
   }
-  return style
-}
-
-interface ShikiToken {
-  content: string
-  color?: string
-  fontStyle?: number
-  bgColor?: string
-}
-
-interface ShikiTokenLine {
-  tokens: ShikiToken[]
+  return result as React.CSSProperties
 }
 
 interface ShikiBlockProps {
@@ -79,10 +68,11 @@ export function ShikiBlock({ code, lang }: ShikiBlockProps): React.JSX.Element {
         const supported = lang !== '' && lang in bundledLanguages
         const result = await codeToTokens(code, {
           lang: (supported ? lang : 'text') as BundledLanguage,
-          theme: 'github-light' as BundledTheme,
+          themes: { light: 'github-light', dark: 'github-dark' },
+          defaultColor: false,
         })
         if (!cancelled) {
-          setState({ kind: 'rendered', lines: normalizeTokenLines(result) })
+          setState({ kind: 'rendered', lines: normalizeTokenLines(result) as ShikiToken[][] })
         }
       } catch {
         if (!cancelled) {
@@ -101,12 +91,12 @@ export function ShikiBlock({ code, lang }: ShikiBlockProps): React.JSX.Element {
 
   if (state.kind === 'rendered') {
     return (
-      <pre className="overflow-x-auto rounded-md bg-white p-3 text-sm leading-relaxed text-neutral-900 ring-1 ring-neutral-200">
+      <pre className="shiki-pre overflow-x-auto rounded-md bg-card p-3 text-sm leading-relaxed ring-1 ring-border">
         <code className={lang ? `language-${lang}` : undefined}>
           {state.lines.map((line, lineIndex) => (
             <span key={lineIndex} style={{ display: 'block' }}>
               {line.length === 0 ? '\n' : line.map((token, tokenIndex) => (
-                <span key={tokenIndex} style={tokenStyle(token)}>{token.content}</span>
+                <span key={tokenIndex} className="shiki-token" style={htmlStyleToReact(token.htmlStyle)}>{token.content}</span>
               ))}
             </span>
           ))}
@@ -118,7 +108,7 @@ export function ShikiBlock({ code, lang }: ShikiBlockProps): React.JSX.Element {
   return (
     <pre
       data-shiki-fallback={state.kind === 'fallback' ? 'true' : undefined}
-      className="overflow-x-auto rounded-md bg-neutral-50 p-3 text-sm leading-relaxed text-neutral-900 ring-1 ring-neutral-200"
+      className="shiki-pre overflow-x-auto rounded-md bg-muted p-3 text-sm leading-relaxed text-foreground ring-1 ring-border"
     >
       <code className={lang ? `language-${lang}` : undefined}>{code}</code>
     </pre>

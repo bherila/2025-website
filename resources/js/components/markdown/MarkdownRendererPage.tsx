@@ -110,14 +110,14 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Document title (optional)"
           maxLength={120}
-          className="flex-1 min-w-[12rem] rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          className="flex-1 min-w-[12rem] rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
         />
         <div className="markdown-actions flex flex-wrap items-center gap-2">
           {hasDocument && (
             <button
               type="button"
               onClick={handleCopyLink}
-              className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50"
+              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground hover:bg-muted"
             >
               {copyState === 'copied' ? 'Copied!' : 'Copy link'}
             </button>
@@ -126,7 +126,7 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
             type="button"
             onClick={handlePrint}
             disabled={printPreparing}
-            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-50"
           >
             {printPreparing ? 'Preparing…' : 'Print / Save as PDF'}
           </button>
@@ -151,12 +151,12 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
             </button>
           )}
           {!initialData.authenticated && (
-            <span className="text-sm text-neutral-500">
+            <span className="text-sm text-muted-foreground">
               <a href="/login" className="underline">Sign in</a> to share
             </span>
           )}
           {hasDocument && !canUpdate && initialData.authenticated && (
-            <span className="text-sm text-neutral-500">Viewing shared document</span>
+            <span className="text-sm text-muted-foreground">Viewing shared document</span>
           )}
         </div>
       </header>
@@ -169,18 +169,18 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="markdown-editor-pane">
-          <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-neutral-700">Markdown</label>
+          <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
           <textarea
             id="markdown-content"
             value={markdown}
             onChange={(event) => setMarkdown(event.target.value)}
             spellCheck={false}
             placeholder="# Hello&#10;&#10;Paste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams."
-            className="h-[70vh] w-full resize-y rounded-md border border-neutral-300 bg-white p-3 font-mono text-sm leading-relaxed"
+            className="h-[70vh] w-full resize-y rounded-md border border-border bg-card p-3 font-mono text-sm leading-relaxed text-foreground"
           />
         </div>
         <div className="markdown-preview-pane">
-          <label className="mb-2 block text-sm font-medium text-neutral-700">Preview</label>
+          <label className="mb-2 block text-sm font-medium text-foreground">Preview</label>
           <Preview ref={previewRef} markdown={debouncedMarkdown} registry={registry} />
         </div>
       </div>

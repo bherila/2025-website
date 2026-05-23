@@ -38,7 +38,7 @@ function CodeRenderer({ className, children, node }: CodeProps): React.JSX.Eleme
 
   if (isInline) {
     return (
-      <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[0.9em] text-neutral-800">
+      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground">
         {children}
       </code>
     )
@@ -59,7 +59,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(function Preview
     <PreviewRenderRegistryContext.Provider value={registry}>
       <div
         ref={ref}
-        className="markdown-preview prose prose-neutral max-w-none rounded-md bg-white p-6 ring-1 ring-neutral-200"
+        className="markdown-preview prose prose-neutral max-w-none rounded-md bg-card p-6 ring-1 ring-border dark:prose-invert"
       >
         <ReactMarkdown
           skipHtml
