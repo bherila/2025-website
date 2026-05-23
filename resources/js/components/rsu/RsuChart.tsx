@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer,Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { getShares } from '@/components/rsu/helpers'
 import { groupBy } from '@/lib/arrayUtils'
@@ -10,6 +10,11 @@ import type { IAward } from '@/types/finance'
 const colors = ['#D32F2F', '#FF8F00', '#FFD600', '#388E3C', '#1976D2', '#7B1FA2']
 
 type ChartMode = 'shares' | 'value'
+
+interface RsuChartData {
+  awardIds: string[]
+  dataSource: Array<{ [key: string]: string | number }>
+}
 
 function formatChartValue(v: number, mode: ChartMode): string {
   if (mode === 'value') {
@@ -86,39 +91,52 @@ function RsuChartTooltip({
   )
 }
 
-export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode?: ChartMode }) {
-  const award_ids = new Set<string>()
+export function buildRsuChartData(rsu: IAward[], mode: ChartMode): RsuChartData {
+  const awardIds = new Set<string>()
   const vests = groupBy(rsu, (vest) => vest.vest_date)
-  const dataSource = []
+  const dataSource: RsuChartData['dataSource'] = []
+  const lastKnownPrice: Record<string, number> = {}
 
-  // Find the most recent vest price for fallback
-  const lastKnownPrice: { [symbol: string]: number | null } = {}
-  for (const vest of rsu) {
-    if (vest.vest_price != null) {
-      lastKnownPrice[vest.symbol!] = vest.vest_price
-    }
-  }
-
-  for (const vestDate of Object.keys(vests)) {
+  for (const vestDate of Object.keys(vests).sort()) {
     const currentVests = vests[vestDate]
-    if (!currentVests) continue
+    if (!currentVests) {
+      continue
+    }
 
-    const o: { [key: string]: string | number } = { vest_date: vestDate }
+    const row: { [key: string]: string | number } = { vest_date: vestDate }
     for (const vest of currentVests) {
-      award_ids.add(vest.award_id!)
+      const awardId = vest.award_id
+      if (!awardId) {
+        continue
+      }
+
+      awardIds.add(awardId)
       const shares = getShares(vest) ?? 0
       if (mode === 'value') {
-        // Use vest price if available, else fallback to last known price for that symbol
-        const price = vest.vest_price ?? lastKnownPrice[vest.symbol!]
-        o[vest.award_id!] = price != null ? currency(shares).multiply(price).value : 0
-        // Update last known price if this vest has a price
-        if (vest.vest_price != null) lastKnownPrice[vest.symbol!] = vest.vest_price
+        const price = vest.vest_price ?? (vest.symbol ? lastKnownPrice[vest.symbol] : undefined)
+        row[awardId] = price != null ? currency(shares).multiply(price).value : 0
       } else {
-        o[vest.award_id!] = shares
+        row[awardId] = shares
       }
     }
-    dataSource.push(o)
+
+    for (const vest of currentVests) {
+      if (vest.symbol && vest.vest_price != null) {
+        lastKnownPrice[vest.symbol] = vest.vest_price
+      }
+    }
+
+    dataSource.push(row)
   }
+
+  return {
+    awardIds: Array.from(awardIds),
+    dataSource,
+  }
+}
+
+export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode?: ChartMode }) {
+  const { awardIds, dataSource } = buildRsuChartData(rsu, mode)
 
   return (
     <ResponsiveContainer width="100%" height={420}>
@@ -143,7 +161,7 @@ export default function RsuChart({ rsu, mode = 'shares' }: { rsu: IAward[]; mode
         <YAxis tickFormatter={(v: number) => formatYTick(v, mode)} width={70} />
         <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} content={<RsuChartTooltip mode={mode} />} />
         <Legend wrapperStyle={{ paddingTop: 16 }} />
-        {Array.from(award_ids).map((award_id, index) => {
+        {awardIds.map((award_id, index) => {
           const color = colors[index % colors.length]
           return <Bar key={award_id} dataKey={award_id} stackId="a" fill={color} />
         })}

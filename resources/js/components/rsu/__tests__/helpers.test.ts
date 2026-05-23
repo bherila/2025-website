@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 
-import { getShares, isVested, shareValue, toLocalIsoDate,todayIso } from '@/components/rsu/helpers'
+import { getShares, isVested, shareValue, todayIso, toLocalIsoDate } from '@/components/rsu/helpers'
 
 describe('rsu/helpers', () => {
   describe('todayIso', () => {
