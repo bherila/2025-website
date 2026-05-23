@@ -14,6 +14,15 @@ type State =
   | { kind: 'error'; message: string }
 
 let renderCounter = 0
+let initializedTheme: 'dark' | 'default' | null = null
+
+function ensureMermaidInitialized(theme: 'dark' | 'default'): void {
+  if (initializedTheme === theme) {
+    return
+  }
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+  initializedTheme = theme
+}
 
 function readIsDark(): boolean {
   if (typeof document === 'undefined') {
@@ -53,11 +62,7 @@ export function MermaidBlock({ code }: MermaidBlockProps): React.JSX.Element {
 
     ;(async () => {
       try {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          theme: isDark ? 'dark' : 'default',
-        })
+        ensureMermaidInitialized(isDark ? 'dark' : 'default')
 
         renderCounter += 1
         const renderId = `mermaid-${Date.now()}-${renderCounter}`
