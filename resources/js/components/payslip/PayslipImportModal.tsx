@@ -1,249 +1,282 @@
 'use client'
 
-import { FileText, Loader2,Upload, XCircle } from 'lucide-react'
-import React, { useCallback, useEffect, useRef,useState } from 'react'
-import { toast } from 'sonner'
+import { Upload } from 'lucide-react'
+import * as React from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { fetchWrapper } from '@/fetchWrapper'
-import { importPayslips } from '@/lib/api'
+import { useGenAiFileUpload } from '@/genai-processor/useGenAiFileUpload'
+
+import { PayslipImportJobCard } from './PayslipImportJobCard'
 
 interface PayslipImportModalProps {
   onImportSuccess: () => void
 }
 
+export interface W2JobOption {
+  id: number
+  display_name: string
+}
+
+interface PendingJob {
+  jobId: number
+  filename: string
+  employmentEntityId: number | null
+}
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024
+
 export function PayslipImportModal({ onImportSuccess }: PayslipImportModalProps): React.ReactElement {
   const [open, setOpen] = useState(false)
-  const [files, setFiles] = useState<File[]>([])
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
-  const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [w2Jobs, setW2Jobs] = useState<{ id: number; display_name: string }[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [jobs, setJobs] = useState<PendingJob[]>([])
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [w2Jobs, setW2Jobs] = useState<W2JobOption[]>([])
   const [selectedEntityId, setSelectedEntityId] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { upload } = useGenAiFileUpload({
+    jobType: 'finance_payslip',
+    context: {
+      file_count: 1,
+      ...(selectedEntityId ? { employment_entity_id: selectedEntityId } : {}),
+    },
+  })
 
   const fetchW2Jobs = useCallback(async () => {
     try {
-      const data = await fetchWrapper.get('/api/finance/employment-entities?visible_only=true') as { id: number; display_name: string; type: string; start_date: string }[]
+      const data = await fetchWrapper.get('/api/finance/employment-entities?visible_only=true') as {
+        id: number
+        display_name: string
+        type: string
+        start_date: string
+      }[]
+
       const w2Only = data
-        .filter(e => e.type === 'w2')
+        .filter((entity) => entity.type === 'w2')
         .sort((a, b) => b.start_date.localeCompare(a.start_date))
+        .map(({ id, display_name }) => ({ id, display_name }))
+
       setW2Jobs(w2Only)
-      if (w2Only.length > 0) setSelectedEntityId(w2Only[0]?.id ?? null)
-    } catch { /* ignore */ }
+      setSelectedEntityId((current) => current ?? w2Only[0]?.id ?? null)
+    } catch {
+      setW2Jobs([])
+    }
   }, [])
 
-  useEffect(() => { fetchW2Jobs() }, [fetchW2Jobs])
+  useEffect(() => {
+    if (open) {
+      fetchW2Jobs()
+    }
+  }, [fetchW2Jobs, open])
 
-  const getTotalSize = (fileList: File[]) => {
-    return fileList.reduce((acc, file) => acc + file.size, 0)
+  const resetModalState = () => {
+    setSelectedFiles([])
+    setJobs([])
+    setUploadError(null)
+    setUploading(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      setError(null)
-      const newFiles = Array.from(event.target.files)
-      const allowedFiles = newFiles.filter(file => {
-        const fileType = file.type
-        return fileType === 'application/pdf'
-      })
+    setUploadError(null)
+    const picked = event.target.files
+    if (!picked) return
 
-      if (allowedFiles.length !== newFiles.length) {
-        toast.error('Only PDF files are allowed.')
+    const added: File[] = []
+    const errors: string[] = []
+
+    Array.from(picked).forEach((file) => {
+      const lowerName = file.name.toLowerCase()
+      const isPdfMime = file.type === 'application/pdf'
+      const hasPdfExtension = lowerName.endsWith('.pdf')
+
+      if (!isPdfMime && !hasPdfExtension) {
+        errors.push(`${file.name}: not a PDF`)
+        return
       }
-
-      const combinedFiles = [...files, ...allowedFiles]
-      if (combinedFiles.length > 200) {
-         toast.error('Too many files selected. Please limit to 200 files.')
-         return
+      if (file.size > MAX_FILE_BYTES) {
+        errors.push(`${file.name}: exceeds 50 MB`)
+        return
       }
+      added.push(file)
+    })
 
-      setFiles(combinedFiles)
+    if (errors.length > 0) {
+      setUploadError(errors.join('; '))
+    }
+    if (added.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...added])
     }
   }
 
-  const handleRemoveFile = (fileToRemove: File) => {
-    setFiles(files.filter(file => file !== fileToRemove))
-    if (files.length <= 1) {
-      setError(null)
-    }
+  const removeSelected = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
   }
 
-  const handleUpload = async () => {
-    if (files.length === 0) {
-      toast.warning('Please select at least one file to import.')
-      return
-    }
+  const startUpload = useCallback(async () => {
+    if (selectedFiles.length === 0) return
 
-    setIsUploading(true)
-    setError(null)
-    
-    // Chunk logic: 5.9 MB per chunk
-    const MAX_CHUNK_SIZE_MB = 5.9;
-    const chunks: File[][] = [];
-    let currentChunk: File[] = [];
-    let currentChunkSize = 0;
-    const maxSizeBytes = MAX_CHUNK_SIZE_MB * 1024 * 1024;
+    setUploading(true)
+    setUploadError(null)
+
+    const files = [...selectedFiles]
+    setSelectedFiles([])
 
     for (const file of files) {
-       // If a single file is > 5.9MB, it must go in its own chunk
-       if (currentChunk.length > 0 && currentChunkSize + file.size > maxSizeBytes) {
-           chunks.push(currentChunk);
-           currentChunk = [];
-           currentChunkSize = 0;
-       }
-       currentChunk.push(file);
-       currentChunkSize += file.size;
-    }
-    if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
-    }
-
-    setUploadProgress({ current: 0, total: chunks.length });
-
-    let successCount = 0;
-    let failCount = 0;
-    const errors: string[] = [];
-
-    try {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        if (!chunk) continue;
-        setUploadProgress({ current: i + 1, total: chunks.length });
-        
-        try {
-            const result = await importPayslips(chunk, selectedEntityId);
-            if (result.success) {
-                // The API result message says "Successfully imported X payslip(s)"
-                // We'll rely on the API success message mostly, but for now just count processed files
-                successCount += chunk.length; 
-            } else {
-                failCount += chunk.length;
-                errors.push(result.error || `Batch ${i+1} failed`);
-            }
-        } catch (e: any) {
-             failCount += chunk.length;
-             errors.push(e.message || `Batch ${i+1} error`);
-        }
+      try {
+        const result = await upload(file)
+        setJobs((prev) => [
+          ...prev,
+          {
+            jobId: result.jobId,
+            filename: file.name,
+            employmentEntityId: selectedEntityId,
+          },
+        ])
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : `Upload failed for ${file.name}`)
       }
-
-      if (successCount > 0) {
-        toast.success(`Processed ${successCount} files.`);
-        onImportSuccess();
-        setFiles([]);
-        setOpen(false);
-      } 
-      
-      if (failCount > 0) {
-        const errorMessage = `Failed to process ${failCount} files. ${errors.slice(0, 3).join(', ')}`;
-        toast.error(errorMessage);
-        setError(errorMessage);
-      }
-
-    } catch (error: any) {
-      console.error('Upload error:', error)
-      const message = error.message || 'An unexpected error occurred during upload.';
-      toast.error(message);
-      setError(message);
-    } finally {
-      setIsUploading(false)
-      setUploadProgress({ current: 0, total: 0 });
     }
+
+    setUploading(false)
+  }, [selectedEntityId, selectedFiles, upload])
+
+  const handleJobFinalized = useCallback(() => {
+    onImportSuccess()
+  }, [onImportSuccess])
+
+  const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen && uploading) return
+    if (!nextOpen) {
+      resetModalState()
+    }
+    setOpen(nextOpen)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogTrigger asChild>
-        <Button variant="outline">
-          <Upload className="mr-2 h-4 w-4" /> Import PDF
+        <Button variant="outline" size="sm">
+          <Upload className="h-3.5 w-3.5" /> Import PDF
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent showCloseButton={!uploading} className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Import Payslips</DialogTitle>
+          <DialogTitle>Import Payslips from PDF</DialogTitle>
           <DialogDescription>
-            Upload PDF files. Files will be processed in batches (max 5.9MB per batch).
+            Uploads run in the background. Each PDF becomes a GenAI job that you can review result-by-result before
+            creating payslip rows. The pipeline uses your active AI provider, whether that is Anthropic, Bedrock, or
+            Gemini.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+
+        <div className="space-y-4 py-2">
           {w2Jobs.length > 0 && (
-            <div className="grid w-full max-w-sm items-center gap-1.5">
+            <div className="space-y-2">
               <Label htmlFor="import-w2-job">W-2 Job</Label>
               <select
                 id="import-w2-job"
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                 value={selectedEntityId ?? ''}
-                onChange={(e) => setSelectedEntityId(e.target.value ? Number(e.target.value) : null)}
-                disabled={isUploading}
+                onChange={(event) => setSelectedEntityId(event.target.value ? Number(event.target.value) : null)}
+                disabled={uploading}
               >
-                <option value="">No Job Associated</option>
-                {w2Jobs.map(job => (
-                  <option key={job.id} value={job.id}>{job.display_name}</option>
+                <option value="">No job associated</option>
+                {w2Jobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.display_name}
+                  </option>
                 ))}
               </select>
             </div>
           )}
-          <div className="grid w-full max-w-sm items-center gap-1.5">
-            <Label htmlFor="payslip-files">Payslip Files</Label>
-            <Input
-              id="payslip-files"
-              type="file"
-              multiple
-              accept=".pdf"
-              onChange={handleFileChange}
+
+          <div
+            className="cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors hover:border-primary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <p className="font-medium">Click to select payslip PDFs</p>
+              <p className="text-xs text-muted-foreground">Up to 50 MB per file. Each file becomes its own review job.</p>
+            </div>
+            <input
               ref={fileInputRef}
-              disabled={isUploading}
+              type="file"
+              accept=".pdf,application/pdf"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
             />
           </div>
-          <div className="mt-2">
-            <div className="text-xs text-muted-foreground mb-2">
-                Selected: {files.length} file(s) - {(getTotalSize(files) / 1024 / 1024).toFixed(2)} MB
-            </div>
-            {files.length > 0 && (
-              <ul className="space-y-1 text-sm text-muted-foreground max-h-[200px] overflow-y-auto">
-                {files.map((file, index) => (
-                  <li key={index} className="flex items-center justify-between">
-                    <span className="flex items-center truncate max-w-[300px]" title={file.name}>
-                      <FileText className="mr-2 h-4 w-4 flex-shrink-0" /> <span className="truncate">{file.name}</span>
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveFile(file)}
-                      disabled={isUploading}
-                    >
-                      <XCircle className="h-4 w-4 text-red-500" />
+
+          {selectedFiles.length > 0 && (
+            <div className="space-y-2 rounded border p-3">
+              <p className="text-sm font-medium">{selectedFiles.length} file(s) ready to upload:</p>
+              <ul className="max-h-32 space-y-1 overflow-y-auto text-sm">
+                {selectedFiles.map((file, index) => (
+                  <li
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    className="flex items-center justify-between rounded bg-muted/40 px-2 py-1"
+                  >
+                    <span className="truncate">{file.name}</span>
+                    <Button variant="ghost" size="sm" disabled={uploading} onClick={() => removeSelected(index)}>
+                      Remove
                     </Button>
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
-          {error && (
-            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive flex items-start gap-2 border border-destructive/20 animate-in fade-in zoom-in duration-200">
-              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <div className="grid gap-1">
-                <div className="font-medium">Import Error</div>
-                <div className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap">{error}</div>
-              </div>
+              <Button onClick={startUpload} disabled={uploading} className="w-full">
+                {uploading ? 'Uploading…' : `Upload ${selectedFiles.length} file(s)`}
+              </Button>
             </div>
           )}
-        </div>
-        <DialogFooter>
-          {isUploading && (
-             <div className="flex items-center mr-4 text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Batch {uploadProgress.current}/{uploadProgress.total}
-             </div>
+
+          {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+
+          {jobs.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">In-flight imports</p>
+              {jobs.map((job) => (
+                <PayslipImportJobCard
+                  key={job.jobId}
+                  jobId={job.jobId}
+                  filename={job.filename}
+                  defaultEmploymentEntityId={job.employmentEntityId}
+                  w2Jobs={w2Jobs}
+                  onResultFinalized={handleJobFinalized}
+                />
+              ))}
+            </div>
           )}
-          <Button onClick={() => setOpen(false)} variant="ghost" disabled={isUploading}>
-            Cancel
-          </Button>
-          <Button onClick={handleUpload} disabled={isUploading || files.length === 0}>
-            {isUploading ? 'Importing...' : 'Import'}
+
+          {jobs.length === 0 && selectedFiles.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              You need an AI configuration in your <a href="/dashboard" className="underline">account settings</a> to use
+              this feature. Queue state is also visible in <a className="underline" href="/admin/genai-jobs">Admin →
+              GenAI Jobs</a> for admins.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={uploading}>
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -92,33 +92,3 @@ export async function updatePayslipEstimatedStatus(
     throw new Error(message)
   }
 }
-
-export async function importPayslips(files: File[], employmentEntityId?: number | null): Promise<{ success: boolean; message?: string; error?: string }> {
-  const formData = new FormData();
-  files.forEach(file => {
-    formData.append('files[]', file);
-  });
-  if (employmentEntityId) {
-    formData.append('employment_entity_id', String(employmentEntityId));
-  }
-
-  const response = await fetch('/api/payslips/import', {
-    method: 'POST',
-    headers: {
-      'X-CSRF-TOKEN': csrfToken || '',
-    },
-    body: formData,
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    // Handle specific error codes like 429 for rate limiting
-    if (response.status === 429) {
-      return { success: false, error: data.error || 'API rate limit exceeded. Please wait and try again.' };
-    }
-    return { success: false, error: data.message || data.error || 'Failed to import payslips.' };
-  }
-
-  return { success: true, message: data.message };
-}

@@ -14,7 +14,7 @@ The Payslips page records each pay stub as a structured payslip entry. All monet
 - **TotalsTable** — quarterly running totals (Q1, Q2, Q3, Q4 YTD) for federal and California state taxes.
 - **Add Payslip** button — navigates to `/finance/payslips/entry?year=YYYY`.
 - **Edit as JSON** button — opens `PayslipJsonModal` in `bulk` mode for direct editing.
-- **Import** buttons — CSV/TSV import and `PayslipImportModal` for copy-paste imports.
+- **Import PDF** — opens `PayslipImportModal`, uploads PDFs into the shared async GenAI queue, and lets you review each parsed payslip before saving it.
 
 ## Payslip Detail Page
 
@@ -44,7 +44,19 @@ The Payslips page records each pay stub as a structured payslip entry. All monet
 | `POST` | `/api/payslips/bulk` | Bulk create/update an array of payslips |
 | `DELETE` | `/api/payslips/{id}` | Delete a payslip |
 | `POST` | `/api/payslips/{id}/estimated-status` | Toggle `ps_is_estimated` flag |
-| `POST` | `/api/payslips/import` | CSV/TSV bulk import |
+| `POST` | `/api/payslips/genai-import/{jobId}/results/{resultId}/confirm` | Confirm a reviewed GenAI payslip result and create a payslip row |
+| `POST` | `/api/payslips/genai-import/{jobId}/results/{resultId}/skip` | Skip a reviewed GenAI payslip result |
+
+### Async PDF import flow
+
+Payslip PDF import now uses the shared GenAI import pipeline described in
+[`docs/genai-import.md`](../genai-import.md):
+
+1. `PayslipImportModal` uploads each PDF to the shared `/api/genai/import/*` queue.
+2. The background worker parses the file with the user's active AI provider.
+3. The modal polls job status and renders an editable review form per parsed payslip.
+4. **Confirm import** posts the reviewed payload to `/api/payslips/genai-import/{jobId}/results/{resultId}/confirm`.
+5. **Skip** marks that parsed result as skipped without creating a `fin_payslip` row.
 
 ---
 
