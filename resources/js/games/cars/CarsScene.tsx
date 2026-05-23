@@ -509,9 +509,9 @@ function buildDynamicScene(
   }
 
   for (const assignment of loopPlan.assignments) {
-    const { entryStartedAt, offset, passenger, sourcePassengers } = assignment
+    const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
     passengerOffsets.set(passenger.id, offset)
-    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null) {
+    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null || shift) {
       passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
     }
 
@@ -520,9 +520,17 @@ function buildDynamicScene(
       pattern: CAR_PATTERNS[passenger.color],
     })
     const position = queuePosition(passengerPhase + offset, queueLayout)
-    const entry = entryStartedAt !== null && sourcePassengers
-      ? createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
-      : null
+    let entry: PassengerRenderItem['entry'] | null = null
+    if (entryStartedAt !== null && sourcePassengers) {
+      entry = createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
+    } else if (shift) {
+      const from = queuePosition(passengerPhase + shift.previousOffset, queueLayout)
+      entry = {
+        from: new THREE.Vector3(from.x, 0.12, from.z),
+        startedAt: shift.startedAt,
+        duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
+      }
+    }
     if (entry) {
       setPassengerRenderHandleTransform(handle, entry.from, 0)
     } else {

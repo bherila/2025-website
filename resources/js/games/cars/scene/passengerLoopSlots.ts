@@ -10,11 +10,17 @@ export interface PassengerLoopSlot {
   offset: number
 }
 
+export interface PassengerLoopShift {
+  previousOffset: number
+  startedAt: number
+}
+
 export interface PassengerLoopAssignment {
   entryStartedAt: number | null
   passenger: Passenger
   sourcePassengers: Passenger[] | null
   offset: number
+  shift: PassengerLoopShift | null
 }
 
 export interface PassengerLoopPlan {
@@ -58,6 +64,30 @@ export function planPassengerLoopSlots({
       entryStartedAt: entryIsActive(slot.entryStartedAt, now) ? slot.entryStartedAt : null,
     }
   })
+
+  const shifts = new Map<string, PassengerLoopShift>()
+  let writeIndex = 0
+  for (let readIndex = 0; readIndex < nextSlots.length; readIndex += 1) {
+    const slot = nextSlots[readIndex]
+    if (!slot || slot.passengerId === null) {
+      continue
+    }
+    if (writeIndex !== readIndex) {
+      const writeSlot = nextSlots[writeIndex]
+      if (writeSlot) {
+        shifts.set(slot.passengerId, {
+          previousOffset: slot.offset,
+          startedAt: now,
+        })
+        writeSlot.passengerId = slot.passengerId
+        writeSlot.entryStartedAt = slot.entryStartedAt
+        slot.passengerId = null
+        slot.entryStartedAt = null
+      }
+    }
+    writeIndex += 1
+  }
+
   const occupiedSlotCount = nextSlots.filter((slot) => slot.passengerId !== null).length
   const desiredCapacity = passengers.length > 0 ? Math.max(capacity, occupiedSlotCount) : 0
   while (nextSlots.length > desiredCapacity) {
@@ -125,6 +155,7 @@ export function planPassengerLoopSlots({
         ? null
         : entrySources.get(passenger.id) ?? [passenger, ...unassignedPassengers],
       offset: slot.offset,
+      shift: shifts.get(passenger.id) ?? null,
     })
   }
 

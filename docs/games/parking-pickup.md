@@ -36,7 +36,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - Two feeder paths curve into the back of the loop, holding additional passengers behind it.
 - The two feeders drain sequentially, not in parallel: the left feeder is consumed first, and the right feeder only begins flowing once the left is empty. Side assignment is fixed per passenger at level generation, so a passenger does not visually switch sides while waiting.
 - The loop perimeter is sized so that when at active capacity, the passengers visibly fill it with no extra gap.
-- When active-loop passengers board, their loop slot remains empty instead of causing the rest of the loop to jump forward. The empty slot continues moving with the loop and is refilled by a feeder passenger when that slot reaches the feeder join.
+- When an active-loop passenger boards, the rest of the loop shifts one slot forward so the visible front-of-loop passenger is always the next-in-queue to board. The trailing slot becomes empty and is refilled by the feeder front when it reaches the feeder join. Shifted passengers interpolate from their previous slot position to their new one so the advance reads as a forward step, not a teleport.
 - Passengers from the active feeder walk into the back of the loop along a curved bezier path that joins tangentially.
 - Passenger positions should be stable while walking; they should not appear or disappear except when boarding.
 - Passenger boarding is gate-based: a passenger is eligible to board only when their loop position crosses the parking gate at the bottom-front of the stadium.
