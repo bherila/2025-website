@@ -15,6 +15,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | Auto-tagging rules | [rules-engine.md](rules-engine.md) | `app/Services/Finance/RulesEngineService.php` |
 | Payslips (W-2 prep) | [payslips.md](payslips.md) | `app/Models/FinanceTool/FinPayslips.php` |
 | RSU awards | [rsu.md](rsu.md) | `resources/js/components/rsu/` |
+| RSU GenAI import (proposed) | [rsu-genai-import.md](rsu-genai-import.md) | spec only — see [genai-import.md](../genai-import.md) |
 | Lot accounting + short-div | [lot-analyzer.md](lot-analyzer.md) | `app/Services/Finance/LotAnalyzer*` |
 | Tax system data model | [tax-system.md](tax-system.md) | `resources/js/components/finance/TaxPreviewContext.tsx` |
 | **Tax Preview — Dock UI** | **[tax-preview-dock.md](tax-preview-dock.md)** | `resources/js/components/finance/tax-preview/` |

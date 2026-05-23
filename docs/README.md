@@ -13,6 +13,7 @@ Start here when you need project documentation. Keep durable architecture and wo
 | User management | [user-management.md](user-management.md) |
 | GenAI import pipeline | [genai-import.md](genai-import.md) |
 | Public financial planning calculators | [financial-planning.md](financial-planning.md) |
+| Utility bill tracker | [utility-bill-tracker.md](utility-bill-tracker.md) |
 
 ## Domain Areas
 
