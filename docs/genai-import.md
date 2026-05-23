@@ -15,7 +15,7 @@ to every provider, not just Gemini — see [Daily quota](#daily-quota--system-an
 | `job_type`             | Prompt template                                  | Output shape                                    | Persist mechanism |
 |------------------------|--------------------------------------------------|-------------------------------------------------|-------------------|
 | `finance_transactions` | `FinanceTransactionsPromptTemplate`              | `addFinanceAccount` tool call per account       | Custom `POST /api/finance/{acct_id}/line_items` (does NOT mark `GenAiImportResult.imported`) |
-| `finance_payslip`      | `PayslipPromptTemplate`                          | TOON array of payslip objects                   | TODO — currently still served by the legacy synchronous controller; migration tracked separately |
+| `finance_payslip`      | `PayslipPromptTemplate`                          | TOON array of payslip objects                   | `POST /api/payslips/genai-import/{jobId}/results/{resultId}/confirm` |
 | `utility_bill`         | `UtilityBillPromptTemplate`                      | TOON array of bill objects                      | `POST /api/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/confirm` |
 | `document_extract`     | `TaxDocumentPromptTemplate` or `MultiAccountTaxImportPromptTemplate` | Tool call per form OR per-account JSON array | Linked `FileForTaxDocument.parsed_data` is updated and `DocumentIngestionService::syncFromTaxDocument` is invoked inline |
 | `class_action_email`   | `ClassActionEmailPromptTemplate` (text-only)     | Single JSON object with structured claim fields | Frontend reads parsed result and posts a class action claim via the regular CRUD endpoint, then calls a confirm route |
@@ -319,6 +319,12 @@ For an example, see the utility bill implementation:
 - Modal: `resources/js/components/utility-bill-tracker/ImportBillModal.tsx`
 - Review card: `resources/js/components/utility-bill-tracker/UtilityBillJobCard.tsx`
 - Tests: `tests/Feature/UtilityBillImportTest.php`
+
+The payslip flow now follows the same contract:
+- Persist: `app/Http/Controllers/FinanceTool/FinancePayslipImportController.php`
+- Modal: `resources/js/components/payslip/PayslipImportModal.tsx`
+- Review card: `resources/js/components/payslip/PayslipImportJobCard.tsx`
+- Tests: `tests/Feature/FinancePayslipImportTest.php`
 
 ---
 

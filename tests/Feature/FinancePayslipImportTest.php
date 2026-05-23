@@ -2,93 +2,97 @@
 
 namespace Tests\Feature;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
+use App\Models\FinanceTool\FinEmploymentEntity;
+use App\Models\FinanceTool\FinPayslips;
 use App\Models\User;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FinancePayslipImportTest extends TestCase
 {
-    public function test_import_payslips_fails_without_auth(): void
+    use RefreshDatabase;
+
+    private function createEmploymentEntity(int $userId, string $displayName = 'Acme Corp'): FinEmploymentEntity
     {
-        $response = $this->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslip.pdf', 100),
-            ],
+        return FinEmploymentEntity::withoutEvents(function () use ($userId, $displayName) {
+            return FinEmploymentEntity::forceCreate([
+                'user_id' => $userId,
+                'display_name' => $displayName,
+                'type' => 'w2',
+                'is_current' => true,
+                'start_date' => '2020-01-01',
+            ]);
+        });
+    }
+
+    private function makeJob(User $user, ?int $employmentEntityId = null): GenAiImportJob
+    {
+        return GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_payslip',
+            'file_hash' => 'hash-'.$user->id.'-'.$employmentEntityId,
+            'original_filename' => 'payslip.pdf',
+            's3_path' => "genai-import/{$user->id}/uuid/payslip.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'context_json' => json_encode(array_filter([
+                'employment_entity_id' => $employmentEntityId,
+                'file_count' => 1,
+            ], static fn ($value) => $value !== null)),
+            'status' => 'parsed',
         ]);
+    }
+
+    private function makeResult(GenAiImportJob $job, array $payload, int $index = 0): GenAiImportResult
+    {
+        return GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => $index,
+            'result_json' => json_encode($payload),
+            'status' => 'pending_review',
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payslipPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-15',
+            'pay_date' => '2026-01-20',
+            'earnings_gross' => 5000,
+            'earnings_net_pay' => 4000,
+            'ps_fed_tax' => 600,
+            'ps_comment' => 'Imported from AI review',
+        ], $overrides);
+    }
+
+    public function test_confirm_requires_auth(): void
+    {
+        $response = $this->postJson('/api/payslips/genai-import/1/results/1/confirm', []);
 
         $response->assertStatus(401);
     }
 
-    public function test_import_payslips_requires_ai_configuration(): void
+    public function test_confirm_creates_payslip_from_result_and_marks_job_imported(): void
     {
-        $user = User::factory()->create(['gemini_api_key' => null]);
+        $user = User::factory()->create();
+        $entity = $this->createEmploymentEntity($user->id);
+        $job = $this->makeJob($user, $entity->id);
+        $result = $this->makeResult($job, $this->payslipPayload());
 
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslip.pdf', 100),
-            ],
-        ]);
+        $response = $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$result->id}/confirm",
+            ['ps_comment' => 'Reviewed before import'],
+        );
 
-        $response->assertStatus(400);
-        $response->assertJson(['error' => 'No AI configuration found. Please add one in Settings.']);
-    }
-
-    public function test_import_payslips_rejects_non_pdf_files(): void
-    {
-        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
-
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('document.txt', 10, 'text/plain'),
-            ],
-        ]);
-
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['files.0']);
-    }
-
-    public function test_import_payslips_successfully_processes_gemini_response(): void
-    {
-        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
-
-        Http::fake([
-            'https://generativelanguage.googleapis.com/upload/v1beta/files*' => Http::response([
-                'file' => ['uri' => 'files/test-payslip-uri'],
-            ], 200),
-            'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
-                'candidates' => [
-                    [
-                        'content' => [
-                            'parts' => [
-                                [
-                                    'text' => json_encode([
-                                        [
-                                            'period_start' => '2026-01-01',
-                                            'period_end' => '2026-01-15',
-                                            'pay_date' => '2026-01-20',
-                                            'earnings_gross' => 5000,
-                                            'earnings_net_pay' => 4000,
-                                        ],
-                                    ]),
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ], 200),
-            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
-        ]);
-
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslip.pdf', 100, 'application/pdf'),
-            ],
-        ]);
-
-        $response->assertOk();
-        $response->assertJsonPath('success', true);
-        $response->assertJsonPath('successful_imports', 1);
+        $response->assertStatus(201);
+        $response->assertJsonPath('result.status', 'imported');
+        $response->assertJsonPath('job_status', 'imported');
 
         $this->assertDatabaseHas('fin_payslip', [
             'uid' => $user->id,
@@ -97,107 +101,107 @@ class FinancePayslipImportTest extends TestCase
             'pay_date' => '2026-01-20',
             'earnings_gross' => 5000,
             'earnings_net_pay' => 4000,
+            'employment_entity_id' => $entity->id,
             'ps_is_estimated' => true,
+            'ps_comment' => 'Reviewed before import',
         ]);
     }
 
-    public function test_import_payslips_handles_gemini_rate_limit(): void
+    public function test_confirm_rejects_other_users_job(): void
     {
-        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $job = $this->makeJob($owner);
+        $result = $this->makeResult($job, $this->payslipPayload());
 
-        Http::fake([
-            'https://generativelanguage.googleapis.com/upload/v1beta/files*' => Http::response([
-                'file' => ['uri' => 'files/test-uri'],
-            ], 200),
-            'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
-                'error' => ['code' => 429, 'message' => 'Rate limit exceeded'],
-            ], 429),
-            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
-        ]);
+        $response = $this->actingAs($other)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$result->id}/confirm",
+            $this->payslipPayload(),
+        );
 
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslip.pdf', 100, 'application/pdf'),
-            ],
-        ]);
-
-        $response->assertStatus(429);
-        $response->assertJson(['error' => 'API rate limit exceeded. Please wait and try again.']);
+        $response->assertStatus(404);
     }
 
-    public function test_import_payslips_handles_gemini_api_error(): void
+    public function test_confirm_rejects_already_imported_result(): void
     {
-        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
+        $user = User::factory()->create();
+        $job = $this->makeJob($user);
+        $result = $this->makeResult($job, $this->payslipPayload());
+        $result->update(['status' => 'imported']);
 
-        Http::fake([
-            'https://generativelanguage.googleapis.com/upload/v1beta/files*' => Http::response([
-                'file' => ['uri' => 'files/test-uri'],
-            ], 200),
-            'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
-                'error' => ['code' => 500, 'message' => 'Internal server error'],
-            ], 500),
-            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
-        ]);
+        $response = $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$result->id}/confirm",
+            $this->payslipPayload(),
+        );
 
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslip.pdf', 100, 'application/pdf'),
-            ],
-        ]);
+        $response->assertStatus(409)
+            ->assertJson(['error' => 'This result has already been imported.']);
+    }
+
+    public function test_confirm_validates_employment_entity_id_ownership(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $foreignEntity = $this->createEmploymentEntity($other->id, 'Foreign Job');
+        $job = $this->makeJob($user);
+        $result = $this->makeResult($job, $this->payslipPayload());
+
+        $response = $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$result->id}/confirm",
+            ['employment_entity_id' => $foreignEntity->id],
+        );
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['employment_entity_id']);
+        $this->assertDatabaseCount('fin_payslip', 0);
+    }
+
+    public function test_job_stays_parsed_until_all_results_are_reviewed(): void
+    {
+        $user = User::factory()->create();
+        $job = $this->makeJob($user);
+        $first = $this->makeResult($job, $this->payslipPayload([
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-15',
+            'pay_date' => '2026-01-20',
+        ]), 0);
+        $second = $this->makeResult($job, $this->payslipPayload([
+            'period_start' => '2026-01-16',
+            'period_end' => '2026-01-31',
+            'pay_date' => '2026-02-05',
+        ]), 1);
+
+        $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$first->id}/confirm",
+            [],
+        )->assertStatus(201);
+
+        $this->assertEquals('parsed', $job->refresh()->status);
+        $this->assertEquals(1, FinPayslips::count());
+
+        $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$second->id}/skip"
+        )->assertOk()
+            ->assertJsonPath('job_status', 'imported');
+
+        $this->assertEquals('imported', $job->refresh()->status);
+        $this->assertEquals('skipped', $second->refresh()->status);
+        $this->assertEquals(1, FinPayslips::count());
+    }
+
+    public function test_skip_marks_result_skipped_without_creating_payslip(): void
+    {
+        $user = User::factory()->create();
+        $job = $this->makeJob($user);
+        $result = $this->makeResult($job, $this->payslipPayload());
+
+        $response = $this->actingAs($user)->postJson(
+            "/api/payslips/genai-import/{$job->id}/results/{$result->id}/skip"
+        );
 
         $response->assertOk();
-        $response->assertJsonPath('success', true);
-        $response->assertJsonPath('successful_imports', 0);
-        $response->assertJsonPath('failed_imports', 1);
-    }
-
-    public function test_import_payslips_handles_multiple_payslips_in_single_file(): void
-    {
-        $user = User::factory()->create(['gemini_api_key' => 'fake-key']);
-
-        Http::fake([
-            'https://generativelanguage.googleapis.com/upload/v1beta/files*' => Http::response([
-                'file' => ['uri' => 'files/test-multi-uri'],
-            ], 200),
-            'https://generativelanguage.googleapis.com/v1beta/files/*' => Http::response(null, 204),
-            'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent*' => Http::response([
-                'candidates' => [
-                    [
-                        'content' => [
-                            'parts' => [
-                                [
-                                    'text' => json_encode([
-                                        [
-                                            'period_start' => '2026-01-01',
-                                            'period_end' => '2026-01-15',
-                                            'pay_date' => '2026-01-20',
-                                            'earnings_gross' => 5000,
-                                            'earnings_net_pay' => 4000,
-                                        ],
-                                        [
-                                            'period_start' => '2026-01-16',
-                                            'period_end' => '2026-01-31',
-                                            'pay_date' => '2026-02-05',
-                                            'earnings_gross' => 5200,
-                                            'earnings_net_pay' => 4100,
-                                        ],
-                                    ]),
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ], 200),
-        ]);
-
-        $response = $this->actingAs($user)->postJson('/api/payslips/import', [
-            'files' => [
-                UploadedFile::fake()->create('payslips-jan.pdf', 100, 'application/pdf'),
-            ],
-        ]);
-
-        $response->assertOk();
-        $response->assertJsonPath('successful_imports', 2);
-        $this->assertDatabaseCount('fin_payslip', 2);
+        $response->assertJsonPath('result.status', 'skipped');
+        $response->assertJsonPath('job_status', 'imported');
+        $this->assertDatabaseCount('fin_payslip', 0);
     }
 }
