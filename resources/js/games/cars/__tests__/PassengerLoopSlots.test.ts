@@ -20,7 +20,7 @@ describe('passenger loop slots', () => {
     expect(plan.feederPassengers.map((item) => item.id)).toEqual(['p4'])
   })
 
-  it('keeps a boarded passenger slot in place and refills it with a delayed feeder entry', () => {
+  it('shifts later loop passengers forward when an earlier slot is vacated and lands the new feeder passenger in the back slot', () => {
     const slots: PassengerLoopSlot[] = [
       { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
       { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
@@ -37,13 +37,16 @@ describe('passenger loop slots', () => {
       speed: 1,
     })
 
-    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p4', 'p3'])
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', 'p4'])
     expect(plan.slots.map((slot) => slot.offset)).toEqual([-0.34, -0.68, -1.02])
+    const p3Assignment = plan.assignments.find((assignment) => assignment.passenger.id === 'p3')
+    expect(p3Assignment?.shift).toEqual({ previousOffset: -1.02, startedAt: 20 })
+    expect(p3Assignment?.entryStartedAt).toBeNull()
     expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p4')?.entryStartedAt).toBeGreaterThan(20)
     expect(plan.feederPassengers).toEqual([])
   })
 
-  it('leaves an empty moving slot when no feeder passenger is available', () => {
+  it('leaves the trailing slot empty when no feeder passenger is available', () => {
     const slots: PassengerLoopSlot[] = [
       { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
       { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
@@ -60,8 +63,10 @@ describe('passenger loop slots', () => {
       speed: 1,
     })
 
-    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', null, 'p3'])
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', null])
     expect(plan.slots.map((slot) => slot.offset)).toEqual([-0.34, -0.68, -1.02])
+    expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p3')?.shift)
+      .toEqual({ previousOffset: -1.02, startedAt: 20 })
   })
 })
 
