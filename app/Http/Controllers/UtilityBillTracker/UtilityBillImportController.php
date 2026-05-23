@@ -145,6 +145,12 @@ class UtilityBillImportController extends Controller
             ->where('job_type', 'utility_bill')
             ->firstOrFail();
 
+        $context = $job->getContextArray();
+        $contextAccountId = (int) ($context['utility_account_id'] ?? 0);
+        if ($contextAccountId !== $accountId) {
+            return response()->json(['error' => 'Job does not belong to this utility account.'], 403);
+        }
+
         $result = GenAiImportResult::query()
             ->where('id', $resultId)
             ->where('job_id', $job->id)

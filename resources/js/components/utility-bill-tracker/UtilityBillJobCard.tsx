@@ -93,7 +93,7 @@ function toNumberOrNull(value: string): number | null {
 }
 
 export function UtilityBillJobCard({ jobId, filename, accountId, accountType, onResultFinalized }: UtilityBillJobCardProps) {
-  const { status, results, error, estimatedWait } = useGenAiJobPolling(jobId)
+  const { status, results, error, estimatedWait, refetch } = useGenAiJobPolling(jobId)
   const [busyResultId, setBusyResultId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
@@ -132,6 +132,10 @@ export function UtilityBillJobCard({ jobId, filename, accountId, accountType, on
         `/api/utility-bill-tracker/accounts/${accountId}/bills/genai-import/${jobId}/results/${result.id}/confirm`,
         body,
       )
+      // Polling has already stopped at `parsed`, so manually refetch to pull the updated
+      // result.status from the server. Otherwise the row stays visible as pending_review
+      // and the next click would hit a 409.
+      refetch()
       onResultFinalized()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to import bill')
@@ -148,6 +152,7 @@ export function UtilityBillJobCard({ jobId, filename, accountId, accountType, on
         `/api/utility-bill-tracker/accounts/${accountId}/bills/genai-import/${jobId}/results/${result.id}/skip`,
         {},
       )
+      refetch()
       onResultFinalized()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to skip result')
@@ -161,6 +166,7 @@ export function UtilityBillJobCard({ jobId, filename, accountId, accountType, on
     setActionError(null)
     try {
       await fetchWrapper.post(`/api/genai/import/jobs/${jobId}/retry`, {})
+      refetch()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to retry job')
     } finally {

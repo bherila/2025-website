@@ -255,6 +255,34 @@ class UtilityBillImportTest extends TestCase
         $this->assertDatabaseCount('utility_bill', 0);
     }
 
+    public function test_skip_rejects_when_context_account_mismatch(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->makeAccount($user);
+        $job = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'utility_bill',
+            'file_hash' => 'hash-skip-mismatch',
+            'original_filename' => 'bill.pdf',
+            's3_path' => "genai-import/{$user->id}/uuid/bill.pdf",
+            'file_size_bytes' => 1024,
+            'context_json' => json_encode([
+                'account_type' => 'General',
+                'utility_account_id' => $account->id + 99,
+                'file_count' => 1,
+            ]),
+            'status' => 'parsed',
+        ]);
+        $result = $this->makeResult($job, []);
+
+        $response = $this->actingAs($user)->postJson(
+            "/api/utility-bill-tracker/accounts/{$account->id}/bills/genai-import/{$job->id}/results/{$result->id}/skip"
+        );
+
+        $response->assertStatus(403);
+        $this->assertEquals('pending_review', $result->refresh()->status);
+    }
+
     public function test_skip_rejects_already_imported_result(): void
     {
         $user = User::factory()->create();

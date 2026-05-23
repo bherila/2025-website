@@ -541,12 +541,6 @@ parameters:
 			path: app/Http/Controllers/UtilityBillTracker/UtilityBillApiController.php
 
 		-
-			message: '#^Negated boolean expression is always false\.$#'
-			identifier: booleanNot.alwaysFalse
-			count: 1
-			path: app/Http/Controllers/UtilityBillTracker/UtilityBillImportController.php
-
-		-
 			message: '#^Cannot call method copy\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
