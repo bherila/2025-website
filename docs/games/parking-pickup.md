@@ -103,6 +103,7 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 ## Level Generation
 
 - Levels are randomly generated from a deterministic seed for the level number.
+- The playfield is a 20×14 grid. Car counts and the passenger queue scale with level so the field stays densely packed and the queue stays long even at high levels: level 1 starts at roughly 15 cars and the cap grows by ~2.4 per level up to 60. The hidden-garage tier scales similarly so the visible field stays manageable while reserve cars wait behind it.
 - Generated levels must be provably winnable without power-ups or opening extra regular parking spaces.
 - Generation is validated in two stages: first the board solver proves that every car can physically leave the field, then a parking/queue simulator proves that a scripted solution can finish with only the four starting regular slots.
 - A target solver order is computed during generation and resequenced so later recovery tools can still reason from the same board order.

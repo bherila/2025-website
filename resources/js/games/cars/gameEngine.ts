@@ -224,8 +224,8 @@ export function generateLevel(
   } = {},
 ): GameState {
   const rng = createRng(seed)
-  const totalCars = Math.min(9 + Math.floor(level * 1.8), 40)
-  const tunnelStacks = Math.min(Math.max(0, Math.floor((level - 1) / 2)), 6)
+  const totalCars = Math.min(13 + Math.floor(level * 2.4), 60)
+  const tunnelStacks = Math.min(Math.max(0, Math.floor((level - 1) / 2)), 9)
   const maxAttempts = 180
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1872,7 +1872,7 @@ function findFreeGaragePlacement(
   occupied: Set<string>,
   rng: RandomGenerator,
 ): { garagePosition: GridPosition, position: GridPosition } | null {
-  for (let attempt = 0; attempt < 160; attempt += 1) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
     const position = randomGarageSpawnPosition(length, direction, rng)
     const garagePosition = garagePositionForCar({ direction, length, position })
     if (!garagePosition) {
@@ -1939,7 +1939,7 @@ function findFreePlacement(
 ): GridPosition | null {
   const bounds = placementBounds(length, direction)
 
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const position = {
       x: rng.int(0, bounds.maxX),
       y: rng.int(0, bounds.maxY),
