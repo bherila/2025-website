@@ -16,6 +16,7 @@ use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\GenAiFileHelper;
 use App\Services\PHR\Import\PhrStructuredDataImporter;
+use Bherila\GenAiLaravel\ContentBlock;
 use Bherila\GenAiLaravel\Contracts\GenAiClient;
 use Bherila\GenAiLaravel\Exceptions\GenAiFatalException;
 use Bherila\GenAiLaravel\Exceptions\GenAiRateLimitException;
@@ -90,26 +91,20 @@ class ParseImportJob implements ShouldQueue
         }
 
         $fileStream = null;
+        $textOnlyJob = $job->job_type === 'class_action_email';
         try {
             $context = $job->getContextArray();
 
-            if ($job->job_type === 'class_action_email') {
+            if ($textOnlyJob) {
+                // Pasted-text jobs (class_action_email) are sent as plain text in the prompt —
+                // no document/file attachment, because Anthropic's inline document blocks only
+                // accept application/pdf (text/plain is rejected as invalid_request_error).
                 $pastedText = trim((string) ($context['pasted_text'] ?? ''));
                 if ($pastedText === '') {
                     $job->markFailed('Pasted input text is empty.');
 
                     return;
                 }
-
-                $fileStream = fopen('php://temp', 'r+');
-                if (! is_resource($fileStream)) {
-                    $job->markFailed('Unable to allocate memory stream for pasted input.');
-
-                    return;
-                }
-                fwrite($fileStream, $pastedText);
-                rewind($fileStream);
-                $fileSize = strlen($pastedText);
             } else {
                 // Stream file from S3 to avoid buffering large uploads fully into memory
                 $fileStream = Storage::disk('s3')->readStream($job->s3_path);
@@ -120,13 +115,13 @@ class ParseImportJob implements ShouldQueue
                 }
 
                 $fileSize = (int) (Storage::disk('s3')->size($job->s3_path) ?: 0);
-            }
 
-            // Guard against oversized inline-fallback payloads for providers without a File API.
-            if ($fileSize > 0 && ! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
-                $job->markFailed('File exceeds the size limit for the configured AI provider.');
+                // Guard against oversized inline-fallback payloads for providers without a File API.
+                if ($fileSize > 0 && ! GenAiFileHelper::withinSizeLimit($client, $fileSize)) {
+                    $job->markFailed('File exceeds the size limit for the configured AI provider.');
 
-                return;
+                    return;
+                }
             }
 
             // Build prompt
@@ -153,14 +148,21 @@ class ParseImportJob implements ShouldQueue
                 'ai_model' => $client->model(),
             ]);
 
-            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError] = $this->callGenerateContent(
-                $client,
-                $dispatcher,
-                $job->job_type,
-                $fileStream,
-                $job->mime_type ?? ($job->job_type === 'class_action_email' ? 'text/plain' : 'application/pdf'),
-                $prompt
-            );
+            ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError] = $textOnlyJob
+                ? $this->callGenerateContentTextOnly(
+                    $client,
+                    $dispatcher,
+                    $job->job_type,
+                    $prompt,
+                )
+                : $this->callGenerateContent(
+                    $client,
+                    $dispatcher,
+                    $job->job_type,
+                    $fileStream,
+                    $job->mime_type ?? 'application/pdf',
+                    $prompt,
+                );
 
             $jobUpdates = [];
             if ($rawResponse !== null) {
@@ -284,6 +286,46 @@ class ParseImportJob implements ShouldQueue
         }
 
         [$inputTokens, $outputTokens] = $this->extractTokenUsage(is_array($response) ? $response : []);
+
+        return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError];
+    }
+
+    /**
+     * Send a text-only prompt to the AI provider (no file/document attachment) and extract
+     * structured data. Used by job types whose entire input is embedded in the prompt — e.g.
+     * class_action_email, whose pasted email body is interpolated by the prompt template.
+     *
+     * @return array{data: array<string, mixed>|null, raw_response: string|null, input_tokens: int|null, output_tokens: int|null, parse_error: string|null}
+     */
+    private function callGenerateContentTextOnly(
+        GenAiClient $client,
+        GenAiJobDispatcherService $dispatcher,
+        string $jobType,
+        string $prompt,
+    ): array {
+        $toolConfig = $dispatcher->buildToolConfig($jobType, $prompt);
+
+        $response = $client->converse('', [
+            [
+                'role' => 'user',
+                'content' => [ContentBlock::text($prompt)],
+            ],
+        ], $toolConfig ?: null);
+
+        $rawResponse = json_encode($response);
+
+        $data = $dispatcher->extractGenerateContentData($jobType, $response, $client);
+        $parseError = null;
+
+        if ($data === null) {
+            $parseError = $dispatcher->describeResponseExtractionFailure($response, $client);
+            Log::error('Failed to decode structured response from AI provider', [
+                'response' => $rawResponse,
+                'parse_error' => $parseError,
+            ]);
+        }
+
+        [$inputTokens, $outputTokens] = $this->extractTokenUsage($response);
 
         return ['data' => $data, 'raw_response' => $rawResponse, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens, 'parse_error' => $parseError];
     }

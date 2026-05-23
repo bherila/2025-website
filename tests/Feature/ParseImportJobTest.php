@@ -6,6 +6,10 @@ use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
+use App\Models\UserAiConfiguration;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class ParseImportJobTest extends TestCase
@@ -304,5 +308,91 @@ class ParseImportJobTest extends TestCase
         $this->assertSame(42.5, $decoded['expected_payment_amount']);
         $this->assertSame(['claim_id' => 0.92], $decoded['confidence']);
         $this->assertArrayNotHasKey('unknown', $decoded);
+    }
+
+    /**
+     * Regression: Anthropic rejects inline document blocks whose media_type isn't application/pdf
+     * (e.g. text/plain → invalid_request_error). Pasted-text jobs must send the email body inside
+     * the prompt as a plain text content block, never as a base64 document attachment.
+     */
+    public function test_class_action_email_sends_text_only_request_to_anthropic(): void
+    {
+        Mail::fake();
+        Http::fake([
+            'api.anthropic.com/v1/messages' => Http::response([
+                'id' => 'msg_test',
+                'type' => 'message',
+                'role' => 'assistant',
+                'content' => [[
+                    'type' => 'text',
+                    'text' => json_encode([
+                        'name' => 'LastPass Data Security Incident Settlement',
+                        'claim_id' => 'TEST123',
+                        'pin' => '4321',
+                        'administrator' => null,
+                        'defendant' => null,
+                        'class_action_url' => null,
+                        'notification_received_on' => null,
+                        'claim_submitted_on' => null,
+                        'claim_deadline' => '2026-07-02',
+                        'final_approval_hearing_on' => '2026-07-14',
+                        'payment_election_submitted_on' => null,
+                        'expected_payment_on' => null,
+                        'expected_payment_amount' => null,
+                        'confidence' => ['claim_id' => 0.95],
+                        'notes' => null,
+                    ]),
+                ]],
+                'stop_reason' => 'end_turn',
+                'usage' => ['input_tokens' => 1200, 'output_tokens' => 80],
+            ]),
+        ]);
+
+        $user = $this->createUser(['gemini_api_key' => null]);
+        UserAiConfiguration::factory()->active()->for($user)->anthropic()->create([
+            'api_key' => 'sk-ant-test',
+        ]);
+
+        $importJob = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'class_action_email',
+            'file_hash' => str_repeat('c', 64),
+            'original_filename' => 'pasted-import.txt',
+            's3_path' => 'inline://paste/abc',
+            'mime_type' => 'text/plain',
+            'file_size_bytes' => 42,
+            'context_json' => json_encode(['pasted_text' => 'Example email body with claim id TEST123 and PIN 4321.']),
+            'status' => 'pending',
+        ]);
+
+        (new ParseImportJob($importJob->id))->handle(new GenAiJobDispatcherService);
+
+        $importJob->refresh();
+        $this->assertSame('parsed', $importJob->status, 'job error: '.$importJob->error_message);
+        $this->assertSame('anthropic', $importJob->ai_provider);
+
+        $result = GenAiImportResult::query()->where('job_id', $importJob->id)->firstOrFail();
+        $decoded = json_decode($result->result_json, true);
+        $this->assertSame('TEST123', $decoded['claim_id']);
+        $this->assertSame('2026-07-02', $decoded['claim_deadline']);
+
+        Http::assertSent(function (Request $request): bool {
+            if (! str_contains($request->url(), 'api.anthropic.com/v1/messages')) {
+                return false;
+            }
+
+            $payload = $request->data();
+            $this->assertIsArray($payload['messages'] ?? null);
+            $this->assertCount(1, $payload['messages']);
+
+            $content = $payload['messages'][0]['content'] ?? [];
+            $this->assertIsArray($content);
+            // Must be a single text block — never a document/base64 attachment with text/plain.
+            foreach ($content as $block) {
+                $this->assertSame('text', $block['type'] ?? null, 'unexpected content block type sent to Anthropic: '.json_encode($block));
+            }
+
+            return true;
+        });
     }
 }
