@@ -18,15 +18,23 @@ function formatChartValue(v: number, mode: ChartMode): string {
   return `${v.toLocaleString()} sh`
 }
 
+// Parse a YYYY-MM-DD calendar string as a local Date. Avoids `new Date('YYYY-MM-DD')`,
+// which is interpreted as UTC and shifts the day back in negative-offset time zones.
+function parseLocalDate(d: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
+  if (!m) return null
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+
 function formatAxisDate(d: string): string {
-  const date = new Date(d)
-  if (isNaN(date.getTime())) return d
+  const date = parseLocalDate(d)
+  if (!date) return d
   return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
 function formatTooltipDate(d: string): string {
-  const date = new Date(d)
-  if (isNaN(date.getTime())) return d
+  const date = parseLocalDate(d)
+  if (!date) return d
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
