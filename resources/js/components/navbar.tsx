@@ -2,10 +2,11 @@ import { ChevronDown, Menu, X } from 'lucide-react';
 import * as React from 'react';
 import { useRef, useState } from 'react';
 
-import type { NavItem } from '@/client-management/types/hydration-schemas';
+import type { AppInitialData, NavDropdownChild, NavItem } from '@/client-management/types/hydration-schemas';
 import { useTheme } from '@/hooks/useTheme';
 
 import { NavDesktopDropdown } from './nav/NavDesktopDropdown';
+import { NavDropdownChildren } from './nav/NavDropdownChildren';
 import { NavMobileDropdown } from './nav/NavMobileDropdown';
 import { safeHref } from './nav/safeHref';
 import { ThemeToggle } from './nav/ThemeToggle';
@@ -14,14 +15,19 @@ type NavbarProps = {
   authenticated: boolean;
   isAdmin?: boolean;
   navItems?: NavItem[];
-  currentUser?: { id: number; name: string; email: string; user_role?: string | null; last_login_date?: string | null } | null;
+  accountMenuItems?: NavDropdownChild[];
+  currentUser?: AppInitialData['currentUser'];
 };
 
-export default function Navbar({ authenticated, navItems = [], currentUser }: NavbarProps) {
+export default function Navbar({ authenticated, navItems = [], accountMenuItems = [], currentUser }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const initials = currentUser && currentUser.name
     ? currentUser.name.trim().split(/\s+/).map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
     : '';
+  const defaultAccountMenuItems: NavDropdownChild[] = authenticated
+    ? [{ type: 'link', label: 'User Settings', href: '/dashboard' }]
+    : [];
+  const resolvedAccountMenuItems = accountMenuItems.length > 0 ? accountMenuItems : defaultAccountMenuItems;
 
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -110,9 +116,7 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             {/* Account section in mobile menu */}
             {authenticated && (
               <div className='pt-2 border-t border-border'>
-                <a className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-foreground' href='/dashboard'>
-                  User Settings
-                </a>
+                <NavDropdownChildren items={resolvedAccountMenuItems} mobile />
                 <a
                   className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-base text-destructive'
                   href='/logout'
@@ -166,15 +170,9 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
             {userMenuOpen && (
               <div
                 role='menu'
-                className='absolute right-0 z-50 mt-2 w-48 rounded-md border border-border bg-popover text-popover-foreground shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
+                className='absolute right-0 z-50 mt-2 w-64 rounded-md border border-border bg-popover text-popover-foreground shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-2'
               >
-                <a
-                  role='menuitem'
-                  className='block px-3 py-2 rounded hover:bg-accent hover:text-accent-foreground text-sm text-popover-foreground'
-                  href='/dashboard'
-                >
-                  User Settings
-                </a>
+                <NavDropdownChildren items={resolvedAccountMenuItems} />
                 <div className='my-1 border-t border-border' />
                 <a
                   role='menuitem'
@@ -184,16 +182,16 @@ export default function Navbar({ authenticated, navItems = [], currentUser }: Na
                 >
                   Sign out
                 </a>
-                <form
-                  ref={logoutFormRef}
-                  action='/logout'
-                  method='POST'
-                  className='hidden'
-                >
-                  <input type='hidden' name='_token' value={csrfToken} />
-                </form>
               </div>
             )}
+            <form
+              ref={logoutFormRef}
+              action='/logout'
+              method='POST'
+              className='hidden'
+            >
+              <input type='hidden' name='_token' value={csrfToken} />
+            </form>
           </div>
         ) : (
           <a href='/login' className='px-3 py-1.5 rounded border border-border hover:bg-accent text-sm text-navbar-foreground'>Sign in</a>

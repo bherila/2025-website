@@ -6,7 +6,7 @@ use Tests\TestCase;
 
 class NavbarFinancialPlanningTest extends TestCase
 {
-    public function test_logged_out_nav_includes_public_financial_planning_dropdown(): void
+    public function test_guest_nav_groups_games_and_public_finance_tools(): void
     {
         $this->withoutVite();
 
@@ -14,58 +14,114 @@ class NavbarFinancialPlanningTest extends TestCase
 
         $response->assertOk();
 
-        $navItems = $this->navItemsFromResponse($response->getContent());
-        $this->assertSame(['Recipes', 'Projects', 'Financial Planning', 'Tools'], array_column($navItems, 'label'));
+        $payload = $this->payloadFromResponse($response->getContent());
+        $navItems = $payload['navItems'];
+        $this->assertSame(['Recipes', 'Projects', 'Finance', 'Tools'], array_column($navItems, 'label'));
 
-        $financialPlanning = $this->navItemByLabel($navItems, 'Financial Planning');
-        $this->assertSame('dropdown', $financialPlanning['type']);
-        $tools = $this->navItemByLabel($navItems, 'Tools');
-        $this->assertNotContains('/phr', array_column($tools['items'], 'href'));
+        $projects = $this->navItemByLabel($navItems, 'Projects');
+        $this->assertSame('dropdown', $projects['type']);
         $this->assertSame([
-            '/financial-planning',
-            '/financial-planning/retirement-contribution-calculator',
-            '/financial-planning/rent-vs-buy',
-            '/financial-planning/roth-conversion',
-        ], array_column($financialPlanning['items'], 'href'));
-        $this->assertContains('Retirement Contribution Calculator', array_column($financialPlanning['items'], 'label'));
+            '/projects',
+            '/games/parking-pickup',
+            '/games/marble-sort',
+            '/tools/bingo',
+        ], array_column($projects['items'], 'href'));
+        $this->assertContains('Marble Sort', array_column($projects['items'], 'label'));
+
+        $finance = $this->navItemByLabel($navItems, 'Finance');
+        $this->assertSame('dropdown', $finance['type']);
+        $financeHrefs = array_column($finance['items'], 'href');
+        $this->assertContains('/tools/irs-f461', $financeHrefs);
+        $this->assertContains('/financial-planning/rent-vs-buy', $financeHrefs);
+        $this->assertNotContains('/finance/accounts', $financeHrefs);
+        $this->assertNotContains('/finance/tax-preview', $financeHrefs);
+
+        $tools = $this->navItemByLabel($navItems, 'Tools');
+        $toolHrefs = array_column($tools['items'], 'href');
+        $this->assertContains('/tools/license-manager', $toolHrefs);
+        $this->assertContains('/tools/address-labels', $toolHrefs);
+        $this->assertContains('/tools/markdown', $toolHrefs);
+        $this->assertNotContains('/tools/bingo', $toolHrefs);
+        $this->assertNotContains('/games/parking-pickup', $toolHrefs);
+        $this->assertNotContains('/tools/irs-f461', $toolHrefs);
+        $this->assertSame([], $payload['accountMenuItems']);
     }
 
-    public function test_logged_in_nav_keeps_finance_and_financial_planning_separate(): void
+    public function test_logged_in_nav_keeps_private_finance_and_utility_links_server_filtered(): void
     {
         $this->withoutVite();
-        $user = $this->createUser();
+        $user = $this->createUser(['id' => 2]);
 
         $response = $this->actingAs($user)->get('/');
 
         $response->assertOk();
 
-        $navItems = $this->navItemsFromResponse($response->getContent());
-        $this->assertSame(['Recipes', 'Projects', 'Finance', 'Financial Planning', 'Tools'], array_column($navItems, 'label'));
+        $payload = $this->payloadFromResponse($response->getContent());
+        $navItems = $payload['navItems'];
+        $this->assertSame(['Recipes', 'Projects', 'Finance', 'Tools'], array_column($navItems, 'label'));
 
         $finance = $this->navItemByLabel($navItems, 'Finance');
-        $financialPlanning = $this->navItemByLabel($navItems, 'Financial Planning');
-
         $this->assertSame('dropdown', $finance['type']);
-        $this->assertSame('dropdown', $financialPlanning['type']);
-        $this->assertContains('/finance/tax-preview', array_column($finance['items'], 'href'));
-        $this->assertContains('/financial-planning/rent-vs-buy', array_column($financialPlanning['items'], 'href'));
+        $financeHrefs = array_column($finance['items'], 'href');
+        $this->assertContains('/finance/accounts', $financeHrefs);
+        $this->assertContains('/finance/all-transactions', $financeHrefs);
+        $this->assertContains('/finance/tax-preview', $financeHrefs);
+        $this->assertContains('/utility-bill-tracker', $financeHrefs);
+        $this->assertContains('/tools/irs-f461', $financeHrefs);
+        $this->assertContains('/financial-planning/rent-vs-buy', $financeHrefs);
 
         $tools = $this->navItemByLabel($navItems, 'Tools');
-        $this->assertContains('/phr', array_column($tools['items'], 'href'));
+        $toolHrefs = array_column($tools['items'], 'href');
+        $this->assertContains('/phr', $toolHrefs);
+        $this->assertContains('/tools/class-action-tracker', $toolHrefs);
+        $this->assertNotContains('/admin/users', $toolHrefs);
+        $this->assertSame(['User Settings'], array_column($payload['accountMenuItems'], 'label'));
+    }
+
+    public function test_admin_links_are_hydrated_in_account_menu_not_main_nav(): void
+    {
+        $this->withoutVite();
+        $admin = $this->createAdminUser();
+
+        $response = $this->actingAs($admin)->get('/');
+
+        $response->assertOk();
+
+        $payload = $this->payloadFromResponse($response->getContent());
+        $navLabels = $this->nestedNavLabels($payload['navItems']);
+
+        $this->assertNotContains('User Management', $navLabels);
+        $this->assertNotContains('GenAI Jobs', $navLabels);
+        $this->assertNotContains('Tax Normalization Review', $navLabels);
+        $this->assertNotContains('Client Management', $navLabels);
+
+        $this->assertSame([
+            'User Settings',
+            'Admin',
+            'User Management',
+            'GenAI Jobs',
+            'Tax Normalization Review',
+            'Client Management',
+        ], array_column($payload['accountMenuItems'], 'label'));
+
+        $this->assertContains('/admin/users', array_column($payload['accountMenuItems'], 'href'));
+        $this->assertContains('/admin/genai-jobs', array_column($payload['accountMenuItems'], 'href'));
+        $this->assertContains('/admin/tax-normalization-review', array_column($payload['accountMenuItems'], 'href'));
+        $this->assertContains('/client/mgmt', array_column($payload['accountMenuItems'], 'href'));
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{navItems: array<int, array<string, mixed>>, accountMenuItems: array<int, array<string, mixed>>}
      */
-    private function navItemsFromResponse(string $html): array
+    private function payloadFromResponse(string $html): array
     {
         preg_match('/<script id="app-initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $html, $matches);
         $this->assertArrayHasKey(1, $matches);
 
-        /** @var array{navItems: array<int, array<string, mixed>>} $payload */
+        /** @var array{navItems: array<int, array<string, mixed>>, accountMenuItems: array<int, array<string, mixed>>} $payload */
         $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
 
-        return $payload['navItems'];
+        return $payload;
     }
 
     /**
@@ -81,5 +137,34 @@ class NavbarFinancialPlanningTest extends TestCase
         }
 
         $this->fail("Expected nav item [{$label}] to exist.");
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $navItems
+     * @return list<string>
+     */
+    private function nestedNavLabels(array $navItems): array
+    {
+        $labels = [];
+
+        foreach ($navItems as $navItem) {
+            if (isset($navItem['label']) && is_string($navItem['label'])) {
+                $labels[] = $navItem['label'];
+            }
+
+            $children = $navItem['items'] ?? [];
+
+            if (! is_array($children)) {
+                continue;
+            }
+
+            foreach ($children as $child) {
+                if (isset($child['label']) && is_string($child['label'])) {
+                    $labels[] = $child['label'];
+                }
+            }
+        }
+
+        return $labels;
     }
 }

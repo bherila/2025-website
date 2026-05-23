@@ -140,5 +140,6 @@ export const AppInitialDataSchema = z.object({
   clientCompanies: z.array(AppCompanySchema).optional(),
   currentUser: UserSchema.nullable().optional(),
   navItems: z.array(NavItemSchema).optional(),
+  accountMenuItems: z.array(NavDropdownChildSchema).optional(),
 })
 export type AppInitialData = z.infer<typeof AppInitialDataSchema>
