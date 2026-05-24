@@ -77,10 +77,8 @@ class K1LegacyTransformer
             'box4_guaranteed_payments_services' => '4',
             'box5_guaranteed_payments_capital' => '5',
             'box6_guaranteed_payments_total' => '6',
-            'box7_net_section_1231_gain' => '7',
-            'box8_other_income' => '8',
-            'box9_section_179_deduction' => '9a',
-            'box10_other_deductions' => '10',
+            'box7_net_section_1231_gain' => '10',
+            'box9_section_179_deduction' => '12',
         ];
         foreach ($boxMap as $legacyKey => $irsBox) {
             $val = $legacy[$legacyKey] ?? null;

@@ -79,9 +79,22 @@ class K1LegacyTransformerTest extends TestCase
     {
         $result = K1LegacyTransformer::transform($this->legacySample());
 
-        $this->assertSame('1020', $result['fields']['10']['value']);
+        $this->assertSame('0', $result['fields']['10']['value']);
         // Zero values are still mapped
         $this->assertSame('0', $result['fields']['1']['value']);
+    }
+
+    public function test_transform_maps_legacy_section_1231_and_section_179_semantically(): void
+    {
+        $legacy = $this->legacySample();
+        $legacy['box7_net_section_1231_gain'] = 1234;
+        $legacy['box9_section_179_deduction'] = 567;
+
+        $result = K1LegacyTransformer::transform($legacy);
+
+        $this->assertSame('1234', $result['fields']['10']['value']);
+        $this->assertSame('567', $result['fields']['12']['value']);
+        $this->assertArrayNotHasKey('9a', $result['fields']);
     }
 
     public function test_transform_maps_ownership_pct_to_field_j(): void
