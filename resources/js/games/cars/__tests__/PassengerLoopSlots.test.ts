@@ -1,5 +1,9 @@
 import type { Passenger } from '../gameEngine'
-import { type PassengerLoopSlot, planPassengerLoopSlots } from '../scene/passengerLoopSlots'
+import {
+  PASSENGER_LOOP_ENTRY_RETENTION_SECONDS,
+  type PassengerLoopSlot,
+  planPassengerLoopSlots,
+} from '../scene/passengerLoopSlots'
 import type { QueueLayout } from '../scene/sceneTypes'
 
 describe('passenger loop slots', () => {
@@ -68,6 +72,42 @@ describe('passenger loop slots', () => {
       .toBeGreaterThan(20)
     expect(plan.feederPassengers.map((item) => item.id)).toEqual(['p5'])
     expect(plan.feederLayoutPassengers.map((item) => item.id)).toEqual(['p4', 'p5'])
+  })
+
+  it('releases feeder head layout space after the loop-entry retention window', () => {
+    const slots: PassengerLoopSlot[] = [
+      { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
+      { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
+      { entryStartedAt: null, passengerId: 'p3', offset: -1.02 },
+    ]
+    const pendingPlan = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: 20,
+      passengers: [passenger('p1'), passenger('p3'), passenger('p4'), passenger('p5')],
+      phase: 0,
+      slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+    const p4Slot = pendingPlan.slots.find((slot) => slot.passengerId === 'p4')
+    if (p4Slot?.entryStartedAt === null || p4Slot?.entryStartedAt === undefined) {
+      throw new Error('Expected p4 to have a delayed feeder entry')
+    }
+
+    const releasedPlan = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: p4Slot.entryStartedAt + PASSENGER_LOOP_ENTRY_RETENTION_SECONDS + 0.01,
+      passengers: [passenger('p1'), passenger('p3'), passenger('p4'), passenger('p5')],
+      phase: 0,
+      slots: pendingPlan.slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+
+    expect(releasedPlan.feederPassengers.map((item) => item.id)).toEqual(['p5'])
+    expect(releasedPlan.feederLayoutPassengers.map((item) => item.id)).toEqual(['p5'])
   })
 
   it('leaves the trailing slot empty when no feeder passenger is available', () => {

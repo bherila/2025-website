@@ -2,7 +2,7 @@ import type { Passenger } from '../gameEngine'
 import { feederJoinProgress, passengerGateProgress } from './sceneGeometry'
 import type { QueueLayout } from './sceneTypes'
 
-const COMPLETED_ENTRY_RETENTION_SECONDS = 1.2
+export const PASSENGER_LOOP_ENTRY_RETENTION_SECONDS = 1.2
 
 export interface PassengerLoopSlot {
   entryStartedAt: number | null
@@ -204,5 +204,5 @@ function timeUntilFeederJoin(phase: number, offset: number, layout: QueueLayout,
 }
 
 function entryIsActive(startedAt: number | null, now: number): boolean {
-  return startedAt !== null && now - startedAt <= COMPLETED_ENTRY_RETENTION_SECONDS
+  return startedAt !== null && now - startedAt <= PASSENGER_LOOP_ENTRY_RETENTION_SECONDS
 }

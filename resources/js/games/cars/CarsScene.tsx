@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef } from 'react'
+import { type ReactElement, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 
 import {
@@ -30,7 +30,11 @@ import {
   passengerInstancePoolMeshes,
 } from './scene/builders/passengerMesh'
 import { createQueueTrack } from './scene/builders/queueTrack'
-import { type PassengerLoopSlot, planPassengerLoopSlots } from './scene/passengerLoopSlots'
+import {
+  PASSENGER_LOOP_ENTRY_RETENTION_SECONDS,
+  type PassengerLoopSlot,
+  planPassengerLoopSlots,
+} from './scene/passengerLoopSlots'
 import { fitCameraToGameplayBounds, gameplayBoundsForState } from './scene/sceneCamera'
 import {
   CAR_MOVE_SECONDS_PER_UNIT,
@@ -62,6 +66,14 @@ export function selectFeederPassengersForRendering(feederPassengers: Passenger[]
   return feederPassengers
 }
 
+const PASSENGER_QUEUE_REFRESH_EPSILON_SECONDS = 0.03
+
+export function passengerQueueRefreshAtForEntry(entry: NonNullable<PassengerRenderItem['entry']>): number {
+  return entry.startedAt
+    + Math.max(entry.duration, PASSENGER_LOOP_ENTRY_RETENTION_SECONDS)
+    + PASSENGER_QUEUE_REFRESH_EPSILON_SECONDS
+}
+
 interface CarsSceneProps {
   blockedCarAttempt: { carId: string, nonce: number } | null
   colorblindMode: boolean
@@ -79,6 +91,7 @@ export function CarsScene({
   onCarClick,
   onPassengerGate,
 }: CarsSceneProps): ReactElement {
+  const [dynamicSceneRefreshKey, setDynamicSceneRefreshKey] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -94,6 +107,7 @@ export function CarsScene({
   const passengerOffsetsRef = useRef<Map<string, number>>(new Map())
   const passengerGateCyclesRef = useRef<Map<string, number>>(new Map())
   const passengerGateHoldsRef = useRef<Map<string, PassengerGateHold>>(new Map())
+  const passengerQueueRefreshAtRef = useRef<number | null>(null)
   const feederPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
   const fieldCarMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
@@ -227,6 +241,10 @@ export function CarsScene({
         onPassengerGateRef.current,
         passengerGateHoldsRef.current,
       )
+      if (passengerQueueRefreshAtRef.current !== null && now > passengerQueueRefreshAtRef.current) {
+        passengerQueueRefreshAtRef.current = null
+        setDynamicSceneRefreshKey((current) => current + 1)
+      }
       renderer.render(scene, camera)
       frameId = window.requestAnimationFrame(animate)
     }
@@ -253,6 +271,7 @@ export function CarsScene({
       passengerLoopSlotsRef.current = []
       boardingPassengersRef.current = []
       passengerGateHolds.clear()
+      passengerQueueRefreshAtRef.current = null
       fieldCarMeshes.clear()
       passengerGateCycles.clear()
       movingCarsRef.current = []
@@ -272,6 +291,7 @@ export function CarsScene({
       passengerLoopSlotsRef.current = []
       passengerGateCyclesRef.current.clear()
       passengerGateHoldsRef.current.clear()
+      passengerQueueRefreshAtRef.current = null
       feederPositionsRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
@@ -343,7 +363,7 @@ export function CarsScene({
     for (const [id, mesh] of retainedFieldCarMeshes) {
       fieldCarMeshesRef.current.set(id, mesh)
     }
-    buildDynamicScene(
+    passengerQueueRefreshAtRef.current = buildDynamicScene(
       dynamicGroup,
       state,
       previousStateRef.current,
@@ -370,7 +390,7 @@ export function CarsScene({
       rendererResizeRef.current?.()
     }
     previousStateRef.current = state
-  }, [blockedCarAttempt, colorblindMode, state])
+  }, [blockedCarAttempt, colorblindMode, dynamicSceneRefreshKey, state])
 
   return (
     <div
@@ -430,7 +450,7 @@ function buildDynamicScene(
   movingCars: MovingCarRenderItem[],
   colorblindMode: boolean,
   feederPositions: Map<string, THREE.Vector3>,
-): void {
+): number | null {
   const activeParkingCarIds = new Set(
     movingCars
       .filter((car) => car.movementKind === 'parking' && car.carId)
@@ -495,6 +515,7 @@ function buildDynamicScene(
   }
   const spacing = passengerSpacing()
   const now = performance.now() / 1000
+  let nextPassengerQueueRefreshAt: number | null = null
   const loopPlan = planPassengerLoopSlots({
     capacity: loopPassengerCapacity(state),
     layout: queueLayout,
@@ -529,6 +550,7 @@ function buildDynamicScene(
     let entry: PassengerRenderItem['entry'] | null = null
     if (entryStartedAt !== null && sourcePassengers) {
       entry = createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
+      nextPassengerQueueRefreshAt = earlierRefreshAt(nextPassengerQueueRefreshAt, passengerQueueRefreshAtForEntry(entry))
     } else if (shift) {
       const from = queuePosition(passengerPhase + shift.previousOffset, queueLayout)
       entry = {
@@ -592,4 +614,10 @@ function buildDynamicScene(
     feederPositions.set(passenger.id, target.clone())
     passengers.push(item)
   }
+
+  return nextPassengerQueueRefreshAt
+}
+
+function earlierRefreshAt(current: number | null, candidate: number): number {
+  return current === null ? candidate : Math.min(current, candidate)
 }
