@@ -11,7 +11,7 @@ describe('readParkingPickupVisualTestOptions', () => {
     expect(options).toEqual({
       colorblind: null,
       enabled: false,
-      hud: 'normal',
+      hud: 'compact',
       level: null,
       reducedMotion: false,
       seed: null,
@@ -50,10 +50,11 @@ describe('readParkingPickupVisualTestOptions', () => {
     expect(readParkingPickupVisualTestOptions('?visualTest=1&level=abc').level).toBeNull()
   })
 
-  it('only treats hud=compact as compact', () => {
+  it('defaults to compact and only treats hud=normal as normal', () => {
+    expect(readParkingPickupVisualTestOptions('?visualTest=1&hud=normal').hud).toBe('normal')
     expect(readParkingPickupVisualTestOptions('?visualTest=1&hud=compact').hud).toBe('compact')
-    expect(readParkingPickupVisualTestOptions('?visualTest=1&hud=expanded').hud).toBe('normal')
-    expect(readParkingPickupVisualTestOptions('?visualTest=1').hud).toBe('normal')
+    expect(readParkingPickupVisualTestOptions('?visualTest=1&hud=expanded').hud).toBe('compact')
+    expect(readParkingPickupVisualTestOptions('?visualTest=1').hud).toBe('compact')
   })
 
   it('only treats reducedMotion=1 as enabled', () => {

@@ -22,7 +22,7 @@ The harness is activated only when `visualTest=1` is present. The query string i
 | `visualTest`    | yes      | `1`                   | Activates the harness. Any other value is a no-op.                     |
 | `level`         | yes      | integer ≥ 1           | Loads that level directly via `generateLevel()`.                       |
 | `seed`          | no       | any string            | Reserved for future use. `generateLevel(level)` is already deterministic. |
-| `hud`           | no       | `compact` / `normal`  | `compact` keeps the mobile stats overlay collapsed (default behaviour). |
+| `hud`           | no       | `compact` / `normal`  | `compact` (default) keeps the mobile stats overlay collapsed; `normal` initialises it expanded. |
 | `reducedMotion` | no       | `1`                   | Reserved for future use. CSS animation-disable is already handled by Playwright's `use.animations`. |
 | `colorblind`    | no       | `1` / `0`             | Forces colorblind mode on or off, overriding stored preference.        |
 

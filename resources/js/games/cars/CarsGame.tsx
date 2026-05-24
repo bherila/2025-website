@@ -49,7 +49,13 @@ export function CarsGame(): ReactElement {
   })
   const [vipSelectionActive, setVipSelectionActive] = useState(false)
   const [blockedCarAttempt, setBlockedCarAttempt] = useState<{ carId: string, nonce: number } | null>(null)
-  const [statsExpanded, setStatsExpanded] = useState(false)
+  const [statsExpanded, setStatsExpanded] = useState(() => {
+    if (visualTestOptions.enabled) {
+      return visualTestOptions.hud === 'normal'
+    }
+
+    return false
+  })
   const [tutorialOpen, setTutorialOpen] = useState(() => {
     if (visualTestOptions.enabled) {
       return false

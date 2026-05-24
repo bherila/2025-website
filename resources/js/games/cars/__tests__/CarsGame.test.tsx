@@ -91,4 +91,22 @@ describe('CarsGame', () => {
 
     expect(window.localStorage.getItem(LEVEL_SNAPSHOT_STORAGE_KEY)).toBe(savedSnapshot)
   })
+
+  it('expands the mobile stats overlay when visualTest hud=normal', () => {
+    window.history.replaceState(null, '', '/?visualTest=1&level=1&hud=normal')
+
+    render(<CarsGame />)
+
+    const expandable = screen.getByText('Total Score').parentElement?.parentElement
+    expect(expandable).not.toHaveClass('hidden')
+  })
+
+  it('keeps the mobile stats overlay collapsed when visualTest hud is absent', () => {
+    window.history.replaceState(null, '', '/?visualTest=1&level=1')
+
+    render(<CarsGame />)
+
+    const expandable = screen.getByText('Total Score').parentElement?.parentElement
+    expect(expandable).toHaveClass('hidden')
+  })
 })

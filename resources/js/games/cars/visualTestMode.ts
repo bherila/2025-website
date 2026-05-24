@@ -34,7 +34,7 @@ export function readParkingPickupVisualTestOptions(
   return {
     colorblind: params.has('colorblind') ? params.get('colorblind') === '1' : null,
     enabled,
-    hud: params.get('hud') === 'compact' ? 'compact' : 'normal',
+    hud: params.get('hud') === 'normal' ? 'normal' : 'compact',
     level,
     reducedMotion: params.get('reducedMotion') === '1',
     seed: params.get('seed'),
