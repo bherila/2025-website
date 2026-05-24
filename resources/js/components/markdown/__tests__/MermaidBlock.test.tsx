@@ -37,7 +37,7 @@ describe('MermaidBlock', () => {
   })
 
   it('renders sanitized SVG when mermaid succeeds', async () => {
-    mermaid.default.render.mockResolvedValue({ svg: '<svg><script>alert(1)</script><g></g></svg>' })
+    mermaid.default.render.mockResolvedValue({ svg: '<svg><script>alert(1)</script><text>Seller</text><g></g></svg>' })
 
     const { registry, container } = renderWithRegistry(<MermaidBlock code="graph TD; A-->B" />)
     await act(async () => {
@@ -47,7 +47,14 @@ describe('MermaidBlock', () => {
     await waitFor(() => {
       expect(container.querySelector('svg')).not.toBeNull()
     })
+    expect(mermaid.default.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      htmlLabels: false,
+      securityLevel: 'strict',
+      startOnLoad: false,
+      theme: 'default',
+    }))
     expect(container.querySelector('svg script')).toBeNull()
+    expect(container.querySelector('svg text')).toHaveTextContent('Seller')
   })
 
   it('renders an error placeholder and settles the registry on render failure', async () => {
