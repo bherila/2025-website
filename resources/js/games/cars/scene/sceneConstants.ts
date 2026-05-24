@@ -1,6 +1,6 @@
 import { BOARD_HEIGHT as GAME_BOARD_HEIGHT, BOARD_WIDTH as GAME_BOARD_WIDTH } from '../gameTypes'
 
-export const CELL_SIZE = 0.56
+export const CELL_SIZE = 0.48
 export const FIELD_Z = 1.9
 export const PARKING_Z = -3.8
 export const QUEUE_Z = -7.0

@@ -224,11 +224,12 @@ export function generateLevel(
   } = {},
 ): GameState {
   const rng = createRng(seed)
-  const totalCars = Math.min(13 + Math.floor(level * 2.4), 60)
+  const totalCars = targetCarCountForLevel(level)
   const tunnelStacks = Math.min(Math.max(0, Math.floor((level - 1) / 2)), 9)
-  const maxAttempts = 180
+  const maxAttempts = 360
+  const randomLayoutAttempts = randomLayoutAttemptsForCount(totalCars, maxAttempts)
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  for (let attempt = 0; attempt < randomLayoutAttempts; attempt += 1) {
     const specs = createPlacementSpecs(totalCars, tunnelStacks, rng)
     if (!specs) {
       continue
@@ -319,6 +320,34 @@ export function generateLevel(
   fallbackState.lastMessage = `Level ${level} is ready with relaxed queue pressure.`
 
   return fallbackState
+}
+
+function targetCarCountForLevel(level: number): number {
+  if (level === 1) {
+    return 20
+  }
+
+  if (level === 2) {
+    return 23
+  }
+
+  if (level === 3) {
+    return 26
+  }
+
+  return Math.min(26 + Math.floor((level - 3) * 2.4), 72)
+}
+
+function randomLayoutAttemptsForCount(totalCars: number, maxAttempts: number): number {
+  if (totalCars >= 36) {
+    return Math.min(maxAttempts, 60)
+  }
+
+  if (totalCars >= 30) {
+    return Math.min(maxAttempts, 120)
+  }
+
+  return maxAttempts
 }
 
 export function getCarCells(car: Pick<Car, 'direction' | 'length' | 'position'>): GridPosition[] {
@@ -1872,7 +1901,7 @@ function findFreeGaragePlacement(
   occupied: Set<string>,
   rng: RandomGenerator,
 ): { garagePosition: GridPosition, position: GridPosition } | null {
-  for (let attempt = 0; attempt < 240; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const position = randomGarageSpawnPosition(length, direction, rng)
     const garagePosition = garagePositionForCar({ direction, length, position })
     if (!garagePosition) {
@@ -1939,7 +1968,7 @@ function findFreePlacement(
 ): GridPosition | null {
   const bounds = placementBounds(length, direction)
 
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const position = {
       x: rng.int(0, bounds.maxX),
       y: rng.int(0, bounds.maxY),
