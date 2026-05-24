@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Finance;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Jobs\LotsMatchJob;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
+use App\Models\User;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -388,6 +391,138 @@ class DocumentIngestionServiceTest extends TestCase
             'document_id' => $taxDocument->document_id,
             'account_id' => $accountId,
             'payload_kind' => FinDocumentAccount::PAYLOAD_DISPOSITIONS,
+        ]);
+    }
+
+    public function test_statement_upload_marks_gen_ai_result_and_job_imported_when_ids_threaded(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $job = $this->makeFinanceJob($user);
+        $result = $this->makeFinanceResult($job);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'statement.pdf',
+            'gen_ai_job_id' => $job->id,
+            'gen_ai_result_id' => $result->id,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-04-30', 'closingBalance' => 500],
+                'statementDetails' => [],
+                'transactions' => [[
+                    't_date' => '2025-04-15',
+                    't_amt' => 50,
+                    't_description' => 'Dividend',
+                ]],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $this->assertSame('imported', $result->fresh()->status);
+        $this->assertSame('imported', $job->fresh()->status);
+    }
+
+    public function test_statement_upload_ignores_gen_ai_ids_owned_by_another_user(): void
+    {
+        Queue::fake();
+
+        $owner = $this->createUser();
+        $other = $this->createUser();
+        $accountId = $this->createAccount($other->id, 'Brokerage');
+        $job = $this->makeFinanceJob($owner);
+        $result = $this->makeFinanceResult($job);
+
+        $response = $this->actingAs($other)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'gen_ai_job_id' => $job->id,
+            'gen_ai_result_id' => $result->id,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-04-30', 'closingBalance' => 500],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $this->assertSame('pending_review', $result->fresh()->status);
+        $this->assertNotSame('imported', $job->fresh()->status);
+    }
+
+    public function test_statement_upload_without_gen_ai_ids_leaves_no_side_effects(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $job = $this->makeFinanceJob($user);
+        $result = $this->makeFinanceResult($job);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-04-30', 'closingBalance' => 500],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $this->assertSame('pending_review', $result->fresh()->status);
+        $this->assertSame('parsed', $job->fresh()->status);
+    }
+
+    public function test_statement_upload_rejects_missing_result_id_when_job_id_given(): void
+    {
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $job = $this->makeFinanceJob($user);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'gen_ai_job_id' => $job->id,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-04-30', 'closingBalance' => 500],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['gen_ai_result_id']);
+    }
+
+    private function makeFinanceJob(User $user): GenAiImportJob
+    {
+        return GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'finance_transactions',
+            'file_hash' => 'hash-'.$user->id.'-'.uniqid(),
+            'original_filename' => 'statement.pdf',
+            's3_path' => "genai-import/{$user->id}/uuid/statement.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 2048,
+            'context_json' => json_encode(['file_count' => 1]),
+            'status' => 'parsed',
+        ]);
+    }
+
+    private function makeFinanceResult(GenAiImportJob $job): GenAiImportResult
+    {
+        return GenAiImportResult::create([
+            'job_id' => $job->id,
+            'result_index' => 0,
+            'result_json' => json_encode(['accounts' => []]),
+            'status' => 'pending_review',
         ]);
     }
 

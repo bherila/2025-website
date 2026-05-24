@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
 use App\Http\Resources\FinanceTool\FinDocumentResource;
@@ -96,6 +98,8 @@ class FinanceDocumentController extends Controller
 
         $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $request->all());
 
+        $this->markGenAiResultImported($request, (int) Auth::id());
+
         return response()->json([
             'success' => true,
             'document' => $result['document'],
@@ -109,11 +113,57 @@ class FinanceDocumentController extends Controller
 
         $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $request->all());
 
+        $this->markGenAiResultImported($request, (int) Auth::id());
+
         return response()->json([
             'success' => true,
             'document' => $result['document'],
             'accounts' => $result['accounts'],
         ], 201);
+    }
+
+    /**
+     * Mark the originating GenAiImportResult / GenAiImportJob imported when the
+     * caller threaded their IDs through. Silently no-ops if the IDs are absent
+     * or do not resolve, so non-GenAI imports (CSV paste, manual statement entry)
+     * keep working unchanged.
+     */
+    private function markGenAiResultImported(Request $request, int $userId): void
+    {
+        $jobId = $request->input('gen_ai_job_id');
+        $resultId = $request->input('gen_ai_result_id');
+
+        if ($jobId === null || $resultId === null) {
+            return;
+        }
+
+        $job = GenAiImportJob::query()
+            ->where('id', (int) $jobId)
+            ->where('user_id', $userId)
+            ->where('job_type', 'finance_transactions')
+            ->first();
+
+        if (! $job instanceof GenAiImportJob) {
+            return;
+        }
+
+        $result = GenAiImportResult::query()
+            ->where('id', (int) $resultId)
+            ->where('job_id', $job->id)
+            ->first();
+
+        if (! $result instanceof GenAiImportResult) {
+            return;
+        }
+
+        if ($result->status !== 'imported') {
+            $result->markImported();
+        }
+
+        $stillPending = $job->results()->where('status', 'pending_review')->exists();
+        if (! $stillPending && $job->status !== 'imported') {
+            $job->markImported();
+        }
     }
 
     private function storeTaxForm(Request $request): JsonResponse
@@ -197,6 +247,8 @@ class FinanceDocumentController extends Controller
             'file_size_bytes' => 'nullable|integer|min:0',
             'file_hash' => 'required_with:s3_key|string',
             'mime_type' => 'nullable|string|max:255',
+            'gen_ai_job_id' => 'nullable|integer',
+            'gen_ai_result_id' => 'nullable|integer|required_with:gen_ai_job_id',
             'accounts' => 'required|array|min:1',
             'accounts.*.acct_id' => 'required|integer',
             'accounts.*.statementInfo' => 'nullable|array',

@@ -22,6 +22,8 @@ interface UseImportExecutionOptions {
   accountMappings: AccountMapping[]
   importTransactions: boolean
   attachAsStatement: boolean
+  genAiJobId?: number | null
+  genAiResultId?: number | null
 }
 
 interface UseImportExecutionResult {
@@ -50,6 +52,8 @@ export function useImportExecution({
   accountMappings,
   importTransactions,
   attachAsStatement,
+  genAiJobId,
+  genAiResultId,
 }: UseImportExecutionOptions): UseImportExecutionResult {
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
@@ -157,6 +161,9 @@ export function useImportExecution({
             const response = (await fetchWrapper.post('/api/finance/documents', {
               document_kind: 'statement',
               accounts: payload,
+              ...(genAiJobId && genAiResultId
+                ? { gen_ai_job_id: genAiJobId, gen_ai_result_id: genAiResultId }
+                : {}),
             })) as { accounts: Array<{ acct_id: number; statement_id: number }> }
 
             if (response.accounts?.length > 0) {
@@ -198,6 +205,8 @@ export function useImportExecution({
       accountMappings,
       attachAsStatement,
       importTransactions,
+      genAiJobId,
+      genAiResultId,
     ],
   )
 
