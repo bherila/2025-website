@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
@@ -207,6 +208,19 @@ class LotReconciliationLinkEndpointTest extends TestCase
                 'acct_last_balance' => '0',
             ]);
         });
+        FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'tax_year' => 2025,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => 'statement.pdf',
+            's3_path' => "fin_documents/{$user->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => hash('sha256', fake()->uuid()),
+            'uploaded_by_user_id' => $user->id,
+            'is_reviewed' => true,
+        ]);
         $document = app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
             'tax_year' => 2025,
