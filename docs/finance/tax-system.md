@@ -618,14 +618,15 @@ When `form_type === 'k1'` and the data contains `schemaVersion`, the modal rende
 
 Legacy parsed_data records (no `schemaVersion`) are migrated to the canonical `fields`/`codes` shape by `App\Services\Finance\K1LegacyTransformer`. Readers that don't already know they're handling 2026.1+ data should call `isLegacy()` + `transform()` defensively before reading `fields`/`codes`.
 
-The transformer's numeric box map is **form-source aware** for the two boxes that differ between K-1 (Form 1065) and K-1 (Form 1120S):
+The transformer's numeric box map is **form-source aware** for the three boxes that differ between K-1 (Form 1065) and K-1 (Form 1120S):
 
 | Legacy field | Form 1065 canonical box | Form 1120S canonical box |
 |--------------|-------------------------|--------------------------|
 | `box7_net_section_1231_gain` | `10` | `9` |
+| `box8_other_income` | `11` | `10` |
 | `box9_section_179_deduction` | `12` | `11` |
 
-Legacy fields `box8_other_income` and `box10_other_deductions` are **intentionally not mapped** to canonical boxes — historical data shows their semantics drift (e.g., `box10_other_deductions` is sometimes actually Box 13 code AE portfolio deductions, not Box 10 Section 1231). The raw values are preserved under `legacyFields` for audit/recovery; downstream readers that need them should pull from there rather than expecting canonical fields.
+Legacy field `box10_other_deductions` is **intentionally not mapped** to a canonical box — historical data shows it is often the same amount also reported as a coded item like `13AE` (suspended portfolio deductions), so a canonical remap would double-count. The raw value is preserved under `legacyFields` for audit/recovery; downstream readers that need it should pull from there rather than expecting a canonical field.
 
 ### Form 8959 / 8960 / Capital Loss Carryover Support
 
