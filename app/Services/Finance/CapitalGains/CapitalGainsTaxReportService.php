@@ -52,7 +52,10 @@ class CapitalGainsTaxReportService
         }
 
         $lots = NormalizedLotQuery::forAccountIdsYear($accountIds, $taxYear)
-            ->with(['account:acct_id,acct_name'])
+            ->with([
+                'account:acct_id,acct_name',
+                'taxDocument:id,document_id',
+            ])
             ->orderBy('acct_id')
             ->orderBy('symbol')
             ->orderBy('sale_date')
