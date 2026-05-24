@@ -20,6 +20,7 @@
 
 import currency from 'currency.js'
 
+import { getSbpElection } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
 
 import type { F1116Category, ForeignTaxSummary } from './types'
@@ -304,11 +305,7 @@ export function extractForeignTaxSummaries(
   const totalForeignTaxPaid = boxTotal !== 0 ? boxTotal : extractK3ForeignTaxTotal(data)
 
   const breakdown = extractK3IncomeBreakdown(data)
-  // U.S.-source is the default for K-3 column (f). The election flag is only set to `false`
-  // when the taxpayer is a non-U.S. partner or is sourcing under a treaty — in which case
-  // column (f) is treated as foreign-source passive income for Form 1116. Undefined / null /
-  // explicit `true` all resolve to the default U.S.-source treatment.
-  const sbpTreatedAsUSSource = data.k3Elections?.sourcedByPartnerAsUSSource !== false
+  const sbpTreatedAsUSSource = getSbpElection(data)
 
   // When foreign tax is zero and there's no col-f income requiring Form 1116 reporting, skip.
   if (totalForeignTaxPaid === 0 && (breakdown.sourcedByPartner === 0 || sbpTreatedAsUSSource)) return []

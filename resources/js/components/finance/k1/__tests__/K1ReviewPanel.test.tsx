@@ -108,3 +108,67 @@ describe('K1ReviewPanel — Box 6b not double-counted (Issue 3)', () => {
     expect(text).toContain('qualified')
   })
 })
+
+describe('K1ReviewPanel — sourced-by-partner default', () => {
+  it('normalizes unset SBP election state for K-3 sub-table labels', () => {
+    const data = makeData({
+      fields: { B: { value: 'Test Fund' } },
+      k3: {
+        sections: [
+          {
+            sectionId: 'part2_section2',
+            title: 'K-3 Part II Section 2',
+            data: {
+              rows: [
+                {
+                  line: '55',
+                  col_c_passive: 100,
+                  col_f_sourced_by_partner: 25,
+                  col_g_total: 125,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    })
+
+    const { container } = render(
+      <K1ReviewPanel data={data} onChange={() => {}} readOnly />,
+    )
+
+    expect(container.textContent).toContain('Sourced by Partner → US (f)')
+  })
+
+  it('keeps K-3 sub-table labels inactive only when SBP is explicitly false', () => {
+    const data = makeData({
+      fields: { B: { value: 'Test Fund' } },
+      k3Elections: { sourcedByPartnerAsUSSource: false },
+      k3: {
+        sections: [
+          {
+            sectionId: 'part2_section2',
+            title: 'K-3 Part II Section 2',
+            data: {
+              rows: [
+                {
+                  line: '55',
+                  col_c_passive: 100,
+                  col_f_sourced_by_partner: 25,
+                  col_g_total: 125,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    })
+
+    const { container } = render(
+      <K1ReviewPanel data={data} onChange={() => {}} readOnly />,
+    )
+
+    expect(container.textContent).not.toContain('Sourced by Partner → US (f)')
+    expect(container.textContent).toContain('Sourced by Partner (f)')
+  })
+})

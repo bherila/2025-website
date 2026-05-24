@@ -120,6 +120,23 @@ describe('computeForm1116Lines — sbpElections', () => {
     expect(result.sbpElections![0]!.sourcedByPartner).toBe(300)
   })
 
+  it('includes K-1 in sbpElections with active=true when election is unset', () => {
+    const data = makeK1Data({
+      codes: { '16': [{ code: 'I', value: '1000' }] },
+      k3: {
+        sections: [
+          toolSection('part2_section1', [
+            { country: 'DE', col_c_passive: 800, col_d_general: 0, col_f_sourced_by_partner: 300 },
+          ]),
+        ],
+      },
+    })
+    const result = computeForm1116Lines({ reviewedK1Docs: [makeK1Doc(data)], reviewed1099Docs: [] })
+    expect(result.sbpElections).toHaveLength(1)
+    expect(result.sbpElections![0]!.active).toBe(true)
+    expect(result.sbpElections![0]!.sourcedByPartner).toBe(300)
+  })
+
   it('produces empty sbpElections when col-f is zero', () => {
     const data = makeK1Data({
       codes: { '21': [{ code: '', value: '500' }] },

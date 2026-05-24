@@ -137,6 +137,18 @@ describe('Form1116Preview UI helpers', () => {
     })
   })
 
+  it('describes sourced-by-partner income as U.S.-source by default', () => {
+    const k1 = makeK1Doc(makeK1Data({
+      k3: { sections: [toolSection('part2_section1', [{ country: 'DE', col_f_sourced_by_partner: 100 }])] },
+      fields: { '21': { value: '100' } },
+    }))
+
+    renderForm1116([k1], [])
+
+    expect(screen.getByText(/By default they are treated as U\.S\.-source/i)).toBeInTheDocument()
+    expect(screen.queryByText(/By default they are treated as foreign-source/i)).not.toBeInTheDocument()
+  })
+
   it('shows the worksheet trigger inside the Form 1116 tab header', () => {
     const reviewed = makeK1Doc(makeK1Data({
       fields: { '21': { value: '100' } },
