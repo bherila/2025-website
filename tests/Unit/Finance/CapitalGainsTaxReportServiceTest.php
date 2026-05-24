@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class CapitalGainsTaxReportServiceTest extends TestCase
@@ -363,6 +364,35 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             $report['transactions'],
         ));
         $this->assertSame(65.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+    }
+
+    public function test_documented_lot_tax_documents_are_eager_loaded_for_report_generation(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeTaxDocument($user->id);
+
+        foreach (range(1, 25) as $index) {
+            $this->makeLot($account, [
+                'symbol' => "DOC{$index}",
+                'description' => "Documented lot {$index}",
+                'lot_source' => '1099b',
+                'tax_document_id' => $document->id,
+                'proceeds' => 125 + $index,
+                'cost_basis' => 100,
+            ]);
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $report = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2025);
+
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertSame(25, count($report['transactions']));
+        $this->assertLessThanOrEqual(10, $queryCount);
     }
 
     private function makeAccount(int $userId, string $name = 'Brokerage'): FinAccounts
