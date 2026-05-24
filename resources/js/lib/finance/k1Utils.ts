@@ -7,13 +7,20 @@ import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
 /**
- * Returns the K-3 "Sourced by Partner" election state for a K-1 document.
- * Accepts `unknown` so it works with both typed FK1StructuredData and the
- * untyped `parsed_data` / `editData` coming from the review modal.
+ * Returns whether the K-3 "Sourced by Partner" column (f) amounts are being treated
+ * as U.S.-source for this K-1. U.S.-source is the default for valid K-1 data (typical
+ * U.S.-person partner); only an explicit `sourcedByPartnerAsUSSource = false` flips
+ * column (f) to foreign-source for treaty / non-U.S.-partner cases.
+ *
+ * Accepts `unknown` so it works with both typed FK1StructuredData and the untyped
+ * `parsed_data` / `editData` coming from the review modal. Returns `false` for non
+ * K-1-structured data — the election concept doesn't apply to non-K-1 payloads, and
+ * a defensive `true` would have made the UI render a spurious "active election" badge
+ * for transient/legacy editor state.
  */
 export function getSbpElection(data: unknown): boolean {
   if (!isFK1StructuredData(data)) return false
-  return data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+  return data.k3Elections?.sourcedByPartnerAsUSSource !== false
 }
 
 export function parseK1Field(data: FK1StructuredData, box: string): number {

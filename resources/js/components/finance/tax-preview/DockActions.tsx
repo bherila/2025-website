@@ -21,7 +21,9 @@ interface DockActionsValue {
   openTaxDocumentDetail: (docId: number) => void
   /** Open the review modal in "select a document" mode (no specific doc). */
   openReviewQueue: () => void
-  /** Bulk-update the K-3 sourcedByPartnerAsUSSource election across multiple K-1s. */
+  /** Bulk-update the K-3 sourcedByPartnerAsUSSource election across multiple K-1s.
+   *  Pass `true` to confirm U.S.-source treatment (default; redundant but explicit) and
+   *  `false` for treaty / non-U.S.-partner treatment (column (f) becomes foreign-source). */
   bulkSetSbpElection: (active: boolean, docIds: number[]) => Promise<string[]>
   /** Open a registry worksheet (presentation: 'modal') as a Dialog. */
   openWorksheet: (id: FormId) => void

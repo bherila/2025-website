@@ -1410,7 +1410,8 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
 
-        $this->assertSame(1300.0, $facts['form1116']['totalPassiveIncome']);
+        // 1000 K-3 col c + 100 1099-DIV estimated; sbp col f (200) is excluded by default (U.S.-source).
+        $this->assertSame(1100.0, $facts['form1116']['totalPassiveIncome']);
         $this->assertSame(50.0, $facts['form1116']['totalGeneralIncome']);
         $this->assertSame(168.0, $facts['form1116']['totalForeignTaxes']);
         $this->assertSame(20.0, $facts['form1116']['totalLine4b']);
@@ -1447,7 +1448,7 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $this->assertSame(1000.0, $facts['form1116']['totalPassiveIncome']);
         $this->assertSame(200.0, $facts['form1116']['totalSourcedByPartnerIncome']);
-        $this->assertSame('Sourced-by-partner-as-U.S.-source election active.', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+        $this->assertStringContainsString('treated as U.S.-source', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
     }
 
     public function test_form1116_prefers_k3_line24_gross_income_and_uses_form4952_interest_apportionment(): void
@@ -1487,6 +1488,7 @@ class TaxPreviewFactsServiceTest extends TestCase
                         ],
                     ],
                 ],
+                k3Elections: ['sourcedByPartnerAsUSSource' => true],
             ),
         ]);
         $brokerDoc = $this->createTaxDocument($user->id, [
@@ -1513,8 +1515,71 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(210.0, $facts['form1116']['totalLine4b']);
         $this->assertSame(-98.0, $facts['form1116']['netForeignSourceTaxableIncome']);
         $this->assertSame(18.0, $facts['form1116']['totalForeignTaxes']);
-        $this->assertStringContainsString('excluded from foreign-source passive income', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+        $this->assertStringContainsString('treated as U.S.-source', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
         $this->assertTrue($facts['form1116']['passiveIncomeSources'][1]['isReviewed']);
+    }
+
+    public function test_form1116_excludes_k3_line24_sourced_by_partner_by_default(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section1',
+                            'data' => [
+                                'line24_totalGrossIncome' => [
+                                    'totals' => ['c' => '100', 'f' => '1000', 'g' => '1100'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        // U.S.-source is the default → sourced-by-partner (col f) is excluded from foreign passive income.
+        $this->assertSame(100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1000.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertStringContainsString('treated as U.S.-source', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+    }
+
+    public function test_form1116_includes_k3_line24_sourced_by_partner_when_treaty_election_selected(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section1',
+                            'data' => [
+                                'line24_totalGrossIncome' => [
+                                    'totals' => ['c' => '100', 'f' => '1000', 'g' => '1100'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                k3Elections: ['sourcedByPartnerAsUSSource' => false],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        // Election explicitly false (treaty / non-U.S. partner) → col (f) is foreign-source passive income.
+        $this->assertSame(1100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1000.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertStringContainsString('Treaty / non-U.S.-partner', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
     }
 
     public function test_form1116_allocates_form4952_interest_once_across_multiple_k1s(): void

@@ -149,7 +149,7 @@ The current pilot covers the highest-value debug paths:
 | `scheduleE` | Schedule E Part I/II partnership and rental buckets | Explicitly routed Schedule E 1099-MISC sources and K-1 Boxes 1/2/3/4/5/11ZZ/13ZZ are separated into passive, nonpassive, and trader-fund NII totals. Trader-fund detection mirrors the existing K-1 utility logic so Form 8960 can reuse the same backend source facts. |
 | `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
 | `scheduleD` | Schedule D lines 1a-16 / line 21 | Schedule D facts combine Form 8949 rollups with K-1 Box 8/9/10, Box 11C Form 6781 60/40 allocations, Box 11S character routing, and 1099-DIV Box 2a capital-gain distributions. Ambiguous Box 11S rows are exposed as `needs_review` sources instead of being silently routed. |
-| `form1116` | Form 1116 passive/general income, line 4b, and foreign tax | K-1/K-3 passive and general category income, sourced-by-partner election state, K-1 Box 21 / K-3 foreign tax, and 1099-DIV/1099-INT foreign tax are exposed. 1099-DIV foreign-source income is estimated from Box 7 at the same default 15% withholding rate as the React calculator and is marked `needs_review` because the gross foreign-source income is inferred. |
+| `form1116` | Form 1116 passive/general income, line 4b, and foreign tax | K-1/K-3 passive and general category income, sourced-by-partner election state, K-1 Box 21 / K-3 foreign tax, and 1099-DIV/1099-INT foreign tax are exposed. 1099-DIV foreign-source income is estimated from Box 7 at the same default 15% withholding rate as the React calculator and is marked `needs_review` because the gross foreign-source income is inferred. K-3 Part II line 24 column (f) "sourced-by-partner" amounts default to **U.S.-source** (excluded from foreign-source passive income on Form 1116) because the typical taxpayer is a U.S. person and partner-level sourcing follows the partner's residency. The `k3Elections.sourcedByPartnerAsUSSource` flag is only required to flip when the partner is *not* a U.S. person or is subject to a treaty that resources the income as foreign — in which case the column (f) amount is treated as foreign-source passive income. |
 | `form8960` | Form 8960 NII components | Schedule B interest/dividends, positive Schedule D net capital gains, Schedule E passive income, trader-fund nonpassive NII, and Form 4952 investment-interest deductions are composed into backend NII facts. MAGI-dependent NIIT tax is intentionally nullable until MAGI and filing status are moved into backend-owned facts. |
 
 Each `TaxFactSource` carries review metadata:
@@ -792,6 +792,9 @@ Foreign tax information from K-1 Box 16 and 1099-DIV/INT feeds into Form 1116 vi
 - Code C → gross general income
 - Code I → foreign taxes paid
 - Code J → foreign taxes withheld at source
+
+**Sourced-by-partner default (K-3 Part II column (f)):**
+U.S.-source is the default. For a U.S.-person taxpayer, partner-level "sourced by partner" income is U.S.-source under the partner's own facts and is excluded from Form 1116 foreign-source passive income. The `sourcedByPartnerAsUSSource` election toggle should only be set to `false` when the partner is *not* a U.S. person or is otherwise sourcing the income as foreign under a treaty.
 
 **Asset Method Apportionment (IRS Pub. 514):**
 ```

@@ -356,12 +356,12 @@ export default function Form1116Preview({
           <FormLine
             note
             label="What is this?"
-            raw="K-3 Part II column (f) amounts are classified 'Sourced by Partner'. By default they are treated as foreign-source income, increasing your FTC base."
+            raw="K-3 Part II column (f) amounts are classified 'Sourced by Partner'. By default they are treated as U.S.-source for U.S.-person partners, excluding them from your FTC base."
           />
           <FormLine
             note
-            label="Election available"
-            raw="You may elect (per Treas. Reg. §1.861-9T) to treat these as U.S.-source, which reduces FTC base but may be required if you are not subject to a tax treaty or §901(j) override."
+            label="When to change it"
+            raw="Switch this only when the partner is not a U.S. person or treaty / §901(j) treatment resources the column (f) income as foreign-source."
           />
           {bulkFailures.length > 0 && (
             <FormLine note label="Bulk update failures" raw={`Could not update: ${bulkFailures.join(', ')}`} />

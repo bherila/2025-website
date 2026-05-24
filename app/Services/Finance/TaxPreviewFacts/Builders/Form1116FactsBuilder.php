@@ -39,12 +39,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             $partnerName = $this->k1PartnerName($doc, $data);
             $totalK1Box5 = $this->sumMoney([$totalK1Box5, $this->k1Field($data, '5')]);
             $breakdown = $this->k3IncomeBreakdown($data);
+            $sbpTreatedAsUSSource = $this->sourcedByPartnerTreatedAsUSSource($data);
             if ($breakdown['sourcedByPartner'] !== 0.0) {
-                $sourcedByPartnerNotes = match (true) {
-                    $this->sourcedByPartnerElection($data) => 'Sourced-by-partner-as-U.S.-source election active.',
-                    $breakdown['sourcedByPartnerIsUsSource'] => 'K-3 line 24 sourced-by-partner amount is surfaced for audit but excluded from foreign-source passive income.',
-                    default => 'Election not active; sourced-by-partner amount is treated as foreign-source passive income.',
-                };
+                $sourcedByPartnerNotes = $sbpTreatedAsUSSource
+                    ? 'K-3 line 24 sourced-by-partner amount is treated as U.S.-source under the default U.S.-person partner-level sourcing rule and excluded from Form 1116 foreign-source passive income.'
+                    : 'Treaty / non-U.S.-partner treatment selected (sourcedByPartnerAsUSSource = false); sourced-by-partner amount is included in Form 1116 foreign-source passive income.';
                 $sourcedByPartnerSources[] = $this->k1Source(
                     $doc,
                     "{$partnerName} — K-3 sourced-by-partner income",
@@ -57,7 +56,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 );
             }
 
-            $effectivePassiveIncome = $this->sourcedByPartnerElection($data) || $breakdown['sourcedByPartnerIsUsSource']
+            $effectivePassiveIncome = $sbpTreatedAsUSSource
                 ? $breakdown['passiveIncome']
                 : $this->sumMoney([$breakdown['passiveIncome'], $breakdown['sourcedByPartner']]);
             $foreignTax = $this->k1ForeignTaxTotal($data);
@@ -177,7 +176,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                     'passiveIncome' => $this->rowColumn($line55, 'c'),
                     'generalIncome' => $this->rowColumn($line55, 'd'),
                     'sourcedByPartner' => $this->rowColumn($line55, 'f'),
-                    'sourcedByPartnerIsUsSource' => false,
+                    'sourcedByPartnerIsUsSource' => true,
                 ];
             }
         }
@@ -202,7 +201,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             'passiveIncome' => $passive ?: $this->sumK1CodeItems($data, '16', 'B'),
             'generalIncome' => $general ?: $this->sumK1CodeItems($data, '16', 'C'),
             'sourcedByPartner' => $sourcedByPartner,
-            'sourcedByPartnerIsUsSource' => false,
+            'sourcedByPartnerIsUsSource' => true,
         ];
     }
 
@@ -616,11 +615,18 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
+     * U.S.-source is the default for K-3 Part II column (f) "sourced by partner" amounts,
+     * because partner-level sourcing under §§861–865 generally resources that income to
+     * the U.S. for U.S.-person partners. The election flag is read so that taxpayers who
+     * are non-U.S. partners or who are sourcing under a treaty can explicitly opt out by
+     * setting `sourcedByPartnerAsUSSource` to `false`, in which case column (f) is treated
+     * as foreign-source passive income for Form 1116.
+     *
      * @param  array<string, mixed>  $data
      */
-    private function sourcedByPartnerElection(array $data): bool
+    private function sourcedByPartnerTreatedAsUSSource(array $data): bool
     {
-        return (bool) ($data['k3Elections']['sourcedByPartnerAsUSSource'] ?? false);
+        return ($data['k3Elections']['sourcedByPartnerAsUSSource'] ?? null) !== false;
     }
 
     private function k1Source(FileForTaxDocument $doc, string $label, float $amount, TaxFactSourceType $sourceType, TaxFactRouting $routing, string $routingReason, ?string $box = null, ?string $notes = null): TaxFactSource

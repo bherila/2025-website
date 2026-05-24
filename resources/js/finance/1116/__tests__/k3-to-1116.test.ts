@@ -229,7 +229,7 @@ describe('extractForeignTaxSummaries — SBP election', () => {
     })
   }
 
-  it('includes sourcedByPartner in passive income when election is NOT active', () => {
+  it('includes sourcedByPartner in passive income when election explicitly set to false (treaty / non-U.S. partner)', () => {
     const summaries = extractForeignTaxSummaries(makeDataWithK3(1_000, 500, false))
     expect(summaries).toHaveLength(1)
     const s = summaries[0]
@@ -237,12 +237,31 @@ describe('extractForeignTaxSummaries — SBP election', () => {
     expect(s.grossForeignIncome).toBe(1_500)
   })
 
-  it('excludes sourcedByPartner from passive income when election IS active', () => {
+  it('excludes sourcedByPartner from passive income when election is explicitly true (U.S.-source)', () => {
     const summaries = extractForeignTaxSummaries(makeDataWithK3(1_000, 500, true))
     expect(summaries).toHaveLength(1)
     const s = summaries[0]
     if (!s) throw new Error('expected summary')
     expect(s.grossForeignIncome).toBe(1_000)
+  })
+
+  it('excludes sourcedByPartner by default when k3Elections is absent (U.S.-source default)', () => {
+    const data = makeData({
+      codes: { '16': [{ code: 'I', value: '1000' }] },
+      k3: {
+        sections: [
+          toolSection('part2_section1', [
+            { country: 'DE', col_c_passive: 1_000, col_d_general: 0, col_f_sourced_by_partner: 500 },
+          ]),
+        ],
+      },
+    })
+    const summaries = extractForeignTaxSummaries(data)
+    expect(summaries).toHaveLength(1)
+    const s = summaries[0]
+    if (!s) throw new Error('expected summary')
+    expect(s.grossForeignIncome).toBe(1_000)
+    expect(s.electionSBPasUS).toBe(true)
   })
 
   it('returns empty when no foreign taxes present', () => {
