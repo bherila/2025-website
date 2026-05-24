@@ -16,6 +16,7 @@ import {
   animatePassengers,
   createPassengerEntryAnimation,
   notifyPassengerGate,
+  type PassengerGateHold,
   setPassengerRenderHandleTransform,
 } from './scene/animation/passengers'
 import { createCarMesh } from './scene/builders/carMesh'
@@ -92,6 +93,7 @@ export function CarsScene({
   const passengerLoopSlotsRef = useRef<PassengerLoopSlot[]>([])
   const passengerOffsetsRef = useRef<Map<string, number>>(new Map())
   const passengerGateCyclesRef = useRef<Map<string, number>>(new Map())
+  const passengerGateHoldsRef = useRef<Map<string, PassengerGateHold>>(new Map())
   const feederPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
   const fieldCarMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
@@ -127,6 +129,7 @@ export function CarsScene({
     scene.background = new THREE.Color('#cbd5e1')
     sceneRef.current = scene
     const passengerGateCycles = passengerGateCyclesRef.current
+    const passengerGateHolds = passengerGateHoldsRef.current
     const fieldCarMeshes = fieldCarMeshesRef.current
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200)
@@ -222,6 +225,7 @@ export function CarsScene({
         movingCarsRef.current,
         now,
         onPassengerGateRef.current,
+        passengerGateHoldsRef.current,
       )
       renderer.render(scene, camera)
       frameId = window.requestAnimationFrame(animate)
@@ -248,6 +252,7 @@ export function CarsScene({
       gatePassengersRef.current = []
       passengerLoopSlotsRef.current = []
       boardingPassengersRef.current = []
+      passengerGateHolds.clear()
       fieldCarMeshes.clear()
       passengerGateCycles.clear()
       movingCarsRef.current = []
@@ -266,6 +271,7 @@ export function CarsScene({
       passengerOffsetsRef.current.clear()
       passengerLoopSlotsRef.current = []
       passengerGateCyclesRef.current.clear()
+      passengerGateHoldsRef.current.clear()
       feederPositionsRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
