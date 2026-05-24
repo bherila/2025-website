@@ -18,6 +18,7 @@ import {
   canMoveCar,
   clearLevelSnapshot,
   type GameState,
+  generateLevel,
   loadLevelSnapshot,
   loadProgress,
   moveCarToParking,
@@ -31,11 +32,17 @@ import {
 } from './gameEngine'
 import { LevelCompleteOverlay } from './LevelCompleteOverlay'
 import { shouldShowCarsTutorial, TutorialOverlay } from './TutorialOverlay'
+import { readParkingPickupVisualTestOptions } from './visualTestMode'
 
 const COLORBLIND_MODE_STORAGE_KEY = 'bwh.cars-game.colorblind.v1'
 
 export function CarsGame(): ReactElement {
+  const visualTestOptions = useMemo(() => readParkingPickupVisualTestOptions(), [])
   const [state, setState] = useState<GameState>(() => {
+    if (visualTestOptions.enabled) {
+      return generateLevel(visualTestOptions.level ?? 1)
+    }
+
     const progress = loadProgress()
 
     return loadLevelSnapshot(undefined, progress) ?? startGameFromProgress(progress)
@@ -43,10 +50,26 @@ export function CarsGame(): ReactElement {
   const [vipSelectionActive, setVipSelectionActive] = useState(false)
   const [blockedCarAttempt, setBlockedCarAttempt] = useState<{ carId: string, nonce: number } | null>(null)
   const [statsExpanded, setStatsExpanded] = useState(false)
-  const [tutorialOpen, setTutorialOpen] = useState(() => shouldShowCarsTutorial())
-  const [colorblindMode, setColorblindMode] = useState(() => loadColorblindMode())
+  const [tutorialOpen, setTutorialOpen] = useState(() => {
+    if (visualTestOptions.enabled) {
+      return false
+    }
+
+    return shouldShowCarsTutorial()
+  })
+  const [colorblindMode, setColorblindMode] = useState(() => {
+    if (visualTestOptions.enabled && visualTestOptions.colorblind !== null) {
+      return visualTestOptions.colorblind
+    }
+
+    return loadColorblindMode()
+  })
 
   useEffect(() => {
+    if (visualTestOptions.enabled) {
+      return
+    }
+
     saveProgress(progressFromState(state))
     if (state.completedLevel) {
       clearLevelSnapshot()
@@ -54,7 +77,7 @@ export function CarsGame(): ReactElement {
     }
 
     saveLevelSnapshot(state)
-  }, [state])
+  }, [state, visualTestOptions.enabled])
 
   const stats = useMemo<GameStats>(() => {
     const departedCars = state.cars.filter((car) => car.status === 'departed').length
@@ -107,8 +130,10 @@ export function CarsGame(): ReactElement {
 
   const handleColorblindModeChange = useCallback((enabled: boolean): void => {
     setColorblindMode(enabled)
-    saveColorblindMode(enabled)
-  }, [])
+    if (!visualTestOptions.enabled) {
+      saveColorblindMode(enabled)
+    }
+  }, [visualTestOptions.enabled])
 
   const handlePassengerGate = useCallback((passengerId: string): void => {
     setState((current) => processBoardingAtParkingGate(current, passengerId))
@@ -142,6 +167,7 @@ export function CarsGame(): ReactElement {
             colorblindMode={colorblindMode}
             state={state}
             vipSelectionActive={vipSelectionActive}
+            visualTestOptions={visualTestOptions}
             onCarClick={handleCarClick}
             onPassengerGate={handlePassengerGate}
           />
