@@ -347,6 +347,166 @@ class K1Schema2026ParserTest extends TestCase
         $this->assertSame(0.0, $facts['form4797']['partINet1231']);
     }
 
+    public function test_k3_elections_default_is_stamped_when_box_16_indicates_k3_attached(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $args = $this->canonicalToolArgs();
+        $args['field_16'] = true;
+
+        $data = $service->extractGenerateContentData(
+            'document_extract',
+            $this->k1ToolResponse($args),
+        );
+
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('16', $data['fields']);
+        $this->assertSame('true', $data['fields']['16']['value']);
+
+        $this->assertIsArray($data['k3Elections']);
+        $this->assertTrue(
+            $data['k3Elections']['sourcedByPartnerAsUSSource'],
+            'Default election must treat K-3 sourced-by-partner amounts as U.S.-source.',
+        );
+        $this->assertTrue(
+            $data['k3Elections']['defaultApplied'],
+            'defaultApplied=true distinguishes the auto-stamped default from a user-explicit choice.',
+        );
+    }
+
+    public function test_k3_elections_is_null_when_box_16_indicates_no_k3_attached(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $args = $this->canonicalToolArgs();
+        $args['field_16'] = false;
+
+        $data = $service->extractGenerateContentData(
+            'document_extract',
+            $this->k1ToolResponse($args),
+        );
+
+        $this->assertIsArray($data);
+        $this->assertSame('false', $data['fields']['16']['value']);
+        $this->assertNull(
+            $data['k3Elections'],
+            'No K-3 attached means no election to record — k3Elections stays null.',
+        );
+    }
+
+    public function test_k3_elections_is_null_when_box_16_is_absent(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        // canonicalToolArgs does not set field_16 at all.
+        $data = $service->extractGenerateContentData(
+            'document_extract',
+            $this->k1ToolResponse($this->canonicalToolArgs()),
+        );
+
+        $this->assertIsArray($data);
+        $this->assertArrayNotHasKey('16', $data['fields']);
+        $this->assertNull($data['k3Elections']);
+    }
+
+    public function test_k3_elections_user_override_is_preserved(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        // Simulate a user-supplied parsed_data (e.g. via Attach JSON) where the user
+        // has explicitly opted out of U.S.-source treatment. The parser must not
+        // overwrite that choice with the default.
+        $args = $this->canonicalToolArgs();
+        $args['field_16'] = true;
+        $args['k3Elections'] = ['sourcedByPartnerAsUSSource' => false];
+
+        $data = $service->extractGenerateContentData(
+            'document_extract',
+            $this->k1ToolResponse($args),
+        );
+
+        $this->assertIsArray($data);
+        $this->assertIsArray($data['k3Elections']);
+        $this->assertFalse(
+            $data['k3Elections']['sourcedByPartnerAsUSSource'],
+            'User-set k3Elections must NOT be overwritten by the default-applied logic.',
+        );
+        $this->assertArrayNotHasKey(
+            'defaultApplied',
+            $data['k3Elections'],
+            'defaultApplied must not be added when the user supplied an explicit election.',
+        );
+    }
+
+    public function test_k3_elections_default_yields_same_form1116_totals_as_null(): void
+    {
+        // Regression: persisting the explicit default { sourcedByPartnerAsUSSource: true }
+        // must not change Form 1116 totals compared to the legacy "k3Elections = null"
+        // shape, because Form1116FactsBuilder::sourcedByPartnerTreatedAsUSSource()
+        // defaults null → true.
+        $userNull = $this->createUser();
+        $userDefault = $this->createUser();
+
+        $service = new GenAiJobDispatcherService;
+        $args = $this->canonicalToolArgs();
+        $args['field_16'] = true;
+        $coercedDefault = $service->extractGenerateContentData(
+            'document_extract',
+            $this->k1ToolResponse($args),
+        );
+        $this->assertIsArray($coercedDefault);
+        $this->assertIsArray($coercedDefault['k3Elections']);
+
+        // Same parsed_data but with k3Elections forced back to null to model legacy docs.
+        $coercedNull = $coercedDefault;
+        $coercedNull['k3Elections'] = null;
+
+        $ingestion = app(DocumentIngestionService::class);
+        $ingestion->createTaxFormDetail([
+            'user_id' => $userNull->id,
+            'tax_year' => 2025,
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'original_filename' => 'k1-null.pdf',
+            'stored_filename' => 'k1-null.pdf',
+            's3_path' => '',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 0,
+            'file_hash' => hash('sha256', 'k1-k3elections-null'),
+            'uploaded_by_user_id' => $userNull->id,
+            'parsed_data' => $coercedNull,
+        ]);
+
+        $ingestion->createTaxFormDetail([
+            'user_id' => $userDefault->id,
+            'tax_year' => 2025,
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'original_filename' => 'k1-default.pdf',
+            'stored_filename' => 'k1-default.pdf',
+            's3_path' => '',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 0,
+            'file_hash' => hash('sha256', 'k1-k3elections-default'),
+            'uploaded_by_user_id' => $userDefault->id,
+            'parsed_data' => $coercedDefault,
+        ]);
+
+        $factsNull = app(TaxPreviewFactsService::class)->arrayForYear($userNull->id, 2025);
+        $factsDefault = app(TaxPreviewFactsService::class)->arrayForYear($userDefault->id, 2025);
+
+        $this->assertSame(
+            $factsNull['form1116']['totalForeignSourceIncome'] ?? null,
+            $factsDefault['form1116']['totalForeignSourceIncome'] ?? null,
+            'Form 1116 foreign-source income totals must be identical whether k3Elections is null or the explicit default.',
+        );
+        $this->assertSame(
+            $factsNull['form1116']['totalSourcedByPartnerIncome'] ?? null,
+            $factsDefault['form1116']['totalSourcedByPartnerIncome'] ?? null,
+            'Form 1116 sourced-by-partner totals must be identical whether k3Elections is null or the explicit default.',
+        );
+    }
+
     public function test_schedule_d_line11_does_pick_up_legitimate_box_10_section_1231_gain(): void
     {
         // Sanity check: when Box 10 carries a real §1231 gain that does NOT

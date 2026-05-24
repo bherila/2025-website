@@ -230,6 +230,14 @@ PROMPT;
                 'description' => 'Schedule K-3 data (omit entirely if no K-3 was attached). '
                     .'Shape: { "sections": [ { "sectionId": "part2_section1", "title": "...", "data": { ... } } ] }',
             ],
+            'k3Elections' => [
+                'type' => 'OBJECT',
+                'description' => 'Partner elections related to Schedule K-3 sourcing. Omit (or set to null) '
+                    .'when no K-3 is attached. When K-3 is attached, the default '
+                    .'{ "sourcedByPartnerAsUSSource": true, "defaultApplied": true } is applied automatically; '
+                    .'set explicitly only to override (e.g. { "sourcedByPartnerAsUSSource": false } for '
+                    .'non-U.S.-person partners or treaty cases).',
+            ],
             'warnings' => [
                 'type' => 'ARRAY',
                 'description' => 'Array of warning strings for ambiguous or complex items (optional).',
@@ -1539,7 +1547,9 @@ PROMPT;
     {
         // Scalar field boxes (left panel A–O, right panel 1–10, 12, 21)
         $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'M', 'N', 'O'];
-        $boolBoxes = ['D', 'H2', 'partnershipPosition_traderInSecurities'];
+        // Box 16 is the "Schedule K-3 is attached" checkbox on the K-1 form (the codes
+        // for Box 16 foreign transactions are handled via codes_16 separately).
+        $boolBoxes = ['D', 'H2', '16', 'partnershipPosition_traderInSecurities'];
         $numBoxes = ['1', '2', '3', '4', '4a', '4b', '4c', '5', '6a', '6b', '6c', '7',
             '8', '9a', '9b', '9c', '10', '12', '21'];
         $codedBoxes = ['11', '13', '14', '15', '16', '17', '18', '19', '20'];
@@ -1714,6 +1724,33 @@ PROMPT;
 
         if ($statementA !== null) {
             $result['statementA'] = $statementA;
+        }
+
+        // K-3 elections: persist an explicit `k3Elections` object so the UI/audit trail
+        // can distinguish "user accepted the default" from "never reviewed".
+        //
+        // - If the AI/source already supplies a non-null k3Elections object (e.g. via
+        //   manual JSON attach where the user previously chose a non-default treatment),
+        //   pass it through unchanged. This preserves user-set values across re-parse.
+        // - Otherwise, if Box 16 (Schedule K-3 is attached) is checked, stamp the default
+        //   election: sourcedByPartnerAsUSSource = true, with defaultApplied = true so
+        //   downstream consumers can distinguish a defaulted value from an explicit one.
+        // - When no K-3 is attached, leave k3Elections null — there is no election to make.
+        //
+        // The default U.S.-source treatment of K-3 Part II column (f) "sourced by partner"
+        // amounts follows Notice 2021-39 transitional relief for U.S.-person partners in
+        // domestic investment partnerships. Non-U.S. partners and treaty cases must opt
+        // out by setting sourcedByPartnerAsUSSource to false via the UI.
+        $existingK3Elections = $args['k3Elections'] ?? null;
+        if (is_array($existingK3Elections)) {
+            $result['k3Elections'] = $existingK3Elections;
+        } elseif (isset($fields['16']['value']) && $fields['16']['value'] === 'true') {
+            $result['k3Elections'] = [
+                'sourcedByPartnerAsUSSource' => true,
+                'defaultApplied' => true,
+            ];
+        } else {
+            $result['k3Elections'] = null;
         }
 
         // Passive activities (Box 23 = true supplemental statement)
@@ -2098,6 +2135,7 @@ PROMPT;
                 'field_9c' => Schema::number(),   // Unrecaptured Sec. 1250 gain
                 'field_10' => Schema::number(),   // Net section 1231 gain (loss)
                 'field_12' => Schema::number(),   // Section 179 deduction
+                'field_16' => Schema::boolean('Box 16 — "Schedule K-3 is attached if checked". Set true when the K-1 indicates that Schedule K-3 was attached for this partner.'),
                 'field_21' => Schema::number(),   // Foreign taxes paid or accrued
 
                 // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────
