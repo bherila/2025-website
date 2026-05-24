@@ -95,6 +95,8 @@ Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController:
 Route::middleware(['web', 'auth'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
 Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);
 Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
+Route::middleware(['web', 'auth'])->post('/rsu/genai-import/{jobId}/results/{resultId}/confirm', [FinanceRsuController::class, 'confirmGenAiImport']);
+Route::middleware(['web', 'auth'])->post('/rsu/genai-import/{jobId}/results/{resultId}/skip', [FinanceRsuController::class, 'skipGenAiImport']);
 
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts

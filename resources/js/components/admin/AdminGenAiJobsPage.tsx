@@ -58,6 +58,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   finance_transactions: 'Finance Transactions',
   finance_payslip: 'Payslip',
   utility_bill: 'Utility Bill',
+  equity_award: 'RSU Award',
   document_extract: 'Document Extract',
 }
 

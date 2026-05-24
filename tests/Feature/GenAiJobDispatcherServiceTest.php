@@ -169,6 +169,39 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $this->assertTrue($result);
     }
 
+    public function test_validate_context_accepts_valid_equity_award_context(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $result = $service->validateContext('equity_award', [
+            'default_symbol' => 'META',
+            'file_count' => 2,
+        ]);
+        $this->assertTrue($result);
+    }
+
+    public function test_validate_context_rejects_long_equity_award_default_symbol(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('default_symbol must be at most 4 characters');
+        $service->validateContext('equity_award', [
+            'default_symbol' => 'BRK.B',
+        ]);
+    }
+
+    public function test_validate_context_rejects_invalid_equity_award_default_symbol(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('default_symbol may only contain letters, numbers, and periods');
+        $service->validateContext('equity_award', [
+            'default_symbol' => 'M$TA',
+        ]);
+    }
+
     public function test_validate_context_accepts_class_action_email_context(): void
     {
         $service = new GenAiJobDispatcherService;
@@ -283,6 +316,18 @@ class GenAiJobDispatcherServiceTest extends TestCase
         $prompt = $service->buildPrompt('utility_bill', ['account_type' => 'Water']);
         $this->assertStringContainsString('utility bill', $prompt);
         $this->assertStringNotContainsString('power_consumed_kwh', $prompt);
+    }
+
+    public function test_build_prompt_for_equity_award(): void
+    {
+        $service = new GenAiJobDispatcherService;
+
+        $prompt = $service->buildPrompt('equity_award', ['default_symbol' => 'META']);
+        $this->assertStringContainsString('RSU grant letter', $prompt);
+        $this->assertStringContainsString('award_id', $prompt);
+        $this->assertStringContainsString('vest_date', $prompt);
+        $this->assertStringContainsString('META', $prompt);
+        $this->assertStringContainsString('Return only TOON', $prompt);
     }
 
     public function test_build_prompt_for_class_action_email(): void

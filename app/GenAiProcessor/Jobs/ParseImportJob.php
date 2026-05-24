@@ -371,7 +371,7 @@ class ParseImportJob implements ShouldQueue
     /**
      * Create GenAiImportResult rows from parsed data.
      *
-     * @param  array<string, mixed>  $data
+     * @param  array<int|string, mixed>  $data
      */
     private function createResults(GenAiImportJob $job, array $data): void
     {
@@ -387,6 +387,9 @@ class ParseImportJob implements ShouldQueue
                 break;
             case 'utility_bill':
                 $this->createUtilityBillResults($job, $data);
+                break;
+            case 'equity_award':
+                $this->createEquityAwardResults($job, $data);
                 break;
             case 'document_extract':
                 $this->createDocumentResults($job, $data);
@@ -446,6 +449,75 @@ class ParseImportJob implements ShouldQueue
                 'status' => 'pending_review',
             ]);
         }
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $data
+     */
+    private function createEquityAwardResults(GenAiImportJob $job, array $data): void
+    {
+        $defaultSymbol = $this->sanitizeTicker($job->getContextArray()['default_symbol'] ?? null);
+
+        foreach ($this->equityAwardRecords($data) as $index => $record) {
+            GenAiImportResult::create([
+                'job_id' => $job->id,
+                'result_index' => $index,
+                'result_json' => json_encode($this->sanitizeEquityAwardResult($record, $defaultSymbol)),
+                'status' => 'pending_review',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $data
+     * @return array<int, array<string, mixed>>
+     */
+    private function equityAwardRecords(array $data): array
+    {
+        if (isset($data[0])) {
+            $records = [];
+            foreach ($data as $record) {
+                if (is_array($record)) {
+                    $records[] = $record;
+                }
+            }
+
+            return $records;
+        }
+
+        foreach (['awards', 'equity_awards', 'tranches', 'vests', 'vesting_schedule'] as $key) {
+            if (isset($data[$key]) && is_array($data[$key])) {
+                $records = [];
+                foreach ($data[$key] as $record) {
+                    if (! is_array($record)) {
+                        continue;
+                    }
+                    $records[] = $record;
+                }
+
+                return $records;
+            }
+        }
+
+        return [$data];
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     * @return array<string, mixed>
+     */
+    private function sanitizeEquityAwardResult(array $record, ?string $defaultSymbol): array
+    {
+        return [
+            'original_filename' => $this->sanitizeString($record['original_filename'] ?? null, 255),
+            'award_id' => $this->sanitizeString($record['award_id'] ?? $record['grant_id'] ?? $record['award_number'] ?? null, 20),
+            'grant_date' => $this->sanitizeDate($record['grant_date'] ?? null),
+            'vest_date' => $this->sanitizeDate($record['vest_date'] ?? null),
+            'share_count' => $this->sanitizeShareCount($record['share_count'] ?? $record['shares'] ?? null),
+            'symbol' => $this->sanitizeTicker($record['symbol'] ?? $record['ticker'] ?? null) ?? $defaultSymbol,
+            'grant_price' => $this->sanitizeMoney($record['grant_price'] ?? null),
+            'vest_price' => $this->sanitizeMoney($record['vest_price'] ?? null),
+        ];
     }
 
     /**
@@ -549,6 +621,31 @@ class ParseImportJob implements ShouldQueue
         $amount = (float) $value;
 
         return $amount >= 0 ? round($amount, 2) : null;
+    }
+
+    private function sanitizeShareCount(mixed $value): ?int
+    {
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        $shareCount = (int) round((float) $value);
+
+        return $shareCount >= 0 ? $shareCount : null;
+    }
+
+    private function sanitizeTicker(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $symbol = strtoupper(trim($value));
+        if ($symbol === '' || strlen($symbol) > 4 || preg_match('/^[A-Z0-9.]+$/', $symbol) !== 1) {
+            return null;
+        }
+
+        return $symbol;
     }
 
     /**

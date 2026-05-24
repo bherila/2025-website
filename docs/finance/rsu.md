@@ -27,6 +27,7 @@ The RSU (Restricted Stock Unit) management system allows users to track equity a
   - Edit existing awards
   - Delete awards
   - Modal-based editing interface
+  - Import grant letters or vest-confirmation PDFs through the shared GenAI queue
 
 ### Add Award (Bulk Import)
 - **Route**: `/finance/rsu/add-grant`
@@ -36,6 +37,17 @@ The RSU (Restricted Stock Unit) management system allows users to track equity a
   - Preview imports before saving
   - Automatic date format conversion (m/d/y → yyyy-mm-dd)
   - Duplicate detection (based on grant_date + award_id + vest_date + symbol)
+
+### GenAI PDF Import
+- **Route**: `/finance/rsu/manage`
+- **Job type**: `equity_award`
+- **Description**: Upload RSU grant letters or vest-confirmation PDFs, parse them asynchronously, and review one editable result per vest tranche.
+- **Capabilities**:
+  - Direct-to-S3 PDF upload through the shared GenAI import endpoints
+  - Optional default stock symbol for documents that omit a ticker
+  - Per-tranche confirm or skip actions
+  - Non-destructive vest back-fill: a vest confirmation can update an existing row's `vest_price` without erasing an existing `grant_price`
+  - Duplicate protection through file-hash job de-duplication plus the user-scoped award unique key
 
 ## Data Model
 
@@ -54,7 +66,7 @@ Table: `fin_equity_awards`
 | `vest_price` | decimal(10,2) | Price per share at vest date (optional) |
 | `grant_price` | decimal(10,2) | Price per share at grant date (optional) |
 
-**Unique Constraint**: (`grant_date`, `award_id`, `vest_date`, `symbol`)
+**Unique Constraint**: (`uid`, `grant_date`, `award_id`, `vest_date`, `symbol`)
 
 ### TypeScript Interface
 ```typescript
@@ -101,7 +113,7 @@ Create or update RSU awards (upsert operation).
 
 **Behavior**:
 - If `id` is provided: Updates the existing record (user ownership verified)
-- If `id` is not provided: Uses `updateOrInsert` with unique key (grant_date, award_id, vest_date, symbol)
+- If `id` is not provided: Uses `updateOrInsert` with unique key (uid, grant_date, award_id, vest_date, symbol)
 
 **Example**:
 ```json
@@ -139,6 +151,21 @@ Delete a specific RSU award.
 }
 ```
 
+### POST /api/rsu/genai-import/{jobId}/results/{resultId}/confirm
+Confirm a reviewed GenAI result and upsert it into `fin_equity_awards`.
+
+**Request Body**: One `IAward`-shaped object without `id`.
+
+**Behavior**:
+- Validates the job belongs to the authenticated user and has `job_type=equity_award`
+- Validates one reviewed vest tranche (`award_id`, dates, whole-share count, max-4 ticker, optional prices)
+- Upserts by (`uid`, `grant_date`, `award_id`, `vest_date`, `symbol`)
+- Applies optional prices only when present, so null imported prices do not erase existing price data
+- Marks the result imported and marks the job imported when no pending review rows remain
+
+### POST /api/rsu/genai-import/{jobId}/results/{resultId}/skip
+Skip a reviewed GenAI result without creating or updating an award row.
+
 ## Component Architecture
 
 ### Main Components
@@ -151,7 +178,12 @@ Delete a specific RSU award.
 #### ManageAwardsPage
 - **Path**: `resources/js/components/rsu/ManageAwardsPage.tsx`
 - **Purpose**: CRUD interface for managing awards
-- **Features**: Table view, add/edit/delete modals
+- **Features**: Table view, add/edit/delete modals, GenAI PDF import modal
+
+#### RsuImportModal / RsuImportJobCard
+- **Path**: `resources/js/components/rsu/RsuImportModal.tsx`, `resources/js/components/rsu/RsuImportJobCard.tsx`
+- **Purpose**: Async PDF upload, polling, and per-tranche review for `equity_award` jobs
+- **Features**: PDF validation, optional default symbol context, retry, confirm, skip
 
 #### AddGrantPage
 - **Path**: `resources/js/components/rsu/AddGrantPage.tsx`
@@ -173,5 +205,6 @@ Delete a specific RSU award.
 
 - All routes protected with `auth` middleware
 - User isolation: Users can only view/edit/delete their own awards
+- GenAI confirm/skip endpoints require the job to belong to the authenticated user
 - Database constraints ensure data integrity
 - CSRF protection on all mutations

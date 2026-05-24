@@ -19,6 +19,7 @@ class GenAiImportJob extends Model
         'class_action_email',
         'finance_payslip',
         'utility_bill',
+        'equity_award',
         'document_extract',
         'phr_lab_result',
         'phr_vital',

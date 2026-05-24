@@ -17,6 +17,7 @@ to every provider, not just Gemini — see [Daily quota](#daily-quota--system-an
 | `finance_transactions` | `FinanceTransactionsPromptTemplate`              | `addFinanceAccount` tool call per account       | `POST /api/finance/documents` with `document_kind=statement`; pass `gen_ai_job_id` and `gen_ai_result_id` so `FinanceDocumentController` marks the result imported on success |
 | `finance_payslip`      | `PayslipPromptTemplate`                          | TOON array of payslip objects                   | `POST /api/payslips/genai-import/{jobId}/results/{resultId}/confirm` |
 | `utility_bill`         | `UtilityBillPromptTemplate`                      | TOON array of bill objects                      | `POST /api/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/confirm` |
+| `equity_award`         | `EquityAwardPromptTemplate`                      | TOON array of RSU vest tranches                 | `POST /api/rsu/genai-import/{jobId}/results/{resultId}/confirm` |
 | `document_extract`     | `TaxDocumentPromptTemplate` or `MultiAccountTaxImportPromptTemplate` | Tool call per form OR per-account JSON array | Linked `FileForTaxDocument.parsed_data` is updated and `DocumentIngestionService::syncFromTaxDocument` is invoked inline |
 | `class_action_email`   | `ClassActionEmailPromptTemplate` (text-only)     | Single JSON object with structured claim fields | Frontend reads parsed result and posts a class action claim via the regular CRUD endpoint, then calls a confirm route |
 | `phr_*` (lab result, vital, office visit, medication, immunization, problem list, procedure, allergy, document) | `PhrPromptTemplate` | JSON array of records | `POST /api/phr/genai/{job}/{result}/accept` (`PhrGenAiImportController::accept`) marks the result imported |
@@ -163,6 +164,7 @@ When wiring a new feature into this pipeline you produce, in order:
 | `finance_transactions` | `accounts` (array of `{name, last4}`)                                                      |
 | `finance_payslip`      | `employment_entity_id`, `file_count`                                                       |
 | `utility_bill`         | `account_type`, `utility_account_id`, `file_count`                                         |
+| `equity_award`         | `default_symbol`, `file_count`                                                             |
 | `document_extract`     | `document_id`, `document_kind`, `tax_year`, `form_type`, `accounts`, `input_kind`, `source_form_type` |
 | `class_action_email`   | `pasted_text`, `reference_page_text` (no file upload — uses `/paste` endpoint)             |
 | `phr_*`                | `patient_id`, `file_count`, `document_id`, `document_type`, `filename_hint`                |
@@ -192,7 +194,7 @@ pending → processing → parsed → imported
 calls `$result->markImported()` after successful persistence, then
 `$job->markImported()` once no `pending_review` rows remain. Every job type
 follows this contract (`class_action_email`, `utility_bill`, `finance_payslip`,
-`finance_transactions`, `phr_*`).
+`finance_transactions`, `equity_award`, `phr_*`).
 
 `finance_transactions` is the one type whose persist endpoint
 (`POST /api/finance/documents`) is shared with non-GenAI flows (manual CSV /
