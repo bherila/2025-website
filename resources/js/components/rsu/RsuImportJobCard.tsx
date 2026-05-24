@@ -21,9 +21,10 @@ const RsuAwardDraftSchema = z.object({
   grant_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Grant date is required'),
   vest_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Vest date is required'),
   share_count: z.string().trim().refine((value) => {
+    if (value === '') return false
     const numeric = Number(value)
-    return Number.isInteger(numeric) && numeric >= 0
-  }, 'Shares must be a whole number'),
+    return Number.isInteger(numeric) && numeric >= 1
+  }, 'Shares must be a whole number of at least 1'),
   symbol: z.string()
     .trim()
     .transform((value) => value.toUpperCase())
