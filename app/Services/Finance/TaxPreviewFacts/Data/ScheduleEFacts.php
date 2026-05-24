@@ -77,6 +77,8 @@ readonly class ScheduleEFacts
         public float $totalTraderNii,
         public float $totalPassive,
         public float $totalNonpassive,
+        public float $totalNonpassiveIncome,
+        public float $totalNonpassiveLoss,
         public float $grandTotal,
     ) {
         $this->miscIncomeSources = $miscIncomeSources;
@@ -114,6 +116,8 @@ readonly class ScheduleEFacts
             'totalTraderNii' => $this->totalTraderNii,
             'totalPassive' => $this->totalPassive,
             'totalNonpassive' => $this->totalNonpassive,
+            'totalNonpassiveIncome' => $this->totalNonpassiveIncome,
+            'totalNonpassiveLoss' => $this->totalNonpassiveLoss,
             'grandTotal' => $this->grandTotal,
         ];
     }
