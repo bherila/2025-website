@@ -14,6 +14,14 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
+/**
+ * Persist GenAI-parsed payslip results into the fin_payslip table.
+ *
+ * The upload + parse path itself lives in the shared GenAi import pipeline
+ * (see app/GenAiProcessor + docs/genai-import.md). This controller only owns
+ * the per-feature confirm/skip step that turns a reviewed GenAiImportResult
+ * into a FinPayslips row.
+ */
 class FinancePayslipImportController extends Controller
 {
     public function confirm(Request $request, int $jobId, int $resultId): JsonResponse
@@ -35,6 +43,9 @@ class FinancePayslipImportController extends Controller
             return response()->json(['error' => 'This result has already been imported.'], 409);
         }
 
+        // ps_is_estimated is forced true: every GenAI-parsed payslip starts as
+        // an estimate and the user flips it via the existing /estimated-status
+        // endpoint after they've reconciled it.
         $payload = array_merge(
             $result->getResultArray(),
             array_filter([
@@ -49,7 +60,10 @@ class FinancePayslipImportController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $validated = Arr::except($validator->validated(), ['payslip_id', 'uid', 'original_filename']);
+        // payslip_id is accepted in the rules so $request->only() doesn't drop it
+        // mid-merge, but it must never be written through to FinPayslips::create —
+        // payslip rows are always new on confirm.
+        $validated = Arr::except($validator->validated(), ['payslip_id']);
 
         $payslip = FinPayslips::create($validated);
 
