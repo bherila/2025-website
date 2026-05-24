@@ -223,7 +223,7 @@ For tax year 2025 trader-fund K-1s, the preview treats attached statement detail
 - Box 11 code S is non-portfolio capital gain/loss. Each sub-line routes to Schedule D line 5 when classified short-term and line 12 when classified long-term.
 - Box 11S lines with missing or mixed ST/LT wording are not routed by default. They surface as unclassified Schedule D rows and require the K-1 review modal's Short-term / Long-term setting before inclusion.
 - Box 11 code ZZ trader-fund items such as Section 988 FX, swap income/loss, and PFIC mark-to-market are ordinary income/loss on Schedule E Part II nonpassive, not Schedule D.
-- Box 13 code H investment interest runs through Form 4952 first. For AQR/trader-fund footnotes that direct Schedule E treatment, only the Form 4952-allowed portion reduces Schedule E Part II nonpassive income; any disallowed amount remains a Form 4952 carryforward.
+- Box 13 code H investment interest runs through Form 4952 first. For trader-fund supporting-statement footnotes that direct Schedule E treatment, only the Form 4952-allowed portion reduces Schedule E Part II nonpassive income; any disallowed amount remains a Form 4952 carryforward.
 - Box 13 code ZZ trader, management, administrative, and similar statement deductions reduce Schedule E Part II nonpassive income.
 - Box 20 code AJ is Form 461 / §461(l) support only. It is exported and displayed as an audit disclosure, but it is not separately deducted.
 - Form 8960 includes ordinary trader-fund Schedule E items as NII when statement notes identify them as trading in financial instruments/commodities.
@@ -232,7 +232,7 @@ For tax year 2025 trader-fund K-1s, the preview treats attached statement detail
 
 Inline tooltips in the K-1 code modal, Schedule D, and Schedule E explain the routing where users commonly need to validate statement treatment.
 
-Use `php artisan finance:k1-codes --year=2025 --account=32 --box=11 --code=S --format=json` to audit the Delphi Plus/AQR rows. In the 2025 sample data, Box 11S does not store explicit `character` values, but the command resolves `short`/`long` from the supporting-statement notes and shows Schedule D line 5 / line 12 destinations.
+Use `php artisan finance:k1-codes --year=2025 --account=<acct_id> --box=11 --code=S --format=json` to audit the trader-fund rows. In typical trader-fund data, Box 11S does not store explicit `character` values, but the command resolves `short`/`long` from the supporting-statement notes and shows Schedule D line 5 / line 12 destinations.
 
 ### Schedule C Tab
 
@@ -614,6 +614,19 @@ When `form_type === 'k1'` and the data contains `schemaVersion`, the modal rende
 - `FK1ParsedData` — legacy flat format (kept for backward compat with pre-2026.1 documents)
 - `isFK1StructuredData(data)` — type guard to detect new-format documents
 
+### Legacy K-1 Transformer (`K1LegacyTransformer`)
+
+Legacy parsed_data records (no `schemaVersion`) are migrated to the canonical `fields`/`codes` shape by `App\Services\Finance\K1LegacyTransformer`. Readers that don't already know they're handling 2026.1+ data should call `isLegacy()` + `transform()` defensively before reading `fields`/`codes`.
+
+The transformer's numeric box map is **form-source aware** for the two boxes that differ between K-1 (Form 1065) and K-1 (Form 1120S):
+
+| Legacy field | Form 1065 canonical box | Form 1120S canonical box |
+|--------------|-------------------------|--------------------------|
+| `box7_net_section_1231_gain` | `10` | `9` |
+| `box9_section_179_deduction` | `12` | `11` |
+
+Legacy fields `box8_other_income` and `box10_other_deductions` are **intentionally not mapped** to canonical boxes — historical data shows their semantics drift (e.g., `box10_other_deductions` is sometimes actually Box 13 code AE portfolio deductions, not Box 10 Section 1231). The raw values are preserved under `legacyFields` for audit/recovery; downstream readers that need them should pull from there rather than expecting canonical fields.
+
 ### Form 8959 / 8960 / Capital Loss Carryover Support
 
 **New modules:**
@@ -640,7 +653,7 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 
 **Part I — Investment interest expense (Line 1, flowing to Line 3):**
 - K-1 Box 13 codes **H** (investment interest), **G**, **AC**, **AD** — collected into `invIntSources` as negative values.
-- `invIntSources.allowedAmount` prorates Form 4952 Line 8 back to each source. `scheduleEDeductibleInvestmentInterestExpense` is the subset eligible for Schedule E treatment under AQR/trader-fund footnotes.
+- `invIntSources.allowedAmount` prorates Form 4952 Line 8 back to each source. `scheduleEDeductibleInvestmentInterestExpense` is the subset eligible for Schedule E treatment under trader-fund supporting-statement footnotes.
 - 1099-INT **Box 5** — investment expense reported by the payer also feeds Part I Line 1 under current convention.
 - Short dividends held >45 days (from `analyzeShortDividends`) — deductible investment interest expense per Pub. 550.
 
