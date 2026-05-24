@@ -78,6 +78,22 @@ All validations in [TESTING.md](../TESTING.md) must pass before committing:
 - **ESLint**: Run `pnpm run lint` - no linting errors
 - **Jest Tests**: Run `pnpm run test` - all tests must pass
 
+### Optional Playwright Checks
+Playwright is available for ad-hoc Parking Pickup visual smoke checks. These checks are **not** part of the mandatory pre-commit or every-PR validation path.
+
+Use them when an LLM agent changes the Parking Pickup scene, camera framing, route rendering, HUD layout, or other browser-visible game behavior:
+
+```bash
+pnpm exec playwright install chromium
+PLAYWRIGHT_BASE_URL=http://localhost:8000 pnpm run test:e2e:parking-pickup
+```
+
+The local command assumes the Laravel app is already running on `localhost:8000`. Use another `PLAYWRIGHT_BASE_URL` if testing a different local or deployed server.
+
+For GitHub-hosted verification, run the **Parking Pickup Playwright** workflow manually from the Actions tab. Leave `base_url` blank to build the selected branch and serve it on the runner, or set `base_url` to test a deployed preview. The workflow is `workflow_dispatch` only and uploads the Playwright report, screenshots, traces, and Laravel server log as artifacts.
+
+See [docs/games/parking-pickup-playwright.md](../docs/games/parking-pickup-playwright.md) for the runbook.
+
 ### When to Run Validations
 - Before every commit
 - After making any code changes
