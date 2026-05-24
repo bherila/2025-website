@@ -26,6 +26,7 @@ export interface PassengerLoopAssignment {
 export interface PassengerLoopPlan {
   assignments: PassengerLoopAssignment[]
   feederPassengers: Passenger[]
+  feederLayoutPassengers: Passenger[]
   slots: PassengerLoopSlot[]
 }
 
@@ -153,17 +154,33 @@ export function planPassengerLoopSlots({
     assignments.push({
       entryStartedAt: slot.entryStartedAt,
       passenger,
-      sourcePassengers: slot.entryStartedAt === null
-        ? null
-        : entrySources.get(passenger.id) ?? [passenger, ...unassignedPassengers],
+      sourcePassengers: slot.entryStartedAt === null ? null : entrySources.get(passenger.id) ?? null,
       offset: slot.offset,
       shift: shifts.get(passenger.id) ?? null,
     })
   }
+  const pendingEntryPassengerIds = new Set(
+    assignments
+      .filter((assignment) => assignment.entryStartedAt !== null)
+      .map((assignment) => assignment.passenger.id),
+  )
+  const pendingEntryPassengers = passengers.filter((passenger) => pendingEntryPassengerIds.has(passenger.id))
+  const feederLayoutPassengers = [...pendingEntryPassengers, ...unassignedPassengers]
+  const assignmentsWithSources = assignments.map((assignment) => {
+    if (assignment.entryStartedAt === null || assignment.sourcePassengers !== null) {
+      return assignment
+    }
+
+    return {
+      ...assignment,
+      sourcePassengers: feederLayoutPassengers,
+    }
+  })
 
   return {
-    assignments,
+    assignments: assignmentsWithSources,
     feederPassengers: unassignedPassengers,
+    feederLayoutPassengers,
     slots: nextSlots,
   }
 }

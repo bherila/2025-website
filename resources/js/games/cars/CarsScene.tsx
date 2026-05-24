@@ -550,6 +550,7 @@ function buildDynamicScene(
   }
 
   const feederPassengers = selectFeederPassengersForRendering(loopPlan.feederPassengers)
+  const feederLayoutPassengers = selectFeederPassengersForRendering(loopPlan.feederLayoutPassengers)
   const feederIds = new Set(feederPassengers.map((passenger) => passenger.id))
   for (const id of feederPositions.keys()) {
     if (!feederIds.has(id)) {
@@ -561,7 +562,7 @@ function buildDynamicScene(
       colorblindMode,
       pattern: CAR_PATTERNS[passenger.color],
     })
-    const target = feederPassengerPosition(passenger, feederPassengers, queueLayout)
+    const target = feederPassengerPosition(passenger, feederLayoutPassengers, queueLayout)
     target.y = 0.1
     const previous = feederPositions.get(passenger.id)
     const fixedTarget = target.clone()

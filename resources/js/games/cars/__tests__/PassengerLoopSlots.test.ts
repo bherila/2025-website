@@ -46,6 +46,30 @@ describe('passenger loop slots', () => {
     expect(plan.feederPassengers).toEqual([])
   })
 
+  it('reserves feeder head layout space for pending loop-entry passengers', () => {
+    const slots: PassengerLoopSlot[] = [
+      { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
+      { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
+      { entryStartedAt: null, passengerId: 'p3', offset: -1.02 },
+    ]
+    const plan = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: 20,
+      passengers: [passenger('p1'), passenger('p3'), passenger('p4'), passenger('p5')],
+      phase: 0,
+      slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', 'p4'])
+    expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p4')?.entryStartedAt)
+      .toBeGreaterThan(20)
+    expect(plan.feederPassengers.map((item) => item.id)).toEqual(['p5'])
+    expect(plan.feederLayoutPassengers.map((item) => item.id)).toEqual(['p4', 'p5'])
+  })
+
   it('leaves the trailing slot empty when no feeder passenger is available', () => {
     const slots: PassengerLoopSlot[] = [
       { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
