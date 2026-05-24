@@ -57,6 +57,8 @@ class Form8960FactsBuilderTest extends TestCase
             totalTraderNii: $trader,
             totalPassive: $passive,
             totalNonpassive: 0.0,
+            totalNonpassiveIncome: 0.0,
+            totalNonpassiveLoss: 0.0,
             grandTotal: $passive + $trader,
         );
     }
@@ -133,6 +135,8 @@ class Form8960FactsBuilderTest extends TestCase
             selectedLine5aTotal: $stateIncomeTaxTotal,
             realEstateTaxSources: [],
             realEstateTaxTotal: 0.0,
+            personalPropertyTaxSources: [],
+            personalPropertyTaxTotal: 0.0,
             saltPaidBeforeCap: $stateIncomeTaxTotal,
             saltCap: 40000.0,
             saltDeduction: min(40000.0, $stateIncomeTaxTotal),
