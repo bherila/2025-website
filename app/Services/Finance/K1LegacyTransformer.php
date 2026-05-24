@@ -72,13 +72,16 @@ class K1LegacyTransformer
         $formSource = (int) ($legacy['form_source'] ?? 1065);
 
         // --- Numbered K-1 boxes ---
-        // Section 1231 and Section 179 box numbers differ between the 1065 and 1120S K-1s:
-        //   Form 1065 K-1:  §1231 = Box 10, §179 = Box 12
-        //   Form 1120S K-1: §1231 = Box 9,  §179 = Box 11
-        // Legacy `box7_net_section_1231_gain` / `box9_section_179_deduction` were named by
-        // semantic meaning, not by canonical IRS box, so we route them by form source.
+        // Several legacy field names were named by semantic meaning, not by canonical IRS
+        // box. The canonical box differs between Form 1065 K-1 and Form 1120S K-1:
+        //   Form 1065 K-1:  §1231 = Box 10, §179 = Box 12, Other income = Box 11
+        //   Form 1120S K-1: §1231 = Box 9,  §179 = Box 11, Other income = Box 10
+        // (`box10_other_deductions` is intentionally NOT remapped: live data shows it is
+        // often the same amount also reported as a coded item like 13AE, so remapping it
+        // would double-count. Recover from `legacyFields` if needed.)
         $section1231Box = $formSource === 1120 ? '9' : '10';
         $section179Box = $formSource === 1120 ? '11' : '12';
+        $otherIncomeBox = $formSource === 1120 ? '10' : '11';
 
         $boxMap = [
             'box1_ordinary_income' => '1',
@@ -88,6 +91,7 @@ class K1LegacyTransformer
             'box5_guaranteed_payments_capital' => '5',
             'box6_guaranteed_payments_total' => '6',
             'box7_net_section_1231_gain' => $section1231Box,
+            'box8_other_income' => $otherIncomeBox,
             'box9_section_179_deduction' => $section179Box,
         ];
         foreach ($boxMap as $legacyKey => $irsBox) {

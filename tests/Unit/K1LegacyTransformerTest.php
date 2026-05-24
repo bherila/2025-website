@@ -92,11 +92,12 @@ class K1LegacyTransformerTest extends TestCase
 
         $result = K1LegacyTransformer::transform($legacy);
 
-        // Form 1065 K-1: §1231 = Box 10, §179 = Box 12
+        // Form 1065 K-1: §1231 = Box 10, §179 = Box 12.
+        // Box 11 separately holds box8_other_income (0 in the sample) — see the dedicated
+        // test_transform_maps_legacy_box8_other_income_for_1065 case.
         $this->assertSame('1234', $result['fields']['10']['value']);
         $this->assertSame('567', $result['fields']['12']['value']);
         $this->assertArrayNotHasKey('9a', $result['fields']);
-        $this->assertArrayNotHasKey('11', $result['fields']);
     }
 
     public function test_transform_maps_legacy_section_1231_and_section_179_for_1120s(): void
@@ -114,6 +115,33 @@ class K1LegacyTransformerTest extends TestCase
         $this->assertArrayNotHasKey('9a', $result['fields']);
         $this->assertArrayNotHasKey('12', $result['fields']);
         $this->assertSame('K-1-1120S', $result['formType']);
+    }
+
+    public function test_transform_maps_legacy_box8_other_income_for_1065(): void
+    {
+        $legacy = $this->legacySample();
+        $legacy['box8_other_income'] = 875;
+
+        $result = K1LegacyTransformer::transform($legacy);
+
+        // Form 1065 K-1: Other income = Box 11
+        $this->assertSame('875', $result['fields']['11']['value']);
+        $this->assertArrayNotHasKey('8', $result['fields']);
+    }
+
+    public function test_transform_maps_legacy_box8_other_income_for_1120s(): void
+    {
+        $legacy = $this->legacySample();
+        $legacy['form_source'] = 1120;
+        $legacy['box8_other_income'] = 875;
+        // Also seed §1231 so we exercise the 1120S split, which puts §1231 at Box 9.
+        $legacy['box7_net_section_1231_gain'] = 0;
+
+        $result = K1LegacyTransformer::transform($legacy);
+
+        // Form 1120S K-1: Other income = Box 10
+        $this->assertSame('875', $result['fields']['10']['value']);
+        $this->assertArrayNotHasKey('8', $result['fields']);
     }
 
     public function test_transform_maps_ownership_pct_to_field_j(): void
