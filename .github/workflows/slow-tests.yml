@@ -1,0 +1,38 @@
+name: Slow Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '19 10 * * *'
+
+concurrency:
+  group: slow-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jest-slow:
+    name: Jest Slow Sweeps
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run slow Jest sweeps
+        run: pnpm run test:slow

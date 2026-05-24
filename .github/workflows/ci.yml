@@ -11,13 +11,16 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  test:
-    name: Run Tests
+  changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      migrations: ${{ steps.changes.outputs.migrations }}
 
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +39,10 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'vite.config.*'
+              - 'jest.config.*'
+              - 'tests-ts/**'
               - 'resources/**'
+              - '.github/workflows/**'
             backend:
               - '**/*.php'
               - 'composer.json'
@@ -46,78 +52,42 @@ jobs:
               - 'phpstan-baseline.neon'
               - 'database/**'
               - 'scripts/**'
+              - '.github/workflows/**'
             migrations:
               - 'database/migrations/**/*.php'
               - 'scripts/check-migration-identifiers.py'
 
-      - name: Check MySQL identifier lengths in migrations
-        if: steps.changes.outputs.migrations == 'true' || github.event_name == 'push'
-        run: python3 scripts/check-migration-identifiers.py
+  frontend:
+    name: Frontend Checks
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Set up pnpm
-        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         uses: pnpm/action-setup@v5
         with:
           version: 10
 
       - name: Set up Node
-        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
 
       - name: Install Node dependencies
-        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: pnpm install --frozen-lockfile
 
       - name: Type-check, lint, and test in parallel
-        if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
         run: pnpm exec concurrently --kill-others-on-fail --names "tsc,eslint,jest" "pnpm run type-check" "pnpm run lint" "pnpm run test"
 
       - name: Build frontend
-        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.backend == 'true' || github.event_name == 'push'
         run: pnpm run build
-
-      - name: Setup PHP
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-
-      - name: Cache Composer dependencies
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        uses: actions/cache@v5
-        with:
-          path: vendor
-          key: composer-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-
-
-      - name: Install Composer dependencies (with dev)
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: composer install --no-interaction --prefer-dist
-
-      - name: Create .env for PHPStan
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: cp .env.example .env
-
-      - name: Cache PHPStan result cache
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        uses: actions/cache@v5
-        with:
-          path: .phpstan-cache
-          key: phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-${{ github.sha }}
-          restore-keys: |
-            phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-
-            phpstan-
-
-      - name: Run PHPStan
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: vendor/bin/phpstan analyse --no-progress
-
-      - name: Run PHPUnit
-        if: steps.changes.outputs.backend == 'true' || github.event_name == 'push'
-        run: php artisan test --compact
 
       - name: Upload frontend build artifact
         if: github.ref == 'refs/heads/main'
@@ -127,10 +97,117 @@ jobs:
           path: public/build/
           retention-days: 2
 
+  backend:
+    name: Backend Checks
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check MySQL identifier lengths in migrations
+        if: needs.changes.outputs.migrations == 'true' || github.event_name == 'push'
+        run: python3 scripts/check-migration-identifiers.py
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend for PHP tests
+        run: pnpm run build
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install Composer dependencies (with dev)
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Create .env for PHPStan
+        run: cp .env.example .env
+
+      - name: Cache PHPStan result cache
+        uses: actions/cache@v5
+        with:
+          path: .phpstan-cache
+          key: phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-${{ github.sha }}
+          restore-keys: |
+            phpstan-${{ hashFiles('phpstan.neon', 'phpstan-baseline.neon', 'composer.lock') }}-
+            phpstan-
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Run PHPUnit
+        run: php artisan test --compact
+
+  test:
+    name: Run Tests
+    needs:
+      - changes
+      - frontend
+      - backend
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check CI results
+        run: |
+          changes="${{ needs.changes.result }}"
+          frontend="${{ needs.frontend.result }}"
+          backend="${{ needs.backend.result }}"
+
+          if [[ "$changes" == "failure" || "$changes" == "cancelled" ]]; then
+            echo "Change detection failed: $changes"
+            exit 1
+          fi
+
+          if [[ "$frontend" == "failure" || "$frontend" == "cancelled" ]]; then
+            echo "Frontend checks failed: $frontend"
+            exit 1
+          fi
+
+          if [[ "$backend" == "failure" || "$backend" == "cancelled" ]]; then
+            echo "Backend checks failed: $backend"
+            exit 1
+          fi
+
+          if [[ "$frontend" == "skipped" && "$backend" == "skipped" ]]; then
+            echo "No frontend or backend paths changed."
+          fi
+
+          echo "Required checks passed."
+
   deploy:
     name: Deploy to Production
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - test
+      - frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.frontend.result == 'success'
     runs-on: ubuntu-latest
     environment: prod
 

@@ -6,6 +6,7 @@
         "build": "vite build",
         "dev": "vite",
         "test": "jest --passWithNoTests",
+        "test:slow": "JEST_INCLUDE_SLOW_TESTS=1 jest --passWithNoTests --testPathPatterns='\\.slow\\.test\\.[tj]sx?$'",
         "test:e2e": "playwright test",
         "test:e2e:parking-pickup": "playwright test tests/e2e/parking-pickup.spec.ts",
         "type-check": "tsc --noEmit --jsx react-jsx",

@@ -1,4 +1,7 @@
-const sourceMaps = process.env.CI === 'true' ? 'inline' : false;
+const sourceMaps = process.env.JEST_INLINE_SOURCEMAPS === '1' ? 'inline' : false;
+const slowTestPathIgnorePatterns = process.env.JEST_INCLUDE_SLOW_TESTS === '1'
+  ? []
+  : ['\\.slow\\.test\\.[tj]sx?$'];
 
 const domTsTests = [
   '<rootDir>/resources/js/components/finance/tax-preview/__tests__/useTaxPreviewPrefs.test.ts',
@@ -57,6 +60,7 @@ module.exports = {
         '<rootDir>/tests-ts/**/*.test.tsx',
         ...domTsTests,
       ],
+      testPathIgnorePatterns: slowTestPathIgnorePatterns,
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.ts'],
       ...shared,
     },
@@ -67,7 +71,10 @@ module.exports = {
         '<rootDir>/resources/js/**/*.test.ts',
         '<rootDir>/tests-ts/**/*.test.ts',
       ],
-      testPathIgnorePatterns: domTsTests,
+      testPathIgnorePatterns: [
+        ...domTsTests,
+        ...slowTestPathIgnorePatterns,
+      ],
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.node.ts'],
       ...shared,
     },
