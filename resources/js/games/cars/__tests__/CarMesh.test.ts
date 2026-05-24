@@ -1,4 +1,5 @@
 import { carVisualMetrics } from '../scene/builders/carMesh'
+import { CELL_SIZE } from '../scene/sceneConstants'
 
 describe('Parking Pickup car visuals', () => {
   it('uses the same field-car width for cardinal and diagonal cars', () => {
@@ -22,5 +23,13 @@ describe('Parking Pickup car visuals', () => {
     expect(metrics.decalZ).toBeGreaterThan(0)
     expect(metrics.counterZ).toBeGreaterThan(0)
     expect(metrics.counterSize).toBeCloseTo(carVisualMetrics({ length: 2 }, false).counterSize)
+  })
+
+  it('uses chunkier field-car proportions for mobile readability', () => {
+    const metrics = carVisualMetrics({ length: 3 }, false)
+
+    expect(metrics.carWidth).toBeCloseTo(CELL_SIZE * 0.74)
+    expect(metrics.counterSize).toBeCloseTo(0.34)
+    expect(metrics.decalSize).toBeGreaterThan(CELL_SIZE * 0.62)
   })
 })

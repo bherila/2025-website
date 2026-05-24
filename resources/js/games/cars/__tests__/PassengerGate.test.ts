@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 
 import { canBoardPassengerAtParkingGate, type Car, type GameState, type ParkingSlot } from '../gameEngine'
-import { notifyPassengerGate } from '../scene/animation/passengers'
-import type { PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
+import { notifyPassengerGate, type PassengerGateHold } from '../scene/animation/passengers'
+import type { MovingCarRenderItem, PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
 
 describe('passenger gate notifications', () => {
   it('does not board passengers before their delayed feeder entry completes', () => {
@@ -68,6 +68,107 @@ describe('passenger gate notifications', () => {
 
     expect(onPassengerGate).not.toHaveBeenCalledWith('feeder-green')
     expect(onPassengerGate).toHaveBeenCalledWith('loop-red')
+  })
+
+  it('boards a held gate passenger when their matching parked car finishes moving', () => {
+    const passenger: PassengerRenderItem = {
+      id: 'p1',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const gateCycles = new Map([['p1', -1]])
+    const gateHolds = new Map<string, PassengerGateHold>()
+    const onPassengerGate = jest.fn()
+
+    notifyPassengerGate(
+      [passenger],
+      0,
+      gateCycles,
+      testState,
+      [parkingMovement()],
+      10.5,
+      onPassengerGate,
+      gateHolds,
+    )
+
+    expect(onPassengerGate).not.toHaveBeenCalled()
+    expect(gateCycles.get('p1')).toBe(-1)
+    expect(gateHolds.get('p1')).toEqual({ cycle: 0, expiresAt: 11.75 })
+
+    notifyPassengerGate(
+      [passenger],
+      0.8,
+      gateCycles,
+      testState,
+      [parkingMovement()],
+      11.1,
+      onPassengerGate,
+      gateHolds,
+    )
+
+    expect(onPassengerGate).toHaveBeenCalledWith('p1')
+    expect(gateCycles.get('p1')).toBe(0)
+    expect(gateHolds.has('p1')).toBe(false)
+  })
+
+  it('expires held gate crossings instead of boarding after the passenger has moved on', () => {
+    const passenger: PassengerRenderItem = {
+      id: 'p1',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const gateCycles = new Map([['p1', -1]])
+    const gateHolds = new Map<string, PassengerGateHold>()
+    const onPassengerGate = jest.fn()
+
+    notifyPassengerGate(
+      [passenger],
+      0,
+      gateCycles,
+      testState,
+      [parkingMovement()],
+      10.5,
+      onPassengerGate,
+      gateHolds,
+    )
+    notifyPassengerGate(
+      [passenger],
+      0.8,
+      gateCycles,
+      testState,
+      [parkingMovement()],
+      12.1,
+      onPassengerGate,
+      gateHolds,
+    )
+
+    expect(onPassengerGate).not.toHaveBeenCalled()
+    expect(gateCycles.get('p1')).toBe(0)
+    expect(gateHolds.has('p1')).toBe(false)
+  })
+
+  it('consumes gate crossings when no matching parked car exists', () => {
+    const bluePassenger: PassengerRenderItem = {
+      id: 'blue-loop',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const noMatchState: GameState = {
+      ...testState,
+      passengerQueue: [{ color: 'blue', id: 'blue-loop' }],
+    }
+    const gateCycles = new Map([['blue-loop', -1]])
+    const gateHolds = new Map<string, PassengerGateHold>()
+    const onPassengerGate = jest.fn()
+
+    notifyPassengerGate([bluePassenger], 0, gateCycles, noMatchState, [], 20, onPassengerGate, gateHolds)
+
+    expect(onPassengerGate).not.toHaveBeenCalled()
+    expect(gateCycles.get('blue-loop')).toBe(0)
+    expect(gateHolds.size).toBe(0)
   })
 
   it('rejects ineligible passenger ids via canBoardPassengerAtParkingGate', () => {
@@ -163,4 +264,17 @@ const testState: GameState = {
   totalScore: 0,
   tunnels: [],
   version: 2,
+}
+
+function parkingMovement(): MovingCarRenderItem {
+  return {
+    carId: 'car-1',
+    duration: 1,
+    mesh: new THREE.Group(),
+    movementKind: 'parking',
+    route: [],
+    segmentLengths: [],
+    startedAt: 10,
+    totalLength: 0,
+  }
 }

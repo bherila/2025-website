@@ -1,7 +1,8 @@
 import { selectFeederPassengersForRendering } from '../CarsScene'
 import { generateLevel, loopPassengerCapacity, type Passenger } from '../gameEngine'
-import { planPassengerLoopSlots } from '../scene/passengerLoopSlots'
-import { passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
+import { type PassengerLoopSlot, planPassengerLoopSlots } from '../scene/passengerLoopSlots'
+import { feederPassengerPosition, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
+import type { QueueLayout } from '../scene/sceneTypes'
 
 describe('feeder passenger rendering plan', () => {
   it('keeps both left and right feeder passengers in the plan, beyond the legacy 40-cap window', () => {
@@ -42,4 +43,57 @@ describe('feeder passenger rendering plan', () => {
       rightSideBeyondLegacyCap.some((passenger) => !legacyCap.some((candidate) => candidate.id === passenger.id)),
     ).toBe(true)
   })
+
+  it('keeps rendered feeder passengers behind pending feeder-entry passengers', () => {
+    const slots: PassengerLoopSlot[] = [
+      { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
+      { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
+      { entryStartedAt: null, passengerId: 'p3', offset: -1.02 },
+    ]
+    const plan = planPassengerLoopSlots({
+      capacity: 3,
+      layout: testLayout,
+      now: 20,
+      passengers: [passenger('p1'), passenger('p3'), passenger('p4'), passenger('p5')],
+      phase: 0,
+      slots,
+      spacing: 0.34,
+      speed: 1,
+    })
+
+    const enteringPassenger = plan.feederLayoutPassengers[0]
+    const firstRenderedFeederPassenger = plan.feederPassengers[0]
+    if (!enteringPassenger || !firstRenderedFeederPassenger) {
+      throw new Error('Expected pending entry and rendered feeder passenger')
+    }
+
+    const enteringPosition = feederPassengerPosition(enteringPassenger, plan.feederLayoutPassengers, testLayout)
+    const renderedPosition = feederPassengerPosition(
+      firstRenderedFeederPassenger,
+      plan.feederLayoutPassengers,
+      testLayout,
+    )
+    const overlappingPosition = feederPassengerPosition(
+      firstRenderedFeederPassenger,
+      plan.feederPassengers,
+      testLayout,
+    )
+
+    expect(renderedPosition.distanceTo(enteringPosition)).toBeGreaterThan(0.2)
+    expect(overlappingPosition.distanceTo(enteringPosition)).toBeLessThan(0.01)
+  })
 })
+
+const testLayout: QueueLayout = {
+  capRadius: 1,
+  depth: 2.7,
+  halfDepth: 1,
+  halfWidth: 2,
+  perimeter: 4 * 2 + Math.PI * 2,
+  straightLength: 4,
+  width: 4.7,
+}
+
+function passenger(id: string): Passenger {
+  return { id, color: 'red', feederSide: 'left' }
+}

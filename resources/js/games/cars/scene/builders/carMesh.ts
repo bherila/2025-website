@@ -22,18 +22,18 @@ export interface CarVisualMetrics {
   roofWidth: number
 }
 
-const FIELD_CAR_WIDTH = CELL_SIZE * 0.56
-const FIELD_CAR_END_PADDING = CELL_SIZE * 0.22
-const PARKED_CAR_WIDTH = CELL_SIZE * 0.58
-const PARKED_CAR_END_PADDING = CELL_SIZE * 0.28
-const COUNTER_SIZE = 0.3
+const FIELD_CAR_WIDTH = CELL_SIZE * 0.74
+const FIELD_CAR_END_PADDING = CELL_SIZE * 0.12
+const PARKED_CAR_WIDTH = CELL_SIZE * 0.72
+const PARKED_CAR_END_PADDING = CELL_SIZE * 0.18
+const COUNTER_SIZE = 0.34
 
 export function carVisualMetrics(car: Pick<Car, 'length'>, parked: boolean): CarVisualMetrics {
   const carWidth = parked ? PARKED_CAR_WIDTH : FIELD_CAR_WIDTH
   const carLength = parked
     ? Math.max(CELL_SIZE, car.length * CELL_SIZE - PARKED_CAR_END_PADDING)
     : Math.max(CELL_SIZE, car.length * CELL_SIZE - FIELD_CAR_END_PADDING)
-  const counterZ = carLength * 0.14
+  const counterZ = carLength * 0.16
 
   return {
     bodyHeight: 0.34,
@@ -41,8 +41,8 @@ export function carVisualMetrics(car: Pick<Car, 'length'>, parked: boolean): Car
     carWidth,
     counterSize: COUNTER_SIZE,
     counterZ,
-    decalSize: Math.min(carWidth * 0.72, 0.3),
-    decalZ: Math.min(carLength * 0.39, counterZ + COUNTER_SIZE * 0.94),
+    decalSize: Math.min(carWidth * 0.86, 0.36),
+    decalZ: Math.min(carLength * 0.42, counterZ + COUNTER_SIZE * 0.95),
     roofLength: Math.max(0.34, carLength * 0.5),
     roofWidth: carWidth * 0.78,
   }
@@ -160,17 +160,17 @@ export function createCarDecalTexture(car: Car, options: CarVisualOptions = {}):
       } else {
         context.fillStyle = '#ffffff'
         context.strokeStyle = 'rgba(15, 23, 42, 0.82)'
-        context.lineWidth = 26
+        context.lineWidth = 30
         context.lineJoin = 'round'
         context.lineCap = 'round'
         context.beginPath()
-        context.moveTo(128, 20)
-        context.lineTo(224, 120)
-        context.lineTo(172, 120)
-        context.lineTo(172, 190)
-        context.lineTo(84, 190)
-        context.lineTo(84, 120)
-        context.lineTo(32, 120)
+        context.moveTo(128, 12)
+        context.lineTo(234, 122)
+        context.lineTo(178, 122)
+        context.lineTo(178, 202)
+        context.lineTo(78, 202)
+        context.lineTo(78, 122)
+        context.lineTo(22, 122)
         context.closePath()
         context.stroke()
         context.fill()
@@ -328,14 +328,14 @@ export function createCarCounterSprite(car: Car, metrics: CarVisualMetrics): THR
       context.clearRect(0, 0, canvas.width, canvas.height)
       context.fillStyle = '#ffffff'
       context.strokeStyle = 'rgba(15, 23, 42, 0.82)'
-      context.lineWidth = 12
+      context.lineWidth = 14
       context.beginPath()
       context.arc(96, 96, 80, 0, Math.PI * 2)
       context.fill()
       context.stroke()
       context.fillStyle = '#0f172a'
       const text = String(remaining)
-      const fontSize = text.length >= 2 ? 110 : 134
+      const fontSize = text.length >= 2 ? 112 : 138
       context.font = `900 ${fontSize}px Atkinson Hyperlegible Next, Arial, sans-serif`
       context.textAlign = 'center'
       context.textBaseline = 'middle'

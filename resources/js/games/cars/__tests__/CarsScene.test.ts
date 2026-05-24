@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 
-import { retainPersistentMovingCars, retainSceneMovingCars } from '../CarsScene'
+import { passengerQueueRefreshAtForEntry, retainPersistentMovingCars, retainSceneMovingCars } from '../CarsScene'
 import { generateLevel, loopPassengerCapacity } from '../gameEngine'
 import { accelerateThenConstantRouteProgress } from '../scene/animation/departingCar'
 import { animateMovingCars, positionOnRoute, routeRotationAtSegment } from '../scene/animation/movingCars'
+import { PASSENGER_LOOP_ENTRY_RETENTION_SECONDS } from '../scene/passengerLoopSlots'
 import { angleLerp, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
 import type { MovingCarRenderItem } from '../scene/sceneTypes'
 
@@ -97,6 +98,16 @@ describe('CarsScene animation bookkeeping', () => {
     expect(car.mesh.position.x).toBeCloseTo(expected.position.x)
     expect(car.mesh.position.y).toBeCloseTo(0.08)
     expect(car.mesh.rotation.y).toBeCloseTo(expected.rotationY)
+  })
+
+  it('schedules feeder queue refresh after delayed loop-entry retention expires', () => {
+    const entry = {
+      duration: 0.55,
+      from: new THREE.Vector3(),
+      startedAt: 12,
+    }
+
+    expect(passengerQueueRefreshAtForEntry(entry)).toBeCloseTo(12 + PASSENGER_LOOP_ENTRY_RETENTION_SECONDS + 0.03)
   })
 })
 

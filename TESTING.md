@@ -26,6 +26,29 @@ silently if skipped — always run it even when your change looks "PHP-trivial".
 2. **ESLint**: `pnpm run lint` — must pass with no errors
 3. **Jest**: `pnpm run test` — all tests must pass
 
+## Optional Playwright Checks
+
+Playwright checks are available for ad-hoc Parking Pickup browser verification. They are not part of the mandatory pre-commit checklist and should not be treated as required on every PR.
+
+Run them locally when changing Parking Pickup rendering, camera framing, mobile layout, or other browser-visible game behavior:
+
+```bash
+pnpm exec playwright install chromium
+PLAYWRIGHT_BASE_URL=http://localhost:8000 pnpm run test:e2e:parking-pickup
+```
+
+The local command assumes the app is already running on `localhost:8000`. Override `PLAYWRIGHT_BASE_URL` for another local port or deployed preview URL.
+
+For CI, use the manual GitHub Actions workflow:
+
+1. Open **Actions**.
+2. Select **Parking Pickup Playwright**.
+3. Click **Run workflow**.
+4. Choose the branch to verify.
+5. Leave `base_url` blank to build the branch and serve it locally on the runner, or set `base_url` to test a deployed preview.
+
+The workflow is `workflow_dispatch` only. It uploads the Playwright report, screenshots, traces, and local Laravel server log as artifacts. See `docs/games/parking-pickup-playwright.md` for details.
+
 ## Backend (steps 4–6)
 
 Before running backend tests, build the Vite manifest: `pnpm run build` (required for blade view tests).

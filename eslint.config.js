@@ -32,7 +32,7 @@ export default tseslint.config(
         ...globals.es2020,
       },
       parserOptions: {
-        project: ["./tsconfig.json"],
+        project: ["./tsconfig.json", "./tsconfig.playwright.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },

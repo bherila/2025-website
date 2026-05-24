@@ -2,7 +2,7 @@ import type { Passenger } from '../gameEngine'
 import { feederJoinProgress, passengerGateProgress } from './sceneGeometry'
 import type { QueueLayout } from './sceneTypes'
 
-const COMPLETED_ENTRY_RETENTION_SECONDS = 1.2
+export const PASSENGER_LOOP_ENTRY_RETENTION_SECONDS = 1.2
 
 export interface PassengerLoopSlot {
   entryStartedAt: number | null
@@ -26,6 +26,7 @@ export interface PassengerLoopAssignment {
 export interface PassengerLoopPlan {
   assignments: PassengerLoopAssignment[]
   feederPassengers: Passenger[]
+  feederLayoutPassengers: Passenger[]
   slots: PassengerLoopSlot[]
 }
 
@@ -153,17 +154,33 @@ export function planPassengerLoopSlots({
     assignments.push({
       entryStartedAt: slot.entryStartedAt,
       passenger,
-      sourcePassengers: slot.entryStartedAt === null
-        ? null
-        : entrySources.get(passenger.id) ?? [passenger, ...unassignedPassengers],
+      sourcePassengers: slot.entryStartedAt === null ? null : entrySources.get(passenger.id) ?? null,
       offset: slot.offset,
       shift: shifts.get(passenger.id) ?? null,
     })
   }
+  const pendingEntryPassengerIds = new Set(
+    assignments
+      .filter((assignment) => assignment.entryStartedAt !== null)
+      .map((assignment) => assignment.passenger.id),
+  )
+  const pendingEntryPassengers = passengers.filter((passenger) => pendingEntryPassengerIds.has(passenger.id))
+  const feederLayoutPassengers = [...pendingEntryPassengers, ...unassignedPassengers]
+  const assignmentsWithSources = assignments.map((assignment) => {
+    if (assignment.entryStartedAt === null || assignment.sourcePassengers !== null) {
+      return assignment
+    }
+
+    return {
+      ...assignment,
+      sourcePassengers: feederLayoutPassengers,
+    }
+  })
 
   return {
-    assignments,
+    assignments: assignmentsWithSources,
     feederPassengers: unassignedPassengers,
+    feederLayoutPassengers,
     slots: nextSlots,
   }
 }
@@ -187,5 +204,5 @@ function timeUntilFeederJoin(phase: number, offset: number, layout: QueueLayout,
 }
 
 function entryIsActive(startedAt: number | null, now: number): boolean {
-  return startedAt !== null && now - startedAt <= COMPLETED_ENTRY_RETENTION_SECONDS
+  return startedAt !== null && now - startedAt <= PASSENGER_LOOP_ENTRY_RETENTION_SECONDS
 }

@@ -18,9 +18,11 @@ package-lock.json
 /.zed
 /auth.json
 /node_modules
+/playwright-report
 /public/build
 /public/hot
 /public/storage
+/test-results
 /storage/*.key
 /storage/pail
 /vendor

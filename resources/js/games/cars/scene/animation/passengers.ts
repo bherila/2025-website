@@ -18,6 +18,13 @@ import type {
   PassengerRenderItem,
 } from '../sceneTypes'
 
+const PASSENGER_GATE_HOLD_SECONDS = 1.25
+
+export interface PassengerGateHold {
+  cycle: number
+  expiresAt: number
+}
+
 export function animatePassengers(passengers: PassengerRenderItem[], phase: number, elapsed: number): void {
   const dirtyPools = new Set<PassengerInstancePools>()
   for (const item of passengers) {
@@ -107,9 +114,17 @@ export function notifyPassengerGate(
   movingCars: MovingCarRenderItem[],
   elapsed: number,
   onPassengerGate: (passengerId: string) => void,
+  passengerGateHolds: Map<string, PassengerGateHold> = new Map(),
 ): void {
   let boardingsThisFrame = 0
   const unavailableCarIds = activeParkingCarIds(movingCars, elapsed)
+  const currentPassengerIds = new Set(state.passengerQueue.map((passenger) => passenger.id))
+  for (const id of passengerGateHolds.keys()) {
+    if (!currentPassengerIds.has(id)) {
+      passengerGateHolds.delete(id)
+    }
+  }
+
   for (const passenger of passengers) {
     if (passenger.fixedTarget) {
       continue
@@ -123,6 +138,27 @@ export function notifyPassengerGate(
     const crossedGate = currentCycle > previousCycle
     const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * 0.9
     const canBoard = canBoardPassengerAtParkingGate(state, passenger.id, unavailableCarIds)
+    const heldGate = passengerGateHolds.get(passenger.id)
+
+    if (heldGate && (elapsed > heldGate.expiresAt || currentCycle > heldGate.cycle)) {
+      passengerGateHolds.delete(passenger.id)
+      if (currentCycle === heldGate.cycle) {
+        passengerGateCycles.set(passenger.id, currentCycle)
+        continue
+      }
+    } else if (heldGate) {
+      if (canBoard) {
+        passengerGateHolds.delete(passenger.id)
+        passengerGateCycles.set(passenger.id, currentCycle)
+        onPassengerGate(passenger.id)
+        boardingsThisFrame += 1
+        if (boardingsThisFrame >= 4) {
+          return
+        }
+      }
+
+      continue
+    }
 
     if ((crossedGate || nearGate) && canBoard) {
       passengerGateCycles.set(passenger.id, currentCycle)
@@ -131,6 +167,14 @@ export function notifyPassengerGate(
       if (boardingsThisFrame >= 4) {
         return
       }
+    } else if (
+      (crossedGate || nearGate)
+      && canBoardPassengerAtParkingGate(state, passenger.id)
+    ) {
+      passengerGateHolds.set(passenger.id, {
+        cycle: currentCycle,
+        expiresAt: elapsed + PASSENGER_GATE_HOLD_SECONDS,
+      })
     } else if (crossedGate) {
       passengerGateCycles.set(passenger.id, currentCycle)
     }

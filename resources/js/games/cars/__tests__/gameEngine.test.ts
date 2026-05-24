@@ -60,6 +60,14 @@ describe('cars game engine', () => {
     }
   })
 
+  it('generates visually denser tutorial and advanced levels', () => {
+    expect(generateLevel(1).cars).toHaveLength(20)
+    expect(generateLevel(2).cars).toHaveLength(23)
+    expect(generateLevel(3).cars).toHaveLength(26)
+    expect(generateLevel(4).cars.length).toBeGreaterThanOrEqual(28)
+    expect(generateLevel(100).cars.length).toBeLessThanOrEqual(72)
+  })
+
   it('adds strategic queue pressure after the tutorial levels', () => {
     const sampledSolutions = new Map<number, PlannedSolution>()
 

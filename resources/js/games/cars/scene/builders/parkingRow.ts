@@ -6,19 +6,32 @@ import { parkingSlotPosition } from '../sceneGeometry'
 import { createTextLabelMesh } from '../threeUtils'
 
 const ASPHALT_WIDTH = 24.0
-const ASPHALT_DEPTH = 4.4
-const ASPHALT_CENTER_Z = PARKING_Z + 0.40
+const ASPHALT_DEPTH = 3.25
+const ASPHALT_CENTER_Z = PARKING_Z
+const APRON_CURB_PAD = 0.3
+
+export const PARKING_APRON_FIELD_EDGE_Z = ASPHALT_CENTER_Z + (ASPHALT_DEPTH + APRON_CURB_PAD) / 2
 
 export function createParkingRow(state: GameState): THREE.Object3D {
   const group = new THREE.Group()
 
-  const asphaltShape = roundedRectShape(ASPHALT_WIDTH, ASPHALT_DEPTH, 0.42)
+  const curbShape = parkingApronShape(ASPHALT_WIDTH + APRON_CURB_PAD, ASPHALT_DEPTH + APRON_CURB_PAD)
+  const curb = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(curbShape, { depth: 0.045, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial({ color: '#e7edf7', roughness: 0.58 }),
+  )
+  curb.rotation.x = -Math.PI / 2
+  curb.position.set(0, 0.045, ASPHALT_CENTER_Z)
+  curb.receiveShadow = true
+  group.add(curb)
+
+  const asphaltShape = parkingApronShape(ASPHALT_WIDTH, ASPHALT_DEPTH)
   const asphalt = new THREE.Mesh(
     new THREE.ExtrudeGeometry(asphaltShape, { depth: 0.06, bevelEnabled: false }),
     new THREE.MeshStandardMaterial({ color: '#667386', roughness: 0.8 }),
   )
   asphalt.rotation.x = -Math.PI / 2
-  asphalt.position.set(0, 0.05, ASPHALT_CENTER_Z)
+  asphalt.position.set(0, 0.07, ASPHALT_CENTER_Z)
   asphalt.receiveShadow = true
   group.add(asphalt)
 
@@ -81,6 +94,32 @@ export function createParkingRow(state: GameState): THREE.Object3D {
   }
 
   return group
+}
+
+function parkingApronShape(width: number, depth: number): THREE.Shape {
+  const w = width / 2
+  const h = depth / 2
+  const bottomRadius = Math.min(0.46, h * 0.35)
+  const sideRadius = Math.min(0.74, h * 0.5)
+  const notchHalfWidth = 0.46
+  const notchDepth = 0.26
+  const shape = new THREE.Shape()
+
+  shape.moveTo(-w + bottomRadius, h)
+  shape.lineTo(w - bottomRadius, h)
+  shape.quadraticCurveTo(w, h, w, h - bottomRadius)
+  shape.lineTo(w, -h + sideRadius)
+  shape.bezierCurveTo(w, -h + 0.22, w - 0.42, -h + 0.03, w - 1.12, -h)
+  shape.bezierCurveTo(w - 3.8, -h - 0.08, w * 0.32, -h + 0.08, notchHalfWidth, -h + 0.08)
+  shape.bezierCurveTo(notchHalfWidth * 0.72, -h + 0.14, notchHalfWidth * 0.62, -h + notchDepth, 0, -h + notchDepth)
+  shape.bezierCurveTo(-notchHalfWidth * 0.62, -h + notchDepth, -notchHalfWidth * 0.72, -h + 0.14, -notchHalfWidth, -h + 0.08)
+  shape.bezierCurveTo(-w * 0.32, -h + 0.08, -w + 3.8, -h - 0.08, -w + 1.12, -h)
+  shape.bezierCurveTo(-w + 0.42, -h + 0.03, -w, -h + 0.22, -w, -h + sideRadius)
+  shape.lineTo(-w, h - bottomRadius)
+  shape.quadraticCurveTo(-w, h, -w + bottomRadius, h)
+  shape.closePath()
+
+  return shape
 }
 
 function roundedRectShape(width: number, height: number, radius: number): THREE.Shape {

@@ -38,7 +38,8 @@ const CAMERA_FOV_DEGREES = 42
 const CAMERA_NEAR = 0.1
 const CAMERA_FAR = 200
 const FEEDER_CURVE_SAMPLES = 8
-const BOUNDS_PADDING = CELL_SIZE * 1.2
+const FEEDER_BOUNDS_T_MAX = 0.58
+const BOUNDS_PADDING = CELL_SIZE * 0.45
 const FIT_MIN_DISTANCE = 1
 const FIT_MAX_DISTANCE = 120
 const FIT_ITERATIONS = 24
@@ -100,7 +101,7 @@ export function gameplayBoundsForState(state: GameState, movingCars: MovingCarRe
   for (const side of [-1, 1] as const) {
     const curve = feederCurve(side, layout)
     for (let i = 0; i <= FEEDER_CURVE_SAMPLES; i += 1) {
-      const t = i / FEEDER_CURVE_SAMPLES
+      const t = (i / FEEDER_CURVE_SAMPLES) * FEEDER_BOUNDS_T_MAX
       const point = curve.getPointAt(t)
       include(point.x, point.z)
     }
@@ -132,9 +133,9 @@ export function fitCameraToGameplayBounds({
   width,
   height,
   bounds,
-  topPaddingPx = 16,
-  bottomPaddingPx = 88,
-  sidePaddingPx = 16,
+  topPaddingPx = 8,
+  bottomPaddingPx = 72,
+  sidePaddingPx = 8,
 }: FitCameraOptions): void {
   camera.fov = CAMERA_FOV_DEGREES
   camera.aspect = width / height

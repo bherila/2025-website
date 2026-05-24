@@ -34,22 +34,6 @@ interface PowerUpConfirmation {
   title: string
 }
 
-interface GameControlsProps {
-  colorblindMode: boolean
-  stats: GameStats
-  statsExpanded: boolean
-  state: GameState
-  vipSelectionActive: boolean
-  onColorblindModeChange: (enabled: boolean) => void
-  onFill: () => void
-  onOpenSlot: () => void
-  onReset: () => void
-  onShuffle: () => void
-  onStatsExpandedChange: Dispatch<SetStateAction<boolean>>
-  onTutorialOpen: () => void
-  onVipSelectionActiveChange: Dispatch<SetStateAction<boolean>>
-}
-
 const POWER_UP_CONFIRMATIONS = {
   vip: {
     actionLabel: 'Use VIP',
@@ -68,54 +52,6 @@ const POWER_UP_CONFIRMATIONS = {
   },
 } satisfies Record<string, PowerUpConfirmation>
 
-export function GameControls({
-  colorblindMode,
-  stats,
-  statsExpanded,
-  state,
-  vipSelectionActive,
-  onColorblindModeChange,
-  onFill,
-  onOpenSlot,
-  onReset,
-  onShuffle,
-  onStatsExpandedChange,
-  onTutorialOpen,
-  onVipSelectionActiveChange,
-}: GameControlsProps): ReactElement {
-  return (
-    <>
-      <MobileStatsHeader
-        colorblindMode={colorblindMode}
-        stats={stats}
-        statsExpanded={statsExpanded}
-        state={state}
-        onColorblindModeChange={onColorblindModeChange}
-        onStatsExpandedChange={onStatsExpandedChange}
-      />
-
-      <DesktopStatsHeader
-        colorblindMode={colorblindMode}
-        stats={stats}
-        state={state}
-        onColorblindModeChange={onColorblindModeChange}
-      />
-
-      <BottomControls
-        stats={stats}
-        state={state}
-        vipSelectionActive={vipSelectionActive}
-        onFill={onFill}
-        onOpenSlot={onOpenSlot}
-        onReset={onReset}
-        onShuffle={onShuffle}
-        onTutorialOpen={onTutorialOpen}
-        onVipSelectionActiveChange={onVipSelectionActiveChange}
-      />
-    </>
-  )
-}
-
 interface StatsHeaderProps {
   colorblindMode: boolean
   stats: GameStats
@@ -128,7 +64,7 @@ interface MobileStatsHeaderProps extends StatsHeaderProps {
   onStatsExpandedChange: Dispatch<SetStateAction<boolean>>
 }
 
-function MobileStatsHeader({
+export function MobileStatsOverlay({
   colorblindMode,
   stats,
   statsExpanded,
@@ -137,9 +73,9 @@ function MobileStatsHeader({
   onStatsExpandedChange,
 }: MobileStatsHeaderProps): ReactElement {
   return (
-    <header className="sm:hidden">
+    <header className="pointer-events-none absolute inset-x-2 top-2 z-30 sm:hidden">
       <button
-        className="flex min-h-12 w-full items-center justify-between rounded-xl border border-white/70 bg-white/85 px-3 py-1.5 text-left shadow-sm shadow-slate-950/5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-slate-950/25"
+        className="pointer-events-auto flex min-h-12 w-full items-center justify-between rounded-xl border border-white/70 bg-white/85 px-3 py-1.5 text-left shadow-sm shadow-slate-950/5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80 dark:shadow-slate-950/25"
         type="button"
         onClick={() => onStatsExpandedChange((current) => !current)}
       >
@@ -160,7 +96,7 @@ function MobileStatsHeader({
         </span>
         <ChevronDown className={cn('size-5 text-slate-500 transition-transform', statsExpanded && 'rotate-180')} />
       </button>
-      <div className={cn('mt-2 grid grid-cols-3 gap-1.5 rounded-xl border border-white/60 bg-white/70 p-1.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-900/70', !statsExpanded && 'hidden')}>
+      <div className={cn('pointer-events-auto mt-2 grid grid-cols-3 gap-1.5 rounded-xl border border-white/60 bg-white/70 p-1.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-900/70', !statsExpanded && 'hidden')}>
         <Metric label="Total Score" value={state.totalScore.toLocaleString()} />
         <Metric label="Best" value={state.highScore.toLocaleString()} />
         <Metric label="Queue" value={state.passengerQueue.length.toLocaleString()} />
@@ -176,7 +112,7 @@ function MobileStatsHeader({
   )
 }
 
-function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindModeChange }: StatsHeaderProps): ReactElement {
+export function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindModeChange }: StatsHeaderProps): ReactElement {
   return (
     <header className="hidden items-center justify-between gap-4 rounded-xl border border-white/70 bg-white/75 px-3 py-2 shadow-sm shadow-slate-950/5 backdrop-blur-md sm:flex dark:border-white/10 dark:bg-slate-900/75 dark:shadow-slate-950/25">
       <div className="flex min-w-0 items-center gap-3">
@@ -215,7 +151,7 @@ interface BottomControlsProps {
   onVipSelectionActiveChange: Dispatch<SetStateAction<boolean>>
 }
 
-function BottomControls({
+export function BottomControls({
   stats,
   state,
   vipSelectionActive,

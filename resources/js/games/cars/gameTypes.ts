@@ -152,8 +152,8 @@ export const DIRECTION_STEPS: Record<Direction, GridPosition> = {
 export const CAPACITIES = [4, 6, 10] as const
 export const STARTING_REGULAR_SLOTS = 4
 export const TOTAL_REGULAR_SLOTS = 7
-export const BOARD_WIDTH = 20
-export const BOARD_HEIGHT = 14
+export const BOARD_WIDTH = 24
+export const BOARD_HEIGHT = 16
 export const MIN_LOOP_PASSENGERS = 18
 export const MAX_LOOP_PASSENGERS = 34
 
