@@ -6,7 +6,8 @@ import {
   gameplayBoundsForState,
   type SceneFitBounds,
 } from '../scene/sceneCamera'
-import { fieldPositionForCar, parkingSlotPosition } from '../scene/sceneGeometry'
+import { QUEUE_Z } from '../scene/sceneConstants'
+import { fieldPositionForCar, parkingSlotPosition, queueLayoutForState } from '../scene/sceneGeometry'
 
 const VIEWPORTS = [
   { width: 390, height: 844 }, // iPhone 12/13/14
@@ -42,9 +43,9 @@ describe('sceneCamera bounds and fitting', () => {
           width,
           height,
           bounds,
-          topPaddingPx: 16,
-          bottomPaddingPx: 88,
-          sidePaddingPx: 16,
+          topPaddingPx: 8,
+          bottomPaddingPx: 72,
+          sidePaddingPx: 8,
         })
 
         for (const point of testPoints) {
@@ -52,7 +53,7 @@ describe('sceneCamera bounds and fitting', () => {
           expect(projected.x).toBeGreaterThanOrEqual(-1)
           expect(projected.x).toBeLessThanOrEqual(1)
           // Leave the bottom safe area free for the absolutely positioned controls.
-          const bottomLimit = -1 + (88 / height) * 2
+          const bottomLimit = -1 + (72 / height) * 2
           expect(projected.y).toBeGreaterThanOrEqual(bottomLimit - 1e-6)
           expect(projected.y).toBeLessThanOrEqual(1)
         }
@@ -97,10 +98,11 @@ describe('sceneCamera bounds and fitting', () => {
   it('includes both feeder curves in the gameplay bounds', () => {
     const state = generateLevel(5, 90_005)
     const bounds = gameplayBoundsForState(state, [])
+    const layout = queueLayoutForState(state)
     expect(bounds.minX).toBeLessThan(-1)
     expect(bounds.maxX).toBeGreaterThan(1)
     // Feeder curves extend below the queue loop on the negative-Z side.
-    expect(bounds.minZ).toBeLessThan(-11)
+    expect(bounds.minZ).toBeLessThan(QUEUE_Z - layout.capRadius - 1.5)
   })
 
   it('ignores departure route endpoints when fitting bounds', () => {

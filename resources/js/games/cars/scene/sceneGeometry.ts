@@ -73,12 +73,12 @@ export function feederCurve(side: -1 | 1, layout: QueueLayout): THREE.CubicBezie
   const r = layout.capRadius
   const innerX = sign * (halfStraight + r * 0.74)
   const innerZ = QUEUE_Z - r * 0.74 - 0.12
-  const outerX = sign * (halfStraight + r + 1.55)
-  const outerZ = QUEUE_Z - r - 4.0
+  const outerX = sign * (halfStraight + r + 0.95)
+  const outerZ = QUEUE_Z - r - 2.15
   const cp1x = sign * (halfStraight + r * 1.05)
-  const cp1z = QUEUE_Z - r - 1.4
-  const cp2x = sign * (halfStraight + r + 1.45)
-  const cp2z = QUEUE_Z - r - 2.7
+  const cp1z = QUEUE_Z - r - 0.85
+  const cp2x = sign * (halfStraight + r + 0.9)
+  const cp2z = QUEUE_Z - r - 1.65
 
   return new THREE.CubicBezierCurve3(
     new THREE.Vector3(innerX, 0, innerZ),
