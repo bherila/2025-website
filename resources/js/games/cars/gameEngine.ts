@@ -887,6 +887,10 @@ export function loopPassengerCapacity(state: Pick<GameState, 'level' | 'passenge
   return loopPassengerCapacityForCount(state.level, state.passengerQueue.length)
 }
 
+export function loopPassengerLayoutCapacity(state: Pick<GameState, 'level'>): number {
+  return loopPassengerCapacityForCount(state.level, MAX_LOOP_PASSENGERS)
+}
+
 function loopPassengerCapacityForCount(level: number, passengerCount: number): number {
   const difficulty = getLevelDifficulty(level)
   const regularCapacity = Math.min(
