@@ -1564,8 +1564,11 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
           {/* SBP election is a user tax-planning preference, not extracted data — stays editable even after confirmation. */}
           <K3ElectionSection data={data} onChange={onChange} />
           <K3GrossIncomeTable sections={k3Sections} />
-          <K3DeductionsTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
-          <K3AssetApportionmentTable sections={k3Sections} electionActive={data.k3Elections?.sourcedByPartnerAsUSSource} />
+          {/* `getSbpElection` normalizes the unset/undefined flag to the U.S.-source default
+              so the column highlight and "Sourced by Partner → US" label stay consistent
+              with the checkbox above and with `extractForeignTaxSummaries`. */}
+          <K3DeductionsTable sections={k3Sections} electionActive={getSbpElection(data)} />
+          <K3AssetApportionmentTable sections={k3Sections} electionActive={getSbpElection(data)} />
           <K3ForeignTaxGrid sections={k3Sections} />
           <K3FDIIPanel sections={k3Sections} />
           {/* Generic fallback for remaining sections */}
