@@ -1,7 +1,7 @@
 const sourceMaps = process.env.JEST_INLINE_SOURCEMAPS === '1' ? 'inline' : false;
 const slowTestPathIgnorePatterns = process.env.JEST_INCLUDE_SLOW_TESTS === '1'
   ? []
-  : ['\.slow\.test\.[tj]sx?$'];
+  : ['\\.slow\\.test\\.[tj]sx?$'];
 const gameTestPathIgnorePatterns = process.env.JEST_EXCLUDE_GAME_TESTS === '1'
   ? ['/resources/js/games/cars/', '/resources/js/games/marble-sort/']
   : [];
@@ -14,13 +14,13 @@ const shared = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
     '^@toon-format/toon$': '<rootDir>/resources/js/__mocks__/toon.ts',
-    '\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
+    '\\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!dayjs).+\.js$',
+    '/node_modules/(?!dayjs).+\\.js$',
   ],
   transform: {
-    '^.+\.(ts|tsx)$': ['@swc/jest', {
+    '^.+\\.(ts|tsx)$': ['@swc/jest', {
       jsc: {
         parser: { syntax: 'typescript', tsx: true, decorators: true },
         transform: { react: { runtime: 'automatic' } },
@@ -28,7 +28,7 @@ const shared = {
       },
       sourceMaps,
     }],
-    '^.+\.(js|jsx|mjs|cjs)$': ['@swc/jest', {
+    '^.+\\.(js|jsx|mjs|cjs)$': ['@swc/jest', {
       jsc: {
         parser: { syntax: 'ecmascript', jsx: true },
         transform: { react: { runtime: 'automatic' } },
@@ -62,7 +62,7 @@ module.exports = {
         '<rootDir>/tests-ts/**/*.test.ts',
       ],
       testPathIgnorePatterns: [
-        '\.dom\.test\.ts$',
+        '\\.dom\\.test\\.ts$',
         ...defaultTestPathIgnorePatterns,
       ],
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.node.ts'],
