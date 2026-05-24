@@ -30,13 +30,13 @@ jest.mock('react-markdown', () => ({
           <Thead>
             <Tr>
               <Th>Feature</Th>
-              <Th align="right">Status</Th>
+              <Th style={{ textAlign: 'right' }}>Status</Th>
             </Tr>
           </Thead>
           <Tbody>
             <Tr>
               <Td>Tables</Td>
-              <Td align="right">Working</Td>
+              <Td style={{ textAlign: 'right' }}>Working</Td>
             </Tr>
           </Tbody>
         </Table>

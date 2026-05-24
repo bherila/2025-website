@@ -25,11 +25,13 @@ function classNames(...classes: Array<string | undefined>): string {
   return classes.filter(Boolean).join(' ')
 }
 
-function tableAlignClass(align: string | undefined): string {
-  if (align === 'center') {
+function tableAlignClass(align: string | undefined, style: React.CSSProperties | undefined): string {
+  const textAlign = align ?? (typeof style?.textAlign === 'string' ? style.textAlign : undefined)
+
+  if (textAlign === 'center') {
     return 'text-center'
   }
-  if (align === 'right') {
+  if (textAlign === 'right') {
     return 'text-right'
   }
   return 'text-left'
@@ -121,7 +123,7 @@ function TableHeaderRenderer({ children, className, node: _node, ...props }: Tab
       {...props}
       className={classNames(
         'border-b border-border px-3 py-2 align-bottom font-semibold text-foreground',
-        tableAlignClass(props.align),
+        tableAlignClass(props.align, props.style),
         className,
       )}
     >
@@ -136,7 +138,7 @@ function TableCellRenderer({ children, className, node: _node, ...props }: Table
       {...props}
       className={classNames(
         'border-t border-border px-3 py-2 align-top text-foreground',
-        tableAlignClass(props.align),
+        tableAlignClass(props.align, props.style),
         className,
       )}
     >
