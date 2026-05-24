@@ -1462,6 +1462,7 @@ class TaxPreviewFactsServiceTest extends TestCase
                         ],
                     ],
                 ],
+                k3Elections: ['sourcedByPartnerAsUSSource' => true],
             ),
         ]);
         $brokerDoc = $this->createTaxDocument($user->id, [
@@ -1488,8 +1489,38 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(210.0, $facts['form1116']['totalLine4b']);
         $this->assertSame(-98.0, $facts['form1116']['netForeignSourceTaxableIncome']);
         $this->assertSame(18.0, $facts['form1116']['totalForeignTaxes']);
-        $this->assertStringContainsString('excluded from foreign-source passive income', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
+        $this->assertSame('Sourced-by-partner-as-U.S.-source election active.', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
         $this->assertTrue($facts['form1116']['passiveIncomeSources'][1]['isReviewed']);
+    }
+
+    public function test_form1116_includes_k3_line24_sourced_by_partner_without_explicit_election(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section1',
+                            'data' => [
+                                'line24_totalGrossIncome' => [
+                                    'totals' => ['c' => '100', 'f' => '1000', 'g' => '1100'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(1100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1000.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertSame('Election not active; sourced-by-partner amount is treated as foreign-source passive income.', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
     }
 
     public function test_form1116_allocates_form4952_interest_once_across_multiple_k1s(): void

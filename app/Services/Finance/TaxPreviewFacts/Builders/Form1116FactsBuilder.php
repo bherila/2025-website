@@ -227,7 +227,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 'passiveIncome' => $this->rowColumn($totals, 'c'),
                 'generalIncome' => $this->rowColumn($totals, 'd'),
                 'sourcedByPartner' => $this->rowColumn($totals, 'f'),
-                'sourcedByPartnerIsUsSource' => true,
+                'sourcedByPartnerIsUsSource' => false,
             ];
         }
 
@@ -248,7 +248,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             'passiveIncome' => $passive,
             'generalIncome' => $general,
             'sourcedByPartner' => $sourcedByPartner,
-            'sourcedByPartnerIsUsSource' => true,
+            'sourcedByPartnerIsUsSource' => false,
         ];
     }
 
