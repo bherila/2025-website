@@ -63,6 +63,10 @@ Reconciliation state lives on `fin_account_lots`:
 
 The ordinary lots APIs exclude superseded lots by default. Pass `include_superseded=1` only when reviewing historical reconciliation state.
 
+## Document ID Discipline
+
+`LotMatcherService::runMatcherForDocument()` keys on the canonical `fin_documents.id`, **not** the `fin_tax_documents.id`. In live data those can diverge, so any caller that holds a `FileForTaxDocument` must pass `$taxDocument->document_id` (the foreign key into `fin_documents`) rather than `$taxDocument->id`. The Tax Document Lots Match endpoint (`TaxDocumentLotsMatchController`) returns a `ValidationException` (422) when a tax document has no `document_id` link rather than silently matching the wrong lots; CLI (`finance:lots:match`) and the `LotsMatchJob` already use the canonical id.
+
 ## Tests
 
 - `tests/Feature/Finance/TaxLotReconciliationServiceTest.php`
