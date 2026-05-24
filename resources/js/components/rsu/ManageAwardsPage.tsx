@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import Container from '@/components/container'
+import { RsuImportModal } from '@/components/rsu/RsuImportModal'
 import RsuSubNav from '@/components/rsu/RsuSubNav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -81,8 +82,8 @@ export default function ManageAwardsPage() {
     try {
       const payload = {
         ...editingAward,
-        share_count: typeof editingAward.share_count === 'object' 
-          ? editingAward.share_count.value 
+        share_count: typeof editingAward.share_count === 'object'
+          ? editingAward.share_count.value
           : editingAward.share_count,
       }
       await fetchWrapper.post('/api/rsu', [payload])
@@ -107,12 +108,15 @@ export default function ManageAwardsPage() {
       <RsuSubNav />
       <Card className="mb-8">
         <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold">Manage RSU Awards</h3>
-            <Button onClick={handleAdd}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Award
-            </Button>
+            <div className="flex items-center gap-2">
+              <RsuImportModal onImportSuccess={loadData} />
+              <Button onClick={handleAdd}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Award
+              </Button>
+            </div>
           </div>
 
           {loading ? (

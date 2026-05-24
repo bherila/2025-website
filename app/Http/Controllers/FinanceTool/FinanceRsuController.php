@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
+use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\FinanceTool\ConfirmRsuGenAiImportRequest;
+use App\Models\FinanceTool\FinEquityAwards;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -10,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class FinanceRsuController extends Controller
 {
+    private const GENAI_JOB_TYPE = 'equity_award';
+
     public function getRsuData(Request $request): JsonResponse
     {
         $user = Auth::user();
@@ -96,6 +102,114 @@ class FinanceRsuController extends Controller
             return response()->json(['status' => 'success']);
         } else {
             return response()->json(['status' => 'error', 'message' => 'Record not found'], 404);
+        }
+    }
+
+    public function confirmGenAiImport(ConfirmRsuGenAiImportRequest $request, int $jobId, int $resultId): JsonResponse
+    {
+        $user = Auth::user();
+
+        $job = GenAiImportJob::query()
+            ->where('id', $jobId)
+            ->where('user_id', $user->id)
+            ->where('job_type', self::GENAI_JOB_TYPE)
+            ->firstOrFail();
+
+        $result = GenAiImportResult::query()
+            ->where('id', $resultId)
+            ->where('job_id', $job->id)
+            ->firstOrFail();
+
+        if ($result->status === 'imported') {
+            return response()->json(['error' => 'This result has already been imported.'], 409);
+        }
+
+        if ($result->status !== 'pending_review') {
+            return response()->json(['error' => 'This result has already been reviewed.'], 409);
+        }
+
+        $award = DB::transaction(function () use ($request, $result, $job, $user): FinEquityAwards {
+            $award = $this->upsertAwardFromImport((int) $user->id, $request->validated());
+
+            $result->markImported();
+            $this->maybeMarkJobImported($job);
+
+            return $award;
+        });
+
+        return response()->json([
+            'award' => $award->fresh(),
+            'result' => $result->refresh(),
+            'job_status' => $job->refresh()->status,
+        ], 201);
+    }
+
+    public function skipGenAiImport(int $jobId, int $resultId): JsonResponse
+    {
+        $user = Auth::user();
+
+        $job = GenAiImportJob::query()
+            ->where('id', $jobId)
+            ->where('user_id', $user->id)
+            ->where('job_type', self::GENAI_JOB_TYPE)
+            ->firstOrFail();
+
+        $result = GenAiImportResult::query()
+            ->where('id', $resultId)
+            ->where('job_id', $job->id)
+            ->firstOrFail();
+
+        if ($result->status === 'imported') {
+            return response()->json(['error' => 'This result has already been imported.'], 409);
+        }
+
+        if ($result->status !== 'pending_review') {
+            return response()->json(['error' => 'This result has already been reviewed.'], 409);
+        }
+
+        $result->markSkipped();
+        $this->maybeMarkJobImported($job);
+
+        return response()->json([
+            'result' => $result->refresh(),
+            'job_status' => $job->refresh()->status,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function upsertAwardFromImport(int $userId, array $validated): FinEquityAwards
+    {
+        $identity = [
+            'uid' => (string) $userId,
+            'award_id' => (string) $validated['award_id'],
+            'grant_date' => (string) $validated['grant_date'],
+            'vest_date' => (string) $validated['vest_date'],
+            'symbol' => (string) $validated['symbol'],
+        ];
+
+        $award = FinEquityAwards::query()->firstOrNew($identity);
+        $award->share_count = (int) $validated['share_count'];
+
+        if (array_key_exists('grant_price', $validated) && $validated['grant_price'] !== null) {
+            $award->grant_price = $validated['grant_price'];
+        }
+
+        if (array_key_exists('vest_price', $validated) && $validated['vest_price'] !== null) {
+            $award->vest_price = $validated['vest_price'];
+        }
+
+        $award->save();
+
+        return $award;
+    }
+
+    private function maybeMarkJobImported(GenAiImportJob $job): void
+    {
+        $stillPending = $job->results()->where('status', 'pending_review')->exists();
+        if (! $stillPending && $job->status !== 'imported') {
+            $job->markImported();
         }
     }
 }

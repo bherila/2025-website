@@ -310,6 +310,65 @@ class ParseImportJobTest extends TestCase
         $this->assertArrayNotHasKey('unknown', $decoded);
     }
 
+    public function test_create_results_emits_one_equity_award_result_per_vest_tranche(): void
+    {
+        $user = $this->createUser();
+
+        $importJob = GenAiImportJob::create([
+            'user_id' => $user->id,
+            'job_type' => 'equity_award',
+            'file_hash' => 'equity-hash-1',
+            'original_filename' => 'grant.pdf',
+            's3_path' => "genai-import/{$user->id}/grant.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 123,
+            'context_json' => json_encode(['default_symbol' => 'META']),
+            'status' => 'processing',
+        ]);
+
+        $job = new ParseImportJob($importJob->id);
+        $method = new \ReflectionMethod($job, 'createResults');
+        $method->setAccessible(true);
+        $method->invoke($job, $importJob, [
+            [
+                'award_id' => '  RSU-2026  ',
+                'grant_date' => '2026-01-15',
+                'vest_date' => '2027-01-15',
+                'share_count' => '100.4',
+                'symbol' => '',
+                'grant_price' => '415.255',
+            ],
+            [
+                'award_number' => 'RSU-2026',
+                'grant_date' => '2026-01-15',
+                'vest_date' => '2027-04-15',
+                'shares' => 125,
+                'symbol' => 'BRK.B',
+                'vest_price' => 505.251,
+            ],
+        ]);
+
+        $results = GenAiImportResult::query()
+            ->where('job_id', $importJob->id)
+            ->orderBy('result_index')
+            ->get();
+
+        $this->assertCount(2, $results);
+
+        $first = json_decode((string) $results[0]->result_json, true);
+        $second = json_decode((string) $results[1]->result_json, true);
+
+        $this->assertSame('RSU-2026', $first['award_id']);
+        $this->assertSame('2027-01-15', $first['vest_date']);
+        $this->assertSame(100, $first['share_count']);
+        $this->assertSame('META', $first['symbol']);
+        $this->assertSame(415.26, $first['grant_price']);
+
+        $this->assertSame('RSU-2026', $second['award_id']);
+        $this->assertSame('META', $second['symbol']);
+        $this->assertSame(505.25, $second['vest_price']);
+    }
+
     /**
      * Regression: Anthropic rejects inline document blocks whose media_type isn't application/pdf
      * (e.g. text/plain → invalid_request_error). Pasted-text jobs must send the email body inside

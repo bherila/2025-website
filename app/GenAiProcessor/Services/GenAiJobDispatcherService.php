@@ -5,6 +5,7 @@ namespace App\GenAiProcessor\Services;
 use App\GenAiProcessor\Models\GenAiDailyQuota;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\Prompts\ClassActionEmailPromptTemplate;
+use App\GenAiProcessor\Services\Prompts\EquityAwardPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\FinanceTransactionsPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\MultiAccountTaxImportPromptTemplate;
 use App\GenAiProcessor\Services\Prompts\PayslipPromptTemplate;
@@ -251,6 +252,7 @@ PROMPT;
             'class_action_email' => new ClassActionEmailPromptTemplate,
             'finance_payslip' => new PayslipPromptTemplate,
             'utility_bill' => new UtilityBillPromptTemplate,
+            'equity_award' => new EquityAwardPromptTemplate,
             'document_extract' => $this->isMultiAccountDocumentContext($context)
                 ? new MultiAccountTaxImportPromptTemplate
                 : new TaxDocumentPromptTemplate,
@@ -462,6 +464,7 @@ PROMPT;
             'class_action_email' => ['pasted_text', 'reference_page_text'],
             'finance_payslip' => ['employment_entity_id', 'file_count'],
             'utility_bill' => ['account_type', 'utility_account_id', 'file_count'],
+            'equity_award' => ['default_symbol', 'file_count'],
             'document_extract' => ['document_id', 'document_kind', 'tax_year', 'form_type', 'accounts', 'input_kind', 'source_form_type'],
             default => PhrStructuredDataImporter::isPhrJobType($jobType)
                 ? ['patient_id', 'file_count', 'document_id', 'document_type', 'filename_hint']
@@ -499,6 +502,24 @@ PROMPT;
         if ($jobType === 'utility_bill') {
             if (isset($context['utility_account_id']) && ! is_int($context['utility_account_id']) && ! ctype_digit((string) $context['utility_account_id'])) {
                 throw new \InvalidArgumentException('utility_account_id must be an integer');
+            }
+        }
+
+        if ($jobType === 'equity_award') {
+            if (isset($context['default_symbol'])) {
+                if (! is_string($context['default_symbol'])) {
+                    throw new \InvalidArgumentException('default_symbol must be a string');
+                }
+                if (strlen(trim($context['default_symbol'])) > 4) {
+                    throw new \InvalidArgumentException('default_symbol must be at most 4 characters');
+                }
+                if (preg_match('/^[A-Za-z0-9.]+$/', trim($context['default_symbol'])) !== 1) {
+                    throw new \InvalidArgumentException('default_symbol may only contain letters, numbers, and periods');
+                }
+            }
+
+            if (isset($context['file_count']) && ! is_int($context['file_count']) && ! ctype_digit((string) $context['file_count'])) {
+                throw new \InvalidArgumentException('file_count must be an integer');
             }
         }
 
