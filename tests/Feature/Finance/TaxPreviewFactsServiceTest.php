@@ -925,6 +925,31 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleD']['line12GainLoss']);
     }
 
+    public function test_form4797_does_not_treat_legacy_other_deductions_as_box10_section1231(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'form_source' => 1065,
+                'entity_name' => 'Legacy Fund Alpha',
+                'partner_name' => 'John Doe',
+                'box7_net_section_1231_gain' => 0,
+                'box10_other_deductions' => 1020,
+                'other_coded_items' => [
+                    ['code' => '13AE', 'description' => 'Portfolio deductions', 'amount' => 1020],
+                ],
+            ],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(0.0, $facts['form4797']['partINet1231']);
+        $this->assertSame([], $facts['form4797']['partISources']);
+        $this->assertSame(0.0, $facts['scheduleD']['line11GainLoss']);
+    }
+
     public function test_facts_from_documents_requires_user_id_for_capital_gains_documents(): void
     {
         $user = $this->createUser();
