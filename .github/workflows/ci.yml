@@ -21,6 +21,8 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       backend: ${{ steps.changes.outputs.backend }}
       migrations: ${{ steps.changes.outputs.migrations }}
+      parking_pickup: ${{ steps.changes.outputs.parking_pickup }}
+      marble_sort: ${{ steps.changes.outputs.marble_sort }}
 
     steps:
       - uses: actions/checkout@v4
@@ -56,11 +58,34 @@ jobs:
             migrations:
               - 'database/migrations/**/*.php'
               - 'scripts/check-migration-identifiers.py'
+            parking_pickup:
+              - 'resources/js/games/cars/**'
+              - 'resources/js/games/_shared/**'
+              - 'resources/js/games/PortraitGameShell.tsx'
+              - 'resources/views/games/cars.blade.php'
+              - 'tests/e2e/parking-pickup.spec.ts'
+              - 'tests/Feature/CarsGamePageTest.php'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'vite.config.*'
+              - 'jest.config.*'
+              - '.github/workflows/**'
+            marble_sort:
+              - 'resources/js/games/marble-sort/**'
+              - 'resources/js/games/_shared/**'
+              - 'resources/js/games/PortraitGameShell.tsx'
+              - 'resources/views/games/marble-sort.blade.php'
+              - 'tests/Feature/MarbleSortGamePageTest.php'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'vite.config.*'
+              - 'jest.config.*'
+              - '.github/workflows/**'
 
-  frontend:
-    name: Frontend Checks
+  frontend-build:
+    name: Frontend Build
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -83,24 +108,144 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check, lint, and test in parallel
-        run: pnpm exec concurrently --kill-others-on-fail --names "tsc,eslint,jest" "pnpm run type-check" "pnpm run lint" "pnpm run test"
-
       - name: Build frontend
         run: pnpm run build
 
       - name: Upload frontend build artifact
-        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
           path: public/build/
           retention-days: 2
 
+  frontend-static:
+    name: Frontend Static Checks
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check and lint in parallel
+        run: pnpm exec concurrently --kill-others-on-fail --names "tsc,eslint" "pnpm run type-check" "pnpm run lint"
+
+  frontend-tests:
+    name: Frontend App Tests
+    needs:
+      - changes
+      - frontend-build
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run non-game Jest tests
+        run: pnpm run test:ci:app
+
+  parking-pickup-tests:
+    name: Parking Pickup Tests
+    needs:
+      - changes
+      - frontend-build
+    if: needs.changes.outputs.parking_pickup == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Parking Pickup Jest tests
+        run: pnpm run test:ci:parking-pickup
+
+  marble-sort-tests:
+    name: Marble Sort Tests
+    needs:
+      - changes
+      - frontend-build
+    if: needs.changes.outputs.marble_sort == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Marble Sort Jest tests
+        run: pnpm run test:ci:marble-sort
+
   backend:
     name: Backend Checks
-    needs: changes
-    if: needs.changes.outputs.backend == 'true' || github.event_name == 'push'
+    needs:
+      - changes
+      - frontend-build
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -110,25 +255,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check MySQL identifier lengths in migrations
-        if: needs.changes.outputs.migrations == 'true' || github.event_name == 'push'
+        if: needs.changes.outputs.migrations == 'true'
         run: python3 scripts/check-migration-identifiers.py
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
         with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build frontend for PHP tests
-        run: pnpm run build
+          name: frontend-build
+          path: public/build/
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -167,7 +301,11 @@ jobs:
     name: Run Tests
     needs:
       - changes
-      - frontend
+      - frontend-build
+      - frontend-static
+      - frontend-tests
+      - parking-pickup-tests
+      - marble-sort-tests
       - backend
     if: always()
     runs-on: ubuntu-latest
@@ -178,7 +316,11 @@ jobs:
       - name: Check CI results
         run: |
           changes="${{ needs.changes.result }}"
-          frontend="${{ needs.frontend.result }}"
+          frontend_build="${{ needs['frontend-build'].result }}"
+          frontend_static="${{ needs['frontend-static'].result }}"
+          frontend_tests="${{ needs['frontend-tests'].result }}"
+          parking_pickup_tests="${{ needs['parking-pickup-tests'].result }}"
+          marble_sort_tests="${{ needs['marble-sort-tests'].result }}"
           backend="${{ needs.backend.result }}"
 
           if [[ "$changes" == "failure" || "$changes" == "cancelled" ]]; then
@@ -186,8 +328,28 @@ jobs:
             exit 1
           fi
 
-          if [[ "$frontend" == "failure" || "$frontend" == "cancelled" ]]; then
-            echo "Frontend checks failed: $frontend"
+          if [[ "$frontend_build" == "failure" || "$frontend_build" == "cancelled" ]]; then
+            echo "Frontend build failed: $frontend_build"
+            exit 1
+          fi
+
+          if [[ "$frontend_static" == "failure" || "$frontend_static" == "cancelled" ]]; then
+            echo "Frontend static checks failed: $frontend_static"
+            exit 1
+          fi
+
+          if [[ "$frontend_tests" == "failure" || "$frontend_tests" == "cancelled" ]]; then
+            echo "Frontend app tests failed: $frontend_tests"
+            exit 1
+          fi
+
+          if [[ "$parking_pickup_tests" == "failure" || "$parking_pickup_tests" == "cancelled" ]]; then
+            echo "Parking Pickup tests failed: $parking_pickup_tests"
+            exit 1
+          fi
+
+          if [[ "$marble_sort_tests" == "failure" || "$marble_sort_tests" == "cancelled" ]]; then
+            echo "Marble Sort tests failed: $marble_sort_tests"
             exit 1
           fi
 
@@ -196,7 +358,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$frontend" == "skipped" && "$backend" == "skipped" ]]; then
+          if [[ "$frontend_build" == "skipped" && "$frontend_static" == "skipped" && "$frontend_tests" == "skipped" && "$parking_pickup_tests" == "skipped" && "$marble_sort_tests" == "skipped" && "$backend" == "skipped" ]]; then
             echo "No frontend or backend paths changed."
           fi
 
@@ -206,8 +368,8 @@ jobs:
     name: Deploy to Production
     needs:
       - test
-      - frontend
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.frontend.result == 'success'
+      - frontend-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs['frontend-build'].result == 'success'
     runs-on: ubuntu-latest
     environment: prod
 

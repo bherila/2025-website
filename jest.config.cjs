@@ -2,6 +2,13 @@ const sourceMaps = process.env.JEST_INLINE_SOURCEMAPS === '1' ? 'inline' : false
 const slowTestPathIgnorePatterns = process.env.JEST_INCLUDE_SLOW_TESTS === '1'
   ? []
   : ['\\.slow\\.test\\.[tj]sx?$'];
+const gameTestPathIgnorePatterns = process.env.JEST_EXCLUDE_GAME_TESTS === '1'
+  ? ['/resources/js/games/cars/', '/resources/js/games/marble-sort/']
+  : [];
+const defaultTestPathIgnorePatterns = [
+  ...slowTestPathIgnorePatterns,
+  ...gameTestPathIgnorePatterns,
+];
 
 const domTsTests = [
   '<rootDir>/resources/js/components/finance/tax-preview/__tests__/useTaxPreviewPrefs.test.ts',
@@ -60,7 +67,7 @@ module.exports = {
         '<rootDir>/tests-ts/**/*.test.tsx',
         ...domTsTests,
       ],
-      testPathIgnorePatterns: slowTestPathIgnorePatterns,
+      testPathIgnorePatterns: defaultTestPathIgnorePatterns,
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.ts'],
       ...shared,
     },
@@ -73,7 +80,7 @@ module.exports = {
       ],
       testPathIgnorePatterns: [
         ...domTsTests,
-        ...slowTestPathIgnorePatterns,
+        ...defaultTestPathIgnorePatterns,
       ],
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.node.ts'],
       ...shared,
