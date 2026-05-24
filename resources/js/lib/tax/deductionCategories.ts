@@ -7,6 +7,7 @@ export const DEDUCTION_CATEGORIES = [
   'real_estate_tax',
   'state_est_tax',
   'sales_tax',
+  'personal_property_tax',
   'mortgage_interest',
   'charitable_cash',
   'charitable_noncash',
@@ -42,6 +43,7 @@ export const DEDUCTION_CATEGORY_LABELS: Record<DeductionCategory, string> = {
   real_estate_tax: 'Real estate / property tax',
   state_est_tax: 'State estimated tax paid',
   sales_tax: 'General sales tax',
+  personal_property_tax: 'Personal property tax',
   mortgage_interest: 'Mortgage interest',
   charitable_cash: 'Charitable — cash',
   charitable_noncash: 'Charitable — non-cash',
@@ -76,6 +78,7 @@ export const SALT_CATEGORIES: ReadonlySet<DeductionCategory> = new Set([
   'real_estate_tax',
   'state_est_tax',
   'sales_tax',
+  'personal_property_tax',
 ])
 
 /**

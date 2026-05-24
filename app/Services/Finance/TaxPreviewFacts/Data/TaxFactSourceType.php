@@ -113,6 +113,7 @@ enum TaxFactSourceType: string
     case UserDeductionCharitableNoncash = 'user_deduction_charitable_noncash';
     case UserDeductionMortgageInterest = 'user_deduction_mortgage_interest';
     case UserDeductionOtherItemized = 'user_deduction_other_itemized';
+    case UserDeductionPersonalPropertyTax = 'user_deduction_personal_property_tax';
     case UserDeductionRealEstateTax = 'user_deduction_real_estate_tax';
     case UserDeductionSalesTax = 'user_deduction_sales_tax';
     case UserDeductionStateTax = 'user_deduction_state_tax';

@@ -25,6 +25,11 @@ readonly class ScheduleAFacts
     /**
      * @var TaxFactSource[]
      */
+    public array $personalPropertyTaxSources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $mortgageInterestSources;
 
     /**
@@ -51,6 +56,7 @@ readonly class ScheduleAFacts
      * @param  TaxFactSource[]  $stateIncomeTaxSources
      * @param  TaxFactSource[]  $salesTaxSources
      * @param  TaxFactSource[]  $realEstateTaxSources
+     * @param  TaxFactSource[]  $personalPropertyTaxSources
      * @param  TaxFactSource[]  $mortgageInterestSources
      * @param  TaxFactSource[]  $investmentInterestSources
      * @param  TaxFactSource[]  $charitableCashSources
@@ -66,6 +72,8 @@ readonly class ScheduleAFacts
         public float $selectedLine5aTotal,
         array $realEstateTaxSources,
         public float $realEstateTaxTotal,
+        array $personalPropertyTaxSources,
+        public float $personalPropertyTaxTotal,
         public float $saltPaidBeforeCap,
         public float $saltCap,
         public float $saltDeduction,
@@ -95,6 +103,7 @@ readonly class ScheduleAFacts
         $this->stateIncomeTaxSources = $stateIncomeTaxSources;
         $this->salesTaxSources = $salesTaxSources;
         $this->realEstateTaxSources = $realEstateTaxSources;
+        $this->personalPropertyTaxSources = $personalPropertyTaxSources;
         $this->mortgageInterestSources = $mortgageInterestSources;
         $this->investmentInterestSources = $investmentInterestSources;
         $this->charitableCashSources = $charitableCashSources;
@@ -116,6 +125,8 @@ readonly class ScheduleAFacts
             'selectedLine5aTotal' => $this->selectedLine5aTotal,
             'realEstateTaxSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->realEstateTaxSources),
             'realEstateTaxTotal' => $this->realEstateTaxTotal,
+            'personalPropertyTaxSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->personalPropertyTaxSources),
+            'personalPropertyTaxTotal' => $this->personalPropertyTaxTotal,
             'saltPaidBeforeCap' => $this->saltPaidBeforeCap,
             'saltCap' => $this->saltCap,
             'saltDeduction' => $this->saltDeduction,

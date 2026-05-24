@@ -29,6 +29,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         ];
         $salesTaxSources = $this->userDeductionSources($userDeductions, DeductionCategory::SalesTax->value);
         $realEstateTaxSources = $this->userDeductionSources($userDeductions, DeductionCategory::RealEstateTax->value);
+        $personalPropertyTaxSources = $this->userDeductionSources($userDeductions, DeductionCategory::PersonalPropertyTax->value);
         $mortgageInterestSources = $this->userDeductionSources($userDeductions, DeductionCategory::MortgageInterest->value);
         $charitableCashSources = $this->userDeductionSources($userDeductions, DeductionCategory::CharitableCash->value);
         $charitableNoncashSources = $this->userDeductionSources($userDeductions, DeductionCategory::CharitableNoncash->value);
@@ -37,11 +38,13 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $stateIncomeTaxTotal = $this->sumSources($stateIncomeTaxSources);
         $salesTaxTotal = $this->sumSources($salesTaxSources);
         $realEstateTaxTotal = $this->sumSources($realEstateTaxSources);
+        $personalPropertyTaxTotal = $this->sumSources($personalPropertyTaxSources);
         $line5aSelection = $this->line5aSelection($stateIncomeTaxTotal, $salesTaxTotal);
         $selectedLine5aTotal = $line5aSelection['amount'];
-        $saltPaidBeforeCap = $this->sumMoney([$selectedLine5aTotal, $realEstateTaxTotal]);
+        // Schedule A line 5d = 5a + 5b + 5c; §164(b)(6) caps the aggregate.
+        $saltPaidBeforeCap = $this->sumMoney([$selectedLine5aTotal, $realEstateTaxTotal, $personalPropertyTaxTotal]);
         $saltCap = $this->saltCap($year, $magi);
-        $saltDeduction = ItemizedDeductions::saltDeduction($realEstateTaxTotal, $year, $magi, $selectedLine5aTotal);
+        $saltDeduction = $this->roundMoney(min($saltCap, $saltPaidBeforeCap));
         $mortgageInterestTotal = $this->sumSources($mortgageInterestSources);
         $investmentInterestTotal = $form4952->deductibleInvestmentInterestExpense;
         $grossInvestmentInterestTotal = $form4952->totalInvestmentInterestExpense;
@@ -64,6 +67,8 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             selectedLine5aTotal: $selectedLine5aTotal,
             realEstateTaxSources: $realEstateTaxSources,
             realEstateTaxTotal: $realEstateTaxTotal,
+            personalPropertyTaxSources: $personalPropertyTaxSources,
+            personalPropertyTaxTotal: $personalPropertyTaxTotal,
             saltPaidBeforeCap: $saltPaidBeforeCap,
             saltCap: $saltCap,
             saltDeduction: $saltDeduction,
@@ -166,6 +171,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             DeductionCategory::RealEstateTax->value => TaxFactSourceType::UserDeductionRealEstateTax,
             DeductionCategory::StateEstTax->value => TaxFactSourceType::UserDeductionStateTax,
             DeductionCategory::SalesTax->value => TaxFactSourceType::UserDeductionSalesTax,
+            DeductionCategory::PersonalPropertyTax->value => TaxFactSourceType::UserDeductionPersonalPropertyTax,
             DeductionCategory::MortgageInterest->value => TaxFactSourceType::UserDeductionMortgageInterest,
             DeductionCategory::CharitableCash->value => TaxFactSourceType::UserDeductionCharitableCash,
             DeductionCategory::CharitableNoncash->value => TaxFactSourceType::UserDeductionCharitableNoncash,
@@ -179,6 +185,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             DeductionCategory::StateEstTax->value => TaxFactRouting::ScheduleALine5a,
             DeductionCategory::SalesTax->value => TaxFactRouting::ScheduleALine5a,
             DeductionCategory::RealEstateTax->value => TaxFactRouting::ScheduleALine5b,
+            DeductionCategory::PersonalPropertyTax->value => TaxFactRouting::ScheduleALine5c,
             DeductionCategory::MortgageInterest->value => TaxFactRouting::ScheduleALine8a,
             DeductionCategory::CharitableCash->value => TaxFactRouting::ScheduleALine11,
             DeductionCategory::CharitableNoncash->value => TaxFactRouting::ScheduleALine12,
@@ -192,6 +199,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             DeductionCategory::StateEstTax->value => 'State estimated tax paid',
             DeductionCategory::SalesTax->value => 'State/local general sales taxes',
             DeductionCategory::RealEstateTax->value => 'Real estate taxes',
+            DeductionCategory::PersonalPropertyTax->value => 'Personal property tax',
             DeductionCategory::MortgageInterest->value => 'Mortgage interest',
             DeductionCategory::CharitableCash->value => 'Charitable cash contributions',
             DeductionCategory::CharitableNoncash->value => 'Charitable noncash contributions',
