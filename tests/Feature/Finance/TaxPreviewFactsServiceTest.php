@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\FinTaxDocumentForm1116Override;
 use App\Models\FinanceTool\PalCarryforward;
 use App\Models\FinanceTool\ScheduleDCarryoverInput;
 use App\Models\FinanceTool\TaxDocumentAccount;
@@ -1418,6 +1419,83 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(200.0, $facts['form1116']['totalSourcedByPartnerIncome']);
         $this->assertSame('credit', $facts['form1116']['recommendation']);
         $this->assertFalse($facts['form1116']['turboTaxAlert']);
+        $this->assertFalse($facts['form1116']['hasUserOverride']);
+    }
+
+    public function test_form1116_1099div_box7_only_estimates_at_15_percent_default(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 1500],
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        // 1500 / 0.15 = 10000 gross foreign-source income estimate.
+        $this->assertSame(10000.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1500.0, $facts['form1116']['totalForeignTaxes']);
+        $this->assertFalse($facts['form1116']['hasUserOverride']);
+        $this->assertFalse($facts['form1116']['passiveIncomeSources'][0]['isReviewed']);
+        $this->assertStringContainsString('estimated', $facts['form1116']['passiveIncomeSources'][0]['label']);
+    }
+
+    public function test_form1116_user_override_replaces_estimated_1099div_foreign_source_income(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 1500],
+        ]);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => null,
+            'account_identifier' => null,
+            'gross_foreign_source_income' => 9326,
+            'override_reason' => 'CPA-supplied gross foreign-source dividend income.',
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(9326.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(1500.0, $facts['form1116']['totalForeignTaxes']);
+        $this->assertTrue($facts['form1116']['hasUserOverride']);
+        $this->assertStringContainsString('user override', $facts['form1116']['passiveIncomeSources'][0]['label']);
+        // Override removes the "estimated" needs_review nudge.
+        $this->assertTrue($facts['form1116']['passiveIncomeSources'][0]['isReviewed']);
+    }
+
+    public function test_form1116_user_override_matches_by_payer_tin_and_account_identifier(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'payer_name' => 'Broker Div',
+                'payer_tin' => '12-3456789',
+                'account_identifier' => '5555',
+                'box7_foreign_tax' => 1500,
+            ],
+        ]);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => '123456789',
+            'account_identifier' => '5555',
+            'gross_foreign_source_income' => 9326,
+            'override_reason' => 'CPA value for this payer/account.',
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(9326.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertTrue($facts['form1116']['hasUserOverride']);
     }
 
     public function test_form1116_sourced_by_partner_election_excludes_sbp_from_passive_income(): void
