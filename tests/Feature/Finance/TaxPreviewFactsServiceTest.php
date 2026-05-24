@@ -1812,8 +1812,13 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(30.0, $facts['form8960']['nonpassiveTradingIncome']);
         $this->assertSame(1130.0, $facts['form8960']['grossNII']);
         $this->assertSame(1130.0, $facts['form8960']['netInvestmentIncome']);
-        $this->assertNull($facts['form8960']['magi']);
+        // MAGI is estimated when not user-supplied; needsMagi remains true so the UI can prompt for an override.
         $this->assertTrue($facts['form8960']['needsMagi']);
+        $this->assertIsFloat($facts['form8960']['magi']);
+        $this->assertIsFloat($facts['form8960']['magiExcessSingle']);
+        $this->assertIsFloat($facts['form8960']['magiExcessMarriedFilingJointly']);
+        $this->assertIsFloat($facts['form8960']['niitTaxSingle']);
+        $this->assertIsFloat($facts['form8960']['niitTaxMarriedFilingJointly']);
     }
 
     public function test_salt_cap_phases_down_using_estimated_magi_in_facts_for_year(): void
@@ -1831,7 +1836,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(37000.0, $facts['scheduleA']['saltCap']);
         $this->assertSame(37000.0, $facts['scheduleA']['saltDeduction']);
         $this->assertTrue($facts['scheduleA']['saltCapUsesEstimatedMagi']);
-        $this->assertNull($facts['form8960']['magi']);
+        $this->assertSame(510000.0, $facts['form8960']['magi']);
         $this->assertTrue($facts['form8960']['needsMagi']);
     }
 
