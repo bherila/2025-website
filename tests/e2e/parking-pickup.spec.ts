@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test'
 
 const CARS_TUTORIAL_STORAGE_KEY = 'bwh.cars-game.tutorial-seen.v1'
 const GAME_PROGRESS_STORAGE_KEY = 'bwh.cars-game.progress.v2'
+const LEVEL_SNAPSHOT_STORAGE_KEY = 'bwh.cars-game.snapshot.v2'
 
 interface PngImage {
   height: number
@@ -48,17 +49,125 @@ test.describe('Parking Pickup visual smoke', () => {
     expect(pixelRatio(image, parkingRegion, isAsphaltPixel)).toBeGreaterThan(0.18)
     expect(pixelRatio(image, boardRegion, isLightBoardPixel)).toBeGreaterThan(0.2)
   })
+
+  test('keeps playfield framing stable through level completion', async ({ page }, testInfo) => {
+    await loadNearCompleteLevel(page)
+    await page.goto('/games/parking-pickup')
+
+    const canvas = page.locator('canvas').first()
+    await expect(canvas).toBeVisible()
+    await waitForCanvasRender(canvas)
+
+    const beforeBox = await canvas.boundingBox()
+    const beforeScreenshot = await canvas.screenshot()
+    const beforeMetrics = visualLayoutMetrics(parsePng(beforeScreenshot))
+    await testInfo.attach(`parking-pickup-before-complete-${testInfo.project.name}.png`, {
+      body: beforeScreenshot,
+      contentType: 'image/png',
+    })
+
+    await page.getByRole('button', { name: 'Fill' }).click()
+    await page.getByRole('button', { name: 'Use Fill' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Level 1 Complete' })).toBeVisible()
+    await page.addStyleTag({ content: '[role="dialog"] { display: none !important; }' })
+    await page.waitForTimeout(700)
+
+    const afterBox = await canvas.boundingBox()
+    const afterScreenshot = await canvas.screenshot()
+    const afterMetrics = visualLayoutMetrics(parsePng(afterScreenshot))
+    await testInfo.attach(`parking-pickup-after-complete-${testInfo.project.name}.png`, {
+      body: afterScreenshot,
+      contentType: 'image/png',
+    })
+
+    expect(afterBox?.width).toBeCloseTo(beforeBox?.width ?? 0, 0)
+    expect(afterBox?.height).toBeCloseTo(beforeBox?.height ?? 0, 0)
+    expect(afterMetrics.asphaltRatio).toBeGreaterThan(0.18)
+    expect(afterMetrics.boardRatio).toBeGreaterThan(0.2)
+    expect(Math.abs(afterMetrics.asphaltRatio - beforeMetrics.asphaltRatio)).toBeLessThan(0.08)
+    expect(Math.abs(afterMetrics.boardRatio - beforeMetrics.boardRatio)).toBeLessThan(0.1)
+  })
 })
 
 async function skipTutorial(page: Page): Promise<void> {
   await page.addInitScript(
-    ({ progressKey, tutorialKey }) => {
+    ({ progressKey, snapshotKey, tutorialKey }) => {
       window.localStorage.setItem(tutorialKey, '1')
       window.localStorage.removeItem(progressKey)
+      window.localStorage.removeItem(snapshotKey)
     },
     {
       progressKey: GAME_PROGRESS_STORAGE_KEY,
+      snapshotKey: LEVEL_SNAPSHOT_STORAGE_KEY,
       tutorialKey: CARS_TUTORIAL_STORAGE_KEY,
+    },
+  )
+}
+
+async function loadNearCompleteLevel(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ progressKey, snapshotKey }) => {
+      const parkingSlots = [
+        { id: 'vip', kind: 'vip', unlocked: true, occupiedCarId: null, index: -1 },
+        { id: 'slot-1', kind: 'regular', unlocked: true, occupiedCarId: 'red-car', index: 0 },
+        { id: 'slot-2', kind: 'regular', unlocked: true, occupiedCarId: null, index: 1 },
+        { id: 'slot-3', kind: 'regular', unlocked: true, occupiedCarId: null, index: 2 },
+        { id: 'slot-4', kind: 'regular', unlocked: true, occupiedCarId: null, index: 3 },
+        { id: 'slot-5', kind: 'regular', unlocked: false, occupiedCarId: null, index: 4 },
+        { id: 'slot-6', kind: 'regular', unlocked: false, occupiedCarId: null, index: 5 },
+        { id: 'slot-7', kind: 'regular', unlocked: false, occupiedCarId: null, index: 6 },
+      ]
+      const state = {
+        version: 2,
+        level: 1,
+        seed: 12345,
+        boardWidth: 24,
+        boardHeight: 16,
+        cars: [{
+          id: 'red-car',
+          color: 'red',
+          colorHidden: false,
+          direction: 'right',
+          capacity: 4,
+          length: 2,
+          position: { x: 0, y: 0 },
+          status: 'parked',
+          parkingSlotId: 'slot-1',
+          boarded: 0,
+          tunnelId: null,
+          sequence: 0,
+        }],
+        tunnels: [],
+        passengerQueue: Array.from({ length: 4 }, (_, index) => ({
+          id: `red-passenger-${index}`,
+          color: 'red',
+        })),
+        parkingSlots,
+        powerUps: { vip: 0, shuffle: 0, fill: 1 },
+        levelScore: 0,
+        totalScore: 0,
+        highScore: 0,
+        moves: 1,
+        maxRegularSlotsUsed: 1,
+        maxRegularSlotsUnlocked: 4,
+        lastMessage: 'Ready to complete.',
+        completedLevel: null,
+        failedLevel: null,
+      }
+
+      window.localStorage.setItem(progressKey, JSON.stringify({
+        version: 2,
+        level: 1,
+        totalScore: 0,
+        highScore: 0,
+        powerUps: { vip: 0, shuffle: 0, fill: 1 },
+      }))
+      window.localStorage.setItem(snapshotKey, JSON.stringify({ version: 2, state }))
+    },
+    {
+      progressKey: GAME_PROGRESS_STORAGE_KEY,
+      snapshotKey: LEVEL_SNAPSHOT_STORAGE_KEY,
     },
   )
 }
@@ -212,6 +321,13 @@ function pixelRatio(
   }
 
   return total === 0 ? 0 : matching / total
+}
+
+function visualLayoutMetrics(image: PngImage): { asphaltRatio: number, boardRatio: number } {
+  return {
+    asphaltRatio: pixelRatio(image, regionFor(image, 0, 0.34, 1, 0.24), isAsphaltPixel),
+    boardRatio: pixelRatio(image, regionFor(image, 0.08, 0.58, 0.84, 0.32), isLightBoardPixel),
+  }
 }
 
 function isGrassPixel(red: number, green: number, blue: number, alpha: number): boolean {

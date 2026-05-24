@@ -1,11 +1,18 @@
 import * as THREE from 'three'
 
 import { passengerQueueRefreshAtForEntry, retainPersistentMovingCars, retainSceneMovingCars } from '../CarsScene'
-import { generateLevel, loopPassengerCapacity } from '../gameEngine'
+import { type Car, generateLevel, loopPassengerCapacity, loopPassengerLayoutCapacity } from '../gameEngine'
 import { accelerateThenConstantRouteProgress } from '../scene/animation/departingCar'
 import { animateMovingCars, positionOnRoute, routeRotationAtSegment } from '../scene/animation/movingCars'
 import { PASSENGER_LOOP_ENTRY_RETENTION_SECONDS } from '../scene/passengerLoopSlots'
-import { angleLerp, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
+import { INCOMING_LANE_Z, OUTGOING_LANE_Z } from '../scene/sceneConstants'
+import {
+  angleLerp,
+  createParkingRoute,
+  parkingSlotPosition,
+  passengerSpacing,
+  queueLayoutForState,
+} from '../scene/sceneGeometry'
 import type { MovingCarRenderItem } from '../scene/sceneTypes'
 
 describe('CarsScene animation bookkeeping', () => {
@@ -55,6 +62,33 @@ describe('CarsScene animation bookkeeping', () => {
     const layout = queueLayoutForState(state)
 
     expect(layout.perimeter).toBeLessThanOrEqual(readyPassengers * passengerSpacing() + passengerSpacing() * 4)
+  })
+
+  it('keeps the rendered loop layout stable as the queue drains', () => {
+    const state = generateLevel(10, 20_010)
+    const fullLayout = queueLayoutForState(state)
+    const drainedLayout = queueLayoutForState({ ...state, passengerQueue: [] })
+
+    expect(loopPassengerCapacity({ ...state, passengerQueue: [] })).toBe(0)
+    expect(loopPassengerLayoutCapacity(state)).toBeGreaterThan(0)
+    expect(drainedLayout.perimeter).toBeCloseTo(fullLayout.perimeter)
+    expect(drainedLayout.capRadius).toBeCloseTo(fullLayout.capRadius)
+  })
+
+  it('routes opposite horizontal parking traffic onto separate road lanes', () => {
+    const leftToRight = createParkingRoute(
+      makeTestCar({ direction: 'left', id: 'left-exit', position: { x: 1, y: 2 } }),
+      parkingSlotPosition(5, 'regular'),
+    )
+    const rightToLeft = createParkingRoute(
+      makeTestCar({ direction: 'right', id: 'right-exit', position: { x: 4, y: 3 } }),
+      parkingSlotPosition(0, 'regular'),
+    )
+
+    expect(routeUsesLane(leftToRight, OUTGOING_LANE_Z)).toBe(true)
+    expect(routeUsesLane(rightToLeft, INCOMING_LANE_Z)).toBe(true)
+    expect(routeUsesLane(leftToRight, INCOMING_LANE_Z)).toBe(false)
+    expect(routeUsesLane(rightToLeft, OUTGOING_LANE_Z)).toBe(false)
   })
 
   it('accelerates departing cars and then keeps a constant route velocity', () => {
@@ -121,4 +155,26 @@ function makeMovingCar(overrides: Partial<MovingCarRenderItem> = {}): MovingCarR
     duration: 1,
     ...overrides,
   }
+}
+
+function makeTestCar(overrides: Partial<Car> = {}): Car {
+  return {
+    boarded: 0,
+    capacity: 4,
+    color: 'red',
+    colorHidden: false,
+    direction: 'right',
+    id: 'car',
+    length: 2,
+    parkingSlotId: null,
+    position: { x: 0, y: 0 },
+    sequence: 0,
+    status: 'field',
+    tunnelId: null,
+    ...overrides,
+  }
+}
+
+function routeUsesLane(route: { position: THREE.Vector3 }[], laneZ: number): boolean {
+  return route.some((point) => Math.abs(point.position.z - laneZ) < 0.001)
 }

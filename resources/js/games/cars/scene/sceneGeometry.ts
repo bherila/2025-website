@@ -8,7 +8,7 @@ import {
   type GameState,
   getCarCells,
   gridCellKey,
-  loopPassengerCapacity,
+  loopPassengerLayoutCapacity,
   type Passenger,
   pathCellsToExit,
   pathOccupiedCellStepsToExit,
@@ -42,6 +42,8 @@ export function feederJoinProgress(layout: QueueLayout): number {
 }
 
 const FEEDER_ROW_SPACING = 0.34
+const LOOP_VISUAL_LANE_OFFSETS = [0, -0.16, 0.16] as const
+const FEEDER_VISUAL_LANE_OFFSETS = [0, -0.15, 0.15] as const
 const DEFAULT_DEPARTURE_OFFSCREEN_X = 22
 const DEPARTURE_VIEWPORT_CLEARANCE = 3.2
 const DEPARTURE_EXIT_SEARCH_LIMIT = 56
@@ -62,6 +64,8 @@ export function feederPassengerPosition(passenger: Passenger, feederPassengers: 
   const distanceFromLoop = Math.min(length - 0.05, 0.42 + row * FEEDER_ROW_SPACING)
   const t = Math.min(1, distanceFromLoop / Math.max(0.01, length))
   const point = curve.getPointAt(t)
+  const tangent = curve.getTangentAt(t)
+  offsetPointByNormal(point, tangent, passengerFeederLaneOffset(passenger.id))
   point.y = 0
 
   return point
@@ -115,8 +119,32 @@ export function queuePosition(rawDistance: number, layout: QueueLayout): THREE.V
   return new THREE.Vector3(-halfStraight + Math.cos(angle) * layout.capRadius, 0, QUEUE_Z + Math.sin(angle) * layout.capRadius)
 }
 
+export function queueVisualPosition(rawDistance: number, layout: QueueLayout, laneOffset: number): THREE.Vector3 {
+  const position = queuePosition(rawDistance, layout)
+  if (laneOffset === 0) {
+    return position
+  }
+
+  const tangent = queueTangent(rawDistance, layout)
+  offsetPointByNormal(position, tangent, laneOffset)
+
+  return position
+}
+
+export function passengerQueueLaneOffset(passengerId: string): number {
+  return LOOP_VISUAL_LANE_OFFSETS[stableLaneIndex(passengerId, LOOP_VISUAL_LANE_OFFSETS.length)] ?? 0
+}
+
+export function passengerFeederLaneOffset(passengerId: string): number {
+  return FEEDER_VISUAL_LANE_OFFSETS[stableLaneIndex(passengerId, FEEDER_VISUAL_LANE_OFFSETS.length)] ?? 0
+}
+
 export function queueLayoutForState(state: GameState): QueueLayout {
-  const activeCount = Math.max(1, loopPassengerCapacity(state))
+  const activeCount = Math.max(1, loopPassengerLayoutCapacity(state))
+  return queueLayoutForPassengerCount(activeCount)
+}
+
+function queueLayoutForPassengerCount(activeCount: number): QueueLayout {
   const targetPerimeter = Math.max(3.2, activeCount * passengerSpacing())
   const capRadius = Math.max(0.48, Math.min(1.45, targetPerimeter / 8.0))
   const straightLength = Math.max(0.45, (targetPerimeter - Math.PI * 2 * capRadius) / 2)
@@ -136,7 +164,7 @@ export function queueLayoutForState(state: GameState): QueueLayout {
 }
 
 export function passengerSpacing(): number {
-  return 0.38
+  return 0.30
 }
 
 export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[] {
@@ -144,27 +172,31 @@ export function createParkingRoute(car: Car, target: THREE.Vector3): RoutePoint[
   const exit = boardExitPosition(car)
   const boardBounds = boardBoundsForRoute()
   const routePositions = [start, exit]
-  const laneOffsetX = (INCOMING_LANE_Z - target.z) * Math.tan(PARKING_SLOT_TILT)
-  const approachX = target.x + laneOffsetX
+  let laneEntryX = exit.x
 
   if (car.direction === 'down') {
     const sideX = target.x < 0 ? boardBounds.left : boardBounds.right
+    laneEntryX = sideX
     routePositions.push(
       new THREE.Vector3(sideX, start.y, boardBounds.bottom),
-      new THREE.Vector3(sideX, start.y, INCOMING_LANE_Z),
     )
   } else if (car.direction === 'left' || car.direction === 'right') {
-    routePositions.push(new THREE.Vector3(exit.x, start.y, INCOMING_LANE_Z))
+    laneEntryX = exit.x
   } else if (isDiagonalDirection(car.direction)) {
     const sideX = exit.x < start.x ? boardBounds.left : boardBounds.right
+    laneEntryX = sideX
     routePositions.push(
       new THREE.Vector3(sideX, start.y, exit.z),
-      new THREE.Vector3(sideX, start.y, INCOMING_LANE_Z),
     )
   }
 
+  const laneZ = parkingTrafficLaneZ(laneEntryX, target.x)
+  const laneOffsetX = (laneZ - target.z) * Math.tan(PARKING_SLOT_TILT)
+  const approachX = target.x + laneOffsetX
+
   routePositions.push(
-    new THREE.Vector3(approachX, start.y, INCOMING_LANE_Z),
+    new THREE.Vector3(laneEntryX, start.y, laneZ),
+    new THREE.Vector3(approachX, start.y, laneZ),
     new THREE.Vector3(target.x, target.y, target.z),
   )
 
@@ -234,6 +266,44 @@ export function departureExitXForViewport(camera: THREE.Camera | null): number {
 
 function projectedXAtDepartureLane(x: number, camera: THREE.Camera): number {
   return new THREE.Vector3(x, 0.08, OUTGOING_LANE_Z).project(camera).x
+}
+
+function parkingTrafficLaneZ(fromX: number, toX: number): number {
+  return toX >= fromX ? OUTGOING_LANE_Z : INCOMING_LANE_Z
+}
+
+function queueTangent(rawDistance: number, layout: QueueLayout): THREE.Vector3 {
+  const epsilon = Math.max(0.001, Math.min(0.02, layout.perimeter / 1000))
+  const before = queuePosition(rawDistance - epsilon, layout)
+  const after = queuePosition(rawDistance + epsilon, layout)
+  const tangent = after.sub(before)
+
+  if (tangent.lengthSq() === 0) {
+    return new THREE.Vector3(1, 0, 0)
+  }
+
+  return tangent.normalize()
+}
+
+function offsetPointByNormal(point: THREE.Vector3, tangent: THREE.Vector3, laneOffset: number): void {
+  const normalX = -tangent.z
+  const normalZ = tangent.x
+  const normalLength = Math.hypot(normalX, normalZ)
+  if (normalLength === 0) {
+    return
+  }
+
+  point.x += (normalX / normalLength) * laneOffset
+  point.z += (normalZ / normalLength) * laneOffset
+}
+
+function stableLaneIndex(value: string, laneCount: number): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0
+  }
+
+  return Math.abs(hash) % laneCount
 }
 
 export function routeSegmentLengths(route: RoutePoint[]): number[] {

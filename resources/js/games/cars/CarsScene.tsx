@@ -48,9 +48,10 @@ import {
   fieldPositionForCar,
   parkingSlotPosition,
   passengerGateCycle,
+  passengerQueueLaneOffset,
   passengerSpacing,
   queueLayoutForState,
-  queuePosition,
+  queueVisualPosition,
   routeSegmentLengths,
 } from './scene/sceneGeometry'
 import type {
@@ -537,6 +538,7 @@ function buildDynamicScene(
 
   for (const assignment of loopPlan.assignments) {
     const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
+    const laneOffset = passengerQueueLaneOffset(passenger.id)
     passengerOffsets.set(passenger.id, offset)
     if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null || shift) {
       passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
@@ -546,13 +548,13 @@ function buildDynamicScene(
       colorblindMode,
       pattern: CAR_PATTERNS[passenger.color],
     })
-    const position = queuePosition(passengerPhase + offset, queueLayout)
+    const position = queueVisualPosition(passengerPhase + offset, queueLayout, laneOffset)
     let entry: PassengerRenderItem['entry'] | null = null
     if (entryStartedAt !== null && sourcePassengers) {
       entry = createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
       nextPassengerQueueRefreshAt = earlierRefreshAt(nextPassengerQueueRefreshAt, passengerQueueRefreshAtForEntry(entry))
     } else if (shift) {
-      const from = queuePosition(passengerPhase + shift.previousOffset, queueLayout)
+      const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
       entry = {
         from: new THREE.Vector3(from.x, 0.12, from.z),
         startedAt: shift.startedAt,
@@ -568,6 +570,7 @@ function buildDynamicScene(
       id: passenger.id,
       mesh: handle,
       offset,
+      laneOffset,
       layout: queueLayout,
     }
     if (entry) {

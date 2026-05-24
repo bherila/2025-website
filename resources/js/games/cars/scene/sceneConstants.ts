@@ -11,8 +11,8 @@ export const BLOCKED_BOUNCE_DURATION = 0.58
 export const PARKED_ROTATION = Math.PI
 export const PARKING_SLOT_TILT = 0.16
 
-export const INCOMING_LANE_Z = PARKING_Z + 1.20
-export const OUTGOING_LANE_Z = PARKING_Z + 1.78
+export const INCOMING_LANE_Z = PARKING_Z + 1.05
+export const OUTGOING_LANE_Z = PARKING_Z + 1.58
 
 export const BOARD_WIDTH = GAME_BOARD_WIDTH
 export const BOARD_HEIGHT = GAME_BOARD_HEIGHT

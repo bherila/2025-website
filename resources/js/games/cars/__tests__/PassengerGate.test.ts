@@ -171,6 +171,21 @@ describe('passenger gate notifications', () => {
     expect(gateHolds.size).toBe(0)
   })
 
+  it('uses logical offsets for gate boarding even when passengers have visual lane offsets', () => {
+    const passenger: PassengerRenderItem = {
+      id: 'p1',
+      laneOffset: 0.16,
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const onPassengerGate = jest.fn()
+
+    notifyPassengerGate([passenger], 0, new Map([['p1', -1]]), testState, [], 20, onPassengerGate)
+
+    expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
   it('rejects ineligible passenger ids via canBoardPassengerAtParkingGate', () => {
     const queueState: GameState = {
       ...testState,
