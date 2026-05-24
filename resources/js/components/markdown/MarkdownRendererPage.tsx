@@ -10,6 +10,8 @@ interface MarkdownRendererPageProps {
   initialData: MarkdownInitialData
 }
 
+type MarkdownTab = 'markdown' | 'preview'
+
 const PREVIEW_DEBOUNCE_MS = 150
 
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -21,10 +23,21 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced
 }
 
+function waitForNextFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve())
+      return
+    }
+    setTimeout(resolve, 0)
+  })
+}
+
 export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps): React.JSX.Element {
   const [markdown, setMarkdown] = useState<string>(initialData.markdown)
   const [title, setTitle] = useState<string>(initialData.title ?? '')
   const [document, setDocument] = useState<MarkdownDocumentDto | null>(initialData.document)
+  const [activeTab, setActiveTab] = useState<MarkdownTab>(initialData.document ? 'preview' : 'markdown')
   const [saving, setSaving] = useState<boolean>(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
@@ -94,10 +107,25 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
     }
     setPrintPreparing(true)
     try {
+      if (activeTab !== 'preview') {
+        setActiveTab('preview')
+        await waitForNextFrame()
+        await waitForNextFrame()
+      }
       await prepareAndPrint(registry, previewRef.current)
     } finally {
       setPrintPreparing(false)
     }
+  }
+
+  const tabButtonClass = (tab: MarkdownTab): string => {
+    const isActive = activeTab === tab
+    return [
+      'rounded-md px-3 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+      isActive
+        ? 'bg-primary text-primary-foreground'
+        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+    ].join(' ')
   }
 
   return (
@@ -161,28 +189,67 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
         </div>
       </header>
 
+      <div className="no-print mb-4 flex w-fit gap-1 rounded-md border border-border bg-card p-1" role="tablist" aria-label="Markdown renderer views">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'markdown'}
+          aria-controls="markdown-tab-panel"
+          id="markdown-tab"
+          className={tabButtonClass('markdown')}
+          onClick={() => setActiveTab('markdown')}
+        >
+          Markdown
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'preview'}
+          aria-controls="preview-tab-panel"
+          id="preview-tab"
+          className={tabButtonClass('preview')}
+          onClick={() => setActiveTab('preview')}
+        >
+          Preview
+        </button>
+      </div>
+
       {saveError !== null && (
         <div className="mb-3 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {saveError}
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="markdown-editor-pane">
-          <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
-          <textarea
-            id="markdown-content"
-            value={markdown}
-            onChange={(event) => setMarkdown(event.target.value)}
-            spellCheck={false}
-            placeholder="# Hello&#10;&#10;Paste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams."
-            className="h-[70vh] w-full resize-y rounded-md border border-border bg-card p-3 font-mono text-sm leading-relaxed text-foreground"
-          />
-        </div>
-        <div className="markdown-preview-pane">
-          <label className="mb-2 block text-sm font-medium text-foreground">Preview</label>
-          <Preview ref={previewRef} markdown={debouncedMarkdown} registry={registry} />
-        </div>
+      <div>
+        {activeTab === 'markdown' && (
+          <div
+            className="markdown-editor-pane"
+            role="tabpanel"
+            id="markdown-tab-panel"
+            aria-labelledby="markdown-tab"
+          >
+            <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
+            <textarea
+              id="markdown-content"
+              value={markdown}
+              onChange={(event) => setMarkdown(event.target.value)}
+              spellCheck={false}
+              placeholder="# Hello&#10;&#10;Paste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams."
+              className="h-[70vh] w-full resize-y rounded-md border border-border bg-card p-3 font-mono text-sm leading-relaxed text-foreground"
+            />
+          </div>
+        )}
+        {activeTab === 'preview' && (
+          <div
+            className="markdown-preview-pane"
+            role="tabpanel"
+            id="preview-tab-panel"
+            aria-labelledby="preview-tab"
+          >
+            <label className="mb-2 block text-sm font-medium text-foreground">Preview</label>
+            <Preview ref={previewRef} markdown={debouncedMarkdown} registry={registry} />
+          </div>
+        )}
       </div>
     </div>
   )

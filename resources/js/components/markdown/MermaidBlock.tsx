@@ -20,7 +20,12 @@ function ensureMermaidInitialized(theme: 'dark' | 'default'): void {
   if (initializedTheme === theme) {
     return
   }
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme,
+    htmlLabels: false,
+  })
   initializedTheme = theme
 }
 

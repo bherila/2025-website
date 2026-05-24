@@ -65,6 +65,16 @@ function makeInitialData(overrides: Partial<MarkdownInitialData> = {}): Markdown
   }
 }
 
+function makeDocument(): NonNullable<MarkdownInitialData['document']> {
+  return {
+    id: 12,
+    shortCode: 'abc123',
+    title: null,
+    shareUrl: 'https://example.test/tools/markdown/s/abc123',
+    ownerUserId: 1,
+  }
+}
+
 describe('MarkdownRendererPage', () => {
   beforeEach(() => {
     mockPreviewSettlers.length = 0
@@ -75,6 +85,24 @@ describe('MarkdownRendererPage', () => {
 
   afterEach(() => {
     jest.useRealTimers()
+  })
+
+  it('uses tabbed markdown and preview panes, defaulting new documents to markdown', () => {
+    render(<MarkdownRendererPage initialData={makeInitialData()} />)
+
+    expect(screen.getByRole('tab', { name: 'Markdown' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('textbox', { name: 'Markdown' })).toBeInTheDocument()
+    expect(screen.queryByTestId('preview')).not.toBeInTheDocument()
+  })
+
+  it('defaults existing documents to the preview tab', () => {
+    render(<MarkdownRendererPage initialData={makeInitialData({ document: makeDocument(), canEdit: true })} />)
+
+    expect(screen.getByRole('tab', { name: 'Markdown' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('preview')).toHaveTextContent('# Draft')
+    expect(screen.queryByRole('textbox', { name: 'Markdown' })).not.toBeInTheDocument()
   })
 
   it('allows a newly saved document to be updated without reloading', async () => {
@@ -98,7 +126,7 @@ describe('MarkdownRendererPage', () => {
     expect(await screen.findByRole('button', { name: 'Update' })).toBeInTheDocument()
     expect(screen.queryByText('Viewing shared document')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Markdown'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown' }), {
       target: { value: '# Edited' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update' }))
@@ -114,7 +142,7 @@ describe('MarkdownRendererPage', () => {
       await registry.waitUntilSettled()
     })
 
-    render(<MarkdownRendererPage initialData={makeInitialData()} />)
+    render(<MarkdownRendererPage initialData={makeInitialData({ document: makeDocument(), canEdit: true })} />)
 
     await waitFor(() => {
       expect(mockPreviewSettlers).toHaveLength(1)
@@ -123,12 +151,14 @@ describe('MarkdownRendererPage', () => {
       mockPreviewSettlers[0]?.()
     })
 
-    fireEvent.change(screen.getByLabelText('Markdown'), {
+    fireEvent.click(screen.getByRole('tab', { name: 'Markdown' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown' }), {
       target: { value: '# Updated preview' },
     })
     act(() => {
       jest.advanceTimersByTime(150)
     })
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }))
 
     expect(screen.getByTestId('preview')).toHaveTextContent('# Updated preview')
     await waitFor(() => {
