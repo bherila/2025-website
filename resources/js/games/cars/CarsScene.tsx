@@ -280,6 +280,11 @@ export function CarsScene({
           seed: visualTestSeed,
         })
       }
+
+      if (visualTestEnabled && visualReadyMarked) {
+        return
+      }
+
       frameId = window.requestAnimationFrame(animate)
     }
     animate()
