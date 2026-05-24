@@ -9,6 +9,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class TaxDocumentLotsMatchController extends Controller
 {
@@ -20,7 +21,7 @@ class TaxDocumentLotsMatchController extends Controller
     {
         $taxDocument = $this->ownedTaxDocument($id);
         $result = $this->lotMatcherService->runMatcherForDocument(
-            (int) $taxDocument->id,
+            $this->documentId($taxDocument),
             $request->boolean('preserve_decisions', true),
         );
 
@@ -31,7 +32,7 @@ class TaxDocumentLotsMatchController extends Controller
     {
         $request->validated();
         $taxDocument = $this->ownedTaxDocument($id);
-        $result = $this->lotMatcherService->runMatcherForDocument((int) $taxDocument->id, preserveDecisions: false);
+        $result = $this->lotMatcherService->runMatcherForDocument($this->documentId($taxDocument), preserveDecisions: false);
 
         return response()->json($result->toArray());
     }
@@ -41,5 +42,16 @@ class TaxDocumentLotsMatchController extends Controller
         return FileForTaxDocument::query()
             ->where('user_id', (int) Auth::id())
             ->findOrFail($id);
+    }
+
+    private function documentId(FileForTaxDocument $taxDocument): int
+    {
+        if ($taxDocument->document_id === null) {
+            throw ValidationException::withMessages([
+                'tax_document' => 'Tax document is not linked to a finance document.',
+            ]);
+        }
+
+        return (int) $taxDocument->document_id;
     }
 }
