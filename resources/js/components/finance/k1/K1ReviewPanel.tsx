@@ -1417,11 +1417,13 @@ function K3ElectionSection({
         />
         <div>
           <Label htmlFor="k3-sbp-election" className="text-xs font-medium cursor-pointer">
-            Elect to treat "Sourced by Partner" (column f) items as U.S. source
+            Treat "Sourced by Partner" (column f) items as U.S. source (default for U.S.-person partners)
           </Label>
           <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-            When checked, column (f) amounts are treated as U.S.-source income for Form 1116 purposes.
-            Applies to domestic partners not subject to a treaty or §901(j) override.
+            U.S.-source is the default — partner-level sourcing under §§861–865 generally resources
+            column (f) to the U.S. for a U.S.-person partner. Uncheck only if you are a non-U.S.
+            partner or you are sourcing this income as foreign under a treaty or §901(j) override;
+            column (f) will then be treated as foreign-source passive income for Form 1116.
           </p>
         </div>
       </div>

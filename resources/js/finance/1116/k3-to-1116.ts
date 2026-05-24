@@ -288,7 +288,7 @@ export function extractK3ForeignTaxTotal(data: FK1StructuredData): number {
  *
  * Uses K-3 Part II data when available (both canonical and tool formats);
  * falls back to Box 16 codes I/J for taxes and B/C for income.
- * Respects the k3Elections.sourcedByPartnerAsUSSource election.
+ * Respects the k3Elections.sourcedByPartnerAsUSSource election (default: U.S.-source).
  *
  * Returns one entry per income category (passive, general) with non-zero data.
  */
@@ -304,15 +304,18 @@ export function extractForeignTaxSummaries(
   const totalForeignTaxPaid = boxTotal !== 0 ? boxTotal : extractK3ForeignTaxTotal(data)
 
   const breakdown = extractK3IncomeBreakdown(data)
-  const electionSBPasUS = data.k3Elections?.sourcedByPartnerAsUSSource ?? false
+  // U.S.-source is the default for K-3 column (f). The election flag is only set to `false`
+  // when the taxpayer is a non-U.S. partner or is sourcing under a treaty — in which case
+  // column (f) is treated as foreign-source passive income for Form 1116. Undefined / null /
+  // explicit `true` all resolve to the default U.S.-source treatment.
+  const sbpTreatedAsUSSource = data.k3Elections?.sourcedByPartnerAsUSSource !== false
 
   // When foreign tax is zero and there's no col-f income requiring Form 1116 reporting, skip.
-  if (totalForeignTaxPaid === 0 && (breakdown.sourcedByPartner === 0 || electionSBPasUS)) return []
+  if (totalForeignTaxPaid === 0 && (breakdown.sourcedByPartner === 0 || sbpTreatedAsUSSource)) return []
 
-  // When the SBP election is NOT active, col_f (sourced-by-partner) amounts are
-  // treated as foreign-source and added to passive income for Form 1116 purposes.
-  // When the election IS active, they are US-source — excluded from foreign income.
-  const effectivePassiveIncome = electionSBPasUS
+  // Default (U.S.-source): exclude sourced-by-partner from foreign-source passive income.
+  // Election explicitly false (treaty / non-U.S. partner): include it.
+  const effectivePassiveIncome = sbpTreatedAsUSSource
     ? breakdown.passiveIncome
     : currency(breakdown.passiveIncome).add(breakdown.sourcedByPartner).value
 
@@ -326,7 +329,7 @@ export function extractForeignTaxSummaries(
         category: 'passive',
         grossForeignIncome: effectivePassiveIncome,
         sourcedByPartner: breakdown.sourcedByPartner,
-        electionSBPasUS,
+        electionSBPasUS: sbpTreatedAsUSSource,
         sourceType: 'k1',
         accountId: accountId ?? null,
       })
@@ -338,7 +341,7 @@ export function extractForeignTaxSummaries(
         category: 'general',
         grossForeignIncome: breakdown.generalIncome,
         sourcedByPartner: 0,
-        electionSBPasUS,
+        electionSBPasUS: sbpTreatedAsUSSource,
         sourceType: 'k1',
         accountId: accountId ?? null,
       })
