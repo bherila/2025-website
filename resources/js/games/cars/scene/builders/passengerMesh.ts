@@ -4,6 +4,14 @@ import { CAR_PATTERN_VALUES, type CarPattern } from '../../gameTypes'
 import type { PassengerInstanceHandle, PassengerInstancePools } from '../sceneTypes'
 import { drawCarPatternCue } from './carMesh'
 
+export const PASSENGER_HEAD_RADIUS = 0.16
+export const PASSENGER_BODY_RADIUS = 0.115
+export const PASSENGER_BODY_LENGTH = 0.25
+export const PASSENGER_HEAD_Y_OFFSET = 0.48
+export const PASSENGER_BODY_Y_OFFSET = 0.23
+export const PASSENGER_BADGE_Y_OFFSET = 0.66
+export const PASSENGER_BADGE_SIZE = 0.18
+
 export interface PassengerVisualOptions {
   colorblindMode?: boolean
   pattern?: CarPattern
@@ -12,13 +20,13 @@ export interface PassengerVisualOptions {
 export function createPassengerMesh(color: string, options: PassengerVisualOptions = {}): THREE.Group {
   const group = new THREE.Group()
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.42 })
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), material)
-  head.position.y = 0.45
+  const head = new THREE.Mesh(new THREE.SphereGeometry(PASSENGER_HEAD_RADIUS, 16, 16), material)
+  head.position.y = PASSENGER_HEAD_Y_OFFSET
   head.castShadow = true
   group.add(head)
 
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.24, 8, 16), material)
-  body.position.y = 0.22
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(PASSENGER_BODY_RADIUS, PASSENGER_BODY_LENGTH, 8, 16), material)
+  body.position.y = PASSENGER_BODY_Y_OFFSET
   body.castShadow = true
   group.add(body)
 
@@ -35,7 +43,7 @@ export function createPassengerInstancePools(
 ): PassengerInstancePools {
   const instanceCapacity = Math.max(0, Math.floor(capacity))
   const headMesh = new THREE.InstancedMesh(
-    withWhiteVertexColors(new THREE.SphereGeometry(0.14, 16, 16)),
+    withWhiteVertexColors(new THREE.SphereGeometry(PASSENGER_HEAD_RADIUS, 16, 16)),
     new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, vertexColors: true }),
     instanceCapacity,
   )
@@ -44,7 +52,7 @@ export function createPassengerInstancePools(
   headMesh.count = 0
 
   const bodyMesh = new THREE.InstancedMesh(
-    withWhiteVertexColors(new THREE.CapsuleGeometry(0.1, 0.24, 8, 16)),
+    withWhiteVertexColors(new THREE.CapsuleGeometry(PASSENGER_BODY_RADIUS, PASSENGER_BODY_LENGTH, 8, 16)),
     new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, vertexColors: true }),
     instanceCapacity,
   )
@@ -56,7 +64,7 @@ export function createPassengerInstancePools(
   if (options.colorblindMode === true) {
     for (const pattern of CAR_PATTERN_VALUES) {
       const badgeMesh = new THREE.InstancedMesh(
-        new THREE.PlaneGeometry(0.16, 0.16),
+        new THREE.PlaneGeometry(PASSENGER_BADGE_SIZE, PASSENGER_BADGE_SIZE),
         new THREE.MeshBasicMaterial({
           map: createPassengerPatternTexture(pattern),
           transparent: true,
@@ -164,14 +172,14 @@ function withWhiteVertexColors<T extends THREE.BufferGeometry>(geometry: T): T {
 
 function createPassengerPatternBadge(pattern: CarPattern): THREE.Mesh {
   const badge = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.16, 0.16),
+    new THREE.PlaneGeometry(PASSENGER_BADGE_SIZE, PASSENGER_BADGE_SIZE),
     new THREE.MeshBasicMaterial({
       map: createPassengerPatternTexture(pattern),
       transparent: true,
       depthWrite: false,
     }),
   )
-  badge.position.y = 0.61
+  badge.position.y = PASSENGER_BADGE_Y_OFFSET
   badge.rotation.x = -Math.PI / 2
 
   return badge

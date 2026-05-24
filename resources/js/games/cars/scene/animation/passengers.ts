@@ -2,13 +2,18 @@ import * as THREE from 'three'
 
 import { canBoardPassengerAtParkingGate, type GameState, type Passenger } from '../../gameEngine'
 import {
+  PASSENGER_BADGE_Y_OFFSET,
+  PASSENGER_BODY_Y_OFFSET,
+  PASSENGER_HEAD_Y_OFFSET,
+} from '../builders/passengerMesh'
+import {
   feederCurve,
   feederPassengerPosition,
   passengerGateCycle,
   passengerGateProgress,
   passengerSpacing,
   queueLayoutForState,
-  queuePosition,
+  queueVisualPosition,
 } from '../sceneGeometry'
 import type {
   MovingCarRenderItem,
@@ -36,7 +41,7 @@ export function animatePassengers(passengers: PassengerRenderItem[], phase: numb
       targetZ = item.fixedTarget.z
       y = 0.1 + Math.sin(elapsed * 4 + item.offset) * 0.018
     } else {
-      const position = queuePosition(phase + item.offset, item.layout)
+      const position = queueVisualPosition(phase + item.offset, item.layout, item.laneOffset ?? 0)
       targetX = position.x
       targetZ = position.z
       y = 0.12 + Math.sin(elapsed * 6 + item.offset) * 0.025
@@ -217,15 +222,15 @@ function applyPassengerTransform(
 }
 
 function updatePassengerInstance(handle: PassengerInstanceHandle, position: THREE.Vector3, rotationY: number): void {
-  writeInstanceMatrix(handle.pool.headMesh, handle.headIndex, position, 0.45, rotationY)
-  writeInstanceMatrix(handle.pool.bodyMesh, handle.bodyIndex, position, 0.22, rotationY)
+  writeInstanceMatrix(handle.pool.headMesh, handle.headIndex, position, PASSENGER_HEAD_Y_OFFSET, rotationY)
+  writeInstanceMatrix(handle.pool.bodyMesh, handle.bodyIndex, position, PASSENGER_BODY_Y_OFFSET, rotationY)
   handle.pool.headMesh.setColorAt(handle.headIndex, handle.color)
   handle.pool.bodyMesh.setColorAt(handle.bodyIndex, handle.color)
 
   if (handle.badgeIndex !== null && handle.badgePattern !== null) {
     const badgeMesh = handle.pool.badgeMeshes[handle.badgePattern]
     if (badgeMesh) {
-      writeInstanceMatrix(badgeMesh, handle.badgeIndex, position, 0.61, rotationY, -Math.PI / 2)
+      writeInstanceMatrix(badgeMesh, handle.badgeIndex, position, PASSENGER_BADGE_Y_OFFSET, rotationY, -Math.PI / 2)
     }
   }
 }

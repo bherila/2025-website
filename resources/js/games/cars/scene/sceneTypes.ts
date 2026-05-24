@@ -7,6 +7,7 @@ export interface PassengerRenderItem {
   mesh: PassengerRenderHandle
   offset: number
   layout: QueueLayout
+  laneOffset?: number
   entry?: PassengerEntryRenderItem
   fixedTarget?: THREE.Vector3
 }

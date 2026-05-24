@@ -5,8 +5,14 @@ import { animatePassengers } from '../scene/animation/passengers'
 import {
   createPassengerInstanceHandle,
   createPassengerInstancePools,
+  PASSENGER_HEAD_Y_OFFSET,
   passengerInstancePoolMeshes,
 } from '../scene/builders/passengerMesh'
+import {
+  passengerQueueLaneOffset,
+  queuePosition,
+  queueVisualPosition,
+} from '../scene/sceneGeometry'
 import type { PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
 
 describe('Parking Pickup passenger rendering', () => {
@@ -32,6 +38,7 @@ describe('Parking Pickup passenger rendering', () => {
     }
     const passenger: PassengerRenderItem = {
       id: 'passenger-1',
+      laneOffset: passengerQueueLaneOffset('passenger-1'),
       layout,
       mesh: handle,
       offset: 0,
@@ -55,6 +62,25 @@ describe('Parking Pickup passenger rendering', () => {
     expect(pools.bodyMesh.count).toBe(1)
     expect(Array.from(vertexColor.array.slice(0, 3))).toEqual([1, 1, 1])
     expect(`#${color.getHexString()}`).toBe(CAR_COLORS.red.hex)
-    expect(position.y).toBeCloseTo(0.57)
+    expect(position.y).toBeCloseTo(0.12 + PASSENGER_HEAD_Y_OFFSET)
+  })
+
+  it('keeps queue lane offsets deterministic and visual-only', () => {
+    const layout: QueueLayout = {
+      capRadius: 1,
+      depth: 2.7,
+      halfDepth: 1,
+      halfWidth: 2,
+      perimeter: 4 * 2 + Math.PI * 2,
+      straightLength: 4,
+      width: 4.7,
+    }
+    const logical = queuePosition(0, layout)
+    const laneOffset = passengerQueueLaneOffset('passenger-1')
+    const visual = queueVisualPosition(0, layout, laneOffset)
+
+    expect(passengerQueueLaneOffset('passenger-1')).toBe(laneOffset)
+    expect(Math.abs(laneOffset)).toBeLessThanOrEqual(0.16)
+    expect(visual.distanceTo(logical)).toBeCloseTo(Math.abs(laneOffset))
   })
 })

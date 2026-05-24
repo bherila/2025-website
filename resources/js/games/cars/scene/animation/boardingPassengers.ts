@@ -2,7 +2,12 @@ import * as THREE from 'three'
 
 import { CAR_COLORS, CAR_PATTERNS, type GameState, type Passenger } from '../../gameEngine'
 import { createPassengerMesh } from '../builders/passengerMesh'
-import { parkingSlotPosition, queueLayoutForState, queuePosition } from '../sceneGeometry'
+import {
+  parkingSlotPosition,
+  passengerQueueLaneOffset,
+  queueLayoutForState,
+  queueVisualPosition,
+} from '../sceneGeometry'
 import type { BoardingPassengerRenderItem } from '../sceneTypes'
 import { disposeObject } from '../threeUtils'
 
@@ -49,7 +54,11 @@ export function startBoardingPassengerAnimations(
 
   for (const assignment of boardingAssignments) {
     const offset = passengerOffsets.get(assignment.passenger.id) ?? 0
-    const from = queuePosition(passengerPhase + offset, queueLayout)
+    const from = queueVisualPosition(
+      passengerPhase + offset,
+      queueLayout,
+      passengerQueueLaneOffset(assignment.passenger.id),
+    )
     from.y = 0.12
     const mesh = createPassengerMesh(CAR_COLORS[assignment.passenger.color].hex, {
       colorblindMode,

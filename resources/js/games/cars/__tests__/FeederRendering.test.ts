@@ -78,9 +78,9 @@ describe('feeder passenger rendering plan', () => {
       plan.feederPassengers,
       testLayout,
     )
+    const overlapDistance = overlappingPosition.distanceTo(enteringPosition)
 
-    expect(renderedPosition.distanceTo(enteringPosition)).toBeGreaterThan(0.2)
-    expect(overlappingPosition.distanceTo(enteringPosition)).toBeLessThan(0.01)
+    expect(renderedPosition.distanceTo(enteringPosition)).toBeGreaterThan(overlapDistance + 0.12)
   })
 })
 
