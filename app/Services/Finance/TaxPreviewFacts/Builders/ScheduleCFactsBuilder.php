@@ -16,6 +16,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFlaggedExpenseRowFact;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use Illuminate\Support\Facades\Schema;
 
 class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
 {
@@ -414,6 +415,10 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
      */
     private function inputsByEntity(int $userId, int $year): array
     {
+        if (! Schema::hasTable('fin_schedule_c_inputs')) {
+            return [];
+        }
+
         return FinScheduleCInput::withoutGlobalScopes()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
