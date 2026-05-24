@@ -20,6 +20,7 @@ jobs:
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
       backend: ${{ steps.changes.outputs.backend }}
+      deploy_inputs: ${{ steps.changes.outputs.deploy_inputs }}
       migrations: ${{ steps.changes.outputs.migrations }}
       parking_pickup: ${{ steps.changes.outputs.parking_pickup }}
       marble_sort: ${{ steps.changes.outputs.marble_sort }}
@@ -55,6 +56,19 @@ jobs:
               - 'database/**'
               - 'scripts/**'
               - '.github/workflows/**'
+            deploy_inputs:
+              - 'app/**'
+              - 'artisan'
+              - 'bootstrap/**'
+              - 'composer.json'
+              - 'composer.lock'
+              - 'config/**'
+              - 'database/**'
+              - 'htaccess-append.txt'
+              - 'public/**'
+              - 'resources/**'
+              - 'routes/**'
+              - 'storage/**'
             migrations:
               - 'database/migrations/**/*.php'
               - 'scripts/check-migration-identifiers.py'
@@ -85,7 +99,7 @@ jobs:
   frontend-build:
     name: Frontend Build
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.deploy_inputs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
