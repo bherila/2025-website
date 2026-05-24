@@ -76,4 +76,14 @@ export default tseslint.config(
       "simple-import-sort/exports": "error",
     },
   }
-);
+,
+  {
+    files: ["**/*.test.ts"],
+    ignores: ["**/*.dom.test.ts"],
+    rules: {
+      "no-restricted-globals": ["error", "window", "document", "HTMLElement"],
+      "no-restricted-imports": ["error", {
+        patterns: ["@testing-library/*"]
+      }],
+    },
+  });

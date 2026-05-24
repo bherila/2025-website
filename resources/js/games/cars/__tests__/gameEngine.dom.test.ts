@@ -41,7 +41,7 @@ describe('cars game engine', () => {
   })
 
   it('generates levels with queue-aware solutions that do not need extra slots', () => {
-    for (const level of [1, 2, 3, 4, 5, 10, 20]) {
+    for (const level of [1, 2, 3, 4, 5, 8, 10, 20, 78]) {
       const state = generateLevel(level)
       const order = findSolvingOrder(state)
       const solution = validateParkingSolution(state, order ?? [])

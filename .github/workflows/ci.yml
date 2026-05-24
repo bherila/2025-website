@@ -94,19 +94,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Build frontend
         run: pnpm run build
@@ -130,19 +119,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Type-check and lint in parallel
         run: pnpm exec concurrently --kill-others-on-fail --names "tsc,eslint" "pnpm run type-check" "pnpm run lint"
@@ -161,19 +139,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run non-game Jest tests
         run: pnpm run test:ci:app
@@ -192,19 +159,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run Parking Pickup Jest tests
         run: pnpm run test:ci:parking-pickup
@@ -223,19 +179,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run Marble Sort Jest tests
         run: pnpm run test:ci:marble-sort

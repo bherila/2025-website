@@ -20,19 +20,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node dependencies
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run slow Jest sweeps
         run: pnpm run test:slow
+
+
+  notify-on-failure:
+    name: Notify on Slow Test Failure
+    needs: jest-slow
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Create issue for slow test failures
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = `Slow tests failed on ${context.payload.repository.default_branch} (${new Date().toISOString().slice(0, 10)})`;
+            const body = [
+              'Nightly slow test workflow failed.',
+              '',
+              `- Workflow: ${context.workflow}`,
+              `- Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Trigger: ${context.eventName}`,
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['ci', 'slow-tests'],
+            });

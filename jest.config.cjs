@@ -1,7 +1,7 @@
 const sourceMaps = process.env.JEST_INLINE_SOURCEMAPS === '1' ? 'inline' : false;
 const slowTestPathIgnorePatterns = process.env.JEST_INCLUDE_SLOW_TESTS === '1'
   ? []
-  : ['\\.slow\\.test\\.[tj]sx?$'];
+  : ['\.slow\.test\.[tj]sx?$'];
 const gameTestPathIgnorePatterns = process.env.JEST_EXCLUDE_GAME_TESTS === '1'
   ? ['/resources/js/games/cars/', '/resources/js/games/marble-sort/']
   : [];
@@ -10,35 +10,17 @@ const defaultTestPathIgnorePatterns = [
   ...gameTestPathIgnorePatterns,
 ];
 
-const domTsTests = [
-  '<rootDir>/resources/js/components/finance/tax-preview/__tests__/useTaxPreviewPrefs.test.ts',
-  '<rootDir>/resources/js/components/finance/transactionTable/__tests__/transactionExport.test.ts',
-  '<rootDir>/resources/js/components/finance/transactionTable/__tests__/useColumnVisibility.test.ts',
-  '<rootDir>/resources/js/components/finance/transactionTable/__tests__/useKeyboardNavigation.test.ts',
-  '<rootDir>/resources/js/components/finance/transactionTable/__tests__/useRowSelection.test.ts',
-  '<rootDir>/resources/js/components/finance/transactionTable/__tests__/useTransactionFilters.test.ts',
-  '<rootDir>/resources/js/components/markdown/__tests__/printExport.test.ts',
-  '<rootDir>/resources/js/components/markdown/__tests__/sanitizeSvg.test.ts',
-  '<rootDir>/resources/js/games/cars/__tests__/gameEngine.test.ts',
-  '<rootDir>/resources/js/games/cars/__tests__/gameProgress.test.ts',
-  '<rootDir>/resources/js/games/marble-sort/__tests__/gameEngine.test.ts',
-  '<rootDir>/resources/js/games/marble-sort/__tests__/gameProgress.test.ts',
-  '<rootDir>/resources/js/genai-processor/__tests__/useGenAiFileUpload.test.ts',
-  '<rootDir>/resources/js/genai-processor/__tests__/useGenAiJobPolling.test.ts',
-  '<rootDir>/tests-ts/webauthn-utils.test.ts',
-];
-
 const shared = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
     '^@toon-format/toon$': '<rootDir>/resources/js/__mocks__/toon.ts',
-    '\\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
+    '\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!dayjs).+\\.js$',
+    '/node_modules/(?!dayjs).+\.js$',
   ],
   transform: {
-    '^.+\\.(ts|tsx)$': ['@swc/jest', {
+    '^.+\.(ts|tsx)$': ['@swc/jest', {
       jsc: {
         parser: { syntax: 'typescript', tsx: true, decorators: true },
         transform: { react: { runtime: 'automatic' } },
@@ -46,7 +28,7 @@ const shared = {
       },
       sourceMaps,
     }],
-    '^.+\\.(js|jsx|mjs|cjs)$': ['@swc/jest', {
+    '^.+\.(js|jsx|mjs|cjs)$': ['@swc/jest', {
       jsc: {
         parser: { syntax: 'ecmascript', jsx: true },
         transform: { react: { runtime: 'automatic' } },
@@ -65,7 +47,8 @@ module.exports = {
       testMatch: [
         '<rootDir>/resources/js/**/*.test.tsx',
         '<rootDir>/tests-ts/**/*.test.tsx',
-        ...domTsTests,
+        '<rootDir>/resources/js/**/*.dom.test.ts',
+        '<rootDir>/tests-ts/**/*.dom.test.ts',
       ],
       testPathIgnorePatterns: defaultTestPathIgnorePatterns,
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.ts'],
@@ -79,7 +62,7 @@ module.exports = {
         '<rootDir>/tests-ts/**/*.test.ts',
       ],
       testPathIgnorePatterns: [
-        ...domTsTests,
+        '\.dom\.test\.ts$',
         ...defaultTestPathIgnorePatterns,
       ],
       setupFilesAfterEnv: ['<rootDir>/tests-ts/jest.setup.node.ts'],
