@@ -74,7 +74,7 @@ export default function LotReconciliationHealthWidget({ selectedYear }: LotRecon
   }
 
   return (
-    <section className="rounded-md border border-border bg-card">
+    <section className="rounded-md border border-border bg-card" data-testid="recon-health-widget">
       <header className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Lot reconciliation health - Tax year {selectedYear}</h2>
@@ -117,7 +117,7 @@ export default function LotReconciliationHealthWidget({ selectedYear }: LotRecon
             <a
               key={document.tax_document_id}
               href={`/finance/tax-documents/${document.tax_document_id}/lot-reconciliation`}
-              className="grid gap-2 px-4 py-3 text-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_auto_auto]"
+              className="grid gap-2 px-4 py-3 text-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_auto_auto]" data-testid={`recon-document-${document.tax_document_id}`}
             >
               <div className="min-w-0">
                 <div className="truncate font-medium text-foreground">{document.broker ?? `Tax document #${document.tax_document_id}`}</div>

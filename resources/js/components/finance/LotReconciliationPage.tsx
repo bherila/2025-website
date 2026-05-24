@@ -299,7 +299,7 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
       <StatusSummary counts={linksData.summary.link_state_counts} diagnosticsCount={report.summary.diagnostics_count} maxDelta={report.summary.max_delta} />
 
       <main id="lot-reconciliation-content" className="space-y-3">
-        <ReconciliationBucket title="Mismatched proceeds / basis / wash / gain" rows={buckets.mismatched} defaultOpen>
+        <ReconciliationBucket title="Mismatched proceeds / basis / wash / gain" rows={buckets.mismatched} testId="recon-bucket-mismatched" defaultOpen>
           {buckets.mismatched.map((link) => (
             <ReconciliationLotRow
               key={link.id}
@@ -310,27 +310,27 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
             />
           ))}
         </ReconciliationBucket>
-        <ReconciliationBucket title="Auto matched" rows={buckets.matched}>
+        <ReconciliationBucket title="Auto matched" rows={buckets.matched} testId="recon-bucket-matched">
           {buckets.matched.map((link) => (
             <ReconciliationLotRow key={link.id} link={link} candidates={linksData.relink_candidates} onAction={(action) => void runLinkAction(link, action)} onRelink={(selectedLotId) => setRelink({ link, selectedLotId })} />
           ))}
         </ReconciliationBucket>
-        <ReconciliationBucket title="Broker-only lots" rows={buckets.brokerOnly}>
+        <ReconciliationBucket title="Broker-only lots" rows={buckets.brokerOnly} testId="recon-bucket-broker-only">
           {buckets.brokerOnly.map((link) => (
             <ReconciliationLotRow key={link.id} link={link} candidates={linksData.relink_candidates} onAction={(action) => void runLinkAction(link, action)} onRelink={(selectedLotId) => setRelink({ link, selectedLotId })} />
           ))}
         </ReconciliationBucket>
-        <ReconciliationBucket title="Account-only lots" rows={buckets.accountOnly}>
+        <ReconciliationBucket title="Account-only lots" rows={buckets.accountOnly} testId="recon-bucket-account-only">
           {buckets.accountOnly.map((link) => (
             <ReconciliationLotRow key={link.id} link={link} candidates={linksData.relink_candidates} onAction={(action) => void runLinkAction(link, action)} onRelink={(selectedLotId) => setRelink({ link, selectedLotId })} />
           ))}
         </ReconciliationBucket>
-        <ReconciliationBucket title="Duplicates / splits" rows={buckets.duplicates}>
+        <ReconciliationBucket title="Duplicates / splits" rows={buckets.duplicates} testId="recon-bucket-duplicates">
           {buckets.duplicates.map((link) => (
             <ReconciliationLotRow key={link.id} link={link} candidates={linksData.relink_candidates} onAction={(action) => void runLinkAction(link, action)} onRelink={(selectedLotId) => setRelink({ link, selectedLotId })} />
           ))}
         </ReconciliationBucket>
-        <ReconciliationBucket title="Unlinked" rows={buckets.unlinked}>
+        <ReconciliationBucket title="Unlinked" rows={buckets.unlinked} testId="recon-bucket-unlinked">
           {buckets.unlinked.map((link) => (
             <ReconciliationLotRow key={link.id} link={link} candidates={linksData.relink_candidates} onAction={(action) => void runLinkAction(link, action)} onRelink={(selectedLotId) => setRelink({ link, selectedLotId })} />
           ))}
@@ -416,13 +416,14 @@ function PriorityChain(): React.ReactElement {
 interface ReconciliationBucketProps {
   title: string
   rows: LotReconciliationLink[]
+  testId?: string
   children: React.ReactNode
   defaultOpen?: boolean
 }
 
-function ReconciliationBucket({ title, rows, children, defaultOpen = false }: ReconciliationBucketProps): React.ReactElement {
+function ReconciliationBucket({ title, rows, testId, children, defaultOpen = false }: ReconciliationBucketProps): React.ReactElement {
   return (
-    <details className="group rounded-md border border-border bg-card" open={defaultOpen}>
+    <details className="group rounded-md border border-border bg-card" open={defaultOpen} data-testid={testId}>
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
         <span className="flex-1">{title}</span>
@@ -586,7 +587,7 @@ export function LotActionMenu({ link, relinkCandidateCount, onAction, onRelink }
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild data-testid={`recon-row-actions-${link.id}`}>
         <Button type="button" size="icon-sm" variant="outline" aria-label="Lot actions">
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </Button>
