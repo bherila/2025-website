@@ -1622,6 +1622,42 @@ PROMPT;
             }
         }
 
+        // Defensive guard: detect Box 10 / Box 20 Code B confusion.
+        //
+        // On Pioneer-style 1065 K-1s where Box 10 (Net §1231 gain/loss) is blank and
+        // Box 20 Code B (Investment expenses for Form 4952) carries a positive dollar
+        // amount, Gemini occasionally mis-routes the Box 20 Code B value into field_10.
+        // A spurious Box 10 value flows through Form 4797 Part I to Schedule D line 11,
+        // inflating long-term capital gains by the misclassified amount.
+        //
+        // Heuristic: if `field_10` numerically equals any `codes_20` Code B value, drop
+        // `fields['10']` and surface a warning so the human reviewer can confirm. Box 10
+        // and Box 20 Code B are independent figures that may legitimately match by
+        // coincidence, but the cost of a false-positive (a warning) is far lower than
+        // the cost of a false-negative (a §1231 misclassification on Schedule D).
+        $box10AutoDropWarning = null;
+        if (isset($fields['10'])) {
+            $box10Value = (float) $fields['10']['value'];
+            if ($box10Value !== 0.0 && isset($codes['20'])) {
+                foreach ($codes['20'] as $codeItem) {
+                    if (($codeItem['code'] ?? null) !== 'B') {
+                        continue;
+                    }
+                    if (! is_numeric($codeItem['value'] ?? null)) {
+                        continue;
+                    }
+                    if ((float) $codeItem['value'] === $box10Value) {
+                        unset($fields['10']);
+                        $box10AutoDropWarning = sprintf(
+                            'K-1 Box 10 value %s matched Box 20 Code B; dropped to prevent §1231 misclassification on Schedule D line 11. Verify Box 10 manually if the partnership actually reported a Section 1231 amount.',
+                            (string) $box10Value,
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
         // Schedule K-3 — assemble structured sections from new flat arrays
         $k3Sections = (new K3SectionAssembler)->assemble($args);
 
@@ -1647,6 +1683,10 @@ PROMPT;
         $warnings = is_array($rawWarnings)
             ? array_values(array_filter(array_map(fn ($w) => is_string($w) ? $w : null, $rawWarnings)))
             : [];
+
+        if ($box10AutoDropWarning !== null) {
+            $warnings[] = $box10AutoDropWarning;
+        }
 
         $result = [
             'schemaVersion' => '2026.1',
