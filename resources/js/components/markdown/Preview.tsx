@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import ReactMarkdown, { type ExtraProps } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 import { MermaidBlock } from './MermaidBlock'
 import { PreviewRenderRegistryContext } from './PreviewContext'
@@ -12,6 +13,26 @@ interface PreviewProps {
 }
 
 type CodeProps = React.ComponentPropsWithoutRef<'code'> & ExtraProps
+type TableProps = React.ComponentPropsWithoutRef<'table'> & ExtraProps
+type TableSectionProps = React.ComponentPropsWithoutRef<'thead'> & ExtraProps
+type TableBodyProps = React.ComponentPropsWithoutRef<'tbody'> & ExtraProps
+type TableRowProps = React.ComponentPropsWithoutRef<'tr'> & ExtraProps
+type TableHeaderProps = React.ComponentPropsWithoutRef<'th'> & ExtraProps
+type TableCellProps = React.ComponentPropsWithoutRef<'td'> & ExtraProps
+
+function classNames(...classes: Array<string | undefined>): string {
+  return classes.filter(Boolean).join(' ')
+}
+
+function tableAlignClass(align: string | undefined): string {
+  if (align === 'center') {
+    return 'text-center'
+  }
+  if (align === 'right') {
+    return 'text-right'
+  }
+  return 'text-left'
+}
 
 function extractLang(className: string | undefined): string {
   if (!className) {
@@ -51,6 +72,73 @@ function CodeRenderer({ className, children, node }: CodeProps): React.JSX.Eleme
   return <ShikiBlock code={text} lang={lang} />
 }
 
+function TableRenderer({ children, className, node: _node, ...props }: TableProps): React.JSX.Element {
+  return (
+    <div className="my-6 overflow-x-auto rounded-md border border-border">
+      <table
+        {...props}
+        className={classNames('my-0 w-full min-w-max border-collapse text-sm', className)}
+      >
+        {children}
+      </table>
+    </div>
+  )
+}
+
+function TableHeadRenderer({ children, className, node: _node, ...props }: TableSectionProps): React.JSX.Element {
+  return (
+    <thead {...props} className={classNames('bg-muted/60', className)}>
+      {children}
+    </thead>
+  )
+}
+
+function TableBodyRenderer({ children, className, node: _node, ...props }: TableBodyProps): React.JSX.Element {
+  return (
+    <tbody {...props} className={className}>
+      {children}
+    </tbody>
+  )
+}
+
+function TableRowRenderer({ children, className, node: _node, ...props }: TableRowProps): React.JSX.Element {
+  return (
+    <tr {...props} className={classNames('border-border', className)}>
+      {children}
+    </tr>
+  )
+}
+
+function TableHeaderRenderer({ children, className, node: _node, ...props }: TableHeaderProps): React.JSX.Element {
+  return (
+    <th
+      {...props}
+      className={classNames(
+        'border-b border-border px-3 py-2 align-bottom font-semibold text-foreground',
+        tableAlignClass(props.align),
+        className,
+      )}
+    >
+      {children}
+    </th>
+  )
+}
+
+function TableCellRenderer({ children, className, node: _node, ...props }: TableCellProps): React.JSX.Element {
+  return (
+    <td
+      {...props}
+      className={classNames(
+        'border-t border-border px-3 py-2 align-top text-foreground',
+        tableAlignClass(props.align),
+        className,
+      )}
+    >
+      {children}
+    </td>
+  )
+}
+
 export const Preview = forwardRef<HTMLDivElement, PreviewProps>(function Preview(
   { markdown, registry },
   ref,
@@ -63,8 +151,15 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(function Preview
       >
         <ReactMarkdown
           skipHtml
+          remarkPlugins={[remarkGfm]}
           components={{
             code: CodeRenderer,
+            table: TableRenderer,
+            tbody: TableBodyRenderer,
+            td: TableCellRenderer,
+            th: TableHeaderRenderer,
+            thead: TableHeadRenderer,
+            tr: TableRowRenderer,
           }}
         >
           {markdown}
