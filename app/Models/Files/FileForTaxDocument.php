@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int|null $document_id
  * @property string|null $misc_routing
+ * @property string|null $wash_sale_treatment
  */
 class FileForTaxDocument extends Model
 {
@@ -75,6 +76,7 @@ class FileForTaxDocument extends Model
         'parsed_data',
         'parsed_data_needs_review',
         'parsed_data_warnings',
+        'wash_sale_treatment',
         'download_history',
     ];
 
