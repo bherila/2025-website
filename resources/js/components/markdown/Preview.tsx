@@ -13,6 +13,7 @@ interface PreviewProps {
 }
 
 type CodeProps = React.ComponentPropsWithoutRef<'code'> & ExtraProps
+type PreProps = React.ComponentPropsWithoutRef<'pre'> & ExtraProps
 type TableProps = React.ComponentPropsWithoutRef<'table'> & ExtraProps
 type TableSectionProps = React.ComponentPropsWithoutRef<'thead'> & ExtraProps
 type TableBodyProps = React.ComponentPropsWithoutRef<'tbody'> & ExtraProps
@@ -52,10 +53,11 @@ function nodeToString(children: React.ReactNode): string {
   return ''
 }
 
-function CodeRenderer({ className, children, node }: CodeProps): React.JSX.Element {
-  const text = nodeToString(children).replace(/\n$/, '')
+function CodeRenderer({ className, children }: CodeProps): React.JSX.Element {
+  const rawText = nodeToString(children)
+  const text = rawText.replace(/\n$/, '')
   const lang = extractLang(className)
-  const isInline = !lang && !text.includes('\n') && node?.position?.start?.line === node?.position?.end?.line
+  const isInline = !lang && !rawText.endsWith('\n')
 
   if (isInline) {
     return (
@@ -70,6 +72,10 @@ function CodeRenderer({ className, children, node }: CodeProps): React.JSX.Eleme
   }
 
   return <ShikiBlock code={text} lang={lang} />
+}
+
+function PreRenderer({ children }: PreProps): React.JSX.Element {
+  return <>{children}</>
 }
 
 function TableRenderer({ children, className, node: _node, ...props }: TableProps): React.JSX.Element {
@@ -154,6 +160,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(function Preview
           remarkPlugins={[remarkGfm]}
           components={{
             code: CodeRenderer,
+            pre: PreRenderer,
             table: TableRenderer,
             tbody: TableBodyRenderer,
             td: TableCellRenderer,

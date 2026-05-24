@@ -44,20 +44,47 @@ jest.mock('react-markdown', () => ({
     }
 
     if (typeof children === 'string' && children.includes('```mermaid')) {
+      const Pre = (components.pre ?? 'pre') as React.ElementType
       const Code = (components.code ?? 'code') as React.ElementType
 
       return (
-        <Code
-          className="language-mermaid"
-          node={{
-            position: {
-              end: { line: 4 },
-              start: { line: 2 },
-            },
-          }}
-        >
-          {'flowchart TD\n  A --> B\n'}
-        </Code>
+        <Pre>
+          <Code className="language-mermaid">
+            {'flowchart TD\n  A --> B\n'}
+          </Code>
+        </Pre>
+      )
+    }
+
+    if (typeof children === 'string' && children.includes('```ts')) {
+      const Pre = (components.pre ?? 'pre') as React.ElementType
+      const Code = (components.code ?? 'code') as React.ElementType
+
+      return (
+        <Pre>
+          <Code className="language-ts">{'const value = 1\n'}</Code>
+        </Pre>
+      )
+    }
+
+    if (typeof children === 'string' && children.includes('```\nplain')) {
+      const Pre = (components.pre ?? 'pre') as React.ElementType
+      const Code = (components.code ?? 'code') as React.ElementType
+
+      return (
+        <Pre>
+          <Code>{'plain text\n'}</Code>
+        </Pre>
+      )
+    }
+
+    if (typeof children === 'string' && children.includes('`inline`')) {
+      const Code = (components.code ?? 'code') as React.ElementType
+
+      return (
+        <p>
+          Before <Code>inline</Code> after
+        </p>
       )
     }
 
@@ -78,7 +105,7 @@ jest.mock('../MermaidBlock', () => ({
 
 jest.mock('../ShikiBlock', () => ({
   ShikiBlock({ code, lang }: { code: string; lang: string }): React.JSX.Element {
-    return <pre data-language={lang}>{code}</pre>
+    return <pre data-testid="shiki-block" data-language={lang}>{code}</pre>
   },
 }))
 
@@ -117,5 +144,36 @@ flowchart TD
 `)
 
     expect(screen.getByTestId('mermaid-block')).toHaveTextContent('flowchart TD')
+  })
+
+  it('renders backtick fenced code blocks through ShikiBlock', () => {
+    const { container } = renderPreview(`
+\`\`\`ts
+const value = 1
+\`\`\`
+`)
+
+    expect(screen.getByTestId('shiki-block')).toHaveAttribute('data-language', 'ts')
+    expect(screen.getByTestId('shiki-block')).toHaveTextContent('const value = 1')
+    expect(container.querySelector('pre pre')).toBeNull()
+  })
+
+  it('renders unlabelled backtick fenced code blocks through ShikiBlock', () => {
+    renderPreview(`
+\`\`\`
+plain text
+\`\`\`
+`)
+
+    expect(screen.getByTestId('shiki-block')).toHaveAttribute('data-language', '')
+    expect(screen.getByTestId('shiki-block')).toHaveTextContent('plain text')
+  })
+
+  it('keeps inline backtick code inline', () => {
+    const { container } = renderPreview('Before `inline` after')
+
+    expect(screen.getByText('inline')).toHaveClass('text-foreground')
+    expect(screen.queryByTestId('shiki-block')).not.toBeInTheDocument()
+    expect(container.querySelector('p > code')).not.toBeNull()
   })
 })
