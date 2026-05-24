@@ -60,6 +60,11 @@ import type {
   PassengerRenderItem,
 } from './scene/sceneTypes'
 import { clearGroup, disposeObject, findCarId } from './scene/threeUtils'
+import {
+  markParkingPickupVisualReady,
+  type ParkingPickupVisualTestOptions,
+  resetParkingPickupVisualReadiness,
+} from './visualTestMode'
 
 export { retainPersistentMovingCarsImpl as retainPersistentMovingCars }
 
@@ -80,15 +85,19 @@ interface CarsSceneProps {
   colorblindMode: boolean
   state: GameState
   vipSelectionActive: boolean
+  visualTestOptions?: ParkingPickupVisualTestOptions
   onCarClick: (carId: string) => void
   onPassengerGate: (passengerId: string) => void
 }
+
+const VISUAL_TEST_STABLE_FRAME_COUNT = 3
 
 export function CarsScene({
   blockedCarAttempt,
   colorblindMode,
   state,
   vipSelectionActive,
+  visualTestOptions,
   onCarClick,
   onPassengerGate,
 }: CarsSceneProps): ReactElement {
@@ -115,6 +124,7 @@ export function CarsScene({
   const movingCarsRef = useRef<MovingCarRenderItem[]>([])
   const onCarClickRef = useRef(onCarClick)
   const onPassengerGateRef = useRef(onPassengerGate)
+  const visualTestOptionsRef = useRef(visualTestOptions)
   const previousStateRef = useRef<GameState | null>(null)
   const stateRef = useRef(state)
   const passengerPhaseRef = useRef(0)
@@ -129,6 +139,10 @@ export function CarsScene({
   useEffect(() => {
     onPassengerGateRef.current = onPassengerGate
   }, [onPassengerGate])
+
+  useEffect(() => {
+    visualTestOptionsRef.current = visualTestOptions
+  }, [visualTestOptions])
 
   useEffect(() => {
     stateRef.current = state
@@ -222,7 +236,16 @@ export function CarsScene({
     resizeObserver.observe(container)
     resize()
 
+    const visualTestEnabled = visualTestOptionsRef.current?.enabled === true
+    if (visualTestEnabled) {
+      resetParkingPickupVisualReadiness()
+    }
+
     let frameId = 0
+    let renderedFrameCount = 0
+    let visualReadyMarked = false
+    const visualTestLevel = stateRef.current.level
+    const visualTestSeed = visualTestOptionsRef.current?.seed ?? null
     const clock = new THREE.Clock()
     const animate = (): void => {
       const delta = clock.getDelta()
@@ -247,6 +270,16 @@ export function CarsScene({
         setDynamicSceneRefreshKey((current) => current + 1)
       }
       renderer.render(scene, camera)
+      renderedFrameCount += 1
+      if (visualTestEnabled && !visualReadyMarked && renderedFrameCount >= VISUAL_TEST_STABLE_FRAME_COUNT) {
+        visualReadyMarked = true
+        markParkingPickupVisualReady({
+          frameCount: renderedFrameCount,
+          level: visualTestLevel,
+          renderedAt: performance.now(),
+          seed: visualTestSeed,
+        })
+      }
       frameId = window.requestAnimationFrame(animate)
     }
     animate()
