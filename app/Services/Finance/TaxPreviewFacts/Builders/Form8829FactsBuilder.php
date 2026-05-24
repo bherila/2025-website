@@ -4,6 +4,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\FinForm8829Input;
+use App\Models\FinanceTool\FinScheduleCInput;
 use App\Models\FinanceTool\FinTaxLineAdjustment;
 use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\ScheduleCSummaryService;
@@ -62,6 +63,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         $summary = $this->scheduleCSummaryService->getSummary($userId);
         $yearData = $this->yearData($summary['years'], $year);
         $inputsByEntity = $this->inputsByEntity($userId, $year);
+        $scheduleCInputsByEntity = $this->scheduleCInputsByEntity($userId, $year);
         $adjustmentsByEntity = $this->adjustmentsByEntity($userId, $year);
 
         if ($yearData === null && $inputsByEntity === []) {
@@ -90,6 +92,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
                 $year,
                 $entityData,
                 $inputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
+                $scheduleCInputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
                 $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? [],
             );
         }
@@ -114,6 +117,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
                     'schedule_c_home_office' => [],
                 ],
                 $input,
+                $scheduleCInputsByEntity[$entityId] ?? null,
                 $adjustmentsByEntity[$entityId] ?? [],
             );
         }
@@ -134,7 +138,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
      * @param  array<string, mixed>  $entityData
      * @param  array<string, FinTaxLineAdjustment[]>  $adjustmentsByLine
      */
-    private function entityFact(int $year, array $entityData, ?FinForm8829Input $input, array $adjustmentsByLine): Form8829EntityFact
+    private function entityFact(int $year, array $entityData, ?FinForm8829Input $input, ?FinScheduleCInput $scheduleCInput, array $adjustmentsByLine): Form8829EntityFact
     {
         $entityId = isset($entityData['entity_id']) ? (int) $entityData['entity_id'] : null;
         $entityName = $this->entityName($entityData);
@@ -146,6 +150,13 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         $businessUsePercentage = $this->roundMoney($businessUseRate * 100);
 
         [$grossReceipts, $returnsAndAllowances] = $this->incomeTotals($entityData);
+        if ($scheduleCInput instanceof FinScheduleCInput) {
+            $grossReceipts = $this->sumMoney([$grossReceipts, (float) $scheduleCInput->gross_receipts]);
+            if ($scheduleCInput->other_income !== null) {
+                $grossReceipts = $this->sumMoney([$grossReceipts, (float) $scheduleCInput->other_income]);
+            }
+            $returnsAndAllowances = $this->sumMoney([$returnsAndAllowances, (float) $scheduleCInput->returns_and_allowances]);
+        }
         $expensesBeforeHomeOffice = $this->sumCategoryTotals($entityData['schedule_c_expense'] ?? []);
         $line8TentativeProfit = max(0.0, $this->subtractMoney($this->subtractMoney($grossReceipts, $returnsAndAllowances), $expensesBeforeHomeOffice));
         $computedHomeOfficeLines = $this->homeOfficeLines($entityData, $businessUseRate, $adjustmentsByLine);
@@ -406,6 +417,19 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
     private function inputsByEntity(int $userId, int $year): array
     {
         return FinForm8829Input::withoutGlobalScopes()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->get()
+            ->keyBy('employment_entity_id')
+            ->all();
+    }
+
+    /**
+     * @return array<int, FinScheduleCInput>
+     */
+    private function scheduleCInputsByEntity(int $userId, int $year): array
+    {
+        return FinScheduleCInput::withoutGlobalScopes()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->get()

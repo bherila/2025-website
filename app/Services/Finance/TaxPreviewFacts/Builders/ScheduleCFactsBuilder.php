@@ -2,6 +2,8 @@
 
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
+use App\Models\FinanceTool\FinEmploymentEntity;
+use App\Models\FinanceTool\FinScheduleCInput;
 use App\Models\FinanceTool\FinTaxLineAdjustment;
 use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\ScheduleCSummaryService;
@@ -31,15 +33,17 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         $form8829 ??= Form8829Facts::empty();
         $summary = $this->scheduleCSummaryService->getSummary($userId);
         $yearData = $this->yearData($summary['years'], $year);
+        $inputsByEntity = $this->inputsByEntity($userId, $year);
+        $adjustmentsByEntity = $this->adjustmentsByEntity($userId, $year);
 
-        if ($yearData === null) {
+        if ($yearData === null && $inputsByEntity === []) {
             return ScheduleCFacts::empty();
         }
 
         $entities = [];
         $entitiesByKey = [];
         $line31Sources = [];
-        $adjustmentsByEntity = $this->adjustmentsByEntity($userId, $year);
+        $seenEntityIds = [];
 
         foreach (($yearData['entities'] ?? []) as $entityData) {
             if (! is_array($entityData)) {
@@ -47,7 +51,15 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $entityId = isset($entityData['entity_id']) ? (int) $entityData['entity_id'] : null;
-            $entity = $this->entityFact($entityData, $form8829->entityFor($entityId), $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? []);
+            if ($entityId !== null) {
+                $seenEntityIds[] = $entityId;
+            }
+            $entity = $this->entityFact(
+                $entityData,
+                $form8829->entityFor($entityId),
+                $inputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
+                $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? [],
+            );
             $entities[] = $entity;
             $entitiesByKey[$this->entityKey($entityData)] = $entity;
             $line31Sources[] = new TaxFactSource(
@@ -61,19 +73,57 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             );
         }
 
+        foreach ($inputsByEntity as $entityId => $input) {
+            if (in_array($entityId, $seenEntityIds, true)) {
+                continue;
+            }
+
+            $entity = FinEmploymentEntity::withoutGlobalScopes()->find($entityId);
+            if (! $entity instanceof FinEmploymentEntity || (int) $entity->user_id !== $userId) {
+                continue;
+            }
+
+            $entityData = [
+                'entity_id' => $entityId,
+                'entity_name' => $entity->display_name,
+                'schedule_c_income' => [],
+                'schedule_c_expense' => [],
+                'schedule_c_home_office' => [],
+            ];
+
+            $entityFact = $this->entityFact(
+                $entityData,
+                $form8829->entityFor($entityId),
+                $input,
+                $adjustmentsByEntity[$entityId] ?? [],
+            );
+            $entities[] = $entityFact;
+            $entitiesByKey[$this->entityKey($entityData)] = $entityFact;
+            $line31Sources[] = new TaxFactSource(
+                id: $this->entitySourceId($entityData, 'line31'),
+                label: "{$entityFact->entityName} — Schedule C net profit",
+                amount: $entityFact->netProfit,
+                sourceType: TaxFactSourceType::ScheduleCNetProfit,
+                routing: TaxFactRouting::ScheduleCLine31,
+                routingReason: 'Schedule C line 31 is gross income less ordinary expenses and allowable home-office deduction.',
+                notes: "Gross {$entityFact->grossReceipts}; returns {$entityFact->returnsAndAllowances}; expenses {$entityFact->expenses}; home office {$entityFact->homeOfficeAllowable}",
+            );
+        }
+
         return new ScheduleCFacts(
             entities: $entities,
             grossReceiptsTotal: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->grossReceipts, $entities)),
             returnsAndAllowancesTotal: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->returnsAndAllowances, $entities)),
             grossIncomeAfterReturns: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->grossIncomeAfterReturns, $entities)),
             expensesTotal: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->expenses, $entities)),
+            expensesBeforeHomeOffice: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->expensesBeforeHomeOffice, $entities)),
             tentativeProfitBeforeHomeOffice: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->tentativeProfitBeforeHomeOffice, $entities)),
             homeOfficeAllowable: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficeAllowable, $entities)),
             homeOfficeDisallowed: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficeDisallowed, $entities)),
             homeOfficePriorCarryforward: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficePriorCarryforward, $entities)),
             homeOfficeCarryoverToNextYear: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->homeOfficeCarryoverToNextYear, $entities)),
             netProfit: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->netProfit, $entities)),
-            netProfitCumulativeByQuarter: $this->netProfitCumulativeByQuarter($yearData, $form8829, $entitiesByKey),
+            netProfitCumulativeByQuarter: $this->netProfitCumulativeByQuarter($yearData ?? ['entities' => []], $form8829, $entitiesByKey),
             netProfitRoutedToSchedule1: $this->sumMoney(array_map(static fn (ScheduleCEntityFact $entity): float => $entity->netProfit, $entities)),
             line31Sources: $line31Sources,
         );
@@ -177,7 +227,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
      * @param  array<string, mixed>  $entityData
      * @param  array<string, FinTaxLineAdjustment[]>  $adjustmentsByLine
      */
-    private function entityFact(array $entityData, ?Form8829EntityFact $form8829Entity, array $adjustmentsByLine): ScheduleCEntityFact
+    private function entityFact(array $entityData, ?Form8829EntityFact $form8829Entity, ?FinScheduleCInput $input, array $adjustmentsByLine): ScheduleCEntityFact
     {
         $entityName = $this->entityName($entityData);
         $grossReceiptSources = $this->categorySources(
@@ -195,6 +245,40 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             static fn (string $category): bool => $category === 'business_returns',
             true,
         );
+
+        if ($input instanceof FinScheduleCInput) {
+            if ((float) $input->gross_receipts !== 0.0) {
+                $grossReceiptSources[] = new TaxFactSource(
+                    id: 'schedule-c-input-'.$this->entityKey($entityData).'-gross-receipts',
+                    label: "{$entityName} — user-entered gross receipts",
+                    amount: $this->roundMoney((float) $input->gross_receipts),
+                    sourceType: TaxFactSourceType::ScheduleCGrossReceipts,
+                    routing: TaxFactRouting::ScheduleCLine1,
+                    routingReason: 'User-entered Schedule C gross receipts flow to line 1.',
+                );
+            }
+            if ((float) $input->returns_and_allowances !== 0.0) {
+                $returnsAndAllowancesSources[] = new TaxFactSource(
+                    id: 'schedule-c-input-'.$this->entityKey($entityData).'-returns',
+                    label: "{$entityName} — user-entered returns and allowances",
+                    amount: $this->roundMoney((float) $input->returns_and_allowances),
+                    sourceType: TaxFactSourceType::ScheduleCReturnsAndAllowances,
+                    routing: TaxFactRouting::ScheduleCLine2,
+                    routingReason: 'User-entered Schedule C returns and allowances flow to line 2.',
+                );
+            }
+            if ($input->other_income !== null && (float) $input->other_income !== 0.0) {
+                $grossReceiptSources[] = new TaxFactSource(
+                    id: 'schedule-c-input-'.$this->entityKey($entityData).'-other-income',
+                    label: "{$entityName} — user-entered other business income",
+                    amount: $this->roundMoney((float) $input->other_income),
+                    sourceType: TaxFactSourceType::ScheduleCGrossReceipts,
+                    routing: TaxFactRouting::ScheduleCLine1,
+                    routingReason: 'User-entered other Schedule C income is included in gross business income.',
+                );
+            }
+        }
+
         $expenseSources = $this->categorySources($entityData, 'schedule_c_expense', TaxFactSourceType::ScheduleCExpenseCategory, TaxFactRouting::ScheduleCLine28);
         $hasForm8829Entity = $form8829Entity instanceof Form8829EntityFact;
         $homeOfficeSources = $hasForm8829Entity
@@ -205,6 +289,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
         $returnsAndAllowances = $this->applyLineAdjustments($this->sumSources($returnsAndAllowancesSources), $adjustmentsByLine['line_2'] ?? []);
         $grossIncomeAfterReturns = $this->applyLineAdjustments($this->subtractMoney($grossReceipts, $returnsAndAllowances), $adjustmentsByLine['line_3'] ?? []);
         $expenses = $this->applyLineAdjustments($this->sumSources($expenseSources), $adjustmentsByLine['line_28'] ?? []);
+        $expensesBeforeHomeOffice = $expenses;
         $tentativeProfitBeforeHomeOffice = $this->applyLineAdjustments($this->subtractMoney($grossIncomeAfterReturns, $expenses), $adjustmentsByLine['line_29'] ?? []);
         $homeOfficeClaimed = $hasForm8829Entity
             ? ($form8829Entity->method === 'simplified' ? $form8829Entity->simplifiedDeduction : $form8829Entity->regularDeduction)
@@ -244,6 +329,7 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             grossIncomeAfterReturns: $grossIncomeAfterReturns,
             expenseSources: $expenseSources,
             expenses: $expenses,
+            expensesBeforeHomeOffice: $expensesBeforeHomeOffice,
             homeOfficeSources: $homeOfficeSources,
             homeOfficeClaimed: $homeOfficeClaimed,
             homeOfficeAllowable: $homeOfficeAllowable,
@@ -321,6 +407,19 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             'schedule_c_home_office' => 'Tagged home-office costs are limited and routed to Schedule C line 30.',
             default => 'Tagged Schedule C transactions are included in the business rollup.',
         };
+    }
+
+    /**
+     * @return array<int, FinScheduleCInput>
+     */
+    private function inputsByEntity(int $userId, int $year): array
+    {
+        return FinScheduleCInput::withoutGlobalScopes()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->get()
+            ->keyBy('employment_entity_id')
+            ->all();
     }
 
     /**
