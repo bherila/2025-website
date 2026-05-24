@@ -101,6 +101,12 @@ export default function ImportTransactions({
     accountsForMatching,
   })
 
+  // GenAI job polling hook — declared before useImportExecution so the latest result id
+  // can be threaded into the persist call so finance_transactions results flip out of
+  // pending_review when their accompanying line items land.
+  const { status: jobStatus, results: jobResults, error: jobPollingError, estimatedWait } = useGenAiJobPolling(jobId)
+  const firstResultId = jobResults[0]?.id ?? null
+
   const { isImporting, setIsImporting, importProgress, importError, handleImport, retryImport } = useImportExecution({
     accountId,
     filterDuplicates,
@@ -110,6 +116,8 @@ export default function ImportTransactions({
     accountMappings,
     importTransactions,
     attachAsStatement,
+    genAiJobId: jobId,
+    genAiResultId: firstResultId,
   })
 
   const {
@@ -153,9 +161,6 @@ export default function ImportTransactions({
     ...(typeof accountId === 'number' ? { acctId: accountId } : {}),
     ...(uploadContext ? { context: uploadContext } : {}),
   })
-
-  // GenAI job polling hook
-  const { status: jobStatus, results: jobResults, error: jobPollingError, estimatedWait } = useGenAiJobPolling(jobId)
 
   // When the job finishes parsing (or has been imported), extract the result and set pdfData
   useEffect(() => {

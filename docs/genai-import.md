@@ -14,7 +14,7 @@ to every provider, not just Gemini — see [Daily quota](#daily-quota--system-an
 
 | `job_type`             | Prompt template                                  | Output shape                                    | Persist mechanism |
 |------------------------|--------------------------------------------------|-------------------------------------------------|-------------------|
-| `finance_transactions` | `FinanceTransactionsPromptTemplate`              | `addFinanceAccount` tool call per account       | Custom `POST /api/finance/{acct_id}/line_items` (does NOT mark `GenAiImportResult.imported`) |
+| `finance_transactions` | `FinanceTransactionsPromptTemplate`              | `addFinanceAccount` tool call per account       | `POST /api/finance/documents` with `document_kind=statement`; pass `gen_ai_job_id` and `gen_ai_result_id` so `FinanceDocumentController` marks the result imported on success |
 | `finance_payslip`      | `PayslipPromptTemplate`                          | TOON array of payslip objects                   | `POST /api/payslips/genai-import/{jobId}/results/{resultId}/confirm` |
 | `utility_bill`         | `UtilityBillPromptTemplate`                      | TOON array of bill objects                      | `POST /api/utility-bill-tracker/accounts/{accountId}/bills/genai-import/{jobId}/results/{resultId}/confirm` |
 | `document_extract`     | `TaxDocumentPromptTemplate` or `MultiAccountTaxImportPromptTemplate` | Tool call per form OR per-account JSON array | Linked `FileForTaxDocument.parsed_data` is updated and `DocumentIngestionService::syncFromTaxDocument` is invoked inline |
@@ -188,10 +188,17 @@ pending → processing → parsed → imported
 
 ### Imported semantics
 
-`status = 'imported'` is set in one of two ways depending on the feature:
+`status = 'imported'` is set by the per-feature persist endpoint: the endpoint
+calls `$result->markImported()` after successful persistence, then
+`$job->markImported()` once no `pending_review` rows remain. Every job type
+follows this contract (`class_action_email`, `utility_bill`, `finance_payslip`,
+`finance_transactions`, `phr_*`).
 
-- **Most features** call `$result->markImported()` from their persist endpoint, then `$job->markImported()` once no `pending_review` rows remain. This is the canonical path (`class_action_email`, `utility_bill`, `phr_*`).
-- **`finance_transactions`** historically bypasses the `GenAiImportResult.status = 'imported'` marker — line items are written directly via `POST /api/finance/{acct_id}/line_items` and the result row stays `pending_review` forever. This is tracked as a follow-up audit.
+`finance_transactions` is the one type whose persist endpoint
+(`POST /api/finance/documents`) is shared with non-GenAI flows (manual CSV /
+JSON / TOON entry). The endpoint marks the result imported only when the
+caller threads `gen_ai_job_id` and `gen_ai_result_id` through; non-GenAI
+callers omit those fields and the marking step no-ops.
 
 ---
 
