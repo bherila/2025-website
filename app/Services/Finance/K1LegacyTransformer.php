@@ -69,7 +69,17 @@ class K1LegacyTransformer
             $fields['J'] = ['value' => 'Ending: '.(string) $legacy['partner_ownership_pct']];
         }
 
+        $formSource = (int) ($legacy['form_source'] ?? 1065);
+
         // --- Numbered K-1 boxes ---
+        // Section 1231 and Section 179 box numbers differ between the 1065 and 1120S K-1s:
+        //   Form 1065 K-1:  §1231 = Box 10, §179 = Box 12
+        //   Form 1120S K-1: §1231 = Box 9,  §179 = Box 11
+        // Legacy `box7_net_section_1231_gain` / `box9_section_179_deduction` were named by
+        // semantic meaning, not by canonical IRS box, so we route them by form source.
+        $section1231Box = $formSource === 1120 ? '9' : '10';
+        $section179Box = $formSource === 1120 ? '11' : '12';
+
         $boxMap = [
             'box1_ordinary_income' => '1',
             'box2_net_rental_real_estate' => '2',
@@ -77,8 +87,8 @@ class K1LegacyTransformer
             'box4_guaranteed_payments_services' => '4',
             'box5_guaranteed_payments_capital' => '5',
             'box6_guaranteed_payments_total' => '6',
-            'box7_net_section_1231_gain' => '10',
-            'box9_section_179_deduction' => '12',
+            'box7_net_section_1231_gain' => $section1231Box,
+            'box9_section_179_deduction' => $section179Box,
         ];
         foreach ($boxMap as $legacyKey => $irsBox) {
             $val = $legacy[$legacyKey] ?? null;
@@ -146,7 +156,6 @@ class K1LegacyTransformer
             $fields['_state'] = ['value' => (string) $legacy['state']];
         }
 
-        $formSource = (int) ($legacy['form_source'] ?? 1065);
         $formType = $formSource === 1120 ? 'K-1-1120S' : 'K-1-1065';
 
         return [

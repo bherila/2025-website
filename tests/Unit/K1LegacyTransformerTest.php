@@ -84,7 +84,7 @@ class K1LegacyTransformerTest extends TestCase
         $this->assertSame('0', $result['fields']['1']['value']);
     }
 
-    public function test_transform_maps_legacy_section_1231_and_section_179_semantically(): void
+    public function test_transform_maps_legacy_section_1231_and_section_179_for_1065(): void
     {
         $legacy = $this->legacySample();
         $legacy['box7_net_section_1231_gain'] = 1234;
@@ -92,9 +92,28 @@ class K1LegacyTransformerTest extends TestCase
 
         $result = K1LegacyTransformer::transform($legacy);
 
+        // Form 1065 K-1: §1231 = Box 10, §179 = Box 12
         $this->assertSame('1234', $result['fields']['10']['value']);
         $this->assertSame('567', $result['fields']['12']['value']);
         $this->assertArrayNotHasKey('9a', $result['fields']);
+        $this->assertArrayNotHasKey('11', $result['fields']);
+    }
+
+    public function test_transform_maps_legacy_section_1231_and_section_179_for_1120s(): void
+    {
+        $legacy = $this->legacySample();
+        $legacy['form_source'] = 1120;
+        $legacy['box7_net_section_1231_gain'] = 1234;
+        $legacy['box9_section_179_deduction'] = 567;
+
+        $result = K1LegacyTransformer::transform($legacy);
+
+        // Form 1120S K-1: §1231 = Box 9, §179 = Box 11
+        $this->assertSame('1234', $result['fields']['9']['value']);
+        $this->assertSame('567', $result['fields']['11']['value']);
+        $this->assertArrayNotHasKey('9a', $result['fields']);
+        $this->assertArrayNotHasKey('12', $result['fields']);
+        $this->assertSame('K-1-1120S', $result['formType']);
     }
 
     public function test_transform_maps_ownership_pct_to_field_j(): void

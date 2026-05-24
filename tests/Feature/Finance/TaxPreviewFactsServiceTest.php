@@ -933,7 +933,7 @@ class TaxPreviewFactsServiceTest extends TestCase
             'is_reviewed' => true,
             'parsed_data' => [
                 'form_source' => 1065,
-                'entity_name' => 'Pioneer Fund AF24',
+                'entity_name' => 'Legacy Fund Alpha',
                 'partner_name' => 'John Doe',
                 'box7_net_section_1231_gain' => 0,
                 'box10_other_deductions' => 1020,
