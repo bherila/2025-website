@@ -308,6 +308,14 @@
   text-decoration: var(--shiki-dark-text-decoration, inherit);
 }
 
+/* @tailwindcss/typography wraps inline <code> in literal backticks via
+   ::before/::after pseudo-elements. The markdown preview already styles
+   inline code with its own bg/padding, so the backticks are redundant. */
+.markdown-preview code::before,
+.markdown-preview code::after {
+  content: none;
+}
+
 @media print {
   @page {
     margin: 0.6in;

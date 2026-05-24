@@ -3,6 +3,13 @@ import { render, screen } from '@testing-library/react'
 import { Preview } from '../Preview'
 import { createPreviewRenderRegistry } from '../previewRenderRegistry'
 
+// Local Node-API declarations so this test does not depend on @types/node
+// being in the project's `types` list.
+declare const __dirname: string
+declare const require: (id: string) => unknown
+const { readFileSync } = require('node:fs') as { readFileSync: (p: string, enc: string) => string }
+const { resolve } = require('node:path') as { resolve: (...parts: string[]) => string }
+
 interface MockReactMarkdownProps {
   children: React.ReactNode
   components?: Record<string, React.ElementType>
@@ -175,5 +182,19 @@ plain text
     expect(screen.getByText('inline')).toHaveClass('text-foreground')
     expect(screen.queryByTestId('shiki-block')).not.toBeInTheDocument()
     expect(container.querySelector('p > code')).not.toBeNull()
+  })
+
+  // The Preview wraps content in `prose`, which is `@tailwindcss/typography`.
+  // Its default theme adds literal backticks around inline <code> via
+  // `code::before { content: '`' }` / `code::after { content: '`' }`. We
+  // override that in resources/css/app.css so inline code in the markdown
+  // preview is not visually wrapped in backticks. This test fails if that
+  // override is removed.
+  it('disables the prose backtick pseudo-elements on markdown-preview code', () => {
+    const cssPath = resolve(__dirname, '../../../../css/app.css')
+    const css = readFileSync(cssPath, 'utf8')
+    const overridePattern = /\.markdown-preview\s+code::before\s*,\s*\.markdown-preview\s+code::after\s*\{\s*content:\s*none\s*;?\s*\}/
+
+    expect(css).toMatch(overridePattern)
   })
 })
