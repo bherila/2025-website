@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout bwh-php (for patcher script)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: bwh-php
           sparse-checkout: |
@@ -48,14 +48,14 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Checkout OHIF Viewers ${{ env.OHIF_TAG }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: OHIF/Viewers
           ref: ${{ env.OHIF_TAG }}
           path: Viewers
 
       - name: Setup Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'yarn'
