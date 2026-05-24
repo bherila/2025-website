@@ -4,7 +4,12 @@ import { cn } from '@/lib/utils'
 
 import { PortraitGameShell } from '../PortraitGameShell'
 import { CarsScene } from './CarsScene'
-import { GameControls, type GameStats } from './GameControls'
+import {
+  BottomControls,
+  DesktopStatsHeader,
+  type GameStats,
+  MobileStatsOverlay,
+} from './GameControls'
 import {
   advanceToNextLevel,
   applyFillPowerUp,
@@ -123,21 +128,12 @@ export function CarsGame(): ReactElement {
 
   return (
     <div className="bg-sky-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <PortraitGameShell contentClassName="gap-2 px-2 py-2 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5">
-        <GameControls
+      <PortraitGameShell contentClassName="gap-1 px-0 py-0 sm:gap-2.5 sm:px-4 sm:py-3 lg:px-5">
+        <DesktopStatsHeader
           colorblindMode={colorblindMode}
           stats={stats}
-          statsExpanded={statsExpanded}
           state={state}
-          vipSelectionActive={vipSelectionActive}
           onColorblindModeChange={handleColorblindModeChange}
-          onFill={handleFill}
-          onOpenSlot={handleOpenSlot}
-          onReset={handleReset}
-          onShuffle={handleShuffle}
-          onStatsExpandedChange={setStatsExpanded}
-          onTutorialOpen={() => setTutorialOpen(true)}
-          onVipSelectionActiveChange={setVipSelectionActive}
         />
 
         <section className="relative min-h-0 flex-1">
@@ -148,6 +144,27 @@ export function CarsGame(): ReactElement {
             vipSelectionActive={vipSelectionActive}
             onCarClick={handleCarClick}
             onPassengerGate={handlePassengerGate}
+          />
+
+          <MobileStatsOverlay
+            colorblindMode={colorblindMode}
+            stats={stats}
+            statsExpanded={statsExpanded}
+            state={state}
+            onColorblindModeChange={handleColorblindModeChange}
+            onStatsExpandedChange={setStatsExpanded}
+          />
+
+          <BottomControls
+            stats={stats}
+            state={state}
+            vipSelectionActive={vipSelectionActive}
+            onFill={handleFill}
+            onOpenSlot={handleOpenSlot}
+            onReset={handleReset}
+            onShuffle={handleShuffle}
+            onTutorialOpen={() => setTutorialOpen(true)}
+            onVipSelectionActiveChange={setVipSelectionActive}
           />
 
           <style>{`
@@ -180,7 +197,8 @@ export function CarsGame(): ReactElement {
           `}</style>
           <div
             className={cn(
-              'pointer-events-none absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-lg shadow-slate-950/10 backdrop-blur-md sm:left-4 sm:top-4 sm:max-w-[calc(100%-2rem)] sm:text-sm dark:border-white/10 dark:bg-slate-950/75 dark:text-slate-100',
+              'pointer-events-none absolute left-3 top-[4.75rem] z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-lg shadow-slate-950/10 backdrop-blur-md sm:left-4 sm:top-4 sm:max-w-[calc(100%-2rem)] sm:text-sm dark:border-white/10 dark:bg-slate-950/75 dark:text-slate-100',
+              statsExpanded && 'top-[10.25rem] sm:top-4',
               blockedCarAttempt && 'cars-blocked-toast-pulse border-rose-300 bg-rose-50/90 text-rose-950 dark:border-rose-500/50 dark:bg-rose-950/75 dark:text-rose-100',
             )}
             key={blockedCarAttempt?.nonce ?? 'cars-message'}
