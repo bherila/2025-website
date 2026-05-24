@@ -361,13 +361,12 @@ class LotImportFromParsedDataService
             $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
             $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
             $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
-            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? null);
+            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? $tx['disposed_date'] ?? null);
             $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
             $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
             $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
-            $washSaleDisallowed = is_numeric($tx['wash_sale_disallowed'] ?? null) ? (float) $tx['wash_sale_disallowed'] : 0.0;
+            $washSaleDisallowed = $this->parseWashSaleDisallowed($tx);
             $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
-            $isCovered = array_key_exists('is_covered', $tx) ? $this->normalizeBooleanOrNull($tx['is_covered']) : null;
             $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
             $form8949Box = null;
             if (is_string($tx['form_8949_box'] ?? null)) {
@@ -375,7 +374,8 @@ class LotImportFromParsedDataService
                 $form8949Box = in_array($candidateBox, WashSaleAdjustmentSynthesizer::FORM_8949_BOXES, true) ? $candidateBox : null;
             }
 
-            $purchaseDateRaw = $tx['purchase_date'] ?? null;
+            $isCovered = $this->resolveIsCovered($tx, $form8949Box);
+            $purchaseDateRaw = $tx['purchase_date'] ?? $tx['acquired_date'] ?? null;
             $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
             $isShortTerm = $this->isShortTerm($tx, $form8949Box);
 
@@ -457,7 +457,7 @@ class LotImportFromParsedDataService
             if (
                 is_array($tx)
                 && is_numeric($tx['quantity'] ?? null)
-                && $this->normalizeDateOrNull($tx['sale_date'] ?? null) !== null
+                && $this->normalizeDateOrNull($tx['sale_date'] ?? $tx['disposed_date'] ?? null) !== null
                 && is_numeric($tx['proceeds'] ?? null)
                 && is_numeric($tx['cost_basis'] ?? null)
             ) {
@@ -477,6 +477,17 @@ class LotImportFromParsedDataService
             return $this->normalizeBooleanOrNull($tx['is_short_term']);
         }
 
+        if (is_string($tx['term'] ?? null)) {
+            $normalizedTerm = strtolower(trim((string) $tx['term']));
+            if (in_array($normalizedTerm, ['short', 'short_term', 'short-term'], true)) {
+                return true;
+            }
+
+            if (in_array($normalizedTerm, ['long', 'long_term', 'long-term'], true)) {
+                return false;
+            }
+        }
+
         if (isset($tx['form_8949_box'])) {
             $box = $form8949Box ?? strtoupper(trim((string) $tx['form_8949_box']));
             if (in_array($box, WashSaleAdjustmentSynthesizer::SHORT_TERM_FORM_8949_BOXES, true)) {
@@ -484,6 +495,61 @@ class LotImportFromParsedDataService
             }
 
             if (in_array($box, WashSaleAdjustmentSynthesizer::LONG_TERM_FORM_8949_BOXES, true)) {
+                return false;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve the per-row wash-sale disallowed amount.
+     *
+     * Accepts the legacy `wash_sale_disallowed` key and the new
+     * `wash_sale_loss_disallowed` key that newer parsers emit. The stored value
+     * is always the absolute value because §1091 disallowed losses are
+     * non-negative amounts reported in Form 8949 column (g).
+     *
+     * @param  array<string, mixed>  $tx
+     */
+    private function parseWashSaleDisallowed(array $tx): float
+    {
+        foreach (['wash_sale_disallowed', 'wash_sale_loss_disallowed'] as $key) {
+            if (is_numeric($tx[$key] ?? null)) {
+                return abs((float) $tx[$key]);
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Resolve the is_covered flag from per-row fields, falling back to the
+     * Form 8949 box (A/D = covered, B/E = noncovered, C/F = unknown).
+     *
+     * @param  array<string, mixed>  $tx
+     */
+    private function resolveIsCovered(array $tx, ?string $form8949Box): ?bool
+    {
+        if (array_key_exists('is_covered', $tx)) {
+            return $this->normalizeBooleanOrNull($tx['is_covered']);
+        }
+
+        foreach (['basisReportedToIrs', 'basis_reported_to_irs'] as $key) {
+            if (array_key_exists($key, $tx)) {
+                $value = $this->normalizeBooleanOrNull($tx[$key]);
+                if ($value !== null) {
+                    return $value;
+                }
+            }
+        }
+
+        if ($form8949Box !== null) {
+            if (in_array($form8949Box, WashSaleAdjustmentSynthesizer::COVERED_FORM_8949_BOXES, true)) {
+                return true;
+            }
+
+            if (in_array($form8949Box, WashSaleAdjustmentSynthesizer::NONCOVERED_FORM_8949_BOXES, true)) {
                 return false;
             }
         }
@@ -519,9 +585,7 @@ class LotImportFromParsedDataService
 
         $rowWashSale = 0.0;
         foreach ($transactions as $transaction) {
-            $rowWashSale += is_numeric($transaction['wash_sale_disallowed'] ?? null)
-                ? abs((float) $transaction['wash_sale_disallowed'])
-                : 0.0;
+            $rowWashSale += $this->parseWashSaleDisallowed($transaction);
         }
 
         if (abs($summaryWashSale - $rowWashSale) <= self::MONEY_TOLERANCE) {
