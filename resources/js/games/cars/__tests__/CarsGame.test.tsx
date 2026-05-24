@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 
 import { CarsGame } from '../CarsGame'
-import { GAME_PROGRESS_STORAGE_KEY } from '../gameEngine'
+import { GAME_PROGRESS_STORAGE_KEY, LEVEL_SNAPSHOT_STORAGE_KEY } from '../gameEngine'
 import { CARS_TUTORIAL_STORAGE_KEY } from '../TutorialOverlay'
 
 jest.mock('../CarsScene', () => ({
@@ -14,6 +14,7 @@ describe('CarsGame', () => {
   beforeEach(() => {
     window.localStorage.clear()
     window.localStorage.setItem(CARS_TUTORIAL_STORAGE_KEY, '1')
+    window.history.replaceState(null, '', '/')
   })
 
   it('mounts the game controls and Three.js scene shell', () => {
@@ -77,5 +78,17 @@ describe('CarsGame', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use VIP' }))
 
     expect(screen.getByTestId('cars-scene')).toHaveAttribute('data-vip-selection', 'active')
+  })
+
+  it('preserves the saved level snapshot when Reset is clicked in visual test mode', () => {
+    const savedSnapshot = JSON.stringify({ version: 2, marker: 'user-progress' })
+    window.localStorage.setItem(LEVEL_SNAPSHOT_STORAGE_KEY, savedSnapshot)
+    window.history.replaceState(null, '', '/?visualTest=1&level=3')
+
+    render(<CarsGame />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+
+    expect(window.localStorage.getItem(LEVEL_SNAPSHOT_STORAGE_KEY)).toBe(savedSnapshot)
   })
 })

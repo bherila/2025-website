@@ -141,15 +141,19 @@ export function CarsGame(): ReactElement {
 
   const handleNextLevel = useCallback((): void => {
     setVipSelectionActive(false)
-    clearLevelSnapshot()
+    if (!visualTestOptions.enabled) {
+      clearLevelSnapshot()
+    }
     setState((current) => advanceToNextLevel(current))
-  }, [])
+  }, [visualTestOptions.enabled])
 
   const handleReset = useCallback((): void => {
     setVipSelectionActive(false)
-    clearLevelSnapshot()
+    if (!visualTestOptions.enabled) {
+      clearLevelSnapshot()
+    }
     setState((current) => restartLevel(current))
-  }, [])
+  }, [visualTestOptions.enabled])
 
   return (
     <div className="bg-sky-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
