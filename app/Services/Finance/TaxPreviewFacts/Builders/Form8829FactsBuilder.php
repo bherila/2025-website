@@ -65,7 +65,8 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
         $yearData = $this->yearData($summary['years'], $year);
         $inputsByEntity = $this->inputsByEntity($userId, $year);
         $scheduleCInputsByEntity = $this->scheduleCInputsByEntity($userId, $year);
-        $adjustmentsByEntity = $this->adjustmentsByEntity($userId, $year);
+        $adjustmentsByEntity = $this->adjustmentsByEntity($userId, $year, 'form_8829');
+        $scheduleCAdjustmentsByEntity = $this->adjustmentsByEntity($userId, $year, 'schedule_c');
 
         if ($yearData === null && $inputsByEntity === []) {
             return Form8829Facts::empty();
@@ -95,6 +96,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
                 $inputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
                 $scheduleCInputsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? null,
                 $adjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? [],
+                $scheduleCAdjustmentsByEntity[$entityId ?? self::UNASSIGNED_ENTITY_KEY] ?? [],
             );
         }
 
@@ -120,6 +122,7 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
                 $input,
                 $scheduleCInputsByEntity[$entityId] ?? null,
                 $adjustmentsByEntity[$entityId] ?? [],
+                $scheduleCAdjustmentsByEntity[$entityId] ?? [],
             );
         }
 
@@ -138,9 +141,16 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  array<string, mixed>  $entityData
      * @param  array<string, FinTaxLineAdjustment[]>  $adjustmentsByLine
+     * @param  array<string, FinTaxLineAdjustment[]>  $scheduleCAdjustmentsByLine
      */
-    private function entityFact(int $year, array $entityData, ?FinForm8829Input $input, ?FinScheduleCInput $scheduleCInput, array $adjustmentsByLine): Form8829EntityFact
-    {
+    private function entityFact(
+        int $year,
+        array $entityData,
+        ?FinForm8829Input $input,
+        ?FinScheduleCInput $scheduleCInput,
+        array $adjustmentsByLine,
+        array $scheduleCAdjustmentsByLine,
+    ): Form8829EntityFact {
         $entityId = isset($entityData['entity_id']) ? (int) $entityData['entity_id'] : null;
         $entityName = $this->entityName($entityData);
         $method = $input->method ?? 'regular';
@@ -158,8 +168,15 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
             }
             $returnsAndAllowances = $this->sumMoney([$returnsAndAllowances, (float) $scheduleCInput->returns_and_allowances]);
         }
-        $expensesBeforeHomeOffice = $this->sumCategoryTotals($entityData['schedule_c_expense'] ?? []);
-        $line8TentativeProfit = max(0.0, $this->subtractMoney($this->subtractMoney($grossReceipts, $returnsAndAllowances), $expensesBeforeHomeOffice));
+        $expensesBeforeHomeOffice = $this->applyLineAdjustments(
+            $this->sumCategoryTotals($entityData['schedule_c_expense'] ?? []),
+            $scheduleCAdjustmentsByLine['line_28'] ?? [],
+        );
+        $line8TentativeProfit = $this->applyLineAdjustments(
+            $this->subtractMoney($this->subtractMoney($grossReceipts, $returnsAndAllowances), $expensesBeforeHomeOffice),
+            $scheduleCAdjustmentsByLine['line_29'] ?? [],
+        );
+        $line8TentativeProfit = max(0.0, $line8TentativeProfit);
         $computedHomeOfficeLines = $this->homeOfficeLines($entityData, $businessUseRate, $adjustmentsByLine);
         $homeOfficeLines = $method === 'simplified' ? [] : $computedHomeOfficeLines;
         $line14 = $method === 'regular' ? $this->sumAllowableLines($homeOfficeLines, self::LINE_14_REFS) : 0.0;
@@ -445,14 +462,14 @@ class Form8829FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @return array<int, array<string, FinTaxLineAdjustment[]>>
      */
-    private function adjustmentsByEntity(int $userId, int $year): array
+    private function adjustmentsByEntity(int $userId, int $year, string $form): array
     {
         $result = [];
 
         $adjustments = FinTaxLineAdjustment::withoutGlobalScopes()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
-            ->where('form', 'form_8829')
+            ->where('form', $form)
             ->whereIn('status', ['open', 'applied'])
             ->orderBy('id')
             ->get();

@@ -89,16 +89,18 @@ class Form8949ReportBuilder
      *
      * @param  CanonicalCapitalGainTransaction[]  $transactions
      * @param  WashSaleAdjustment[]  $adjustments
+     * @param  array<int, string>  $reportingModesByTaxDocumentId
      * @return ScheduleDRollupInput[]
      */
     public function buildScheduleDRollup(
         array $transactions,
         array $adjustments = [],
         string $reportingMode = 'form_8949_transactions',
+        array $reportingModesByTaxDocumentId = [],
     ): array {
         $adjustedIds = $this->adjustedTransactionIds($adjustments);
 
-        /** @var array<string, array{proceeds: float, basis: float, adjustment: float, count: int}> $buckets */
+        /** @var array<string, array{box: string, reportingMode: string, proceeds: float, basis: float, adjustment: float, count: int}> $buckets */
         $buckets = [];
 
         foreach ($transactions as $txn) {
@@ -110,21 +112,34 @@ class Form8949ReportBuilder
             $wsAdjustment = $adjustedIds[$txn->id] ?? null;
 
             $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
+            $effectiveReportingMode = $txn->taxDocumentId !== null
+                ? ($reportingModesByTaxDocumentId[$txn->taxDocumentId] ?? $reportingMode)
+                : $reportingMode;
+            $documentKey = $txn->taxDocumentId !== null ? "doc:{$txn->taxDocumentId}" : 'global';
+            $bucketKey = "{$documentKey}|{$box}|{$effectiveReportingMode}";
 
-            if (! isset($buckets[$box])) {
-                $buckets[$box] = ['proceeds' => 0.0, 'basis' => 0.0, 'adjustment' => 0.0, 'count' => 0];
+            if (! isset($buckets[$bucketKey])) {
+                $buckets[$bucketKey] = [
+                    'box' => $box,
+                    'reportingMode' => $effectiveReportingMode,
+                    'proceeds' => 0.0,
+                    'basis' => 0.0,
+                    'adjustment' => 0.0,
+                    'count' => 0,
+                ];
             }
 
-            $buckets[$box]['proceeds'] += $txn->proceeds;
-            $buckets[$box]['basis'] += $txn->costBasis;
-            $buckets[$box]['adjustment'] += $adjustmentAmount;
-            $buckets[$box]['count']++;
+            $buckets[$bucketKey]['proceeds'] += $txn->proceeds;
+            $buckets[$bucketKey]['basis'] += $txn->costBasis;
+            $buckets[$bucketKey]['adjustment'] += $adjustmentAmount;
+            $buckets[$bucketKey]['count']++;
         }
 
         $results = [];
-        foreach ($buckets as $box => $totals) {
+        foreach ($buckets as $totals) {
+            $box = $totals['box'];
             $isShortTerm = in_array($box, self::SHORT_TERM_BOXES, true);
-            $scheduleDLine = $this->scheduleDLineForBox($box, $reportingMode, $totals['adjustment']);
+            $scheduleDLine = $this->scheduleDLineForBox($box, $totals['reportingMode'], $totals['adjustment']);
             $netGain = $totals['proceeds'] - $totals['basis'] + $totals['adjustment'];
 
             $results[] = new ScheduleDRollupInput(
@@ -139,7 +154,7 @@ class Form8949ReportBuilder
             );
         }
 
-        usort($results, fn (ScheduleDRollupInput $a, ScheduleDRollupInput $b): int => $a->form8949Box <=> $b->form8949Box);
+        usort($results, fn (ScheduleDRollupInput $a, ScheduleDRollupInput $b): int => [$a->form8949Box, $a->scheduleDLine] <=> [$b->form8949Box, $b->scheduleDLine]);
 
         return $results;
     }

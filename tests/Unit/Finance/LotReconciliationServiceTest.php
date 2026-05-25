@@ -95,6 +95,27 @@ class LotReconciliationServiceTest extends TestCase
         );
     }
 
+    public function test_zero_row_parsed_entry_with_no_lots_is_ok(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, [
+            'payer_name' => 'Synthetic Broker',
+            'transactions' => [],
+            'total_proceeds' => 0,
+            'total_cost_basis' => 0,
+            'total_wash_sale_disallowed' => 0,
+            'total_realized_gain_loss' => 0,
+        ]);
+
+        $report = app(LotReconciliationService::class)->reconcileTaxDocument($document->id)->toArray();
+
+        $this->assertSame('ok', $report['status']);
+        $this->assertSame([], $report['diagnostics']);
+        $this->assertSame(0, $report['entries'][0]['summary']['expected_lot_count']);
+        $this->assertSame(0, $report['entries'][0]['summary']['broker_lot_count']);
+    }
+
     public function test_reports_missing_summary_adjustment_and_unknown_treatment(): void
     {
         $user = $this->createUser();

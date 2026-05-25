@@ -2098,6 +2098,31 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(35.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
     }
 
+    public function test_form_8829_tentative_profit_includes_schedule_c_line_28_adjustments(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Adjusted Expenses LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -1000);
+        $this->createForm8829Input($user->id, $entityId, 2025);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'form' => 'schedule_c',
+            'line_ref' => 'line_28',
+            'kind' => 'adjustment',
+            'amount' => 100,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(100.0, $facts['scheduleC']['expensesBeforeHomeOffice']);
+        $this->assertSame(900.0, $facts['form8829']['entities'][0]['line8TentativeProfit']);
+        $this->assertSame(900.0, $facts['scheduleC']['homeOfficeAllowable']);
+    }
+
     public function test_form_8829_simplified_method_uses_square_foot_cap_and_month_proration(): void
     {
         $user = $this->createUser();

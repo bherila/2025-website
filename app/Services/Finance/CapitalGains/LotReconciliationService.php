@@ -267,7 +267,7 @@ class LotReconciliationService
                 'account_identifier' => $this->stringValue($entry['account_identifier'] ?? null),
                 'account_name' => $this->stringValue($entry['account_name'] ?? null),
             ]);
-        } elseif ($entryLots->isEmpty()) {
+        } elseif ($entryLots->isEmpty() && count($expectedTransactions) > 0) {
             $diagnostics[] = $this->diagnostic('parsed_entry_unlinked', $entryIndex, $linkId, [
                 'account_id' => $accountId,
             ]);
