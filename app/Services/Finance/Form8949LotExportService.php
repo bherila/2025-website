@@ -116,7 +116,7 @@ class Form8949LotExportService
 
         return new Form8949ExportLot(
             description: $this->description($lot->description, $lot->symbol, $lot->quantity),
-            dateAcquired: $lot->purchase_date->format('Y-m-d'),
+            dateAcquired: $this->dateAcquired($lot),
             dateSold: $lot->sale_date?->format('Y-m-d') ?? '',
             proceeds: $proceeds,
             costBasis: $costBasis,
@@ -133,6 +133,15 @@ class Form8949LotExportService
             accruedMarketDiscount: $lot->accrued_market_discount !== null ? $this->floatValue($lot->accrued_market_discount) : null,
             washSaleDisallowed: $washSaleDisallowed,
         );
+    }
+
+    private function dateAcquired(FinAccountLot $lot): ?string
+    {
+        if (is_string($lot->reconciliation_notes) && str_contains($lot->reconciliation_notes, 'Date acquired reported as Various')) {
+            return null;
+        }
+
+        return $lot->purchase_date->format('Y-m-d');
     }
 
     /**

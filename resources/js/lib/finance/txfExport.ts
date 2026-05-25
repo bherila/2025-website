@@ -21,7 +21,7 @@
  *   D<date>    — Date sold (MM/DD/YYYY)
  *   $<amount>  — Cost or other basis
  *   $<amount>  — Sales price / proceeds
- *   $<amount>  — Wash sale loss disallowed (if applicable, may be 0)
+ *   $<amount>  — Wash sale loss disallowed (0.00 when none)
  *
  * See docs/finance/LotAnalyzer.md for further context.
  */
@@ -73,10 +73,8 @@ export function generateTxf(lots: LotSale[], year?: string): string {
     lines.push(`$${formatTxfAmount(lot.costBasis)}`)
     lines.push(`$${formatTxfAmount(lot.proceeds)}`)
 
-    // If there's a wash sale adjustment, include it
-    if (lot.isWashSale && lot.adjustmentAmount !== 0) {
-      lines.push(`$${formatTxfAmount(lot.adjustmentAmount)}`)
-    }
+    const washSaleAmount = lot.isWashSale ? lot.adjustmentAmount : 0
+    lines.push(`$${formatTxfAmount(washSaleAmount)}`)
 
     lines.push('^')  // End of record
   }

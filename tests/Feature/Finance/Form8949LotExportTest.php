@@ -45,7 +45,41 @@ class Form8949LotExportTest extends TestCase
         $response->assertSeeText('N711', false);
         $response->assertSeeText('PApple Inc.', false);
         $this->assertStringContainsString(
-            "PApple Inc.\r\nD01/02/2024\r\nD02/03/2025\r\n$1000.00\r\n$1250.00\r\n^\r\n",
+            "PApple Inc.\r\nD01/02/2024\r\nD02/03/2025\r\n$1000.00\r\n$1250.00\r\n$0.00\r\n^\r\n",
+            $response->getContent(),
+        );
+    }
+
+    public function test_txf_export_preserves_various_date_acquired_placeholders(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $link = TaxDocumentAccount::createLink($document->id, $account->acct_id, '1099_b', 2025, isReviewed: true);
+        $this->makeLot($account, $document, [
+            'description' => 'Long-term mutual fund lot',
+            'purchase_date' => '2025-01-02',
+            'sale_date' => '2025-01-02',
+            'form_8949_box' => 'D',
+            'is_short_term' => false,
+            'is_covered' => true,
+            'cost_basis' => 8877.52,
+            'proceeds' => 12411.65,
+            'wash_sale_disallowed' => 0,
+            'reconciliation_notes' => 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.',
+        ]);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-txf', [
+            'source' => 'database',
+            'scope' => 'account_document',
+            'account_id' => $account->acct_id,
+            'tax_document_id' => $document->id,
+            'account_link_id' => $link->id,
+        ]);
+
+        $response->assertOk();
+        $this->assertStringContainsString(
+            "TD\r\nN323\r\nC1\r\nL1\r\nPLong-term mutual fund lot\r\nDVarious\r\nD01/02/2025\r\n$8877.52\r\n$12411.65\r\n$0.00\r\n^\r\n",
             $response->getContent(),
         );
     }

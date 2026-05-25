@@ -38,6 +38,8 @@ class TxfWriter
 
             if ($lot->washSaleDisallowed !== null && $lot->washSaleDisallowed !== 0.0) {
                 $lines[] = '$'.$this->formatAmount($lot->washSaleDisallowed);
+            } else {
+                $lines[] = '$0.00';
             }
 
             $lines[] = '^';

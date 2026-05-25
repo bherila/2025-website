@@ -31,7 +31,7 @@ class Form8949ExportWritersTest extends TestCase
         $this->assertStringContainsString("N714\r\n", $txf);
         $this->assertSame(7, substr_count($txf, "\r\n^\r\n"));
         $this->assertStringContainsString(
-            "TD\r\nN321\r\nC1\r\nL1\r\nPExample Lot A\r\nD01/15/2024\r\nD02/20/2025\r\n$700.00\r\n$1200.00\r\n^\r\n",
+            "TD\r\nN321\r\nC1\r\nL1\r\nPExample Lot A\r\nD01/15/2024\r\nD02/20/2025\r\n$700.00\r\n$1200.00\r\n$0.00\r\n^\r\n",
             $txf,
         );
     }
@@ -53,6 +53,7 @@ class Form8949ExportWritersTest extends TestCase
         ]);
 
         $this->assertStringNotContainsString('$500.00', $txf);
+        $this->assertStringContainsString("$700.00\r\n$1200.00\r\n$0.00\r\n^\r\n", $txf);
     }
 
     public function test_olt_xlsx_writer_creates_template_sheet_with_lot_rows(): void
