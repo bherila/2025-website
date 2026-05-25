@@ -11,7 +11,13 @@ export function parseWealthfrontHAR(text: string): AccountLineItem[] {
     const entries = har.log.entries
 
     for (const entry of entries) {
-      if (entry.request.url.includes('https://api.wealthfront.com/v1/history')) {
+      let requestUrl: URL
+      try {
+        requestUrl = new URL(entry.request.url)
+      } catch {
+        continue
+      }
+      if (requestUrl.host === 'api.wealthfront.com' && requestUrl.pathname.startsWith('/v1/history')) {
         const responseContent = entry.response.content.text
         const responseData = JSON.parse(responseContent)
 

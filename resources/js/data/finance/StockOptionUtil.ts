@@ -24,7 +24,7 @@ export function parseOptionDescription(description: string): ParsedOptionInfo | 
   const etradeRegex =
     /[\d\s]*([A-Z]+) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}) '(\d{2}) \$([\d.]+) (Call|Put)/i
 
-  const etradeMatch = description.replace('\t', ' ').match(etradeRegex)
+  const etradeMatch = description.replace(/\t/g, ' ').match(etradeRegex)
   if (etradeMatch) {
     const symbol = etradeMatch[1]
     const month = etradeMatch[2]
