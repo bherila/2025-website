@@ -42,6 +42,16 @@ describe('parseOptionDescription', () => {
       })
     })
 
+    it('replaces every tab so multi-tab descriptions still match the E-Trade regex', () => {
+      const result = parseOptionDescription("AAPL\tJan\t15 '24 $150.00 Call")
+      expect(result).toEqual({
+        symbol: 'AAPL',
+        optionType: 'call',
+        maturityDate: '2024-01-15',
+        strikePrice: 150,
+      })
+    })
+
     it('should parse option with single digit day', () => {
       const result = parseOptionDescription("AAPL Jan 5 '24 $150.50 Call")
       expect(result).toEqual({

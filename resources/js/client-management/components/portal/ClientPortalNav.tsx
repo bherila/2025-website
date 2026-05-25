@@ -4,6 +4,7 @@ import { ChevronDown, Clock, CreditCard, FileText, FolderOpen, Home, Receipt, Se
 import { useCallback, useEffect, useState } from 'react'
 
 import { PortalNavButton } from '@/components/nav/PortalNavButton'
+import { safeHref } from '@/components/nav/safeHref'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -146,9 +147,9 @@ export default function ClientPortalNav({
                     {companies.map(company => (
                       <DropdownMenuItem key={company.id} asChild>
                         <a
-                          href={currentPage === 'manage'
-                            ? `/client/mgmt/${company.id}`
-                            : `/client/portal/${company.slug}${getPagePathSuffix(currentPage)}`}
+                          href={safeHref(currentPage === 'manage'
+                            ? `/client/mgmt/${encodeURIComponent(String(company.id))}`
+                            : `/client/portal/${encodeURIComponent(company.slug)}${getPagePathSuffix(currentPage)}`)}
                           className={cn(
                             slug === company.slug && 'bg-accent font-medium'
                           )}
@@ -175,7 +176,7 @@ export default function ClientPortalNav({
             <div className="flex items-center gap-1">
               {/* Home link */}
               <PortalNavButton active={currentPage === 'home'} asChild>
-                <a href={`/client/portal/${slug}`}>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}`)}>
                   <Home className="h-4 w-4 mr-1" />
                   Home
                 </a>
@@ -183,7 +184,7 @@ export default function ClientPortalNav({
 
               {/* Time Records */}
               <PortalNavButton active={currentPage === 'time'} asChild>
-                <a href={`/client/portal/${slug}/time`}>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/time`)}>
                   <Clock className="h-4 w-4 mr-1" />
                   Time Records
                 </a>
@@ -191,7 +192,7 @@ export default function ClientPortalNav({
 
               {/* Expenses */}
               <PortalNavButton active={currentPage === 'expenses'} asChild>
-                <a href={`/client/portal/${slug}/expenses`}>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/expenses`)}>
                   <Receipt className="h-4 w-4 mr-1" />
                   Expenses
                 </a>
@@ -199,14 +200,14 @@ export default function ClientPortalNav({
 
               {/* Invoices */}
               <PortalNavButton active={currentPage === 'invoices' || currentPage === 'invoice'} asChild>
-                <a href={`/client/portal/${slug}/invoices`}>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/invoices`)}>
                   <FileText className="h-4 w-4 mr-1" />
                   Invoices
                 </a>
               </PortalNavButton>
 
               <PortalNavButton active={currentPage === 'billing'} asChild>
-                <a href={`/client/portal/${slug}/billing`}>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/billing`)}>
                   <CreditCard className="h-4 w-4 mr-1" />
                   Billing
                 </a>
@@ -234,7 +235,7 @@ export default function ClientPortalNav({
                     projects.map(project => (
                       <DropdownMenuItem key={project.id} asChild>
                         <a
-                          href={`/client/portal/${slug}/project/${project.slug}`}
+                          href={safeHref(`/client/portal/${encodeURIComponent(slug)}/project/${encodeURIComponent(project.slug)}`)}
                           className={cn(
                             currentProjectSlug === project.slug && 'bg-accent'
                           )}
@@ -253,7 +254,7 @@ export default function ClientPortalNav({
           {isAdmin && companyId && currentPage !== 'manage' && (
             <div className="flex items-center">
               <Button variant="outline" size="sm" asChild className="gap-2">
-                <a href={`/client/mgmt/${companyId}`}>
+                <a href={safeHref(`/client/mgmt/${encodeURIComponent(String(companyId))}`)}>
                   <Settings className="h-4 w-4" />
                   Manage Company
                 </a>
@@ -269,7 +270,7 @@ export default function ClientPortalNav({
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbLink href={`/client/portal/${slug}`}>Home</BreadcrumbLink>
+                <BreadcrumbLink href={safeHref(`/client/portal/${encodeURIComponent(slug)}`)}>Home</BreadcrumbLink>
               </BreadcrumbItem>
 
               {currentPage === 'time' && (
@@ -312,7 +313,7 @@ export default function ClientPortalNav({
                 <>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbLink href={`/client/portal/${slug}/invoices`}>Invoices</BreadcrumbLink>
+                    <BreadcrumbLink href={safeHref(`/client/portal/${encodeURIComponent(slug)}/invoices`)}>Invoices</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>

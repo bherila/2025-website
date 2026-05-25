@@ -21,11 +21,11 @@ function normalizeOfxDate(rawDate: string): string {
 
 function decodeOfxEntities(value: string): string {
   return value
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
 }
 
 export function parseQuickenQFX(text: string): AccountLineItem[] {
