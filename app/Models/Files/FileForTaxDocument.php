@@ -21,6 +21,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $document_id
  * @property string|null $misc_routing
  * @property string|null $wash_sale_treatment
+ * @property string $form_type Broadened from the original ENUM type because subsequent
+ *                             migrations (see 2026_04_10_200000_add_broker_form_types_to_fin_tax_documents) convert
+ *                             the column to VARCHAR via raw DB::statement, which Larastan cannot detect. Use
+ *                             {@see self::FORM_TYPES} as the authoritative allowlist.
  */
 class FileForTaxDocument extends Model
 {

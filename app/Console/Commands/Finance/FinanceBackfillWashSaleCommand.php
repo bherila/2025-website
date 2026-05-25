@@ -230,7 +230,7 @@ class FinanceBackfillWashSaleCommand extends BaseFinanceCommand
                 $key = $this->matchKey(
                     $lot->sale_date?->format('Y-m-d'),
                     is_string($lot->description) ? trim($lot->description) : null,
-                    $lot->quantity !== null ? (float) $lot->quantity : null,
+                    (float) $lot->quantity,
                 );
 
                 if ($key === null || ! isset($rowsByKey[$key])) {

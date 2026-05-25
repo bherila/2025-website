@@ -1650,10 +1650,10 @@ PROMPT;
             $box10Value = (float) $fields['10']['value'];
             if ($box10Value !== 0.0 && isset($codes['20'])) {
                 foreach ($codes['20'] as $codeItem) {
-                    if (($codeItem['code'] ?? null) !== 'B') {
+                    if ($codeItem['code'] !== 'B') {
                         continue;
                     }
-                    if (! is_numeric($codeItem['value'] ?? null)) {
+                    if (! is_numeric($codeItem['value'])) {
                         continue;
                     }
                     if ((float) $codeItem['value'] === $box10Value) {
