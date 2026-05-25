@@ -97,18 +97,60 @@ class ClientAgreementApiControllerTest extends TestCase
         $this->assertEquals(6000, (float) $agreement->fresh()->retainer_fee);
     }
 
+    public function test_catch_up_threshold_uses_existing_period_retainer_hours(): void
+    {
+        $agreement = $this->makeAgreement(
+            BillingCadence::SemiAnnual,
+            retainerFee: 262.50,
+            retainerHours: 1,
+            monthlyRetainerHours: 0,
+        );
+
+        $this->actingAs($this->admin)
+            ->putJson($this->updateUrl($agreement), [
+                'catch_up_threshold_hours' => 1,
+            ])
+            ->assertOk();
+
+        $this->assertEquals(1, (float) $agreement->fresh()->catch_up_threshold_hours);
+    }
+
+    public function test_catch_up_threshold_uses_requested_period_retainer_hours(): void
+    {
+        $agreement = $this->makeAgreement(
+            BillingCadence::SemiAnnual,
+            retainerFee: 262.50,
+            retainerHours: null,
+            monthlyRetainerHours: 0,
+            catchUpThresholdHours: 0,
+        );
+
+        $this->actingAs($this->admin)
+            ->putJson($this->updateUrl($agreement), [
+                'retainer_hours' => 1,
+                'catch_up_threshold_hours' => 1,
+            ])
+            ->assertOk();
+
+        $agreement->refresh();
+        $this->assertEquals(1, (float) $agreement->retainer_hours);
+        $this->assertEquals(1, (float) $agreement->catch_up_threshold_hours);
+    }
+
     private function makeAgreement(
         BillingCadence $cadence,
         ?float $retainerFee = null,
         ?float $retainerHours = null,
+        float $monthlyRetainerHours = 10,
+        float $catchUpThresholdHours = 1,
     ): ClientAgreement {
         return ClientAgreement::factory()->for($this->company)->create([
             'active_date' => Carbon::parse('2026-01-01'),
-            'monthly_retainer_hours' => 10,
+            'monthly_retainer_hours' => $monthlyRetainerHours,
             'monthly_retainer_fee' => 1000,
             'hourly_rate' => 150,
             'rollover_months' => 3,
-            'catch_up_threshold_hours' => 1,
+            'catch_up_threshold_hours' => $catchUpThresholdHours,
             'billing_cadence' => $cadence->value,
             'retainer_fee' => $retainerFee,
             'retainer_hours' => $retainerHours,

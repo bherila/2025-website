@@ -66,12 +66,10 @@ class ClientAgreementApiController extends Controller
                 'numeric',
                 'min:0',
                 function ($attribute, $value, $fail) use ($request, $agreement) {
-                    $retainerHours = $request->has('monthly_retainer_hours')
-                        ? $request->input('monthly_retainer_hours')
-                        : $agreement->monthly_retainer_hours;
+                    $retainerHours = $this->retainerHoursForThresholdValidation($request, $agreement);
 
                     if ($value > $retainerHours) {
-                        $fail("The catch-up threshold hours cannot exceed monthly retainer hours ({$retainerHours}).");
+                        $fail("The catch-up threshold hours cannot exceed period retainer hours ({$retainerHours}).");
                     }
                 },
             ],
@@ -219,5 +217,33 @@ class ClientAgreementApiController extends Controller
         return response()->json([
             'success' => true,
         ]);
+    }
+
+    private function retainerHoursForThresholdValidation(Request $request, ClientAgreement $agreement): float
+    {
+        $cadence = BillingCadence::tryFrom((string) $request->input(
+            'billing_cadence',
+            $agreement->effectiveBillingCadence()->value,
+        )) ?? $agreement->effectiveBillingCadence();
+
+        $monthlyRetainerHours = (float) (
+            $request->has('monthly_retainer_hours')
+                ? $request->input('monthly_retainer_hours')
+                : $agreement->monthly_retainer_hours
+        );
+
+        if ($cadence !== BillingCadence::Monthly) {
+            if ($request->has('retainer_hours')) {
+                $retainerHours = $request->input('retainer_hours');
+
+                if ($retainerHours !== null && $retainerHours !== '') {
+                    return (float) $retainerHours;
+                }
+            } elseif ($agreement->retainer_hours !== null) {
+                return (float) $agreement->retainer_hours;
+            }
+        }
+
+        return $monthlyRetainerHours * $cadence->monthsInCycle();
     }
 }
