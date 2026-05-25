@@ -288,6 +288,7 @@ export default function ClientAgreementShowPage({ agreementId, companyId, compan
                 <SelectContent>
                   <SelectItem value="monthly">Monthly</SelectItem>
                   <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="semi_annual">Semiannual</SelectItem>
                   <SelectItem value="annual">Annual</SelectItem>
                 </SelectContent>
               </Select>

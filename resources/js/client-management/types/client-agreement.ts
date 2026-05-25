@@ -14,8 +14,10 @@ export interface ClientAgreement {
   rollover_months: number
   hourly_rate: string
   monthly_retainer_fee: string
+  retainer_fee?: string | null
+  retainer_hours?: string | null
   is_visible_to_client?: boolean
-  billing_cadence: 'monthly' | 'quarterly' | 'annual'
+  billing_cadence: 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
   bill_overage_interim: boolean
   first_cycle_proration: 'prorate_hours' | 'full_period' | 'align_next_cycle'
   recurring_items?: ClientAgreementRecurringItem[]
@@ -31,7 +33,7 @@ export interface ClientAgreement {
   }
 }
 
-export type BillingCadence = 'monthly' | 'quarterly' | 'annual'
+export type BillingCadence = 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
 export type ChargeCadence = 'monthly' | 'quarterly' | 'semi_annual' | 'annual' | 'one_time'
 export type FirstCycleProration = 'prorate_hours' | 'full_period' | 'align_next_cycle'
 

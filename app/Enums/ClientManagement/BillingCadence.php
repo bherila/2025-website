@@ -16,6 +16,7 @@ enum BillingCadence: string
 {
     case Monthly = 'monthly';
     case Quarterly = 'quarterly';
+    case SemiAnnual = 'semi_annual';
     case Annual = 'annual';
 
     /**
@@ -26,6 +27,7 @@ enum BillingCadence: string
         return match ($this) {
             self::Monthly => 1,
             self::Quarterly => 3,
+            self::SemiAnnual => 6,
             self::Annual => 12,
         };
     }
@@ -45,6 +47,7 @@ enum BillingCadence: string
         return match ($this) {
             self::Monthly => $date->copy()->startOfMonth(),
             self::Quarterly => $this->quarterStart($date),
+            self::SemiAnnual => $date->copy()->startOfYear(),
             self::Annual => $date->copy()->startOfYear(),
         };
     }
@@ -59,6 +62,7 @@ enum BillingCadence: string
         return match ($this) {
             self::Monthly => $start->copy()->endOfMonth()->startOfDay(),
             self::Quarterly => $start->copy()->addMonths(3)->subDay(),
+            self::SemiAnnual => $start->copy()->addMonths(6)->subDay(),
             self::Annual => $start->copy()->endOfYear()->startOfDay(),
         };
     }

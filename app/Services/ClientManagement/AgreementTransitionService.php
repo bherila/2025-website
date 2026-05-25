@@ -119,6 +119,8 @@ class AgreementTransitionService
             'rollover_months' => $terms['rollover_months'] ?? $agreement->rollover_months,
             'hourly_rate' => $terms['hourly_rate'] ?? $agreement->hourly_rate,
             'monthly_retainer_fee' => $terms['monthly_retainer_fee'] ?? $agreement->monthly_retainer_fee,
+            'retainer_fee' => $terms['retainer_fee'] ?? $agreement->retainer_fee,
+            'retainer_hours' => $terms['retainer_hours'] ?? $agreement->retainer_hours,
             'billing_cadence' => $terms['billing_cadence'] ?? $agreement->effectiveBillingCadence()->value,
             'bill_overage_interim' => $terms['bill_overage_interim'] ?? $agreement->bill_overage_interim,
             'first_cycle_proration' => $terms['first_cycle_proration'] ?? $agreement->effectiveFirstCycleProration()->value,

@@ -12,6 +12,7 @@ class BillingCadenceEnumTest extends TestCase
     {
         $this->assertSame(1, BillingCadence::Monthly->monthsInCycle());
         $this->assertSame(3, BillingCadence::Quarterly->monthsInCycle());
+        $this->assertSame(6, BillingCadence::SemiAnnual->monthsInCycle());
         $this->assertSame(12, BillingCadence::Annual->monthsInCycle());
     }
 

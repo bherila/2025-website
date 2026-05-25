@@ -33,6 +33,8 @@ class ClientAgreement extends Model
         'rollover_months',
         'hourly_rate',
         'monthly_retainer_fee',
+        'retainer_fee',
+        'retainer_hours',
         'is_visible_to_client',
         'billing_cadence',
         'bill_overage_interim',
@@ -48,6 +50,8 @@ class ClientAgreement extends Model
         'catch_up_threshold_hours' => 'decimal:2',
         'hourly_rate' => 'decimal:2',
         'monthly_retainer_fee' => 'decimal:2',
+        'retainer_fee' => 'decimal:2',
+        'retainer_hours' => 'decimal:4',
         'rollover_months' => 'integer',
         'is_visible_to_client' => 'boolean',
         'billing_cadence' => BillingCadence::class,
@@ -170,13 +174,31 @@ class ClientAgreement extends Model
     public function validateCatchUpThreshold(): void
     {
         $threshold = (float) $this->catch_up_threshold_hours;
-        $retainerHours = (float) $this->monthly_retainer_hours;
+        $retainerHours = $this->periodRetainerHours();
 
         if ($threshold < 0 || $threshold > $retainerHours) {
             throw new \InvalidArgumentException(
                 "catch_up_threshold_hours must be between 0 and monthly_retainer_hours ({$retainerHours}). Got: {$threshold}"
             );
         }
+    }
+
+    public function periodRetainerFee(): float
+    {
+        if ($this->retainer_fee !== null) {
+            return (float) $this->retainer_fee;
+        }
+
+        return (float) $this->monthly_retainer_fee * $this->effectiveBillingCadence()->monthsInCycle();
+    }
+
+    public function periodRetainerHours(): float
+    {
+        if ($this->retainer_hours !== null) {
+            return (float) $this->retainer_hours;
+        }
+
+        return (float) $this->monthly_retainer_hours * $this->effectiveBillingCadence()->monthsInCycle();
     }
 
     /**

@@ -339,6 +339,8 @@ class ClientInvoice extends Model
                 'id' => $this->agreement->id,
                 'monthly_retainer_hours' => $this->agreement->monthly_retainer_hours,
                 'monthly_retainer_fee' => $this->agreement->monthly_retainer_fee,
+                'retainer_fee' => $this->agreement->retainer_fee,
+                'retainer_hours' => $this->agreement->retainer_hours,
                 'hourly_rate' => $this->agreement->hourly_rate,
             ] : null,
             'line_items' => $this->lineItems->map(function ($line) {
