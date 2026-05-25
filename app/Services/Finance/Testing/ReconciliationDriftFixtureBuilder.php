@@ -76,7 +76,7 @@ class ReconciliationDriftFixtureBuilder
             's3_path' => "tax_docs/{$userId}/{$filename}",
             'mime_type' => 'application/pdf',
             'file_size_bytes' => 1024,
-            'file_hash' => hash('sha256', fake()->uuid()),
+            'file_hash' => hash('sha256', "recon-drift-fixture:{$userId}:{$taxYear}"),
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
             'parsed_data' => [[
