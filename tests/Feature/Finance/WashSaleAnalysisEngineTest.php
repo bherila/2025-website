@@ -572,6 +572,43 @@ class WashSaleAnalysisEngineTest extends TestCase
         $this->assertEquals('8a', $rollup[1]->scheduleDLine);
     }
 
+    public function test_schedule_d_rollup_falls_back_to_document_level_reporting_mode(): void
+    {
+        $shortTerm = new CanonicalCapitalGainTransaction(
+            id: 'account_lot:1',
+            source: 'account_lot',
+            symbol: 'AAPL',
+            description: 'Apple Inc.',
+            cusip: null,
+            quantity: 10.0,
+            dateAcquired: '2024-01-01',
+            dateSold: '2024-12-01',
+            proceeds: 1000.0,
+            costBasis: 800.0,
+            washSaleDisallowed: 0.0,
+            realizedGainLoss: 200.0,
+            isShortTerm: true,
+            form8949Box: 'A',
+            isCovered: true,
+            accruedMarketDiscount: null,
+            accountId: 1,
+            accountName: 'Brokerage',
+            taxDocumentId: 10,
+            lotId: 1,
+            closeTransactionId: null,
+        );
+
+        $rollup = $this->reportBuilder->buildScheduleDRollup(
+            [$shortTerm],
+            [],
+            'form_8949_transactions',
+            ['doc:10|account:none' => 'schedule_d_summary'],
+        );
+
+        $this->assertSame('1a', $rollup[0]->scheduleDLine);
+        $this->assertSame(200.0, $rollup[0]->netGainOrLoss);
+    }
+
     public function test_schedule_d_summary_splits_adjusted_and_unadjusted_covered_boxes(): void
     {
         $directShortTerm = new CanonicalCapitalGainTransaction(

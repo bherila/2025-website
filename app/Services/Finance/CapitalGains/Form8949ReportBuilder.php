@@ -112,9 +112,11 @@ class Form8949ReportBuilder
             $wsAdjustment = $adjustedIds[$txn->id] ?? null;
 
             $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
-            $effectiveReportingMode = $txn->taxDocumentId !== null
-                ? ($reportingModesByDocumentAccountKey[$this->reportingModeLookupKey($txn->taxDocumentId, $txn->accountId)] ?? $reportingMode)
-                : $reportingMode;
+            $effectiveReportingMode = $this->reportingModeForTransaction(
+                $txn,
+                $reportingMode,
+                $reportingModesByDocumentAccountKey,
+            );
             $documentKey = $txn->taxDocumentId !== null ? $this->reportingModeLookupKey($txn->taxDocumentId, $txn->accountId) : 'global';
             $bucketKey = "{$documentKey}|{$box}|{$effectiveReportingMode}";
 
@@ -185,6 +187,26 @@ class Form8949ReportBuilder
     private function reportingModeLookupKey(int $taxDocumentId, ?int $accountId): string
     {
         return "doc:{$taxDocumentId}|account:".($accountId !== null ? (string) $accountId : 'none');
+    }
+
+    /**
+     * @param  array<string, string>  $reportingModesByDocumentAccountKey
+     */
+    private function reportingModeForTransaction(
+        CanonicalCapitalGainTransaction $txn,
+        string $reportingMode,
+        array $reportingModesByDocumentAccountKey,
+    ): string {
+        if ($txn->taxDocumentId === null) {
+            return $reportingMode;
+        }
+
+        $accountSpecificKey = $this->reportingModeLookupKey($txn->taxDocumentId, $txn->accountId);
+        $documentLevelKey = $this->reportingModeLookupKey($txn->taxDocumentId, null);
+
+        return $reportingModesByDocumentAccountKey[$accountSpecificKey]
+            ?? $reportingModesByDocumentAccountKey[$documentLevelKey]
+            ?? $reportingMode;
     }
 
     // -------------------------------------------------------------------------
