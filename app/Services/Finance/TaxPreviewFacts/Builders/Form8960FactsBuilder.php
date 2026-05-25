@@ -80,15 +80,18 @@ class Form8960FactsBuilder extends TaxPreviewFactBuilder
             return 0.0;
         }
 
-        $stateIncomeTax = $scheduleA->stateIncomeTaxTotal;
-        if ($stateIncomeTax <= 0.0 || $magi === null || $magi <= 0.0 || $grossNii <= 0.0) {
+        $deductibleIncomeTax = $scheduleA->selectedLine5aType === 'state_income_tax'
+            ? $scheduleA->selectedLine5aTotal
+            : 0.0;
+
+        if ($deductibleIncomeTax <= 0.0 || $magi === null || $magi <= 0.0 || $grossNii <= 0.0) {
             return 0.0;
         }
 
         $ratio = $grossNii / $magi;
-        $allocated = MoneyMath::multiply($stateIncomeTax, $ratio);
+        $allocated = MoneyMath::multiply($deductibleIncomeTax, $ratio);
 
-        return max(0.0, min($stateIncomeTax, $allocated));
+        return max(0.0, min($deductibleIncomeTax, $allocated));
     }
 
     /**

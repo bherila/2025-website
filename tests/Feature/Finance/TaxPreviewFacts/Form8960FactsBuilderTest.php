@@ -124,15 +124,15 @@ class Form8960FactsBuilderTest extends TestCase
         );
     }
 
-    private function scheduleA(float $stateIncomeTaxTotal = 0.0): ScheduleAFacts
+    private function scheduleA(float $stateIncomeTaxTotal = 0.0, float $salesTaxTotal = 0.0): ScheduleAFacts
     {
         return new ScheduleAFacts(
             stateIncomeTaxSources: [],
             stateIncomeTaxTotal: $stateIncomeTaxTotal,
             salesTaxSources: [],
-            salesTaxTotal: 0.0,
-            selectedLine5aType: 'state',
-            selectedLine5aTotal: $stateIncomeTaxTotal,
+            salesTaxTotal: $salesTaxTotal,
+            selectedLine5aType: $salesTaxTotal > $stateIncomeTaxTotal ? 'sales_tax' : 'state_income_tax',
+            selectedLine5aTotal: max($stateIncomeTaxTotal, $salesTaxTotal),
             realEstateTaxSources: [],
             realEstateTaxTotal: 0.0,
             personalPropertyTaxSources: [],
@@ -227,6 +227,20 @@ class Form8960FactsBuilderTest extends TestCase
             $this->scheduleD(line16Combined: 0.0),
             $this->form4952(),
             $this->scheduleA(stateIncomeTaxTotal: 0.0),
+            magi: 2122501.0,
+        );
+
+        $this->assertSame(0.0, $facts->stateLocalForeignIncomeTax);
+    }
+
+    public function test_line_9b_salt_proration_returns_zero_when_schedule_a_elects_sales_tax(): void
+    {
+        $facts = $this->builder()->build(
+            $this->scheduleB(interest: 11117.0),
+            $this->scheduleE(),
+            $this->scheduleD(line16Combined: 0.0),
+            $this->form4952(),
+            $this->scheduleA(stateIncomeTaxTotal: 10000.0, salesTaxTotal: 12000.0),
             magi: 2122501.0,
         );
 

@@ -87,6 +87,7 @@ deductionValueAtThirtySevenPercent: number;
 recommendation: string | null;
 totalK1Box5: number;
 turboTaxAlert: boolean;
+hasUserOverride: boolean;
 };
 export type Form4797Facts = {
 partISources: Array<TaxFactSource>;
@@ -468,6 +469,7 @@ export type ScheduleAFacts = {
 stateIncomeTaxSources: Array<TaxFactSource>;
 salesTaxSources: Array<TaxFactSource>;
 realEstateTaxSources: Array<TaxFactSource>;
+personalPropertyTaxSources: Array<TaxFactSource>;
 mortgageInterestSources: Array<TaxFactSource>;
 investmentInterestSources: Array<TaxFactSource>;
 charitableCashSources: Array<TaxFactSource>;
@@ -478,6 +480,7 @@ salesTaxTotal: number;
 selectedLine5aType: string;
 selectedLine5aTotal: number;
 realEstateTaxTotal: number;
+personalPropertyTaxTotal: number;
 saltPaidBeforeCap: number;
 saltCap: number;
 saltDeduction: number;
@@ -630,6 +633,8 @@ totalBox13ZZ: number;
 totalTraderNii: number;
 totalPassive: number;
 totalNonpassive: number;
+totalNonpassiveIncome: number;
+totalNonpassiveLoss: number;
 grandTotal: number;
 };
 export type ScheduleFFacts = {
