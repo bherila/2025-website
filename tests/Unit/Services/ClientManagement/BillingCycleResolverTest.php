@@ -319,6 +319,113 @@ class BillingCycleResolverTest extends TestCase
     }
 
     // =========================================================================
+    // Semi-annual cadence
+    // =========================================================================
+
+    public function test_semi_annual_mid_year_start_multi_cycle(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-03-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours
+        );
+
+        $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
+            $agreement,
+            Carbon::parse('2025-06-30')), false);
+
+        // First cycle: Mar 1 – Aug 31 (6 months from active_date)
+        $this->assertEquals('2024-03-01', $cycles[0]->start->toDateString());
+        $this->assertEquals('2024-08-31', $cycles[0]->end->toDateString());
+
+        // Second cycle: Sep 1 – Feb 28
+        $this->assertEquals('2024-09-01', $cycles[1]->start->toDateString());
+        $this->assertEquals('2025-02-28', $cycles[1]->end->toDateString());
+
+        // Third cycle: Mar 1 – Jun 30 (clipped)
+        $this->assertEquals('2025-03-01', $cycles[2]->start->toDateString());
+        $this->assertEquals('2025-06-30', $cycles[2]->end->toDateString());
+        $this->assertTrue($cycles[2]->isProrated);
+
+        $this->assertCount(3, $cycles);
+    }
+
+    public function test_semi_annual_with_termination(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-01-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours,
+            '2024-09-15'
+        );
+
+        $cycles = iterator_to_array($this->resolver->cyclesForAgreement(
+            $agreement,
+            Carbon::parse('2025-12-31')), false);
+
+        $this->assertCount(2, $cycles);
+        $this->assertEquals('2024-01-01', $cycles[0]->start->toDateString());
+        $this->assertEquals('2024-06-30', $cycles[0]->end->toDateString());
+        $this->assertFalse($cycles[0]->isProrated);
+
+        // Second cycle clipped at termination
+        $this->assertEquals('2024-07-01', $cycles[1]->start->toDateString());
+        $this->assertEquals('2024-09-15', $cycles[1]->end->toDateString());
+        $this->assertTrue($cycles[1]->isProrated);
+    }
+
+    public function test_semi_annual_cycle_containing_cycle_1(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-01-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours
+        );
+
+        $cycle = $this->resolver->cycleContaining($agreement, Carbon::parse('2024-03-15'));
+        $this->assertEquals('2024-01-01', $cycle->start->toDateString());
+        $this->assertEquals('2024-06-30', $cycle->end->toDateString());
+    }
+
+    public function test_semi_annual_cycle_containing_cycle_2(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-01-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours
+        );
+
+        $cycle = $this->resolver->cycleContaining($agreement, Carbon::parse('2024-09-15'));
+        $this->assertEquals('2024-07-01', $cycle->start->toDateString());
+        $this->assertEquals('2024-12-31', $cycle->end->toDateString());
+    }
+
+    public function test_semi_annual_cycle_containing_on_boundary(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-01-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours
+        );
+
+        $cycle = $this->resolver->cycleContaining($agreement, Carbon::parse('2024-07-01'));
+        $this->assertEquals('2024-07-01', $cycle->start->toDateString());
+        $this->assertEquals('2024-12-31', $cycle->end->toDateString());
+    }
+
+    public function test_semi_annual_cycle_containing_throws_for_date_before_active(): void
+    {
+        $agreement = $this->makeAgreement(
+            '2024-07-01',
+            BillingCadence::SemiAnnual,
+            FirstCycleProration::ProrateHours
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->resolver->cycleContaining($agreement, Carbon::parse('2024-01-15'));
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 

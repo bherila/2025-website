@@ -51,6 +51,9 @@ class BillingCycleResolver
             return;
         }
         if ($cadence === BillingCadence::SemiAnnual) {
+            // Note: first_cycle_proration and bill_overage_interim are not applied
+            // for semi-annual cadence. Cycles are anchored to active_date and always
+            // span exactly 6 months (or clipped at termination/ceiling).
             $cursor = $activeDate->copy();
             while ($cursor->lte($ceiling)) {
                 $cycleStart = $cursor->copy();
@@ -95,6 +98,11 @@ class BillingCycleResolver
         $cadence = $agreement->effectiveBillingCadence();
         if ($cadence === BillingCadence::SemiAnnual) {
             $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
+            if (Carbon::instance($date)->startOfDay()->lt($activeDate)) {
+                throw new \InvalidArgumentException(
+                    'Cannot resolve a cycle for a date before the agreement active_date.'
+                );
+            }
             $resolved = $activeDate->copy();
             while ($resolved->gt($date)) {
                 $resolved->subMonths(6);

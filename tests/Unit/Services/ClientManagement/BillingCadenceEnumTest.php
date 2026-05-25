@@ -30,6 +30,32 @@ class BillingCadenceEnumTest extends TestCase
         $this->assertEquals('2026-12-31', BillingCadence::Annual->cycleEnd($reference)->toDateString());
     }
 
+    public function test_semi_annual_cycle_start_first_half(): void
+    {
+        // Dates in Jan–Jun should return Jan 1
+        $this->assertEquals('2026-01-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-01-01'))->toDateString());
+        $this->assertEquals('2026-01-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-03-15'))->toDateString());
+        $this->assertEquals('2026-01-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-06-30'))->toDateString());
+    }
+
+    public function test_semi_annual_cycle_start_second_half(): void
+    {
+        // Dates in Jul–Dec should return Jul 1
+        $this->assertEquals('2026-07-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-07-01'))->toDateString());
+        $this->assertEquals('2026-07-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-09-15'))->toDateString());
+        $this->assertEquals('2026-07-01', BillingCadence::SemiAnnual->cycleStart(Carbon::parse('2026-12-31'))->toDateString());
+    }
+
+    public function test_semi_annual_cycle_end_first_half(): void
+    {
+        $this->assertEquals('2026-06-30', BillingCadence::SemiAnnual->cycleEnd(Carbon::parse('2026-03-15'))->toDateString());
+    }
+
+    public function test_semi_annual_cycle_end_second_half(): void
+    {
+        $this->assertEquals('2026-12-31', BillingCadence::SemiAnnual->cycleEnd(Carbon::parse('2026-09-15'))->toDateString());
+    }
+
     public function test_cycle_starts_between_excludes_containing_cycle_before_from_date(): void
     {
         $starts = iterator_to_array(BillingCadence::Quarterly->cycleStartsBetween(
