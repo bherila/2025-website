@@ -92,6 +92,12 @@ class ClientAgreementApiController extends Controller
             ], 422);
         }
 
+        // Clear stale period retainer overrides when transitioning to monthly
+        if ($cadence === BillingCadence::Monthly) {
+            $validated['retainer_fee'] = null;
+            $validated['retainer_hours'] = null;
+        }
+
         $agreement->update($validated);
 
         return response()->json([

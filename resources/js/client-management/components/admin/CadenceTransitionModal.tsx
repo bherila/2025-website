@@ -197,7 +197,7 @@ export default function CadenceTransitionModal({
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
                     <SelectItem value="semi_annual">Semiannual</SelectItem>
-                  <SelectItem value="annual">Annual</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

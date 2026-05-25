@@ -38,6 +38,7 @@ enum BillingCadence: string
      *
      * - Monthly: first day of the month.
      * - Quarterly: Jan 1 / Apr 1 / Jul 1 / Oct 1 of the reference year.
+     * - SemiAnnual: Jan 1 / Jul 1 of the reference year.
      * - Annual: Jan 1 of the reference year.
      */
     public function cycleStart(CarbonInterface $reference): Carbon
@@ -47,7 +48,9 @@ enum BillingCadence: string
         return match ($this) {
             self::Monthly => $date->copy()->startOfMonth(),
             self::Quarterly => $this->quarterStart($date),
-            self::SemiAnnual => $date->copy()->startOfYear(),
+            self::SemiAnnual => $date->month <= 6
+                ? Carbon::create($date->year, 1, 1)->startOfDay()
+                : Carbon::create($date->year, 7, 1)->startOfDay(),
             self::Annual => $date->copy()->startOfYear(),
         };
     }

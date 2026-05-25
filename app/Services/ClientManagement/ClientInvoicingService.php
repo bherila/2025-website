@@ -794,13 +794,13 @@ class ClientInvoicingService
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => BillingCadenceLabel::for($agreement->effectiveBillingCadence())." Retainer ({$agreement->monthly_retainer_hours} hours) - ".
+                    'description' => BillingCadenceLabel::for($agreement->effectiveBillingCadence())." Retainer ({$agreement->periodRetainerHours()} hours) - ".
                                     $retainerMonthStart->format('M j, Y').' through '.$retainerMonthEnd->format('M j, Y'),
                     'quantity' => '1',
                     'unit_price' => $agreement->periodRetainerFee(),
                     'line_total' => $agreement->periodRetainerFee(),
                     'line_type' => 'retainer',
-                    'hours' => (float) $agreement->monthly_retainer_hours,
+                    'hours' => $agreement->periodRetainerHours(),
                     'line_date' => $retainerMonthStart,
                     'sort_order' => $sortOrder++,
                 ]);
