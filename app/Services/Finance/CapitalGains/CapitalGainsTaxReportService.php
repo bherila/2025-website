@@ -25,7 +25,7 @@ class CapitalGainsTaxReportService
         $accountIds = $this->accountIdsForUser($userId);
         $adjustments = $this->washSaleEngine->analyze($accountIds, $taxYear);
         $transactions = $this->loadCanonicalTransactions($accountIds, $taxYear);
-        $reportingModesByTaxDocumentId = $this->reportingModesByTaxDocumentId($userId, $taxYear);
+        $reportingModesByDocumentAccountKey = $this->reportingModesByDocumentAccountKey($userId, $taxYear);
 
         return [
             'taxYear' => $taxYear,
@@ -33,7 +33,7 @@ class CapitalGainsTaxReportService
             'transactions' => $transactions,
             'adjustments' => $adjustments,
             'rows' => $this->reportBuilder->buildRows($transactions, $adjustments, $reportingMode),
-            'scheduleDRollup' => $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode, $reportingModesByTaxDocumentId),
+            'scheduleDRollup' => $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode, $reportingModesByDocumentAccountKey),
         ];
     }
 
@@ -155,9 +155,9 @@ class CapitalGainsTaxReportService
     }
 
     /**
-     * @return array<int, string>
+     * @return array<string, string>
      */
-    private function reportingModesByTaxDocumentId(int $userId, int $taxYear): array
+    private function reportingModesByDocumentAccountKey(int $userId, int $taxYear): array
     {
         $rows = DB::table('fin_document_accounts')
             ->join('fin_tax_documents', 'fin_tax_documents.document_id', '=', 'fin_document_accounts.document_id')
@@ -171,14 +171,23 @@ class CapitalGainsTaxReportService
             ])
             ->get([
                 'fin_tax_documents.id as tax_document_id',
+                'fin_document_accounts.account_id',
                 'fin_document_accounts.reporting_mode',
             ]);
 
         $reportingModes = [];
         foreach ($rows as $row) {
-            $reportingModes[(int) $row->tax_document_id] = (string) $row->reporting_mode;
+            $reportingModes[$this->reportingModeLookupKey(
+                (int) $row->tax_document_id,
+                $row->account_id !== null ? (int) $row->account_id : null,
+            )] = (string) $row->reporting_mode;
         }
 
         return $reportingModes;
+    }
+
+    private function reportingModeLookupKey(int $taxDocumentId, ?int $accountId): string
+    {
+        return "doc:{$taxDocumentId}|account:".($accountId !== null ? (string) $accountId : 'none');
     }
 }

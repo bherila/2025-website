@@ -45,33 +45,43 @@ class CapitalGainsTaxReportServiceTest extends TestCase
     public function test_schedule_d_rollup_uses_tax_document_account_reporting_modes(): void
     {
         $user = $this->createUser();
-        $account = $this->makeAccount($user->id);
-        $summaryDocument = $this->makeTaxDocument($user->id);
-        $form8949Document = $this->makeTaxDocument($user->id);
-        $summaryDocument->update(['document_id' => $summaryDocument->id]);
-        $form8949Document->update(['document_id' => $form8949Document->id]);
+        $summaryAccount = $this->makeAccount($user->id, 'Summary Brokerage');
+        $form8949Account = $this->makeAccount($user->id, 'Form 8949 Brokerage');
+        $document = $this->makeTaxDocument($user->id);
 
         DB::table('fin_document_accounts')->insert([
-            'document_id' => $summaryDocument->id,
-            'account_id' => $account->acct_id,
-            'form_type' => '1099_b',
-            'tax_year' => 2025,
-            'payload_kind' => 'dispositions',
-            'reporting_mode' => 'schedule_d_summary',
-            'created_at' => now(),
-            'updated_at' => now(),
+            [
+                'document_id' => $document->document_id,
+                'account_id' => $summaryAccount->acct_id,
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'payload_kind' => 'dispositions',
+                'reporting_mode' => 'schedule_d_summary',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'document_id' => $document->document_id,
+                'account_id' => $form8949Account->acct_id,
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'payload_kind' => 'dispositions',
+                'reporting_mode' => 'form_8949_transactions',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ]);
 
-        $this->makeLot($account, [
+        $this->makeLot($summaryAccount, [
             'lot_source' => '1099b',
-            'tax_document_id' => $summaryDocument->id,
+            'tax_document_id' => $document->id,
             'proceeds' => 125,
             'cost_basis' => 100,
         ]);
-        $this->makeLot($account, [
+        $this->makeLot($form8949Account, [
             'symbol' => 'MSFT',
             'lot_source' => '1099b',
-            'tax_document_id' => $form8949Document->id,
+            'tax_document_id' => $document->id,
             'proceeds' => 140,
             'cost_basis' => 100,
         ]);

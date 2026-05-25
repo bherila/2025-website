@@ -89,14 +89,14 @@ class Form8949ReportBuilder
      *
      * @param  CanonicalCapitalGainTransaction[]  $transactions
      * @param  WashSaleAdjustment[]  $adjustments
-     * @param  array<int, string>  $reportingModesByTaxDocumentId
+     * @param  array<string, string>  $reportingModesByDocumentAccountKey
      * @return ScheduleDRollupInput[]
      */
     public function buildScheduleDRollup(
         array $transactions,
         array $adjustments = [],
         string $reportingMode = 'form_8949_transactions',
-        array $reportingModesByTaxDocumentId = [],
+        array $reportingModesByDocumentAccountKey = [],
     ): array {
         $adjustedIds = $this->adjustedTransactionIds($adjustments);
 
@@ -113,9 +113,9 @@ class Form8949ReportBuilder
 
             $adjustmentAmount = $wsAdjustment !== null ? $wsAdjustment->disallowedLoss : $txn->washSaleDisallowed;
             $effectiveReportingMode = $txn->taxDocumentId !== null
-                ? ($reportingModesByTaxDocumentId[$txn->taxDocumentId] ?? $reportingMode)
+                ? ($reportingModesByDocumentAccountKey[$this->reportingModeLookupKey($txn->taxDocumentId, $txn->accountId)] ?? $reportingMode)
                 : $reportingMode;
-            $documentKey = $txn->taxDocumentId !== null ? "doc:{$txn->taxDocumentId}" : 'global';
+            $documentKey = $txn->taxDocumentId !== null ? $this->reportingModeLookupKey($txn->taxDocumentId, $txn->accountId) : 'global';
             $bucketKey = "{$documentKey}|{$box}|{$effectiveReportingMode}";
 
             if (! isset($buckets[$bucketKey])) {
@@ -135,17 +135,40 @@ class Form8949ReportBuilder
             $buckets[$bucketKey]['count']++;
         }
 
-        $results = [];
+        /** @var array<string, array{box: string, scheduleDLine: string, proceeds: float, basis: float, adjustment: float, count: int}> $lineBuckets */
+        $lineBuckets = [];
         foreach ($buckets as $totals) {
             $box = $totals['box'];
-            $isShortTerm = in_array($box, self::SHORT_TERM_BOXES, true);
             $scheduleDLine = $this->scheduleDLineForBox($box, $totals['reportingMode'], $totals['adjustment']);
+            $lineBucketKey = "{$box}|{$scheduleDLine}";
+
+            if (! isset($lineBuckets[$lineBucketKey])) {
+                $lineBuckets[$lineBucketKey] = [
+                    'box' => $box,
+                    'scheduleDLine' => $scheduleDLine,
+                    'proceeds' => 0.0,
+                    'basis' => 0.0,
+                    'adjustment' => 0.0,
+                    'count' => 0,
+                ];
+            }
+
+            $lineBuckets[$lineBucketKey]['proceeds'] += $totals['proceeds'];
+            $lineBuckets[$lineBucketKey]['basis'] += $totals['basis'];
+            $lineBuckets[$lineBucketKey]['adjustment'] += $totals['adjustment'];
+            $lineBuckets[$lineBucketKey]['count'] += $totals['count'];
+        }
+
+        $results = [];
+        foreach ($lineBuckets as $totals) {
+            $box = $totals['box'];
+            $isShortTerm = in_array($box, self::SHORT_TERM_BOXES, true);
             $netGain = $totals['proceeds'] - $totals['basis'] + $totals['adjustment'];
 
             $results[] = new ScheduleDRollupInput(
                 form8949Box: $box,
                 isShortTerm: $isShortTerm,
-                scheduleDLine: $scheduleDLine,
+                scheduleDLine: $totals['scheduleDLine'],
                 totalProceeds: $totals['proceeds'],
                 totalCostBasis: $totals['basis'],
                 totalAdjustment: $totals['adjustment'],
@@ -157,6 +180,11 @@ class Form8949ReportBuilder
         usort($results, fn (ScheduleDRollupInput $a, ScheduleDRollupInput $b): int => [$a->form8949Box, $a->scheduleDLine] <=> [$b->form8949Box, $b->scheduleDLine]);
 
         return $results;
+    }
+
+    private function reportingModeLookupKey(int $taxDocumentId, ?int $accountId): string
+    {
+        return "doc:{$taxDocumentId}|account:".($accountId !== null ? (string) $accountId : 'none');
     }
 
     // -------------------------------------------------------------------------

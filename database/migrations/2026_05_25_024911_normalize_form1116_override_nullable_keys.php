@@ -13,6 +13,8 @@ return new class extends Migration
             return;
         }
 
+        $this->deleteDuplicateOverrides();
+
         DB::table('fin_tax_document_form1116_overrides')
             ->whereNull('payer_tin')
             ->update(['payer_tin' => '']);
@@ -20,8 +22,6 @@ return new class extends Migration
         DB::table('fin_tax_document_form1116_overrides')
             ->whereNull('account_identifier')
             ->update(['account_identifier' => '']);
-
-        $this->deleteDuplicateOverrides();
 
         Schema::table('fin_tax_document_form1116_overrides', function (Blueprint $table): void {
             $table->dropUnique('fin_1116_overrides_doc_tin_acct_unique');
