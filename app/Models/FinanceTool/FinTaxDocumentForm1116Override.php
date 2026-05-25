@@ -18,8 +18,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int $user_id
  * @property int $document_id References fin_documents.id (unified document table).
- * @property string|null $payer_tin
- * @property string|null $account_identifier
+ * @property string $payer_tin
+ * @property string $account_identifier
  * @property float $gross_foreign_source_income
  * @property string|null $override_reason
  */
@@ -45,9 +45,28 @@ class FinTaxDocumentForm1116Override extends Model
         ];
     }
 
+    public function setPayerTinAttribute(mixed $value): void
+    {
+        $this->attributes['payer_tin'] = $this->nullableKeyValue($value);
+    }
+
+    public function setAccountIdentifierAttribute(mixed $value): void
+    {
+        $this->attributes['account_identifier'] = $this->nullableKeyValue($value);
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    private function nullableKeyValue(mixed $value): string
+    {
+        if (! is_string($value) && ! is_numeric($value)) {
+            return '';
+        }
+
+        return trim((string) $value);
     }
 }

@@ -139,9 +139,9 @@ class FinanceBackfillWashSaleCommand extends BaseFinanceCommand
     }
 
     /**
-     * Build a map keyed by (disposed_date|description|quantity) -> wash-sale amount.
+     * Build a map keyed by (disposed_date|description|quantity) -> ordered wash-sale amounts.
      *
-     * @return array<string, float>
+     * @return array<string, list<float>>
      */
     private function washSaleRowsByKey(FileForTaxDocument $document): array
     {
@@ -188,7 +188,8 @@ class FinanceBackfillWashSaleCommand extends BaseFinanceCommand
                     continue;
                 }
 
-                $byKey[$key] = round(($byKey[$key] ?? 0.0) + $amount, 4);
+                $byKey[$key] ??= [];
+                $byKey[$key][] = round($amount, 4);
             }
         }
 
@@ -210,13 +211,14 @@ class FinanceBackfillWashSaleCommand extends BaseFinanceCommand
     }
 
     /**
-     * @param  array<string, float>  $rowsByKey
+     * @param  array<string, list<float>>  $rowsByKey
      * @return list<array{lot_id: int, wash_sale_disallowed: float}>
      */
     private function backfillDocument(int $documentId, array $rowsByKey, bool $isDryRun): array
     {
         $lots = FinAccountLot::query()
             ->where('document_id', $documentId)
+            ->orderBy('lot_id')
             ->get();
 
         if ($lots->isEmpty()) {
@@ -233,11 +235,11 @@ class FinanceBackfillWashSaleCommand extends BaseFinanceCommand
                     (float) $lot->quantity,
                 );
 
-                if ($key === null || ! isset($rowsByKey[$key])) {
+                if ($key === null || ($rowsByKey[$key] ?? []) === []) {
                     continue;
                 }
 
-                $target = round($rowsByKey[$key], 4);
+                $target = round((float) array_shift($rowsByKey[$key]), 4);
                 $current = round((float) ($lot->wash_sale_disallowed ?? 0.0), 4);
 
                 if (abs($target - $current) <= self::MONEY_TOLERANCE) {

@@ -19,6 +19,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Support\Finance\FederalStandardDeduction;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -1467,6 +1468,34 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertStringContainsString('user override', $facts['form1116']['passiveIncomeSources'][0]['label']);
         // Override removes the "estimated" needs_review nudge.
         $this->assertTrue($facts['form1116']['passiveIncomeSources'][0]['isReviewed']);
+    }
+
+    public function test_form1116_doc_wide_override_is_unique_when_nullable_keys_are_used(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 1500],
+        ]);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => null,
+            'account_identifier' => null,
+            'gross_foreign_source_income' => 9326,
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => null,
+            'account_identifier' => null,
+            'gross_foreign_source_income' => 10000,
+        ]);
     }
 
     public function test_form1116_user_override_matches_by_payer_tin_and_account_identifier(): void

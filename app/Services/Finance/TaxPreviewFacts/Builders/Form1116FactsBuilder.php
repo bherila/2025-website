@@ -546,16 +546,16 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             ->where('document_id', $documentId)
             ->when(
                 $payerTin !== null,
-                fn ($q) => $q->where(fn ($inner) => $inner->where('payer_tin', $payerTin)->orWhereNull('payer_tin')),
-                fn ($q) => $q->whereNull('payer_tin'),
+                fn ($q) => $q->where(fn ($inner) => $inner->where('payer_tin', $payerTin)->orWhereNull('payer_tin')->orWhere('payer_tin', '')),
+                fn ($q) => $q->where(fn ($inner) => $inner->whereNull('payer_tin')->orWhere('payer_tin', '')),
             )
             ->when(
                 $accountIdentifier !== null,
-                fn ($q) => $q->where(fn ($inner) => $inner->where('account_identifier', $accountIdentifier)->orWhereNull('account_identifier')),
-                fn ($q) => $q->whereNull('account_identifier'),
+                fn ($q) => $q->where(fn ($inner) => $inner->where('account_identifier', $accountIdentifier)->orWhereNull('account_identifier')->orWhere('account_identifier', '')),
+                fn ($q) => $q->where(fn ($inner) => $inner->whereNull('account_identifier')->orWhere('account_identifier', '')),
             )
-            ->orderByRaw('CASE WHEN payer_tin IS NULL THEN 1 ELSE 0 END')
-            ->orderByRaw('CASE WHEN account_identifier IS NULL THEN 1 ELSE 0 END')
+            ->orderByRaw("CASE WHEN payer_tin IS NULL OR payer_tin = '' THEN 1 ELSE 0 END")
+            ->orderByRaw("CASE WHEN account_identifier IS NULL OR account_identifier = '' THEN 1 ELSE 0 END")
             ->first();
     }
 

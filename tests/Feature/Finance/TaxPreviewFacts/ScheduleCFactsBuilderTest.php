@@ -112,6 +112,12 @@ class ScheduleCFactsBuilderTest extends TestCase
         $this->assertSame(100.0, $scheduleC['returnsAndAllowancesTotal']);
         $this->assertSame(0.0, $scheduleC['expensesBeforeHomeOffice']);
         $this->assertSame(4900.0, $scheduleC['netProfit']);
+        $this->assertSame([
+            'q1' => 0.0,
+            'q2' => 0.0,
+            'q3' => 0.0,
+            'q4' => 4900.0,
+        ], $scheduleC['netProfitCumulativeByQuarter']);
     }
 
     private function createAccount(int $userId): FinAccounts
