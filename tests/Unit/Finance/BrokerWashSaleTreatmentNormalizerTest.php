@@ -80,6 +80,22 @@ class BrokerWashSaleTreatmentNormalizerTest extends TestCase
             BrokerWashSaleTreatmentNormalizer::TREATMENT_GROSS_OF_WASH_SALES,
             $normalizer->normalizeTreatment('separate W adjustment'),
         );
+        $this->assertSame(
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_GROSS_OF_WASH_SALES,
+            $normalizer->normalizeTreatment('gain_loss_gross_of_wash_sales'),
+        );
+        $this->assertSame(
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
+            $normalizer->normalizeTreatment('gain_loss_already_reflects_wash_sales_in_basis'),
+        );
+        $this->assertSame(
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_NET_OF_WASH_SALES,
+            $normalizer->normalizeTreatment('net_gain_loss_already_includes_wash_sale_column'),
+        );
+        $this->assertSame(
+            BrokerWashSaleTreatmentNormalizer::TREATMENT_NO_WASH_SALE_AMOUNT,
+            $normalizer->normalizeTreatment('no_wash_sale_amount_in_source_summary'),
+        );
     }
 
     private function normalizer(): BrokerWashSaleTreatmentNormalizer

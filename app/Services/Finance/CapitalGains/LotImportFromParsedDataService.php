@@ -15,6 +15,8 @@ class LotImportFromParsedDataService
 {
     private const float MONEY_TOLERANCE = 0.02;
 
+    private const int INSERT_CHUNK_SIZE = 500;
+
     public function __construct(
         private readonly BrokerWashSaleTreatmentNormalizer $washSaleNormalizer,
         private readonly WashSaleAdjustmentSynthesizer $washSaleAdjustmentSynthesizer,
@@ -112,22 +114,25 @@ class LotImportFromParsedDataService
                 }
 
                 $warnings = array_merge($warnings, $this->washSaleTotalWarnings($entry, $parsedData, $transactions));
-                $defaultWashSaleTreatment = $this->washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+                $defaultWashSaleTreatment = $this->washSaleTreatmentForEntry($taxDocument, $parsedData);
                 $transactions = $this->washSaleAdjustmentSynthesizer->appendSummaryWashSaleAdjustmentTransactions(
                     $transactions,
                     $parsedData,
                     $defaultWashSaleTreatment,
                 );
 
-                $importedLotIds = $this->importTransactionsToLots(
-                    accountId: $accountId,
-                    transactions: $transactions,
-                    documentId: (int) $taxDocument->document_id,
-                    defaultWashSaleTreatment: $defaultWashSaleTreatment,
-                    dryRun: $dryRun,
-                );
-                $insertedCount += $dryRun ? $this->importableTransactionCount($transactions) : count($importedLotIds);
-                $lotIds = array_merge($lotIds, $importedLotIds);
+                $insertedCount += $dryRun
+                    ? $this->importableTransactionCount($transactions)
+                    : $this->bulkInsertTransactionsToLots(
+                        accountId: $accountId,
+                        transactions: $transactions,
+                        documentId: (int) $taxDocument->document_id,
+                        defaultWashSaleTreatment: $defaultWashSaleTreatment,
+                    );
+            }
+
+            if (! $dryRun) {
+                $lotIds = $this->rebuiltBrokerLotIds((int) $taxDocument->document_id);
             }
 
             return new LotImportRebuildResult(
@@ -335,6 +340,21 @@ class LotImportFromParsedDataService
     }
 
     /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function washSaleTreatmentForEntry(FileForTaxDocument $taxDocument, array $parsedData): ?string
+    {
+        $parsedTreatment = $this->washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+        if ($parsedTreatment !== null) {
+            return $parsedTreatment;
+        }
+
+        $documentTreatment = $this->washSaleNormalizer->normalizeTreatment($taxDocument->wash_sale_treatment ?? null);
+
+        return $documentTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN ? null : $documentTreatment;
+    }
+
+    /**
      * @param  array<int, mixed>  $transactions
      * @return list<int>
      */
@@ -358,72 +378,17 @@ class LotImportFromParsedDataService
                 continue;
             }
 
-            $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
-            $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
-            $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
-            $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? $tx['disposed_date'] ?? null);
-            $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
-            $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
-            $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
-            $washSaleDisallowed = $this->parseWashSaleDisallowed($tx);
-            $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
-            $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
-            $form8949Box = null;
-            if (is_string($tx['form_8949_box'] ?? null)) {
-                $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
-                $form8949Box = in_array($candidateBox, WashSaleAdjustmentSynthesizer::FORM_8949_BOXES, true) ? $candidateBox : null;
-            }
-
-            $isCovered = $this->resolveIsCovered($tx, $form8949Box);
-            $purchaseDateRaw = $tx['purchase_date'] ?? $tx['acquired_date'] ?? null;
-            $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
-            $isShortTerm = $this->isShortTerm($tx, $form8949Box);
-
-            if ($quantity === null || $saleDate === null || $proceeds === null || $costBasis === null) {
+            $row = $this->lotInsertRow($accountId, $tx, $documentId, $defaultWashSaleTreatment, $now);
+            if ($row === null) {
                 continue;
             }
 
-            $washSaleAmounts = $this->washSaleNormalizer->normalizeAmounts(
-                proceeds: $proceeds,
-                costBasis: $costBasis,
-                reportedGainLoss: $realizedGainLoss,
-                washSaleDisallowed: $washSaleDisallowed,
-                treatment: $tx['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
-            );
-            $reconciliationNotes = BrokerWashSaleTreatmentNormalizer::appendReconciliationNotes(
-                $purchaseDateNormalized === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
-                is_string($tx['reconciliation_notes'] ?? null) ? $tx['reconciliation_notes'] : null,
-                $washSaleAmounts['note'],
-            );
-
-            $lot = FinAccountLot::create([
-                'acct_id' => $accountId,
-                'symbol' => $symbol ?? $description,
-                'description' => $description,
-                'cusip' => $cusip,
-                'quantity' => $quantity,
-                'purchase_date' => $purchaseDateNormalized ?? $saleDate,
-                'cost_basis' => $costBasis,
-                'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
-                'sale_date' => $saleDate,
-                'proceeds' => $proceeds,
-                'realized_gain_loss' => $washSaleAmounts['realized_gain_loss'],
-                'is_short_term' => $isShortTerm,
-                'lot_source' => FinAccountLot::SOURCE_1099B,
-                'source' => $this->sourceForTransaction($tx),
-                'document_id' => $documentId,
-                'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
-                'form_8949_box' => $form8949Box,
-                'is_covered' => $isCovered,
-                'accrued_market_discount' => $accruedMarketDiscount,
-                'wash_sale_disallowed' => $washSaleAmounts['wash_sale_disallowed'],
-                'reconciliation_notes' => $reconciliationNotes,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            $lot = FinAccountLot::create($row);
 
             if (! (bool) ($tx['skip_transaction_matching'] ?? false)) {
-                $buyItem = $purchaseDateNormalized !== null ? $this->lotMatcher->matchingBuyTransaction($lot, $usedTransactionIds) : null;
+                $buyItem = $this->normalizeDateOrNull($tx['purchase_date'] ?? $tx['acquired_date'] ?? null) !== null
+                    ? $this->lotMatcher->matchingBuyTransaction($lot, $usedTransactionIds)
+                    : null;
                 if ($buyItem instanceof FinAccountLineItems) {
                     $usedTransactionIds[] = (int) $buyItem->t_id;
                 }
@@ -445,6 +410,130 @@ class LotImportFromParsedDataService
         }
 
         return $lotIds;
+    }
+
+    /**
+     * @param  array<int, mixed>  $transactions
+     */
+    private function bulkInsertTransactionsToLots(
+        int $accountId,
+        array $transactions,
+        int $documentId,
+        mixed $defaultWashSaleTreatment,
+    ): int {
+        $now = now()->toDateTimeString();
+        $rows = [];
+
+        foreach ($transactions as $tx) {
+            if (! is_array($tx)) {
+                continue;
+            }
+
+            $row = $this->lotInsertRow($accountId, $tx, $documentId, $defaultWashSaleTreatment, $now);
+            if ($row !== null) {
+                $rows[] = $row;
+            }
+        }
+
+        foreach (array_chunk($rows, self::INSERT_CHUNK_SIZE) as $chunk) {
+            FinAccountLot::query()->insert($chunk);
+        }
+
+        return count($rows);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function rebuiltBrokerLotIds(int $documentId): array
+    {
+        return FinAccountLot::query()
+            ->where('document_id', $documentId)
+            ->where('lot_origin', FinAccountLot::ORIGIN_1099B_DISPOSITION)
+            ->whereIn('source', [
+                FinAccountLot::SOURCE_BROKER_1099B,
+                FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT,
+            ])
+            ->orderBy('lot_id')
+            ->pluck('lot_id')
+            ->map(static fn (int|string $lotId): int => (int) $lotId)
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $tx
+     * @return array<string, mixed>|null
+     */
+    private function lotInsertRow(
+        int $accountId,
+        array $tx,
+        int $documentId,
+        mixed $defaultWashSaleTreatment,
+        string $now,
+    ): ?array {
+        $symbol = is_string($tx['symbol'] ?? null) && trim($tx['symbol']) !== '' ? trim($tx['symbol']) : null;
+        $description = is_string($tx['description'] ?? null) ? trim($tx['description']) : ($symbol ?? 'Unknown');
+        $quantity = is_numeric($tx['quantity'] ?? null) ? (float) $tx['quantity'] : null;
+        $saleDate = $this->normalizeDateOrNull($tx['sale_date'] ?? $tx['disposed_date'] ?? null);
+        $proceeds = is_numeric($tx['proceeds'] ?? null) ? (float) $tx['proceeds'] : null;
+        $costBasis = is_numeric($tx['cost_basis'] ?? null) ? (float) $tx['cost_basis'] : null;
+        $realizedGainLoss = is_numeric($tx['realized_gain_loss'] ?? null) ? (float) $tx['realized_gain_loss'] : null;
+        $washSaleDisallowed = $this->parseWashSaleDisallowed($tx);
+        $accruedMarketDiscount = is_numeric($tx['accrued_market_discount'] ?? null) ? (float) $tx['accrued_market_discount'] : null;
+        $cusip = is_string($tx['cusip'] ?? null) && trim($tx['cusip']) !== '' ? trim($tx['cusip']) : null;
+        $form8949Box = null;
+        if (is_string($tx['form_8949_box'] ?? null)) {
+            $candidateBox = strtoupper(trim((string) $tx['form_8949_box']));
+            $form8949Box = in_array($candidateBox, WashSaleAdjustmentSynthesizer::FORM_8949_BOXES, true) ? $candidateBox : null;
+        }
+
+        $isCovered = $this->resolveIsCovered($tx, $form8949Box);
+        $purchaseDateRaw = $tx['purchase_date'] ?? $tx['acquired_date'] ?? null;
+        $purchaseDateNormalized = $this->normalizeDateOrNull($purchaseDateRaw);
+        $isShortTerm = $this->isShortTerm($tx, $form8949Box);
+
+        if ($quantity === null || $saleDate === null || $proceeds === null || $costBasis === null) {
+            return null;
+        }
+
+        $washSaleAmounts = $this->washSaleNormalizer->normalizeAmounts(
+            proceeds: $proceeds,
+            costBasis: $costBasis,
+            reportedGainLoss: $realizedGainLoss,
+            washSaleDisallowed: $washSaleDisallowed,
+            treatment: $tx['wash_sale_treatment'] ?? $defaultWashSaleTreatment,
+        );
+        $reconciliationNotes = BrokerWashSaleTreatmentNormalizer::appendReconciliationNotes(
+            $purchaseDateNormalized === null ? 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.' : null,
+            is_string($tx['reconciliation_notes'] ?? null) ? $tx['reconciliation_notes'] : null,
+            $washSaleAmounts['note'],
+        );
+
+        return [
+            'acct_id' => $accountId,
+            'symbol' => $symbol ?? $description,
+            'description' => $description,
+            'cusip' => $cusip,
+            'quantity' => $quantity,
+            'purchase_date' => $purchaseDateNormalized ?? $saleDate,
+            'cost_basis' => $costBasis,
+            'cost_per_unit' => $quantity > 0 ? round($costBasis / $quantity, 8) : null,
+            'sale_date' => $saleDate,
+            'proceeds' => $proceeds,
+            'realized_gain_loss' => $washSaleAmounts['realized_gain_loss'],
+            'is_short_term' => $isShortTerm,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => $this->sourceForTransaction($tx),
+            'document_id' => $documentId,
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
+            'form_8949_box' => $form8949Box,
+            'is_covered' => $isCovered,
+            'accrued_market_discount' => $accruedMarketDiscount,
+            'wash_sale_disallowed' => $washSaleAmounts['wash_sale_disallowed'],
+            'reconciliation_notes' => $reconciliationNotes,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
     }
 
     /**

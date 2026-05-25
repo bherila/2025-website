@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\BrokerWashSaleTreatmentNormalizer;
 use App\Services\Finance\CapitalGains\LotReconciliationService;
 use App\Services\Finance\DocumentIngestionService;
 use Tests\TestCase;
@@ -224,6 +225,41 @@ class LotReconciliationServiceTest extends TestCase
 
         $this->assertSame('ok', $postRebuildReport['status']);
         $this->assertSame([], $postRebuildReport['diagnostics']);
+    }
+
+    public function test_document_level_wash_sale_treatment_normalizes_reconciliation_totals(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $parsedData = $this->parsedData([
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'realized_gain_loss' => -200,
+            'wash_sale_disallowed' => 50,
+        ], [
+            'total_proceeds' => 1000,
+            'total_cost_basis' => 1200,
+            'total_wash_sale_disallowed' => 50,
+            'total_realized_gain_loss' => -200,
+        ]);
+        $document = $this->makeBrokerDocument($user->id, $account, $parsedData, 'doc-level-wash-treatment.pdf');
+        $document->update(['wash_sale_treatment' => 'gain_loss_already_reflects_wash_sales_in_basis']);
+        $this->makeLot($account, $document, [
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'realized_gain_loss' => -200,
+            'wash_sale_disallowed' => 0,
+        ]);
+
+        $report = app(LotReconciliationService::class)->reconcileTaxDocument($document->id)->toArray();
+
+        $this->assertSame('ok', $report['status']);
+        $this->assertSame([], $report['diagnostics']);
+        $this->assertSame(0.0, $report['entries'][0]['summary']['parsed_totals']['wash_sale_disallowed']);
+        $this->assertSame(
+            [BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS],
+            $report['entries'][0]['summary']['wash_sale_treatments'],
+        );
     }
 
     private function makeAccount(int $userId, string $name = 'Brokerage', ?string $number = '1234'): FinAccounts

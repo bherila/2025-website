@@ -166,7 +166,7 @@ class LotReconciliationService
 
         $parsedData = $this->arrayValue($entry['parsed_data'] ?? null);
         $parsedTransactions = $this->parsedTransactions($parsedData);
-        $defaultWashSaleTreatment = $this->washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+        $defaultWashSaleTreatment = $this->washSaleTreatmentForEntry($taxDocument, $parsedData);
         $syntheticTransactions = $this->washSaleAdjustmentSynthesizer->summaryWashSaleAdjustmentTransactions(
             $parsedTransactions,
             $parsedData,
@@ -179,7 +179,7 @@ class LotReconciliationService
         $deltas = $this->deltas($parsedTotals, $lotTotals);
         $parsedBoxes = $this->parsedForm8949Boxes($parsedData, $parsedTransactions);
         $lotBoxes = $this->lotForm8949Boxes($entryLots);
-        $washSaleTreatments = $this->washSaleTreatments($parsedData, $parsedTransactions);
+        $washSaleTreatments = $this->washSaleTreatments($taxDocument, $parsedData, $parsedTransactions);
         $syntheticLotCount = $this->syntheticWashSaleLotCount($entryLots);
 
         $diagnostics = $this->entryDiagnostics(
@@ -463,6 +463,21 @@ class LotReconciliationService
 
     /**
      * @param  array<string, mixed>  $parsedData
+     */
+    private function washSaleTreatmentForEntry(FileForTaxDocument $taxDocument, array $parsedData): ?string
+    {
+        $parsedTreatment = $this->washSaleAdjustmentSynthesizer->washSaleTreatmentFromParsedData($parsedData);
+        if ($parsedTreatment !== null) {
+            return $parsedTreatment;
+        }
+
+        $documentTreatment = $this->washSaleTreatmentNormalizer->normalizeTreatment($taxDocument->wash_sale_treatment ?? null);
+
+        return $documentTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN ? null : $documentTreatment;
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
      * @param  array<int, array<string, mixed>>  $transactions
      * @return array<string, float>
      */
@@ -470,11 +485,14 @@ class LotReconciliationService
     {
         $transactionTotals = $this->transactionTotals($transactions, $defaultWashSaleTreatment);
         $summaryTotals = $this->summaryTotals($parsedData);
+        $normalizedTreatment = $this->washSaleTreatmentNormalizer->normalizeTreatment($defaultWashSaleTreatment);
 
         return [
             'proceeds' => $summaryTotals['proceeds'] ?? $transactionTotals['proceeds'],
             'cost_basis' => $summaryTotals['cost_basis'] ?? $transactionTotals['cost_basis'],
-            'wash_sale_disallowed' => $summaryTotals['wash_sale_disallowed'] ?? $transactionTotals['wash_sale_disallowed'],
+            'wash_sale_disallowed' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS
+                ? $transactionTotals['wash_sale_disallowed']
+                : ($summaryTotals['wash_sale_disallowed'] ?? $transactionTotals['wash_sale_disallowed']),
             'realized_gain_loss' => $summaryTotals['realized_gain_loss'] ?? $transactionTotals['realized_gain_loss'],
         ];
     }
@@ -669,13 +687,14 @@ class LotReconciliationService
      * @param  array<int, array<string, mixed>>  $transactions
      * @return list<string>
      */
-    private function washSaleTreatments(array $parsedData, array $transactions): array
+    private function washSaleTreatments(FileForTaxDocument $taxDocument, array $parsedData, array $transactions): array
     {
         $treatments = [];
         foreach ([
             $parsedData['wash_sale_treatment'] ?? null,
             $parsedData['wash_sale_basis_treatment'] ?? null,
             $parsedData['extraction_notes']['wash_sale_treatment'] ?? null,
+            $taxDocument->wash_sale_treatment ?? null,
         ] as $candidate) {
             if ($candidate !== null) {
                 $treatments[$this->washSaleTreatmentNormalizer->normalizeTreatment($candidate)] = true;
