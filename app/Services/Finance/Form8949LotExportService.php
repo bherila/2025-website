@@ -14,6 +14,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class Form8949LotExportService
 {
+    private const VARIOUS_DATE_ACQUIRED_NOTE = 'Date acquired reported as Various';
+
     /**
      * @param  array<string, mixed>  $validated
      * @return Form8949ExportLot[]
@@ -137,11 +139,24 @@ class Form8949LotExportService
 
     private function dateAcquired(FinAccountLot $lot): string
     {
-        if (is_string($lot->reconciliation_notes) && str_contains($lot->reconciliation_notes, 'Date acquired reported as Various')) {
+        if ($this->hasVariousDateAcquiredPlaceholder($lot)) {
             return 'various';
         }
 
         return $lot->purchase_date->format('Y-m-d');
+    }
+
+    private function hasVariousDateAcquiredPlaceholder(FinAccountLot $lot): bool
+    {
+        if (! is_string($lot->reconciliation_notes) || ! str_contains($lot->reconciliation_notes, self::VARIOUS_DATE_ACQUIRED_NOTE)) {
+            return false;
+        }
+
+        if ($lot->sale_date === null) {
+            return false;
+        }
+
+        return $lot->purchase_date->format('Y-m-d') === $lot->sale_date->format('Y-m-d');
     }
 
     /**

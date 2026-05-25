@@ -84,6 +84,41 @@ class Form8949LotExportTest extends TestCase
         );
     }
 
+    public function test_txf_export_uses_corrected_purchase_date_when_various_note_is_stale(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Fidelity Taxable');
+        $document = $this->makeTaxDocument($user->id);
+        $link = TaxDocumentAccount::createLink($document->id, $account->acct_id, '1099_b', 2025, isReviewed: true);
+        $this->makeLot($account, $document, [
+            'description' => 'Corrected mutual fund lot',
+            'purchase_date' => '2024-12-31',
+            'sale_date' => '2025-01-02',
+            'form_8949_box' => 'A',
+            'is_short_term' => true,
+            'is_covered' => true,
+            'cost_basis' => 1772.32,
+            'proceeds' => 2477.87,
+            'wash_sale_disallowed' => 0,
+            'reconciliation_notes' => 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder.',
+        ]);
+
+        $response = $this->actingAs($user)->post('/api/finance/lots/export-txf', [
+            'source' => 'database',
+            'scope' => 'account_document',
+            'account_id' => $account->acct_id,
+            'tax_document_id' => $document->id,
+            'account_link_id' => $link->id,
+        ]);
+
+        $response->assertOk();
+        $this->assertStringContainsString(
+            "TD\r\nN321\r\nC1\r\nL1\r\nPCorrected mutual fund lot\r\nD12/31/2024\r\nD01/02/2025\r\n$1772.32\r\n$2477.87\r\n$\r\n^\r\n",
+            $response->getContent(),
+        );
+        $this->assertStringNotContainsString('Dvarious', (string) $response->getContent());
+    }
+
     public function test_account_document_export_uses_matching_payer_data_for_account_link(): void
     {
         $user = $this->createUser();
