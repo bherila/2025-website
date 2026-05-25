@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { InvoiceKindBadge, InvoiceStatusBadge } from '@/client-management/components/admin/ClientBadges'
 import DateInput from '@/client-management/components/admin/DateInput'
+import type { BillingCadence } from '@/client-management/types/client-agreement'
 import type { Agreement } from '@/client-management/types/common'
+import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -232,7 +234,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
               <SelectItem value="all">All agreements</SelectItem>
               {agreements.map((agreement) => (
                 <SelectItem key={agreement.id} value={String(agreement.id)}>
-                  {agreement.billing_cadence ?? 'monthly'} from {formatDate(agreement.active_date)}
+                  {formatBillingCadence((agreement.billing_cadence ?? 'monthly') as BillingCadence)} from {formatDate(agreement.active_date)}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,3 +1,5 @@
+import type { BillingCadence } from '@/client-management/types/client-agreement'
+import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
 import { Badge } from '@/components/ui/badge'
 
 interface BadgeProps {
@@ -11,12 +13,20 @@ function humanize(value: string): string {
     .join(' ')
 }
 
+const BILLING_CADENCES = new Set<BillingCadence>(['monthly', 'quarterly', 'semi_annual', 'annual'])
+
+function isBillingCadence(value: string): value is BillingCadence {
+  return BILLING_CADENCES.has(value as BillingCadence)
+}
+
 export function CadenceBadge({ value }: BadgeProps) {
   if (!value) {
     return <Badge variant="outline">No cadence</Badge>
   }
 
-  return <Badge variant={value === 'monthly' ? 'secondary' : 'default'}>{humanize(value)}</Badge>
+  const label = isBillingCadence(value) ? formatBillingCadence(value) : humanize(value)
+
+  return <Badge variant={value === 'monthly' ? 'secondary' : 'default'}>{label}</Badge>
 }
 
 export function InvoiceKindBadge({ value }: BadgeProps) {

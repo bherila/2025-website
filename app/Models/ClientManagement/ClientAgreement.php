@@ -183,6 +183,12 @@ class ClientAgreement extends Model
         }
     }
 
+    /**
+     * Retainer fee for one full billing cycle. Prefers the period-level
+     * override `retainer_fee` when present, otherwise multiplies
+     * `monthly_retainer_fee` by the cycle's month count. Callers should treat
+     * this as the authoritative per-cycle fee for invoicing.
+     */
     public function periodRetainerFee(): float
     {
         if ($this->retainer_fee !== null) {
@@ -192,6 +198,16 @@ class ClientAgreement extends Model
         return (float) $this->monthly_retainer_fee * $this->effectiveBillingCadence()->monthsInCycle();
     }
 
+    /**
+     * Retainer hours included in one full billing cycle. Prefers the
+     * period-level override `retainer_hours` when present, otherwise
+     * multiplies `monthly_retainer_hours` by the cycle's month count.
+     *
+     * Note: `retainer_hours` is stored as `decimal(10,4)` (matching
+     * `initial_rollover_hours`) for sub-hour precision, while
+     * `monthly_retainer_hours` is `decimal(10,2)`. The extra precision
+     * matters for prorated entries.
+     */
     public function periodRetainerHours(): float
     {
         if ($this->retainer_hours !== null) {

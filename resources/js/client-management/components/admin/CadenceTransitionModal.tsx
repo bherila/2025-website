@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 
 import CurrencyInput from '@/client-management/components/admin/CurrencyInput'
 import DateInput from '@/client-management/components/admin/DateInput'
+import type { BillingCadence } from '@/client-management/types/client-agreement'
 import type { Agreement } from '@/client-management/types/common'
+import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -269,7 +271,7 @@ export default function CadenceTransitionModal({
               {preview ? (
                 <div className="space-y-2">
                   <div><strong>Effective:</strong> {preview.effective_date}</div>
-                  <div><strong>Successor cadence:</strong> {preview.successor_terms.billing_cadence}</div>
+                  <div><strong>Successor cadence:</strong> {formatBillingCadence(preview.successor_terms.billing_cadence as BillingCadence)}</div>
                   <div><strong>Carry rollover:</strong> {preview.carried_rollover_hours.toFixed(2)} hours</div>
                 </div>
               ) : (

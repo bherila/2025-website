@@ -66,12 +66,10 @@ class ClientAgreementApiController extends Controller
                 'numeric',
                 'min:0',
                 function ($attribute, $value, $fail) use ($request, $agreement) {
-                    $retainerHours = $request->has('monthly_retainer_hours')
-                        ? $request->input('monthly_retainer_hours')
-                        : $agreement->monthly_retainer_hours;
+                    $retainerHours = $this->retainerHoursForThresholdValidation($request, $agreement);
 
                     if ($value > $retainerHours) {
-                        $fail("The catch-up threshold hours cannot exceed monthly retainer hours ({$retainerHours}).");
+                        $fail("The catch-up threshold hours cannot exceed period retainer hours ({$retainerHours}).");
                     }
                 },
             ],
@@ -89,6 +87,22 @@ class ClientAgreementApiController extends Controller
         if ($cadence === BillingCadence::Monthly && (($validated['retainer_fee'] ?? null) !== null || ($validated['retainer_hours'] ?? null) !== null)) {
             return response()->json([
                 'error' => 'Monthly agreements cannot set retainer_fee or retainer_hours.',
+            ], 422);
+        }
+
+        // Mutual exclusivity: callers must choose either the period-level
+        // override (retainer_fee/retainer_hours) or the monthly-equivalent
+        // (monthly_retainer_fee/monthly_retainer_hours) in a single PATCH,
+        // not both — period values otherwise silently override the monthly
+        // ones inside periodRetainerFee()/periodRetainerHours().
+        if ($request->has('retainer_fee') && $request->has('monthly_retainer_fee')) {
+            return response()->json([
+                'error' => 'Send either retainer_fee or monthly_retainer_fee in a single request, not both.',
+            ], 422);
+        }
+        if ($request->has('retainer_hours') && $request->has('monthly_retainer_hours')) {
+            return response()->json([
+                'error' => 'Send either retainer_hours or monthly_retainer_hours in a single request, not both.',
             ], 422);
         }
 
@@ -203,5 +217,33 @@ class ClientAgreementApiController extends Controller
         return response()->json([
             'success' => true,
         ]);
+    }
+
+    private function retainerHoursForThresholdValidation(Request $request, ClientAgreement $agreement): float
+    {
+        $cadence = BillingCadence::tryFrom((string) $request->input(
+            'billing_cadence',
+            $agreement->effectiveBillingCadence()->value,
+        )) ?? $agreement->effectiveBillingCadence();
+
+        $monthlyRetainerHours = (float) (
+            $request->has('monthly_retainer_hours')
+                ? $request->input('monthly_retainer_hours')
+                : $agreement->monthly_retainer_hours
+        );
+
+        if ($cadence !== BillingCadence::Monthly) {
+            if ($request->has('retainer_hours')) {
+                $retainerHours = $request->input('retainer_hours');
+
+                if ($retainerHours !== null && $retainerHours !== '') {
+                    return (float) $retainerHours;
+                }
+            } elseif ($agreement->retainer_hours !== null) {
+                return (float) $agreement->retainer_hours;
+            }
+        }
+
+        return $monthlyRetainerHours * $cadence->monthsInCycle();
     }
 }

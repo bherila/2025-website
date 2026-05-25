@@ -268,6 +268,13 @@ class ClientInvoice extends Model
     /**
      * Return a canonical detailed array representation for API responses.
      * Controllers should call this to keep serialization consistent.
+     *
+     * Note: the `agreement` block is a live passthrough of the related
+     * ClientAgreement — it reflects current agreement terms, not a snapshot of
+     * the terms in force when the invoice was issued. Billing-stable values
+     * (rates, hours, totals as of issuance) live on the `line_items` rows
+     * (`unit_price`, `line_total`, `hours`); the `agreement` block is for
+     * display context only.
      */
     public function toDetailedArray(): array
     {
