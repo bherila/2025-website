@@ -92,6 +92,22 @@ class ClientAgreementApiController extends Controller
             ], 422);
         }
 
+        // Mutual exclusivity: callers must choose either the period-level
+        // override (retainer_fee/retainer_hours) or the monthly-equivalent
+        // (monthly_retainer_fee/monthly_retainer_hours) in a single PATCH,
+        // not both — period values otherwise silently override the monthly
+        // ones inside periodRetainerFee()/periodRetainerHours().
+        if ($request->has('retainer_fee') && $request->has('monthly_retainer_fee')) {
+            return response()->json([
+                'error' => 'Send either retainer_fee or monthly_retainer_fee in a single request, not both.',
+            ], 422);
+        }
+        if ($request->has('retainer_hours') && $request->has('monthly_retainer_hours')) {
+            return response()->json([
+                'error' => 'Send either retainer_hours or monthly_retainer_hours in a single request, not both.',
+            ], 422);
+        }
+
         // Clear stale period retainer overrides when transitioning to monthly
         if ($cadence === BillingCadence::Monthly) {
             $validated['retainer_fee'] = null;

@@ -59,6 +59,8 @@ class PreviewAgreementTransitionRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->validateRetainerMutualExclusivity($validator);
+
             if ($validator->errors()->isNotEmpty() || ! $this->filled('effective_date')) {
                 return;
             }
@@ -77,6 +79,28 @@ class PreviewAgreementTransitionRequest extends FormRequest
                 $validator->errors()->add('effective_date', 'Effective date must be on or before the current agreement termination date.');
             }
         });
+    }
+
+    /**
+     * Reject combinations where both the period-level retainer override and
+     * the monthly-equivalent are sent in the same request. periodRetainer*()
+     * silently prefers the period value over the monthly one, so accepting
+     * both would hide caller intent.
+     */
+    private function validateRetainerMutualExclusivity(Validator $validator): void
+    {
+        if ($this->has('retainer_fee') && $this->has('monthly_retainer_fee')) {
+            $validator->errors()->add('retainer_fee', 'Send either retainer_fee or monthly_retainer_fee in a single request, not both.');
+        }
+        if ($this->has('retainer_hours') && $this->has('monthly_retainer_hours')) {
+            $validator->errors()->add('retainer_hours', 'Send either retainer_hours or monthly_retainer_hours in a single request, not both.');
+        }
+        if ($this->has('successor_terms.retainer_fee') && $this->has('successor_terms.monthly_retainer_fee')) {
+            $validator->errors()->add('successor_terms.retainer_fee', 'Send either successor_terms.retainer_fee or successor_terms.monthly_retainer_fee, not both.');
+        }
+        if ($this->has('successor_terms.retainer_hours') && $this->has('successor_terms.monthly_retainer_hours')) {
+            $validator->errors()->add('successor_terms.retainer_hours', 'Send either successor_terms.retainer_hours or successor_terms.monthly_retainer_hours, not both.');
+        }
     }
 
     /**

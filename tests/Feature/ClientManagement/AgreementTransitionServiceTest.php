@@ -108,6 +108,33 @@ class AgreementTransitionServiceTest extends TestCase
         $this->assertSame(4.0, (float) $activity->payload['carried_rollover_hours']);
     }
 
+    public function test_transitioning_to_monthly_clears_period_retainer_overrides_on_successor(): void
+    {
+        $this->agreement->update([
+            'billing_cadence' => BillingCadence::SemiAnnual->value,
+            'retainer_fee' => 12000,
+            'retainer_hours' => 240,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->postJson($this->transitionUrl(), [
+                'effective_date' => '2026-04-01',
+                'billing_cadence' => BillingCadence::Monthly->value,
+                'carry_rollover' => false,
+                'recurring_item_handling' => 'skip',
+            ])
+            ->assertCreated();
+
+        $successor = ClientAgreement::query()
+            ->where('client_company_id', $this->company->id)
+            ->where('id', '!=', $this->agreement->id)
+            ->firstOrFail();
+
+        $this->assertSame(BillingCadence::Monthly, $successor->billing_cadence);
+        $this->assertNull($successor->retainer_fee, 'retainer_fee must be cleared on monthly successor');
+        $this->assertNull($successor->retainer_hours, 'retainer_hours must be cleared on monthly successor');
+    }
+
     public function test_transition_end_mode_ends_outgoing_recurring_items_without_cloning(): void
     {
         $item = ClientAgreementRecurringItem::create([
