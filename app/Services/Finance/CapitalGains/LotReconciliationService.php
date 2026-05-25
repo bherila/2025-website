@@ -486,6 +486,8 @@ class LotReconciliationService
         $transactionTotals = $this->transactionTotals($transactions, $defaultWashSaleTreatment);
         $summaryTotals = $this->summaryTotals($parsedData);
         $normalizedTreatment = $this->washSaleTreatmentNormalizer->normalizeTreatment($defaultWashSaleTreatment);
+        $useSummaryRealizedGainLoss = $transactions === []
+            || $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN;
 
         return [
             'proceeds' => $summaryTotals['proceeds'] ?? $transactionTotals['proceeds'],
@@ -493,7 +495,7 @@ class LotReconciliationService
             'wash_sale_disallowed' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS
                 ? $transactionTotals['wash_sale_disallowed']
                 : ($summaryTotals['wash_sale_disallowed'] ?? $transactionTotals['wash_sale_disallowed']),
-            'realized_gain_loss' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN
+            'realized_gain_loss' => $useSummaryRealizedGainLoss
                 ? ($summaryTotals['realized_gain_loss'] ?? $transactionTotals['realized_gain_loss'])
                 : $transactionTotals['realized_gain_loss'],
         ];

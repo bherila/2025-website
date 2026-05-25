@@ -169,6 +169,7 @@ class CapitalGainsTaxReportService
                 'form_8949_summary',
                 'form_8949_transactions',
             ])
+            ->orderBy('fin_document_accounts.id')
             ->get([
                 'fin_tax_documents.id as tax_document_id',
                 'fin_document_accounts.account_id',

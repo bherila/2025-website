@@ -116,6 +116,31 @@ class LotReconciliationServiceTest extends TestCase
         $this->assertSame(0, $report['entries'][0]['summary']['broker_lot_count']);
     }
 
+    public function test_summary_only_entry_preserves_reported_realized_gain_loss(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, [
+            'payer_name' => 'Summary Broker',
+            'transactions' => [],
+            'total_proceeds' => 1000,
+            'total_cost_basis' => 800,
+            'total_wash_sale_disallowed' => 0,
+            'total_realized_gain_loss' => 200,
+            'wash_sale_treatment' => BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS,
+        ]);
+        $this->makeLot($account, $document, [
+            'proceeds' => 1000,
+            'cost_basis' => 800,
+            'realized_gain_loss' => 200,
+        ]);
+
+        $report = app(LotReconciliationService::class)->reconcileTaxDocument($document->id)->toArray();
+
+        $this->assertSame(200.0, $report['entries'][0]['summary']['parsed_totals']['realized_gain_loss']);
+        $this->assertNotContains('gain_mismatch', $this->diagnosticCodes($report));
+    }
+
     public function test_reports_missing_summary_adjustment_and_unknown_treatment(): void
     {
         $user = $this->createUser();
