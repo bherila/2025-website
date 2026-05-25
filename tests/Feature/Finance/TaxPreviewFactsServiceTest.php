@@ -19,6 +19,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Support\Finance\FederalStandardDeduction;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -1469,6 +1470,34 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertTrue($facts['form1116']['passiveIncomeSources'][0]['isReviewed']);
     }
 
+    public function test_form1116_doc_wide_override_is_unique_when_nullable_keys_are_used(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => '1099_div',
+            'is_reviewed' => true,
+            'parsed_data' => ['payer_name' => 'Broker Div', 'box7_foreign_tax' => 1500],
+        ]);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => null,
+            'account_identifier' => null,
+            'gross_foreign_source_income' => 9326,
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        FinTaxDocumentForm1116Override::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->document_id,
+            'payer_tin' => null,
+            'account_identifier' => null,
+            'gross_foreign_source_income' => 10000,
+        ]);
+    }
+
     public function test_form1116_user_override_matches_by_payer_tin_and_account_identifier(): void
     {
         $user = $this->createUser();
@@ -2067,6 +2096,31 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(35.0, $line22['allowable']);
         $this->assertSame(35.0, $form8829Entity['line24AllowableOperatingIndirectExpenses']);
         $this->assertSame(35.0, $form8829Entity['line36AllowableHomeOfficeDeduction']);
+    }
+
+    public function test_form_8829_tentative_profit_includes_schedule_c_line_28_adjustments(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $entityId = $this->createEmploymentEntity($user->id, 'Adjusted Expenses LLC');
+        $incomeTag = $this->createScheduleCTag($user->id, $entityId, 'business_income', 'Business income');
+        $homeOfficeTag = $this->createScheduleCTag($user->id, $entityId, 'scho_rent', 'Home office rent');
+
+        $this->tagTransaction($account->acct_id, $incomeTag, '2025-01-01', 1000);
+        $this->tagTransaction($account->acct_id, $homeOfficeTag, '2025-02-01', -1000);
+        $this->createForm8829Input($user->id, $entityId, 2025);
+        $this->createTaxLineAdjustment($user->id, $entityId, [
+            'form' => 'schedule_c',
+            'line_ref' => 'line_28',
+            'kind' => 'adjustment',
+            'amount' => 100,
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+
+        $this->assertSame(100.0, $facts['scheduleC']['expensesBeforeHomeOffice']);
+        $this->assertSame(900.0, $facts['form8829']['entities'][0]['line8TentativeProfit']);
+        $this->assertSame(900.0, $facts['scheduleC']['homeOfficeAllowable']);
     }
 
     public function test_form_8829_simplified_method_uses_square_foot_cap_and_month_proration(): void

@@ -11,6 +11,8 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotImportFromParsedDataService;
 use App\Services\Finance\DocumentIngestionService;
+use App\Services\Finance\LotMatcher;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use ReflectionMethod;
 use Tests\TestCase;
@@ -56,6 +58,43 @@ class LotImportFromParsedDataServiceTest extends TestCase
             LotsMatchJob::class,
             fn (LotsMatchJob $job): bool => $job->documentId === (int) $document->document_id,
         );
+    }
+
+    public function test_rebuild_bulk_inserts_lots_without_synchronous_transaction_matching(): void
+    {
+        Queue::fake();
+        $this->mock(LotMatcher::class, function ($mock): void {
+            $mock->shouldNotReceive('matchingBuyTransaction');
+            $mock->shouldNotReceive('matchingSellTransaction');
+        });
+
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $parsedData = $this->parsedData();
+        $parsedData['transactions'] = [
+            $this->transaction(['symbol' => 'AAPL', 'description' => 'Apple Inc.']),
+            $this->transaction(['symbol' => 'MSFT', 'description' => 'Microsoft Corp.']),
+            $this->transaction(['symbol' => 'NVDA', 'description' => 'Nvidia Corp.']),
+        ];
+        $document = $this->makeBrokerDocument($user->id, $account, $parsedData);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        try {
+            $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
+            $queries = DB::getQueryLog();
+        } finally {
+            DB::disableQueryLog();
+        }
+
+        $lotInsertQueries = collect($queries)
+            ->filter(static fn (array $query): bool => str_contains(strtolower((string) $query['query']), 'insert')
+                && str_contains(strtolower((string) $query['query']), 'fin_account_lots'))
+            ->count();
+
+        $this->assertSame(3, $result->insertedCount);
+        $this->assertCount(3, $result->lotIds);
+        $this->assertSame(1, $lotInsertQueries);
     }
 
     public function test_rebuild_warns_and_skips_when_account_link_is_missing(): void
@@ -328,6 +367,32 @@ class LotImportFromParsedDataServiceTest extends TestCase
         $this->assertSame(75.50, (float) FinAccountLot::query()
             ->where('document_id', $document->document_id)
             ->sum('wash_sale_disallowed'));
+    }
+
+    public function test_rebuild_uses_document_level_wash_sale_treatment_when_parsed_entry_omits_it(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, $this->parsedData([
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'realized_gain_loss' => -200,
+            'wash_sale_disallowed' => 50,
+            'wash_sale_treatment' => null,
+        ], [
+            'total_proceeds' => 1000,
+            'total_cost_basis' => 1200,
+            'total_wash_sale_disallowed' => 50,
+            'total_realized_gain_loss' => -200,
+        ]));
+        $document->update(['wash_sale_treatment' => 'gain_loss_already_reflects_wash_sales_in_basis']);
+
+        app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
+
+        $lot = FinAccountLot::query()->where('document_id', $document->document_id)->firstOrFail();
+        $this->assertSame(-200.0, (float) $lot->realized_gain_loss);
+        $this->assertSame(0.0, (float) $lot->wash_sale_disallowed);
+        $this->assertStringContainsString('already reflected in cost basis', (string) $lot->reconciliation_notes);
     }
 
     public function test_rebuild_sums_wash_sale_across_multiple_rows_with_new_field_names(): void

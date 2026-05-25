@@ -42,6 +42,67 @@ class CapitalGainsTaxReportServiceTest extends TestCase
         $this->assertSame(25.0, $report['scheduleDRollup'][0]->netGainOrLoss);
     }
 
+    public function test_schedule_d_rollup_uses_tax_document_account_reporting_modes(): void
+    {
+        $user = $this->createUser();
+        $summaryAccount = $this->makeAccount($user->id, 'Summary Brokerage');
+        $form8949Account = $this->makeAccount($user->id, 'Form 8949 Brokerage');
+        $document = $this->makeTaxDocument($user->id);
+
+        DB::table('fin_document_accounts')->insert([
+            [
+                'document_id' => $document->document_id,
+                'account_id' => $summaryAccount->acct_id,
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'payload_kind' => 'dispositions',
+                'reporting_mode' => 'form_8949_transactions',
+                'created_at' => now()->subMinute(),
+                'updated_at' => now()->subMinute(),
+            ],
+            [
+                'document_id' => $document->document_id,
+                'account_id' => $summaryAccount->acct_id,
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'payload_kind' => 'dispositions',
+                'reporting_mode' => 'schedule_d_summary',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'document_id' => $document->document_id,
+                'account_id' => $form8949Account->acct_id,
+                'form_type' => '1099_b',
+                'tax_year' => 2025,
+                'payload_kind' => 'dispositions',
+                'reporting_mode' => 'form_8949_transactions',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->makeLot($summaryAccount, [
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'proceeds' => 125,
+            'cost_basis' => 100,
+        ]);
+        $this->makeLot($form8949Account, [
+            'symbol' => 'MSFT',
+            'lot_source' => '1099b',
+            'tax_document_id' => $document->id,
+            'proceeds' => 140,
+            'cost_basis' => 100,
+        ]);
+
+        $report = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2025);
+        $byLine = collect($report['scheduleDRollup'])->mapWithKeys(fn ($rollup): array => [$rollup->scheduleDLine => $rollup->netGainOrLoss])->all();
+
+        $this->assertSame(25.0, $byLine['1a']);
+        $this->assertSame(40.0, $byLine['1b']);
+    }
+
     public function test_documented_1099b_lots_suppress_native_lots_for_other_symbols_in_same_account_year(): void
     {
         $user = $this->createUser();
@@ -104,7 +165,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             static fn ($transaction): ?string => $transaction->symbol,
             $report['transactions'],
         ));
-        $this->assertSame(65.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+        $this->assertSame(65.0, array_sum(array_map(static fn ($rollup): float => $rollup->netGainOrLoss, $report['scheduleDRollup'])));
     }
 
     public function test_orphan_imported_1099b_lots_take_priority_over_native_account_lots(): void
@@ -270,7 +331,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             $report['transactions'][0]->lotId,
             $report['transactions'][0]->taxDocumentId,
         ]);
-        $this->assertSame(95.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+        $this->assertSame(95.0, array_sum(array_map(static fn ($rollup): float => $rollup->netGainOrLoss, $report['scheduleDRollup'])));
     }
 
     public function test_accepted_account_override_link_flips_schedule_d_to_account_lot_amounts(): void
@@ -363,7 +424,7 @@ class CapitalGainsTaxReportServiceTest extends TestCase
             static fn ($transaction): ?string => $transaction->symbol,
             $report['transactions'],
         ));
-        $this->assertSame(65.0, $report['scheduleDRollup'][0]->netGainOrLoss);
+        $this->assertSame(65.0, array_sum(array_map(static fn ($rollup): float => $rollup->netGainOrLoss, $report['scheduleDRollup'])));
     }
 
     public function test_documented_lot_tax_documents_are_eager_loaded_for_report_generation(): void

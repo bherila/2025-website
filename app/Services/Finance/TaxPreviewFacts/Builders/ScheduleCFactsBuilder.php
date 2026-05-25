@@ -137,16 +137,19 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
     private function netProfitCumulativeByQuarter(array $yearData, Form8829Facts $form8829, array $entitiesByKey): QuarterTotals
     {
         $quarters = ['q1' => 0.0, 'q2' => 0.0, 'q3' => 0.0, 'q4' => 0.0];
+        $processedEntityKeys = [];
 
         foreach (($yearData['entities'] ?? []) as $entityData) {
             if (! is_array($entityData)) {
                 continue;
             }
 
-            $entity = $entitiesByKey[$this->entityKey($entityData)] ?? null;
+            $entityKey = $this->entityKey($entityData);
+            $entity = $entitiesByKey[$entityKey] ?? null;
             if (! $entity instanceof ScheduleCEntityFact) {
                 continue;
             }
+            $processedEntityKeys[$entityKey] = true;
 
             $quarterSums = [
                 'q1' => ['income' => 0.0, 'expense' => 0.0],
@@ -178,6 +181,14 @@ class ScheduleCFactsBuilder extends TaxPreviewFactBuilder
             $quarters['q2'] = $this->sumMoney([$quarters['q2'], $q2Net]);
             $quarters['q3'] = $this->sumMoney([$quarters['q3'], $q3Net]);
             $quarters['q4'] = $this->sumMoney([$quarters['q4'], $q4Net]);
+        }
+
+        foreach ($entitiesByKey as $entityKey => $entity) {
+            if (isset($processedEntityKeys[$entityKey])) {
+                continue;
+            }
+
+            $quarters['q4'] = $this->sumMoney([$quarters['q4'], $entity->netProfit]);
         }
 
         return new QuarterTotals(

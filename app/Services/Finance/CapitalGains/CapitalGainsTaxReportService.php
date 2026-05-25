@@ -2,7 +2,9 @@
 
 namespace App\Services\Finance\CapitalGains;
 
+use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
+use Illuminate\Support\Facades\DB;
 
 class CapitalGainsTaxReportService
 {
@@ -23,6 +25,7 @@ class CapitalGainsTaxReportService
         $accountIds = $this->accountIdsForUser($userId);
         $adjustments = $this->washSaleEngine->analyze($accountIds, $taxYear);
         $transactions = $this->loadCanonicalTransactions($accountIds, $taxYear);
+        $reportingModesByDocumentAccountKey = $this->reportingModesByDocumentAccountKey($userId, $taxYear);
 
         return [
             'taxYear' => $taxYear,
@@ -30,7 +33,7 @@ class CapitalGainsTaxReportService
             'transactions' => $transactions,
             'adjustments' => $adjustments,
             'rows' => $this->reportBuilder->buildRows($transactions, $adjustments, $reportingMode),
-            'scheduleDRollup' => $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode),
+            'scheduleDRollup' => $this->reportBuilder->buildScheduleDRollup($transactions, $adjustments, $reportingMode, $reportingModesByDocumentAccountKey),
         ];
     }
 
@@ -149,5 +152,43 @@ class CapitalGainsTaxReportService
             ->map(static fn (int|string $id): int => (int) $id)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function reportingModesByDocumentAccountKey(int $userId, int $taxYear): array
+    {
+        $rows = DB::table('fin_document_accounts')
+            ->join('fin_tax_documents', 'fin_tax_documents.document_id', '=', 'fin_document_accounts.document_id')
+            ->where('fin_tax_documents.user_id', $userId)
+            ->where('fin_tax_documents.tax_year', $taxYear)
+            ->where('fin_document_accounts.form_type', FileForTaxDocument::FORM_TYPE_1099_B)
+            ->whereIn('fin_document_accounts.reporting_mode', [
+                'schedule_d_summary',
+                'form_8949_summary',
+                'form_8949_transactions',
+            ])
+            ->orderBy('fin_document_accounts.id')
+            ->get([
+                'fin_tax_documents.id as tax_document_id',
+                'fin_document_accounts.account_id',
+                'fin_document_accounts.reporting_mode',
+            ]);
+
+        $reportingModes = [];
+        foreach ($rows as $row) {
+            $reportingModes[$this->reportingModeLookupKey(
+                (int) $row->tax_document_id,
+                $row->account_id !== null ? (int) $row->account_id : null,
+            )] = (string) $row->reporting_mode;
+        }
+
+        return $reportingModes;
+    }
+
+    private function reportingModeLookupKey(int $taxDocumentId, ?int $accountId): string
+    {
+        return "doc:{$taxDocumentId}|account:".($accountId !== null ? (string) $accountId : 'none');
     }
 }

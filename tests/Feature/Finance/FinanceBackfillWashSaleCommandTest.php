@@ -136,6 +136,52 @@ class FinanceBackfillWashSaleCommandTest extends TestCase
         $this->assertSame(0.0, (float) FinAccountLot::find($unmatched->lot_id)->wash_sale_disallowed);
     }
 
+    public function test_backfill_consumes_duplicate_parsed_rows_one_to_one(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocumentWithRows($user->id, $account, [
+            [
+                'description' => 'DUPLICATE 10 SH',
+                'disposed_date' => '2025-04-04',
+                'quantity' => 10,
+                'wash_sale_loss_disallowed' => 10,
+            ],
+            [
+                'description' => 'DUPLICATE 10 SH',
+                'disposed_date' => '2025-04-04',
+                'quantity' => 10,
+                'wash_sale_loss_disallowed' => 20,
+            ],
+        ]);
+
+        $firstLot = $this->makeLot($account, $document, [
+            'description' => 'DUPLICATE 10 SH',
+            'quantity' => 10,
+            'sale_date' => '2025-04-04',
+            'wash_sale_disallowed' => 0,
+        ]);
+        $secondLot = $this->makeLot($account, $document, [
+            'description' => 'DUPLICATE 10 SH',
+            'quantity' => 10,
+            'sale_date' => '2025-04-04',
+            'wash_sale_disallowed' => 0,
+        ]);
+
+        $exitCode = Artisan::call('finance:backfill-wash-sale', [
+            '--user' => $user->id,
+            '--year' => 2025,
+            '--format' => 'json',
+        ]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame(2, $payload['totals']['updatedCount']);
+        $this->assertSame(30.0, (float) $payload['totals']['totalWashSale']);
+        $this->assertSame(10.0, (float) FinAccountLot::find($firstLot->lot_id)->wash_sale_disallowed);
+        $this->assertSame(20.0, (float) FinAccountLot::find($secondLot->lot_id)->wash_sale_disallowed);
+    }
+
     private function makeAccount(int $userId): FinAccounts
     {
         return FinAccounts::withoutEvents(function () use ($userId): FinAccounts {
@@ -148,8 +194,38 @@ class FinanceBackfillWashSaleCommandTest extends TestCase
         });
     }
 
-    private function makeBrokerDocumentWithRows(int $userId, FinAccounts $account): FileForTaxDocument
+    /**
+     * @param  list<array<string, mixed>>|null  $transactions
+     */
+    private function makeBrokerDocumentWithRows(int $userId, FinAccounts $account, ?array $transactions = null): FileForTaxDocument
     {
+        $transactions ??= [
+            [
+                'description' => 'ACME 100 SH',
+                'term' => 'short',
+                'form_8949_box' => 'A',
+                'acquired_date' => '2024-09-12',
+                'disposed_date' => '2025-04-04',
+                'quantity' => 100,
+                'proceeds' => 1000,
+                'cost_basis' => 1200,
+                'wash_sale_loss_disallowed' => 50,
+                'realized_gain_loss' => -200,
+            ],
+            [
+                'description' => 'BETA 50 SH',
+                'term' => 'long',
+                'form_8949_box' => 'D',
+                'acquired_date' => '2022-01-15',
+                'disposed_date' => '2025-06-20',
+                'quantity' => 50,
+                'proceeds' => 2000,
+                'cost_basis' => 2300,
+                'wash_sale_loss_disallowed' => 80,
+                'realized_gain_loss' => -300,
+            ],
+        ];
+
         return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $userId,
             'tax_year' => 2025,
@@ -168,33 +244,8 @@ class FinanceBackfillWashSaleCommandTest extends TestCase
                 'form_type' => '1099_b',
                 'tax_year' => 2025,
                 'parsed_data' => [
-                    'total_wash_sale_disallowed' => 130,
-                    'transactions' => [
-                        [
-                            'description' => 'ACME 100 SH',
-                            'term' => 'short',
-                            'form_8949_box' => 'A',
-                            'acquired_date' => '2024-09-12',
-                            'disposed_date' => '2025-04-04',
-                            'quantity' => 100,
-                            'proceeds' => 1000,
-                            'cost_basis' => 1200,
-                            'wash_sale_loss_disallowed' => 50,
-                            'realized_gain_loss' => -200,
-                        ],
-                        [
-                            'description' => 'BETA 50 SH',
-                            'term' => 'long',
-                            'form_8949_box' => 'D',
-                            'acquired_date' => '2022-01-15',
-                            'disposed_date' => '2025-06-20',
-                            'quantity' => 50,
-                            'proceeds' => 2000,
-                            'cost_basis' => 2300,
-                            'wash_sale_loss_disallowed' => 80,
-                            'realized_gain_loss' => -300,
-                        ],
-                    ],
+                    'total_wash_sale_disallowed' => array_sum(array_map(static fn (array $row): float => abs((float) ($row['wash_sale_loss_disallowed'] ?? $row['wash_sale_disallowed'] ?? 0)), $transactions)),
+                    'transactions' => $transactions,
                 ],
             ]],
         ]);
