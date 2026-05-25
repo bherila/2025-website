@@ -31,16 +31,12 @@ class TxfWriter
             $lines[] = 'C1';
             $lines[] = 'L1';
             $lines[] = 'P'.$lot->description;
-            $lines[] = 'D'.$this->formatDate($lot->dateAcquired);
+            $lines[] = 'D'.$this->formatDate($lot->dateAcquired, $lot->isShortTerm);
             $lines[] = 'D'.$this->formatDate($lot->dateSold);
             $lines[] = '$'.$this->formatAmount($lot->costBasis);
             $lines[] = '$'.$this->formatAmount($lot->proceeds);
 
-            if ($lot->washSaleDisallowed !== null && $lot->washSaleDisallowed !== 0.0) {
-                $lines[] = '$'.$this->formatAmount($lot->washSaleDisallowed);
-            } else {
-                $lines[] = '$0.00';
-            }
+            $lines[] = '$'.$this->formatOptionalAmount($lot->washSaleDisallowed);
 
             $lines[] = '^';
         }
@@ -53,10 +49,14 @@ class TxfWriter
         return self::BOX_REFS[$lot->form8949Box] ?? ($lot->isShortTerm ? '321' : '323');
     }
 
-    private function formatDate(?string $date): string
+    private function formatDate(?string $date, ?bool $isShortTerm = null): string
     {
         if ($date === null || trim($date) === '') {
-            return 'Various';
+            return '';
+        }
+
+        if (strtolower(trim($date)) === 'various') {
+            return $isShortTerm === false ? 'VARIOUS' : 'various';
         }
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1) {
@@ -69,5 +69,14 @@ class TxfWriter
     private function formatAmount(float $amount): string
     {
         return number_format($amount, 2, '.', '');
+    }
+
+    private function formatOptionalAmount(?float $amount): string
+    {
+        if ($amount === null || round($amount, 2) === 0.0) {
+            return '';
+        }
+
+        return $this->formatAmount($amount);
     }
 }

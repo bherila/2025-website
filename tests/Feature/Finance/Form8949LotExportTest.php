@@ -45,7 +45,7 @@ class Form8949LotExportTest extends TestCase
         $response->assertSeeText('N711', false);
         $response->assertSeeText('PApple Inc.', false);
         $this->assertStringContainsString(
-            "PApple Inc.\r\nD01/02/2024\r\nD02/03/2025\r\n$1000.00\r\n$1250.00\r\n$0.00\r\n^\r\n",
+            "PApple Inc.\r\nD01/02/2024\r\nD02/03/2025\r\n$1000.00\r\n$1250.00\r\n$\r\n^\r\n",
             $response->getContent(),
         );
     }
@@ -79,7 +79,7 @@ class Form8949LotExportTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString(
-            "TD\r\nN323\r\nC1\r\nL1\r\nPLong-term mutual fund lot\r\nDVarious\r\nD01/02/2025\r\n$8877.52\r\n$12411.65\r\n$0.00\r\n^\r\n",
+            "TD\r\nN323\r\nC1\r\nL1\r\nPLong-term mutual fund lot\r\nDVARIOUS\r\nD01/02/2025\r\n$8877.52\r\n$12411.65\r\n$\r\n^\r\n",
             $response->getContent(),
         );
     }

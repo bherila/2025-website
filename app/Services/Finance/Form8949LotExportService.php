@@ -135,10 +135,10 @@ class Form8949LotExportService
         );
     }
 
-    private function dateAcquired(FinAccountLot $lot): ?string
+    private function dateAcquired(FinAccountLot $lot): string
     {
         if (is_string($lot->reconciliation_notes) && str_contains($lot->reconciliation_notes, 'Date acquired reported as Various')) {
-            return null;
+            return 'various';
         }
 
         return $lot->purchase_date->format('Y-m-d');

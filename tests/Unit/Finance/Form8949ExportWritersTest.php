@@ -31,7 +31,7 @@ class Form8949ExportWritersTest extends TestCase
         $this->assertStringContainsString("N714\r\n", $txf);
         $this->assertSame(7, substr_count($txf, "\r\n^\r\n"));
         $this->assertStringContainsString(
-            "TD\r\nN321\r\nC1\r\nL1\r\nPExample Lot A\r\nD01/15/2024\r\nD02/20/2025\r\n$700.00\r\n$1200.00\r\n$0.00\r\n^\r\n",
+            "TD\r\nN321\r\nC1\r\nL1\r\nPExample Lot A\r\nD01/15/2024\r\nD02/20/2025\r\n$700.00\r\n$1200.00\r\n$\r\n^\r\n",
             $txf,
         );
     }
@@ -53,7 +53,18 @@ class Form8949ExportWritersTest extends TestCase
         ]);
 
         $this->assertStringNotContainsString('$500.00', $txf);
-        $this->assertStringContainsString("$700.00\r\n$1200.00\r\n$0.00\r\n^\r\n", $txf);
+        $this->assertStringContainsString("$700.00\r\n$1200.00\r\n$\r\n^\r\n", $txf);
+    }
+
+    public function test_txf_writer_preserves_various_date_acquired_with_term_case(): void
+    {
+        $txf = (new TxfWriter)->write([
+            $this->lot('A', true, dateAcquired: 'various'),
+            $this->lot('D', false, dateAcquired: 'various'),
+        ]);
+
+        $this->assertStringContainsString("N321\r\nC1\r\nL1\r\nPExample Lot A\r\nDvarious\r\nD02/20/2025", $txf);
+        $this->assertStringContainsString("N323\r\nC1\r\nL1\r\nPExample Lot D\r\nDVARIOUS\r\nD02/20/2025", $txf);
     }
 
     public function test_olt_xlsx_writer_creates_template_sheet_with_lot_rows(): void
@@ -87,10 +98,11 @@ class Form8949ExportWritersTest extends TestCase
         ?bool $isCovered = true,
         ?float $accruedMarketDiscount = null,
         ?float $washSaleDisallowed = null,
+        ?string $dateAcquired = '2024-01-15',
     ): Form8949ExportLot {
         return new Form8949ExportLot(
             description: "Example Lot {$box}",
-            dateAcquired: '2024-01-15',
+            dateAcquired: $dateAcquired,
             dateSold: '2025-02-20',
             proceeds: 1200.0,
             costBasis: 700.0,

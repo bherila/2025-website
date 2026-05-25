@@ -21,7 +21,7 @@
  *   D<date>    — Date sold (MM/DD/YYYY)
  *   $<amount>  — Cost or other basis
  *   $<amount>  — Sales price / proceeds
- *   $<amount>  — Wash sale loss disallowed (0.00 when none)
+ *   $<amount>  — Wash sale loss disallowed (blank when none)
  *
  * See docs/finance/LotAnalyzer.md for further context.
  */
@@ -29,8 +29,9 @@
 import type { LotSale } from './washSaleEngine'
 
 /** Format a date string (YYYY-MM-DD) as MM/DD/YYYY for TXF. */
-function formatTxfDate(dateStr: string | null): string {
-  if (!dateStr) return 'Various'
+function formatTxfDate(dateStr: string | null, isShortTerm?: boolean): string {
+  if (!dateStr) return ''
+  if (dateStr.trim().toLowerCase() === 'various') return isShortTerm === false ? 'VARIOUS' : 'various'
   const parts = dateStr.split('-')
   if (parts.length === 3) {
     return `${parts[1]}/${parts[2]}/${parts[0]}`
@@ -68,13 +69,13 @@ export function generateTxf(lots: LotSale[], year?: string): string {
     lines.push('C1')
     lines.push('L1')
     lines.push(`P${lot.description}`)
-    lines.push(`D${formatTxfDate(lot.dateAcquired)}`)
+    lines.push(`D${formatTxfDate(lot.dateAcquired, lot.isShortTerm)}`)
     lines.push(`D${formatTxfDate(lot.dateSold)}`)
     lines.push(`$${formatTxfAmount(lot.costBasis)}`)
     lines.push(`$${formatTxfAmount(lot.proceeds)}`)
 
-    const washSaleAmount = lot.isWashSale ? lot.adjustmentAmount : 0
-    lines.push(`$${formatTxfAmount(washSaleAmount)}`)
+    const washSaleAmount = lot.isWashSale ? lot.adjustmentAmount : null
+    lines.push(washSaleAmount === null ? '$' : `$${formatTxfAmount(washSaleAmount)}`)
 
     lines.push('^')  // End of record
   }
