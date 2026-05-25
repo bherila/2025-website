@@ -14,6 +14,16 @@ class ReconciliationDriftFixtureBuilder
 {
     public function __construct(private readonly DocumentIngestionService $documentIngestionService) {}
 
+    /**
+     * @return array{
+     *     user_id: int,
+     *     tax_year: int,
+     *     tax_document_id: int,
+     *     account_id: int,
+     *     login_path: string,
+     *     reconciliation_path: string
+     * }
+     */
     public function build(int $taxYear = 2025): array
     {
         $user = User::factory()->create();
