@@ -493,7 +493,9 @@ class LotReconciliationService
             'wash_sale_disallowed' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_ALREADY_REFLECTED_IN_COST_BASIS
                 ? $transactionTotals['wash_sale_disallowed']
                 : ($summaryTotals['wash_sale_disallowed'] ?? $transactionTotals['wash_sale_disallowed']),
-            'realized_gain_loss' => $summaryTotals['realized_gain_loss'] ?? $transactionTotals['realized_gain_loss'],
+            'realized_gain_loss' => $normalizedTreatment === BrokerWashSaleTreatmentNormalizer::TREATMENT_UNKNOWN
+                ? ($summaryTotals['realized_gain_loss'] ?? $transactionTotals['realized_gain_loss'])
+                : $transactionTotals['realized_gain_loss'],
         ];
     }
 

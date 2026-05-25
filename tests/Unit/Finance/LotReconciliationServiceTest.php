@@ -262,6 +262,37 @@ class LotReconciliationServiceTest extends TestCase
         );
     }
 
+    public function test_gross_of_wash_sales_reconciliation_compares_normalized_gain_loss(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $parsedData = $this->parsedData([
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'realized_gain_loss' => -200,
+            'wash_sale_disallowed' => 50,
+        ], [
+            'total_proceeds' => 1000,
+            'total_cost_basis' => 1200,
+            'total_wash_sale_disallowed' => 50,
+            'total_realized_gain_loss' => -200,
+        ]);
+        $document = $this->makeBrokerDocument($user->id, $account, $parsedData, 'gross-wash-treatment.pdf');
+        $document->update(['wash_sale_treatment' => 'gain_loss_gross_of_wash_sales']);
+        $this->makeLot($account, $document, [
+            'proceeds' => 1000,
+            'cost_basis' => 1200,
+            'realized_gain_loss' => -150,
+            'wash_sale_disallowed' => 50,
+        ]);
+
+        $report = app(LotReconciliationService::class)->reconcileTaxDocument($document->id)->toArray();
+
+        $this->assertSame('ok', $report['status']);
+        $this->assertSame([], $report['diagnostics']);
+        $this->assertSame(-150.0, $report['entries'][0]['summary']['parsed_totals']['realized_gain_loss']);
+    }
+
     private function makeAccount(int $userId, string $name = 'Brokerage', ?string $number = '1234'): FinAccounts
     {
         return FinAccounts::withoutEvents(function () use ($userId, $name, $number): FinAccounts {
