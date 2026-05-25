@@ -1,0 +1,22 @@
+[
+  {
+    "treatment": "gross_of_wash_sales",
+    "evidence": "Box A realized gain/loss equals proceeds minus cost basis, with wash-sale disallowed shown separately.",
+    "rule": "Normalize Form 8949 gain/loss = brokerReportedGainLoss + washSaleDisallowed."
+  },
+  {
+    "treatment": "already_reflected_in_cost_basis",
+    "evidence": "Broker says: The disallowed loss is included in the cost basis; therefore, it is calculated into the realized gain/loss.",
+    "rule": "Form 8949 gain/loss = brokerReportedGainLoss (do not add wash-sale)."
+  },
+  {
+    "treatment": "net_gain_loss_already_includes_wash_sale_column",
+    "evidence": "Proceeds − cost basis + wash sale equals the displayed net gain/loss.",
+    "rule": "Form 8949 gain/loss = displayed net gain/loss."
+  },
+  {
+    "treatment": "no_wash_sale_amount",
+    "evidence": "Summary shows no wash-sale amount.",
+    "rule": "Form 8949 gain/loss = displayed realized gain/loss."
+  }
+]

@@ -283,6 +283,105 @@ class LotImportFromParsedDataServiceTest extends TestCase
         );
     }
 
+    public function test_rebuild_reads_per_row_wash_sale_loss_disallowed_field(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, [
+            'payer_name' => 'Synthetic Broker',
+            'total_proceeds' => 1234.56,
+            'total_cost_basis' => 1500.00,
+            'total_wash_sale_disallowed' => 75.50,
+            'total_realized_gain_loss' => -265.44,
+            'transactions' => [
+                [
+                    'description' => 'ACME 100 SH',
+                    'term' => 'short',
+                    'form_8949_box' => 'A',
+                    'acquired_date' => '2024-09-12',
+                    'disposed_date' => '2025-04-04',
+                    'quantity' => 100,
+                    'proceeds' => 1234.56,
+                    'cost_basis' => 1500.00,
+                    'wash_sale_loss_disallowed' => 75.50,
+                    'realized_gain_loss' => -265.44,
+                    'basisReportedToIrs' => true,
+                ],
+            ],
+        ]);
+
+        $result = app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
+
+        $this->assertSame(1, $result->insertedCount);
+        $this->assertSame([], $result->warnings);
+
+        $lots = FinAccountLot::query()->where('document_id', $document->document_id)->get();
+        $this->assertCount(1, $lots);
+
+        $lot = $lots->first();
+        $this->assertSame(75.50, (float) $lot->wash_sale_disallowed);
+        $this->assertSame('A', $lot->form_8949_box);
+        $this->assertTrue((bool) $lot->is_short_term);
+        $this->assertTrue((bool) $lot->is_covered);
+        $this->assertSame('2024-09-12', $lot->purchase_date?->format('Y-m-d'));
+        $this->assertSame('2025-04-04', $lot->sale_date?->format('Y-m-d'));
+        $this->assertSame(75.50, (float) FinAccountLot::query()
+            ->where('document_id', $document->document_id)
+            ->sum('wash_sale_disallowed'));
+    }
+
+    public function test_rebuild_sums_wash_sale_across_multiple_rows_with_new_field_names(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account, [
+            'payer_name' => 'Synthetic Broker',
+            'total_proceeds' => 3000,
+            'total_cost_basis' => 3500,
+            'total_wash_sale_disallowed' => 130,
+            'total_realized_gain_loss' => -370,
+            'transactions' => [
+                [
+                    'description' => 'ACME 100 SH',
+                    'term' => 'short',
+                    'form_8949_box' => 'A',
+                    'acquired_date' => '2024-09-12',
+                    'disposed_date' => '2025-04-04',
+                    'quantity' => 100,
+                    'proceeds' => 1000,
+                    'cost_basis' => 1200,
+                    'wash_sale_loss_disallowed' => 50,
+                    'realized_gain_loss' => -200,
+                    'basisReportedToIrs' => true,
+                ],
+                [
+                    'description' => 'BETA 50 SH',
+                    'term' => 'long',
+                    'form_8949_box' => 'D',
+                    'acquired_date' => '2022-01-15',
+                    'disposed_date' => '2025-06-20',
+                    'quantity' => 50,
+                    'proceeds' => 2000,
+                    'cost_basis' => 2300,
+                    'wash_sale_loss_disallowed' => 80,
+                    'realized_gain_loss' => -300,
+                    'basisReportedToIrs' => true,
+                ],
+            ],
+        ]);
+
+        app(LotImportFromParsedDataService::class)->rebuildForDocument((int) $document->document_id);
+
+        $lots = FinAccountLot::query()->where('document_id', $document->document_id)->get();
+        $this->assertCount(2, $lots);
+        $this->assertSame(130.0, round((float) $lots->sum('wash_sale_disallowed'), 2));
+
+        $shortLot = $lots->firstWhere('description', 'ACME 100 SH');
+        $longLot = $lots->firstWhere('description', 'BETA 50 SH');
+        $this->assertTrue((bool) $shortLot->is_short_term);
+        $this->assertFalse((bool) $longLot->is_short_term);
+    }
+
     public function test_rebuild_is_idempotent_and_corrects_doc_12_style_stale_lots(): void
     {
         $user = $this->createUser();

@@ -56,6 +56,7 @@ readonly class Form1116Facts
         public ?string $recommendation,
         public float $totalK1Box5,
         public bool $turboTaxAlert,
+        public bool $hasUserOverride = false,
     ) {
         $this->passiveIncomeSources = $passiveIncomeSources;
         $this->generalIncomeSources = $generalIncomeSources;
@@ -86,6 +87,7 @@ readonly class Form1116Facts
             'recommendation' => $this->recommendation,
             'totalK1Box5' => $this->totalK1Box5,
             'turboTaxAlert' => $this->turboTaxAlert,
+            'hasUserOverride' => $this->hasUserOverride,
         ];
     }
 }

@@ -19,6 +19,7 @@ class CapitalGainsImportNormalizer
 {
     public function __construct(
         private readonly BrokerWashSaleTreatmentNormalizer $washSaleTreatmentNormalizer,
+        private readonly WashSaleTreatmentApplier $washSaleTreatmentApplier = new WashSaleTreatmentApplier,
     ) {}
 
     /**
@@ -36,6 +37,9 @@ class CapitalGainsImportNormalizer
         $account = $lot->account;
         $accountName = $account instanceof FinAccounts ? (string) $account->acct_name : null;
         $taxDocument = $lot->taxDocument;
+        $treatment = $taxDocument instanceof FileForTaxDocument
+            ? $this->washSaleTreatmentApplier->resolveForDocument($taxDocument)
+            : null;
 
         return new CanonicalCapitalGainTransaction(
             id: "{$source}:{$lot->lot_id}",
@@ -59,6 +63,7 @@ class CapitalGainsImportNormalizer
             taxDocumentId: $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null,
             lotId: (int) $lot->lot_id,
             closeTransactionId: $lot->close_t_id !== null ? (int) $lot->close_t_id : null,
+            washSaleTreatment: $treatment,
         );
     }
 
@@ -100,6 +105,9 @@ class CapitalGainsImportNormalizer
         $acctName = $linkAccount instanceof FinAccounts
             ? (string) $linkAccount->acct_name
             : ($link->ai_account_name ?? null);
+        $treatment = $taxDocument instanceof FileForTaxDocument
+            ? $this->washSaleTreatmentApplier->resolveForDocument($taxDocument)
+            : null;
 
         return new CanonicalCapitalGainTransaction(
             id: "parsed:{$docId}:{$link->id}:".md5($symbol.$saleDate.$proceeds),
@@ -123,6 +131,7 @@ class CapitalGainsImportNormalizer
             taxDocumentId: $docId,
             lotId: null,
             closeTransactionId: null,
+            washSaleTreatment: $treatment,
         );
     }
 

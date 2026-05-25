@@ -230,6 +230,14 @@ PROMPT;
                 'description' => 'Schedule K-3 data (omit entirely if no K-3 was attached). '
                     .'Shape: { "sections": [ { "sectionId": "part2_section1", "title": "...", "data": { ... } } ] }',
             ],
+            'k3Elections' => [
+                'type' => 'OBJECT',
+                'description' => 'Partner elections related to Schedule K-3 sourcing. Omit (or set to null) '
+                    .'when no K-3 is attached. When K-3 is attached, the default '
+                    .'{ "sourcedByPartnerAsUSSource": true, "defaultApplied": true } is applied automatically; '
+                    .'set explicitly only to override (e.g. { "sourcedByPartnerAsUSSource": false } for '
+                    .'non-U.S.-person partners or treaty cases).',
+            ],
             'warnings' => [
                 'type' => 'ARRAY',
                 'description' => 'Array of warning strings for ambiguous or complex items (optional).',
@@ -1539,7 +1547,9 @@ PROMPT;
     {
         // Scalar field boxes (left panel A–O, right panel 1–10, 12, 21)
         $strBoxes = ['A', 'B', 'C', 'E', 'F', 'G', 'H1', 'I1', 'I2', 'I3', 'M', 'N', 'O'];
-        $boolBoxes = ['D', 'H2', 'partnershipPosition_traderInSecurities'];
+        // Box 16 is the "Schedule K-3 is attached" checkbox on the K-1 form (the codes
+        // for Box 16 foreign transactions are handled via codes_16 separately).
+        $boolBoxes = ['D', 'H2', '16', 'partnershipPosition_traderInSecurities'];
         $numBoxes = ['1', '2', '3', '4', '4a', '4b', '4c', '5', '6a', '6b', '6c', '7',
             '8', '9a', '9b', '9c', '10', '12', '21'];
         $codedBoxes = ['11', '13', '14', '15', '16', '17', '18', '19', '20'];
@@ -1622,6 +1632,42 @@ PROMPT;
             }
         }
 
+        // Defensive guard: detect Box 10 / Box 20 Code B confusion.
+        //
+        // On Pioneer-style 1065 K-1s where Box 10 (Net §1231 gain/loss) is blank and
+        // Box 20 Code B (Investment expenses for Form 4952) carries a positive dollar
+        // amount, Gemini occasionally mis-routes the Box 20 Code B value into field_10.
+        // A spurious Box 10 value flows through Form 4797 Part I to Schedule D line 11,
+        // inflating long-term capital gains by the misclassified amount.
+        //
+        // Heuristic: if `field_10` numerically equals any `codes_20` Code B value, drop
+        // `fields['10']` and surface a warning so the human reviewer can confirm. Box 10
+        // and Box 20 Code B are independent figures that may legitimately match by
+        // coincidence, but the cost of a false-positive (a warning) is far lower than
+        // the cost of a false-negative (a §1231 misclassification on Schedule D).
+        $box10AutoDropWarning = null;
+        if (isset($fields['10'])) {
+            $box10Value = (float) $fields['10']['value'];
+            if ($box10Value !== 0.0 && isset($codes['20'])) {
+                foreach ($codes['20'] as $codeItem) {
+                    if ($codeItem['code'] !== 'B') {
+                        continue;
+                    }
+                    if (! is_numeric($codeItem['value'])) {
+                        continue;
+                    }
+                    if ((float) $codeItem['value'] === $box10Value) {
+                        unset($fields['10']);
+                        $box10AutoDropWarning = sprintf(
+                            'K-1 Box 10 value %s matched Box 20 Code B; dropped to prevent §1231 misclassification on Schedule D line 11. Verify Box 10 manually if the partnership actually reported a Section 1231 amount.',
+                            (string) $box10Value,
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
         // Schedule K-3 — assemble structured sections from new flat arrays
         $k3Sections = (new K3SectionAssembler)->assemble($args);
 
@@ -1647,6 +1693,10 @@ PROMPT;
         $warnings = is_array($rawWarnings)
             ? array_values(array_filter(array_map(fn ($w) => is_string($w) ? $w : null, $rawWarnings)))
             : [];
+
+        if ($box10AutoDropWarning !== null) {
+            $warnings[] = $box10AutoDropWarning;
+        }
 
         $result = [
             'schemaVersion' => '2026.1',
@@ -1674,6 +1724,33 @@ PROMPT;
 
         if ($statementA !== null) {
             $result['statementA'] = $statementA;
+        }
+
+        // K-3 elections: persist an explicit `k3Elections` object so the UI/audit trail
+        // can distinguish "user accepted the default" from "never reviewed".
+        //
+        // - If the AI/source already supplies a non-null k3Elections object (e.g. via
+        //   manual JSON attach where the user previously chose a non-default treatment),
+        //   pass it through unchanged. This preserves user-set values across re-parse.
+        // - Otherwise, if Box 16 (Schedule K-3 is attached) is checked, stamp the default
+        //   election: sourcedByPartnerAsUSSource = true, with defaultApplied = true so
+        //   downstream consumers can distinguish a defaulted value from an explicit one.
+        // - When no K-3 is attached, leave k3Elections null — there is no election to make.
+        //
+        // The default U.S.-source treatment of K-3 Part II column (f) "sourced by partner"
+        // amounts follows Notice 2021-39 transitional relief for U.S.-person partners in
+        // domestic investment partnerships. Non-U.S. partners and treaty cases must opt
+        // out by setting sourcedByPartnerAsUSSource to false via the UI.
+        $existingK3Elections = $args['k3Elections'] ?? null;
+        if (is_array($existingK3Elections)) {
+            $result['k3Elections'] = $existingK3Elections;
+        } elseif (isset($fields['16']['value']) && $fields['16']['value'] === 'true') {
+            $result['k3Elections'] = [
+                'sourcedByPartnerAsUSSource' => true,
+                'defaultApplied' => true,
+            ];
+        } else {
+            $result['k3Elections'] = null;
         }
 
         // Passive activities (Box 23 = true supplemental statement)
@@ -2058,6 +2135,7 @@ PROMPT;
                 'field_9c' => Schema::number(),   // Unrecaptured Sec. 1250 gain
                 'field_10' => Schema::number(),   // Net section 1231 gain (loss)
                 'field_12' => Schema::number(),   // Section 179 deduction
+                'field_16' => Schema::boolean('Box 16 — "Schedule K-3 is attached if checked". Set true when the K-1 indicates that Schedule K-3 was attached for this partner.'),
                 'field_21' => Schema::number(),   // Foreign taxes paid or accrued
 
                 // ── Coded boxes (11, 13–20): arrays of {code, value, notes} ──────

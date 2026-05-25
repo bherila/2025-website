@@ -3,6 +3,7 @@
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinTaxDocumentForm1116Override;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form1116Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
@@ -10,6 +11,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class Form1116FactsBuilder extends TaxPreviewFactBuilder
 {
@@ -28,6 +30,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         $sourcedByPartnerSources = [];
         $k1TaxAdded = [];
         $totalK1Box5 = 0.0;
+        $hasUserOverride = false;
         $form4952InterestByK1Doc = $this->form4952InterestExpenseByK1Doc($k1Docs, $form4952);
 
         foreach ($k1Docs as $doc) {
@@ -99,18 +102,28 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 }
 
                 $payer = $this->payerName($doc, $entry['link'], $entry['parsedData']);
-                $foreignIncome = $this->foreignSourceIncomeFrom1099Div($entry['parsedData'], $foreignTax);
+                $foreignIncome = $this->foreignSourceIncomeFrom1099Div($doc, $entry['link'], $entry['parsedData'], $foreignTax);
                 $incomeIsEstimated = $foreignIncome['isEstimated'];
+                $sourceHasUserOverride = $foreignIncome['hasUserOverride'];
+                $hasUserOverride = $hasUserOverride || $sourceHasUserOverride;
+                $sourceLabel = match (true) {
+                    $sourceHasUserOverride => "{$payer} — 1099-DIV foreign source income (user override)",
+                    $incomeIsEstimated => "{$payer} — 1099-DIV estimated foreign source income",
+                    default => "{$payer} — 1099-DIV foreign source income",
+                };
+                $routingReason = match (true) {
+                    $sourceHasUserOverride => '1099-DIV foreign-source income overridden by user-supplied gross foreign-source income.',
+                    $incomeIsEstimated => '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.',
+                    default => '1099-DIV foreign-source income comes from the broker foreign income and taxes summary.',
+                };
                 $passiveIncomeSources[] = $this->documentSource(
                     $doc,
                     $entry['link'],
-                    $incomeIsEstimated ? "{$payer} — 1099-DIV estimated foreign source income" : "{$payer} — 1099-DIV foreign source income",
+                    $sourceLabel,
                     $foreignIncome['amount'],
                     TaxFactSourceType::Form1099DivForeignTax,
                     TaxFactRouting::Form1116Line1a,
-                    $incomeIsEstimated
-                        ? '1099-DIV foreign-source income is estimated from Box 7 foreign tax at the default 15% withholding rate.'
-                        : '1099-DIV foreign-source income comes from the broker foreign income and taxes summary.',
+                    $routingReason,
                     '1099_div',
                     '7',
                     $incomeIsEstimated ? false : null,
@@ -152,6 +165,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             recommendation: $totalForeignTaxes > 0.0 ? 'credit' : null,
             totalK1Box5: $this->roundMoney($totalK1Box5),
             turboTaxAlert: $totalK1Box5 > 0.0 && $this->sumSources($passiveIncomeSources) < ($totalK1Box5 * 0.5),
+            hasUserOverride: $hasUserOverride,
         );
     }
 
@@ -473,10 +487,19 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{amount:float,isEstimated:bool}
+     * @return array{amount:float,isEstimated:bool,hasUserOverride:bool}
      */
-    private function foreignSourceIncomeFrom1099Div(array $data, float $foreignTax): array
+    private function foreignSourceIncomeFrom1099Div(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $data, float $foreignTax): array
     {
+        $override = $this->resolveForm1116Override($doc, $link, $data);
+        if ($override !== null) {
+            return [
+                'amount' => $this->roundMoney(abs($override->gross_foreign_source_income)),
+                'isEstimated' => false,
+                'hasUserOverride' => true,
+            ];
+        }
+
         $summary = $data['foreign_income_and_taxes_summary'] ?? null;
         $summaryIncome = is_array($summary)
             ? $this->parseMoney($summary['total_foreign_source_income'] ?? null)
@@ -484,13 +507,67 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         $directIncome = $summaryIncome ?? $this->firstNumericValue($data, ['foreign_source_income', 'total_foreign_source_income']);
 
         if ($directIncome !== null && $directIncome !== 0.0) {
-            return ['amount' => abs($directIncome), 'isEstimated' => false];
+            return ['amount' => abs($directIncome), 'isEstimated' => false, 'hasUserOverride' => false];
         }
 
         return [
             'amount' => $this->roundMoney(abs($foreignTax) / self::ASSUMED_FOREIGN_WITHHOLDING_RATE),
             'isEstimated' => true,
+            'hasUserOverride' => false,
         ];
+    }
+
+    /**
+     * Match a per-document override by (document_id, payer_tin, account_identifier).
+     *
+     * The lookup is keyed on the unified fin_documents.id stored on
+     * fin_tax_documents.document_id. payer_tin is read from parsed_data and
+     * account_identifier prefers the link's ai_identifier, falling back to the
+     * parsed_data account_identifier. Either may be null to allow doc-wide overrides.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveForm1116Override(FileForTaxDocument $doc, ?TaxDocumentAccount $link, array $data): ?FinTaxDocumentForm1116Override
+    {
+        $documentId = $doc->document_id;
+        if ($documentId === null) {
+            return null;
+        }
+
+        if (! Schema::hasTable('fin_tax_document_form1116_overrides')) {
+            return null;
+        }
+
+        $payerTin = $this->normalizedTin($data['payer_tin'] ?? null);
+        $accountIdentifier = $this->normalizedIdentifier($link?->ai_identifier)
+            ?? $this->normalizedIdentifier($data['account_identifier'] ?? null);
+
+        return FinTaxDocumentForm1116Override::query()
+            ->where('document_id', $documentId)
+            ->when(
+                $payerTin !== null,
+                fn ($q) => $q->where(fn ($inner) => $inner->where('payer_tin', $payerTin)->orWhereNull('payer_tin')),
+                fn ($q) => $q->whereNull('payer_tin'),
+            )
+            ->when(
+                $accountIdentifier !== null,
+                fn ($q) => $q->where(fn ($inner) => $inner->where('account_identifier', $accountIdentifier)->orWhereNull('account_identifier')),
+                fn ($q) => $q->whereNull('account_identifier'),
+            )
+            ->orderByRaw('CASE WHEN payer_tin IS NULL THEN 1 ELSE 0 END')
+            ->orderByRaw('CASE WHEN account_identifier IS NULL THEN 1 ELSE 0 END')
+            ->first();
+    }
+
+    private function normalizedTin(mixed $value): ?string
+    {
+        if (! is_string($value) && ! is_numeric($value)) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', (string) $value);
+
+        return is_string($digits) && $digits !== '' ? $digits : null;
     }
 
     /**

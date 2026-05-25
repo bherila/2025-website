@@ -65,6 +65,7 @@ enum TaxFactRouting: string
     case Form8960Line4a = 'form_8960_line_4a';
     case Form8960Line5a = 'form_8960_line_5a';
     case Form8960Line9a = 'form_8960_line_9a';
+    case Form8960Line9b = 'form_8960_line_9b';
     case NeedsReviewScheduleDLine5Or12 = 'needs_review_schedule_d_line_5_or_12';
     case Schedule1Line1a = 'schedule_1_line_1a';
     case Schedule1Line2a = 'schedule_1_line_2a';

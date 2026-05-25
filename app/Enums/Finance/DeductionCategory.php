@@ -5,9 +5,10 @@ namespace App\Enums\Finance;
 /**
  * Manual tax-preview categories stored in `fin_user_deductions.category`.
  * Schedule A values map to one (or part of one) Schedule A line:
- *  - real_estate_tax → Line 5b
  *  - state_est_tax   → Line 5a (in addition to W-2 Box 17 withholding)
- *  - sales_tax       → Line 5c
+ *  - sales_tax       → Line 5a (taxpayer elects state income tax OR general sales tax)
+ *  - real_estate_tax → Line 5b
+ *  - personal_property_tax → Line 5c
  *  - mortgage_interest → Line 8a
  *  - charitable_cash / charitable_noncash → Lines 11 / 12
  *  - other → Line 16
@@ -26,6 +27,7 @@ enum DeductionCategory: string
     case RealEstateTax = 'real_estate_tax';
     case StateEstTax = 'state_est_tax';
     case SalesTax = 'sales_tax';
+    case PersonalPropertyTax = 'personal_property_tax';
     case MortgageInterest = 'mortgage_interest';
     case CharitableCash = 'charitable_cash';
     case CharitableNoncash = 'charitable_noncash';
@@ -61,6 +63,7 @@ enum DeductionCategory: string
             self::RealEstateTax->value,
             self::StateEstTax->value,
             self::SalesTax->value,
+            self::PersonalPropertyTax->value,
             self::MortgageInterest->value,
             self::CharitableCash->value,
             self::CharitableNoncash->value,
@@ -75,7 +78,9 @@ enum DeductionCategory: string
     }
 
     /**
-     * Categories that roll up into SALT (Schedule A Line 7).
+     * Categories that roll up into SALT (Schedule A Line 7) — §164(b)(6) aggregates
+     * lines 5a (state/local income or general sales tax), 5b (real estate tax),
+     * and 5c (personal property tax) before applying the $10,000 cap.
      *
      * @return list<string>
      */
@@ -85,6 +90,7 @@ enum DeductionCategory: string
             self::RealEstateTax->value,
             self::StateEstTax->value,
             self::SalesTax->value,
+            self::PersonalPropertyTax->value,
         ];
     }
 }

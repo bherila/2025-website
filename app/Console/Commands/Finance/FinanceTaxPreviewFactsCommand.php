@@ -230,6 +230,7 @@ class FinanceTaxPreviewFactsCommand extends BaseFinanceCommand
             'stateIncomeTaxSources' => 'line5a',
             'realEstateTaxSources' => 'line5b',
             'salesTaxSources' => 'line5a',
+            'personalPropertyTaxSources' => 'line5c',
             'mortgageInterestSources' => 'line8a',
             'investmentInterestSources' => 'line9',
             'charitableCashSources' => 'line11',

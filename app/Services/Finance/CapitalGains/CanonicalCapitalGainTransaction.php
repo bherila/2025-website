@@ -2,6 +2,8 @@
 
 namespace App\Services\Finance\CapitalGains;
 
+use App\Enums\Finance\WashSaleTreatment;
+
 /**
  * Canonical representation of a capital gain/loss transaction.
  *
@@ -55,5 +57,7 @@ class CanonicalCapitalGainTransaction
         public readonly ?int $lotId,
         /** Internal transaction ID of the closing (sell) transaction, when available */
         public readonly ?int $closeTransactionId,
+        /** Resolved per-document wash-sale treatment, when known */
+        public readonly ?WashSaleTreatment $washSaleTreatment = null,
     ) {}
 }

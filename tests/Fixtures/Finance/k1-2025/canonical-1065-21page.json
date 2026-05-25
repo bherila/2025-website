@@ -1,0 +1,49 @@
+{
+    "_meta": {
+        "purpose": "Canonical Schedule K-1 (Form 1065) parsed_data — anonymized 21-page Pioneer-style trader fund. Asserts the parser correctly distinguishes Box 10 from Box 20 Code B and preserves multiple same-letter Box 13 AE entries.",
+        "schemaVersion": "2026.1",
+        "anonymizedFrom": "21-page 1065 K-1, 2025 tax year",
+        "keysExplanation": "fields are keyed by IRS box id (A, B, 5, 9a, 10, 12, 21, etc.). codes are keyed by box number whose contents are coded items."
+    },
+    "schemaVersion": "2026.1",
+    "formType": "K-1-1065",
+    "formId": "TEST-FUND-ONE-001-2025",
+    "partnerNumber": "001",
+    "pages": 21,
+    "amendedK1": false,
+    "finalK1": false,
+    "taxYearBeginning": "2025-01-01",
+    "taxYearEnding": "2025-12-31",
+    "fields": {
+        "A": {"value": "99-9999999"},
+        "B": {"value": "TEST FUND ONE L.P."},
+        "E": {"value": "999-99-9999"},
+        "F": {"value": "TEST PARTNER"},
+        "G": {"value": "LIMITED_PARTNER"},
+        "I1": {"value": "INDIVIDUAL"},
+        "5": {"value": "21"},
+        "9a": {"value": "-500"},
+        "16": {"value": "true"},
+        "21": {"value": "11"},
+        "22": {"value": "true"},
+        "23": {"value": "true"}
+    },
+    "codes": {
+        "13": [
+            {"code": "AE", "value": "796", "notes": "Portfolio deductions - Management fees. SUSPENDED under TCJA section 67(g) for individuals through 12/31/2025."},
+            {"code": "AE", "value": "224", "notes": "Portfolio deductions - Other deductions. SUSPENDED under TCJA section 67(g) for individuals through 12/31/2025."}
+        ],
+        "20": [
+            {"code": "A", "value": "21", "notes": "Investment income for Form 4952 purposes."},
+            {"code": "B", "value": "1020", "notes": "Investment expenses for Form 4952 line 5. Includes the suspended Box 13 AE amounts (796 + 224)."}
+        ]
+    },
+    "k3": {"sections": []},
+    "raw_text": null,
+    "warnings": [],
+    "extraction": {
+        "model": "fixture",
+        "version": "2026.1",
+        "source": "test_fixture"
+    }
+}

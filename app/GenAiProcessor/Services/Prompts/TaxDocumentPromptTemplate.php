@@ -201,11 +201,30 @@ EXTRACTION RULES:
    Box 16 (Foreign Transactions):
      Code A = country name, Code B = passive gross income, Code C = general gross income,
      Code I = foreign taxes paid, Code J = foreign taxes withheld at source.
-   Box 20 (Other Information) — critical for QBI deduction:
+   Box 20 (Other Information) — critical for QBI deduction and Form 4952:
      {$box20QbiGuidance}
+     Code A = Investment income (→ Form 4952 line 4a).
+     Code B = Investment expenses (→ Form 4952 line 5). On trader/portfolio funds this is
+     frequently the SAME dollar amount that also appears under Box 13 Code AE
+     (portfolio deductions) — the Box 20 B line keeps the §67(g)-suspended deduction visible
+     for Form 4952 even though the Schedule A side is suspended through 2025.
    Box 13 (Other Deductions):
      Code G = investment interest expense (→ Form 4952 Line 1).
      Code L = portfolio deductions not subject to 2% floor (→ Schedule A or Form 4952).
+     Code AE = portfolio deductions (excess deductions). Multiple sub-items under the SAME
+     code AE (e.g. one row for "management fees", another for "other deductions") must each
+     be returned as a SEPARATE `codes_13` array entry — do NOT sum sibling AE rows into one
+     consolidated entry. Preserve the sub-line label in `notes`.
+
+   CRITICAL — Box 10 vs Box 20 Code B disambiguation:
+     Box 10 is "Net section 1231 gain (loss)" — an income-side line in the right panel,
+     printed BEFORE Box 11 / Box 12 / Box 13. If the printed Box 10 row is blank or shows
+     "0", return `field_10` as null — do NOT populate it from any other line.
+     Box 20 Code B is "Investment expenses" and lives under the "Other Information" coded
+     box at the bottom of the form. The dollar amount next to a Box 20 Code B row must go
+     into `codes_20` as `{ "code": "B", "value": "<amount>", ... }`. It must NEVER be
+     placed into `field_10`. Confusing these two is a known failure mode on Pioneer-style
+     21-page partnership K-1s — be explicit about which printed row each value came from.
 
 8. WARNINGS:
    Add a warning string for: (a) any item whose tax character is ambiguous,

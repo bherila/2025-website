@@ -86,6 +86,7 @@ enum TaxFactSourceType: string
     case Form8995ScheduleFQbi = 'form_8995_schedule_f_qbi';
     case Form8960InvestmentInterestDeduction = 'form_8960_investment_interest_deduction';
     case Form8960NetCapitalGain = 'form_8960_net_capital_gain';
+    case Form8960StateLocalForeignIncomeTax = 'form_8960_state_local_foreign_income_tax';
     case Schedule3Form1116ForeignTaxCredit = 'schedule_3_form_1116_foreign_tax_credit';
     case Schedule3UserEnteredCredit = 'schedule_3_user_entered_credit';
     case ScheduleCExpenseCategory = 'schedule_c_expense_category';
@@ -112,6 +113,7 @@ enum TaxFactSourceType: string
     case UserDeductionCharitableNoncash = 'user_deduction_charitable_noncash';
     case UserDeductionMortgageInterest = 'user_deduction_mortgage_interest';
     case UserDeductionOtherItemized = 'user_deduction_other_itemized';
+    case UserDeductionPersonalPropertyTax = 'user_deduction_personal_property_tax';
     case UserDeductionRealEstateTax = 'user_deduction_real_estate_tax';
     case UserDeductionSalesTax = 'user_deduction_sales_tax';
     case UserDeductionStateTax = 'user_deduction_state_tax';

@@ -1,0 +1,44 @@
+{
+    "_meta": {
+        "purpose": "Sibling-fund canonical K-1 fixture. Same partnership family as canonical-1065-21page.json with different Box 13 AE / Box 20 B amounts. Confirms the same parser behaviour across fund instances.",
+        "schemaVersion": "2026.1",
+        "anonymizedFrom": "21-page 1065 K-1 sibling fund, 2025 tax year"
+    },
+    "schemaVersion": "2026.1",
+    "formType": "K-1-1065",
+    "formId": "TEST-FUND-TWO-001-2025",
+    "partnerNumber": "001",
+    "pages": 21,
+    "amendedK1": false,
+    "finalK1": false,
+    "taxYearBeginning": "2025-01-01",
+    "taxYearEnding": "2025-12-31",
+    "fields": {
+        "A": {"value": "99-9999999"},
+        "B": {"value": "TEST FUND TWO L.P."},
+        "E": {"value": "999-99-9999"},
+        "F": {"value": "TEST PARTNER"},
+        "G": {"value": "LIMITED_PARTNER"},
+        "I1": {"value": "INDIVIDUAL"},
+        "16": {"value": "true"},
+        "22": {"value": "true"},
+        "23": {"value": "true"}
+    },
+    "codes": {
+        "13": [
+            {"code": "AE", "value": "800", "notes": "Portfolio deductions - Management fees. SUSPENDED under TCJA section 67(g)."},
+            {"code": "AE", "value": "249", "notes": "Portfolio deductions - Other deductions. SUSPENDED under TCJA section 67(g)."}
+        ],
+        "20": [
+            {"code": "B", "value": "1049", "notes": "Investment expenses for Form 4952 line 5. Includes the suspended Box 13 AE amounts (800 + 249)."}
+        ]
+    },
+    "k3": {"sections": []},
+    "raw_text": null,
+    "warnings": [],
+    "extraction": {
+        "model": "fixture",
+        "version": "2026.1",
+        "source": "test_fixture"
+    }
+}

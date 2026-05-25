@@ -470,7 +470,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         }
 
         $niit = $isMarried ? $form8960->niitTaxMarriedFilingJointly : $form8960->niitTaxSingle;
-        if ($niit !== null && $niit !== 0.0) {
+        if ($niit !== 0.0) {
             $sources[] = $this->source('form8960-form1040-line23', 'Form 8960 net investment income tax', $niit, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line23, 'Form 8960 NIIT flows through Schedule 2 Part II to Form 1040 line 23.');
         }
 

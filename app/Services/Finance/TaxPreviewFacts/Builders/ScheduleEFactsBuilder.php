@@ -26,6 +26,8 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
         $box13ZZSources = [];
         $traderNiiSources = [];
         $totalBox5 = 0.0;
+        $totalNonpassiveIncome = 0.0;
+        $totalNonpassiveLoss = 0.0;
 
         foreach ($k1Docs as $doc) {
             $data = $this->k1Data($doc);
@@ -34,38 +36,40 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $partnerName = $this->k1PartnerName($doc, $data);
-            $box1Sources = [
-                ...$box1Sources,
-                ...$this->k1FieldSource($doc, $partnerName, $data, '1', TaxFactSourceType::K1ScheduleEBox1Ordinary, 'ordinary business income/loss'),
-            ];
-            $box2Sources = [
-                ...$box2Sources,
-                ...$this->k1FieldSource($doc, $partnerName, $data, '2', TaxFactSourceType::K1ScheduleEBox2Rental, 'net rental real estate income/loss'),
-            ];
-            $box3Sources = [
-                ...$box3Sources,
-                ...$this->k1FieldSource($doc, $partnerName, $data, '3', TaxFactSourceType::K1ScheduleEBox3Rental, 'other net rental income/loss'),
-            ];
-            $box4Sources = [
-                ...$box4Sources,
-                ...$this->k1FieldSource($doc, $partnerName, $data, '4', TaxFactSourceType::K1ScheduleEBox4GuaranteedPayments, 'guaranteed payments'),
-            ];
+            $partnerBox1Sources = $this->k1FieldSource($doc, $partnerName, $data, '1', TaxFactSourceType::K1ScheduleEBox1Ordinary, 'ordinary business income/loss');
+            $partnerBox2Sources = $this->k1FieldSource($doc, $partnerName, $data, '2', TaxFactSourceType::K1ScheduleEBox2Rental, 'net rental real estate income/loss');
+            $partnerBox3Sources = $this->k1FieldSource($doc, $partnerName, $data, '3', TaxFactSourceType::K1ScheduleEBox3Rental, 'other net rental income/loss');
+            $partnerBox4Sources = $this->k1FieldSource($doc, $partnerName, $data, '4', TaxFactSourceType::K1ScheduleEBox4GuaranteedPayments, 'guaranteed payments');
+            $partnerBox11ZZSources = $this->k1CodeSources($doc, $partnerName, $data, '11', 'ZZ', TaxFactSourceType::K1ScheduleEBox11ZZOtherIncome, false);
+            $partnerBox13ZZSources = $this->k1CodeSources($doc, $partnerName, $data, '13', 'ZZ', TaxFactSourceType::K1ScheduleEBox13ZZOtherDeductions, true);
+
+            $box1Sources = [...$box1Sources, ...$partnerBox1Sources];
+            $box2Sources = [...$box2Sources, ...$partnerBox2Sources];
+            $box3Sources = [...$box3Sources, ...$partnerBox3Sources];
+            $box4Sources = [...$box4Sources, ...$partnerBox4Sources];
+            $box11ZZSources = [...$box11ZZSources, ...$partnerBox11ZZSources];
+            $box13ZZSources = [...$box13ZZSources, ...$partnerBox13ZZSources];
 
             $totalBox5 = $this->sumMoney([$totalBox5, $this->k1Field($data, '5')]);
-            $box11ZZSources = [
-                ...$box11ZZSources,
-                ...$this->k1CodeSources($doc, $partnerName, $data, '11', 'ZZ', TaxFactSourceType::K1ScheduleEBox11ZZOtherIncome, false),
-            ];
-            $box13ZZSources = [
-                ...$box13ZZSources,
-                ...$this->k1CodeSources($doc, $partnerName, $data, '13', 'ZZ', TaxFactSourceType::K1ScheduleEBox13ZZOtherDeductions, true),
-            ];
+
+            $partnerNonpassiveNet = $this->sumMoney([
+                $this->sumSources($partnerBox1Sources),
+                $this->sumSources($partnerBox4Sources),
+                $this->sumSources($partnerBox11ZZSources),
+                -$this->sumAbsoluteSources($partnerBox13ZZSources),
+            ]);
+
+            if ($partnerNonpassiveNet >= 0) {
+                $totalNonpassiveIncome = $this->sumMoney([$totalNonpassiveIncome, $partnerNonpassiveNet]);
+            } else {
+                $totalNonpassiveLoss = $this->sumMoney([$totalNonpassiveLoss, $partnerNonpassiveNet]);
+            }
 
             if ($this->isTraderFundK1($data)) {
                 $traderNiiSources = [
                     ...$traderNiiSources,
-                    ...$this->k1CodeSources($doc, $partnerName, $data, '11', 'ZZ', TaxFactSourceType::K1ScheduleEBox11ZZOtherIncome, false),
-                    ...$this->k1CodeSources($doc, $partnerName, $data, '13', 'ZZ', TaxFactSourceType::K1ScheduleEBox13ZZOtherDeductions, true),
+                    ...$partnerBox11ZZSources,
+                    ...$partnerBox13ZZSources,
                 ];
             }
         }
@@ -77,7 +81,9 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
         $totalBox11ZZ = $this->sumSources($box11ZZSources);
         $totalBox13ZZ = $this->sumAbsoluteSources($box13ZZSources);
         $totalPassive = $this->sumMoney([$totalBox2, $totalBox3]);
-        $totalNonpassive = $this->sumMoney([$totalBox1, $totalBox4, $totalBox11ZZ, -$totalBox13ZZ]);
+        $totalNonpassiveIncome = $this->roundMoney($totalNonpassiveIncome);
+        $totalNonpassiveLoss = $this->roundMoney($totalNonpassiveLoss);
+        $totalNonpassive = $this->sumMoney([$totalNonpassiveIncome, $totalNonpassiveLoss]);
         $miscIncomeTotal = $this->sumSources($miscIncomeSources);
 
         return new ScheduleEFacts(
@@ -100,6 +106,8 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             totalTraderNii: $this->sumSources($traderNiiSources),
             totalPassive: $totalPassive,
             totalNonpassive: $totalNonpassive,
+            totalNonpassiveIncome: $totalNonpassiveIncome,
+            totalNonpassiveLoss: $totalNonpassiveLoss,
             grandTotal: $this->sumMoney([$miscIncomeTotal, $totalPassive, $totalNonpassive]),
         );
     }
