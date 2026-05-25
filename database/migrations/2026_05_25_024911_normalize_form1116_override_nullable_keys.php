@@ -75,11 +75,7 @@ return new class extends Migration
             ->orderByDesc('id')
             ->get()
             ->each(function (object $row) use (&$seen, &$duplicateIds): void {
-                $key = implode('|', [
-                    (string) $row->document_id,
-                    (string) $row->payer_tin,
-                    (string) $row->account_identifier,
-                ]);
+                $key = $this->duplicateKey($row);
 
                 if (isset($seen[$key])) {
                     $duplicateIds[] = (int) $row->id;
@@ -95,5 +91,14 @@ return new class extends Migration
                 ->whereIn('id', $duplicateIds)
                 ->delete();
         }
+    }
+
+    private function duplicateKey(object $row): string
+    {
+        return json_encode([
+            (int) $row->document_id,
+            (string) $row->payer_tin,
+            (string) $row->account_identifier,
+        ], JSON_THROW_ON_ERROR);
     }
 };
