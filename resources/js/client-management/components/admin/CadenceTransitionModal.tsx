@@ -18,7 +18,7 @@ interface TransitionPreview {
   carried_rollover_hours: number
   recurring_items_affected: number
   successor_terms: {
-    billing_cadence: 'monthly' | 'quarterly' | 'annual'
+    billing_cadence: 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
     monthly_retainer_hours: string | number
     monthly_retainer_fee: string | number
     hourly_rate: string | number
@@ -53,7 +53,7 @@ export default function CadenceTransitionModal({
 }: CadenceTransitionModalProps) {
   const [step, setStep] = useState(1)
   const [effectiveDate, setEffectiveDate] = useState(tomorrow())
-  const [billingCadence, setBillingCadence] = useState<'monthly' | 'quarterly' | 'annual'>(agreement.billing_cadence ?? 'monthly')
+  const [billingCadence, setBillingCadence] = useState<'monthly' | 'quarterly' | 'semi_annual' | 'annual'>(agreement.billing_cadence ?? 'monthly')
   const [monthlyRetainerHours, setMonthlyRetainerHours] = useState(Number(agreement.monthly_retainer_hours ?? 0))
   const [monthlyRetainerFee, setMonthlyRetainerFee] = useState(Number(agreement.monthly_retainer_fee ?? 0))
   const [hourlyRate, setHourlyRate] = useState(Number(agreement.hourly_rate ?? 0))
@@ -196,7 +196,8 @@ export default function CadenceTransitionModal({
                   <SelectContent>
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
-                    <SelectItem value="annual">Annual</SelectItem>
+                    <SelectItem value="semi_annual">Semiannual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

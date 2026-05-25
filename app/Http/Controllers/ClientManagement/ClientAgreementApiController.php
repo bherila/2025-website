@@ -78,11 +78,19 @@ class ClientAgreementApiController extends Controller
             'rollover_months' => 'nullable|integer|min:0',
             'hourly_rate' => 'nullable|numeric|min:0',
             'monthly_retainer_fee' => 'nullable|numeric|min:0',
+            'retainer_fee' => 'nullable|numeric|min:0',
+            'retainer_hours' => 'nullable|numeric|min:0',
             'is_visible_to_client' => 'nullable|boolean',
             'billing_cadence' => ['nullable', Rule::enum(BillingCadence::class)],
             'bill_overage_interim' => 'nullable|boolean',
             'first_cycle_proration' => ['nullable', Rule::enum(FirstCycleProration::class)],
         ]);
+        $cadence = BillingCadence::tryFrom((string) ($validated['billing_cadence'] ?? $agreement->effectiveBillingCadence()->value));
+        if ($cadence === BillingCadence::Monthly && (($validated['retainer_fee'] ?? null) !== null || ($validated['retainer_hours'] ?? null) !== null)) {
+            return response()->json([
+                'error' => 'Monthly agreements cannot set retainer_fee or retainer_hours.',
+            ], 422);
+        }
 
         $agreement->update($validated);
 

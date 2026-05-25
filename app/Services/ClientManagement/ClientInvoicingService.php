@@ -20,6 +20,7 @@ use App\Services\ClientManagement\DataTransferObjects\DeferredAllocationResult;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
 use App\Services\ClientManagement\DataTransferObjects\TimeEntryFragment;
+use App\Support\ClientManagement\BillingCadenceLabel;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -793,11 +794,11 @@ class ClientInvoicingService
                 ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Monthly Retainer ({$agreement->monthly_retainer_hours} hours) - ".
+                    'description' => BillingCadenceLabel::for($agreement->effectiveBillingCadence())." Retainer ({$agreement->monthly_retainer_hours} hours) - ".
                                     $retainerMonthStart->format('M j, Y').' through '.$retainerMonthEnd->format('M j, Y'),
                     'quantity' => '1',
-                    'unit_price' => $agreement->monthly_retainer_fee,
-                    'line_total' => $agreement->monthly_retainer_fee,
+                    'unit_price' => $agreement->periodRetainerFee(),
+                    'line_total' => $agreement->periodRetainerFee(),
                     'line_type' => 'retainer',
                     'hours' => (float) $agreement->monthly_retainer_hours,
                     'line_date' => $retainerMonthStart,

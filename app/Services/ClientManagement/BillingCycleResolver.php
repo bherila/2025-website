@@ -50,6 +50,18 @@ class BillingCycleResolver
 
             return;
         }
+        if ($cadence === BillingCadence::SemiAnnual) {
+            $cursor = $activeDate->copy();
+            while ($cursor->lte($ceiling)) {
+                $cycleStart = $cursor->copy();
+                $cycleEnd = $cycleStart->copy()->addMonths(6)->subDay();
+                $clippedEnd = $cycleEnd->gt($ceiling) ? $ceiling->copy() : $cycleEnd->copy();
+                yield $this->makeCycle($cycleStart, $clippedEnd, $clippedEnd->lt($cycleEnd));
+                $cursor = $cycleEnd->copy()->addDay();
+            }
+
+            return;
+        }
 
         // Non-monthly cadences: handle first cycle per proration policy
         $firstCycleStart = $cadence->cycleStart($activeDate);
@@ -81,6 +93,18 @@ class BillingCycleResolver
     public function cycleContaining(ClientAgreement $agreement, CarbonInterface $date): BillingCycle
     {
         $cadence = $agreement->effectiveBillingCadence();
+        if ($cadence === BillingCadence::SemiAnnual) {
+            $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
+            $resolved = $activeDate->copy();
+            while ($resolved->gt($date)) {
+                $resolved->subMonths(6);
+            }
+            while ($resolved->copy()->addMonths(6)->subDay()->lt($date)) {
+                $resolved->addMonths(6);
+            }
+
+            return $this->makeCycle($resolved->copy(), $resolved->copy()->addMonths(6)->subDay(), false);
+        }
         $start = $cadence->cycleStart($date);
         $end = $cadence->cycleEnd($date);
 

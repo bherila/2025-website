@@ -38,7 +38,7 @@ export interface ClientCompany {
   uninvoiced_task_incomplete_total?: number
   lifetime_value?: number
   unpaid_invoices?: ClientInvoice[]
-  current_billing_cadence?: 'monthly' | 'quarterly' | 'annual' | null
+  current_billing_cadence?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual' | null
   current_retainer_hours?: number | null
   current_cycle_progress?: number | null
   needs_attention?: boolean
@@ -88,7 +88,9 @@ export interface Agreement {
   rollover_months?: number
   hourly_rate?: string
   monthly_retainer_fee: string
-  billing_cadence?: 'monthly' | 'quarterly' | 'annual'
+  retainer_fee?: string | null
+  retainer_hours?: string | null
+  billing_cadence?: 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
   bill_overage_interim?: boolean
   first_cycle_proration?: 'prorate_hours' | 'full_period' | 'align_next_cycle'
   initial_rollover_hours?: string
