@@ -13,6 +13,7 @@
         "test:e2e": "playwright test",
         "test:e2e:parking-pickup": "playwright test tests/e2e/parking-pickup.spec.ts",
         "test:e2e:parking-pickup-visual": "playwright test tests/e2e/parking-pickup.visual.spec.ts",
+        "test:e2e:finance-lot-reconciliation": "playwright test tests/e2e/finance-lot-reconciliation.spec.ts",
         "type-check": "tsc --noEmit --jsx react-jsx",
         "type-check:e2e": "tsc --noEmit -p tsconfig.playwright.json",
         "lint": "eslint .",
