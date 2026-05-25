@@ -66,11 +66,12 @@ describe('TXF Export', () => {
       expect(txf).toContain('P50 sh. TSLA')
     })
 
-    it('should include proceeds and cost basis', () => {
+    it('should emit basis before proceeds in a TD record', () => {
       const lot = makeLot({ proceeds: 17500, costBasis: 15000 })
       const txf = generateTxf([lot])
-      expect(txf).toContain('$17500.00')
-      expect(txf).toContain('$15000.00')
+      expect(txf).toContain(
+        'TD\r\nN321\r\nC1\r\nL1\r\nP100 sh. AAPL\r\nD01/15/2024\r\nD06/15/2024\r\n$15000.00\r\n$17500.00\r\n^\r\n',
+      )
     })
 
     it('should include wash sale adjustment when present', () => {
@@ -81,12 +82,13 @@ describe('TXF Export', () => {
       })
       const txf = generateTxf([lot])
       expect(txf).toContain('$500.00')
+      expect(txf).toContain('$15000.00\r\n$17500.00\r\n$500.00\r\n^\r\n')
     })
 
     it('should not include wash sale adjustment when not a wash sale', () => {
       const lot = makeLot({ isWashSale: false, adjustmentAmount: 0 })
       const txf = generateTxf([lot])
-      // Should have exactly two $ lines: proceeds and cost basis
+      // Should have exactly two $ lines: cost basis and proceeds.
       const dollarLines = txf.split('\r\n').filter(l => l.startsWith('$'))
       expect(dollarLines.length).toBe(2)
     })

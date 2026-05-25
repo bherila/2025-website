@@ -30,6 +30,10 @@ class Form8949ExportWritersTest extends TestCase
         $this->assertStringContainsString("N713\r\n", $txf);
         $this->assertStringContainsString("N714\r\n", $txf);
         $this->assertSame(7, substr_count($txf, "\r\n^\r\n"));
+        $this->assertStringContainsString(
+            "TD\r\nN321\r\nC1\r\nL1\r\nPExample Lot A\r\nD01/15/2024\r\nD02/20/2025\r\n$700.00\r\n$1200.00\r\n^\r\n",
+            $txf,
+        );
     }
 
     public function test_txf_writer_includes_wash_sale_adjustment_when_present(): void
@@ -39,6 +43,7 @@ class Form8949ExportWritersTest extends TestCase
         ]);
 
         $this->assertStringContainsString('$500.00', $txf);
+        $this->assertStringContainsString("$700.00\r\n$1200.00\r\n$500.00\r\n^\r\n", $txf);
     }
 
     public function test_txf_writer_does_not_emit_non_wash_adjustment_amount(): void

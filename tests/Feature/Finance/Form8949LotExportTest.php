@@ -44,7 +44,10 @@ class Form8949LotExportTest extends TestCase
         $response->assertHeader('content-disposition', 'attachment; filename="1099b-lots-2025.txf"');
         $response->assertSeeText('N711', false);
         $response->assertSeeText('PApple Inc.', false);
-        $response->assertSeeText('$1250.00', false);
+        $this->assertStringContainsString(
+            "PApple Inc.\r\nD01/02/2024\r\nD02/03/2025\r\n$1000.00\r\n$1250.00\r\n^\r\n",
+            $response->getContent(),
+        );
     }
 
     public function test_account_document_export_uses_matching_payer_data_for_account_link(): void
