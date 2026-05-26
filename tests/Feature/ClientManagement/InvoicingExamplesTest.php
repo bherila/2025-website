@@ -305,7 +305,7 @@ class InvoicingExamplesTest extends TestCase
     {
         // Try to create agreement with invalid catch_up_threshold (exceeds retainer)
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('catch_up_threshold_hours must be between 0 and monthly_retainer_hours');
+        $this->expectExceptionMessage('catch_up_threshold_hours must be between 0 and period retainer hours');
 
         ClientAgreement::create([
             'client_company_id' => $this->company->id,

@@ -865,7 +865,7 @@ class ClientInvoicingService
      */
     protected function generateAllCadenceInvoices(ClientCompany $company, ClientAgreement $agreement): array
     {
-        $through = $agreement->effectiveBillingCadence()->cycleEnd(now());
+        $through = $this->cadenceGenerationThroughDate($agreement);
         $billExcessImmediately = (bool) $agreement->bill_overage_interim;
         $cycleLedger = $this->buildAgreementLedgerThrough(
             $company,
@@ -1069,8 +1069,8 @@ class ClientInvoicingService
                 ->orderBy('id')
                 ->get();
 
-            $retainerHours = $cycleLedger['retainer_hours'];
-            $retainerFee = round((float) $agreement->monthly_retainer_fee * $cycleLedger['retainer_multiplier'], 2);
+            $retainerHours = $this->cycleRetainerHours($agreement, $cycle, $cycleLedger);
+            $retainerFee = $this->cycleRetainerFee($agreement, $cycle, $cycleLedger);
 
             $splitter = new TimeEntrySplitter;
             $plan = $splitter->allocateTimeEntries(
@@ -1086,7 +1086,7 @@ class ClientInvoicingService
                 $line = ClientInvoiceLine::create([
                     'client_invoice_id' => $invoice->client_invoice_id,
                     'client_agreement_id' => $agreement->id,
-                    'description' => "Work items applied to {$agreement->effectiveBillingCadence()->value} retainer ({$this->formatHoursForQuantity($hours)} applied to {$this->formatPeriodLabel($periodStart, $periodEnd)} cycle)",
+                    'description' => 'Work items applied to '.strtolower(BillingCadenceLabel::for($agreement->effectiveBillingCadence()))." retainer ({$this->formatHoursForQuantity($hours)} applied to {$this->formatPeriodLabel($periodStart, $periodEnd)} cycle)",
                     'quantity' => '',
                     'unit_price' => 0,
                     'line_total' => 0,
@@ -1138,7 +1138,7 @@ class ClientInvoicingService
             ClientInvoiceLine::create([
                 'client_invoice_id' => $invoice->client_invoice_id,
                 'client_agreement_id' => $agreement->id,
-                'description' => ucfirst($agreement->effectiveBillingCadence()->value)." Retainer ({$retainerHours} hours) - ".
+                'description' => BillingCadenceLabel::for($agreement->effectiveBillingCadence())." Retainer ({$this->formatHoursForQuantity($retainerHours)} hours) - ".
                                 $periodStart->format('M j, Y').' through '.$periodEnd->format('M j, Y'),
                 'quantity' => '1',
                 'unit_price' => $retainerFee,
@@ -1573,6 +1573,25 @@ class ClientInvoicingService
         $first = $cycleSummaries->first();
         /** @var MonthSummary|null $last */
         $last = $cycleSummaries->last();
+
+        if ($agreement->retainer_hours !== null) {
+            $retainerHours = $this->cyclePeriodRetainerHours($agreement, $cycle);
+            $hoursWorked = round((float) $cycleSummaries->sum('hoursWorked'), 4);
+            $coveredHours = round(min($hoursWorked, $retainerHours), 4);
+
+            return [
+                'retainer_hours' => $retainerHours,
+                'retainer_multiplier' => $this->cyclePeriodRetainerMultiplier($agreement, $cycle),
+                'covered_hours' => $coveredHours,
+                'hours_worked' => $hoursWorked,
+                'rollover_hours_used' => 0.0,
+                'unused_hours' => round(max(0.0, $retainerHours - $hoursWorked), 4),
+                'negative_hours' => round(max(0.0, $hoursWorked - $retainerHours), 4),
+                'starting_unused_hours' => 0.0,
+                'starting_negative_hours' => 0.0,
+            ];
+        }
+
         $retainerHours = round((float) $cycleSummaries->sum('retainerHours'), 4);
         $monthlyRetainerHours = (float) $agreement->monthly_retainer_hours;
 
@@ -1599,6 +1618,81 @@ class ClientInvoicingService
                 ? round($first->opening->negativeOffset + $first->opening->remainingNegativeBalance, 4)
                 : 0.0,
         ];
+    }
+
+    /**
+     * Resolve the last date invoice generation should cover for cadence-based agreements.
+     */
+    protected function cadenceGenerationThroughDate(ClientAgreement $agreement): Carbon
+    {
+        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
+        $referenceDate = now()->startOfDay();
+
+        if ($activeDate->gt($referenceDate)) {
+            $referenceDate = $activeDate->copy();
+        }
+
+        if ($agreement->termination_date !== null && Carbon::parse($agreement->termination_date)->lt($referenceDate)) {
+            $referenceDate = Carbon::parse($agreement->termination_date)->startOfDay();
+        }
+
+        return $this->billingCycleResolver->cycleContaining($agreement, $referenceDate)->end;
+    }
+
+    /**
+     * Resolve retainer hours for this concrete cadence cycle.
+     *
+     * @param  array<string, float>  $cycleLedger
+     */
+    protected function cycleRetainerHours(ClientAgreement $agreement, BillingCycle $cycle, array $cycleLedger): float
+    {
+        if ($agreement->retainer_hours !== null) {
+            return $this->cyclePeriodRetainerHours($agreement, $cycle);
+        }
+
+        return $cycleLedger['retainer_hours'];
+    }
+
+    protected function cyclePeriodRetainerHours(ClientAgreement $agreement, BillingCycle $cycle): float
+    {
+        return round((float) $agreement->retainer_hours * $this->cyclePeriodRetainerMultiplier($agreement, $cycle), 4);
+    }
+
+    /**
+     * Resolve retainer fee for this concrete cadence cycle.
+     *
+     * @param  array<string, float>  $cycleLedger
+     */
+    protected function cycleRetainerFee(ClientAgreement $agreement, BillingCycle $cycle, array $cycleLedger): float
+    {
+        if ($agreement->retainer_fee !== null) {
+            return round((float) $agreement->retainer_fee * $this->cyclePeriodRetainerMultiplier($agreement, $cycle), 2);
+        }
+
+        return round((float) $agreement->monthly_retainer_fee * $cycleLedger['retainer_multiplier'], 2);
+    }
+
+    protected function cyclePeriodRetainerMultiplier(ClientAgreement $agreement, BillingCycle $cycle): float
+    {
+        if (! $cycle->isProrated) {
+            return 1.0;
+        }
+
+        $cadence = $agreement->effectiveBillingCadence();
+        if ($cadence === BillingCadence::SemiAnnual) {
+            $fullCycleStart = $cycle->start->copy();
+            $fullCycleEnd = $fullCycleStart->copy()->addMonths($cadence->monthsInCycle())->subDay();
+        } else {
+            $fullCycleStart = $cadence->cycleStart($cycle->start);
+            $fullCycleEnd = $cadence->cycleEnd($cycle->start);
+        }
+
+        $fullCycleDays = $fullCycleStart->diffInDays($fullCycleEnd) + 1;
+        if ($fullCycleDays <= 0) {
+            return 1.0;
+        }
+
+        return ($cycle->start->diffInDays($cycle->end) + 1) / $fullCycleDays;
     }
 
     protected function monthRetainerMultiplier(ClientAgreement $agreement, Carbon $monthStart, Carbon $monthEnd): float
@@ -1718,7 +1812,13 @@ class ClientInvoicingService
     protected function agreementsForInvoiceGeneration(ClientCompany $company): Collection
     {
         $agreements = $company->agreements()
-            ->where('active_date', '<=', now())
+            ->where(function ($query): void {
+                $query->where('active_date', '<=', now())
+                    ->orWhere(function ($query): void {
+                        $query->where('billing_cadence', '!=', BillingCadence::Monthly->value)
+                            ->where('active_date', '<=', now()->copy()->addMonth());
+                    });
+            })
             ->orderBy('active_date')
             ->orderBy('id')
             ->get();
