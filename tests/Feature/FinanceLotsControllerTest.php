@@ -770,6 +770,40 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertTrue($lot->is_short_term);
     }
 
+    public function test_update_lot_purchase_date_clears_various_placeholder_note(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Test Update Various Lot',
+            'acct_last_balance' => '0',
+        ]);
+
+        $lot = FinAccountLot::create([
+            'acct_id' => $acctId,
+            'symbol' => 'FXAIX',
+            'quantity' => 10,
+            'purchase_date' => '2025-01-02',
+            'cost_basis' => 1000.00,
+            'sale_date' => '2025-01-02',
+            'proceeds' => 1200.00,
+            'realized_gain_loss' => 200.00,
+            'is_short_term' => true,
+            'lot_source' => '1099b',
+            'reconciliation_notes' => 'Date acquired reported as Various; purchase_date stores sale_date as a database placeholder. Broker note to preserve.',
+        ]);
+
+        $response = $this->actingAs($user)->putJson("/api/finance/{$acctId}/lots/{$lot->lot_id}", [
+            'purchase_date' => '2025-01-02',
+        ]);
+
+        $response->assertOk();
+
+        $lot->refresh();
+        $this->assertSame('2025-01-02', $lot->purchase_date->format('Y-m-d'));
+        $this->assertSame('Broker note to preserve.', $lot->reconciliation_notes);
+    }
+
     public function test_update_lot_transaction_assignment_only_does_not_queue_matcher(): void
     {
         Queue::fake();
