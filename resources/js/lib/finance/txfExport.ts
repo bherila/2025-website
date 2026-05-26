@@ -17,7 +17,7 @@
  *   C1         — Copy 1
  *   L1         — Line 1
  *   P<desc>    — Description of property
- *   D<date>    — Date acquired (MM/DD/YYYY or "Various")
+ *   D<date>    — Date acquired (MM/DD/YYYY, "various" short-term, "VARIOUS" long-term, or blank)
  *   D<date>    — Date sold (MM/DD/YYYY)
  *   $<amount>  — Cost or other basis
  *   $<amount>  — Sales price / proceeds
