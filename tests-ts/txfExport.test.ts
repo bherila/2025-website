@@ -54,10 +54,22 @@ describe('TXF Export', () => {
       expect(txf).toContain('D06/15/2024')
     })
 
-    it('should use "Various" for null date acquired', () => {
+    it('should use a blank acquired-date field for null date acquired', () => {
       const lot = makeLot({ dateAcquired: null })
       const txf = generateTxf([lot])
-      expect(txf).toContain('DVarious')
+      expect(txf).toContain('P100 sh. AAPL\r\nD\r\nD06/15/2024')
+    })
+
+    it('should preserve various date acquired markers', () => {
+      const lot = makeLot({ dateAcquired: 'various' })
+      const txf = generateTxf([lot])
+      expect(txf).toContain('P100 sh. AAPL\r\nDvarious\r\nD06/15/2024')
+    })
+
+    it('should preserve long-term various date acquired markers', () => {
+      const lot = makeLot({ dateAcquired: 'various', isShortTerm: false })
+      const txf = generateTxf([lot])
+      expect(txf).toContain('P100 sh. AAPL\r\nDVARIOUS\r\nD06/15/2024')
     })
 
     it('should include description', () => {
@@ -66,11 +78,12 @@ describe('TXF Export', () => {
       expect(txf).toContain('P50 sh. TSLA')
     })
 
-    it('should include proceeds and cost basis', () => {
+    it('should emit basis before proceeds in a TD record', () => {
       const lot = makeLot({ proceeds: 17500, costBasis: 15000 })
       const txf = generateTxf([lot])
-      expect(txf).toContain('$17500.00')
-      expect(txf).toContain('$15000.00')
+      expect(txf).toContain(
+        'TD\r\nN321\r\nC1\r\nL1\r\nP100 sh. AAPL\r\nD01/15/2024\r\nD06/15/2024\r\n$15000.00\r\n$17500.00\r\n$\r\n^\r\n',
+      )
     })
 
     it('should include wash sale adjustment when present', () => {
@@ -81,14 +94,15 @@ describe('TXF Export', () => {
       })
       const txf = generateTxf([lot])
       expect(txf).toContain('$500.00')
+      expect(txf).toContain('$15000.00\r\n$17500.00\r\n$500.00\r\n^\r\n')
     })
 
-    it('should not include wash sale adjustment when not a wash sale', () => {
+    it('should emit a blank wash sale field when not a wash sale', () => {
       const lot = makeLot({ isWashSale: false, adjustmentAmount: 0 })
       const txf = generateTxf([lot])
-      // Should have exactly two $ lines: proceeds and cost basis
+      // Should have three $ lines: cost basis, proceeds, and a blank wash-sale field.
       const dollarLines = txf.split('\r\n').filter(l => l.startsWith('$'))
-      expect(dollarLines.length).toBe(2)
+      expect(dollarLines).toEqual(['$15000.00', '$17500.00', '$'])
     })
 
     it('should end each record with ^', () => {

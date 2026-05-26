@@ -14,6 +14,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class Form8949LotExportService
 {
+    private const VARIOUS_DATE_ACQUIRED_NOTE = 'Date acquired reported as Various';
+
     /**
      * @param  array<string, mixed>  $validated
      * @return Form8949ExportLot[]
@@ -116,7 +118,7 @@ class Form8949LotExportService
 
         return new Form8949ExportLot(
             description: $this->description($lot->description, $lot->symbol, $lot->quantity),
-            dateAcquired: $lot->purchase_date->format('Y-m-d'),
+            dateAcquired: $this->dateAcquired($lot),
             dateSold: $lot->sale_date?->format('Y-m-d') ?? '',
             proceeds: $proceeds,
             costBasis: $costBasis,
@@ -133,6 +135,28 @@ class Form8949LotExportService
             accruedMarketDiscount: $lot->accrued_market_discount !== null ? $this->floatValue($lot->accrued_market_discount) : null,
             washSaleDisallowed: $washSaleDisallowed,
         );
+    }
+
+    private function dateAcquired(FinAccountLot $lot): string
+    {
+        if ($this->hasVariousDateAcquiredPlaceholder($lot)) {
+            return 'various';
+        }
+
+        return $lot->purchase_date->format('Y-m-d');
+    }
+
+    private function hasVariousDateAcquiredPlaceholder(FinAccountLot $lot): bool
+    {
+        if (! is_string($lot->reconciliation_notes) || ! str_contains($lot->reconciliation_notes, self::VARIOUS_DATE_ACQUIRED_NOTE)) {
+            return false;
+        }
+
+        if ($lot->sale_date === null) {
+            return false;
+        }
+
+        return $lot->purchase_date->format('Y-m-d') === $lot->sale_date->format('Y-m-d');
     }
 
     /**

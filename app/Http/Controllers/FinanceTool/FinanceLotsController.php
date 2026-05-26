@@ -22,6 +22,12 @@ class FinanceLotsController extends Controller
 {
     use QueriesUserAccounts;
 
+    private const VARIOUS_DATE_ACQUIRED_NOTE_PATTERNS = [
+        '/Date acquired reported as Various;\s*purchase_date stores sale_date as a database placeholder\.?\s*/',
+        '/Date acquired reported as Various\.\s*/',
+        '/Date acquired reported as Various\s*/',
+    ];
+
     public function __construct(
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
     ) {}
@@ -637,6 +643,10 @@ class FinanceLotsController extends Controller
             $updateData['realized_gain_loss'] = (float) $proceeds - (float) $costBasis;
         }
 
+        if (array_key_exists('purchase_date', $updateData)) {
+            $updateData['reconciliation_notes'] = $this->withoutVariousDateAcquiredNote($lot->reconciliation_notes);
+        }
+
         $lot->update($updateData);
         $freshLot = $lot->fresh();
         if ($updateData !== [] && $freshLot instanceof FinAccountLot && $this->lotUpdateAffectsMatcher($validated)) {
@@ -834,5 +844,21 @@ class FinanceLotsController extends Controller
         }
 
         return false;
+    }
+
+    private function withoutVariousDateAcquiredNote(?string $notes): ?string
+    {
+        $cleaned = trim((string) $notes);
+        if ($cleaned === '') {
+            return null;
+        }
+
+        foreach (self::VARIOUS_DATE_ACQUIRED_NOTE_PATTERNS as $pattern) {
+            $cleaned = preg_replace($pattern, '', $cleaned) ?? $cleaned;
+        }
+
+        $cleaned = trim(preg_replace('/\s+/', ' ', $cleaned) ?? $cleaned);
+
+        return $cleaned !== '' ? $cleaned : null;
     }
 }

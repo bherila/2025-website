@@ -4,23 +4,24 @@
  * Generates TXF files from IRS Form 8949 lot sale data for import
  * into tax preparation software (TurboTax, H&R Block, etc.).
  *
- * TXF Spec: Each record begins with a type line (V, followed by version),
- * then line-item records identified by reference numbers.
+ * TXF Spec: Each file begins with a V042 header. Form 8949 transaction
+ * records use TD records with Schedule D reference numbers.
  *
  * Reference numbers used:
  *   321 — Short-term gain/loss (Schedule D Part I / Form 8949 Part I)
  *   323 — Long-term gain/loss  (Schedule D Part II / Form 8949 Part II)
  *
  * Each sale record is a block of lines:
+ *   TD         — Form 1099-B detail record type
  *   N<refnum>  — Reference number (321 or 323)
  *   C1         — Copy 1
  *   L1         — Line 1
  *   P<desc>    — Description of property
- *   D<date>    — Date acquired (MM/DD/YYYY or "Various")
+ *   D<date>    — Date acquired (MM/DD/YYYY, "various" short-term, "VARIOUS" long-term, or blank)
  *   D<date>    — Date sold (MM/DD/YYYY)
- *   $<amount>  — Sales price / proceeds
  *   $<amount>  — Cost or other basis
- *   $<amount>  — Wash sale loss disallowed (if applicable, may be 0)
+ *   $<amount>  — Sales price / proceeds
+ *   $<amount>  — Wash sale loss disallowed (blank when none)
  *
  * See docs/finance/LotAnalyzer.md for further context.
  */
@@ -28,8 +29,9 @@
 import type { LotSale } from './washSaleEngine'
 
 /** Format a date string (YYYY-MM-DD) as MM/DD/YYYY for TXF. */
-function formatTxfDate(dateStr: string | null): string {
-  if (!dateStr) return 'Various'
+function formatTxfDate(dateStr: string | null, isShortTerm?: boolean): string {
+  if (!dateStr) return ''
+  if (dateStr.trim().toLowerCase() === 'various') return isShortTerm === false ? 'VARIOUS' : 'various'
   const parts = dateStr.split('-')
   if (parts.length === 3) {
     return `${parts[1]}/${parts[2]}/${parts[0]}`
@@ -62,19 +64,18 @@ export function generateTxf(lots: LotSale[], year?: string): string {
     // Reference number: 321 for short-term, 323 for long-term
     const refNum = lot.isShortTerm ? '321' : '323'
 
+    lines.push('TD')
     lines.push(`N${refNum}`)
     lines.push('C1')
     lines.push('L1')
     lines.push(`P${lot.description}`)
-    lines.push(`D${formatTxfDate(lot.dateAcquired)}`)
+    lines.push(`D${formatTxfDate(lot.dateAcquired, lot.isShortTerm)}`)
     lines.push(`D${formatTxfDate(lot.dateSold)}`)
-    lines.push(`$${formatTxfAmount(lot.proceeds)}`)
     lines.push(`$${formatTxfAmount(lot.costBasis)}`)
+    lines.push(`$${formatTxfAmount(lot.proceeds)}`)
 
-    // If there's a wash sale adjustment, include it
-    if (lot.isWashSale && lot.adjustmentAmount !== 0) {
-      lines.push(`$${formatTxfAmount(lot.adjustmentAmount)}`)
-    }
+    const washSaleAmount = lot.isWashSale ? lot.adjustmentAmount : null
+    lines.push(washSaleAmount === null ? '$' : `$${formatTxfAmount(washSaleAmount)}`)
 
     lines.push('^')  // End of record
   }
