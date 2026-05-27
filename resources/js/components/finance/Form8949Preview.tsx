@@ -134,11 +134,8 @@ export function classifyBox(lot: Form8949Lot): Form8949Box {
   if (canonicalSource === 'broker_1099b') {
     return shortTerm ? 'A' : 'D'
   }
-  if (canonicalSource === 'account_derived' || canonicalSource === 'synthetic_adjustment') {
-    // Account-derived and synthetic adjustments are not on a 1099-B
-    return shortTerm ? 'C' : 'F'
-  }
-  if (canonicalSource === 'manual') {
+  if (['account_derived', 'synthetic_adjustment', 'manual'].includes(canonicalSource)) {
+    // Non-1099-B sources are not reported by a broker
     return shortTerm ? 'C' : 'F'
   }
 

@@ -57,10 +57,7 @@ class FinanceBackfillLotSourceCommand extends BaseFinanceCommand
                         $q->where('lot_origin', $mapping['lot_origin']);
                     }
                 })
-                ->where(function ($q) use ($mapping): void {
-                    $q->whereNull('source')
-                        ->orWhere('source', '!=', $mapping['target_source']);
-                });
+                ->whereNull('source');
 
             $count = $query->count();
 
