@@ -18,6 +18,7 @@ use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class FinanceDocumentController extends Controller
 {
@@ -75,6 +76,24 @@ class FinanceDocumentController extends Controller
             's3_key' => $s3Path,
             'expires_in' => 900,
         ]);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $doc = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->where('document_kind', '!=', FinDocument::KIND_TAX_FORM)
+            ->firstOrFail();
+
+        DB::transaction(function () use ($doc): void {
+            $doc->lots()->delete();
+            $doc->accounts()->delete();
+            $doc->statements()->delete();
+            $doc->delete();
+        });
+
+        return response()->json(['success' => true]);
     }
 
     public function store(Request $request): JsonResponse
