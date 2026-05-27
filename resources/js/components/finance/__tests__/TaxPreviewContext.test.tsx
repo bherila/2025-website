@@ -603,23 +603,23 @@ describe('TaxPreviewContext', () => {
     expect(result.current.isLoading).toBe(false)
   })
 
-  it('registers a 5 s setInterval when a document is pending', async () => {
+  it('registers polling with setTimeout and backoff when a document is pending', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     renderHook(() => useTaxPreview(), { wrapper })
 
-    // Wait until the polling effect fires — it will call setInterval(fn, 5000)
+    // Wait until the polling effect fires — it will call setTimeout(fn, 5000) for first backoff
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
     spy.mockRestore()
   })
 
-  it('registers a 5 s setInterval when a document is processing', async () => {
+  it('registers polling with setTimeout and backoff when a document is processing', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'processing')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     renderHook(() => useTaxPreview(), { wrapper })
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
@@ -630,16 +630,17 @@ describe('TaxPreviewContext', () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     renderHook(() => useTaxPreview(), { wrapper })
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
 
+    // Changed from setInterval to setTimeout with backoff
     const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
-    expect(pollCalls).toHaveLength(1)
+    expect(pollCalls.length).toBeGreaterThanOrEqual(1)
     const pollCall = pollCalls[0]
     if (pollCall === undefined) {
-      throw new Error('Expected exactly one tax-preview polling interval')
+      throw new Error('Expected at least one tax-preview polling timeout')
     }
 
     const pollCallback = pollCall[0] as () => void
@@ -659,16 +660,17 @@ describe('TaxPreviewContext', () => {
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'parsed')]))
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     renderHook(() => useTaxPreview(), { wrapper })
 
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
 
+    // Changed from setInterval to setTimeout with backoff
     const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
-    expect(pollCalls).toHaveLength(1)
+    expect(pollCalls.length).toBeGreaterThanOrEqual(1)
     const pollCall = pollCalls[0]
     if (pollCall === undefined) {
-      throw new Error('Expected exactly one tax-preview polling interval')
+      throw new Error('Expected at least one tax-preview polling timeout')
     }
 
     const pollCallback = pollCall[0] as () => void
@@ -686,7 +688,7 @@ describe('TaxPreviewContext', () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
     // Wait until the fetch is fully settled (state updated + effects flushed)
@@ -696,19 +698,22 @@ describe('TaxPreviewContext', () => {
     spy.mockRestore()
   })
 
-  it('calls clearInterval after all documents leave in-flight state', async () => {
+  it('stops polling via cleanup when documents leave in-flight state', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
-    const clearSpy = jest.spyOn(globalThis, 'clearInterval')
+    const clearSpy = jest.spyOn(globalThis, 'clearTimeout')
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    // Wait for the first fetch to fully settle so the polling interval is registered
+    // Wait for the first fetch to fully settle so the polling timeout is registered
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    // Simulate the poll returning parsed status
+    // Simulate the poll returning parsed status - this will cause the effect to re-run
+    // and the cleanup function will call clearTimeout
     await act(async () => { await result.current.refreshAll() })
+    
+    // The cleanup should be called when effect re-runs due to allDocuments change
     await waitFor(() => expect(clearSpy).toHaveBeenCalled())
 
     clearSpy.mockRestore()
