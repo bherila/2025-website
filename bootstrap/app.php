@@ -17,9 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/GenAiProcessor/Console/Commands',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        if (env('APP_ENV') === 'local') {
-            $middleware->append(DbQueryCountMiddleware::class);
-        }
+        // DbQueryCountMiddleware is a dev-only tool; it no-ops via an internal
+        // environment guard when not running in the local environment.
+        $middleware->append(DbQueryCountMiddleware::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
