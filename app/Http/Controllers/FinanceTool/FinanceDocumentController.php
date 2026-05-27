@@ -86,7 +86,7 @@ class FinanceDocumentController extends Controller
             ->firstOrFail();
 
         if ($doc->document_kind === FinDocument::KIND_TAX_FORM) {
-            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use the tax-documents endpoint instead.');
+            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use DELETE /api/finance/tax-documents/{id} instead.');
         }
 
         DB::transaction(function () use ($doc): void {
