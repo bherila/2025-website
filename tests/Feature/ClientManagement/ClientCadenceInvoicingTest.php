@@ -258,6 +258,68 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_semiannual_period_retainer_clips_boundary_month_hours_per_cycle(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-20'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-15'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 2,
+                'retainer_fee' => 500,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            // Cycle 1: 2025-11-15 → 2026-05-14
+            $this->createTimeEntry('2025-11-20', 1.0);
+            $this->createTimeEntry('2026-05-10', 0.5);
+
+            // Cycle 2: 2026-05-15 → 2026-11-14 (shares calendar month 2026-05 with cycle 1)
+            $this->createTimeEntry('2026-05-19', 0.7);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $cycleOneInvoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2025-11-15')
+                ->whereDate('cycle_end', '2026-05-14')
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals(1.5, (float) $cycleOneInvoice->hours_worked, 'Cycle 1 must only count hours within Nov 15 – May 14');
+            $this->assertEquals(0.0, (float) $cycleOneInvoice->hours_billed_at_rate);
+            $this->assertEquals(500.0, (float) $cycleOneInvoice->invoice_total);
+
+            $cycleTwoInvoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-05-15')
+                ->whereDate('cycle_end', '2026-11-14')
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals(0.7, (float) $cycleTwoInvoice->hours_worked, 'Cycle 2 must only count hours within May 15 – Nov 14');
+            $this->assertEquals(0.0, (float) $cycleTwoInvoice->hours_billed_at_rate);
+            $this->assertEquals(500.0, (float) $cycleTwoInvoice->invoice_total);
+
+            $interimCount = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
+                ->count();
+
+            $this->assertSame(0, $interimCount, 'No interim overage should fire when each cycle stays within its own pool.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_semiannual_agreement_starting_next_month_generates_full_upcoming_cycle(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-05-26'));
