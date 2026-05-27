@@ -178,7 +178,7 @@ class ClientAgreement extends Model
 
         if ($threshold < 0 || $threshold > $retainerHours) {
             throw new \InvalidArgumentException(
-                "catch_up_threshold_hours must be between 0 and monthly_retainer_hours ({$retainerHours}). Got: {$threshold}"
+                "catch_up_threshold_hours must be between 0 and period retainer hours ({$retainerHours}). Got: {$threshold}"
             );
         }
     }
