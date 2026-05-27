@@ -104,12 +104,7 @@ class ReadinessSummaryService
     {
         return FileForTaxDocument::where('user_id', $userId)
             ->where('tax_year', $year)
-            ->where(function (Builder $query): void {
-                $query->whereIn('form_type', ['1099_b', 'broker_1099'])
-                    ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
-                        $linkQuery->where('form_type', '1099_b');
-                    });
-            })
+            ->whereIn('form_type', ['1099_b', 'broker_1099'])
             ->whereDoesntHave('accountLinks')
             ->count();
     }

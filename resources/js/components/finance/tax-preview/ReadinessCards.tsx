@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, AlertCircle, FileText, AlertTriangle, ListTodo } from 'lucide-react'
-import { useTaxPreview } from '../TaxPreviewContext'
+import { fetchWrapper } from '@/fetchWrapper'
 
 interface ReadinessSummary {
   year: number
@@ -41,13 +41,8 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
     setLoading(true)
     setError(null)
 
-    fetch(`/api/finance/tax-years/${year}/readiness-summary`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`)
-        }
-        return res.json()
-      })
+    fetchWrapper
+      .get<ReadinessSummary>(`/api/finance/tax-years/${year}/readiness-summary`)
       .then((data) => {
         if (mounted) {
           setSummary(data)

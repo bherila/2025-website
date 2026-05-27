@@ -466,15 +466,16 @@ export function TaxPreviewProvider({
 
       void refreshAll({ includeTaxFacts: false })
 
-      const intervalIndex = Math.min(attempt, POLLING_INTERVALS_MS.length - 1)
-      const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
       attempt++
-
-      timeoutId = setTimeout(poll, nextInterval)
+      if (attempt < MAX_POLLING_ATTEMPTS) {
+        const intervalIndex = Math.min(attempt - 1, POLLING_INTERVALS_MS.length - 1)
+        const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
+        timeoutId = setTimeout(poll, nextInterval)
+      }
     }
 
-    // Start first poll
-    timeoutId = setTimeout(poll, POLLING_INTERVALS_MS[0])
+    // Start first poll immediately
+    poll()
 
     return () => {
       if (timeoutId !== null) {
