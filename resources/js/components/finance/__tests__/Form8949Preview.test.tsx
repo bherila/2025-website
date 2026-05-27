@@ -49,6 +49,36 @@ describe('classifyBox', () => {
     expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b', form_8949_box: 'B' }))).toBe('B')
     expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b', form_8949_box: 'E' }))).toBe('E')
   })
+
+  // Tests for canonical `source` field
+  it('routes canonical broker_1099b source short-term to box A', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: undefined }))).toBe('A')
+  })
+
+  it('routes canonical broker_1099b source long-term to box D', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: undefined }))).toBe('D')
+  })
+
+  it('routes canonical account_derived source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: undefined }))).toBe('C')
+  })
+
+  it('routes canonical manual source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'manual', lot_source: undefined }))).toBe('F')
+  })
+
+  it('routes canonical synthetic_adjustment source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'synthetic_adjustment', lot_source: undefined }))).toBe('C')
+  })
+
+  it('canonical source takes priority over legacy lot_source', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: 'manual' }))).toBe('A')
+  })
+
+  it('falls back to lot_source when source is absent', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: undefined, lot_source: '1099b' }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: 'broker_statement' }))).toBe('B')
+  })
 })
 
 describe('computeForm8949', () => {

@@ -25,6 +25,8 @@ export interface Form8949Lot {
   is_short_term: number | boolean
   /** 'broker_statement', '1099b', 'manual', etc. Drives the A/B/C vs. D/E/F box split. */
   lot_source?: string | null
+  /** Canonical source: 'broker_1099b', 'account_derived', 'manual', 'synthetic_adjustment'. Preferred over lot_source. */
+  source?: string | null
   tax_document_id?: number | null
   form_8949_box?: Form8949Box | null
   is_covered?: boolean | null
@@ -117,15 +119,30 @@ function rowDescription(lot: Form8949Lot): string {
 
 /**
  * Box A/D = basis reported to IRS, B/E = basis not reported, C/F = not on a 1099-B.
- * `lot_source` is our proxy: '1099b' → A/D, 'broker_statement' / 'broker' → B/E,
- * anything else (including 'manual') → C/F. Future refinement could pull a
- * per-lot `basis_reported` flag from the 1099-B itself.
+ * Prefers the canonical `source` field ('broker_1099b', 'account_derived', 'manual',
+ * 'synthetic_adjustment') when available, falling back to legacy `lot_source` for
+ * backward compatibility with older rows.
  */
 export function classifyBox(lot: Form8949Lot): Form8949Box {
   const shortTerm = toBool(lot.is_short_term)
   if (lot.form_8949_box && ['A', 'B', 'C', 'D', 'E', 'F'].includes(lot.form_8949_box)) {
     return lot.form_8949_box
   }
+
+  // Prefer canonical source field when present
+  const canonicalSource = (lot.source ?? '').toLowerCase()
+  if (canonicalSource === 'broker_1099b') {
+    return shortTerm ? 'A' : 'D'
+  }
+  if (canonicalSource === 'account_derived' || canonicalSource === 'synthetic_adjustment') {
+    // Account-derived and synthetic adjustments are not on a 1099-B
+    return shortTerm ? 'C' : 'F'
+  }
+  if (canonicalSource === 'manual') {
+    return shortTerm ? 'C' : 'F'
+  }
+
+  // Fall back to legacy lot_source for older rows without canonical source
   const src = (lot.lot_source ?? '').toLowerCase()
   if (src === '1099b' || src === '1099_b') {
     return shortTerm ? 'A' : 'D'

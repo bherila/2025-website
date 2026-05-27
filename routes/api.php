@@ -41,6 +41,7 @@ use App\Http\Controllers\FinanceTool\FinanceTransactionTaggingApiController;
 use App\Http\Controllers\FinanceTool\Form8829InputController;
 use App\Http\Controllers\FinanceTool\Form8949LotExportController;
 use App\Http\Controllers\FinanceTool\LotReconciliationLinkController;
+use App\Http\Controllers\FinanceTool\LotWorkspaceController;
 use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
@@ -231,6 +232,7 @@ Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [F
 Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
 
 // Lots API routes
+Route::middleware(['web', 'auth'])->get('/finance/lot-workspace', [LotWorkspaceController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);
 Route::middleware(['web', 'auth'])->post('/finance/lots/export-txf', [Form8949LotExportController::class, 'txf']);
 Route::middleware(['web', 'auth'])->post('/finance/lots/export-olt-xlsx', [Form8949LotExportController::class, 'oltXlsx']);
