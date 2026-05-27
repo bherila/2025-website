@@ -1507,6 +1507,21 @@ class ClientInvoicingService
             ->get()
             ->groupBy(fn (ClientTimeEntry $entry): string => Carbon::parse($entry->date_worked)->format('Y-m'));
 
+        /** @var array<string, float> $hoursByMonth */
+        $hoursByMonth = [];
+        foreach ($entriesByMonth as $key => $entries) {
+            $hoursByMonth[(string) $key] = round((float) $entries->sum('minutes_worked') / 60, 4);
+        }
+
+        if ($agreement->retainer_hours !== null) {
+            return $this->buildPeriodRetainerLedgerThrough(
+                $agreement,
+                $ledgerEnd,
+                $hoursByMonth,
+                $billExcessImmediately,
+            );
+        }
+
         $months = [];
         $initialRolloverHours = (float) ($agreement->initial_rollover_hours ?? 0);
         if ($initialRolloverHours > 0) {
@@ -1541,6 +1556,93 @@ class ClientInvoicingService
             (int) $agreement->rollover_months,
             $billExcessImmediately,
         );
+    }
+
+    /**
+     * Build a cycle-pooled ledger for agreements that use native period
+     * retainer terms (retainer_hours / retainer_fee).
+     *
+     * Each cycle's retainer is a single pool that is consumed across its
+     * months. Excess hours and interim overages are computed against the
+     * cycle pool rather than per-month monthly_retainer_hours, so interim
+     * billing stays consistent with the final cadence reckoning.
+     *
+     * @param  array<string, float>  $hoursByMonth  Pre-aggregated billable hours, keyed by Y-m.
+     * @return array<int, MonthSummary>
+     */
+    protected function buildPeriodRetainerLedgerThrough(
+        ClientAgreement $agreement,
+        Carbon $ledgerEnd,
+        array $hoursByMonth,
+        bool $billExcessImmediately,
+    ): array {
+        $ledger = [];
+
+        foreach ($this->billingCycleResolver->cyclesForAgreement($agreement, $ledgerEnd) as $cycle) {
+            $cyclePool = $this->cyclePeriodRetainerHours($agreement, $cycle);
+            $cumulativeWorked = 0.0;
+            $cumulativeExcess = 0.0;
+            $cycleFirstMonth = $cycle->start->copy()->startOfMonth();
+
+            $cursor = $cycleFirstMonth->copy();
+            $lastMonth = $cycle->end->copy()->startOfMonth();
+            if ($lastMonth->gt($ledgerEnd)) {
+                $lastMonth = $ledgerEnd->copy()->startOfMonth();
+            }
+
+            while ($cursor->lte($lastMonth)) {
+                $monthKey = $cursor->format('Y-m');
+                $monthHoursWorked = $hoursByMonth[$monthKey] ?? 0.0;
+
+                $openingPool = round(max(0.0, $cyclePool - $cumulativeWorked), 4);
+                $cumulativeWorked = round($cumulativeWorked + $monthHoursWorked, 4);
+
+                $monthFromRetainer = round(min($monthHoursWorked, $openingPool), 4);
+
+                if ($billExcessImmediately) {
+                    $newCumulativeExcess = round(max(0.0, $cumulativeWorked - $cyclePool), 4);
+                    $monthExcess = round($newCumulativeExcess - $cumulativeExcess, 4);
+                    $cumulativeExcess = $newCumulativeExcess;
+                    $negativeBalance = 0.0;
+                } else {
+                    $monthExcess = 0.0;
+                    $negativeBalance = round(max(0.0, $cumulativeWorked - $cyclePool), 4);
+                }
+
+                $closingPool = round(max(0.0, $cyclePool - $cumulativeWorked), 4);
+
+                $monthRetainer = $cursor->isSameDay($cycleFirstMonth) ? $cyclePool : 0.0;
+
+                $ledger[] = new MonthSummary(
+                    opening: new OpeningBalance(
+                        retainerHours: $monthRetainer,
+                        rolloverHours: 0.0,
+                        expiredHours: 0.0,
+                        totalAvailable: $openingPool,
+                        negativeOffset: 0.0,
+                        invoicedNegativeBalance: 0.0,
+                        effectiveRetainerHours: $monthRetainer,
+                        remainingNegativeBalance: 0.0,
+                    ),
+                    closing: new ClosingBalance(
+                        hoursUsedFromRetainer: $monthFromRetainer,
+                        hoursUsedFromRollover: 0.0,
+                        unusedHours: $closingPool,
+                        excessHours: $monthExcess,
+                        negativeBalance: $negativeBalance,
+                        remainingRollover: 0.0,
+                    ),
+                    hoursWorked: $monthHoursWorked,
+                    yearMonth: $monthKey,
+                    retainerHours: $monthRetainer,
+                    billExcessImmediately: $billExcessImmediately,
+                );
+
+                $cursor->addMonth()->startOfMonth();
+            }
+        }
+
+        return $ledger;
     }
 
     /**
