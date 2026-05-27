@@ -1,8 +1,9 @@
+import { AlertCircle, AlertTriangle, CheckCircle, FileText, ListTodo } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, AlertCircle, FileText, AlertTriangle, ListTodo } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchWrapper } from '@/fetchWrapper'
 
 interface ReadinessSummary {
@@ -18,6 +19,7 @@ interface ReadinessSummary {
   }
   pending_review_count: number
   missing_account_count: number
+  parsing_failure_count: number
   reconciliation_health: {
     ok: number
     drift: number
@@ -26,9 +28,11 @@ interface ReadinessSummary {
   last_matcher_run_at: string | null
 }
 
+type ReadinessFormTarget = 'documents' | 'tax-lot-reconciliation'
+
 interface ReadinessCardsProps {
   year: number
-  onOpenForm?: (formId: string) => void
+  onOpenForm?: (formId: ReadinessFormTarget) => void
 }
 
 export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React.ReactElement {
@@ -42,10 +46,10 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
     setError(null)
 
     fetchWrapper
-      .get<ReadinessSummary>(`/api/finance/tax-years/${year}/readiness-summary`)
+      .get(`/api/finance/tax-years/${year}/readiness-summary`)
       .then((data) => {
         if (mounted) {
-          setSummary(data)
+          setSummary(data as ReadinessSummary)
           setLoading(false)
         }
       })
@@ -107,7 +111,7 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
     summary.documents_by_kind.other
 
   const hasReconciliationIssues = summary.reconciliation_health.drift > 0 || summary.reconciliation_health.blocked > 0
-  const totalActionItems = summary.pending_review_count + summary.missing_account_count
+  const totalActionItems = summary.pending_review_count + summary.missing_account_count + summary.parsing_failure_count
   const hasActionItems = totalActionItems > 0
 
   return (
@@ -265,6 +269,9 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
                   )}
                   {summary.pending_review_count > 0 && (
                     <div>• {summary.pending_review_count} unreviewed doc{summary.pending_review_count !== 1 ? 's' : ''}</div>
+                  )}
+                  {summary.parsing_failure_count > 0 && (
+                    <div>• {summary.parsing_failure_count} parsing failure{summary.parsing_failure_count !== 1 ? 's' : ''}</div>
                   )}
                 </div>
                 <Button

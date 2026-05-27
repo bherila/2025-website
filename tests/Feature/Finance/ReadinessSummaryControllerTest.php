@@ -3,7 +3,6 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
-use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
@@ -66,6 +65,7 @@ class ReadinessSummaryControllerTest extends TestCase
                 'drift',
                 'blocked',
             ],
+            'parsing_failure_count',
             'last_matcher_run_at',
         ]);
 
@@ -75,6 +75,7 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(1, $data['documents_by_kind']['1099_div']);
         $this->assertEquals(1, $data['documents_by_kind']['1099_b']);
         $this->assertEquals(1, $data['pending_review_count']);
+        $this->assertEquals(0, $data['parsing_failure_count']);
     }
 
     public function test_counts_missing_account_links(): void
@@ -91,6 +92,67 @@ class ReadinessSummaryControllerTest extends TestCase
         $response->assertOk();
         $data = $response->json();
         $this->assertEquals(1, $data['missing_account_count']);
+    }
+
+    public function test_reconciliation_health_uses_persisted_link_states(): void
+    {
+        $okDocument = $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'is_reviewed' => true,
+        ]);
+        $driftDocument = $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'is_reviewed' => true,
+        ]);
+        $blockedDocument = $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'is_reviewed' => true,
+        ]);
+        $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'is_reviewed' => true,
+        ]);
+
+        FinLotReconciliationLink::factory()->create([
+            'document_id' => (int) $okDocument->document_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+            'updated_at' => now()->subMinutes(3),
+        ]);
+        FinLotReconciliationLink::factory()->create([
+            'document_id' => (int) $driftDocument->document_id,
+            'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
+            'updated_at' => now()->subMinutes(2),
+        ]);
+        FinLotReconciliationLink::factory()->create([
+            'document_id' => (int) $blockedDocument->document_id,
+            'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
+            'updated_at' => now()->subMinute(),
+        ]);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $response->assertJsonPath('reconciliation_health.ok', 1)
+            ->assertJsonPath('reconciliation_health.drift', 1)
+            ->assertJsonPath('reconciliation_health.blocked', 2);
+        $this->assertNotNull($response->json('last_matcher_run_at'));
+    }
+
+    public function test_counts_parsing_failures(): void
+    {
+        $this->createTaxDocument([
+            'form_type' => '1099_div',
+            'genai_status' => 'failed',
+        ]);
+        $this->createTaxDocument([
+            'form_type' => '1099_int',
+            'genai_status' => 'parsed',
+        ]);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $response->assertJsonPath('parsing_failure_count', 1);
     }
 
     public function test_caches_summary_for_60_seconds(): void
@@ -140,6 +202,7 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(2024, $data['year']);
         $this->assertEquals(0, $data['pending_review_count']);
         $this->assertEquals(0, $data['missing_account_count']);
+        $this->assertEquals(0, $data['parsing_failure_count']);
         $this->assertEquals(0, $data['documents_by_kind']['w2']);
         $this->assertEquals(0, $data['reconciliation_health']['ok']);
     }
@@ -164,7 +227,7 @@ class ReadinessSummaryControllerTest extends TestCase
             'original_filename' => 'test.pdf',
             'file_path' => '/tmp/test.pdf',
             'file_size_bytes' => 1000,
-            'file_hash' => md5('test-' . uniqid()),
+            'file_hash' => md5('test-'.uniqid()),
             'genai_status' => 'parsed',
             'is_reviewed' => false,
             ...$overrides,

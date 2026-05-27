@@ -147,6 +147,10 @@ const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
 const POLLING_INTERVALS_MS = [5000, 10000, 30000] // 5s → 10s → 30s with backoff
 const MAX_POLLING_ATTEMPTS = 5
 
+function setArrayStateIfChanged<T>(setter: Dispatch<SetStateAction<T[]>>, next: T[]): void {
+  setter((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next)
+}
+
 export function TaxPreviewProvider({
   initialData,
   children,
@@ -160,6 +164,8 @@ export function TaxPreviewProvider({
   const [error, setError] = useState<string | null>(null)
   const hasLoadedOnce = useRef(false)
   const prevDocStatusRef = useRef<Map<number, string>>(new Map())
+  const pollingAttemptRef = useRef(0)
+  const pollingSignatureRef = useRef('')
   const [payslips, setPayslips] = useState<fin_payslip[]>([])
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
   const [w2Documents, setW2Documents] = useState<TaxDocument[]>([])
@@ -337,8 +343,8 @@ export function TaxPreviewProvider({
       setAvailableYears(response.availableYears ?? [])
       setPayslips(Array.isArray(response.payslips) ? response.payslips : [])
       setPendingReviewCount(response.pendingReviewCount ?? 0)
-      setW2Documents(Array.isArray(response.w2Documents) ? response.w2Documents : [])
-      setAccountDocuments(Array.isArray(response.accountDocuments) ? response.accountDocuments : [])
+      setArrayStateIfChanged(setW2Documents, Array.isArray(response.w2Documents) ? response.w2Documents : [])
+      setArrayStateIfChanged(setAccountDocuments, Array.isArray(response.accountDocuments) ? response.accountDocuments : [])
       setScheduleCData(response.scheduleCData ?? null)
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
@@ -420,6 +426,14 @@ export function TaxPreviewProvider({
     () => [...w2Documents, ...accountDocuments],
     [w2Documents, accountDocuments],
   )
+  const inFlightDocumentsSignature = useMemo(
+    () => allDocuments
+      .filter((doc) => IN_FLIGHT_STATUSES.has(doc.genai_status ?? ''))
+      .map((doc) => `${doc.id}:${doc.genai_status ?? ''}`)
+      .sort()
+      .join('|'),
+    [allDocuments],
+  )
 
   // Fire a toast when any document transitions from in-flight → parsed.
   useEffect(() => {
@@ -453,36 +467,41 @@ export function TaxPreviewProvider({
 
   // Poll with backoff while any document is still being processed by the AI.
   useEffect(() => {
-    const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
-    if (!hasInFlight) return
+    if (!inFlightDocumentsSignature) {
+      pollingAttemptRef.current = 0
+      pollingSignatureRef.current = ''
+      return
+    }
 
-    let attempt = 0
+    if (pollingSignatureRef.current !== inFlightDocumentsSignature) {
+      pollingAttemptRef.current = 0
+      pollingSignatureRef.current = inFlightDocumentsSignature
+    }
+
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
-    const poll = () => {
-      if (attempt >= MAX_POLLING_ATTEMPTS) {
+    const schedulePoll = () => {
+      if (pollingAttemptRef.current >= MAX_POLLING_ATTEMPTS) {
         return
       }
 
-      void refreshAll({ includeTaxFacts: false })
-
-      attempt++
-      if (attempt < MAX_POLLING_ATTEMPTS) {
-        const intervalIndex = Math.min(attempt - 1, POLLING_INTERVALS_MS.length - 1)
-        const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
-        timeoutId = setTimeout(poll, nextInterval)
-      }
+      const intervalIndex = Math.min(pollingAttemptRef.current, POLLING_INTERVALS_MS.length - 1)
+      const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
+      timeoutId = setTimeout(() => {
+        pollingAttemptRef.current += 1
+        void refreshAll({ includeTaxFacts: false })
+        schedulePoll()
+      }, nextInterval)
     }
 
-    // Start first poll immediately
-    poll()
+    schedulePoll()
 
     return () => {
       if (timeoutId !== null) {
         clearTimeout(timeoutId)
       }
     }
-  }, [allDocuments, refreshAll])
+  }, [inFlightDocumentsSignature, refreshAll])
 
   // Load short dividend analysis for all active accounts.
   // We fetch transactions for each active account, run analyzeShortDividends,
@@ -491,6 +510,11 @@ export function TaxPreviewProvider({
   const loadShortDividendSummary = useCallback(() => {
     setShortDividendLoadRequested(true)
   }, [])
+
+  useEffect(() => {
+    setShortDividendLoadRequested(false)
+    setShortDividendSummary(null)
+  }, [year])
 
   useEffect(() => {
     if (!shortDividendLoadRequested) return
@@ -796,6 +820,7 @@ export function TaxPreviewProvider({
     realEstateProfessional,
     setRealEstateProfessional,
     shortDividendSummary,
+    loadShortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
     priorYearTax,

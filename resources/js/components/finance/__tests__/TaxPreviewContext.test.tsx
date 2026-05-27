@@ -11,11 +11,19 @@ jest.mock('@/fetchWrapper', () => ({
 
 jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
 
+jest.mock('@/services/transactionCache', () => ({
+  buildCacheKey: jest.fn((acctId: number) => `acct:${acctId}`),
+  getCachedTransactions: jest.fn(),
+  syncCachedTransactions: jest.fn(),
+}))
+
 jest.mock('@/components/finance/ScheduleCPreview', () => ({
   computeScheduleCNetIncome: () => ({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }),
 }))
 
 import { toast } from 'sonner'
+
+import { getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 
 import { TaxPreviewProvider, useTaxPreview } from '../TaxPreviewContext'
 
@@ -35,7 +43,7 @@ function makeDoc(id: number, genai_status: string, form_type = '1099_int') {
   }
 }
 
-function makeResponse(docs: object[] = []) {
+function makeResponse(docs: object[] = [], activeAccountIds: number[] = []) {
   return {
     year: 2025,
     availableYears: [2025],
@@ -46,7 +54,7 @@ function makeResponse(docs: object[] = []) {
     scheduleCData: null,
     employmentEntities: [],
     accounts: [],
-    activeAccountIds: [],
+    activeAccountIds,
     taxFacts: null,
   }
 }
@@ -554,7 +562,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <TaxPreviewProvider initialData={SHELL}>{children}</TaxPreviewProvider>
 }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.useRealTimers()
+  jest.clearAllMocks()
+})
 
 // --- tests -----------------------------------------------------------------
 
@@ -630,16 +641,61 @@ describe('TaxPreviewContext', () => {
     expect(result.current.accountDocuments[0]?.genai_status).toBe('processing')
   })
 
-  // Note: Polling backoff behavior is tested below with "does not register setTimeout when all documents are already parsed"
-  // and "stops polling via cleanup when documents leave in-flight state". The lightweight behavior is that
-  // refreshAll() doesn't fetch tax facts while documents are pending, which prevents expensive computation
-  // during in-flight polling loops.
+  it('polls in-flight documents with capped 5s, 10s, 30s backoff', async () => {
+    jest.useFakeTimers()
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    const pollCalls = () => (fetchWrapper.get as jest.Mock).mock.calls
+      .filter(([url]) => url === '/api/finance/tax-preview-data?year=2025')
+
+    expect(pollCalls()).toHaveLength(0)
+
+    for (const interval of [5_000, 10_000, 30_000, 30_000, 30_000]) {
+      await act(async () => {
+        jest.advanceTimersByTime(interval)
+        await Promise.resolve()
+      })
+    }
+
+    expect(pollCalls()).toHaveLength(5)
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000)
+      await Promise.resolve()
+    })
+
+    expect(pollCalls()).toHaveLength(5)
+    jest.useRealTimers()
+  })
+
+  it('does not run short-dividend sync until a consuming form requests it', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue(makeResponse([], [101, 202]))
+    ;(getCachedTransactions as jest.Mock).mockResolvedValue(null)
+    ;(syncCachedTransactions as jest.Mock).mockResolvedValue({ transactions: [] })
+
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(syncCachedTransactions).not.toHaveBeenCalled()
+
+    act(() => result.current.loadShortDividendSummary())
+
+    await waitFor(() => expect(syncCachedTransactions).toHaveBeenCalledTimes(2))
+    expect(syncCachedTransactions).toHaveBeenCalledWith('acct:101', '/api/finance/101/line_items/sync')
+    expect(syncCachedTransactions).toHaveBeenCalledWith('acct:202', '/api/finance/202/line_items/sync')
+  })
 
   // Note: Terminal status transition behavior is tested below with "fires a toast when a document transitions
   // from pending to parsed". When documents transition to parsed, the context automatically refreshes tax facts.
 
   it('does not register setTimeout when all documents are already parsed', async () => {
-    (fetchWrapper.get as jest.Mock)
+    jest.useFakeTimers()
+    ;(fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
     const spy = jest.spyOn(globalThis, 'setTimeout')
@@ -651,6 +707,7 @@ describe('TaxPreviewContext', () => {
     // Should not schedule any polling timeouts since document is already parsed
     expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 5_000)
     spy.mockRestore()
+    jest.useRealTimers()
   })
 
   it('stops polling via cleanup when documents leave in-flight state', async () => {

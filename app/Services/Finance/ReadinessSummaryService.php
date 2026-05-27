@@ -3,18 +3,12 @@
 namespace App\Services\Finance;
 
 use App\Models\Files\FileForTaxDocument;
-use App\Models\FinanceTool\FinAccounts;
-use App\Services\Finance\CapitalGains\LotMatcherService;
-use App\Services\Finance\CapitalGains\LotReconciliationService;
+use App\Models\FinanceTool\FinLotReconciliationLink;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 
 class ReadinessSummaryService
 {
-    public function __construct(
-        private readonly LotReconciliationService $lotReconciliationService,
-        private readonly LotMatcherService $lotMatcherService,
-    ) {}
-
     /**
      * Fast, cacheable readiness summary for Tax Preview home view.
      *
@@ -23,6 +17,7 @@ class ReadinessSummaryService
      * - Pending review count
      * - Missing account count (1099-B docs without linked accounts)
      * - Reconciliation health (per-document status → ok / drift / blocked)
+     * - Parsing failure count
      * - Last matcher run timestamp
      *
      * @return array<string, mixed>
@@ -33,6 +28,7 @@ class ReadinessSummaryService
         $pendingReviewCount = $this->pendingReviewCount($userId, $year);
         $missingAccountCount = $this->missingAccountCount($userId, $year);
         $reconciliationHealth = $this->reconciliationHealth($userId, $year);
+        $parsingFailureCount = $this->parsingFailureCount($userId, $year);
         $lastMatcherRunAt = $this->lastMatcherRunAt($userId, $year);
 
         return [
@@ -41,6 +37,7 @@ class ReadinessSummaryService
             'pending_review_count' => $pendingReviewCount,
             'missing_account_count' => $missingAccountCount,
             'reconciliation_health' => $reconciliationHealth,
+            'parsing_failure_count' => $parsingFailureCount,
             'last_matcher_run_at' => $lastMatcherRunAt,
         ];
     }
@@ -116,8 +113,7 @@ class ReadinessSummaryService
      */
     private function reconciliationHealth(int $userId, int $year): array
     {
-        $reconciliation = $this->lotReconciliationService->reconcileYear($userId, $year);
-        $documents = $reconciliation->documents();
+        $documentIds = $this->reconciliationDocumentIds($userId, $year);
 
         $health = [
             'ok' => 0,
@@ -125,16 +121,22 @@ class ReadinessSummaryService
             'blocked' => 0,
         ];
 
-        foreach ($documents as $document) {
-            $dashboardStatus = (string) ($document['dashboard_status'] ?? 'in_sync');
+        if ($documentIds === []) {
+            return $health;
+        }
 
-            if ($dashboardStatus === 'in_sync') {
-                $health['ok']++;
-            } elseif ($dashboardStatus === 'drift') {
+        $linkCounts = $this->linkStateCountsByDocumentIds($documentIds);
+
+        foreach ($documentIds as $documentId) {
+            $counts = $linkCounts[$documentId] ?? $this->emptyLinkStateCounts();
+            $totalLinks = array_sum($counts);
+
+            if ($totalLinks === 0 || $this->hasBlockedLinkState($counts)) {
+                $health['blocked']++;
+            } elseif (($counts[FinLotReconciliationLink::STATE_NEEDS_REVIEW] ?? 0) > 0) {
                 $health['drift']++;
             } else {
-                // needs_review or any other status → blocked
-                $health['blocked']++;
+                $health['ok']++;
             }
         }
 
@@ -143,27 +145,109 @@ class ReadinessSummaryService
 
     private function lastMatcherRunAt(int $userId, int $year): ?string
     {
-        // Find the most recent last_matched_at across all accounts active in this year
-        $accounts = FinAccounts::forOwner($userId)->pluck('acct_id')->all();
+        $documentIds = $this->reconciliationDocumentIds($userId, $year);
 
-        if ($accounts === []) {
+        if ($documentIds === []) {
             return null;
         }
 
-        $timestamps = [];
-        foreach ($accounts as $accountId) {
-            $timestamp = $this->lotMatcherService->lastMatchedAtForAccount((int) $accountId);
-            if ($timestamp !== null) {
-                $timestamps[] = $timestamp;
+        $latestTimestamp = FinLotReconciliationLink::query()
+            ->whereIn('document_id', $documentIds)
+            ->max('updated_at')
+            ?? FinLotReconciliationLink::query()
+                ->whereIn('document_id', $documentIds)
+                ->max('created_at');
+
+        if (! is_string($latestTimestamp) || trim($latestTimestamp) === '') {
+            return null;
+        }
+
+        return Carbon::parse($latestTimestamp)->toJSON();
+    }
+
+    private function parsingFailureCount(int $userId, int $year): int
+    {
+        return FileForTaxDocument::where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->where('genai_status', 'failed')
+            ->count();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function reconciliationDocumentIds(int $userId, int $year): array
+    {
+        return FileForTaxDocument::query()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->whereNotNull('document_id')
+            ->where(function (Builder $query): void {
+                $query->whereIn('form_type', ['1099_b', 'broker_1099'])
+                    ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
+                        $linkQuery->where('form_type', '1099_b');
+                    });
+            })
+            ->pluck('document_id')
+            ->map(static fn (mixed $documentId): int => (int) $documentId)
+            ->filter(static fn (int $documentId): bool => $documentId > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function emptyLinkStateCounts(): array
+    {
+        return array_fill_keys(FinLotReconciliationLink::STATES, 0);
+    }
+
+    /**
+     * @param  list<int>  $documentIds
+     * @return array<int, array<string, int>>
+     */
+    private function linkStateCountsByDocumentIds(array $documentIds): array
+    {
+        $counts = [];
+        foreach ($documentIds as $documentId) {
+            $counts[$documentId] = $this->emptyLinkStateCounts();
+        }
+
+        $rows = FinLotReconciliationLink::query()
+            ->whereIn('document_id', $documentIds)
+            ->selectRaw('document_id, state, COUNT(*) as aggregate')
+            ->groupBy('document_id', 'state')
+            ->get();
+
+        foreach ($rows as $row) {
+            $documentId = (int) $row->getAttribute('document_id');
+            $state = (string) $row->getAttribute('state');
+            if (! isset($counts[$documentId])) {
+                continue;
+            }
+            $counts[$documentId][$state] = (int) $row->getAttribute('aggregate');
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  array<string, int>  $counts
+     */
+    private function hasBlockedLinkState(array $counts): bool
+    {
+        foreach ([
+            FinLotReconciliationLink::STATE_BROKER_ONLY,
+            FinLotReconciliationLink::STATE_ACCOUNT_ONLY,
+            FinLotReconciliationLink::STATE_UNLINKED,
+        ] as $state) {
+            if (($counts[$state] ?? 0) > 0) {
+                return true;
             }
         }
 
-        if ($timestamps === []) {
-            return null;
-        }
-
-        rsort($timestamps);
-
-        return $timestamps[0];
+        return false;
     }
 }

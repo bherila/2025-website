@@ -24,9 +24,9 @@ import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleFPreview from '@/components/finance/ScheduleFPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
+import { ReadinessCards } from '@/components/finance/tax-preview/ReadinessCards'
 import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliationPanel'
-import { ReadinessCards } from '@/components/finance/tax-preview/ReadinessCards'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
@@ -154,6 +154,8 @@ function Form4952Adapter({ state }: FormRenderProps): React.ReactElement {
   return (
     <Form4952Preview
       form4952Facts={state.taxFacts?.form4952 ?? null}
+      shortDividendSummary={state.shortDividendSummary}
+      onLoadShortDividendSummary={state.loadShortDividendSummary}
     />
   )
 }
@@ -530,7 +532,7 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }): React.React
 }
 
 function DocumentsAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
-  return <ReadinessCards year={state.year} onOpenForm={onDrill} />
+  return <ReadinessCards year={state.year} onOpenForm={(formId) => onDrill({ id: formId })} />
 }
 
 function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {
