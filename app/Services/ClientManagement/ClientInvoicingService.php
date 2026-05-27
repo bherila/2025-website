@@ -1825,7 +1825,14 @@ class ClientInvoicingService
     {
         $naturalCycle = $this->billingCycleResolver->cycleContaining($agreement, $cycle->start);
 
-        $effectiveStart = $cycle->start->gt($naturalCycle->start) ? $cycle->start->copy() : $naturalCycle->start->copy();
+        $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
+        $fullPeriodFirstCycle = $agreement->effectiveFirstCycleProration() === FirstCycleProration::FullPeriod
+            && $cycle->start->isSameDay($activeDate)
+            && $cycle->start->gt($naturalCycle->start);
+
+        $effectiveStart = $fullPeriodFirstCycle || $naturalCycle->start->gt($cycle->start)
+            ? $naturalCycle->start->copy()
+            : $cycle->start->copy();
         $effectiveEnd = $naturalCycle->end->copy();
 
         $terminationDate = $agreement->termination_date

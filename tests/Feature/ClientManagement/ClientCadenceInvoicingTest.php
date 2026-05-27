@@ -561,6 +561,46 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_full_period_first_cycle_keeps_full_period_retainer_override(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'first_cycle_proration' => FirstCycleProration::FullPeriod->value,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 30,
+                'retainer_fee' => 3000,
+                'active_date' => Carbon::parse('2026-02-15'),
+            ]);
+
+            $this->createTimeEntry('2026-02-20', 20);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
+            $this->assertEquals(20.0, (float) $invoice->hours_worked);
+            $this->assertEquals(0.0, (float) $invoice->hours_billed_at_rate);
+
+            $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
+            $this->assertNotNull($retainerLine);
+            $this->assertEquals(3000.0, (float) $retainerLine->line_total);
+            $this->assertEquals(30.0, (float) $retainerLine->hours);
+            $this->assertNull($invoice->lineItems->firstWhere('line_type', InvoiceLineType::AdditionalHours->value));
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_mid_cycle_termination_prorates_final_cadence_cycle(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-02-20'));
