@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\DbQueryCountMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/GenAiProcessor/Console/Commands',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->append(DbQueryCountMiddleware::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
