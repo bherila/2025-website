@@ -26,11 +26,11 @@ import ScheduleFPreview from '@/components/finance/ScheduleFPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliationPanel'
+import { ReadinessCards } from '@/components/finance/tax-preview/ReadinessCards'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
-import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
@@ -529,18 +529,8 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }): React.React
   )
 }
 
-function DocumentsAdapter({ state }: FormRenderProps): React.ReactElement {
-  return (
-    <div className="flex items-center justify-between rounded-md border bg-background p-4">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">Documents</h2>
-        <p className="text-sm text-muted-foreground">{state.year} tax forms and supporting imports</p>
-      </div>
-      <Button asChild>
-        <a href="/finance/documents">Open Documents</a>
-      </Button>
-    </div>
-  )
+function DocumentsAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  return <ReadinessCards year={state.year} onOpenForm={onDrill} />
 }
 
 function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {

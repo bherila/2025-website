@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\User;
+use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -26,25 +27,19 @@ class ReadinessSummaryControllerTest extends TestCase
     public function test_returns_readiness_summary_for_year(): void
     {
         // Create test documents
-        FileForTaxDocument::factory()->create([
-            'user_id' => $this->user->id,
-            'tax_year' => 2024,
+        $this->createTaxDocument([
             'form_type' => 'w2',
             'genai_status' => 'parsed',
             'is_reviewed' => true,
         ]);
 
-        FileForTaxDocument::factory()->create([
-            'user_id' => $this->user->id,
-            'tax_year' => 2024,
+        $this->createTaxDocument([
             'form_type' => '1099_div',
             'genai_status' => 'parsed',
             'is_reviewed' => false,
         ]);
 
-        FileForTaxDocument::factory()->create([
-            'user_id' => $this->user->id,
-            'tax_year' => 2024,
+        $this->createTaxDocument([
             'form_type' => '1099_b',
             'genai_status' => 'parsed',
             'is_reviewed' => true,
@@ -85,9 +80,7 @@ class ReadinessSummaryControllerTest extends TestCase
     public function test_counts_missing_account_links(): void
     {
         // 1099-B without account links
-        FileForTaxDocument::factory()->create([
-            'user_id' => $this->user->id,
-            'tax_year' => 2024,
+        $this->createTaxDocument([
             'form_type' => '1099_b',
             'genai_status' => 'parsed',
             'is_reviewed' => true,
@@ -109,9 +102,7 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertTrue(Cache::has($cacheKey));
 
         // Create new document
-        FileForTaxDocument::factory()->create([
-            'user_id' => $this->user->id,
-            'tax_year' => 2024,
+        $this->createTaxDocument([
             'form_type' => 'w2',
         ]);
 
@@ -159,5 +150,24 @@ class ReadinessSummaryControllerTest extends TestCase
 
         $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
         $response->assertStatus(401);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createTaxDocument(array $overrides = []): FileForTaxDocument
+    {
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => 'w2',
+            'original_filename' => 'test.pdf',
+            'file_path' => '/tmp/test.pdf',
+            'file_size_bytes' => 1000,
+            'file_hash' => md5('test-' . uniqid()),
+            'genai_status' => 'parsed',
+            'is_reviewed' => false,
+            ...$overrides,
+        ]);
     }
 }
