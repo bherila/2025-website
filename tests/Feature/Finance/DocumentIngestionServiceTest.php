@@ -284,11 +284,11 @@ class DocumentIngestionServiceTest extends TestCase
         $response = $this->actingAs($user)->getJson('/api/finance/documents?document_kind=statement');
 
         $response->assertOk()
-            ->assertJsonPath('0.document_kind', FinDocument::KIND_STATEMENT)
-            ->assertJsonPath('0.original_filename', 'resource.pdf')
-            ->assertJsonPath('0.accounts.0.account_id', $accountId)
-            ->assertJsonMissingPath('0.file_hash')
-            ->assertJsonMissingPath('0.download_history');
+            ->assertJsonPath('data.0.document_kind', FinDocument::KIND_STATEMENT)
+            ->assertJsonPath('data.0.original_filename', 'resource.pdf')
+            ->assertJsonPath('data.0.accounts.0.account_id', $accountId)
+            ->assertJsonMissingPath('data.0.file_hash')
+            ->assertJsonMissingPath('data.0.download_history');
     }
 
     public function test_document_download_history_appends_entries(): void
