@@ -203,25 +203,7 @@ class FinanceDocumentController extends Controller
             ->where('user_id', (int) Auth::id())
             ->firstOrFail();
 
-        $accountLinkCount = $document->accounts()->count();
-        $statementCount = $document->statements()->count();
-        $lotCount = $document->lots()->count();
-        $hasTaxDocument = $document->taxDocument()->exists();
-
-        $summary = [
-            'document_id' => (int) $document->id,
-            'account_links' => $accountLinkCount,
-            'statements' => $statementCount,
-            'lots' => $lotCount,
-            'has_tax_document' => $hasTaxDocument,
-        ];
-
-        $hash = hash('sha256', json_encode($summary));
-
-        return response()->json([
-            'summary' => $summary,
-            'impact_hash' => $hash,
-        ]);
+        return response()->json($this->computeImpactSummary($document));
     }
 
     public function destroy(int $id, Request $request): JsonResponse
@@ -236,22 +218,9 @@ class FinanceDocumentController extends Controller
         ]);
 
         // Recompute impact to verify hash
-        $accountLinkCount = $document->accounts()->count();
-        $statementCount = $document->statements()->count();
-        $lotCount = $document->lots()->count();
-        $hasTaxDocument = $document->taxDocument()->exists();
+        $impact = $this->computeImpactSummary($document);
 
-        $summary = [
-            'document_id' => (int) $document->id,
-            'account_links' => $accountLinkCount,
-            'statements' => $statementCount,
-            'lots' => $lotCount,
-            'has_tax_document' => $hasTaxDocument,
-        ];
-
-        $currentHash = hash('sha256', json_encode($summary));
-
-        if ($currentHash !== (string) $request->input('impact_hash')) {
+        if ($impact['impact_hash'] !== (string) $request->input('impact_hash')) {
             return response()->json([
                 'message' => 'Impact hash mismatch. The document state has changed since the preview was generated.',
             ], 409);
@@ -532,5 +501,26 @@ class FinanceDocumentController extends Controller
             ->where('id', $employmentEntityId)
             ->where('user_id', $userId)
             ->firstOrFail();
+    }
+
+    /**
+     * Compute the impact summary and hash for a document.
+     *
+     * @return array{summary: array{document_id: int, account_links: int, statements: int, lots: int, has_tax_document: bool}, impact_hash: string}
+     */
+    private function computeImpactSummary(FinDocument $document): array
+    {
+        $summary = [
+            'document_id' => (int) $document->id,
+            'account_links' => $document->accounts()->count(),
+            'statements' => $document->statements()->count(),
+            'lots' => $document->lots()->count(),
+            'has_tax_document' => $document->taxDocument()->exists(),
+        ];
+
+        return [
+            'summary' => $summary,
+            'impact_hash' => hash('sha256', json_encode($summary)),
+        ];
     }
 }
