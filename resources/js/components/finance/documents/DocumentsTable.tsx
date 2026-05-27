@@ -24,11 +24,13 @@ export default function DocumentsTable({
   onDownload,
   onDelete,
 }: DocumentsTableProps) {
+  const rows = documents ?? []
+
   if (isLoading) {
     return <div className="px-3 py-8 text-center text-sm text-muted-foreground">Loading documents...</div>
   }
 
-  if (documents.length === 0) {
+  if (rows.length === 0) {
     return <DocumentEmptyState />
   }
 
@@ -42,7 +44,7 @@ export default function DocumentsTable({
         <span></span>
       </div>
       <div className="divide-y">
-        {documents.map((doc) => (
+        {rows.map((doc) => (
           <DocumentRow
             key={doc.id}
             document={doc}

@@ -22,7 +22,9 @@ export default function DocumentDrawerHeader({ document, onClose }: DocumentDraw
             {document.original_filename ?? `Document ${document.id}`}
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{KIND_LABELS[document.document_kind] ?? document.document_kind}</Badge>
+            <Badge variant="secondary">
+              {document.document_kind ? (KIND_LABELS[document.document_kind] ?? document.document_kind) : 'Document'}
+            </Badge>
             {document.tax_year && <span className="text-xs text-muted-foreground">{document.tax_year}</span>}
           </div>
         </div>

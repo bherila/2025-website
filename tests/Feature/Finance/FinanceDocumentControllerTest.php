@@ -102,6 +102,26 @@ class FinanceDocumentControllerTest extends TestCase
         $this->assertCount(1, $response->json('data'));
     }
 
+    public function test_index_filters_by_processing_status(): void
+    {
+        $user = $this->createUser();
+        $this->makeDocument($user->id, ['genai_status' => 'pending']);
+        $this->makeDocument($user->id, ['genai_status' => 'parsed']);
+        $this->makeDocument($user->id, ['genai_status' => 'parsed', 'parsed_data_needs_review' => true]);
+
+        $pendingResponse = $this->actingAs($user)->getJson('/api/finance/documents?processing_status=pending');
+
+        $pendingResponse->assertOk();
+        $this->assertCount(1, $pendingResponse->json('data'));
+        $this->assertSame('pending', $pendingResponse->json('data.0.genai_status'));
+
+        $reviewResponse = $this->actingAs($user)->getJson('/api/finance/documents?processing_status=needs_review');
+
+        $reviewResponse->assertOk();
+        $this->assertCount(1, $reviewResponse->json('data'));
+        $this->assertTrue($reviewResponse->json('data.0.parsed_data_needs_review'));
+    }
+
     public function test_index_filters_by_missing_account(): void
     {
         $user = $this->createUser();

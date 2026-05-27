@@ -14,7 +14,6 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\FileStorageService;
-use App\Services\Finance\DocumentCapabilityService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\TaxDocument\TaxDocumentCreationService;
@@ -30,7 +29,6 @@ class FinanceDocumentController extends Controller
         private readonly DocumentIngestionService $documentIngestionService,
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
-        private readonly DocumentCapabilityService $documentCapabilityService,
     ) {}
 
     public function index(IndexDocumentsRequest $request): JsonResponse
@@ -67,11 +65,25 @@ class FinanceDocumentController extends Controller
         }
 
         if ($request->filled('form_type')) {
-            $query->whereHas('accounts', fn ($q) => $q->where('form_type', (string) $request->input('form_type')));
+            $formType = (string) $request->input('form_type');
+            $query->where(function ($q) use ($formType): void {
+                $q->whereHas('accounts', fn ($accountQuery) => $accountQuery->where('form_type', $formType))
+                    ->orWhereHas('taxDocument', fn ($taxQuery) => $taxQuery->where('form_type', $formType));
+            });
         }
 
         if ($request->filled('genai_status')) {
             $query->where('genai_status', (string) $request->input('genai_status'));
+        }
+
+        if ($request->filled('processing_status')) {
+            $status = (string) $request->input('processing_status');
+            match ($status) {
+                'needs_review' => $query->where('parsed_data_needs_review', true),
+                'reviewed' => $query->where('is_reviewed', true),
+                'unreviewed' => $query->where('is_reviewed', false),
+                default => $query->where('genai_status', $status),
+            };
         }
 
         if ($request->filled('is_reviewed')) {
@@ -109,6 +121,15 @@ class FinanceDocumentController extends Controller
         if ($request->filled('source_job_id')) {
             $query->where('genai_job_id', (int) $request->input('source_job_id'));
         }
+
+        match ((string) $request->input('sort', 'default')) {
+            'name_asc' => $query->reorder('original_filename'),
+            'kind_asc' => $query->reorder('document_kind')->orderByDesc('created_at'),
+            'tax_year_desc' => $query->reorder('tax_year', 'desc')->orderByDesc('created_at'),
+            'period_end_desc' => $query->reorder('period_end', 'desc')->orderByDesc('created_at'),
+            'created_desc', 'default' => null,
+            default => null,
+        };
 
         $perPage = $request->integer('per_page', 50);
 
@@ -162,7 +183,7 @@ class FinanceDocumentController extends Controller
             ->with([
                 'accounts.account:acct_id,acct_name,acct_number',
                 'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
-                'statements:statement_id,document_id,acct_id,statement_closing_date,closing_balance',
+                'statements:statement_id,document_id,acct_id,statement_closing_date,balance',
                 'lots',
             ])
             ->firstOrFail();
@@ -176,6 +197,10 @@ class FinanceDocumentController extends Controller
             ->where('id', $id)
             ->where('user_id', (int) Auth::id())
             ->firstOrFail();
+
+        if ($document->document_kind === FinDocument::KIND_TAX_FORM && $document->taxDocument) {
+            return $this->downloadTaxDocument($document->taxDocument);
+        }
 
         if (! $document->s3_path) {
             return response()->json(['message' => 'No file associated with this document.'], 404);
@@ -229,7 +254,11 @@ class FinanceDocumentController extends Controller
         // Delete associated records, then the document
         DB::transaction(function () use ($document) {
             $document->lots()->delete();
-            $document->statements()->delete();
+            $document->statements->each(function ($statement): void {
+                $statement->details()->delete();
+                $statement->transactions()->delete();
+                $statement->delete();
+            });
             $document->accounts()->delete();
             if ($document->taxDocument) {
                 $document->taxDocument->delete();
@@ -241,6 +270,21 @@ class FinanceDocumentController extends Controller
         });
 
         return response()->json(['message' => 'Document deleted successfully.']);
+    }
+
+    private function downloadTaxDocument(FileForTaxDocument $taxDocument): JsonResponse
+    {
+        if (! $taxDocument->s3_path) {
+            return response()->json(['message' => 'No file associated with this document.'], 404);
+        }
+
+        $taxDocument->recordDownload();
+
+        return response()->json([
+            'view_url' => $this->fileStorageService->getSignedViewUrl($taxDocument->s3_path, $taxDocument->mime_type),
+            'download_url' => $this->fileStorageService->getSignedDownloadUrl($taxDocument->s3_path, $taxDocument->original_filename),
+            'filename' => $taxDocument->original_filename,
+        ]);
     }
 
     public function requestUpload(Request $request): JsonResponse
@@ -506,14 +550,17 @@ class FinanceDocumentController extends Controller
     /**
      * Compute the impact summary and hash for a document.
      *
-     * @return array{summary: array{document_id: int, account_links: int, statements: int, lots: int, has_tax_document: bool}, impact_hash: string}
+     * @return array{summary: array{document_id: int, account_links: int, statements: int, statement_details: int, transactions: int, lots: int, has_tax_document: bool}, impact_hash: string}
      */
     private function computeImpactSummary(FinDocument $document): array
     {
+        $statementIds = $document->statements()->pluck('statement_id');
         $summary = [
             'document_id' => (int) $document->id,
             'account_links' => $document->accounts()->count(),
-            'statements' => $document->statements()->count(),
+            'statements' => $statementIds->count(),
+            'statement_details' => DB::table('fin_statement_details')->whereIn('statement_id', $statementIds)->count(),
+            'transactions' => DB::table('fin_account_line_items')->whereIn('statement_id', $statementIds)->count(),
             'lots' => $document->lots()->count(),
             'has_tax_document' => $document->taxDocument()->exists(),
         ];

@@ -53,7 +53,14 @@ export default function DocumentImpactPreview({ document, onConfirmDelete, onCan
   if (!preview) return null
 
   const { summary } = preview
-  const hasImpact = summary.account_links > 0 || summary.statements > 0 || summary.lots > 0 || summary.has_tax_document
+  const statementDetails = summary.statement_details ?? 0
+  const transactions = summary.transactions ?? 0
+  const hasImpact = summary.account_links > 0
+    || summary.statements > 0
+    || statementDetails > 0
+    || transactions > 0
+    || summary.lots > 0
+    || summary.has_tax_document
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -79,6 +86,16 @@ export default function DocumentImpactPreview({ document, onConfirmDelete, onCan
             {summary.statements > 0 && (
               <li>
                 {summary.statements} statement{summary.statements > 1 ? 's' : ''}
+              </li>
+            )}
+            {statementDetails > 0 && (
+              <li>
+                {statementDetails} statement detail{statementDetails > 1 ? 's' : ''}
+              </li>
+            )}
+            {transactions > 0 && (
+              <li>
+                {transactions} transaction{transactions > 1 ? 's' : ''}
               </li>
             )}
             {summary.lots > 0 && (

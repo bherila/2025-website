@@ -30,6 +30,7 @@ class IndexDocumentsRequest extends FormRequest
             'has_lots' => ['nullable', 'boolean'],
             'processing_status' => ['nullable', 'string', 'max:50'],
             'source_job_id' => ['nullable', 'integer'],
+            'sort' => ['nullable', 'string', 'in:default,created_desc,name_asc,kind_asc,tax_year_desc,period_end_desc'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }

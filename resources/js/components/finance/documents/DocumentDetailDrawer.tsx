@@ -32,6 +32,7 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
 
   useEffect(() => {
     if (document) {
+      setDetail(null) // eslint-disable-line @eslint-react/set-state-in-effect
       void loadDetail(document.id)
     }
     // Reset delete state when document changes
@@ -55,6 +56,8 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
   }
 
   const displayDoc = detail ?? document
+  const accounts = displayDoc.accounts ?? []
+  const capabilities = displayDoc.capabilities ?? []
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l bg-background shadow-xl">
@@ -108,11 +111,11 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
             </section>
 
             {/* Accounts section */}
-            {displayDoc.accounts.length > 0 && (
+            {accounts.length > 0 && (
               <section>
                 <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Linked accounts</h3>
                 <ul className="space-y-1 text-sm">
-                  {displayDoc.accounts.map((link) => (
+                  {accounts.map((link) => (
                     <li key={link.id} className="flex items-center gap-2">
                       <span>{link.account?.acct_name ?? link.ai_account_name ?? 'Unassigned'}</span>
                       {link.form_type && (
@@ -148,7 +151,7 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
             )}
 
             {/* Actions */}
-            {document.capabilities.includes('delete') && (
+            {capabilities.includes('delete') && (
               <div className="border-t pt-4">
                 <button
                   className="text-sm text-destructive hover:underline"

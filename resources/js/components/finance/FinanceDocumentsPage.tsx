@@ -11,7 +11,12 @@ import DocumentDetailDrawer from './documents/DocumentDetailDrawer'
 import DocumentFilters from './documents/DocumentFilters'
 import DocumentSearchBar from './documents/DocumentSearchBar'
 import DocumentsTable from './documents/DocumentsTable'
-import type { FinanceDocument, PaginatedResponse } from './documents/types'
+import {
+  DEFAULT_DOCUMENT_FILTERS,
+  type DocumentFilterState,
+  type FinanceDocument,
+  type PaginatedResponse,
+} from './documents/types'
 
 function getInitialParam(key: string): string {
   return new URLSearchParams(window.location.search).get(key) ?? ''
@@ -28,10 +33,22 @@ function setUrlParam(key: string, value: string | null) {
   window.history.replaceState({}, '', newUrl)
 }
 
+function getInitialFilters(): DocumentFilterState {
+  const params = new URLSearchParams(window.location.search)
+
+  return Object.fromEntries(
+    Object.entries(DEFAULT_DOCUMENT_FILTERS).map(([key, defaultValue]) => [
+      key,
+      params.get(key) ?? defaultValue,
+    ]),
+  ) as DocumentFilterState
+}
+
 export default function FinanceDocumentsPage() {
   const [documents, setDocuments] = useState<FinanceDocument[]>([])
   const [activeKind, setActiveKind] = useState(() => getInitialParam('document_kind') || 'all')
   const [searchQuery, setSearchQuery] = useState(() => getInitialParam('q'))
+  const [filters, setFilters] = useState<DocumentFilterState>(getInitialFilters)
   const [currentPage, setCurrentPage] = useState(() => Number(getInitialParam('page') || '1'))
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -60,21 +77,27 @@ export default function FinanceDocumentsPage() {
       const params = new URLSearchParams()
       if (activeKind !== 'all') params.set('document_kind', activeKind)
       if (searchQuery.trim()) params.set('q', searchQuery.trim())
+      Object.entries(filters).forEach(([key, value]) => {
+        const defaultValue = DEFAULT_DOCUMENT_FILTERS[key as keyof DocumentFilterState]
+        if (value !== '' && value !== defaultValue) {
+          params.set(key, value)
+        }
+      })
       if (currentPage > 1) params.set('page', String(currentPage))
       params.set('per_page', '50')
 
       const queryStr = params.toString() ? `?${params.toString()}` : ''
       const response = (await fetchWrapper.get(`/api/finance/documents${queryStr}`)) as PaginatedResponse<FinanceDocument>
 
-      setDocuments(response.data)
-      setTotalPages(response.meta.last_page)
-      setTotal(response.meta.total)
+      setDocuments(response.data ?? [])
+      setTotalPages(response.meta?.last_page ?? 1)
+      setTotal(response.meta?.total ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load documents')
     } finally {
       setIsLoading(false)
     }
-  }, [activeKind, searchQuery, currentPage])
+  }, [activeKind, searchQuery, filters, currentPage])
 
   useEffect(() => {
     void loadDocuments()
@@ -84,8 +107,12 @@ export default function FinanceDocumentsPage() {
   useEffect(() => {
     setUrlParam('document_kind', activeKind === 'all' ? null : activeKind)
     setUrlParam('q', searchQuery || null)
+    Object.entries(filters).forEach(([key, value]) => {
+      const defaultValue = DEFAULT_DOCUMENT_FILTERS[key as keyof DocumentFilterState]
+      setUrlParam(key, value === defaultValue ? null : value)
+    })
     setUrlParam('page', currentPage > 1 ? String(currentPage) : null)
-  }, [activeKind, searchQuery, currentPage])
+  }, [activeKind, searchQuery, filters, currentPage])
 
   const handleKindChange = (kind: string) => {
     setActiveKind(kind)
@@ -94,6 +121,17 @@ export default function FinanceDocumentsPage() {
 
   const handleSearch = (q: string) => {
     setSearchQuery(q)
+    setCurrentPage(1)
+  }
+
+  const handleFilterChange = (key: keyof DocumentFilterState, value: string) => {
+    setFilters((current) => ({ ...current, [key]: value }))
+    setCurrentPage(1)
+  }
+
+  const handleClearFilters = () => {
+    setActiveKind('all')
+    setFilters(DEFAULT_DOCUMENT_FILTERS)
     setCurrentPage(1)
   }
 
@@ -159,7 +197,13 @@ export default function FinanceDocumentsPage() {
         </div>
       </div>
 
-      <DocumentFilters activeKind={activeKind} onKindChange={handleKindChange} />
+      <DocumentFilters
+        activeKind={activeKind}
+        filters={filters}
+        onKindChange={handleKindChange}
+        onFilterChange={handleFilterChange}
+        onClear={handleClearFilters}
+      />
 
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

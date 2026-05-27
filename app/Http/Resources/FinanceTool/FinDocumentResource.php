@@ -33,6 +33,8 @@ class FinDocumentResource extends JsonResource
             'file_size_bytes' => $document->file_size_bytes,
             'human_file_size' => $document->human_file_size,
             'genai_status' => $document->genai_status,
+            'parsed_data_needs_review' => (bool) $document->parsed_data_needs_review,
+            'parsed_data_warnings' => $document->parsed_data_warnings,
             'is_reviewed' => (bool) $document->is_reviewed,
             'download_count' => (int) $document->download_count,
             'created_at' => $this->dateString($document->created_at),

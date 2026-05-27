@@ -6,6 +6,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
+use App\Models\FinanceTool\FinStatement;
 use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -127,11 +128,11 @@ class FinDocumentDetailResource extends JsonResource
         }
 
         return $document->statements
-            ->map(fn ($stmt): array => [
+            ->map(fn (FinStatement $stmt): array => [
                 'id' => (int) $stmt->statement_id,
                 'acct_id' => $stmt->acct_id,
-                'statement_closing_date' => $stmt->statement_closing_date?->format('Y-m-d'),
-                'closing_balance' => $stmt->closing_balance,
+                'statement_closing_date' => $this->dateString($stmt->statement_closing_date),
+                'closing_balance' => $stmt->balance,
             ])
             ->values()
             ->all();

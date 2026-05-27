@@ -28,6 +28,8 @@ export interface FinanceDocument {
   file_size_bytes: number | null
   human_file_size: string | null
   genai_status: string | null
+  parsed_data_needs_review?: boolean
+  parsed_data_warnings?: string[] | null
   is_reviewed: boolean
   download_count: number
   created_at: string
@@ -92,6 +94,8 @@ export interface DocumentImpactPreviewData {
     document_id: number
     account_links: number
     statements: number
+    statement_details: number
+    transactions: number
     lots: number
     has_tax_document: boolean
   }
@@ -130,3 +134,33 @@ export const KIND_FILTERS = [
   { value: 'toon_import', label: 'TOON' },
   { value: 'manual', label: 'Manual' },
 ] as const
+
+export interface DocumentFilterState {
+  tax_year: string
+  account_id: string
+  form_type: string
+  genai_status: string
+  is_reviewed: string
+  missing_account: string
+  has_tax_document: string
+  has_statement: string
+  has_lots: string
+  processing_status: string
+  source_job_id: string
+  sort: string
+}
+
+export const DEFAULT_DOCUMENT_FILTERS: DocumentFilterState = {
+  tax_year: '',
+  account_id: '',
+  form_type: '',
+  genai_status: '',
+  is_reviewed: '',
+  missing_account: '',
+  has_tax_document: '',
+  has_statement: '',
+  has_lots: '',
+  processing_status: '',
+  source_job_id: '',
+  sort: 'default',
+}
