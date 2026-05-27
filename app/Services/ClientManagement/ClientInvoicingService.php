@@ -1811,27 +1811,45 @@ class ClientInvoicingService
         return round((float) $agreement->monthly_retainer_fee * $cycleLedger['retainer_multiplier'], 2);
     }
 
+    /**
+     * Multiplier to apply to retainer_hours / retainer_fee for the given cycle.
+     *
+     * The window is the cycle's effective entitlement — start = max(cycle.start,
+     * natural cycle start) and end = min(natural cycle end, termination_date) —
+     * over the natural cycle length. We deliberately ignore the cycle's end as
+     * yielded by `cyclesForAgreement(...)` because that may have been clipped
+     * by `$through` (e.g., when an interim ledger is built mid-cycle), which is
+     * not a real shortening of the client's retainer entitlement.
+     */
     protected function cyclePeriodRetainerMultiplier(ClientAgreement $agreement, BillingCycle $cycle): float
     {
-        if (! $cycle->isProrated) {
+        $naturalCycle = $this->billingCycleResolver->cycleContaining($agreement, $cycle->start);
+
+        $effectiveStart = $cycle->start->gt($naturalCycle->start) ? $cycle->start->copy() : $naturalCycle->start->copy();
+        $effectiveEnd = $naturalCycle->end->copy();
+
+        $terminationDate = $agreement->termination_date
+            ? Carbon::parse($agreement->termination_date)->startOfDay()
+            : null;
+        if ($terminationDate !== null && $terminationDate->lt($effectiveEnd)) {
+            $effectiveEnd = $terminationDate->copy();
+        }
+
+        if ($effectiveStart->gt($effectiveEnd)) {
+            return 0.0;
+        }
+
+        $naturalDays = $naturalCycle->start->diffInDays($naturalCycle->end) + 1;
+        if ($naturalDays <= 0) {
             return 1.0;
         }
 
-        $cadence = $agreement->effectiveBillingCadence();
-        if ($cadence === BillingCadence::SemiAnnual) {
-            $fullCycleStart = $cycle->start->copy();
-            $fullCycleEnd = $fullCycleStart->copy()->addMonths($cadence->monthsInCycle())->subDay();
-        } else {
-            $fullCycleStart = $cadence->cycleStart($cycle->start);
-            $fullCycleEnd = $cadence->cycleEnd($cycle->start);
-        }
-
-        $fullCycleDays = $fullCycleStart->diffInDays($fullCycleEnd) + 1;
-        if ($fullCycleDays <= 0) {
+        $effectiveDays = $effectiveStart->diffInDays($effectiveEnd) + 1;
+        if ($effectiveDays >= $naturalDays) {
             return 1.0;
         }
 
-        return ($cycle->start->diffInDays($cycle->end) + 1) / $fullCycleDays;
+        return $effectiveDays / $naturalDays;
     }
 
     protected function monthRetainerMultiplier(ClientAgreement $agreement, Carbon $monthStart, Carbon $monthEnd): float

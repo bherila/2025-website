@@ -258,6 +258,43 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_period_retainer_interim_compares_against_full_cycle_pool_when_built_mid_cycle(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-12-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-01'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 262.50,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            $this->createTimeEntry('2025-12-10', 0.5);
+
+            // Call interim directly with periodStart inside an in-progress cycle.
+            // Without the fix, the ledger gets built through Dec 31 and
+            // cyclesForAgreement clips the active cycle to Nov 1 - Dec 31
+            // (~33% multiplier), so 0.5h of work would exceed the shrunken
+            // pool and bill as overage.
+            $invoice = $this->invoicingService->generateInterimOverageInvoice(
+                $this->company,
+                Carbon::parse('2025-12-01'),
+                $agreement,
+            );
+
+            $this->assertNull($invoice, 'Mid-cycle interim must compare against the full Nov-Apr pool, not the ledger-clipped partial cycle.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_semiannual_period_retainer_clips_boundary_month_hours_per_cycle(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-05-20'));
