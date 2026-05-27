@@ -21,6 +21,7 @@ export const taxLotReconciliationLotSchema = z.object({
   cost_basis: z.number().nullable(),
   realized_gain_loss: z.number().nullable(),
   is_short_term: z.boolean().nullable(),
+  source: z.string().nullable().optional().default(null),
   lot_source: z.string().nullable(),
   form_8949_box: z.enum(['A', 'B', 'C', 'D', 'E', 'F']).nullable(),
   is_covered: z.boolean().nullable(),

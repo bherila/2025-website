@@ -1,5 +1,8 @@
+export { LotActionMenu } from './LotActionMenu'
+export { LotFilters, type LotFilterValues } from './LotFilters'
 export { LotReconciliationBadge } from './LotReconciliationBadge'
 export { LotSideBySideComparison } from './LotSideBySideComparison'
 export { LotSourceBadge } from './LotSourceBadge'
+export { LotSourceDocumentLink } from './LotSourceDocumentLink'
 export { LotSummaryCards } from './LotSummaryCards'
 export { LotWorkspaceTable } from './LotWorkspaceTable'

@@ -1,12 +1,28 @@
+import { render, screen, waitFor } from '@testing-library/react'
+
+import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import {
   classifyBox,
   computeForm8949,
+  default as Form8949Preview,
   type Form8949Lot,
   form8949LotsFromTaxDocuments,
   formatForm8949Date,
 } from '../Form8949Preview'
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: jest.fn(),
+  },
+}))
+
+const mockGet = fetchWrapper.get as jest.Mock
+
+beforeEach(() => {
+  mockGet.mockReset()
+})
 
 function mkLot(overrides: Partial<Form8949Lot> = {}): Form8949Lot {
   return {
@@ -52,23 +68,23 @@ describe('classifyBox', () => {
 
   // Tests for canonical `source` field
   it('routes canonical broker_1099b source short-term to box A', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: undefined }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null }))).toBe('A')
   })
 
   it('routes canonical broker_1099b source long-term to box D', () => {
-    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: undefined }))).toBe('D')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null }))).toBe('D')
   })
 
   it('routes canonical account_derived source short-term to box C', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: undefined }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: null }))).toBe('C')
   })
 
   it('routes canonical manual source long-term to box F', () => {
-    expect(classifyBox(mkLot({ is_short_term: 0, source: 'manual', lot_source: undefined }))).toBe('F')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'manual', lot_source: null }))).toBe('F')
   })
 
   it('routes canonical synthetic_adjustment source short-term to box C', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: 'synthetic_adjustment', lot_source: undefined }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'synthetic_adjustment', lot_source: null }))).toBe('C')
   })
 
   it('canonical source takes priority over legacy lot_source', () => {
@@ -76,8 +92,69 @@ describe('classifyBox', () => {
   })
 
   it('falls back to lot_source when source is absent', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: undefined, lot_source: '1099b' }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b' }))).toBe('A')
     expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: 'broker_statement' }))).toBe('B')
+  })
+})
+
+describe('Form8949Preview', () => {
+  it('loads closed lots from the normalized lot workspace endpoint with account scope', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: [{
+        id: 44,
+        source: 'broker_1099b',
+        lot_origin: '1099b_disposition',
+        document_id: 12,
+        statement_id: null,
+        open_transaction_id: null,
+        close_transaction_id: null,
+        account_id: 7,
+        account_name: 'Brokerage',
+        account_number: 'Acct 1234',
+        symbol: 'AAPL',
+        cusip: null,
+        description: 'Apple Inc.',
+        quantity: '10.00000000',
+        acquired_date: '2024-01-02',
+        sold_date: '2025-02-03',
+        basis: '900.0000',
+        proceeds: '1000.0000',
+        wash_sale_disallowed: '0.0000',
+        realized_gain: '100.0000',
+        is_short_term: false,
+        form_8949_box: 'D',
+        is_covered: true,
+        accrued_market_discount: null,
+        reconciliation_state: 'accepted_broker',
+        link_id: 3,
+        superseded_by: null,
+        lot_source: '1099b',
+        capabilities: ['view_source_document', 'open_reconciliation'],
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }],
+      summary: {
+        total_proceeds: 1000,
+        total_basis: 900,
+        total_wash_sale: 0,
+        total_realized_gain: 100,
+        count: 1,
+        counts_by_source: { broker_1099b: 1 },
+        counts_by_state: { accepted_broker: 1 },
+      },
+      closed_years: [2025],
+      meta: {
+        current_page: 1,
+        last_page: 1,
+        per_page: 200,
+        total: 1,
+      },
+    })
+
+    render(<Form8949Preview selectedYear={2025} accountId={7} />)
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/api/finance/lot-workspace?status=closed&year=2025&per_page=200&page=1&account_ids=7'))
+    expect(await screen.findByText('AAPL • 1234')).toBeInTheDocument()
   })
 })
 

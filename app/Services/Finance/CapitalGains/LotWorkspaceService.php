@@ -5,8 +5,10 @@ namespace App\Services\Finance\CapitalGains;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
  * Central lot query service powering the unified lot-workspace API.
@@ -36,102 +38,17 @@ final class LotWorkspaceService
      *   per_page?: int,
      *   page?: int,
      * }  $params
-     * @return LengthAwarePaginator<FinAccountLot>
+     * @return LengthAwarePaginator<int, FinAccountLot>
      */
     public function query(array $params): LengthAwarePaginator
     {
-        $userId = $params['user_id'];
-        $accountIds = $params['account_ids'] ?? null;
-        $year = $params['year'] ?? null;
-        $dateFrom = $params['date_from'] ?? null;
-        $dateTo = $params['date_to'] ?? null;
-        $source = $params['source'] ?? null;
-        $reconciliationState = $params['reconciliation_state'] ?? null;
-        $status = $params['status'] ?? 'all';
-        $includeSuperseded = $params['include_superseded'] ?? false;
-        $symbol = $params['symbol'] ?? null;
-        $cusip = $params['cusip'] ?? null;
-        $documentId = $params['document_id'] ?? null;
         $perPage = min($params['per_page'] ?? 50, 200);
         $page = $params['page'] ?? 1;
 
-        // Resolve account scope
-        if ($accountIds === null || $accountIds === []) {
-            $accountIds = FinAccounts::forOwner($userId)
-                ->pluck('acct_id')
-                ->map(static fn (int|string $id): int => (int) $id)
-                ->all();
-        } else {
-            // Verify ownership
-            $accountIds = FinAccounts::forOwner($userId)
-                ->whereIn('acct_id', $accountIds)
-                ->pluck('acct_id')
-                ->map(static fn (int|string $id): int => (int) $id)
-                ->all();
-        }
-
-        $query = FinAccountLot::query()
-            ->whereIn('acct_id', $accountIds)
+        $query = $this->baseQuery($params)
             ->with('account:acct_id,acct_name,acct_number');
 
-        // Date scope
-        if ($year !== null) {
-            $query->whereBetween('sale_date', ["{$year}-01-01", "{$year}-12-31"]);
-        }
-        if ($dateFrom !== null) {
-            $query->where('sale_date', '>=', $dateFrom);
-        }
-        if ($dateTo !== null) {
-            $query->where('sale_date', '<=', $dateTo);
-        }
-
-        // Status filter (open = no sale_date, closed = has sale_date)
-        if ($status === 'open') {
-            $query->whereNull('sale_date');
-        } elseif ($status === 'closed') {
-            $query->whereNotNull('sale_date');
-        }
-
-        // Source filter
-        if ($source !== null) {
-            $sources = is_array($source) ? $source : [$source];
-            $query->whereIn('source', $sources);
-        }
-
-        // Reconciliation state filter — reads from links table directly
-        if ($reconciliationState !== null) {
-            $states = is_array($reconciliationState) ? $reconciliationState : [$reconciliationState];
-            $query->where(function (Builder $q) use ($states): void {
-                $q->whereIn('reconciliation_status', $states)
-                    ->orWhereExists(function ($sub) use ($states): void {
-                        $sub->selectRaw('1')
-                            ->from('fin_lot_reconciliation_links')
-                            ->where(function ($linkQ): void {
-                                $linkQ->whereColumn('fin_lot_reconciliation_links.broker_lot_id', 'fin_account_lots.lot_id')
-                                    ->orWhereColumn('fin_lot_reconciliation_links.account_lot_id', 'fin_account_lots.lot_id');
-                            })
-                            ->whereIn('fin_lot_reconciliation_links.state', $states);
-                    });
-            });
-        }
-
-        // Superseded filter
-        if (! $includeSuperseded) {
-            $query->whereNull('superseded_by_lot_id');
-        }
-
-        // Symbol / CUSIP filter
-        if ($symbol !== null) {
-            $query->where('symbol', 'LIKE', $symbol);
-        }
-        if ($cusip !== null) {
-            $query->where('cusip', $cusip);
-        }
-
-        // Document filter
-        if ($documentId !== null) {
-            $query->where('document_id', $documentId);
-        }
+        $this->addReconciliationColumns($query);
 
         $query->orderBy('sale_date', 'desc')
             ->orderBy('lot_id', 'desc');
@@ -147,58 +64,7 @@ final class LotWorkspaceService
      */
     public function summary(array $params): array
     {
-        $userId = $params['user_id'];
-        $accountIds = $params['account_ids'] ?? null;
-
-        if ($accountIds === null || $accountIds === []) {
-            $accountIds = FinAccounts::forOwner($userId)
-                ->pluck('acct_id')
-                ->map(static fn (int|string $id): int => (int) $id)
-                ->all();
-        } else {
-            $accountIds = FinAccounts::forOwner($userId)
-                ->whereIn('acct_id', $accountIds)
-                ->pluck('acct_id')
-                ->map(static fn (int|string $id): int => (int) $id)
-                ->all();
-        }
-
-        $query = FinAccountLot::query()->whereIn('acct_id', $accountIds);
-
-        $year = $params['year'] ?? null;
-        $status = $params['status'] ?? 'all';
-        $includeSuperseded = $params['include_superseded'] ?? false;
-        $source = $params['source'] ?? null;
-        $symbol = $params['symbol'] ?? null;
-        $cusip = $params['cusip'] ?? null;
-        $documentId = $params['document_id'] ?? null;
-
-        if ($year !== null) {
-            $query->whereBetween('sale_date', ["{$year}-01-01", "{$year}-12-31"]);
-        }
-        if ($status === 'open') {
-            $query->whereNull('sale_date');
-        } elseif ($status === 'closed') {
-            $query->whereNotNull('sale_date');
-        }
-        if ($source !== null) {
-            $sources = is_array($source) ? $source : [$source];
-            $query->whereIn('source', $sources);
-        }
-        if (! $includeSuperseded) {
-            $query->whereNull('superseded_by_lot_id');
-        }
-        if ($symbol !== null) {
-            $query->where('symbol', 'LIKE', $symbol);
-        }
-        if ($cusip !== null) {
-            $query->where('cusip', $cusip);
-        }
-        if ($documentId !== null) {
-            $query->where('document_id', $documentId);
-        }
-
-        $aggregates = $query->selectRaw(
+        $aggregates = $this->baseQuery($params)->selectRaw(
             'COALESCE(SUM(proceeds), 0) as total_proceeds, '.
             'COALESCE(SUM(cost_basis), 0) as total_basis, '.
             'COALESCE(SUM(wash_sale_disallowed), 0) as total_wash_sale, '.
@@ -206,26 +72,278 @@ final class LotWorkspaceService
             'COUNT(*) as count'
         )->first();
 
-        $countsBySource = $query->clone()
-            ->selectRaw('source, COUNT(*) as cnt')
-            ->groupBy('source')
-            ->pluck('cnt', 'source')
-            ->all();
-
-        $countsByState = $query->clone()
-            ->selectRaw('COALESCE(reconciliation_status, \'none\') as state, COUNT(*) as cnt')
-            ->groupBy('reconciliation_status')
-            ->pluck('cnt', 'state')
+        $lotIds = $this->baseQuery($params)
+            ->pluck('lot_id')
+            ->map(static fn (int|string $lotId): int => (int) $lotId)
+            ->values()
             ->all();
 
         return [
-            'total_proceeds' => (float) ($aggregates->total_proceeds ?? 0),
-            'total_basis' => (float) ($aggregates->total_basis ?? 0),
-            'total_wash_sale' => (float) ($aggregates->total_wash_sale ?? 0),
-            'total_realized_gain' => (float) ($aggregates->total_realized_gain ?? 0),
-            'count' => (int) ($aggregates->count ?? 0),
-            'counts_by_source' => $countsBySource,
-            'counts_by_state' => $countsByState,
+            'total_proceeds' => (float) ($aggregates?->getAttribute('total_proceeds') ?? 0),
+            'total_basis' => (float) ($aggregates?->getAttribute('total_basis') ?? 0),
+            'total_wash_sale' => (float) ($aggregates?->getAttribute('total_wash_sale') ?? 0),
+            'total_realized_gain' => (float) ($aggregates?->getAttribute('total_realized_gain') ?? 0),
+            'count' => (int) ($aggregates?->getAttribute('count') ?? 0),
+            'counts_by_source' => $this->countsBySource($this->baseQuery($params)),
+            'counts_by_state' => $this->countsByLatestLinkState($lotIds),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return list<int>
+     */
+    public function closedYears(array $params): array
+    {
+        $accountIds = $this->ownedAccountIds(
+            (int) $params['user_id'],
+            is_array($params['account_ids'] ?? null) ? $params['account_ids'] : null,
+        );
+
+        $query = FinAccountLot::query()
+            ->whereNotNull('sale_date')
+            ->whereNull('superseded_by_lot_id');
+
+        if ($accountIds === []) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereIn('acct_id', $accountIds);
+        }
+
+        return $query
+            ->pluck('sale_date')
+            ->map(static fn (mixed $saleDate): int => (int) substr((string) $saleDate, 0, 4))
+            ->filter(static fn (int $year): bool => $year > 0)
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return Builder<FinAccountLot>
+     */
+    private function baseQuery(array $params): Builder
+    {
+        $userId = (int) $params['user_id'];
+        $accountIds = $this->ownedAccountIds($userId, is_array($params['account_ids'] ?? null) ? $params['account_ids'] : null);
+        $status = (string) ($params['status'] ?? 'all');
+
+        $query = FinAccountLot::query();
+
+        if ($accountIds === []) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereIn('acct_id', $accountIds);
+        }
+
+        if (($params['year'] ?? null) !== null) {
+            $year = (int) $params['year'];
+            $query->whereBetween('sale_date', ["{$year}-01-01", "{$year}-12-31"]);
+        }
+        if (($params['date_from'] ?? null) !== null) {
+            $query->where('sale_date', '>=', (string) $params['date_from']);
+        }
+        if (($params['date_to'] ?? null) !== null) {
+            $query->where('sale_date', '<=', (string) $params['date_to']);
+        }
+
+        if ($status === 'open') {
+            $query->whereNull('sale_date');
+        } elseif ($status === 'closed') {
+            $query->whereNotNull('sale_date');
+        }
+
+        $sources = $this->stringValues($params['source'] ?? null);
+        if ($sources !== []) {
+            $query->whereIn('source', $sources);
+        }
+
+        $this->applyReconciliationStateFilter($query, $params['reconciliation_state'] ?? null);
+
+        if (! (bool) ($params['include_superseded'] ?? false)) {
+            $query->whereNull('superseded_by_lot_id');
+        }
+        if (($params['symbol'] ?? null) !== null) {
+            $query->where('symbol', 'LIKE', (string) $params['symbol']);
+        }
+        if (($params['cusip'] ?? null) !== null) {
+            $query->where('cusip', (string) $params['cusip']);
+        }
+        if (($params['document_id'] ?? null) !== null) {
+            $query->where('document_id', (int) $params['document_id']);
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  int[]|null  $requestedAccountIds
+     * @return list<int>
+     */
+    private function ownedAccountIds(int $userId, ?array $requestedAccountIds): array
+    {
+        $query = FinAccounts::forOwner($userId);
+
+        if ($requestedAccountIds !== null && $requestedAccountIds !== []) {
+            $query->whereIn('acct_id', array_map(static fn (int|string $accountId): int => (int) $accountId, $requestedAccountIds));
+        }
+
+        return $query
+            ->pluck('acct_id')
+            ->map(static fn (int|string $accountId): int => (int) $accountId)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Builder<FinAccountLot>  $query
+     */
+    private function applyReconciliationStateFilter(Builder $query, mixed $stateFilter): void
+    {
+        $states = $this->stringValues($stateFilter);
+        if ($states === []) {
+            return;
+        }
+
+        $includeNone = in_array('none', $states, true);
+        $linkStates = array_values(array_filter($states, static fn (string $state): bool => $state !== 'none'));
+
+        $query->where(function (Builder $stateQuery) use ($includeNone, $linkStates): void {
+            if ($linkStates !== []) {
+                $stateQuery->whereExists($this->linkedLotExists($linkStates));
+            }
+
+            if ($includeNone && $linkStates !== []) {
+                $stateQuery->orWhereNotExists($this->linkedLotExists());
+            } elseif ($includeNone) {
+                $stateQuery->whereNotExists($this->linkedLotExists());
+            }
+        });
+    }
+
+    /**
+     * @param  list<string>|null  $states
+     */
+    private function linkedLotExists(?array $states = null): Closure
+    {
+        return static function (QueryBuilder $linkQuery) use ($states): void {
+            $linkQuery
+                ->selectRaw('1')
+                ->from('fin_lot_reconciliation_links')
+                ->where(function (QueryBuilder $linkedLotQuery): void {
+                    $linkedLotQuery
+                        ->whereColumn('fin_lot_reconciliation_links.broker_lot_id', 'fin_account_lots.lot_id')
+                        ->orWhereColumn('fin_lot_reconciliation_links.account_lot_id', 'fin_account_lots.lot_id');
+                });
+
+            if ($states !== null && $states !== []) {
+                $linkQuery->whereIn('fin_lot_reconciliation_links.state', $states);
+            }
+        };
+    }
+
+    /**
+     * @param  Builder<FinAccountLot>  $query
+     */
+    private function addReconciliationColumns(Builder $query): void
+    {
+        $latestLink = static function (Builder $linkQuery): void {
+            $linkQuery->where(function (Builder $linkedLotQuery): void {
+                $linkedLotQuery
+                    ->whereColumn('fin_lot_reconciliation_links.broker_lot_id', 'fin_account_lots.lot_id')
+                    ->orWhereColumn('fin_lot_reconciliation_links.account_lot_id', 'fin_account_lots.lot_id');
+            });
+        };
+
+        $query->addSelect([
+            'reconciliation_link_id' => FinLotReconciliationLink::query()
+                ->select('id')
+                ->where($latestLink)
+                ->orderByDesc('id')
+                ->limit(1),
+            'reconciliation_state' => FinLotReconciliationLink::query()
+                ->select('state')
+                ->where($latestLink)
+                ->orderByDesc('id')
+                ->limit(1),
+        ]);
+    }
+
+    /**
+     * @param  Builder<FinAccountLot>  $query
+     * @return array<string, int>
+     */
+    private function countsBySource(Builder $query): array
+    {
+        $rows = $query
+            ->selectRaw('COALESCE(source, ?) as source_key, COUNT(*) as cnt', ['none'])
+            ->groupBy('source')
+            ->get();
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $counts[(string) $row->getAttribute('source_key')] = (int) $row->getAttribute('cnt');
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  list<int>  $lotIds
+     * @return array<string, int>
+     */
+    private function countsByLatestLinkState(array $lotIds): array
+    {
+        if ($lotIds === []) {
+            return [];
+        }
+
+        $lotIdLookup = array_fill_keys($lotIds, true);
+        $stateByLotId = [];
+        $links = FinLotReconciliationLink::query()
+            ->where(function (Builder $query) use ($lotIds): void {
+                $query
+                    ->whereIn('broker_lot_id', $lotIds)
+                    ->orWhereIn('account_lot_id', $lotIds);
+            })
+            ->orderByDesc('id')
+            ->get(['id', 'broker_lot_id', 'account_lot_id', 'state']);
+
+        foreach ($links as $link) {
+            foreach (['broker_lot_id', 'account_lot_id'] as $attribute) {
+                $lotId = (int) ($link->getAttribute($attribute) ?? 0);
+                if ($lotId > 0 && isset($lotIdLookup[$lotId]) && ! array_key_exists($lotId, $stateByLotId)) {
+                    $stateByLotId[$lotId] = (string) $link->getAttribute('state');
+                }
+            }
+        }
+
+        $counts = [];
+        foreach ($lotIds as $lotId) {
+            $state = $stateByLotId[$lotId] ?? 'none';
+            $counts[$state] = ($counts[$state] ?? 0) + 1;
+        }
+        ksort($counts);
+
+        return $counts;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stringValues(mixed $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+
+        $values = is_array($value) ? $value : [$value];
+
+        return array_values(array_filter(
+            array_map(static fn (mixed $item): string => trim((string) $item), $values),
+            static fn (string $item): bool => $item !== '',
+        ));
     }
 }

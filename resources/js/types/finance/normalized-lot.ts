@@ -8,6 +8,8 @@ export interface NormalizedLot {
   lot_origin: string | null
   document_id: number | null
   statement_id: number | null
+  open_transaction_id: number | null
+  close_transaction_id: number | null
   account_id: number
   account_name: string | null
   account_number: string | null
@@ -26,8 +28,10 @@ export interface NormalizedLot {
   is_covered: boolean | null
   accrued_market_discount: string | null
   reconciliation_state: string | null
+  link_id: number | null
   superseded_by: number | null
   lot_source: string | null
+  capabilities: string[]
   created_at: string | null
   updated_at: string | null
 }
@@ -52,5 +56,6 @@ export interface LotWorkspaceMeta {
 export interface LotWorkspaceResponse {
   data: NormalizedLot[]
   summary: LotWorkspaceSummary
+  closed_years: number[]
   meta: LotWorkspaceMeta
 }

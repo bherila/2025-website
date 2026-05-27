@@ -6,6 +6,7 @@ import type { ReactElement } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { LotSourceBadge } from '@/components/finance/lots/shared'
 import { Callout, fmtAmt } from '@/components/finance/tax-preview-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -345,6 +346,7 @@ function LotSummary({ lot, source, duplicateCount = 0 }: { lot: TaxLotReconcilia
     <div className="min-w-0 space-y-0.5 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="font-medium text-foreground">{lot.symbol ?? 'Unknown'}</span>
+        <LotSourceBadge source={lot.source} />
         {accepted && (
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
             Accepted

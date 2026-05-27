@@ -3,7 +3,6 @@
 namespace App\Console\Commands\Finance;
 
 use App\Models\FinanceTool\FinAccountLot;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Backfill the canonical `source` column for rows where it is null or default,
@@ -47,17 +46,25 @@ class FinanceBackfillLotSourceCommand extends BaseFinanceCommand
         foreach ($mappings as $mapping) {
             $query = FinAccountLot::query()
                 ->where(function ($q) use ($mapping): void {
-                    if ($mapping['lot_source'] !== null) {
-                        $q->where('lot_source', $mapping['lot_source']);
-                    } else {
-                        $q->whereNull('lot_source');
+                    if (array_key_exists('lot_source', $mapping)) {
+                        if ($mapping['lot_source'] !== null) {
+                            $q->where('lot_source', $mapping['lot_source']);
+                        } else {
+                            $q->whereNull('lot_source');
+                        }
                     }
 
                     if ($mapping['lot_origin'] !== null) {
                         $q->where('lot_origin', $mapping['lot_origin']);
                     }
                 })
-                ->whereNull('source');
+                ->where(function ($q) use ($mapping): void {
+                    $q->whereNull('source');
+
+                    if ($mapping['target_source'] !== FinAccountLot::SOURCE_ACCOUNT_DERIVED) {
+                        $q->orWhere('source', FinAccountLot::SOURCE_ACCOUNT_DERIVED);
+                    }
+                });
 
             $count = $query->count();
 
@@ -66,7 +73,7 @@ class FinanceBackfillLotSourceCommand extends BaseFinanceCommand
             }
 
             $results[] = [
-                'lot_source' => $mapping['lot_source'] ?? '(null)',
+                'lot_source' => array_key_exists('lot_source', $mapping) ? ($mapping['lot_source'] ?? '(null)') : '(any)',
                 'lot_origin' => $mapping['lot_origin'] ?? '(any)',
                 'target_source' => $mapping['target_source'],
                 'rows_affected' => $count,
@@ -96,7 +103,7 @@ class FinanceBackfillLotSourceCommand extends BaseFinanceCommand
     /**
      * Build the mapping rules from legacy lot_source/lot_origin to canonical source.
      *
-     * @return array<int, array{lot_source: string|null, lot_origin: string|null, target_source: string}>
+     * @return array<int, array{lot_source?: string|null, lot_origin: string|null, target_source: string}>
      */
     private function buildMappings(): array
     {
@@ -115,31 +122,26 @@ class FinanceBackfillLotSourceCommand extends BaseFinanceCommand
             ],
             // Rows with 1099b_disposition origin → broker_1099b
             [
-                'lot_source' => null,
                 'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
                 'target_source' => FinAccountLot::SOURCE_BROKER_1099B,
             ],
             // statement_disposition → account_derived
             [
-                'lot_source' => null,
                 'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
                 'target_source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             ],
             // statement_position → account_derived
             [
-                'lot_source' => null,
                 'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
                 'target_source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             ],
             // csv_import → account_derived
             [
-                'lot_source' => null,
                 'lot_origin' => FinAccountLot::ORIGIN_CSV_IMPORT,
                 'target_source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             ],
             // manual origin → manual source
             [
-                'lot_source' => null,
                 'lot_origin' => FinAccountLot::ORIGIN_MANUAL,
                 'target_source' => FinAccountLot::SOURCE_MANUAL,
             ],

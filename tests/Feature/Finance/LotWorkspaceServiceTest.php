@@ -6,7 +6,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\LotWorkspaceService;
-use App\Services\Finance\DocumentIngestionService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,7 +36,7 @@ class LotWorkspaceServiceTest extends TestCase
             'account_ids' => [(int) $account1->acct_id],
         ]);
 
-        $ids = collect($result->items())->pluck('lot_id')->map(fn ($id) => (int) $id)->all();
+        $ids = array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($result));
         $this->assertContains((int) $lot1->lot_id, $ids);
         $this->assertCount(1, $ids);
     }
@@ -87,7 +87,7 @@ class LotWorkspaceServiceTest extends TestCase
         ]);
 
         $this->assertCount(1, $result->items());
-        $this->assertEquals(FinAccountLot::SOURCE_BROKER_1099B, $result->items()[0]->source);
+        $this->assertEquals(FinAccountLot::SOURCE_BROKER_1099B, $this->items($result)[0]->source);
     }
 
     public function test_superseded_lots_hidden_by_default(): void
@@ -135,7 +135,7 @@ class LotWorkspaceServiceTest extends TestCase
         ]);
 
         $this->assertCount(1, $result->items());
-        $this->assertNull($result->items()[0]->sale_date);
+        $this->assertNull($this->items($result)[0]->sale_date);
     }
 
     public function test_summary_aggregates_correct_totals(): void
@@ -181,7 +181,65 @@ class LotWorkspaceServiceTest extends TestCase
         ]);
 
         $this->assertCount(1, $result->items());
-        $this->assertEquals('AAPL', $result->items()[0]->symbol);
+        $this->assertEquals('AAPL', $this->items($result)[0]->symbol);
+    }
+
+    public function test_reconciliation_filters_and_summary_use_latest_link_state(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id);
+        $acceptedLot = $this->makeLot($account, [
+            'reconciliation_status' => FinLotReconciliationLink::STATE_IGNORED_DUPLICATE,
+            'sale_date' => '2025-02-03',
+            'proceeds' => 1000,
+        ]);
+        $noneLot = $this->makeLot($account, [
+            'sale_date' => '2025-03-03',
+            'proceeds' => 2000,
+        ]);
+        $outOfRangeLot = $this->makeLot($account, [
+            'sale_date' => '2025-04-03',
+            'proceeds' => 3000,
+        ]);
+
+        FinLotReconciliationLink::create([
+            'account_lot_id' => $acceptedLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+        FinLotReconciliationLink::create([
+            'account_lot_id' => $outOfRangeLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_BROKER_ONLY,
+        ]);
+
+        $result = $this->service->query([
+            'user_id' => (int) $user->id,
+            'date_from' => '2025-01-01',
+            'date_to' => '2025-02-28',
+            'reconciliation_state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+
+        $this->assertSame([(int) $acceptedLot->lot_id], array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($result)));
+        $this->assertSame(FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE, $this->items($result)[0]->getAttribute('reconciliation_state'));
+
+        $summary = $this->service->summary([
+            'user_id' => (int) $user->id,
+            'date_from' => '2025-01-01',
+            'date_to' => '2025-02-28',
+            'reconciliation_state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+
+        $this->assertSame(1, $summary['count']);
+        $this->assertSame(1000.0, $summary['total_proceeds']);
+        $this->assertSame([
+            FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE => 1,
+        ], $summary['counts_by_state']);
+
+        $noneResult = $this->service->query([
+            'user_id' => (int) $user->id,
+            'reconciliation_state' => 'none',
+        ]);
+
+        $this->assertSame([(int) $noneLot->lot_id], array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($noneResult)));
     }
 
     private function makeAccount(int $userId, string $name = 'Brokerage'): FinAccounts
@@ -220,5 +278,14 @@ class LotWorkspaceServiceTest extends TestCase
         ], $overrides);
 
         return FinAccountLot::create($attributes);
+    }
+
+    /**
+     * @param  LengthAwarePaginator<int, FinAccountLot>  $result
+     * @return list<FinAccountLot>
+     */
+    private function items(LengthAwarePaginator $result): array
+    {
+        return array_values($result->items());
     }
 }

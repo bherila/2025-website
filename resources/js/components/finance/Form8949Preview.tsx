@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 import { mergeForm8949Lots } from '@/lib/finance/form8949Extraction'
+import type { LotWorkspaceResponse, NormalizedLot } from '@/types/finance/normalized-lot'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 /** One closed lot row, shaped to match the `fin_account_lots` closed-status API response. */
@@ -237,6 +238,70 @@ interface Form8949PreviewProps {
 }
 
 const ROW_CAP = 50
+const LOT_WORKSPACE_PAGE_SIZE = 200
+
+function form8949LotFromNormalizedLot(lot: NormalizedLot): Form8949Lot {
+  return {
+    lot_id: lot.id,
+    acct_id: lot.account_id,
+    symbol: lot.symbol,
+    description: lot.description,
+    quantity: lot.quantity,
+    purchase_date: lot.acquired_date,
+    cost_basis: lot.basis,
+    sale_date: lot.sold_date,
+    proceeds: lot.proceeds,
+    realized_gain_loss: lot.realized_gain,
+    is_short_term: lot.is_short_term ?? false,
+    lot_source: lot.lot_source,
+    source: lot.source,
+    tax_document_id: lot.document_id,
+    form_8949_box: lot.form_8949_box,
+    is_covered: lot.is_covered,
+    accrued_market_discount: lot.accrued_market_discount,
+    wash_sale_disallowed: lot.wash_sale_disallowed,
+    account_name: lot.account_name,
+    account_last4: accountLast4(lot.account_number),
+    account_link_id: null,
+  }
+}
+
+function accountLast4(accountNumber: string | null): string | null {
+  if (!accountNumber) {
+    return null
+  }
+
+  const digits = accountNumber.replace(/\D/g, '')
+
+  return digits.length >= 4 ? digits.slice(-4) : null
+}
+
+async function loadForm8949WorkspaceLots(selectedYear: number, accountId?: number): Promise<Form8949Lot[]> {
+  const lots: Form8949Lot[] = []
+  let page = 1
+
+  while (true) {
+    const params = new URLSearchParams({
+      status: 'closed',
+      year: String(selectedYear),
+      per_page: String(LOT_WORKSPACE_PAGE_SIZE),
+      page: String(page),
+    })
+
+    if (accountId !== undefined) {
+      params.set('account_ids', String(accountId))
+    }
+
+    const response = (await fetchWrapper.get(`/api/finance/lot-workspace?${params.toString()}`)) as LotWorkspaceResponse
+    lots.push(...response.data.map(form8949LotFromNormalizedLot))
+    if (page >= response.meta.last_page) {
+      break
+    }
+    page += 1
+  }
+
+  return lots
+}
 
 export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], accountId }: Form8949PreviewProps) {
   const [lots, setLots] = useState<Form8949Lot[] | null>(null)
@@ -247,12 +312,9 @@ export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], a
     let cancelled = false
     void (async () => {
       try {
-        const res = (await fetchWrapper.get(
-          `/api/finance/all/lots?status=closed&year=${selectedYear}`,
-        )) as { lots?: Form8949Lot[] }
+        const fetchedLots = await loadForm8949WorkspaceLots(selectedYear, accountId)
         if (cancelled) return
-        const fetchedLots = Array.isArray(res.lots) ? res.lots : []
-        setLots(accountId === undefined ? fetchedLots : fetchedLots.filter((lot) => lot.acct_id === accountId))
+        setLots(fetchedLots)
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : 'Failed to load lots')

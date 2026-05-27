@@ -49,6 +49,7 @@ class LotWorkspaceController extends Controller
         return response()->json([
             'data' => NormalizedLotResource::collection($paginator->items()),
             'summary' => $summary,
+            'closed_years' => $this->lotWorkspaceService->closedYears($params),
             'meta' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
