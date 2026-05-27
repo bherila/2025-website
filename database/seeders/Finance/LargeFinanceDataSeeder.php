@@ -109,6 +109,8 @@ class LargeFinanceDataSeeder extends Seeder
                 $taxYear = self::TAX_YEARS[$d % count(self::TAX_YEARS)];
                 $identifier = "ACCT-{$account->acct_id}-{$taxYear}-{$d}";
                 $filename = "large-{$account->acct_id}-{$d}.pdf";
+                $isMissingAccount = $d % 10 === 0;
+                $isMultiAccountDocument = ! $isMissingAccount && $d % 25 === 1;
 
                 $document = $ingestionService->createTaxFormDetail([
                     'user_id' => $user->id,
@@ -122,20 +124,38 @@ class LargeFinanceDataSeeder extends Seeder
                     'file_hash' => hash('sha256', $identifier),
                     'uploaded_by_user_id' => $user->id,
                     'is_reviewed' => ($d % 5 !== 0), // ~20 % unreviewed
-                    'parsed_data' => $this->buildParsedData($identifier, $taxYear),
+                    'parsed_data' => $isMultiAccountDocument
+                        ? $this->buildParsedDataForAccounts($accounts, $taxYear, $d)
+                        : $this->buildParsedData($identifier, $taxYear),
                 ]);
 
-                // Create account link — leave every 10th document unlinked ("missing account").
-                if ($d % 10 !== 0) {
-                    TaxDocumentAccount::createLink(
-                        (int) $document->id,
-                        $account->acct_id,
-                        '1099_b',
-                        $taxYear,
-                        aiIdentifier: $identifier,
-                        aiAccountName: $account->acct_name,
-                    );
+                if ($isMissingAccount) {
+                    continue;
                 }
+
+                if ($isMultiAccountDocument) {
+                    foreach ($accounts as $linkedAccount) {
+                        TaxDocumentAccount::createLink(
+                            (int) $document->id,
+                            $linkedAccount->acct_id,
+                            '1099_b',
+                            $taxYear,
+                            aiIdentifier: "ACCT-{$linkedAccount->acct_id}-{$taxYear}-{$d}",
+                            aiAccountName: $linkedAccount->acct_name,
+                        );
+                    }
+
+                    continue;
+                }
+
+                TaxDocumentAccount::createLink(
+                    (int) $document->id,
+                    $account->acct_id,
+                    '1099_b',
+                    $taxYear,
+                    aiIdentifier: $identifier,
+                    aiAccountName: $account->acct_name,
+                );
             }
 
             // Bulk-insert lots after all documents for this account are created.
@@ -223,6 +243,30 @@ class LargeFinanceDataSeeder extends Seeder
                 'transactions' => $this->buildTransactions(),
             ],
         ]];
+    }
+
+    /**
+     * @param  list<FinAccounts>  $accounts
+     * @return list<array<string, mixed>>
+     */
+    private function buildParsedDataForAccounts(array $accounts, int $taxYear, int $documentIndex): array
+    {
+        return array_map(
+            fn (FinAccounts $account): array => [
+                'account_identifier' => "ACCT-{$account->acct_id}-{$taxYear}-{$documentIndex}",
+                'account_name' => $account->acct_name,
+                'form_type' => '1099_b',
+                'tax_year' => $taxYear,
+                'parsed_data' => [
+                    'payer_name' => 'Synthetic Broker',
+                    'total_proceeds' => 50000,
+                    'total_cost_basis' => 40000,
+                    'total_realized_gain_loss' => 10000,
+                    'transactions' => $this->buildTransactions(),
+                ],
+            ],
+            $accounts,
+        );
     }
 
     /**

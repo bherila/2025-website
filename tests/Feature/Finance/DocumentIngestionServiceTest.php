@@ -507,10 +507,12 @@ class DocumentIngestionServiceTest extends TestCase
 
         $user = $this->createUser();
         $accountId = $this->createAccount($user->id, 'Brokerage');
+        $fileHash = str_repeat('a', 64);
 
         $response = $this->actingAs($user)->postJson('/api/finance/documents', [
             'document_kind' => FinDocument::KIND_STATEMENT,
             'original_filename' => 'to-delete.pdf',
+            'file_hash' => $fileHash,
             'accounts' => [[
                 'acct_id' => $accountId,
                 'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 100],
@@ -533,15 +535,38 @@ class DocumentIngestionServiceTest extends TestCase
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseHas('fin_account_lots', ['document_id' => $documentId]);
 
-        $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
-        $deleteResponse->assertOk()->assertJson(['success' => true]);
+        $previewResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
+        $previewResponse->assertOk()
+            ->assertJsonPath('requires_confirmation', true)
+            ->assertJsonPath('document.file_hash', $fileHash)
+            ->assertJsonPath('impact.lots', 1)
+            ->assertJsonPath('impact.account_links', 1)
+            ->assertJsonPath('impact.statements', 1);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $staleConfirmResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+            'file_hash' => str_repeat('b', 64),
+        ]);
+        $staleConfirmResponse->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+            'file_hash' => $fileHash,
+        ]);
+        $deleteResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('impact.lots', 1)
+            ->assertJsonPath('impact.account_links', 1)
+            ->assertJsonPath('impact.statements', 1);
 
         $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseMissing('fin_account_lots', ['document_id' => $documentId]);
         $this->assertDatabaseMissing('fin_document_accounts', ['document_id' => $documentId]);
     }
 
-    public function test_document_delete_is_scoped_to_owner(): void
+    public function test_document_delete_is_scoped_to_owner_and_rejects_tax_form_documents(): void
     {
         Queue::fake();
 
@@ -565,6 +590,29 @@ class DocumentIngestionServiceTest extends TestCase
 
         $this->actingAs($attacker)->deleteJson("/api/finance/documents/{$documentId}")->assertNotFound();
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $taxDocument = app(TaxDocumentCreationService::class)->createSingleAccountDocument([
+            'user_id' => $owner->id,
+            'tax_year' => 2025,
+            'form_type' => '1099_b',
+            'original_filename' => 'tax-form.pdf',
+            'stored_filename' => 'tax-form.pdf',
+            's3_path' => "tax_docs/{$owner->id}/tax-form.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1000,
+            'file_hash' => str_repeat('c', 64),
+            'uploaded_by_user_id' => $owner->id,
+            'parsed_data' => ['transactions' => []],
+        ], [
+            'account_id' => $accountId,
+            'form_type' => '1099_b',
+            'tax_year' => 2025,
+        ]);
+
+        $this->actingAs($owner)->deleteJson("/api/finance/documents/{$taxDocument->document_id}", [
+            'confirm' => true,
+            'file_hash' => str_repeat('c', 64),
+        ])->assertForbidden();
     }
 
     public function test_document_source_lineage_position_vs_disposition(): void

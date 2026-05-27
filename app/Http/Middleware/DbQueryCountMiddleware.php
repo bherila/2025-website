@@ -46,6 +46,7 @@ class DbQueryCountMiddleware
             return $next($request);
         }
 
+        DB::flushQueryLog();
         DB::enableQueryLog();
         $start = hrtime(true);
 
@@ -69,6 +70,8 @@ class DbQueryCountMiddleware
         } else {
             Log::debug("db-query-count: {$count} queries in {$context['elapsed_ms']} ms", $context);
         }
+
+        DB::flushQueryLog();
 
         return $response;
     }
