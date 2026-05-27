@@ -1,0 +1,163 @@
+<?php
+
+namespace Tests\Feature\Finance;
+
+use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Tests\TestCase;
+
+class ReadinessSummaryControllerTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user);
+    }
+
+    public function test_returns_readiness_summary_for_year(): void
+    {
+        // Create test documents
+        FileForTaxDocument::factory()->create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => 'w2',
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+        ]);
+
+        FileForTaxDocument::factory()->create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => '1099_div',
+            'genai_status' => 'parsed',
+            'is_reviewed' => false,
+        ]);
+
+        FileForTaxDocument::factory()->create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => '1099_b',
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+        ]);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $response->assertJsonStructure([
+            'year',
+            'documents_by_kind' => [
+                'w2',
+                '1099_div',
+                '1099_int',
+                '1099_b',
+                '1099_r',
+                'k1',
+                'other',
+            ],
+            'pending_review_count',
+            'missing_account_count',
+            'reconciliation_health' => [
+                'ok',
+                'drift',
+                'blocked',
+            ],
+            'last_matcher_run_at',
+        ]);
+
+        $data = $response->json();
+        $this->assertEquals(2024, $data['year']);
+        $this->assertEquals(1, $data['documents_by_kind']['w2']);
+        $this->assertEquals(1, $data['documents_by_kind']['1099_div']);
+        $this->assertEquals(1, $data['documents_by_kind']['1099_b']);
+        $this->assertEquals(1, $data['pending_review_count']);
+    }
+
+    public function test_counts_missing_account_links(): void
+    {
+        // 1099-B without account links
+        FileForTaxDocument::factory()->create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => '1099_b',
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+        ]);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertEquals(1, $data['missing_account_count']);
+    }
+
+    public function test_caches_summary_for_60_seconds(): void
+    {
+        $cacheKey = "tax_readiness_summary:{$this->user->id}:2024";
+
+        // First request
+        $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+        $this->assertTrue(Cache::has($cacheKey));
+
+        // Create new document
+        FileForTaxDocument::factory()->create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => 'w2',
+        ]);
+
+        // Second request should still use cached value
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+        $data = $response->json();
+
+        // Should be 0 because cached value is returned
+        $this->assertEquals(0, $data['documents_by_kind']['w2']);
+
+        // Clear cache and verify fresh data
+        Cache::forget($cacheKey);
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+        $data = $response->json();
+
+        // Should be 1 now
+        $this->assertEquals(1, $data['documents_by_kind']['w2']);
+    }
+
+    public function test_validates_year_parameter(): void
+    {
+        $response = $this->getJson('/api/finance/tax-years/1800/readiness-summary');
+        $response->assertStatus(422);
+
+        $response = $this->getJson('/api/finance/tax-years/2200/readiness-summary');
+        $response->assertStatus(422);
+    }
+
+    public function test_returns_empty_summary_for_year_with_no_data(): void
+    {
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertEquals(2024, $data['year']);
+        $this->assertEquals(0, $data['pending_review_count']);
+        $this->assertEquals(0, $data['missing_account_count']);
+        $this->assertEquals(0, $data['documents_by_kind']['w2']);
+        $this->assertEquals(0, $data['reconciliation_health']['ok']);
+    }
+
+    public function test_requires_authentication(): void
+    {
+        $this->app['auth']->forgetGuards();
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+        $response->assertStatus(401);
+    }
+}
