@@ -120,6 +120,8 @@ interface TaxPreviewContextValue {
   setRealEstateProfessional: Dispatch<SetStateAction<boolean>>
   /** Aggregated short dividend summary across all active accounts, or null if not yet loaded. */
   shortDividendSummary: ShortDividendSummary | null
+  /** Trigger short dividend analysis load (for consuming forms like Schedule A / Form 4952). */
+  loadShortDividendSummary: () => void
   /** Prior year total tax — user-entered for safe-harbor estimated payment planning. */
   priorYearTax: number
   /** Setter for priorYearTax — persisted to localStorage per tax year. */
@@ -142,7 +144,8 @@ interface TaxPreviewContextValue {
 const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
-const POLLING_INTERVAL_MS = 5_000
+const POLLING_INTERVALS_MS = [5000, 10000, 30000] // 5s → 10s → 30s with backoff
+const MAX_POLLING_ATTEMPTS = 5
 
 export function TaxPreviewProvider({
   initialData,
@@ -168,6 +171,7 @@ export function TaxPreviewProvider({
   const [activeAccountIds, setActiveAccountIds] = useState<number[]>([])
   const [taxFacts, setTaxFacts] = useState<TaxPreviewFacts | null>(null)
   const [shortDividendSummary, setShortDividendSummary] = useState<ShortDividendSummary | null>(null)
+  const [shortDividendLoadRequested, setShortDividendLoadRequested] = useState(false)
   const [isMarried, setIsMarried] = useState(false)
   const [activeTaxStates, setActiveTaxStates] = useState<string[]>([])
   const [userDeductions, setUserDeductions] = useState<UserDeductionEntry[]>([])
@@ -447,18 +451,48 @@ export function TaxPreviewProvider({
     }
   }, [allDocuments, refreshAll])
 
-  // Poll every 5 s while any document is still being processed by the AI.
+  // Poll with backoff while any document is still being processed by the AI.
   useEffect(() => {
     const hasInFlight = allDocuments.some(d => IN_FLIGHT_STATUSES.has(d.genai_status ?? ''))
     if (!hasInFlight) return
-    const id = setInterval(() => void refreshAll({ includeTaxFacts: false }), POLLING_INTERVAL_MS)
-    return () => clearInterval(id)
+
+    let attempt = 0
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const poll = () => {
+      if (attempt >= MAX_POLLING_ATTEMPTS) {
+        return
+      }
+
+      void refreshAll({ includeTaxFacts: false })
+
+      const intervalIndex = Math.min(attempt, POLLING_INTERVALS_MS.length - 1)
+      const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
+      attempt++
+
+      timeoutId = setTimeout(poll, nextInterval)
+    }
+
+    // Start first poll
+    timeoutId = setTimeout(poll, POLLING_INTERVALS_MS[0])
+
+    return () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
+    }
   }, [allDocuments, refreshAll])
 
   // Load short dividend analysis for all active accounts.
   // We fetch transactions for each active account, run analyzeShortDividends,
   // then merge the results into a single summary.
+  // GATED: Only loads when consuming form (Schedule A / Form 4952) explicitly requests it.
+  const loadShortDividendSummary = useCallback(() => {
+    setShortDividendLoadRequested(true)
+  }, [])
+
   useEffect(() => {
+    if (!shortDividendLoadRequested) return
     if (activeAccountIds.length === 0) return
 
     let cancelled = false
@@ -505,7 +539,7 @@ export function TaxPreviewProvider({
     })()
 
     return () => { cancelled = true }
-  }, [activeAccountIds])
+  }, [shortDividendLoadRequested, activeAccountIds])
 
   const reviewedW2Docs = useMemo(
     () => w2Documents.filter((doc) => doc.is_reviewed),
@@ -813,6 +847,7 @@ export function TaxPreviewProvider({
     realEstateProfessional,
     setRealEstateProfessional,
     shortDividendSummary,
+    loadShortDividendSummary,
     priorYearAgi,
     setPriorYearAgi,
     priorYearTax,
