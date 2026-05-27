@@ -673,7 +673,7 @@ class DocumentIngestionServiceTest extends TestCase
         ]);
         $reconResponse->assertOk()->assertJson(['success' => true]);
 
-        $this->assertSame('accepted', DB::table('fin_account_lots')->where('lot_id', $lot->lot_id)->value('reconciliation_status'));
+        $this->assertSame('accepted', FinAccountLot::find($lot->lot_id)?->reconciliation_status);
     }
 
     private function makeFinanceJob(User $user): GenAiImportJob

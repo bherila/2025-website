@@ -83,8 +83,11 @@ class FinanceDocumentController extends Controller
         $doc = FinDocument::query()
             ->where('id', $id)
             ->where('user_id', (int) Auth::id())
-            ->where('document_kind', '!=', FinDocument::KIND_TAX_FORM)
             ->firstOrFail();
+
+        if ($doc->document_kind === FinDocument::KIND_TAX_FORM) {
+            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use the tax-documents endpoint instead.');
+        }
 
         DB::transaction(function () use ($doc): void {
             $doc->lots()->delete();
