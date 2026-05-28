@@ -249,6 +249,23 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(1, $response->json('missing_account_count'));
     }
 
+    public function test_counts_each_unresolved_account_link_as_missing(): void
+    {
+        $doc = $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+        ]);
+
+        TaxDocumentAccount::createLink((int) $doc->id, null, '1099_b', 2024, aiIdentifier: 'section-a');
+        TaxDocumentAccount::createLink((int) $doc->id, null, '1099_b', 2024, aiIdentifier: 'section-b');
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $this->assertEquals(2, $response->json('missing_account_count'));
+    }
+
     public function test_reconciliation_health_detects_drift_for_auto_matched_documents_with_amount_mismatch(): void
     {
         // A document with auto_matched links but drifted lot amounts should appear
