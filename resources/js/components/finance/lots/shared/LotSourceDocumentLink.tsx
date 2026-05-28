@@ -28,7 +28,7 @@ export function LotSourceDocumentLink({ lot, className = '' }: LotSourceDocument
     links.push(
       <a
         key="statement"
-        href={`/finance/${lot.account_id}/statements?statement_id=${lot.statement_id}`}
+        href={`/finance/account/${lot.account_id}/statements?statement_id=${lot.statement_id}`}
         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
       >
         <ExternalLink className="h-3.5 w-3.5" />

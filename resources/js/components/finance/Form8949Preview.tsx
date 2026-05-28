@@ -300,7 +300,11 @@ function form8949LotFromNormalizedLot(lot: NormalizedLot): Form8949Lot {
     is_short_term: lot.is_short_term ?? false,
     lot_source: lot.lot_source,
     source: lot.source,
-    tax_document_id: lot.document_id,
+    // mergeForm8949Lots() dedupes against reviewed 1099-B docs using
+    // fin_tax_documents.id, so we must pass the lot's tax-document id
+    // (NOT the unified fin_documents.id) or the dedupe path fails and the
+    // same sale gets counted twice in Form 8949 totals.
+    tax_document_id: lot.tax_document_id,
     form_8949_box: lot.form_8949_box,
     is_covered: lot.is_covered,
     accrued_market_discount: lot.accrued_market_discount,

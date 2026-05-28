@@ -28,6 +28,7 @@ class NormalizedLotResource extends JsonResource
 
         $account = $lot->relationLoaded('account') ? $lot->getRelation('account') : null;
         $documentId = $lot->document_id !== null ? (int) $lot->document_id : null;
+        $taxDocumentId = $lot->tax_document_id;
         $statementId = $lot->statement_id !== null ? (int) $lot->statement_id : null;
         $openTransactionId = $lot->open_t_id !== null ? (int) $lot->open_t_id : null;
         $closeTransactionId = $lot->close_t_id !== null ? (int) $lot->close_t_id : null;
@@ -38,6 +39,7 @@ class NormalizedLotResource extends JsonResource
             'source' => $lot->source,
             'lot_origin' => $lot->lot_origin,
             'document_id' => $documentId,
+            'tax_document_id' => $taxDocumentId,
             'statement_id' => $statementId,
             'open_transaction_id' => $openTransactionId,
             'close_transaction_id' => $closeTransactionId,
@@ -62,7 +64,7 @@ class NormalizedLotResource extends JsonResource
             'link_id' => $linkId !== null ? (int) $linkId : null,
             'superseded_by' => $lot->superseded_by_lot_id ? (int) $lot->superseded_by_lot_id : null,
             'lot_source' => $lot->getAttribute('lot_source'),
-            'capabilities' => $this->capabilities($documentId, $statementId, $openTransactionId, $closeTransactionId, $linkId !== null),
+            'capabilities' => $this->capabilities($documentId, $taxDocumentId, $statementId, $openTransactionId, $closeTransactionId, $linkId !== null),
             'created_at' => $lot->created_at?->toIso8601String(),
             'updated_at' => $lot->updated_at?->toIso8601String(),
         ];
@@ -73,6 +75,7 @@ class NormalizedLotResource extends JsonResource
      */
     private function capabilities(
         ?int $documentId,
+        ?int $taxDocumentId,
         ?int $statementId,
         ?int $openTransactionId,
         ?int $closeTransactionId,
@@ -92,7 +95,10 @@ class NormalizedLotResource extends JsonResource
         if ($closeTransactionId !== null) {
             $capabilities[] = 'view_close_transaction';
         }
-        if ($hasLink) {
+        // Reconciliation links require a `fin_tax_documents.id`, not the
+        // underlying `fin_documents.id`, since the controller resolves
+        // `FileForTaxDocument::findOrFail($id)`.
+        if ($hasLink && $taxDocumentId !== null) {
             $capabilities[] = 'open_reconciliation';
         }
 

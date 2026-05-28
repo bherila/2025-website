@@ -179,6 +179,7 @@ describe('Form8949Preview', () => {
         source: 'broker_1099b',
         lot_origin: '1099b_disposition',
         document_id: 12,
+        tax_document_id: 12,
         statement_id: null,
         open_transaction_id: null,
         close_transaction_id: null,

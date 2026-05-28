@@ -7,6 +7,7 @@ export interface NormalizedLot {
   source: string | null
   lot_origin: string | null
   document_id: number | null
+  tax_document_id: number | null
   statement_id: number | null
   open_transaction_id: number | null
   close_transaction_id: number | null

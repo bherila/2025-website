@@ -139,6 +139,24 @@ describe('mergeForm8949Lots', () => {
     const imported = [makeLot({ symbol: 'AAPL', tax_document_id: null })]
     expect(mergeForm8949Lots(persisted, imported)).toHaveLength(2)
   })
+
+  // Regression: persisted lots from NormalizedLotResource were previously seeded
+  // with the unified fin_documents.id (100) into tax_document_id, but
+  // form8949LotsFromTaxDocuments emits the fin_tax_documents.id (500). Those
+  // two ids never matched, so the same broker-reported sale was counted twice.
+  // mergeForm8949Lots() should dedupe when both sides agree on
+  // fin_tax_documents.id (500) — verified by passing matching ids.
+  it('dedupes when persisted and imported share fin_tax_documents.id (not fin_documents.id)', () => {
+    const persisted = [makeLot({ symbol: 'AAPL', sale_date: '2025-03-01', proceeds: 200, cost_basis: 150, tax_document_id: 500 })]
+    const imported = [makeLot({ symbol: 'AAPL', sale_date: '2025-03-01', proceeds: 200, cost_basis: 150, tax_document_id: 500 })]
+
+    // With ids matching the dedupe drops the imported duplicate.
+    expect(mergeForm8949Lots(persisted, imported)).toHaveLength(1)
+
+    // Sanity check: mismatched ids (the pre-fix behaviour) double-count.
+    const mismatched = [makeLot({ symbol: 'AAPL', sale_date: '2025-03-01', proceeds: 200, cost_basis: 150, tax_document_id: 100 })]
+    expect(mergeForm8949Lots(mismatched, imported)).toHaveLength(2)
+  })
 })
 
 describe('form8949LotsFromTaxDocuments — account_links fallback', () => {

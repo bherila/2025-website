@@ -46,7 +46,8 @@ final class LotWorkspaceService
         $page = $params['page'] ?? 1;
 
         $query = $this->baseQuery($params)
-            ->with('account:acct_id,acct_name,acct_number');
+            ->with('account:acct_id,acct_name,acct_number')
+            ->with('taxDocument:id,document_id');
 
         $this->addReconciliationColumns($query);
 

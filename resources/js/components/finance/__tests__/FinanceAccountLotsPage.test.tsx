@@ -66,6 +66,7 @@ function mkLot(overrides: Partial<NormalizedLot> = {}): NormalizedLot {
     source: 'broker_1099b',
     lot_origin: '1099b_disposition',
     document_id: null,
+    tax_document_id: null,
     statement_id: null,
     open_transaction_id: null,
     close_transaction_id: null,

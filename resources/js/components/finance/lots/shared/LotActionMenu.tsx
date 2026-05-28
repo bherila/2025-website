@@ -18,7 +18,11 @@ interface LotActionMenuProps {
 export function LotActionMenu({ lot, className = '' }: LotActionMenuProps): React.ReactElement {
   const canOpenDocument = lot.document_id !== null && lot.capabilities.includes('view_source_document')
   const canOpenStatement = lot.statement_id !== null && lot.capabilities.includes('view_statement')
-  const canOpenReconciliation = lot.document_id !== null && lot.link_id !== null && lot.capabilities.includes('open_reconciliation')
+  // The /finance/tax-documents/{id}/lot-reconciliation route resolves
+  // FileForTaxDocument::findOrFail($id), which keys on fin_tax_documents.id,
+  // so the link target must be `tax_document_id`, NOT `document_id`
+  // (the unified fin_documents id).
+  const canOpenReconciliation = lot.tax_document_id !== null && lot.link_id !== null && lot.capabilities.includes('open_reconciliation')
   const hasActions = canOpenDocument || canOpenStatement || canOpenReconciliation
 
   return (
@@ -46,7 +50,7 @@ export function LotActionMenu({ lot, className = '' }: LotActionMenuProps): Reac
         )}
         {canOpenStatement && (
           <DropdownMenuItem asChild>
-            <a href={`/finance/${lot.account_id}/statements?statement_id=${lot.statement_id}`}>
+            <a href={`/finance/account/${lot.account_id}/statements?statement_id=${lot.statement_id}`}>
               <ExternalLink className="h-4 w-4" />
               Open statement
             </a>
@@ -54,7 +58,7 @@ export function LotActionMenu({ lot, className = '' }: LotActionMenuProps): Reac
         )}
         {canOpenReconciliation && (
           <DropdownMenuItem asChild>
-            <a href={`/finance/tax-documents/${lot.document_id}/lot-reconciliation`}>
+            <a href={`/finance/tax-documents/${lot.tax_document_id}/lot-reconciliation`}>
               <FileSearch className="h-4 w-4" />
               Open reconciliation
             </a>
