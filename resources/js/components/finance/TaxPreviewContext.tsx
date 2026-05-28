@@ -145,7 +145,6 @@ const TaxPreviewContext = createContext<TaxPreviewContextValue | null>(null)
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'processing'])
 const POLLING_INTERVALS_MS = [5000, 10000, 30000] // 5s → 10s → 30s with backoff
-const MAX_POLLING_ATTEMPTS = 5
 
 function setArrayStateIfChanged<T>(setter: Dispatch<SetStateAction<T[]>>, next: T[]): void {
   setter((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next)
@@ -481,10 +480,6 @@ export function TaxPreviewProvider({
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     const schedulePoll = () => {
-      if (pollingAttemptRef.current >= MAX_POLLING_ATTEMPTS) {
-        return
-      }
-
       const intervalIndex = Math.min(pollingAttemptRef.current, POLLING_INTERVALS_MS.length - 1)
       const nextInterval = POLLING_INTERVALS_MS[intervalIndex]
       timeoutId = setTimeout(() => {

@@ -641,7 +641,7 @@ describe('TaxPreviewContext', () => {
     expect(result.current.accountDocuments[0]?.genai_status).toBe('processing')
   })
 
-  it('polls in-flight documents with capped 5s, 10s, 30s backoff', async () => {
+  it('keeps polling in-flight documents with capped 5s, 10s, 30s backoff intervals', async () => {
     jest.useFakeTimers()
     ;(fetchWrapper.get as jest.Mock).mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
@@ -654,21 +654,21 @@ describe('TaxPreviewContext', () => {
 
     expect(pollCalls()).toHaveLength(0)
 
-    for (const interval of [5_000, 10_000, 30_000, 30_000, 30_000]) {
+    for (const interval of [5_000, 10_000, 30_000, 30_000, 30_000, 30_000]) {
       await act(async () => {
         jest.advanceTimersByTime(interval)
         await Promise.resolve()
       })
     }
 
-    expect(pollCalls()).toHaveLength(5)
+    expect(pollCalls()).toHaveLength(6)
 
     await act(async () => {
       jest.advanceTimersByTime(30_000)
       await Promise.resolve()
     })
 
-    expect(pollCalls()).toHaveLength(5)
+    expect(pollCalls()).toHaveLength(7)
     jest.useRealTimers()
   })
 
