@@ -127,6 +127,13 @@ function rowDescription(lot: Form8949Lot): string {
  * For broker_1099b rows, `is_covered` distinguishes A/D (true) from B/E (false). When
  * `is_covered` is null on a broker_1099b row, defaults to covered (A/D) to match
  * historical behavior, with a dev-only warning so the gap can be triaged.
+ *
+ * Critically, the legacy `lot_source='1099b'` signal is honored *before* trusting
+ * non-broker canonical sources. The `source` column has a migration default of
+ * `account_derived`, so rows that were imported as 1099-B disposition data but
+ * have not yet been backfilled will still classify as A/D/B/E rather than being
+ * misrouted to C/F (which would turn broker-reported sales into "not on a 1099-B"
+ * on Form 8949).
  */
 export function classifyBox(lot: Form8949Lot): Form8949Box {
   const shortTerm = toBool(lot.is_short_term)
@@ -134,22 +141,27 @@ export function classifyBox(lot: Form8949Lot): Form8949Box {
     return lot.form_8949_box
   }
 
-  // Prefer canonical source field when present
   const canonicalSource = (lot.source ?? '').toLowerCase()
-  if (canonicalSource === 'broker_1099b') {
+  const legacySource = (lot.lot_source ?? '').toLowerCase()
+
+  const canonicalIsBroker = canonicalSource === 'broker_1099b'
+  const legacyIsBroker1099b = legacySource === '1099b' || legacySource === '1099_b'
+
+  // Trust any broker-1099-B signal (canonical OR legacy) before falling through
+  // to non-broker classifications. This protects against the migration-default
+  // `source='account_derived'` overriding a legitimate `lot_source='1099b'` on
+  // un-backfilled rows.
+  if (canonicalIsBroker || legacyIsBroker1099b) {
     return brokerBox(lot, shortTerm)
   }
+
   if (['account_derived', 'synthetic_adjustment', 'manual'].includes(canonicalSource)) {
     // Non-1099-B sources are not reported by a broker
     return shortTerm ? 'C' : 'F'
   }
 
   // Fall back to legacy lot_source for older rows without canonical source
-  const src = (lot.lot_source ?? '').toLowerCase()
-  if (src === '1099b' || src === '1099_b') {
-    return brokerBox(lot, shortTerm)
-  }
-  if (src === 'broker_statement' || src === 'broker') {
+  if (legacySource === 'broker_statement' || legacySource === 'broker') {
     return shortTerm ? 'B' : 'E'
   }
   return shortTerm ? 'C' : 'F'

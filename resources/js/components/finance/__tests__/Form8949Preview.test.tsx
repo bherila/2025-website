@@ -142,6 +142,33 @@ describe('classifyBox', () => {
     expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b', is_covered: false }))).toBe('B')
     expect(classifyBox(mkLot({ is_short_term: 0, source: null, lot_source: '1099b', is_covered: false }))).toBe('E')
   })
+
+  // Regression coverage for the migration-default fallback bug. When a 1099-B
+  // row hasn't been backfilled, `source` is the migration default
+  // `account_derived` while `lot_source` is still `1099b`. The legacy signal
+  // must win so the lot stays on Box A/D (or B/E for non-covered) rather than
+  // getting demoted to "not on a 1099-B" (Box C/F).
+  it('treats unmigrated rows (source=account_derived, lot_source=1099b) as broker-reported (A/D)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: '1099b', is_covered: true }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: '1099b', is_covered: true }))).toBe('D')
+  })
+
+  it('treats unmigrated non-covered 1099-B rows (source=account_derived, lot_source=1099b, is_covered=false) as B/E', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: '1099b', is_covered: false }))).toBe('B')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: '1099b', is_covered: false }))).toBe('E')
+  })
+
+  it('still routes source=account_derived with no legacy 1099-B signal to C/F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: null }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: null }))).toBe('F')
+  })
+
+  it('routes null+null to A/D with a dev warning (broker default for missing data)', () => {
+    // null source + null lot_source falls through to the default C/F branch,
+    // not the brokerBox warning path. Confirm both halves.
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: null, is_covered: null }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: null, lot_source: null, is_covered: null }))).toBe('F')
+  })
 })
 
 describe('Form8949Preview', () => {
