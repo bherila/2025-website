@@ -121,19 +121,28 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         void fetchLots()
     }, [fetchLots])
 
-    // Reset to first page whenever a filter or year selection changes — keeping
-    // a stale page index across filter changes would cause off-by-one empty
-    // states.
-    useEffect(() => {
-        setPage(1)
-    }, [filters, selectedYear])
-
     const handleStatusChange = (newStatus: string) => {
         const status = newStatus as LotFilterValues['status']
+        setPage(1)
         setFilters((current) => ({ ...current, status }))
         if (status !== 'closed') {
             setSelectedYear('')
         }
+    }
+
+    const handleYearChange = (year: string): void => {
+        setPage(1)
+        setSelectedYear(year)
+    }
+
+    const handleFiltersChange = (nextFilters: LotFilterValues): void => {
+        setPage(1)
+        setFilters(nextFilters)
+    }
+
+    const handleResetFilters = (): void => {
+        setPage(1)
+        setFilters({ ...DEFAULT_FILTERS, status: filters.status })
     }
 
     const handleToggleLotAnalyzer = async () => {
@@ -164,10 +173,9 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
      * broker-vs-account ledger reconciliation.
      */
     const missingLinkCount = useMemo(() => {
-        const lots = data?.data ?? []
-        return lots.filter(
-            (lot) => lot.reconciliation_state === 'broker_only' || lot.reconciliation_state === 'account_only',
-        ).length
+        const countsByState = data?.summary.counts_by_state
+
+        return (countsByState?.broker_only ?? 0) + (countsByState?.account_only ?? 0)
     }, [data])
 
     if (isLoading && !data) {
@@ -210,7 +218,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                 </Tabs>
 
                 {filters.status === 'closed' && closedYears.length > 0 && (
-                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                    <Select value={selectedYear} onValueChange={handleYearChange}>
                         <SelectTrigger className="w-32">
                             <SelectValue placeholder="Year" />
                         </SelectTrigger>
@@ -244,8 +252,8 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
 
             <LotFilters
                 value={filters}
-                onChange={setFilters}
-                onReset={() => setFilters({ ...DEFAULT_FILTERS, status: filters.status })}
+                onChange={handleFiltersChange}
+                onReset={handleResetFilters}
             />
 
             {shortDivSummary && shortDivSummary.entries.length > 0 && (

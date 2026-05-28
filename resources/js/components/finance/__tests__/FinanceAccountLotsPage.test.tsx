@@ -29,7 +29,40 @@ jest.mock('../lots/LotAnalyzer', () => ({
 jest.mock('../lots/shared', () => ({
   __esModule: true,
   // Mirror real LotFilters output enough for the page to render.
-  LotFilters: () => <div data-testid="lot-filters" />,
+  LotFilters: ({
+    value,
+    onChange,
+    onReset,
+  }: {
+    value: {
+      status: 'all' | 'open' | 'closed'
+      source: string
+      reconciliationState: string
+      symbol: string
+      cusip: string
+      dateFrom: string
+      dateTo: string
+    }
+    onChange: (value: {
+      status: 'all' | 'open' | 'closed'
+      source: string
+      reconciliationState: string
+      symbol: string
+      cusip: string
+      dateFrom: string
+      dateTo: string
+    }) => void
+    onReset: () => void
+  }) => (
+    <div data-testid="lot-filters">
+      <button type="button" onClick={() => onChange({ ...value, source: 'broker_1099b' })}>
+        1099-B source
+      </button>
+      <button type="button" onClick={onReset}>
+        Reset filters
+      </button>
+    </div>
+  ),
   LotWorkspaceTable: ({ lots }: { lots: NormalizedLot[] }) => (
     <div data-testid="lot-table">{lots.length} lots</div>
   ),
@@ -140,7 +173,10 @@ describe('FinanceAccountLotsPage', () => {
           total_realized_gain: 300,
           count: 3,
           counts_by_source: {},
-          counts_by_state: {},
+          counts_by_state: {
+            broker_only: 1,
+            account_only: 1,
+          },
           term_breakdown: {
             short: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
             long: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
@@ -163,6 +199,19 @@ describe('FinanceAccountLotsPage', () => {
     mockGet.mockResolvedValueOnce(
       mkResponse({
         data: [mkLot({ id: 1, reconciliation_state: 'accepted_broker' })],
+        summary: {
+          total_proceeds: 1000,
+          total_basis: 900,
+          total_wash_sale: 0,
+          total_realized_gain: 100,
+          count: 1,
+          counts_by_source: {},
+          counts_by_state: {},
+          term_breakdown: {
+            short: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+            long: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+          },
+        },
       }),
     )
 
@@ -171,6 +220,39 @@ describe('FinanceAccountLotsPage', () => {
     await waitFor(() => expect(mockGet).toHaveBeenCalled())
     await screen.findByTestId('lot-summary-cards')
     expect(screen.queryByText('Missing reconciliation link')).not.toBeInTheDocument()
+  })
+
+  it('counts missing reconciliation links from the aggregate summary', async () => {
+    mockGet.mockResolvedValueOnce(
+      mkResponse({
+        data: [mkLot({ id: 1, reconciliation_state: 'accepted_broker' })],
+        summary: {
+          total_proceeds: 1000,
+          total_basis: 900,
+          total_wash_sale: 0,
+          total_realized_gain: 100,
+          count: 401,
+          counts_by_source: {},
+          counts_by_state: {
+            broker_only: 2,
+            account_only: 3,
+          },
+          term_breakdown: {
+            short: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+            long: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+          },
+        },
+        meta: { current_page: 1, last_page: 3, per_page: 200, total: 401 },
+      }),
+    )
+
+    render(<FinanceAccountLotsPage id={7} />)
+
+    await screen.findByTestId('lot-summary-cards')
+    expect(screen.getByText('Missing reconciliation link')).toBeInTheDocument()
+    expect(
+      screen.getByText(/5 lots are flagged as broker-only or account-only/i),
+    ).toBeInTheDocument()
   })
 
   it('renders the LotSummaryCards in aggregate mode on the Open Lots tab (default)', async () => {
@@ -207,5 +289,42 @@ describe('FinanceAccountLotsPage', () => {
     await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
     expect(mockGet.mock.calls[1]?.[0]).toContain('page=2')
     expect(await screen.findByText(/Showing page 2 of 2/i)).toBeInTheDocument()
+  })
+
+  it('resets to the first page before issuing filtered lot requests', async () => {
+    mockGet
+      .mockResolvedValueOnce(
+        mkResponse({
+          data: [mkLot({ id: 1 })],
+          meta: { current_page: 1, last_page: 2, per_page: 200, total: 201 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mkResponse({
+          data: [mkLot({ id: 201 })],
+          meta: { current_page: 2, last_page: 2, per_page: 200, total: 201 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mkResponse({
+          data: [mkLot({ id: 3, source: 'broker_1099b' })],
+          meta: { current_page: 1, last_page: 1, per_page: 200, total: 1 },
+        }),
+      )
+
+    render(<FinanceAccountLotsPage id={7} />)
+
+    expect(await screen.findByText(/Showing page 1 of 2/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText(/Showing page 2 of 2/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /1099-b source/i }))
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(3))
+    const filteredRequest = new URL(mockGet.mock.calls[2]?.[0], 'https://example.test')
+    expect(filteredRequest.searchParams.get('source')).toBe('broker_1099b')
+    expect(filteredRequest.searchParams.get('page')).toBe('1')
   })
 })
