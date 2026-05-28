@@ -25,6 +25,9 @@ class FinanceDocumentControllerTest extends TestCase
         ]));
     }
 
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
     private function makeDocument(int $userId, array $attrs = []): FinDocument
     {
         return FinDocument::create(array_merge([
@@ -446,9 +449,8 @@ class FinanceDocumentControllerTest extends TestCase
         $response = $this->actingAs($user)->getJson('/api/finance/documents?sort=created_desc');
 
         $response->assertOk();
-        $ids = collect($response->json('data'))->pluck('id')->values();
-        $this->assertSame($recent->id, $ids[0], 'Most recently created document should appear first');
-        $this->assertSame($older->id, $ids[1]);
+        $response->assertJsonPath('data.0.id', $recent->id);
+        $response->assertJsonPath('data.1.id', $older->id);
     }
 
     // ─── Comment 1: form1116_overrides in impact hash ─────────────────────────
@@ -517,6 +519,9 @@ class FinanceDocumentControllerTest extends TestCase
     /**
      * Adding a row in any statement-cascade table between preview and delete must
      * invalidate the impact_hash → 409.
+     */
+    /**
+     * @param  array<string, mixed>  $extraColumns
      */
     #[DataProvider('statementCascadeTableProvider')]
     public function test_adding_statement_cascade_row_invalidates_hash(string $table, array $extraColumns): void
