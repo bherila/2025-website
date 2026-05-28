@@ -1,12 +1,28 @@
+import { render, screen, waitFor } from '@testing-library/react'
+
+import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 import {
   classifyBox,
   computeForm8949,
+  default as Form8949Preview,
   type Form8949Lot,
   form8949LotsFromTaxDocuments,
   formatForm8949Date,
 } from '../Form8949Preview'
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    get: jest.fn(),
+  },
+}))
+
+const mockGet = fetchWrapper.get as jest.Mock
+
+beforeEach(() => {
+  mockGet.mockReset()
+})
 
 function mkLot(overrides: Partial<Form8949Lot> = {}): Form8949Lot {
   return {
@@ -20,17 +36,30 @@ function mkLot(overrides: Partial<Form8949Lot> = {}): Form8949Lot {
     realized_gain_loss: 2000,
     is_short_term: 0,
     lot_source: '1099b',
+    // Default to covered to avoid the dev-only is_covered=null warning;
+    // tests that exercise the null/non-covered code paths pass it explicitly.
+    is_covered: true,
     ...overrides,
   }
 }
 
 describe('classifyBox', () => {
-  it('routes 1099b-sourced short-term lots to box A', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b' }))).toBe('A')
+  let warnSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('routes 1099b-sourced long-term lots to box D', () => {
-    expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b' }))).toBe('D')
+  afterEach(() => {
+    warnSpy.mockRestore()
+  })
+
+  it('routes 1099b-sourced short-term lots to box A (covered defaulted)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b', is_covered: true }))).toBe('A')
+  })
+
+  it('routes 1099b-sourced long-term lots to box D (covered defaulted)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b', is_covered: true }))).toBe('D')
   })
 
   it('routes broker-statement short-term lots to box B', () => {
@@ -48,6 +77,159 @@ describe('classifyBox', () => {
   it('prefers an imported Form 8949 box when present', () => {
     expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b', form_8949_box: 'B' }))).toBe('B')
     expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b', form_8949_box: 'E' }))).toBe('E')
+  })
+
+  // Tests for canonical `source` field
+  it('routes canonical broker_1099b source short-term + covered to box A', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: true }))).toBe('A')
+  })
+
+  it('routes canonical broker_1099b source long-term + covered to box D', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: true }))).toBe('D')
+  })
+
+  it('routes canonical broker_1099b source short-term + non-covered to box B', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: false }))).toBe('B')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('routes canonical broker_1099b source long-term + non-covered to box E', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: false }))).toBe('E')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('defaults broker_1099b with is_covered=null to A/D and emits a dev warning', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: null }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: null }))).toBe('D')
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+    expect(warnSpy.mock.calls[0]![0]).toMatch(/is_covered=null/)
+  })
+
+  it('routes canonical account_derived source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: null }))).toBe('C')
+  })
+
+  it('routes canonical account_derived source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: null }))).toBe('F')
+  })
+
+  it('routes canonical manual source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'manual', lot_source: null }))).toBe('C')
+  })
+
+  it('routes canonical manual source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'manual', lot_source: null }))).toBe('F')
+  })
+
+  it('routes canonical synthetic_adjustment source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'synthetic_adjustment', lot_source: null }))).toBe('C')
+  })
+
+  it('routes canonical synthetic_adjustment source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'synthetic_adjustment', lot_source: null }))).toBe('F')
+  })
+
+  it('canonical source takes priority over legacy lot_source', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: 'manual', is_covered: true }))).toBe('A')
+  })
+
+  it('falls back to lot_source when source is absent', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b', is_covered: true }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: 'broker_statement' }))).toBe('B')
+  })
+
+  it('respects is_covered on legacy lot_source=1099b rows', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b', is_covered: false }))).toBe('B')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: null, lot_source: '1099b', is_covered: false }))).toBe('E')
+  })
+
+  // Regression coverage for the migration-default fallback bug. When a 1099-B
+  // row hasn't been backfilled, `source` is the migration default
+  // `account_derived` while `lot_source` is still `1099b`. The legacy signal
+  // must win so the lot stays on Box A/D (or B/E for non-covered) rather than
+  // getting demoted to "not on a 1099-B" (Box C/F).
+  it('treats unmigrated rows (source=account_derived, lot_source=1099b) as broker-reported (A/D)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: '1099b', is_covered: true }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: '1099b', is_covered: true }))).toBe('D')
+  })
+
+  it('treats unmigrated non-covered 1099-B rows (source=account_derived, lot_source=1099b, is_covered=false) as B/E', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: '1099b', is_covered: false }))).toBe('B')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: '1099b', is_covered: false }))).toBe('E')
+  })
+
+  it('still routes source=account_derived with no legacy 1099-B signal to C/F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: null }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: null }))).toBe('F')
+  })
+
+  it('routes null+null to A/D with a dev warning (broker default for missing data)', () => {
+    // null source + null lot_source falls through to the default C/F branch,
+    // not the brokerBox warning path. Confirm both halves.
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: null, is_covered: null }))).toBe('C')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: null, lot_source: null, is_covered: null }))).toBe('F')
+  })
+})
+
+describe('Form8949Preview', () => {
+  it('loads closed lots from the normalized lot workspace endpoint with account scope', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: [{
+        id: 44,
+        source: 'broker_1099b',
+        lot_origin: '1099b_disposition',
+        document_id: 12,
+        tax_document_id: 12,
+        statement_id: null,
+        open_transaction_id: null,
+        close_transaction_id: null,
+        account_id: 7,
+        account_name: 'Brokerage',
+        account_number: 'Acct 1234',
+        symbol: 'AAPL',
+        cusip: null,
+        description: 'Apple Inc.',
+        quantity: '10.00000000',
+        acquired_date: '2024-01-02',
+        sold_date: '2025-02-03',
+        basis: '900.0000',
+        proceeds: '1000.0000',
+        wash_sale_disallowed: '0.0000',
+        realized_gain: '100.0000',
+        is_short_term: false,
+        form_8949_box: 'D',
+        is_covered: true,
+        accrued_market_discount: null,
+        reconciliation_state: 'accepted_broker',
+        link_id: 3,
+        superseded_by: null,
+        lot_source: '1099b',
+        capabilities: ['view_source_document', 'open_reconciliation'],
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }],
+      summary: {
+        total_proceeds: 1000,
+        total_basis: 900,
+        total_wash_sale: 0,
+        total_realized_gain: 100,
+        count: 1,
+        counts_by_source: { broker_1099b: 1 },
+        counts_by_state: { accepted_broker: 1 },
+      },
+      closed_years: [2025],
+      meta: {
+        current_page: 1,
+        last_page: 1,
+        per_page: 200,
+        total: 1,
+      },
+    })
+
+    render(<Form8949Preview selectedYear={2025} accountId={7} />)
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/api/finance/lot-workspace?status=closed&year=2025&per_page=200&page=1&account_ids=7'))
+    expect(await screen.findByText('AAPL • 1234')).toBeInTheDocument()
   })
 })
 

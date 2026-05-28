@@ -12,6 +12,8 @@ export interface Lot {
     realized_gain_loss: string | null
     is_short_term: boolean | null
     lot_source: string | null
+    /** Canonical source: 'broker_1099b', 'account_derived', 'manual', 'synthetic_adjustment'. */
+    source?: string | null
     form_8949_box?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | null
     is_covered?: boolean | null
     accrued_market_discount?: string | null

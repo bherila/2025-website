@@ -1,8 +1,10 @@
 'use client'
+
+import { AlertTriangle, Search, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
-import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -13,99 +15,138 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { analyzeShortDividends } from '@/lib/finance/shortDividendAnalysis'
-import type { Lot, LotsResponse } from '@/types/finance/lot'
+import type { LotWorkspaceResponse } from '@/types/finance/normalized-lot'
 
 import ImportLotsPanel from './lots/ImportLotsPanel'
 import LotAnalyzer from './lots/LotAnalyzer'
+import { LotFilters, type LotFilterValues, LotSummaryCards, LotWorkspaceTable } from './lots/shared'
 import { ShortDividendSummaryCard } from './ShortDividendDetailModal'
 
-function formatCurrency(value: string | number | null | undefined): string {
-    if (value === null || value === undefined) return '—'
-    const num = typeof value === 'string' ? parseFloat(value) : value
-    if (isNaN(num)) return '—'
-    return num.toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-    })
+const DEFAULT_FILTERS: LotFilterValues = {
+    status: 'open',
+    source: '',
+    reconciliationState: '',
+    symbol: '',
+    cusip: '',
+    dateFrom: '',
+    dateTo: '',
 }
 
-function formatDate(dateStr: string | null): string {
-    if (!dateStr) return '—'
-    try {
-        const d = new Date(dateStr + 'T00:00:00')
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    } catch {
-        return dateStr
-    }
-}
-
-function formatQty(value: string | null | undefined): string {
-    if (value === null || value === undefined) return '—'
-    const num = parseFloat(value)
-    if (isNaN(num)) return '—'
-    // Show up to 4 decimals, trimming trailing zeros
-    return num.toLocaleString('en-US', { maximumFractionDigits: 4 })
-}
+const LOTS_PER_PAGE = 200
 
 export default function FinanceAccountLotsPage({ id }: { id: number }) {
-    const [status, setStatus] = useState<'open' | 'closed'>('open')
+    const [filters, setFilters] = useState<LotFilterValues>(DEFAULT_FILTERS)
     const [selectedYear, setSelectedYear] = useState<string>('')
-    const [data, setData] = useState<LotsResponse | null>(null)
+    const [data, setData] = useState<LotWorkspaceResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [showImport, setShowImport] = useState(false)
     const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
     const [transactions, setTransactions] = useState<AccountLineItem[]>([])
     const [loadingTransactions, setLoadingTransactions] = useState(false)
+    const [page, setPage] = useState(1)
 
     const fetchLots = useCallback(async () => {
         setIsLoading(true)
         try {
-            let url = `/api/finance/${id}/lots?status=${status}`
-            if (status === 'closed' && selectedYear) {
-                url += `&year=${selectedYear}`
+            const params = new URLSearchParams({
+                account_ids: String(id),
+                status: filters.status,
+                per_page: String(LOTS_PER_PAGE),
+                page: String(page),
+            })
+
+            if (filters.status === 'closed' && selectedYear) {
+                params.set('year', selectedYear)
             }
-            const response = await fetchWrapper.get(url) as LotsResponse
+            if (filters.source) {
+                params.set('source', filters.source)
+            }
+            if (filters.reconciliationState) {
+                params.set('reconciliation_state', filters.reconciliationState)
+            }
+            if (filters.symbol) {
+                params.set('symbol', filters.symbol)
+            }
+            if (filters.cusip) {
+                params.set('cusip', filters.cusip)
+            }
+            if (filters.dateFrom) {
+                params.set('date_from', filters.dateFrom)
+            }
+            if (filters.dateTo) {
+                params.set('date_to', filters.dateTo)
+            }
+
+            const response = await fetchWrapper.get(`/api/finance/lot-workspace?${params.toString()}`) as LotWorkspaceResponse
             setData(response)
 
-            // Auto-select most recent year for closed lots if no year selected
-            if (status === 'closed' && !selectedYear && response.closedYears.length > 0) {
-                setSelectedYear(String(response.closedYears[0]))
+            if (filters.status === 'closed' && !selectedYear && response.closed_years.length > 0) {
+                setSelectedYear(String(response.closed_years[0]))
             }
         } catch (error) {
             console.error('Error fetching lots:', error)
-            setData({ lots: [], summary: null, closedYears: [] })
+            setData({
+                data: [],
+                summary: {
+                    total_proceeds: 0,
+                    total_basis: 0,
+                    total_wash_sale: 0,
+                    total_realized_gain: 0,
+                    count: 0,
+                    counts_by_source: {},
+                    counts_by_state: {},
+                    term_breakdown: {
+                        short: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+                        long: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+                    },
+                },
+                closed_years: [],
+                meta: {
+                    current_page: 1,
+                    last_page: 1,
+                    per_page: LOTS_PER_PAGE,
+                    total: 0,
+                },
+            })
         } finally {
             setIsLoading(false)
         }
-    }, [id, status, selectedYear])
+    }, [id, filters, selectedYear, page])
 
     useEffect(() => {
-        fetchLots()
+        void fetchLots()
     }, [fetchLots])
 
     const handleStatusChange = (newStatus: string) => {
-        setStatus(newStatus as 'open' | 'closed')
-        if (newStatus === 'open') {
+        const status = newStatus as LotFilterValues['status']
+        setPage(1)
+        setFilters((current) => ({ ...current, status }))
+        if (status !== 'closed') {
             setSelectedYear('')
         }
     }
 
+    const handleYearChange = (year: string): void => {
+        setPage(1)
+        setSelectedYear(year)
+    }
+
+    const handleFiltersChange = (nextFilters: LotFilterValues): void => {
+        setPage(1)
+        setFilters(nextFilters)
+    }
+
+    const handleResetFilters = (): void => {
+        setPage(1)
+        setFilters({ ...DEFAULT_FILTERS, status: filters.status })
+    }
+
     const handleToggleLotAnalyzer = async () => {
         if (!showLotAnalyzer && transactions.length === 0) {
-            // Fetch all transactions for this account
             setLoadingTransactions(true)
             try {
                 const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items`)
@@ -120,11 +161,22 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         setShowLotAnalyzer(!showLotAnalyzer)
     }
 
-    // Memoize so analyzeShortDividends doesn't re-run on every render
     const shortDivSummary = useMemo(
         () => (transactions.length > 0 ? analyzeShortDividends(transactions) : null),
         [transactions],
     )
+
+    /**
+     * A lot is "missing its expected reconciliation link" when its latest link
+     * state is broker_only or account_only — meaning the matched counterpart
+     * lot couldn't be located, so the row appears in only one side of the
+     * broker-vs-account ledger reconciliation.
+     */
+    const missingLinkCount = useMemo(() => {
+        const countsByState = data?.summary.counts_by_state
+
+        return (countsByState?.broker_only ?? 0) + (countsByState?.account_only ?? 0)
+    }, [data])
 
     if (isLoading && !data) {
         return (
@@ -136,9 +188,9 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         )
     }
 
-    const lots = data?.lots ?? []
+    const lots = data?.data ?? []
     const summary = data?.summary
-    const closedYears = data?.closedYears ?? []
+    const closedYears = data?.closed_years ?? []
 
     if (showImport) {
         return (
@@ -147,7 +199,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     accountId={id}
                     onImportComplete={() => {
                         setShowImport(false)
-                        fetchLots()
+                        void fetchLots()
                     }}
                     onCancel={() => setShowImport(false)}
                 />
@@ -155,28 +207,18 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         )
     }
 
-    /** Check if a lot has a missing (null) transaction link when one is expected */
-    const hasMissingLink = (lot: Lot) => {
-        // open_t_id should always be set for imported lots
-        if (lot.lot_source && lot.lot_source !== 'manual' && lot.open_t_id === null) return true
-        // close_t_id should exist for closed lots from imports
-        if (lot.sale_date && lot.lot_source && lot.lot_source !== 'manual' && lot.close_t_id === null) return true
-        return false
-    }
-
     return (
-        <div className="px-8 pb-8">
-            {/* Controls */}
-            <div className="flex items-center gap-4 mb-6">
-                <Tabs value={status} onValueChange={handleStatusChange}>
+        <div className="space-y-6 px-8 pb-8">
+            <div className="flex flex-wrap items-center gap-4">
+                <Tabs value={filters.status} onValueChange={handleStatusChange}>
                     <TabsList>
                         <TabsTrigger value="open">Open Lots</TabsTrigger>
                         <TabsTrigger value="closed">Closed Lots</TabsTrigger>
                     </TabsList>
                 </Tabs>
 
-                {status === 'closed' && closedYears.length > 0 && (
-                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                {filters.status === 'closed' && closedYears.length > 0 && (
+                    <Select value={selectedYear} onValueChange={handleYearChange}>
                         <SelectTrigger className="w-32">
                             <SelectValue placeholder="Year" />
                         </SelectTrigger>
@@ -190,114 +232,74 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     </Select>
                 )}
 
-                <Button variant="outline" onClick={() => setShowImport(true)}>
+                <Button variant="outline" className="gap-1.5" onClick={() => setShowImport(true)}>
+                    <Upload className="h-3.5 w-3.5" />
                     Import Lots
                 </Button>
 
                 <Button
                     variant={showLotAnalyzer ? 'default' : 'outline'}
-                    onClick={handleToggleLotAnalyzer}
+                    className="gap-1.5"
+                    onClick={() => void handleToggleLotAnalyzer()}
                     disabled={loadingTransactions}
                 >
+                    <Search className="h-3.5 w-3.5" />
                     {loadingTransactions ? 'Loading...' : showLotAnalyzer ? 'Hide Lot Analyzer' : 'Lot Analyzer'}
                 </Button>
 
                 {isLoading && <Skeleton className="h-4 w-16 rounded" />}
             </div>
 
-            {/* Short Dividend Analysis — shown when transactions are loaded */}
+            <LotFilters
+                value={filters}
+                onChange={handleFiltersChange}
+                onReset={handleResetFilters}
+            />
+
             {shortDivSummary && shortDivSummary.entries.length > 0 && (
-                <div className="mb-6">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">Short Dividend Holding Period Analysis</CardTitle>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Dividends charged on short positions, classified by IRS holding period rules (IRS Pub. 550).
-                                Click a row to see supporting transactions.
-                            </p>
-                        </CardHeader>
-                        <CardContent>
-                            <ShortDividendSummaryCard summary={shortDivSummary} />
-                        </CardContent>
-                    </Card>
-                </div>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Short Dividend Holding Period Analysis</CardTitle>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Dividends charged on short positions, classified by IRS holding period rules (IRS Pub. 550).
+                            Click a row to see supporting transactions.
+                        </p>
+                    </CardHeader>
+                    <CardContent>
+                        <ShortDividendSummaryCard summary={shortDivSummary} />
+                    </CardContent>
+                </Card>
             )}
 
-            {/* Lot Analyzer */}
             {showLotAnalyzer && transactions.length > 0 && (
-                <div className="mb-6">
-                    <LotAnalyzer
-                        transactions={transactions}
-                        accountId={id}
-                        allYearsLoaded={true}
-                    />
-                </div>
+                <LotAnalyzer
+                    transactions={transactions}
+                    accountId={id}
+                    allYearsLoaded={true}
+                />
             )}
 
-            {/* Gains/Losses Summary for closed lots */}
-            {status === 'closed' && summary && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">ST Gains</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-lg font-semibold text-green-600">
-                                {formatCurrency(summary.short_term_gains)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">ST Losses</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-lg font-semibold text-red-600">
-                                {formatCurrency(summary.short_term_losses)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">LT Gains</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-lg font-semibold text-green-600">
-                                {formatCurrency(summary.long_term_gains)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">LT Losses</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-lg font-semibold text-red-600">
-                                {formatCurrency(summary.long_term_losses)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Net Realized</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <p className={`text-lg font-semibold ${summary.total_realized >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {formatCurrency(summary.total_realized)}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
+            {missingLinkCount > 0 && (
+                <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Missing reconciliation link</AlertTitle>
+                    <AlertDescription>
+                        {missingLinkCount} lot{missingLinkCount === 1 ? '' : 's'} {missingLinkCount === 1 ? 'is' : 'are'} flagged
+                        as broker-only or account-only — the matched counterpart lot could not be located.
+                        Review these in the reconciliation workspace before filing.
+                    </AlertDescription>
+                </Alert>
             )}
 
-            {/* Lots Table */}
+            {summary && <LotSummaryCards summary={summary} showTermBreakdown={filters.status === 'closed'} />}
+
             {lots.length === 0 ? (
-                <div className="text-center p-8 bg-muted rounded-lg">
-                    <h2 className="text-xl font-semibold mb-4">
-                        {status === 'open' ? 'No Open Lots' : 'No Closed Lots'}
+                <div className="rounded-lg bg-muted p-8 text-center">
+                    <h2 className="mb-4 text-xl font-semibold">
+                        {filters.status === 'open' ? 'No Open Lots' : 'No Closed Lots'}
                     </h2>
                     <p className="mb-6">
-                        {status === 'open'
+                        {filters.status === 'open'
                             ? "This account doesn't have any open lots. Import a statement to populate lot data."
                             : selectedYear
                                 ? `No lots were closed in ${selectedYear}.`
@@ -308,102 +310,47 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     </a>
                 </div>
             ) : (
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Symbol</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead className="text-right">Qty</TableHead>
-                                <TableHead>Purchase Date</TableHead>
-                                <TableHead className="text-right">Cost Basis</TableHead>
-                                <TableHead className="text-right">Cost/Unit</TableHead>
-                                {status === 'closed' && (
-                                    <>
-                                        <TableHead>Sale Date</TableHead>
-                                        <TableHead className="text-right">Proceeds</TableHead>
-                                        <TableHead className="text-right">Gain/Loss</TableHead>
-                                        <TableHead>Type</TableHead>
-                                    </>
-                                )}
-                                <TableHead>Statement</TableHead>
-                                <TableHead>Source</TableHead>
-                                <TableHead>Links</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {lots.map((lot) => {
-                                const gainLoss = lot.realized_gain_loss ? parseFloat(lot.realized_gain_loss) : null
-                                return (
-                                    <TableRow key={lot.lot_id}>
-                                        <TableCell className="font-medium">{lot.symbol}</TableCell>
-                                        <TableCell className="text-muted-foreground max-w-48 truncate">
-                                            {lot.description || '—'}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">{formatQty(lot.quantity)}</TableCell>
-                                        <TableCell>{formatDate(lot.purchase_date)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(lot.cost_basis)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(lot.cost_per_unit)}</TableCell>
-                                        {status === 'closed' && (
-                                            <>
-                                                <TableCell>{formatDate(lot.sale_date)}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(lot.proceeds)}</TableCell>
-                                                <TableCell className={`text-right font-mono ${gainLoss !== null && gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                    {formatCurrency(lot.realized_gain_loss)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {lot.is_short_term !== null && (
-                                                        <Badge variant={lot.is_short_term ? 'secondary' : 'outline'}>
-                                                            {lot.is_short_term ? 'ST' : 'LT'}
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                            </>
-                                        )}
-                                        <TableCell>
-                                            {lot.statement ? (
-                                                <a
-                                                    href={`/finance/${id}/statements?statement_id=${lot.statement.statement_id}`}
-                                                    className="text-blue-600 hover:underline"
-                                                >
-                                                    {formatDate(lot.statement.statement_closing_date)}
-                                                </a>
-                                            ) : lot.lot_source === 'import' ? (
-                                                <span className="text-muted-foreground italic text-xs">Statement Deleted</span>
-                                            ) : (
-                                                '—'
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {lot.lot_source && (
-                                                <Badge variant="outline" className="text-xs">
-                                                    {lot.lot_source}
-                                                </Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1">
-                                                {lot.open_t_id && (
-                                                    <a href={`/finance/${id}#t_id=${lot.open_t_id}`} className="text-blue-600 hover:underline text-xs">
-                                                        Buy #{lot.open_t_id}
-                                                    </a>
-                                                )}
-                                                {lot.close_t_id && (
-                                                    <a href={`/finance/${id}#t_id=${lot.close_t_id}`} className="text-blue-600 hover:underline text-xs">
-                                                        Sell #{lot.close_t_id}
-                                                    </a>
-                                                )}
-                                                {hasMissingLink(lot) && (
-                                                    <span title="Linked transaction is missing" className="text-yellow-600">⚠️</span>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                            })}
-                        </TableBody>
-                    </Table>
-                </div>
+                <>
+                    <div className="rounded-md border">
+                        <LotWorkspaceTable
+                            lots={lots}
+                            showDescription
+                            showTerm={filters.status === 'closed'}
+                            showReconciliation
+                            showSourceDocument
+                            showTransactionLinks
+                            showActions
+                        />
+                    </div>
+                    {data?.meta && data.meta.last_page > 1 && (
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
+                                Showing page {data.meta.current_page} of {data.meta.last_page} ({data.meta.total} total lots)
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={data.meta.current_page <= 1 || isLoading}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                >
+                                    Previous
+                                </Button>
+                                <span className="px-2 text-sm">
+                                    Page {data.meta.current_page} / {data.meta.last_page}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={data.meta.current_page >= data.meta.last_page || isLoading}
+                                    onClick={() => setPage((p) => p + 1)}
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     )

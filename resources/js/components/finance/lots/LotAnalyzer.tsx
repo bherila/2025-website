@@ -29,6 +29,7 @@ import {
 } from '@/lib/finance/washSaleEngine'
 
 import { VariousTransactionsModal } from '../VariousTransactionsModal'
+import { LotSourceBadge } from './shared'
 import { WashSaleDetailModal } from './WashSaleDetailModal'
 
 function formatCurrency(value: number): string {
@@ -476,6 +477,7 @@ function Form8949Table({
                                     >
                                         <TableCell className="font-mono text-sm whitespace-nowrap">
                                             {lot.description}
+                                            <LotSourceBadge source="account_derived" className="ml-1 align-middle" />
                                             {accountBadgeLabel && (
                                                 <Badge variant="outline" className="ml-1 text-xs font-sans uppercase tracking-tight opacity-70">
                                                     {accountBadgeLabel}

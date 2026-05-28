@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { LotSourceBadge } from '@/components/finance/lots/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -514,7 +515,10 @@ function LotSide({ title, lot }: { title: string; lot: LotReconciliationLot | nu
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title}</div>
-          <div className="mt-1 text-sm font-medium">{lot.description ?? lot.symbol ?? `Lot #${lot.lot_id}`}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium">{lot.description ?? lot.symbol ?? `Lot #${lot.lot_id}`}</span>
+            <LotSourceBadge source={lot.source} />
+          </div>
           <div className="text-xs text-muted-foreground">{lot.account_name ?? `Account #${lot.acct_id}`}</div>
         </div>
         <Badge variant="outline">#{lot.lot_id}</Badge>

@@ -51,7 +51,7 @@ class FinanceLotsController extends Controller
         // Closed-lot mode returns full columns needed by Form 8949 (per-transaction detail).
         // Open-lot / as_of mode remains narrow (acct_id + basis + dates) for Form 1116 worksheet.
         $selectColumns = $status === 'closed'
-            ? ['lot_id', 'acct_id', 'symbol', 'description', 'cusip', 'quantity', 'purchase_date', 'cost_basis', 'sale_date', 'proceeds', 'realized_gain_loss', 'is_short_term', 'lot_source', 'document_id', 'form_8949_box', 'is_covered', 'accrued_market_discount', 'wash_sale_disallowed']
+            ? ['lot_id', 'acct_id', 'symbol', 'description', 'cusip', 'quantity', 'purchase_date', 'cost_basis', 'sale_date', 'proceeds', 'realized_gain_loss', 'is_short_term', 'lot_source', 'source', 'document_id', 'form_8949_box', 'is_covered', 'accrued_market_discount', 'wash_sale_disallowed']
             : ['acct_id', 'cost_basis', 'purchase_date', 'sale_date'];
 
         $query = FinAccountLot::whereIn('acct_id', $accountIds)->select($selectColumns);
@@ -348,6 +348,7 @@ class FinanceLotsController extends Controller
             'realized_gain_loss' => $realizedGainLoss,
             'is_short_term' => $isShortTerm,
             'lot_source' => 'manual',
+            'source' => FinAccountLot::SOURCE_MANUAL,
             'open_t_id' => $validated['open_t_id'] ?? null,
             'close_t_id' => $validated['close_t_id'] ?? null,
         ]);
@@ -470,6 +471,7 @@ class FinanceLotsController extends Controller
                         'realized_gain_loss' => $realizedGainLoss,
                         'is_short_term' => $isShortTerm,
                         'lot_source' => 'fidelity_import',
+                        'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
                         'open_t_id' => $lotData['open_t_id'] ?? null,
                         'close_t_id' => $lotData['close_t_id'] ?? null,
                     ]);
@@ -583,6 +585,7 @@ class FinanceLotsController extends Controller
                     'realized_gain_loss' => $realizedGainLoss,
                     'is_short_term' => $isShortTerm,
                     'lot_source' => 'analyzer',
+                    'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
                     'open_t_id' => $lotData['open_t_id'] ?? null,
                     'close_t_id' => $lotData['close_t_id'] ?? null,
                 ]);
@@ -781,6 +784,7 @@ class FinanceLotsController extends Controller
                     'realized_gain_loss' => $assignment['proceeds'] - $assignment['cost_basis'],
                     'is_short_term' => $isShortTerm,
                     'lot_source' => 'manual',
+                    'source' => FinAccountLot::SOURCE_MANUAL,
                     'open_t_id' => $assignment['open_t_id'],
                     'close_t_id' => $assignment['close_t_id'],
                 ]);
