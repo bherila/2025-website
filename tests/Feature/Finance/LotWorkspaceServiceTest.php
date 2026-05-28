@@ -78,16 +78,45 @@ class LotWorkspaceServiceTest extends TestCase
         $user = $this->createUser();
         $account = $this->makeAccount((int) $user->id);
 
-        $this->makeLot($account, ['source' => FinAccountLot::SOURCE_BROKER_1099B]);
-        $this->makeLot($account, ['source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED]);
+        $canonicalBrokerLot = $this->makeLot($account, ['source' => FinAccountLot::SOURCE_BROKER_1099B]);
+        $accountLot = $this->makeLot($account, ['source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED]);
+        $legacyBrokerLot = $this->makeLot($account, [
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+        ]);
 
-        $result = $this->service->query([
+        $brokerResult = $this->service->query([
             'user_id' => (int) $user->id,
             'source' => FinAccountLot::SOURCE_BROKER_1099B,
         ]);
+        $accountResult = $this->service->query([
+            'user_id' => (int) $user->id,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+        ]);
 
-        $this->assertCount(1, $result->items());
-        $this->assertEquals(FinAccountLot::SOURCE_BROKER_1099B, $this->items($result)[0]->source);
+        $this->assertEqualsCanonicalizing(
+            [(int) $canonicalBrokerLot->lot_id, (int) $legacyBrokerLot->lot_id],
+            array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($brokerResult)),
+        );
+        $this->assertSame([(int) $accountLot->lot_id], array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($accountResult)));
+    }
+
+    public function test_source_summary_honors_legacy_1099b_lot_source(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id);
+
+        $this->makeLot($account, ['source' => FinAccountLot::SOURCE_BROKER_1099B]);
+        $this->makeLot($account, [
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+        ]);
+        $this->makeLot($account, ['source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED]);
+
+        $summary = $this->service->summary(['user_id' => (int) $user->id]);
+
+        $this->assertSame(2, $summary['counts_by_source'][FinAccountLot::SOURCE_BROKER_1099B] ?? null);
+        $this->assertSame(1, $summary['counts_by_source'][FinAccountLot::SOURCE_ACCOUNT_DERIVED] ?? null);
     }
 
     public function test_superseded_lots_hidden_by_default(): void
