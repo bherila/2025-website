@@ -177,6 +177,186 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_semiannual_period_retainer_skips_interim_overage_when_work_fits_within_cycle_pool(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-01'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 262.50,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            $this->createTimeEntry('2025-12-10', 0.5);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $interimInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
+                ->get();
+
+            $this->assertCount(0, $interimInvoices, 'Interim overage invoice must not be generated when cycle-cumulative work is within the period retainer pool.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_semiannual_period_retainer_bills_interim_overage_only_for_cycle_excess(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-01'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 262.50,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            $this->createTimeEntry('2025-12-10', 0.5);
+            $this->createTimeEntry('2026-02-10', 1.5);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $interimInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
+                ->with('lineItems')
+                ->get();
+
+            $this->assertCount(1, $interimInvoices, 'Exactly one interim invoice for the cycle-cumulative excess crossing month.');
+
+            $invoice = $interimInvoices->first();
+            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-02-28', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-11-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->cycle_end->toDateString());
+            $this->assertEquals(1.0, (float) $invoice->hours_billed_at_rate);
+            $this->assertEquals(375.0, (float) $invoice->invoice_total);
+
+            $additionalHoursLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::AdditionalHours->value);
+            $this->assertNotNull($additionalHoursLine);
+            $this->assertEquals(1.0, (float) $additionalHoursLine->hours);
+            $this->assertEquals(375.0, (float) $additionalHoursLine->line_total);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_period_retainer_interim_compares_against_full_cycle_pool_when_built_mid_cycle(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-12-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-01'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 262.50,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            $this->createTimeEntry('2025-12-10', 0.5);
+
+            // Call interim directly with periodStart inside an in-progress cycle.
+            // Without the fix, the ledger gets built through Dec 31 and
+            // cyclesForAgreement clips the active cycle to Nov 1 - Dec 31
+            // (~33% multiplier), so 0.5h of work would exceed the shrunken
+            // pool and bill as overage.
+            $invoice = $this->invoicingService->generateInterimOverageInvoice(
+                $this->company,
+                Carbon::parse('2025-12-01'),
+                $agreement,
+            );
+
+            $this->assertNull($invoice, 'Mid-cycle interim must compare against the full Nov-Apr pool, not the ledger-clipped partial cycle.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_semiannual_period_retainer_clips_boundary_month_hours_per_cycle(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-20'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-15'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 2,
+                'retainer_fee' => 500,
+                'hourly_rate' => 375,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => true,
+            ]);
+
+            // Cycle 1: 2025-11-15 → 2026-05-14
+            $this->createTimeEntry('2025-11-20', 1.0);
+            $this->createTimeEntry('2026-05-10', 0.5);
+
+            // Cycle 2: 2026-05-15 → 2026-11-14 (shares calendar month 2026-05 with cycle 1)
+            $this->createTimeEntry('2026-05-19', 0.7);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $cycleOneInvoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2025-11-15')
+                ->whereDate('cycle_end', '2026-05-14')
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals(1.5, (float) $cycleOneInvoice->hours_worked, 'Cycle 1 must only count hours within Nov 15 – May 14');
+            $this->assertEquals(0.0, (float) $cycleOneInvoice->hours_billed_at_rate);
+            $this->assertEquals(500.0, (float) $cycleOneInvoice->invoice_total);
+
+            $cycleTwoInvoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-05-15')
+                ->whereDate('cycle_end', '2026-11-14')
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals(0.7, (float) $cycleTwoInvoice->hours_worked, 'Cycle 2 must only count hours within May 15 – Nov 14');
+            $this->assertEquals(0.0, (float) $cycleTwoInvoice->hours_billed_at_rate);
+            $this->assertEquals(500.0, (float) $cycleTwoInvoice->invoice_total);
+
+            $interimCount = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
+                ->count();
+
+            $this->assertSame(0, $interimCount, 'No interim overage should fire when each cycle stays within its own pool.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_semiannual_agreement_starting_next_month_generates_full_upcoming_cycle(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-05-26'));
@@ -376,6 +556,46 @@ class ClientCadenceInvoicingTest extends TestCase
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
             $this->assertNotNull($retainerLine);
             $this->assertEquals(2000.0, (float) $retainerLine->line_total);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_full_period_first_cycle_keeps_full_period_retainer_override(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'first_cycle_proration' => FirstCycleProration::FullPeriod->value,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 30,
+                'retainer_fee' => 3000,
+                'active_date' => Carbon::parse('2026-02-15'),
+            ]);
+
+            $this->createTimeEntry('2026-02-20', 20);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoice = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->with('lineItems')
+                ->firstOrFail();
+
+            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
+            $this->assertEquals(20.0, (float) $invoice->hours_worked);
+            $this->assertEquals(0.0, (float) $invoice->hours_billed_at_rate);
+
+            $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
+            $this->assertNotNull($retainerLine);
+            $this->assertEquals(3000.0, (float) $retainerLine->line_total);
+            $this->assertEquals(30.0, (float) $retainerLine->hours);
+            $this->assertNull($invoice->lineItems->firstWhere('line_type', InvoiceLineType::AdditionalHours->value));
         } finally {
             Carbon::setTestNow();
         }

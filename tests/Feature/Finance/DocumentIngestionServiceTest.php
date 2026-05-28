@@ -501,6 +501,228 @@ class DocumentIngestionServiceTest extends TestCase
         $response->assertJsonValidationErrors(['gen_ai_result_id']);
     }
 
+    public function test_document_delete_cascades_lots_and_account_links(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $fileHash = str_repeat('a', 64);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'to-delete.pdf',
+            'file_hash' => $fileHash,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 100],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [[
+                    'symbol' => 'MSFT',
+                    'quantity' => 5,
+                    'purchaseDate' => '2024-03-01',
+                    'costBasis' => 500,
+                    'saleDate' => '2025-03-15',
+                    'proceeds' => 600,
+                ]],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+        $this->assertDatabaseHas('fin_account_lots', ['document_id' => $documentId]);
+
+        $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$documentId}/impact-preview");
+        $previewResponse->assertOk()
+            ->assertJsonPath('summary.document_id', $documentId)
+            ->assertJsonPath('summary.user_id', $user->id)
+            ->assertJsonPath('summary.lots', 1)
+            ->assertJsonPath('summary.account_links', 1)
+            ->assertJsonPath('summary.statements', 1)
+            ->assertJsonStructure(['summary', 'impact_hash']);
+
+        $impactHash = (string) $previewResponse->json('impact_hash');
+        $this->assertNotSame('', $impactHash);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $staleHashResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'impact_hash' => str_repeat('0', 64),
+        ]);
+        $staleHashResponse->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'impact_hash' => $impactHash,
+        ]);
+        $deleteResponse->assertOk();
+
+        $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
+        $this->assertDatabaseMissing('fin_account_lots', ['document_id' => $documentId]);
+        $this->assertDatabaseMissing('fin_document_accounts', ['document_id' => $documentId]);
+    }
+
+    public function test_document_delete_is_scoped_to_owner_and_rejects_tax_form_documents(): void
+    {
+        Queue::fake();
+
+        $owner = $this->createUser();
+        $attacker = $this->createUser();
+        $accountId = $this->createAccount($owner->id, 'Brokerage');
+
+        $response = $this->actingAs($owner)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'private.pdf',
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-01-31', 'closingBalance' => 0],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+
+        $this->actingAs($attacker)->deleteJson("/api/finance/documents/{$documentId}", [
+            'impact_hash' => str_repeat('0', 64),
+        ])->assertNotFound();
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $taxDocument = app(TaxDocumentCreationService::class)->createSingleAccountDocument([
+            'user_id' => $owner->id,
+            'tax_year' => 2025,
+            'form_type' => '1099_b',
+            'original_filename' => 'tax-form.pdf',
+            'stored_filename' => 'tax-form.pdf',
+            's3_path' => "tax_docs/{$owner->id}/tax-form.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1000,
+            'file_hash' => str_repeat('c', 64),
+            'uploaded_by_user_id' => $owner->id,
+            'parsed_data' => ['transactions' => []],
+        ], [
+            'account_id' => $accountId,
+            'form_type' => '1099_b',
+            'tax_year' => 2025,
+        ]);
+
+        $this->actingAs($owner)->deleteJson("/api/finance/documents/{$taxDocument->document_id}", [
+            'impact_hash' => str_repeat('0', 64),
+        ])->assertForbidden();
+    }
+
+    public function test_document_source_lineage_position_vs_disposition(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'mixed.pdf',
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-06-30', 'closingBalance' => 2000],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [
+                    [
+                        'symbol' => 'AAPL',
+                        'quantity' => 10,
+                        'purchaseDate' => '2024-06-01',
+                        'costBasis' => 1000,
+                        'saleDate' => null,
+                        'proceeds' => null,
+                    ],
+                    [
+                        'symbol' => 'GOOG',
+                        'quantity' => 5,
+                        'purchaseDate' => '2024-01-15',
+                        'costBasis' => 750,
+                        'saleDate' => '2025-06-20',
+                        'proceeds' => 900,
+                    ],
+                ],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+
+        $positionLot = DB::table('fin_account_lots')
+            ->where('document_id', $documentId)
+            ->where('symbol', 'AAPL')
+            ->first();
+        $this->assertSame(FinAccountLot::ORIGIN_STATEMENT_POSITION, $positionLot->lot_origin);
+
+        $dispositionLot = DB::table('fin_account_lots')
+            ->where('document_id', $documentId)
+            ->where('symbol', 'GOOG')
+            ->first();
+        $this->assertSame(FinAccountLot::ORIGIN_STATEMENT_DISPOSITION, $dispositionLot->lot_origin);
+    }
+
+    public function test_resolver_assign_followed_by_reconciliation_rerun(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Resolver E2E Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        $buyTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId,
+            't_date' => '2025-01-10',
+            't_type' => 'Buy',
+            't_symbol' => 'NVDA',
+            't_qty' => 20,
+            't_amt' => -2000,
+            'when_added' => now(),
+        ]);
+        $sellTId = DB::table('fin_account_line_items')->insertGetId([
+            't_account' => $acctId,
+            't_date' => '2025-06-10',
+            't_type' => 'Sell',
+            't_symbol' => 'NVDA',
+            't_qty' => -20,
+            't_amt' => 2500,
+            'when_added' => now(),
+        ]);
+
+        $assignResponse = $this->actingAs($user)->postJson('/api/finance/lots/save-assignment', [
+            'assignments' => [[
+                'close_t_id' => $sellTId,
+                'open_t_id' => $buyTId,
+                'symbol' => 'NVDA',
+                'quantity' => 20,
+                'purchase_date' => '2025-01-10',
+                'cost_basis' => 2000.00,
+                'sale_date' => '2025-06-10',
+                'proceeds' => 2500.00,
+            ]],
+        ]);
+        $assignResponse->assertOk()->assertJson(['success' => true, 'created' => 1]);
+
+        $lot = DB::table('fin_account_lots')
+            ->where('acct_id', $acctId)
+            ->where('symbol', 'NVDA')
+            ->first();
+        $this->assertNotNull($lot);
+        $this->assertSame('manual', $lot->lot_source);
+
+        $reconResponse = $this->actingAs($user)->postJson("/api/finance/{$acctId}/lots/reconciliation/apply", [
+            'accept' => [$lot->lot_id],
+        ]);
+        $reconResponse->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame('accepted', FinAccountLot::find($lot->lot_id)?->reconciliation_status);
+    }
+
     private function makeFinanceJob(User $user): GenAiImportJob
     {
         return GenAiImportJob::create([

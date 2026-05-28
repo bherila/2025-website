@@ -241,6 +241,10 @@ class FinanceDocumentController extends Controller
             ->where('user_id', (int) Auth::id())
             ->firstOrFail();
 
+        if ($document->document_kind === FinDocument::KIND_TAX_FORM) {
+            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use DELETE /api/finance/tax-documents/{id} instead.');
+        }
+
         $request->validate([
             'impact_hash' => 'required|string',
         ]);

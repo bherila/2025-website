@@ -10,13 +10,15 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
+use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\DocumentIngestionService;
+use App\Services\Finance\LotMatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
-use Mockery;
+use Psr\Log\AbstractLogger;
 use Tests\TestCase;
 
 class LotMatcherAutoDispatchServiceTest extends TestCase
@@ -26,7 +28,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
     public function test_dispatch_for_account_years_queues_standalone_and_consolidated_documents_once(): void
     {
         Queue::fake();
-        Log::spy();
+        $logger = $this->swapLogRecorder();
         $user = $this->createUser();
         $account = $this->makeAccount($user->id);
         $standalone = $this->makeTaxDocument($user->id, '1099_b', accountId: (int) $account->acct_id);
@@ -47,13 +49,15 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
             fn (LotsMatchJob $job): bool => in_array($job->documentId, [(int) $standalone->document_id, (int) $consolidated->document_id], true)
                 && $job->delay instanceof \DateTimeInterface,
         );
-        Log::shouldHaveReceived('info')
-            ->with('Lot matcher auto-dispatch queued', Mockery::on(
-                fn (array $context): bool => $context['trigger'] === LotMatcherAutoTrigger::CsvImport->value
-                    && $context['account_id'] === (int) $account->acct_id
-                    && $context['tax_year'] === 2025,
-            ))
-            ->twice();
+        $queuedRecords = array_values(array_filter(
+            $logger->records,
+            fn (array $record): bool => $record['level'] === 'info'
+                && $record['message'] === 'Lot matcher auto-dispatch queued'
+                && $record['context']['trigger'] === LotMatcherAutoTrigger::CsvImport->value
+                && $record['context']['account_id'] === (int) $account->acct_id
+                && $record['context']['tax_year'] === 2025,
+        ));
+        $this->assertCount(2, $queuedRecords);
     }
 
     public function test_duplicate_tax_document_dispatch_uses_unique_job_lock(): void
@@ -141,17 +145,50 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
 
     public function test_job_properties_and_handler_are_pinned(): void
     {
-        $job = new LotsMatchJob(42);
-        $matcher = Mockery::mock(LotMatcherService::class);
-        $matcher->shouldReceive('runMatcherForDocument')->once()->with(42, true);
+        $logger = $this->swapLogRecorder();
+        $job = new LotsMatchJob(42, queuedAtIso: now()->subSeconds(5)->toIso8601String());
+        $matcher = new class extends LotMatcherService
+        {
+            /**
+             * @var list<array{document_id: int, preserve_decisions: bool}>
+             */
+            public array $calls = [];
+
+            public function __construct()
+            {
+                parent::__construct(app(LotMatcher::class));
+            }
+
+            public function runMatcherForDocument(int $documentId, bool $preserveDecisions = true): LotMatcherResult
+            {
+                $this->calls[] = [
+                    'document_id' => $documentId,
+                    'preserve_decisions' => $preserveDecisions,
+                ];
+
+                return new LotMatcherResult($documentId, false, [], [], []);
+            }
+        };
 
         $job->handle($matcher);
 
+        $this->assertSame([['document_id' => 42, 'preserve_decisions' => true]], $matcher->calls);
         $this->assertSame('42', $job->uniqueId());
         $this->assertSame(300, $job->uniqueFor);
         $this->assertSame(300, $job->timeout);
         $this->assertSame(3, $job->tries);
         $this->assertSame([30, 120], $job->backoff);
+        $timingRecords = array_values(array_filter(
+            $logger->records,
+            fn (array $record): bool => $record['level'] === 'info'
+                && $record['message'] === 'LotsMatchJob: matcher timing'
+                && $record['context']['document_id'] === 42
+                && $record['context']['tax_year'] === null
+                && $record['context']['queue_wait_ms'] >= 0
+                && $record['context']['duration_ms'] >= 0
+                && $record['context']['success'] === true,
+        ));
+        $this->assertCount(1, $timingRecords);
     }
 
     private function makeAccount(int $userId): FinAccounts
@@ -182,5 +219,35 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
             'uploaded_by_user_id' => $userId,
             'is_reviewed' => true,
         ]);
+    }
+
+    /**
+     * @return object{records: list<array{level: string, message: string, context: array<string, mixed>}>}
+     */
+    private function swapLogRecorder(): object
+    {
+        $logger = new class extends AbstractLogger
+        {
+            /**
+             * @var list<array{level: string, message: string, context: array<string, mixed>}>
+             */
+            public array $records = [];
+
+            /**
+             * @param  array<string, mixed>  $context
+             */
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->records[] = [
+                    'level' => (string) $level,
+                    'message' => (string) $message,
+                    'context' => $context,
+                ];
+            }
+        };
+
+        Log::swap($logger);
+
+        return $logger;
     }
 }
