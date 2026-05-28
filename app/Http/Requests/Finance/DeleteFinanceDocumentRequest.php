@@ -12,13 +12,13 @@ class DeleteFinanceDocumentRequest extends FormRequest
     }
 
     /**
-     * @return array{confirm: list<string>, file_hash: list<string>}
+     * @return array{confirm: list<string>, confirmation_token: list<string>}
      */
     public function rules(): array
     {
         return [
             'confirm' => ['sometimes', 'boolean'],
-            'file_hash' => ['nullable', 'string', 'max:128'],
+            'confirmation_token' => ['nullable', 'string', 'max:128'],
         ];
     }
 }

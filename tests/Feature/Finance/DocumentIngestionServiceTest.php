@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Jobs\LotsMatchJob;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
@@ -541,19 +542,22 @@ class DocumentIngestionServiceTest extends TestCase
             ->assertJsonPath('document.file_hash', $fileHash)
             ->assertJsonPath('impact.lots', 1)
             ->assertJsonPath('impact.account_links', 1)
-            ->assertJsonPath('impact.statements', 1);
+            ->assertJsonPath('impact.statements', 1)
+            ->assertJsonPath('impact.transactions', 0);
+        $confirmationToken = (string) $previewResponse->json('confirmation_token');
+        $this->assertNotSame('', $confirmationToken);
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
         $staleConfirmResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
             'confirm' => true,
-            'file_hash' => str_repeat('b', 64),
+            'confirmation_token' => str_repeat('b', 64),
         ]);
         $staleConfirmResponse->assertStatus(409);
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
         $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
             'confirm' => true,
-            'file_hash' => $fileHash,
+            'confirmation_token' => $confirmationToken,
         ]);
         $deleteResponse->assertOk()
             ->assertJsonPath('success', true)
@@ -564,6 +568,94 @@ class DocumentIngestionServiceTest extends TestCase
         $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseMissing('fin_account_lots', ['document_id' => $documentId]);
         $this->assertDatabaseMissing('fin_document_accounts', ['document_id' => $documentId]);
+    }
+
+    public function test_document_delete_removes_imported_transactions(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $fileHash = str_repeat('a', 64);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'with-transactions.pdf',
+            'file_hash' => $fileHash,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 100],
+                'statementDetails' => [],
+                'transactions' => [
+                    ['t_date' => '2025-03-10', 't_amt' => 250.00, 't_description' => 'Dividend'],
+                    ['t_date' => '2025-03-15', 't_amt' => -75.50, 't_description' => 'Fee'],
+                ],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+        $statementId = (int) $response->json('accounts.0.statement_id');
+
+        $this->assertSame(2, FinAccountLineItems::query()->where('statement_id', $statementId)->count());
+
+        $previewResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
+        $previewResponse->assertOk()
+            ->assertJsonPath('impact.transactions', 2);
+        $confirmationToken = (string) $previewResponse->json('confirmation_token');
+
+        $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+            'confirmation_token' => $confirmationToken,
+        ]);
+        $deleteResponse->assertOk()
+            ->assertJsonPath('impact.transactions', 2);
+
+        $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
+        $this->assertSame(0, FinAccountLineItems::query()->where('statement_id', $statementId)->count());
+    }
+
+    public function test_hashless_document_delete_requires_confirmation_token(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'inline-import.pdf',
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-02-28', 'closingBalance' => 0],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $documentId = (int) $response->json('document.id');
+        $this->assertNull(FinDocument::query()->findOrFail($documentId)->file_hash);
+
+        $previewResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
+        $previewResponse->assertOk()
+            ->assertJsonPath('requires_confirmation', true)
+            ->assertJsonPath('document.file_hash', null);
+        $confirmationToken = (string) $previewResponse->json('confirmation_token');
+        $this->assertNotSame('', $confirmationToken);
+
+        $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+        ])->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+            'confirmation_token' => $confirmationToken,
+        ])->assertOk();
+        $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
     }
 
     public function test_document_delete_is_scoped_to_owner_and_rejects_tax_form_documents(): void
