@@ -9,6 +9,7 @@ use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\Query\Expression;
 
 /**
  * Central lot query service powering the unified lot-workspace API.
@@ -201,7 +202,7 @@ final class LotWorkspaceService
 
         $sources = $this->stringValues($params['source'] ?? null);
         if ($sources !== []) {
-            $query->whereIn('source', $sources);
+            $query->whereIn(new Expression($this->effectiveSourceExpression()), $sources);
         }
 
         $this->applyReconciliationStateFilter($query, $params['reconciliation_state'] ?? null);
@@ -358,9 +359,10 @@ final class LotWorkspaceService
      */
     private function countsBySource(Builder $query): array
     {
+        $effectiveSourceExpression = $this->effectiveSourceExpression();
         $rows = $query
-            ->selectRaw('COALESCE(source, ?) as source_key, COUNT(*) as cnt', ['none'])
-            ->groupBy('source')
+            ->selectRaw("{$effectiveSourceExpression} as source_key, COUNT(*) as cnt")
+            ->groupBy('source_key')
             ->get();
         $counts = [];
 
@@ -369,6 +371,16 @@ final class LotWorkspaceService
         }
 
         return $counts;
+    }
+
+    private function effectiveSourceExpression(): string
+    {
+        return sprintf(
+            "CASE WHEN lot_source IN ('%s', '%s') THEN '%s' ELSE COALESCE(source, 'none') END",
+            FinAccountLot::SOURCE_1099B,
+            FinAccountLot::SOURCE_1099B_UNDERSCORE,
+            FinAccountLot::SOURCE_BROKER_1099B,
+        );
     }
 
     /**
