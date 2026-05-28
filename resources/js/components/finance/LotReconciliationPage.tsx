@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
 import { LotSourceBadge } from '@/components/finance/lots/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -145,6 +146,10 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
   }, [load])
 
   const buckets = useMemo(() => bucketLinks(linksData?.links ?? []), [linksData])
+  const unresolvedAccountLinks = useMemo(
+    () => (linksData?.document.account_links ?? []).filter((link) => link.account_id === null),
+    [linksData?.document.account_links],
+  )
 
   async function runLinkAction(link: LotReconciliationLink, action: LinkAction): Promise<void> {
     const meta = LINK_ACTION_META[action]
@@ -288,6 +293,28 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
           </div>
         </div>
         <PriorityChain />
+        {unresolvedAccountLinks.length > 0 && (
+          <div className="rounded-md border border-warning/30 bg-warning/10 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Missing account</h2>
+                <p className="text-xs text-muted-foreground">
+                  Resolve account links before relying on guided lot reconciliation.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {unresolvedAccountLinks.map((link) => (
+                  <MissingAccountResolver
+                    key={link.id}
+                    link={link}
+                    taxDocumentId={linksData.document.id}
+                    onResolved={() => void load()}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {busyLabel && (

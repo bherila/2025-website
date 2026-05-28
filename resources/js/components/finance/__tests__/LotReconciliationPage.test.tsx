@@ -145,11 +145,13 @@ const reportResponse = {
 const linksResponse = {
   document: {
     id: 12,
+    document_id: 120,
     broker: 'Synthetic Broker',
     tax_year: 2025,
     form_type: 'broker_1099',
     original_filename: 'broker.pdf',
     last_matched_at: '2026-05-10T17:00:00.000Z',
+    account_links: [],
   },
   summary: {
     total: 1,

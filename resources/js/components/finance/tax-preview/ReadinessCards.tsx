@@ -1,10 +1,12 @@
 import { AlertCircle, AlertTriangle, CheckCircle, FileText, ListTodo } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 
+import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchWrapper } from '@/fetchWrapper'
+import type { AccountSuggestionLink } from '@/types/finance/account-suggestion'
 
 interface ReadinessSummary {
   year: number
@@ -19,6 +21,7 @@ interface ReadinessSummary {
   }
   pending_review_count: number
   missing_account_count: number
+  missing_account_links: AccountSuggestionLink[]
   parsing_failure_count: number
   reconciliation_health: {
     ok: number
@@ -39,6 +42,7 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
   const [summary, setSummary] = useState<ReadinessSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -63,7 +67,7 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
     return () => {
       mounted = false
     }
-  }, [year])
+  }, [year, reloadKey])
 
   if (loading) {
     return (
@@ -264,6 +268,22 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
                     <div>• {summary.parsing_failure_count} parsing failure{summary.parsing_failure_count !== 1 ? 's' : ''}</div>
                   )}
                 </div>
+                {summary.missing_account_links.length > 0 && (
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                    {summary.missing_account_links.slice(0, 3).map((link) => (
+                      <div key={link.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">
+                          {link.ai_account_name ?? link.source_filename ?? `Link #${link.id}`}
+                        </span>
+                        <MissingAccountResolver
+                          link={link}
+                          taxDocumentId={link.tax_document_id ?? null}
+                          onResolved={() => setReloadKey((current) => current + 1)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <Button variant="outline" size="sm" className="w-full mt-2" asChild>
                   <a href="/finance/documents">Take Action</a>
                 </Button>

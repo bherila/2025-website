@@ -43,6 +43,7 @@ class ReadinessSummaryService
             'documents_by_kind' => $documentsByKind,
             'pending_review_count' => $pendingReviewCount,
             'missing_account_count' => $missingAccountCount,
+            'missing_account_links' => $this->missingAccountLinks($userId, $year),
             'reconciliation_health' => $reconciliationHealth,
             'parsing_failure_count' => $parsingFailureCount,
             'last_matcher_run_at' => $lastMatcherRunAt,
@@ -117,6 +118,41 @@ class ReadinessSummaryService
             ->count();
 
         return $documentsWithoutLinks + $unresolvedAccountLinks;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function missingAccountLinks(int $userId, int $year): array
+    {
+        return TaxDocumentAccount::query()
+            ->whereNull('account_id')
+            ->where('tax_year', $year)
+            ->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
+            ->whereHas('document', fn (Builder $query): Builder => $query->where('user_id', $userId))
+            ->with(['document', 'taxDocument'])
+            ->orderBy('id')
+            ->limit(5)
+            ->get()
+            ->map(function (TaxDocumentAccount $link): array {
+                $document = $link->relationLoaded('document') ? $link->document : null;
+                $taxDocument = $link->relationLoaded('taxDocument') ? $link->taxDocument : null;
+
+                return [
+                    'id' => (int) $link->id,
+                    'document_id' => (int) $link->document_id,
+                    'tax_document_id' => $taxDocument instanceof FileForTaxDocument ? (int) $taxDocument->id : null,
+                    'form_type' => $link->form_type,
+                    'tax_year' => $link->tax_year,
+                    'account_section_label' => $link->account_section_label,
+                    'ai_identifier' => $link->ai_identifier,
+                    'ai_account_name' => $link->ai_account_name,
+                    'is_reviewed' => (bool) $link->is_reviewed,
+                    'source_filename' => $document?->original_filename,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

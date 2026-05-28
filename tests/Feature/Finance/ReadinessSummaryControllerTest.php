@@ -63,6 +63,7 @@ class ReadinessSummaryControllerTest extends TestCase
             ],
             'pending_review_count',
             'missing_account_count',
+            'missing_account_links',
             'reconciliation_health' => [
                 'ok',
                 'drift',
@@ -241,12 +242,14 @@ class ReadinessSummaryControllerTest extends TestCase
             'is_reviewed' => true,
         ]);
 
-        TaxDocumentAccount::createLink((int) $doc->id, null, '1099_b', 2024);
+        TaxDocumentAccount::createLink((int) $doc->id, null, '1099_b', 2024, aiIdentifier: 'section-a');
 
         $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
 
         $response->assertOk();
         $this->assertEquals(1, $response->json('missing_account_count'));
+        $this->assertSame($doc->document_id, $response->json('missing_account_links.0.document_id'));
+        $this->assertSame('section-a', $response->json('missing_account_links.0.ai_identifier'));
     }
 
     public function test_counts_each_unresolved_account_link_as_missing(): void

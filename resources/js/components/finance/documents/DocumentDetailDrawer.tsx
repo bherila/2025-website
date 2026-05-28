@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
 import { fetchWrapper } from '@/fetchWrapper'
 
 import DocumentDrawerHeader from './DocumentDrawerHeader'
@@ -9,10 +10,11 @@ import type { FinanceDocument, FinanceDocumentDetail } from './types'
 interface DocumentDetailDrawerProps {
   document: FinanceDocument | null
   onClose: () => void
+  onAccountResolved?: (() => void) | undefined
   onDeleted: () => void
 }
 
-export default function DocumentDetailDrawer({ document, onClose, onDeleted }: DocumentDetailDrawerProps) {
+export default function DocumentDetailDrawer({ document, onClose, onAccountResolved, onDeleted }: DocumentDetailDrawerProps) {
   const [detail, setDetail] = useState<FinanceDocumentDetail | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -58,6 +60,14 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
   const displayDoc = detail ?? document
   const accounts = displayDoc.accounts ?? []
   const capabilities = displayDoc.capabilities ?? []
+  const taxDocumentId = displayDoc.tax_document?.id ?? null
+
+  const handleAccountResolved = () => {
+    if (document) {
+      void loadDetail(document.id)
+    }
+    onAccountResolved?.()
+  }
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l bg-background shadow-xl">
@@ -116,10 +126,17 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
                 <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Linked accounts</h3>
                 <ul className="space-y-1 text-sm">
                   {accounts.map((link) => (
-                    <li key={link.id} className="flex items-center gap-2">
-                      <span>{link.account?.acct_name ?? link.ai_account_name ?? 'Unassigned'}</span>
+                    <li key={link.id} className="flex flex-wrap items-center gap-2">
+                      <span>{link.account?.acct_name ?? link.ai_account_name ?? 'Missing account'}</span>
                       {link.form_type && (
                         <span className="text-xs text-muted-foreground">({link.form_type})</span>
+                      )}
+                      {link.account_id === null && (
+                        <MissingAccountResolver
+                          link={link}
+                          taxDocumentId={taxDocumentId}
+                          onResolved={handleAccountResolved}
+                        />
                       )}
                     </li>
                   ))}
