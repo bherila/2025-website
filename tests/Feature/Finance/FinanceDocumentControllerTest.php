@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
+use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FinanceDocumentControllerTest extends TestCase
@@ -269,5 +272,134 @@ class FinanceDocumentControllerTest extends TestCase
     {
         $response = $this->getJson('/api/finance/documents');
         $response->assertUnauthorized();
+    }
+
+    // ─── Blocker 1: impact hash isolation ────────────────────────────────────
+
+    /**
+     * Same counts but different user_id → different hash.
+     * Prevents a user from replaying another user's hash to delete their document.
+     */
+    public function test_impact_hash_differs_for_same_counts_different_user(): void
+    {
+        $userA = $this->createUser();
+        $userB = $this->createUser();
+
+        $docA = $this->makeDocument($userA->id);
+        $docB = $this->makeDocument($userB->id);
+
+        $service = app(DocumentCapabilityService::class);
+
+        $hashA = $service->computeImpactSummary($docA)['impact_hash'];
+        $hashB = $service->computeImpactSummary($docB)['impact_hash'];
+
+        // Same counts (all zero), different user → different hash
+        $this->assertNotSame($hashA, $hashB);
+    }
+
+    /**
+     * Same user, same counts, but different document_id → different hash.
+     * Prevents replay of one document's hash against a sibling document.
+     */
+    public function test_impact_hash_differs_for_different_document_id_same_user(): void
+    {
+        $user = $this->createUser();
+
+        $doc1 = $this->makeDocument($user->id);
+        $doc2 = $this->makeDocument($user->id);
+
+        $service = app(DocumentCapabilityService::class);
+
+        $hash1 = $service->computeImpactSummary($doc1)['impact_hash'];
+        $hash2 = $service->computeImpactSummary($doc2)['impact_hash'];
+
+        // Same counts, same user, but different document → different hash
+        $this->assertNotSame($hash1, $hash2);
+    }
+
+    /**
+     * Hash is deterministic: calling computeImpactSummary twice on the same
+     * document with no intervening changes produces the same hash.
+     */
+    public function test_impact_hash_is_stable_for_same_document(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->makeDocument($user->id);
+
+        $service = app(DocumentCapabilityService::class);
+
+        $hash1 = $service->computeImpactSummary($doc)['impact_hash'];
+        $hash2 = $service->computeImpactSummary($doc)['impact_hash'];
+
+        $this->assertSame($hash1, $hash2);
+    }
+
+    /**
+     * Attacker cannot delete owner's document by supplying their own document's hash,
+     * even when both documents have identical counts. The auth scope rejects it with 404.
+     */
+    public function test_destroy_cannot_use_own_hash_on_another_users_document(): void
+    {
+        $owner = $this->createUser();
+        $attacker = $this->createUser();
+
+        $ownerDoc = $this->makeDocument($owner->id);
+        $attackerDoc = $this->makeDocument($attacker->id);
+
+        // Attacker gets a valid hash for their own (structurally identical) document
+        $service = app(DocumentCapabilityService::class);
+        $attackerHash = $service->computeImpactSummary($attackerDoc)['impact_hash'];
+
+        // Attempt to delete owner's document with attacker's hash
+        $response = $this->actingAs($attacker)->deleteJson("/api/finance/documents/{$ownerDoc->id}", [
+            'impact_hash' => $attackerHash,
+        ]);
+
+        // Scoped query returns 404 before hash check even runs
+        $response->assertNotFound();
+        $this->assertDatabaseHas('fin_documents', ['id' => $ownerDoc->id]);
+    }
+
+    // ─── Blocker 2: N+1 on lots ───────────────────────────────────────────────
+
+    /**
+     * index() must not issue one query per document to check for lots.
+     * With N documents each having lots, total queries must stay well below N+baseline.
+     */
+    public function test_index_does_not_produce_n_plus_1_queries_for_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+
+        for ($i = 0; $i < 3; $i++) {
+            $doc = $this->makeDocument($user->id);
+            FinDocumentAccount::create([
+                'document_id' => $doc->id,
+                'account_id' => $account->acct_id,
+            ]);
+            FinAccountLot::query()->create([
+                'acct_id' => $account->acct_id,
+                'document_id' => $doc->id,
+                'symbol' => 'AAPL',
+                'quantity' => 1,
+                'purchase_date' => '2024-01-01',
+                'cost_basis' => 100,
+                'cost_per_unit' => 100,
+                'sale_date' => '2025-01-15',
+                'proceeds' => 120,
+                'realized_gain_loss' => 20,
+                'lot_origin' => 'statement_disposition',
+            ]);
+        }
+
+        DB::enableQueryLog();
+        $response = $this->actingAs($user)->getJson('/api/finance/documents');
+        $response->assertOk();
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Without eager-loading lots, this would be baseline + N (3 extra).
+        // With 'lots:id,document_id' in with(), total should be ≤ 10.
+        $this->assertLessThan(15, $queryCount, "Expected < 15 queries, got {$queryCount}");
     }
 }
