@@ -19,6 +19,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\ClientManagement\StripeWebhookController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\Finance\PalCarryforwardController;
+use App\Http\Controllers\Finance\ReadinessSummaryController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
@@ -530,6 +531,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);

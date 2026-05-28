@@ -1,13 +1,18 @@
 'use client'
 
 import currency from 'currency.js'
+import { useEffect } from 'react'
 
+import { ShortDividendSummaryCard } from '@/components/finance/ShortDividendDetailModal'
+import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
 
 interface Form4952PreviewProps {
   form4952Facts?: Form4952Facts | null
+  shortDividendSummary?: ShortDividendSummary | null
+  onLoadShortDividendSummary?: () => void
 }
 
 function SourceRows({
@@ -44,7 +49,13 @@ function SourceRows({
 
 export default function Form4952Preview({
   form4952Facts,
+  shortDividendSummary,
+  onLoadShortDividendSummary,
 }: Form4952PreviewProps) {
+  useEffect(() => {
+    onLoadShortDividendSummary?.()
+  }, [onLoadShortDividendSummary])
+
   if (!form4952Facts) {
     return <FactsLoadingPlaceholder label="Form 4952" />
   }
@@ -137,6 +148,12 @@ export default function Form4952Preview({
             emptyLabel="No excluded investment expenses"
           />
           <FormTotalLine label="Total excluded investment expenses" value={form4952Facts.totalExcludedInvestmentExpenses} />
+        </FormBlock>
+      )}
+
+      {shortDividendSummary && (
+        <FormBlock title="Short Dividend Classification">
+          <ShortDividendSummaryCard summary={shortDividendSummary} />
         </FormBlock>
       )}
 
