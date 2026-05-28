@@ -1,9 +1,10 @@
 'use client'
 
-import { Search, Upload } from 'lucide-react'
+import { AlertTriangle, Search, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -94,6 +95,10 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     count: 0,
                     counts_by_source: {},
                     counts_by_state: {},
+                    term_breakdown: {
+                        short: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+                        long: { proceeds: 0, basis: 0, realized_gain: 0, count: 0 },
+                    },
                 },
                 closed_years: [],
                 meta: {
@@ -140,6 +145,19 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         () => (transactions.length > 0 ? analyzeShortDividends(transactions) : null),
         [transactions],
     )
+
+    /**
+     * A lot is "missing its expected reconciliation link" when its latest link
+     * state is broker_only or account_only — meaning the matched counterpart
+     * lot couldn't be located, so the row appears in only one side of the
+     * broker-vs-account ledger reconciliation.
+     */
+    const missingLinkCount = useMemo(() => {
+        const lots = data?.data ?? []
+        return lots.filter(
+            (lot) => lot.reconciliation_state === 'broker_only' || lot.reconciliation_state === 'account_only',
+        ).length
+    }, [data])
 
     if (isLoading && !data) {
         return (
@@ -242,7 +260,19 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                 />
             )}
 
-            {summary && <LotSummaryCards summary={summary} />}
+            {missingLinkCount > 0 && (
+                <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Missing reconciliation link</AlertTitle>
+                    <AlertDescription>
+                        {missingLinkCount} lot{missingLinkCount === 1 ? '' : 's'} {missingLinkCount === 1 ? 'is' : 'are'} flagged
+                        as broker-only or account-only — the matched counterpart lot could not be located.
+                        Review these in the reconciliation workspace before filing.
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {summary && <LotSummaryCards summary={summary} showTermBreakdown={filters.status === 'closed'} />}
 
             {lots.length === 0 ? (
                 <div className="rounded-lg bg-muted p-8 text-center">

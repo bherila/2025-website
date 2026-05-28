@@ -36,6 +36,13 @@ export interface NormalizedLot {
   updated_at: string | null
 }
 
+export interface LotTermBucket {
+  proceeds: number
+  basis: number
+  realized_gain: number
+  count: number
+}
+
 export interface LotWorkspaceSummary {
   total_proceeds: number
   total_basis: number
@@ -44,6 +51,10 @@ export interface LotWorkspaceSummary {
   count: number
   counts_by_source: Record<string, number>
   counts_by_state: Record<string, number>
+  term_breakdown: {
+    short: LotTermBucket
+    long: LotTermBucket
+  }
 }
 
 export interface LotWorkspaceMeta {

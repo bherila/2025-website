@@ -60,7 +60,7 @@ final class LotWorkspaceService
      * Compute summary aggregates for the current filter set.
      *
      * @param  array<string, mixed>  $params  Same params as query()
-     * @return array{total_proceeds: float, total_basis: float, total_wash_sale: float, total_realized_gain: float, count: int, counts_by_source: array<string, int>, counts_by_state: array<string, int>}
+     * @return array{total_proceeds: float, total_basis: float, total_wash_sale: float, total_realized_gain: float, count: int, counts_by_source: array<string, int>, counts_by_state: array<string, int>, term_breakdown: array{short: array{proceeds: float, basis: float, realized_gain: float, count: int}, long: array{proceeds: float, basis: float, realized_gain: float, count: int}}}
      */
     public function summary(array $params): array
     {
@@ -86,7 +86,50 @@ final class LotWorkspaceService
             'count' => (int) ($aggregates?->getAttribute('count') ?? 0),
             'counts_by_source' => $this->countsBySource($this->baseQuery($params)),
             'counts_by_state' => $this->countsByLatestLinkState($lotIds),
+            'term_breakdown' => $this->termBreakdown($params),
         ];
+    }
+
+    /**
+     * Aggregate proceeds, basis, realized gain, and count split by short-term vs long-term.
+     * Open lots (is_short_term IS NULL) are excluded from both buckets.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array{short: array{proceeds: float, basis: float, realized_gain: float, count: int}, long: array{proceeds: float, basis: float, realized_gain: float, count: int}}
+     */
+    private function termBreakdown(array $params): array
+    {
+        $rows = $this->baseQuery($params)
+            ->whereNotNull('is_short_term')
+            ->selectRaw(
+                'is_short_term, '.
+                'COALESCE(SUM(proceeds), 0) as total_proceeds, '.
+                'COALESCE(SUM(cost_basis), 0) as total_basis, '.
+                'COALESCE(SUM(realized_gain_loss), 0) as total_realized_gain, '.
+                'COUNT(*) as cnt'
+            )
+            ->groupBy('is_short_term')
+            ->get();
+
+        $empty = ['proceeds' => 0.0, 'basis' => 0.0, 'realized_gain' => 0.0, 'count' => 0];
+        $short = $empty;
+        $long = $empty;
+
+        foreach ($rows as $row) {
+            $bucket = [
+                'proceeds' => (float) $row->getAttribute('total_proceeds'),
+                'basis' => (float) $row->getAttribute('total_basis'),
+                'realized_gain' => (float) $row->getAttribute('total_realized_gain'),
+                'count' => (int) $row->getAttribute('cnt'),
+            ];
+            if ((int) $row->getAttribute('is_short_term') === 1) {
+                $short = $bucket;
+            } else {
+                $long = $bucket;
+            }
+        }
+
+        return ['short' => $short, 'long' => $long];
     }
 
     /**

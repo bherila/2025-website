@@ -167,6 +167,74 @@ class LotWorkspaceServiceTest extends TestCase
         $this->assertEquals(2, $summary['count']);
     }
 
+    public function test_summary_includes_term_breakdown_split_by_short_long(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id);
+
+        // Two short-term realized lots.
+        $this->makeLot($account, [
+            'is_short_term' => true,
+            'proceeds' => 1100,
+            'cost_basis' => 1000,
+            'realized_gain_loss' => 100,
+        ]);
+        $this->makeLot($account, [
+            'is_short_term' => true,
+            'proceeds' => 500,
+            'cost_basis' => 600,
+            'realized_gain_loss' => -100,
+        ]);
+        // One long-term realized lot.
+        $this->makeLot($account, [
+            'is_short_term' => false,
+            'proceeds' => 2000,
+            'cost_basis' => 1500,
+            'realized_gain_loss' => 500,
+        ]);
+        // One open lot (is_short_term null) — must be excluded from the breakdown.
+        $this->makeLot($account, [
+            'is_short_term' => null,
+            'sale_date' => null,
+            'proceeds' => null,
+            'realized_gain_loss' => null,
+        ]);
+
+        $summary = $this->service->summary(['user_id' => (int) $user->id]);
+
+        $this->assertArrayHasKey('term_breakdown', $summary);
+        $this->assertSame(2, $summary['term_breakdown']['short']['count']);
+        $this->assertEquals(1600.0, $summary['term_breakdown']['short']['proceeds']);
+        $this->assertEquals(1600.0, $summary['term_breakdown']['short']['basis']);
+        $this->assertEquals(0.0, $summary['term_breakdown']['short']['realized_gain']);
+
+        $this->assertSame(1, $summary['term_breakdown']['long']['count']);
+        $this->assertEquals(2000.0, $summary['term_breakdown']['long']['proceeds']);
+        $this->assertEquals(1500.0, $summary['term_breakdown']['long']['basis']);
+        $this->assertEquals(500.0, $summary['term_breakdown']['long']['realized_gain']);
+    }
+
+    public function test_summary_term_breakdown_is_zero_when_no_realized_lots(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id);
+
+        // Only an open lot.
+        $this->makeLot($account, [
+            'is_short_term' => null,
+            'sale_date' => null,
+            'proceeds' => null,
+            'realized_gain_loss' => null,
+        ]);
+
+        $summary = $this->service->summary(['user_id' => (int) $user->id]);
+
+        $this->assertSame(0, $summary['term_breakdown']['short']['count']);
+        $this->assertSame(0, $summary['term_breakdown']['long']['count']);
+        $this->assertEquals(0.0, $summary['term_breakdown']['short']['proceeds']);
+        $this->assertEquals(0.0, $summary['term_breakdown']['long']['proceeds']);
+    }
+
     public function test_symbol_filter(): void
     {
         $user = $this->createUser();
