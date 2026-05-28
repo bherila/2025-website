@@ -520,7 +520,10 @@ class DocumentIngestionServiceTest extends TestCase
                 'acct_id' => $accountId,
                 'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 100],
                 'statementDetails' => [],
-                'transactions' => [],
+                'transactions' => [
+                    ['t_date' => '2025-03-10', 't_amt' => 250.00, 't_description' => 'Dividend'],
+                    ['t_date' => '2025-03-15', 't_amt' => -75.50, 't_description' => 'Fee'],
+                ],
                 'lots' => [[
                     'symbol' => 'MSFT',
                     'quantity' => 5,

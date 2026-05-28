@@ -335,6 +335,21 @@ class FinanceDocumentControllerTest extends TestCase
         $this->assertSame($hash1, $hash2);
     }
 
+    public function test_impact_hash_is_signed_with_server_secret(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->makeDocument($user->id);
+
+        $result = app(DocumentCapabilityService::class)->computeImpactSummary($doc);
+
+        $predictableHash = hash('sha256', (string) json_encode([
+            'file_hash' => $doc->file_hash,
+            'summary' => $result['summary'],
+        ]));
+
+        $this->assertNotSame($predictableHash, $result['impact_hash']);
+    }
+
     /**
      * Attacker cannot delete owner's document by supplying their own document's hash,
      * even when both documents have identical counts. The auth scope rejects it with 404.
