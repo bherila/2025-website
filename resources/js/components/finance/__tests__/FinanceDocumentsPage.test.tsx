@@ -293,7 +293,7 @@ describe('FinanceDocumentsPage', () => {
     )
     expect(screen.getByRole('link', { name: /Lots/i })).toHaveAttribute(
       'href',
-      '/finance/account/12/lots?source_document_id=42',
+      '/finance/account/12/lots?source_document_id=42&status=all',
     )
   })
 

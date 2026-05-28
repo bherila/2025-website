@@ -51,7 +51,7 @@ export default function LotSummaryFacet({ documentId, summary, accounts }: LotSu
         <span>{summary.count.toLocaleString()} linked lot{summary.count === 1 ? '' : 's'}</span>
         {firstAccountId && (
           <Button asChild variant="outline" size="sm" className="h-7 gap-1 px-2">
-            <a href={`/finance/account/${firstAccountId}/lots?source_document_id=${documentId}`}>
+            <a href={`/finance/account/${firstAccountId}/lots?source_document_id=${documentId}&status=all`}>
               Open
               <ArrowUpRight className="h-3 w-3" />
             </a>

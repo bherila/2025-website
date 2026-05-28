@@ -69,7 +69,7 @@ export default function StatementFacet({ facet }: StatementFacetProps) {
                       </a>
                     </Button>
                     <Button asChild variant="outline" size="sm" className="h-7 gap-1 px-2">
-                      <a href={`/finance/account/${account.id}/lots?source_document_id=${facet.document_id}`}>
+                      <a href={`/finance/account/${account.id}/lots?source_document_id=${facet.document_id}&status=all`}>
                         Lots
                         <ArrowUpRight className="h-3 w-3" />
                       </a>

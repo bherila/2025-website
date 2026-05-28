@@ -43,9 +43,23 @@ function getUrlParam(key: string): string | null {
     return new URLSearchParams(window.location.search).get(key)
 }
 
+function getInitialFilters(sourceDocumentId: string | null): LotFilterValues {
+    const status = getUrlParam('status')
+
+    if (status === 'all' || status === 'open' || status === 'closed') {
+        return { ...DEFAULT_FILTERS, status }
+    }
+
+    if (sourceDocumentId) {
+        return { ...DEFAULT_FILTERS, status: 'all' }
+    }
+
+    return DEFAULT_FILTERS
+}
+
 export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const sourceDocumentId = getUrlParam('source_document_id')
-    const [filters, setFilters] = useState<LotFilterValues>(DEFAULT_FILTERS)
+    const [filters, setFilters] = useState<LotFilterValues>(() => getInitialFilters(sourceDocumentId))
     const [selectedYear, setSelectedYear] = useState<string>('')
     const [data, setData] = useState<LotWorkspaceResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
