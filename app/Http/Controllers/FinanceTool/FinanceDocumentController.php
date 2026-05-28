@@ -5,8 +5,9 @@ namespace App\Http\Controllers\FinanceTool;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Finance\DeleteFinanceDocumentRequest;
+use App\Http\Requests\Finance\IndexDocumentsRequest;
 use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
+use App\Http\Resources\FinanceTool\FinDocumentDetailResource;
 use App\Http\Resources\FinanceTool\FinDocumentResource;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
@@ -14,6 +15,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\FileStorageService;
+use App\Services\Finance\DocumentCapabilityService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\Finance\TransactionDeletionTombstoneService;
@@ -31,35 +33,288 @@ class FinanceDocumentController extends Controller
         private readonly DocumentIngestionService $documentIngestionService,
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
+        private readonly DocumentCapabilityService $documentCapabilityService,
         private readonly TransactionDeletionTombstoneService $transactionDeletionTombstoneService,
     ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(IndexDocumentsRequest $request): JsonResponse
     {
         $query = FinDocument::query()
             ->where('user_id', (int) Auth::id())
             ->with([
                 'accounts.account:acct_id,acct_name,acct_number',
                 'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
+                'lots:lot_id,document_id',
             ])
             ->orderByDesc('tax_year')
             ->orderByDesc('period_end')
             ->orderByDesc('created_at');
 
         if ($request->filled('document_kind')) {
-            $kinds = array_filter(array_map('trim', explode(',', (string) $request->query('document_kind'))));
+            $kinds = array_filter(array_map('trim', explode(',', (string) $request->input('document_kind'))));
             $query->whereIn('document_kind', $kinds);
         }
 
         if ($request->filled('tax_year')) {
-            $query->where('tax_year', (int) $request->query('tax_year'));
+            $query->where('tax_year', (int) $request->input('tax_year'));
         }
 
         if ($request->filled('account_id')) {
-            $query->whereHas('accounts', fn ($accountQuery) => $accountQuery->where('account_id', (int) $request->query('account_id')));
+            $query->whereHas('accounts', fn ($accountQuery) => $accountQuery->where('account_id', (int) $request->input('account_id')));
         }
 
-        return response()->json(FinDocumentResource::collection($query->get())->resolve($request));
+        if ($request->filled('q')) {
+            $search = (string) $request->input('q');
+            $query->where(function ($q) use ($search) {
+                $q->where('original_filename', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('form_type')) {
+            $formType = (string) $request->input('form_type');
+            $query->where(function ($q) use ($formType): void {
+                $q->whereHas('accounts', fn ($accountQuery) => $accountQuery->where('form_type', $formType))
+                    ->orWhereHas('taxDocument', fn ($taxQuery) => $taxQuery->where('form_type', $formType));
+            });
+        }
+
+        if ($request->filled('genai_status')) {
+            $query->where('genai_status', (string) $request->input('genai_status'));
+        }
+
+        if ($request->filled('processing_status')) {
+            $status = (string) $request->input('processing_status');
+            match ($status) {
+                'needs_review' => $query->where('parsed_data_needs_review', true),
+                'reviewed' => $query->where('is_reviewed', true),
+                'unreviewed' => $query->where('is_reviewed', false),
+                default => $query->where('genai_status', $status),
+            };
+        }
+
+        if ($request->filled('is_reviewed')) {
+            $query->where('is_reviewed', $request->boolean('is_reviewed'));
+        }
+
+        if ($request->filled('missing_account') && $request->boolean('missing_account')) {
+            $query->whereHas('accounts', fn ($q) => $q->whereNull('account_id'));
+        }
+
+        if ($request->filled('has_tax_document')) {
+            if ($request->boolean('has_tax_document')) {
+                $query->whereHas('taxDocument');
+            } else {
+                $query->whereDoesntHave('taxDocument');
+            }
+        }
+
+        if ($request->filled('has_statement')) {
+            if ($request->boolean('has_statement')) {
+                $query->whereHas('statements');
+            } else {
+                $query->whereDoesntHave('statements');
+            }
+        }
+
+        if ($request->filled('has_lots')) {
+            if ($request->boolean('has_lots')) {
+                $query->whereHas('lots');
+            } else {
+                $query->whereDoesntHave('lots');
+            }
+        }
+
+        if ($request->filled('source_job_id')) {
+            $query->where('genai_job_id', (int) $request->input('source_job_id'));
+        }
+
+        match ((string) $request->input('sort', 'default')) {
+            'name_asc' => $query->reorder('original_filename'),
+            'kind_asc' => $query->reorder('document_kind')->orderByDesc('created_at'),
+            'tax_year_desc' => $query->reorder('tax_year', 'desc')->orderByDesc('created_at'),
+            'period_end_desc' => $query->reorder('period_end', 'desc')->orderByDesc('created_at'),
+            'created_desc' => $query->reorder()->orderByDesc('created_at')->orderByDesc('id'),
+            default => null,
+        };
+
+        $perPage = $request->integer('per_page', 50);
+
+        return FinDocumentResource::collection($query->paginate($perPage))->toResponse($request);
+    }
+
+    public function summary(): JsonResponse
+    {
+        $userId = (int) Auth::id();
+
+        $byKind = DB::table('fin_documents')
+            ->where('user_id', $userId)
+            ->select('document_kind', DB::raw('COUNT(*) as count'))
+            ->groupBy('document_kind')
+            ->pluck('count', 'document_kind');
+
+        $byYear = DB::table('fin_documents')
+            ->where('user_id', $userId)
+            ->whereNotNull('tax_year')
+            ->select('tax_year', DB::raw('COUNT(*) as count'))
+            ->groupBy('tax_year')
+            ->orderByDesc('tax_year')
+            ->pluck('count', 'tax_year');
+
+        $byStatus = DB::table('fin_documents')
+            ->where('user_id', $userId)
+            ->select('genai_status', DB::raw('COUNT(*) as count'))
+            ->groupBy('genai_status')
+            ->pluck('count', 'genai_status');
+
+        $missingAccountCount = DB::table('fin_document_accounts')
+            ->join('fin_documents', 'fin_documents.id', '=', 'fin_document_accounts.document_id')
+            ->where('fin_documents.user_id', $userId)
+            ->whereNull('fin_document_accounts.account_id')
+            ->count();
+
+        return response()->json([
+            'by_kind' => $byKind,
+            'by_year' => $byYear,
+            'by_status' => $byStatus,
+            'missing_account_count' => $missingAccountCount,
+            'total' => DB::table('fin_documents')->where('user_id', $userId)->count(),
+        ]);
+    }
+
+    public function show(int $id): JsonResponse
+    {
+        $document = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->with([
+                'accounts.account:acct_id,acct_name,acct_number',
+                'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
+                'statements:statement_id,document_id,acct_id,statement_closing_date,balance',
+                'lots',
+            ])
+            ->firstOrFail();
+
+        return response()->json((new FinDocumentDetailResource($document))->resolve(request()));
+    }
+
+    public function download(int $id): JsonResponse
+    {
+        $document = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
+
+        if ($document->document_kind === FinDocument::KIND_TAX_FORM && $document->taxDocument) {
+            return $this->downloadTaxDocument($document->taxDocument);
+        }
+
+        if (! $document->s3_path) {
+            return response()->json(['message' => 'No file associated with this document.'], 404);
+        }
+
+        $document->recordDownload();
+
+        $filename = $document->original_filename ?? 'document';
+        $mimeType = $document->mime_type ?? 'application/octet-stream';
+
+        $viewUrl = $this->fileStorageService->getSignedViewUrl($document->s3_path, $mimeType);
+        $downloadUrl = $this->fileStorageService->getSignedDownloadUrl($document->s3_path, $filename);
+
+        return response()->json([
+            'view_url' => $viewUrl,
+            'download_url' => $downloadUrl,
+            'filename' => $filename,
+        ]);
+    }
+
+    public function impactPreview(int $id): JsonResponse
+    {
+        $document = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
+
+        return response()->json($this->documentCapabilityService->computeImpactSummary($document));
+    }
+
+    public function destroy(int $id, Request $request): JsonResponse
+    {
+        $document = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
+
+        if ($document->document_kind === FinDocument::KIND_TAX_FORM) {
+            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use DELETE /api/finance/tax-documents/{id} instead.');
+        }
+
+        $request->validate([
+            'impact_hash' => 'required|string',
+        ]);
+
+        // Recompute impact to verify hash
+        $impact = $this->documentCapabilityService->computeImpactSummary($document);
+
+        if ($impact['impact_hash'] !== (string) $request->input('impact_hash')) {
+            return response()->json([
+                'message' => 'Impact hash mismatch. The document state has changed since the preview was generated.',
+            ], 409);
+        }
+
+        // Delete associated records, then the document
+        DB::transaction(function () use ($document) {
+            $transactions = $this->documentTransactions($document)->get(['t_id', 't_account']);
+            $this->transactionDeletionTombstoneService->record($transactions, (int) $document->user_id);
+
+            if ($transactions->isNotEmpty()) {
+                FinAccountLineItems::query()
+                    ->whereKey($transactions->pluck('t_id')->all())
+                    ->delete();
+            }
+
+            $document->lots()->delete();
+            $document->statements->each(function ($statement): void {
+                $statement->details()->delete();
+                $statement->delete();
+            });
+            $document->accounts()->delete();
+            if ($document->taxDocument) {
+                $document->taxDocument->delete();
+            }
+            if ($document->s3_path) {
+                $this->fileStorageService->deleteFile($document->s3_path);
+            }
+            $document->delete();
+        });
+
+        return response()->json(['message' => 'Document deleted successfully.']);
+    }
+
+    /**
+     * Imported ledger transactions linked to this document's statements.
+     *
+     * @return Builder<FinAccountLineItems>
+     */
+    private function documentTransactions(FinDocument $document): Builder
+    {
+        return FinAccountLineItems::query()
+            ->whereIn('statement_id', $document->statements()->select('statement_id'));
+    }
+
+    private function downloadTaxDocument(FileForTaxDocument $taxDocument): JsonResponse
+    {
+        if (! $taxDocument->s3_path) {
+            return response()->json(['message' => 'No file associated with this document.'], 404);
+        }
+
+        $taxDocument->recordDownload();
+
+        return response()->json([
+            'view_url' => $this->fileStorageService->getSignedViewUrl($taxDocument->s3_path, $taxDocument->mime_type),
+            'download_url' => $this->fileStorageService->getSignedDownloadUrl($taxDocument->s3_path, $taxDocument->original_filename),
+            'filename' => $taxDocument->original_filename,
+        ]);
     }
 
     public function requestUpload(Request $request): JsonResponse
@@ -80,63 +335,6 @@ class FinanceDocumentController extends Controller
             'upload_url' => $uploadUrl,
             's3_key' => $s3Path,
             'expires_in' => 900,
-        ]);
-    }
-
-    public function destroy(DeleteFinanceDocumentRequest $request, int $id): JsonResponse
-    {
-        $doc = FinDocument::query()
-            ->where('id', $id)
-            ->where('user_id', (int) Auth::id())
-            ->firstOrFail();
-
-        if ($doc->document_kind === FinDocument::KIND_TAX_FORM) {
-            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use DELETE /api/finance/tax-documents/{id} instead.');
-        }
-
-        $impact = $this->deleteImpact($doc);
-        $confirmationToken = $this->confirmationToken($doc, $impact);
-
-        if (! $request->boolean('confirm')) {
-            return response()->json([
-                'requires_confirmation' => true,
-                'confirmation_token' => $confirmationToken,
-                'document' => [
-                    'id' => (int) $doc->id,
-                    'document_kind' => $doc->document_kind,
-                    'original_filename' => $doc->original_filename,
-                    'file_hash' => $doc->file_hash,
-                ],
-                'impact' => $impact,
-            ]);
-        }
-
-        $submittedToken = $request->input('confirmation_token');
-        if (! is_string($submittedToken) || ! hash_equals($confirmationToken, $submittedToken)) {
-            return response()->json([
-                'message' => 'Document changed since delete preview. Refresh and preview the delete impact again.',
-            ], 409);
-        }
-
-        DB::transaction(function () use ($doc): void {
-            $transactions = $this->documentTransactions($doc)->get(['t_id', 't_account']);
-            $this->transactionDeletionTombstoneService->record($transactions, (int) $doc->user_id);
-
-            if ($transactions->isNotEmpty()) {
-                FinAccountLineItems::query()
-                    ->whereKey($transactions->pluck('t_id')->all())
-                    ->delete();
-            }
-
-            $doc->lots()->delete();
-            $doc->accounts()->delete();
-            $doc->statements()->delete();
-            $doc->delete();
-        });
-
-        return response()->json([
-            'success' => true,
-            'impact' => $impact,
         ]);
     }
 
@@ -183,56 +381,6 @@ class FinanceDocumentController extends Controller
             'document' => $result['document'],
             'accounts' => $result['accounts'],
         ], 201);
-    }
-
-    /**
-     * @return array{lots: int, account_links: int, statements: int, transactions: int}
-     */
-    private function deleteImpact(FinDocument $document): array
-    {
-        return [
-            'lots' => $document->lots()->count(),
-            'account_links' => $document->accounts()->count(),
-            'statements' => $document->statements()->count(),
-            'transactions' => $this->documentTransactions($document)->count(),
-        ];
-    }
-
-    /**
-     * Imported ledger transactions linked to this document's statements.
-     *
-     * The `fin_account_line_items.statement_id` FK is `ON DELETE SET NULL`, so
-     * deleting the statements alone would orphan these rows in the user's
-     * ledger. They are deleted explicitly as part of the document cascade.
-     *
-     * @return Builder<FinAccountLineItems>
-     */
-    private function documentTransactions(FinDocument $document): Builder
-    {
-        return FinAccountLineItems::query()
-            ->whereIn('statement_id', $document->statements()->select('statement_id'));
-    }
-
-    /**
-     * Confirmation token the client must echo back to confirm a hard delete.
-     *
-     * Bound to the document identity, its file hash, and the current impact
-     * counts so that a hashless inline import still requires a preview round
-     * trip, and any change to the file or cascaded rows between preview and
-     * confirm invalidates the token.
-     *
-     * @param  array{lots: int, account_links: int, statements: int, transactions: int}  $impact
-     */
-    private function confirmationToken(FinDocument $document, array $impact): string
-    {
-        $payload = json_encode([
-            'id' => (int) $document->id,
-            'user_id' => (int) $document->user_id,
-            'file_hash' => $document->file_hash,
-            'impact' => $impact,
-        ], JSON_THROW_ON_ERROR);
-
-        return hash_hmac('sha256', $payload, (string) config('app.key'));
     }
 
     /**

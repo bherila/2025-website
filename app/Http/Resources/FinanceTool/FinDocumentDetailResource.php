@@ -6,11 +6,12 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
+use App\Models\FinanceTool\FinStatement;
 use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class FinDocumentResource extends JsonResource
+class FinDocumentDetailResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -29,18 +30,23 @@ class FinDocumentResource extends JsonResource
             'period_start' => $this->dateString($document->period_start),
             'period_end' => $this->dateString($document->period_end),
             'original_filename' => $document->original_filename,
+            'stored_filename' => $document->stored_filename,
             'mime_type' => $document->mime_type,
             'file_size_bytes' => $document->file_size_bytes,
             'human_file_size' => $document->human_file_size,
+            'genai_job_id' => $document->genai_job_id,
             'genai_status' => $document->genai_status,
             'parsed_data_needs_review' => (bool) $document->parsed_data_needs_review,
             'parsed_data_warnings' => $document->parsed_data_warnings,
             'is_reviewed' => (bool) $document->is_reviewed,
+            'notes' => $document->notes,
             'download_count' => (int) $document->download_count,
             'created_at' => $this->dateString($document->created_at),
             'updated_at' => $this->dateString($document->updated_at),
             'accounts' => $this->accountLinks($document),
-            'tax_document' => $this->taxDocument($document),
+            'tax_document' => $this->taxDocumentFacet($document),
+            'statements' => $this->statementFacet($document),
+            'lot_summary' => $this->lotSummary($document),
             'capabilities' => $capabilityService->capabilities($document),
         ];
     }
@@ -94,7 +100,7 @@ class FinDocumentResource extends JsonResource
     /**
      * @return array<string, mixed>|null
      */
-    private function taxDocument(FinDocument $document): ?array
+    private function taxDocumentFacet(FinDocument $document): ?array
     {
         $taxDocument = $document->relationLoaded('taxDocument') ? $document->taxDocument : null;
 
@@ -109,6 +115,40 @@ class FinDocumentResource extends JsonResource
             'tax_year' => $taxDocument->tax_year,
             'is_reviewed' => (bool) $taxDocument->is_reviewed,
             'genai_status' => $taxDocument->genai_status,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function statementFacet(FinDocument $document): array
+    {
+        if (! $document->relationLoaded('statements')) {
+            return [];
+        }
+
+        return $document->statements
+            ->map(fn (FinStatement $stmt): array => [
+                'id' => (int) $stmt->statement_id,
+                'acct_id' => $stmt->acct_id,
+                'statement_closing_date' => $this->dateString($stmt->statement_closing_date),
+                'closing_balance' => $stmt->balance,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function lotSummary(FinDocument $document): array
+    {
+        if (! $document->relationLoaded('lots')) {
+            return ['count' => 0];
+        }
+
+        return [
+            'count' => $document->lots->count(),
         ];
     }
 
