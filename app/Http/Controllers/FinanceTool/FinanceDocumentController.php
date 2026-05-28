@@ -10,6 +10,7 @@ use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
 use App\Http\Resources\FinanceTool\FinDocumentDetailResource;
 use App\Http\Resources\FinanceTool\FinDocumentResource;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinEmploymentEntity;
@@ -17,7 +18,9 @@ use App\Services\FileStorageService;
 use App\Services\Finance\DocumentCapabilityService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +34,7 @@ class FinanceDocumentController extends Controller
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
         private readonly DocumentCapabilityService $documentCapabilityService,
+        private readonly TransactionDeletionTombstoneService $transactionDeletionTombstoneService,
     ) {}
 
     public function index(IndexDocumentsRequest $request): JsonResponse
@@ -260,10 +264,18 @@ class FinanceDocumentController extends Controller
 
         // Delete associated records, then the document
         DB::transaction(function () use ($document) {
+            $transactions = $this->documentTransactions($document)->get(['t_id', 't_account']);
+            $this->transactionDeletionTombstoneService->record($transactions, (int) $document->user_id);
+
+            if ($transactions->isNotEmpty()) {
+                FinAccountLineItems::query()
+                    ->whereKey($transactions->pluck('t_id')->all())
+                    ->delete();
+            }
+
             $document->lots()->delete();
             $document->statements->each(function ($statement): void {
                 $statement->details()->delete();
-                $statement->transactions()->delete();
                 $statement->delete();
             });
             $document->accounts()->delete();
@@ -277,6 +289,17 @@ class FinanceDocumentController extends Controller
         });
 
         return response()->json(['message' => 'Document deleted successfully.']);
+    }
+
+    /**
+     * Imported ledger transactions linked to this document's statements.
+     *
+     * @return Builder<FinAccountLineItems>
+     */
+    private function documentTransactions(FinDocument $document): Builder
+    {
+        return FinAccountLineItems::query()
+            ->whereIn('statement_id', $document->statements()->select('statement_id'));
     }
 
     private function downloadTaxDocument(FileForTaxDocument $taxDocument): JsonResponse

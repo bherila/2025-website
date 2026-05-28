@@ -54,13 +54,25 @@ export default function DocumentImpactPreview({ document, onConfirmDelete, onCan
 
   const { summary } = preview
   const statementDetails = summary.statement_details ?? 0
+  const statementCashReports = summary.statement_cash_reports ?? 0
+  const statementNav = summary.statement_nav ?? 0
+  const statementPerformance = summary.statement_performance ?? 0
+  const statementPositions = summary.statement_positions ?? 0
+  const statementSecuritiesLent = summary.statement_securities_lent ?? 0
   const transactions = summary.transactions ?? 0
+  const form1116Overrides = summary.form1116_overrides ?? 0
   const hasImpact = summary.account_links > 0
     || summary.statements > 0
     || statementDetails > 0
+    || statementCashReports > 0
+    || statementNav > 0
+    || statementPerformance > 0
+    || statementPositions > 0
+    || statementSecuritiesLent > 0
     || transactions > 0
     || summary.lots > 0
     || summary.has_tax_document
+    || form1116Overrides > 0
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -93,6 +105,31 @@ export default function DocumentImpactPreview({ document, onConfirmDelete, onCan
                 {statementDetails} statement detail{statementDetails > 1 ? 's' : ''}
               </li>
             )}
+            {statementCashReports > 0 && (
+              <li>
+                {statementCashReports} statement cash report{statementCashReports > 1 ? 's' : ''}
+              </li>
+            )}
+            {statementNav > 0 && (
+              <li>
+                {statementNav} statement NAV row{statementNav > 1 ? 's' : ''}
+              </li>
+            )}
+            {statementPerformance > 0 && (
+              <li>
+                {statementPerformance} statement performance row{statementPerformance > 1 ? 's' : ''}
+              </li>
+            )}
+            {statementPositions > 0 && (
+              <li>
+                {statementPositions} statement position{statementPositions > 1 ? 's' : ''}
+              </li>
+            )}
+            {statementSecuritiesLent > 0 && (
+              <li>
+                {statementSecuritiesLent} securities-lent row{statementSecuritiesLent > 1 ? 's' : ''}
+              </li>
+            )}
             {transactions > 0 && (
               <li>
                 {transactions} transaction{transactions > 1 ? 's' : ''}
@@ -104,6 +141,11 @@ export default function DocumentImpactPreview({ document, onConfirmDelete, onCan
               </li>
             )}
             {summary.has_tax_document && <li>1 tax document record</li>}
+            {form1116Overrides > 0 && (
+              <li>
+                {form1116Overrides} Form 1116 override{form1116Overrides > 1 ? 's' : ''}
+              </li>
+            )}
           </ul>
         </div>
       )}

@@ -100,7 +100,10 @@ class DocumentIngestionServiceTest extends TestCase
                 'acct_id' => $accountId,
                 'statementInfo' => ['periodEnd' => '2025-02-01'],
                 'statementDetails' => [],
-                'transactions' => [],
+                'transactions' => [
+                    ['t_date' => '2025-03-10', 't_amt' => 250.00, 't_description' => 'Dividend'],
+                    ['t_date' => '2025-03-15', 't_amt' => -75.50, 't_description' => 'Fee'],
+                ],
                 'lots' => [[
                     'symbol' => 'MSFT',
                     'quantity' => 3,
@@ -531,9 +534,15 @@ class DocumentIngestionServiceTest extends TestCase
 
         $response->assertCreated();
         $documentId = (int) $response->json('document.id');
+        $statementId = (int) $response->json('accounts.0.statement_id');
+        $transactionIds = DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->pluck('t_id')
+            ->all();
 
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseHas('fin_account_lots', ['document_id' => $documentId]);
+        $this->assertCount(2, $transactionIds);
 
         $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$documentId}/impact-preview");
         $previewResponse->assertOk()
@@ -542,6 +551,7 @@ class DocumentIngestionServiceTest extends TestCase
             ->assertJsonPath('summary.lots', 1)
             ->assertJsonPath('summary.account_links', 1)
             ->assertJsonPath('summary.statements', 1)
+            ->assertJsonPath('summary.transactions', 2)
             ->assertJsonStructure(['summary', 'impact_hash']);
 
         $impactHash = (string) $previewResponse->json('impact_hash');
@@ -562,6 +572,15 @@ class DocumentIngestionServiceTest extends TestCase
         $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseMissing('fin_account_lots', ['document_id' => $documentId]);
         $this->assertDatabaseMissing('fin_document_accounts', ['document_id' => $documentId]);
+        $this->assertSame(0, DB::table('fin_account_line_items')->where('statement_id', $statementId)->count());
+
+        foreach ($transactionIds as $transactionId) {
+            $this->assertDatabaseHas('fin_account_line_item_deletions', [
+                't_id' => $transactionId,
+                't_account' => $accountId,
+                'user_id' => $user->id,
+            ]);
+        }
     }
 
     public function test_document_delete_is_scoped_to_owner_and_rejects_tax_form_documents(): void

@@ -29,7 +29,7 @@ class DocumentCapabilityServiceTest extends TestCase
 
         $this->assertContains('view_original', $caps);
         $this->assertContains('download_original', $caps);
-        $this->assertContains('delete', $caps);
+        $this->assertNotContains('delete', $caps);
         $this->assertContains('open_tax_document', $caps);
         $this->assertContains('open_tax_reconciliation', $caps);
         $this->assertNotContains('reprocess', $caps);
@@ -50,7 +50,7 @@ class DocumentCapabilityServiceTest extends TestCase
 
         $this->assertNotContains('view_original', $caps);
         $this->assertNotContains('download_original', $caps);
-        $this->assertContains('delete', $caps);
+        $this->assertNotContains('delete', $caps);
     }
 
     public function test_tax_form_pending_genai_has_reprocess(): void

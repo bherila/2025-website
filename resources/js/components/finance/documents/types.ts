@@ -95,9 +95,15 @@ export interface DocumentImpactPreviewData {
     account_links: number
     statements: number
     statement_details: number
+    statement_cash_reports: number
+    statement_nav: number
+    statement_performance: number
+    statement_positions: number
+    statement_securities_lent: number
     transactions: number
     lots: number
     has_tax_document: boolean
+    form1116_overrides: number
   }
   impact_hash: string
 }

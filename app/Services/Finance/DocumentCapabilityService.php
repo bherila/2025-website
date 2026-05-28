@@ -37,8 +37,6 @@ class DocumentCapabilityService
             $caps[] = 'download_original';
         }
 
-        $caps[] = 'delete';
-
         if ($document->genai_status && $document->genai_status !== 'completed') {
             $caps[] = 'reprocess';
         }
@@ -257,7 +255,10 @@ class DocumentCapabilityService
 
         return [
             'summary' => $summary,
-            'impact_hash' => hash('sha256', json_encode($summary)),
+            'impact_hash' => hash_hmac('sha256', json_encode([
+                'file_hash' => $document->file_hash,
+                'summary' => $summary,
+            ], JSON_THROW_ON_ERROR), (string) config('app.key')),
         ];
     }
 }
