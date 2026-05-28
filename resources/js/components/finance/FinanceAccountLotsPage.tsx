@@ -38,8 +38,28 @@ const DEFAULT_FILTERS: LotFilterValues = {
 
 const LOTS_PER_PAGE = 200
 
+function getUrlParam(key: string): string | null {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get(key)
+}
+
+function getInitialFilters(sourceDocumentId: string | null): LotFilterValues {
+    const status = getUrlParam('status')
+
+    if (status === 'all' || status === 'open' || status === 'closed') {
+        return { ...DEFAULT_FILTERS, status }
+    }
+
+    if (sourceDocumentId) {
+        return { ...DEFAULT_FILTERS, status: 'all' }
+    }
+
+    return DEFAULT_FILTERS
+}
+
 export default function FinanceAccountLotsPage({ id }: { id: number }) {
-    const [filters, setFilters] = useState<LotFilterValues>(DEFAULT_FILTERS)
+    const sourceDocumentId = getUrlParam('source_document_id')
+    const [filters, setFilters] = useState<LotFilterValues>(() => getInitialFilters(sourceDocumentId))
     const [selectedYear, setSelectedYear] = useState<string>('')
     const [data, setData] = useState<LotWorkspaceResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -80,6 +100,9 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
             if (filters.dateTo) {
                 params.set('date_to', filters.dateTo)
             }
+            if (sourceDocumentId) {
+                params.set('document_id', sourceDocumentId)
+            }
 
             const response = await fetchWrapper.get(`/api/finance/lot-workspace?${params.toString()}`) as LotWorkspaceResponse
             setData(response)
@@ -115,7 +138,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         } finally {
             setIsLoading(false)
         }
-    }, [id, filters, selectedYear, page])
+    }, [id, filters, selectedYear, page, sourceDocumentId])
 
     useEffect(() => {
         void fetchLots()
@@ -149,7 +172,10 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
         if (!showLotAnalyzer && transactions.length === 0) {
             setLoadingTransactions(true)
             try {
-                const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items`)
+                const query = sourceDocumentId
+                    ? `?${new URLSearchParams({ source_document_id: sourceDocumentId }).toString()}`
+                    : ''
+                const fetchedData = await fetchWrapper.get(`/api/finance/${id}/line_items${query}`)
                 const parsedData = z.array(AccountLineItemSchema).parse(fetchedData)
                 setTransactions(parsedData.filter(Boolean))
             } catch (error) {

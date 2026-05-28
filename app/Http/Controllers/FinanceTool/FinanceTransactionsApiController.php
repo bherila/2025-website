@@ -8,6 +8,7 @@ use App\Http\Controllers\FinanceTool\Concerns\QueriesUserAccounts;
 use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatement;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TransactionDeletionTombstoneService;
@@ -34,6 +35,10 @@ class FinanceTransactionsApiController extends Controller
      */
     public function getLineItems(Request $request, int|string|null $account_id = null): StreamedResponse
     {
+        $request->validate([
+            'source_document_id' => 'sometimes|integer|min:1',
+        ]);
+
         if ($account_id && $account_id !== 'all') {
             $account = $this->resolveOwnedAccount($account_id);
             $query = FinAccountLineItems::where('t_account', $account->acct_id);
@@ -43,6 +48,10 @@ class FinanceTransactionsApiController extends Controller
 
         $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
+
+        if ($request->filled('source_document_id')) {
+            $this->applySourceDocumentFilter($query, (int) $request->query('source_document_id'));
+        }
 
         if ($request->has('start_date') && $request->has('end_date')) {
             $query->whereBetween('t_date', [$request->start_date, $request->end_date]);
@@ -140,6 +149,21 @@ class FinanceTransactionsApiController extends Controller
         ]);
 
         return CarbonImmutable::parse((string) $request->query('since'));
+    }
+
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     */
+    private function applySourceDocumentFilter(Builder $query, int $sourceDocumentId): void
+    {
+        FinDocument::query()
+            ->where('id', $sourceDocumentId)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
+
+        $query->whereHas('statement', function (Builder $statementQuery) use ($sourceDocumentId): void {
+            $statementQuery->where('document_id', $sourceDocumentId);
+        });
     }
 
     /**

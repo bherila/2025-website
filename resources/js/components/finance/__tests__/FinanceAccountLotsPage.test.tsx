@@ -155,6 +155,7 @@ function mkResponse(overrides: Partial<LotWorkspaceResponse> = {}): LotWorkspace
 
 beforeEach(() => {
   mockGet.mockReset()
+  window.history.replaceState({}, '', '/finance/account/7/lots')
 })
 
 describe('FinanceAccountLotsPage', () => {
@@ -262,6 +263,31 @@ describe('FinanceAccountLotsPage', () => {
 
     const card = await screen.findByTestId('lot-summary-cards')
     expect(card.getAttribute('data-show-term-breakdown')).toBe('false')
+  })
+
+  it('passes source document deep links through to the lot workspace API', async () => {
+    window.history.replaceState({}, '', '/finance/account/7/lots?source_document_id=42')
+    mockGet.mockResolvedValueOnce(mkResponse({ data: [mkLot({ document_id: 42 })] }))
+
+    render(<FinanceAccountLotsPage id={7} />)
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalled())
+    const request = new URL(mockGet.mock.calls[0]?.[0], 'https://example.test')
+    expect(request.searchParams.get('account_ids')).toBe('7')
+    expect(request.searchParams.get('document_id')).toBe('42')
+    expect(request.searchParams.get('status')).toBe('all')
+  })
+
+  it('honors explicit lot status from document deep links', async () => {
+    window.history.replaceState({}, '', '/finance/account/7/lots?source_document_id=42&status=closed')
+    mockGet.mockResolvedValueOnce(mkResponse({ data: [mkLot({ document_id: 42 })] }))
+
+    render(<FinanceAccountLotsPage id={7} />)
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalled())
+    const request = new URL(mockGet.mock.calls[0]?.[0], 'https://example.test')
+    expect(request.searchParams.get('document_id')).toBe('42')
+    expect(request.searchParams.get('status')).toBe('closed')
   })
 
   it('requests the selected lot page when pagination controls are used', async () => {

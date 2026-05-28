@@ -10,6 +10,7 @@ use App\Http\Requests\Finance\TaxLotReconciliationRequest;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TaxLotReconciliationService;
 use Illuminate\Http\JsonResponse;
@@ -103,9 +104,19 @@ class FinanceLotsController extends Controller
     {
         $account = $this->resolveOwnedAccount($account_id);
 
+        $request->validate([
+            'source_document_id' => 'sometimes|integer|min:1',
+        ]);
+
         $query = FinAccountLot::where('acct_id', $account->acct_id);
         if (! $request->boolean('include_superseded')) {
             $query->whereNull('superseded_by_lot_id');
+        }
+
+        if ($request->filled('source_document_id')) {
+            $sourceDocumentId = (int) $request->query('source_document_id');
+            $this->ensureOwnedSourceDocument($sourceDocumentId);
+            $query->where('document_id', $sourceDocumentId);
         }
 
         $status = $request->query('status', 'open');
@@ -304,6 +315,14 @@ class FinanceLotsController extends Controller
         }
 
         return substr($digits, -4);
+    }
+
+    private function ensureOwnedSourceDocument(int $documentId): void
+    {
+        FinDocument::query()
+            ->where('id', $documentId)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
     }
 
     /**
