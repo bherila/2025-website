@@ -1,5 +1,6 @@
 import { FileText } from 'lucide-react'
 
+import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
 import { Badge } from '@/components/ui/badge'
 
 import DocumentEmptyState from './DocumentEmptyState'
@@ -14,6 +15,7 @@ interface DocumentsTableProps {
   onView: ((doc: FinanceDocument) => void) | undefined
   onDownload: ((doc: FinanceDocument) => void) | undefined
   onDelete: ((doc: FinanceDocument) => void) | undefined
+  onAccountResolved?: (() => void) | undefined
 }
 
 export default function DocumentsTable({
@@ -23,6 +25,7 @@ export default function DocumentsTable({
   onView,
   onDownload,
   onDelete,
+  onAccountResolved,
 }: DocumentsTableProps) {
   const rows = documents ?? []
 
@@ -52,6 +55,7 @@ export default function DocumentsTable({
             onView={onView}
             onDownload={onDownload}
             onDelete={onDelete}
+            onAccountResolved={onAccountResolved}
           />
         ))}
       </div>
@@ -65,12 +69,15 @@ interface DocumentRowProps {
   onView: ((doc: FinanceDocument) => void) | undefined
   onDownload: ((doc: FinanceDocument) => void) | undefined
   onDelete: ((doc: FinanceDocument) => void) | undefined
+  onAccountResolved?: (() => void) | undefined
 }
 
-function DocumentRow({ document, onClick, onView, onDownload, onDelete }: DocumentRowProps) {
+function DocumentRow({ document, onClick, onView, onDownload, onDelete, onAccountResolved }: DocumentRowProps) {
   const accountLabels = (document.accounts ?? [])
     .map((link) => link.account?.acct_name ?? link.account_section_label)
     .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+  const missingAccountLinks = (document.accounts ?? []).filter((link) => link.account_id === null)
+  const taxDocumentId = document.tax_document?.id ?? null
 
   return (
     <div
@@ -105,9 +112,26 @@ function DocumentRow({ document, onClick, onView, onDownload, onDelete }: Docume
         <Badge variant="secondary">{KIND_LABELS[document.document_kind] ?? document.document_kind}</Badge>
       </div>
 
-      <div className="min-w-0 text-sm text-muted-foreground">
-        {accountLabels.length > 0 ? accountLabels.slice(0, 2).join(', ') : 'Unassigned'}
-        {accountLabels.length > 2 && ` +${accountLabels.length - 2}`}
+      <div className="min-w-0 text-sm text-muted-foreground" onClick={(event) => event.stopPropagation()}>
+        {missingAccountLinks.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span>Missing account</span>
+            {missingAccountLinks.slice(0, 2).map((link) => (
+              <MissingAccountResolver
+                key={link.id}
+                link={link}
+                taxDocumentId={taxDocumentId}
+                onResolved={onAccountResolved}
+              />
+            ))}
+            {missingAccountLinks.length > 2 && <span className="text-xs">+{missingAccountLinks.length - 2}</span>}
+          </div>
+        ) : (
+          <>
+            {accountLabels.length > 0 ? accountLabels.slice(0, 2).join(', ') : 'Unassigned'}
+            {accountLabels.length > 2 && ` +${accountLabels.length - 2}`}
+          </>
+        )}
       </div>
 
       <div className="text-sm text-muted-foreground">

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { accountSuggestionLinkSchema } from './account-suggestion'
+
 export const lotReconciliationLinkStateSchema = z.enum([
   'auto_matched',
   'needs_review',
@@ -76,11 +78,13 @@ export const lotReconciliationLinkSchema = z.object({
 export const lotReconciliationLinksResponseSchema = z.object({
   document: z.object({
     id: z.number(),
+    document_id: z.number().nullable(),
     broker: z.string().nullable(),
     tax_year: z.number(),
     form_type: z.string(),
     original_filename: z.string().nullable(),
     last_matched_at: z.string().nullable(),
+    account_links: z.array(accountSuggestionLinkSchema),
   }),
   summary: z.object({
     total: z.number(),

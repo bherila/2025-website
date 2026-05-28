@@ -221,6 +221,7 @@ export default function FinanceDocumentsPage() {
           setSelectedDoc(doc)
           setUrlParam('doc', String(doc.id))
         }}
+        onAccountResolved={() => void loadDocuments()}
       />
 
       {/* Pagination */}
@@ -260,6 +261,7 @@ export default function FinanceDocumentsPage() {
         <DocumentDetailDrawer
           document={selectedDoc}
           onClose={handleDrawerClose}
+          onAccountResolved={() => void loadDocuments()}
           onDeleted={() => {
             handleDrawerClose()
             void loadDocuments()

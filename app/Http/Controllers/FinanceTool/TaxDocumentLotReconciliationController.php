@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotReconciliationService;
 use Illuminate\Http\JsonResponse;
@@ -46,11 +47,22 @@ class TaxDocumentLotReconciliationController extends Controller
         return response()->json([
             'document' => [
                 'id' => (int) $taxDocument->id,
+                'document_id' => $taxDocument->document_id !== null ? (int) $taxDocument->document_id : null,
                 'broker' => $this->documentBrokerName($taxDocument),
                 'tax_year' => (int) $taxDocument->tax_year,
                 'form_type' => (string) $taxDocument->form_type,
                 'original_filename' => $taxDocument->original_filename,
                 'last_matched_at' => $this->lotMatcherService->lastMatchedAtForDocument((int) $taxDocument->document_id),
+                'account_links' => $taxDocument->accountLinks
+                    ->map(function ($link): array {
+                        if (! $link instanceof TaxDocumentAccount) {
+                            return [];
+                        }
+
+                        return $this->accountLinkPayload($link);
+                    })
+                    ->filter(static fn (array $payload): bool => $payload !== [])
+                    ->values(),
             ],
             'summary' => [
                 'total' => $links->count(),
@@ -92,6 +104,31 @@ class TaxDocumentLotReconciliationController extends Controller
         }
 
         return $counts;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function accountLinkPayload(TaxDocumentAccount $link): array
+    {
+        $account = $link->relationLoaded('account') ? $link->account : null;
+
+        return [
+            'id' => (int) $link->id,
+            'document_id' => (int) $link->document_id,
+            'account_id' => $link->account_id !== null ? (int) $link->account_id : null,
+            'form_type' => $link->form_type,
+            'tax_year' => $link->tax_year,
+            'account_section_label' => $link->account_section_label,
+            'ai_identifier' => $link->ai_identifier,
+            'ai_account_name' => $link->ai_account_name,
+            'is_reviewed' => (bool) $link->is_reviewed,
+            'account' => $account instanceof FinAccounts ? [
+                'acct_id' => (int) $account->acct_id,
+                'acct_name' => (string) $account->acct_name,
+                'acct_number' => $account->acct_number,
+            ] : null,
+        ];
     }
 
     /**

@@ -23,6 +23,7 @@ use App\Http\Controllers\Finance\ReadinessSummaryController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
+use App\Http\Controllers\FinanceTool\AccountSuggestController;
 use App\Http\Controllers\FinanceTool\CapitalGainsReconciliationController;
 use App\Http\Controllers\FinanceTool\EmploymentEntityYearController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
@@ -45,6 +46,7 @@ use App\Http\Controllers\FinanceTool\LotReconciliationLinkController;
 use App\Http\Controllers\FinanceTool\LotWorkspaceController;
 use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
+use App\Http\Controllers\FinanceTool\TaxDocumentAccountBulkUpdateController;
 use App\Http\Controllers\FinanceTool\TaxDocumentController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotsMatchController;
@@ -91,6 +93,7 @@ Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRender
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
+Route::middleware(['web', 'auth'])->get('/finance/accounts/suggest', [AccountSuggestController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceApiController::class, 'updateBalance']);
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
@@ -562,6 +565,7 @@ Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/convert-br
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/repair-format', [TaxDocumentController::class, 'repairBrokerFormat']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/reprocess', [TaxDocumentController::class, 'reprocessBrokerDocument']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
+Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts/bulk-update', [TaxDocumentAccountBulkUpdateController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
 Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);
 
