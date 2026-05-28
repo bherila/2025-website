@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinDocumentAccount;
 use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class FinanceDocumentControllerTest extends TestCase
@@ -228,7 +229,7 @@ class FinanceDocumentControllerTest extends TestCase
     public function test_destroy_with_valid_hash_deletes_document(): void
     {
         $user = $this->createUser();
-        $doc = $this->makeDocument($user->id);
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
 
         // Get impact preview
         $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}/impact-preview");
@@ -246,7 +247,7 @@ class FinanceDocumentControllerTest extends TestCase
     public function test_destroy_with_invalid_hash_returns_409(): void
     {
         $user = $this->createUser();
-        $doc = $this->makeDocument($user->id);
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
 
         $response = $this->actingAs($user)->deleteJson("/api/finance/documents/{$doc->id}", [
             'impact_hash' => 'invalid-hash-value',
@@ -259,7 +260,7 @@ class FinanceDocumentControllerTest extends TestCase
     public function test_destroy_requires_impact_hash(): void
     {
         $user = $this->createUser();
-        $doc = $this->makeDocument($user->id);
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
 
         $response = $this->actingAs($user)->deleteJson("/api/finance/documents/{$doc->id}", []);
 
@@ -401,5 +402,161 @@ class FinanceDocumentControllerTest extends TestCase
         // Without eager-loading lots, this would be baseline + N (3 extra).
         // With 'lots:id,document_id' in with(), total should be ≤ 10.
         $this->assertLessThan(15, $queryCount, "Expected < 15 queries, got {$queryCount}");
+    }
+
+    // ─── Comment 2: created_desc sort ────────────────────────────────────────
+
+    /**
+     * When sort=created_desc, the most recently created document must be first
+     * regardless of its tax_year or period_end values.
+     */
+    public function test_index_sort_created_desc_orders_by_created_at_not_tax_year(): void
+    {
+        $user = $this->createUser();
+
+        // Create a document with a newer tax year but explicitly older created_at
+        $older = $this->makeDocument($user->id, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'tax_year' => 2025,
+            'created_at' => now()->subHours(2),
+        ]);
+
+        // Create a document with an older tax year but explicitly newer created_at
+        $recent = $this->makeDocument($user->id, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'tax_year' => 2020,
+            'created_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/documents?sort=created_desc');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->values();
+        $this->assertSame($recent->id, $ids[0], 'Most recently created document should appear first');
+        $this->assertSame($older->id, $ids[1]);
+    }
+
+    // ─── Comment 1: form1116_overrides in impact hash ─────────────────────────
+
+    /**
+     * Adding a Form 1116 override row between preview and delete must invalidate
+     * the impact_hash and cause destroy() to return 409.
+     */
+    public function test_adding_form1116_override_between_preview_and_delete_invalidates_hash(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
+
+        // Capture the preview hash before adding the override
+        $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}/impact-preview");
+        $previewResponse->assertOk();
+        $hash = $previewResponse->json('impact_hash');
+
+        // Add a Form 1116 override row for this document
+        DB::table('fin_tax_document_form1116_overrides')->insert([
+            'user_id' => $user->id,
+            'document_id' => $doc->id,
+            'payer_tin' => '12-3456789',
+            'account_identifier' => 'ACC001',
+            'gross_foreign_source_income' => 500.00,
+            'override_reason' => 'Test override',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // The stale hash should now be rejected
+        $response = $this->actingAs($user)->deleteJson("/api/finance/documents/{$doc->id}", [
+            'impact_hash' => $hash,
+        ]);
+
+        $response->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $doc->id]);
+    }
+
+    /**
+     * The impact summary must include the form1116_overrides count.
+     */
+    public function test_impact_summary_includes_form1116_overrides_count(): void
+    {
+        $user = $this->createUser();
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
+
+        DB::table('fin_tax_document_form1116_overrides')->insert([
+            'user_id' => $user->id,
+            'document_id' => $doc->id,
+            'payer_tin' => '12-3456789',
+            'account_identifier' => 'ACC001',
+            'gross_foreign_source_income' => 500.00,
+            'override_reason' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}/impact-preview");
+        $response->assertOk();
+        $this->assertSame(1, $response->json('summary.form1116_overrides'));
+    }
+
+    // ─── Comment 3: statement cascade tables in impact hash ───────────────────
+
+    /**
+     * Adding a row in any statement-cascade table between preview and delete must
+     * invalidate the impact_hash → 409.
+     */
+    #[DataProvider('statementCascadeTableProvider')]
+    public function test_adding_statement_cascade_row_invalidates_hash(string $table, array $extraColumns): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $doc->id,
+            'acct_id' => $account->acct_id,
+            'balance' => '0',
+        ]);
+
+        // Get preview hash before adding child row
+        $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}/impact-preview");
+        $previewResponse->assertOk();
+        $hash = $previewResponse->json('impact_hash');
+
+        // Add a row to the cascade table
+        DB::table($table)->insert(array_merge(['statement_id' => $statementId], $extraColumns));
+
+        // The stale hash must now be rejected
+        $response = $this->actingAs($user)->deleteJson("/api/finance/documents/{$doc->id}", [
+            'impact_hash' => $hash,
+        ]);
+
+        $response->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $doc->id]);
+    }
+
+    /** @return array<string, array{string, array<string, mixed>}> */
+    public static function statementCascadeTableProvider(): array
+    {
+        return [
+            'cash_report' => [
+                'fin_statement_cash_report',
+                ['currency' => 'USD', 'line_item' => 'Cash', 'total' => 1000.00],
+            ],
+            'nav' => [
+                'fin_statement_nav',
+                ['asset_class' => 'Equity', 'current_total' => 50000.00],
+            ],
+            'performance' => [
+                'fin_statement_performance',
+                ['perf_type' => 'Total', 'symbol' => 'AAPL'],
+            ],
+            'positions' => [
+                'fin_statement_positions',
+                ['symbol' => 'AAPL', 'quantity' => 10.0, 'market_value' => 1500.00],
+            ],
+            'securities_lent' => [
+                'fin_statement_securities_lent',
+                ['symbol' => 'MSFT', 'quantity' => 5.0],
+            ],
+        ];
     }
 }
