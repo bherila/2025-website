@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property int|null $document_id
  * @property string|null $reconciliation_status Latest fin_lot_reconciliation_links.state cache for this lot when reconciliation links exist.
+ * @property string|null $source Canonical source discriminator (broker_1099b, account_derived, manual, synthetic_adjustment).
+ * @property string|null $lot_source Legacy source discriminator; scheduled for retirement after Form 8949 reads $source.
  */
 class FinAccountLot extends Model
 {
