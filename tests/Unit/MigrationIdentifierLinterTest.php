@@ -313,4 +313,67 @@ class MigrationIdentifierLinterTest extends TestCase
             "Violations:\n  ".implode("\n  ", $violations),
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Failure-path tests: verify the linter actually CATCHES violations.
+    // -------------------------------------------------------------------------
+
+    /**
+     * A migration with ->index('col') and no explicit name argument must be
+     * reported as a violation.
+     */
+    public function test_linter_catches_index_without_explicit_name(): void
+    {
+        $source = <<<'PHP'
+            $table->index('user_id');
+            PHP;
+
+        $violations = $this->findUnnamedCalls($source, [], 'fixture_no_name.php');
+
+        $this->assertNotEmpty(
+            $violations,
+            'Expected a violation for ->index() with no explicit name, but none was reported.',
+        );
+        $this->assertStringContainsString('->index(', $violations[0]);
+    }
+
+    /**
+     * A migration with ->foreignId('col')->constrained() and no indexName:
+     * argument must be reported as a violation.
+     */
+    public function test_linter_catches_constrained_without_index_name(): void
+    {
+        $source = <<<'PHP'
+            $table->foreignId('account_id')->constrained('fin_accounts');
+            PHP;
+
+        $violations = $this->findUnnamedCalls($source, [], 'fixture_constrained.php');
+
+        $this->assertNotEmpty(
+            $violations,
+            'Expected a violation for ->constrained() with no indexName, but none was reported.',
+        );
+        $this->assertStringContainsString("->foreignId('account_id')->constrained", $violations[0]);
+    }
+
+    /**
+     * An explicit index name that exceeds 64 characters must be reported as a
+     * length violation.
+     */
+    public function test_linter_catches_identifier_exceeding_64_chars(): void
+    {
+        // 65-character name — one over the limit.
+        $longName = 'this_is_a_really_long_explicit_name_that_clearly_exceeds_sixtyfour_chars_idx';
+        $this->assertGreaterThan(self::MAX_IDENTIFIER_LENGTH, strlen($longName));
+
+        $source = "\$table->index(['col1', 'col2'], '{$longName}');";
+
+        $violations = $this->findTooLongIdentifiers($source, [], 'fixture_long_name.php');
+
+        $this->assertNotEmpty(
+            $violations,
+            'Expected a violation for an identifier exceeding 64 chars, but none was reported.',
+        );
+        $this->assertStringContainsString($longName, $violations[0]);
+    }
 }
