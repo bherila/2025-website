@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotReconciliationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -100,22 +101,22 @@ class ReadinessSummaryService
             ->count();
     }
 
-    /**
-     * Count 1099-B documents that either have no account links at all,
-     * or have account links where account_id is null (unresolved links).
-     */
     private function missingAccountCount(int $userId, int $year): int
     {
-        return FileForTaxDocument::where('user_id', $userId)
+        $documentsWithoutLinks = FileForTaxDocument::where('user_id', $userId)
             ->where('tax_year', $year)
             ->whereIn('form_type', ['1099_b', 'broker_1099'])
-            ->where(function (Builder $query): void {
-                $query->whereDoesntHave('accountLinks')
-                    ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
-                        $linkQuery->whereNull('account_id');
-                    });
-            })
+            ->whereDoesntHave('accountLinks')
             ->count();
+
+        $unresolvedAccountLinks = TaxDocumentAccount::query()
+            ->whereNull('account_id')
+            ->where('tax_year', $year)
+            ->whereIn('form_type', [FileForTaxDocument::FORM_TYPE_1099_B, 'broker_1099'])
+            ->whereHas('document', fn (Builder $query): Builder => $query->where('user_id', $userId))
+            ->count();
+
+        return $documentsWithoutLinks + $unresolvedAccountLinks;
     }
 
     /**
