@@ -36,17 +36,30 @@ function mkLot(overrides: Partial<Form8949Lot> = {}): Form8949Lot {
     realized_gain_loss: 2000,
     is_short_term: 0,
     lot_source: '1099b',
+    // Default to covered to avoid the dev-only is_covered=null warning;
+    // tests that exercise the null/non-covered code paths pass it explicitly.
+    is_covered: true,
     ...overrides,
   }
 }
 
 describe('classifyBox', () => {
-  it('routes 1099b-sourced short-term lots to box A', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b' }))).toBe('A')
+  let warnSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('routes 1099b-sourced long-term lots to box D', () => {
-    expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b' }))).toBe('D')
+  afterEach(() => {
+    warnSpy.mockRestore()
+  })
+
+  it('routes 1099b-sourced short-term lots to box A (covered defaulted)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, lot_source: '1099b', is_covered: true }))).toBe('A')
+  })
+
+  it('routes 1099b-sourced long-term lots to box D (covered defaulted)', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, lot_source: '1099b', is_covered: true }))).toBe('D')
   })
 
   it('routes broker-statement short-term lots to box B', () => {
@@ -67,16 +80,41 @@ describe('classifyBox', () => {
   })
 
   // Tests for canonical `source` field
-  it('routes canonical broker_1099b source short-term to box A', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null }))).toBe('A')
+  it('routes canonical broker_1099b source short-term + covered to box A', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: true }))).toBe('A')
   })
 
-  it('routes canonical broker_1099b source long-term to box D', () => {
-    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null }))).toBe('D')
+  it('routes canonical broker_1099b source long-term + covered to box D', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: true }))).toBe('D')
+  })
+
+  it('routes canonical broker_1099b source short-term + non-covered to box B', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: false }))).toBe('B')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('routes canonical broker_1099b source long-term + non-covered to box E', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: false }))).toBe('E')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('defaults broker_1099b with is_covered=null to A/D and emits a dev warning', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: null, is_covered: null }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'broker_1099b', lot_source: null, is_covered: null }))).toBe('D')
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+    expect(warnSpy.mock.calls[0]![0]).toMatch(/is_covered=null/)
   })
 
   it('routes canonical account_derived source short-term to box C', () => {
     expect(classifyBox(mkLot({ is_short_term: 1, source: 'account_derived', lot_source: null }))).toBe('C')
+  })
+
+  it('routes canonical account_derived source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'account_derived', lot_source: null }))).toBe('F')
+  })
+
+  it('routes canonical manual source short-term to box C', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'manual', lot_source: null }))).toBe('C')
   })
 
   it('routes canonical manual source long-term to box F', () => {
@@ -87,13 +125,22 @@ describe('classifyBox', () => {
     expect(classifyBox(mkLot({ is_short_term: 1, source: 'synthetic_adjustment', lot_source: null }))).toBe('C')
   })
 
+  it('routes canonical synthetic_adjustment source long-term to box F', () => {
+    expect(classifyBox(mkLot({ is_short_term: 0, source: 'synthetic_adjustment', lot_source: null }))).toBe('F')
+  })
+
   it('canonical source takes priority over legacy lot_source', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: 'manual' }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: 'broker_1099b', lot_source: 'manual', is_covered: true }))).toBe('A')
   })
 
   it('falls back to lot_source when source is absent', () => {
-    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b' }))).toBe('A')
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b', is_covered: true }))).toBe('A')
     expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: 'broker_statement' }))).toBe('B')
+  })
+
+  it('respects is_covered on legacy lot_source=1099b rows', () => {
+    expect(classifyBox(mkLot({ is_short_term: 1, source: null, lot_source: '1099b', is_covered: false }))).toBe('B')
+    expect(classifyBox(mkLot({ is_short_term: 0, source: null, lot_source: '1099b', is_covered: false }))).toBe('E')
   })
 })
 

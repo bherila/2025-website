@@ -119,10 +119,14 @@ function rowDescription(lot: Form8949Lot): string {
 }
 
 /**
- * Box A/D = basis reported to IRS, B/E = basis not reported, C/F = not on a 1099-B.
- * Prefers the canonical `source` field ('broker_1099b', 'account_derived', 'manual',
- * 'synthetic_adjustment') when available, falling back to legacy `lot_source` for
- * backward compatibility with older rows.
+ * Box A/D = basis reported to IRS (covered), B/E = basis not reported (non-covered),
+ * C/F = not on a 1099-B. Prefers the canonical `source` field ('broker_1099b',
+ * 'account_derived', 'manual', 'synthetic_adjustment') when available, falling back
+ * to legacy `lot_source` for backward compatibility with older rows.
+ *
+ * For broker_1099b rows, `is_covered` distinguishes A/D (true) from B/E (false). When
+ * `is_covered` is null on a broker_1099b row, defaults to covered (A/D) to match
+ * historical behavior, with a dev-only warning so the gap can be triaged.
  */
 export function classifyBox(lot: Form8949Lot): Form8949Box {
   const shortTerm = toBool(lot.is_short_term)
@@ -133,7 +137,7 @@ export function classifyBox(lot: Form8949Lot): Form8949Box {
   // Prefer canonical source field when present
   const canonicalSource = (lot.source ?? '').toLowerCase()
   if (canonicalSource === 'broker_1099b') {
-    return shortTerm ? 'A' : 'D'
+    return brokerBox(lot, shortTerm)
   }
   if (['account_derived', 'synthetic_adjustment', 'manual'].includes(canonicalSource)) {
     // Non-1099-B sources are not reported by a broker
@@ -143,12 +147,41 @@ export function classifyBox(lot: Form8949Lot): Form8949Box {
   // Fall back to legacy lot_source for older rows without canonical source
   const src = (lot.lot_source ?? '').toLowerCase()
   if (src === '1099b' || src === '1099_b') {
-    return shortTerm ? 'A' : 'D'
+    return brokerBox(lot, shortTerm)
   }
   if (src === 'broker_statement' || src === 'broker') {
     return shortTerm ? 'B' : 'E'
   }
   return shortTerm ? 'C' : 'F'
+}
+
+/**
+ * Route a broker_1099b lot to A/D (covered) or B/E (non-covered) based on
+ * `is_covered`. Null defaults to covered with a dev-only warning.
+ */
+function brokerBox(lot: Form8949Lot, shortTerm: boolean): Form8949Box {
+  if (lot.is_covered === false) {
+    return shortTerm ? 'B' : 'E'
+  }
+  if (lot.is_covered === null || lot.is_covered === undefined) {
+    if (!isProduction()) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Form8949] broker_1099b lot ${lot.lot_id ?? '(unknown id)'} has is_covered=null; defaulting to covered (A/D).`,
+      )
+    }
+  }
+  return shortTerm ? 'A' : 'D'
+}
+
+/**
+ * True only when running in a production build. Reads NODE_ENV when available
+ * (Jest/Node, also exposed by Vite's define plugin) and otherwise treats the
+ * environment as non-production so the dev warning surfaces by default.
+ */
+function isProduction(): boolean {
+  const proc = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process
+  return proc?.env?.NODE_ENV === 'production'
 }
 
 const BOX_LABELS: Record<Form8949Box, string> = {
