@@ -133,13 +133,8 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
               {summary.documents_by_kind['1099_b']} 1099-B{summary.documents_by_kind['1099_b'] !== 1 ? 's' : ''} •{' '}
               {summary.documents_by_kind['1099_div'] + summary.documents_by_kind['1099_int']} other 1099s
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mt-2"
-              onClick={() => onOpenForm?.('documents')}
-            >
-              View All
+            <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+              <a href="/finance/documents">View All</a>
             </Button>
           </div>
         </CardContent>
@@ -169,13 +164,8 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
               <>
                 <div className="text-2xl font-bold text-amber-600">{summary.pending_review_count}</div>
                 <p className="text-xs text-muted-foreground">Documents need review</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => onOpenForm?.('documents')}
-                >
-                  Review Now
+                <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                  <a href="/finance/documents?is_reviewed=0">Review Now</a>
                 </Button>
               </>
             )}
@@ -274,13 +264,8 @@ export function ReadinessCards({ year, onOpenForm }: ReadinessCardsProps): React
                     <div>• {summary.parsing_failure_count} parsing failure{summary.parsing_failure_count !== 1 ? 's' : ''}</div>
                   )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => onOpenForm?.('documents')}
-                >
-                  Take Action
+                <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                  <a href="/finance/documents">Take Action</a>
                 </Button>
               </>
             )}
