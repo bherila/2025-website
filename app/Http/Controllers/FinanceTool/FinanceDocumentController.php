@@ -14,6 +14,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\FileStorageService;
+use App\Services\Finance\DocumentCapabilityService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\TaxDocument\TaxDocumentCreationService;
@@ -29,6 +30,7 @@ class FinanceDocumentController extends Controller
         private readonly DocumentIngestionService $documentIngestionService,
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
+        private readonly DocumentCapabilityService $documentCapabilityService,
     ) {}
 
     public function index(IndexDocumentsRequest $request): JsonResponse
@@ -229,7 +231,7 @@ class FinanceDocumentController extends Controller
             ->where('user_id', (int) Auth::id())
             ->firstOrFail();
 
-        return response()->json($this->computeImpactSummary($document));
+        return response()->json($this->documentCapabilityService->computeImpactSummary($document));
     }
 
     public function destroy(int $id, Request $request): JsonResponse
@@ -244,7 +246,7 @@ class FinanceDocumentController extends Controller
         ]);
 
         // Recompute impact to verify hash
-        $impact = $this->computeImpactSummary($document);
+        $impact = $this->documentCapabilityService->computeImpactSummary($document);
 
         if ($impact['impact_hash'] !== (string) $request->input('impact_hash')) {
             return response()->json([
@@ -546,30 +548,5 @@ class FinanceDocumentController extends Controller
             ->where('id', $employmentEntityId)
             ->where('user_id', $userId)
             ->firstOrFail();
-    }
-
-    /**
-     * Compute the impact summary and hash for a document.
-     *
-     * @return array{summary: array{document_id: int, account_links: int, statements: int, statement_details: int, transactions: int, lots: int, has_tax_document: bool}, impact_hash: string}
-     */
-    private function computeImpactSummary(FinDocument $document): array
-    {
-        $statementIds = $document->statements()->pluck('statement_id');
-        $summary = [
-            'document_id' => (int) $document->id,
-            'user_id' => (int) $document->user_id,
-            'account_links' => $document->accounts()->count(),
-            'statements' => $statementIds->count(),
-            'statement_details' => DB::table('fin_statement_details')->whereIn('statement_id', $statementIds)->count(),
-            'transactions' => DB::table('fin_account_line_items')->whereIn('statement_id', $statementIds)->count(),
-            'lots' => $document->lots()->count(),
-            'has_tax_document' => $document->taxDocument()->exists(),
-        ];
-
-        return [
-            'summary' => $summary,
-            'impact_hash' => hash('sha256', json_encode($summary)),
-        ];
     }
 }

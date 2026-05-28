@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Models\FinanceTool\FinDocument;
+use Illuminate\Support\Facades\DB;
 
 class DocumentCapabilityService
 {
@@ -222,5 +223,35 @@ class DocumentCapabilityService
         }
 
         return $document->lots->isNotEmpty();
+    }
+
+    /**
+     * Compute the impact summary and hash for a document before deletion.
+     *
+     * Both document_id and user_id are included in the hash payload so that:
+     * - Two documents from different users with identical counts produce different hashes.
+     * - Two documents from the same user with identical counts produce different hashes.
+     *
+     * @return array{summary: array{document_id: int, user_id: int, account_links: int, statements: int, statement_details: int, transactions: int, lots: int, has_tax_document: bool}, impact_hash: string}
+     */
+    public function computeImpactSummary(FinDocument $document): array
+    {
+        $statementIds = $document->statements()->pluck('statement_id');
+
+        $summary = [
+            'document_id' => (int) $document->id,
+            'user_id' => (int) $document->user_id,
+            'account_links' => $document->accounts()->count(),
+            'statements' => $statementIds->count(),
+            'statement_details' => DB::table('fin_statement_details')->whereIn('statement_id', $statementIds)->count(),
+            'transactions' => DB::table('fin_account_line_items')->whereIn('statement_id', $statementIds)->count(),
+            'lots' => $document->lots()->count(),
+            'has_tax_document' => $document->taxDocument()->exists(),
+        ];
+
+        return [
+            'summary' => $summary,
+            'impact_hash' => hash('sha256', json_encode($summary)),
+        ];
     }
 }
