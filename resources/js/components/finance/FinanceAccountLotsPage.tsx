@@ -36,6 +36,8 @@ const DEFAULT_FILTERS: LotFilterValues = {
     dateTo: '',
 }
 
+const LOTS_PER_PAGE = 200
+
 export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const [filters, setFilters] = useState<LotFilterValues>(DEFAULT_FILTERS)
     const [selectedYear, setSelectedYear] = useState<string>('')
@@ -45,6 +47,7 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
     const [showLotAnalyzer, setShowLotAnalyzer] = useState(false)
     const [transactions, setTransactions] = useState<AccountLineItem[]>([])
     const [loadingTransactions, setLoadingTransactions] = useState(false)
+    const [page, setPage] = useState(1)
 
     const fetchLots = useCallback(async () => {
         setIsLoading(true)
@@ -52,7 +55,8 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
             const params = new URLSearchParams({
                 account_ids: String(id),
                 status: filters.status,
-                per_page: '200',
+                per_page: String(LOTS_PER_PAGE),
+                page: String(page),
             })
 
             if (filters.status === 'closed' && selectedYear) {
@@ -104,18 +108,25 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                 meta: {
                     current_page: 1,
                     last_page: 1,
-                    per_page: 200,
+                    per_page: LOTS_PER_PAGE,
                     total: 0,
                 },
             })
         } finally {
             setIsLoading(false)
         }
-    }, [id, filters, selectedYear])
+    }, [id, filters, selectedYear, page])
 
     useEffect(() => {
         void fetchLots()
     }, [fetchLots])
+
+    // Reset to first page whenever a filter or year selection changes — keeping
+    // a stale page index across filter changes would cause off-by-one empty
+    // states.
+    useEffect(() => {
+        setPage(1)
+    }, [filters, selectedYear])
 
     const handleStatusChange = (newStatus: string) => {
         const status = newStatus as LotFilterValues['status']
@@ -291,17 +302,47 @@ export default function FinanceAccountLotsPage({ id }: { id: number }) {
                     </a>
                 </div>
             ) : (
-                <div className="rounded-md border">
-                    <LotWorkspaceTable
-                        lots={lots}
-                        showDescription
-                        showTerm={filters.status === 'closed'}
-                        showReconciliation
-                        showSourceDocument
-                        showTransactionLinks
-                        showActions
-                    />
-                </div>
+                <>
+                    <div className="rounded-md border">
+                        <LotWorkspaceTable
+                            lots={lots}
+                            showDescription
+                            showTerm={filters.status === 'closed'}
+                            showReconciliation
+                            showSourceDocument
+                            showTransactionLinks
+                            showActions
+                        />
+                    </div>
+                    {data?.meta && data.meta.last_page > 1 && (
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
+                                Showing page {data.meta.current_page} of {data.meta.last_page} ({data.meta.total} total lots)
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={data.meta.current_page <= 1 || isLoading}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                >
+                                    Previous
+                                </Button>
+                                <span className="px-2 text-sm">
+                                    Page {data.meta.current_page} / {data.meta.last_page}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={data.meta.current_page >= data.meta.last_page || isLoading}
+                                    onClick={() => setPage((p) => p + 1)}
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     )

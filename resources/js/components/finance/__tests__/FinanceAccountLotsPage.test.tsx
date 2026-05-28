@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
@@ -180,5 +180,32 @@ describe('FinanceAccountLotsPage', () => {
 
     const card = await screen.findByTestId('lot-summary-cards')
     expect(card.getAttribute('data-show-term-breakdown')).toBe('false')
+  })
+
+  it('requests the selected lot page when pagination controls are used', async () => {
+    mockGet
+      .mockResolvedValueOnce(
+        mkResponse({
+          data: [mkLot({ id: 1 })],
+          meta: { current_page: 1, last_page: 2, per_page: 200, total: 201 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mkResponse({
+          data: [mkLot({ id: 201 })],
+          meta: { current_page: 2, last_page: 2, per_page: 200, total: 201 },
+        }),
+      )
+
+    render(<FinanceAccountLotsPage id={7} />)
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('page=1')))
+    expect(await screen.findByText(/Showing page 1 of 2/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+    expect(mockGet.mock.calls[1]?.[0]).toContain('page=2')
+    expect(await screen.findByText(/Showing page 2 of 2/i)).toBeInTheDocument()
   })
 })
