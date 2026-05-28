@@ -232,7 +232,7 @@ class DocumentCapabilityService
      * - Two documents from different users with identical counts produce different hashes.
      * - Two documents from the same user with identical counts produce different hashes.
      *
-     * @return array{summary: array{document_id: int, user_id: int, account_links: int, statements: int, statement_details: int, transactions: int, lots: int, has_tax_document: bool}, impact_hash: string}
+     * @return array{summary: array{document_id: int, user_id: int, account_links: int, statements: int, statement_details: int, statement_cash_reports: int, statement_nav: int, statement_performance: int, statement_positions: int, statement_securities_lent: int, transactions: int, lots: int, has_tax_document: bool, form1116_overrides: int}, impact_hash: string}
      */
     public function computeImpactSummary(FinDocument $document): array
     {
@@ -244,9 +244,15 @@ class DocumentCapabilityService
             'account_links' => $document->accounts()->count(),
             'statements' => $statementIds->count(),
             'statement_details' => DB::table('fin_statement_details')->whereIn('statement_id', $statementIds)->count(),
+            'statement_cash_reports' => DB::table('fin_statement_cash_report')->whereIn('statement_id', $statementIds)->count(),
+            'statement_nav' => DB::table('fin_statement_nav')->whereIn('statement_id', $statementIds)->count(),
+            'statement_performance' => DB::table('fin_statement_performance')->whereIn('statement_id', $statementIds)->count(),
+            'statement_positions' => DB::table('fin_statement_positions')->whereIn('statement_id', $statementIds)->count(),
+            'statement_securities_lent' => DB::table('fin_statement_securities_lent')->whereIn('statement_id', $statementIds)->count(),
             'transactions' => DB::table('fin_account_line_items')->whereIn('statement_id', $statementIds)->count(),
             'lots' => $document->lots()->count(),
             'has_tax_document' => $document->taxDocument()->exists(),
+            'form1116_overrides' => DB::table('fin_tax_document_form1116_overrides')->where('document_id', $document->id)->count(),
         ];
 
         return [
