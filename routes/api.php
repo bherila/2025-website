@@ -128,6 +128,15 @@ Route::middleware(['web', 'auth'])->post('/finance/rules/reorder', [FinanceRules
 Route::middleware(['web', 'auth'])->post('/finance/rules/{id}/run', [FinanceRulesApiController::class, 'runNow']);
 Route::middleware(['web', 'auth'])->post('/finance/rules/preview-matches', [FinanceRulesApiController::class, 'previewMatches']);
 
+Route::middleware(['web', 'auth'])->get('/finance/documents', [FinanceDocumentController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/documents/summary', [FinanceDocumentController::class, 'summary']);
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}', [FinanceDocumentController::class, 'show'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}/download', [FinanceDocumentController::class, 'download'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}/impact-preview', [FinanceDocumentController::class, 'impactPreview'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->delete('/finance/documents/{id}', [FinanceDocumentController::class, 'destroy'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [FinanceDocumentController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
+
 Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
 
 // Employment Entity routes
@@ -227,10 +236,6 @@ Route::middleware(['web', 'auth'])->post('/user/update-password', [UserApiContro
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
-Route::middleware(['web', 'auth'])->get('/finance/documents', [FinanceDocumentController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [FinanceDocumentController::class, 'requestUpload']);
-Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
-Route::middleware(['web', 'auth'])->delete('/finance/documents/{id}', [FinanceDocumentController::class, 'destroy']);
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);
