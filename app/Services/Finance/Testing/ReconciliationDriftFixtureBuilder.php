@@ -123,6 +123,7 @@ class ReconciliationDriftFixtureBuilder
             'realized_gain_loss' => 250,
             'is_short_term' => false,
             'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
             'document_id' => $document->document_id,
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,

@@ -187,6 +187,7 @@ class FinanceLotsControllerTest extends TestCase
             'acct_id' => $acctId,
             'symbol' => 'TSLA',
             'lot_source' => 'manual',
+            'source' => FinAccountLot::SOURCE_MANUAL,
         ]);
     }
 
@@ -361,6 +362,7 @@ class FinanceLotsControllerTest extends TestCase
             'open_t_id' => $buyTId,
             'close_t_id' => $sellTId,
             'lot_source' => 'fidelity_import',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
         ]);
     }
 
@@ -663,6 +665,7 @@ class FinanceLotsControllerTest extends TestCase
             'acct_id' => $acctId,
             'symbol' => 'AAPL',
             'lot_source' => 'analyzer',
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
             'open_t_id' => $buyTId,
             'close_t_id' => $sellTId,
         ]);
@@ -984,6 +987,7 @@ class FinanceLotsControllerTest extends TestCase
             'acct_id' => $acctId,
             'symbol' => 'AAPL',
             'lot_source' => 'manual',
+            'source' => FinAccountLot::SOURCE_MANUAL,
             'open_t_id' => $buyTId,
             'close_t_id' => $sellTId,
         ]);

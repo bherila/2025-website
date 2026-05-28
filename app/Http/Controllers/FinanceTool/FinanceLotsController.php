@@ -348,6 +348,7 @@ class FinanceLotsController extends Controller
             'realized_gain_loss' => $realizedGainLoss,
             'is_short_term' => $isShortTerm,
             'lot_source' => 'manual',
+            'source' => FinAccountLot::SOURCE_MANUAL,
             'open_t_id' => $validated['open_t_id'] ?? null,
             'close_t_id' => $validated['close_t_id'] ?? null,
         ]);
@@ -470,6 +471,7 @@ class FinanceLotsController extends Controller
                         'realized_gain_loss' => $realizedGainLoss,
                         'is_short_term' => $isShortTerm,
                         'lot_source' => 'fidelity_import',
+                        'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
                         'open_t_id' => $lotData['open_t_id'] ?? null,
                         'close_t_id' => $lotData['close_t_id'] ?? null,
                     ]);
@@ -583,6 +585,7 @@ class FinanceLotsController extends Controller
                     'realized_gain_loss' => $realizedGainLoss,
                     'is_short_term' => $isShortTerm,
                     'lot_source' => 'analyzer',
+                    'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
                     'open_t_id' => $lotData['open_t_id'] ?? null,
                     'close_t_id' => $lotData['close_t_id'] ?? null,
                 ]);
@@ -781,6 +784,7 @@ class FinanceLotsController extends Controller
                     'realized_gain_loss' => $assignment['proceeds'] - $assignment['cost_basis'],
                     'is_short_term' => $isShortTerm,
                     'lot_source' => 'manual',
+                    'source' => FinAccountLot::SOURCE_MANUAL,
                     'open_t_id' => $assignment['open_t_id'],
                     'close_t_id' => $assignment['close_t_id'],
                 ]);
