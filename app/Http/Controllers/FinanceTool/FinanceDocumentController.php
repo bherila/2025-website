@@ -130,7 +130,7 @@ class FinanceDocumentController extends Controller
             'kind_asc' => $query->reorder('document_kind')->orderByDesc('created_at'),
             'tax_year_desc' => $query->reorder('tax_year', 'desc')->orderByDesc('created_at'),
             'period_end_desc' => $query->reorder('period_end', 'desc')->orderByDesc('created_at'),
-            'created_desc', 'default' => null,
+            'created_desc' => $query->reorder()->orderByDesc('created_at')->orderByDesc('id'),
             default => null,
         };
 
