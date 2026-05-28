@@ -9,13 +9,16 @@ use App\Http\Requests\Finance\DeleteFinanceDocumentRequest;
 use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
 use App\Http\Resources\FinanceTool\FinDocumentResource;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\FileStorageService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -28,6 +31,7 @@ class FinanceDocumentController extends Controller
         private readonly DocumentIngestionService $documentIngestionService,
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
+        private readonly TransactionDeletionTombstoneService $transactionDeletionTombstoneService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -91,10 +95,12 @@ class FinanceDocumentController extends Controller
         }
 
         $impact = $this->deleteImpact($doc);
+        $confirmationToken = $this->confirmationToken($doc, $impact);
 
         if (! $request->boolean('confirm')) {
             return response()->json([
                 'requires_confirmation' => true,
+                'confirmation_token' => $confirmationToken,
                 'document' => [
                     'id' => (int) $doc->id,
                     'document_kind' => $doc->document_kind,
@@ -105,14 +111,23 @@ class FinanceDocumentController extends Controller
             ]);
         }
 
-        $submittedHash = $request->input('file_hash');
-        if ($doc->file_hash !== null && (! is_string($submittedHash) || ! hash_equals((string) $doc->file_hash, $submittedHash))) {
+        $submittedToken = $request->input('confirmation_token');
+        if (! is_string($submittedToken) || ! hash_equals($confirmationToken, $submittedToken)) {
             return response()->json([
                 'message' => 'Document changed since delete preview. Refresh and preview the delete impact again.',
             ], 409);
         }
 
         DB::transaction(function () use ($doc): void {
+            $transactions = $this->documentTransactions($doc)->get(['t_id', 't_account']);
+            $this->transactionDeletionTombstoneService->record($transactions, (int) $doc->user_id);
+
+            if ($transactions->isNotEmpty()) {
+                FinAccountLineItems::query()
+                    ->whereKey($transactions->pluck('t_id')->all())
+                    ->delete();
+            }
+
             $doc->lots()->delete();
             $doc->accounts()->delete();
             $doc->statements()->delete();
@@ -171,7 +186,7 @@ class FinanceDocumentController extends Controller
     }
 
     /**
-     * @return array{lots: int, account_links: int, statements: int}
+     * @return array{lots: int, account_links: int, statements: int, transactions: int}
      */
     private function deleteImpact(FinDocument $document): array
     {
@@ -179,7 +194,45 @@ class FinanceDocumentController extends Controller
             'lots' => $document->lots()->count(),
             'account_links' => $document->accounts()->count(),
             'statements' => $document->statements()->count(),
+            'transactions' => $this->documentTransactions($document)->count(),
         ];
+    }
+
+    /**
+     * Imported ledger transactions linked to this document's statements.
+     *
+     * The `fin_account_line_items.statement_id` FK is `ON DELETE SET NULL`, so
+     * deleting the statements alone would orphan these rows in the user's
+     * ledger. They are deleted explicitly as part of the document cascade.
+     *
+     * @return Builder<FinAccountLineItems>
+     */
+    private function documentTransactions(FinDocument $document): Builder
+    {
+        return FinAccountLineItems::query()
+            ->whereIn('statement_id', $document->statements()->select('statement_id'));
+    }
+
+    /**
+     * Confirmation token the client must echo back to confirm a hard delete.
+     *
+     * Bound to the document identity, its file hash, and the current impact
+     * counts so that a hashless inline import still requires a preview round
+     * trip, and any change to the file or cascaded rows between preview and
+     * confirm invalidates the token.
+     *
+     * @param  array{lots: int, account_links: int, statements: int, transactions: int}  $impact
+     */
+    private function confirmationToken(FinDocument $document, array $impact): string
+    {
+        $payload = json_encode([
+            'id' => (int) $document->id,
+            'user_id' => (int) $document->user_id,
+            'file_hash' => $document->file_hash,
+            'impact' => $impact,
+        ], JSON_THROW_ON_ERROR);
+
+        return hash_hmac('sha256', $payload, (string) config('app.key'));
     }
 
     /**
