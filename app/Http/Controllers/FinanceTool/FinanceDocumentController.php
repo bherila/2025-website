@@ -38,6 +38,7 @@ class FinanceDocumentController extends Controller
             ->with([
                 'accounts.account:acct_id,acct_name,acct_number',
                 'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
+                'lots:id,document_id',
             ])
             ->orderByDesc('tax_year')
             ->orderByDesc('period_end')
@@ -557,6 +558,7 @@ class FinanceDocumentController extends Controller
         $statementIds = $document->statements()->pluck('statement_id');
         $summary = [
             'document_id' => (int) $document->id,
+            'user_id' => (int) $document->user_id,
             'account_links' => $document->accounts()->count(),
             'statements' => $statementIds->count(),
             'statement_details' => DB::table('fin_statement_details')->whereIn('statement_id', $statementIds)->count(),
