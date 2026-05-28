@@ -242,6 +242,17 @@ final class LotWorkspaceService
     }
 
     /**
+     * Filter rows by the state of the LATEST reconciliation link for the lot.
+     *
+     * The visible reconciliation state shown by `addReconciliationColumns()` is
+     * the most recent link (`orderByDesc('id')`), so the filter must match
+     * against that same link — not any historical link. A lot whose latest link
+     * is `accepted_account_override` but whose older link was `auto_matched`
+     * should NOT appear under the `auto_matched` filter (the workspace would
+     * otherwise show a row whose state column disagrees with the filter).
+     *
+     * The MAX(id) subselect is portable to both MySQL and SQLite.
+     *
      * @param  Builder<FinAccountLot>  $query
      */
     private function applyReconciliationStateFilter(Builder $query, mixed $stateFilter): void
@@ -256,23 +267,53 @@ final class LotWorkspaceService
 
         $query->where(function (Builder $stateQuery) use ($includeNone, $linkStates): void {
             if ($linkStates !== []) {
-                $stateQuery->whereExists($this->linkedLotExists($linkStates));
+                $stateQuery->whereExists($this->latestLinkMatches($linkStates));
             }
 
             if ($includeNone && $linkStates !== []) {
-                $stateQuery->orWhereNotExists($this->linkedLotExists());
+                $stateQuery->orWhereNotExists($this->anyLinkExists());
             } elseif ($includeNone) {
-                $stateQuery->whereNotExists($this->linkedLotExists());
+                $stateQuery->whereNotExists($this->anyLinkExists());
             }
         });
     }
 
     /**
-     * @param  list<string>|null  $states
+     * Closure building an EXISTS subselect that matches when the latest link
+     * (highest id) attached to the lot is in one of the given states.
+     *
+     * @param  list<string>  $states
      */
-    private function linkedLotExists(?array $states = null): Closure
+    private function latestLinkMatches(array $states): Closure
     {
         return static function (QueryBuilder $linkQuery) use ($states): void {
+            $linkQuery
+                ->selectRaw('1')
+                ->from('fin_lot_reconciliation_links as latest_link')
+                ->whereIn('latest_link.state', $states)
+                ->where(function (QueryBuilder $linkedLotQuery): void {
+                    $linkedLotQuery
+                        ->whereColumn('latest_link.broker_lot_id', 'fin_account_lots.lot_id')
+                        ->orWhereColumn('latest_link.account_lot_id', 'fin_account_lots.lot_id');
+                })
+                ->whereRaw(
+                    'latest_link.id = ('
+                    .'SELECT MAX(inner_link.id) FROM fin_lot_reconciliation_links AS inner_link '
+                    .'WHERE inner_link.broker_lot_id = fin_account_lots.lot_id '
+                    .'OR inner_link.account_lot_id = fin_account_lots.lot_id'
+                    .')'
+                );
+        };
+    }
+
+    /**
+     * Closure building an EXISTS subselect that matches when ANY reconciliation
+     * link exists for the lot — used for the `none` bucket to detect lots with
+     * no link at all (we negate this with whereNotExists).
+     */
+    private function anyLinkExists(): Closure
+    {
+        return static function (QueryBuilder $linkQuery): void {
             $linkQuery
                 ->selectRaw('1')
                 ->from('fin_lot_reconciliation_links')
@@ -281,10 +322,6 @@ final class LotWorkspaceService
                         ->whereColumn('fin_lot_reconciliation_links.broker_lot_id', 'fin_account_lots.lot_id')
                         ->orWhereColumn('fin_lot_reconciliation_links.account_lot_id', 'fin_account_lots.lot_id');
                 });
-
-            if ($states !== null && $states !== []) {
-                $linkQuery->whereIn('fin_lot_reconciliation_links.state', $states);
-            }
         };
     }
 

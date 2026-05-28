@@ -310,6 +310,42 @@ class LotWorkspaceServiceTest extends TestCase
         $this->assertSame([(int) $noneLot->lot_id], array_map(static fn (FinAccountLot $lot): int => (int) $lot->lot_id, $this->items($noneResult)));
     }
 
+    public function test_reconciliation_filter_uses_only_the_latest_link_state(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount((int) $user->id);
+        $lot = $this->makeLot($account, ['sale_date' => '2025-06-15', 'proceeds' => 5000]);
+
+        // Older link in `auto_matched` state, newer link in `accepted_account_override`.
+        // The workspace surfaces the newer link's state, so the filter must too —
+        // otherwise the row would appear under `auto_matched` while its visible
+        // state is `accepted_account_override`.
+        FinLotReconciliationLink::create([
+            'account_lot_id' => $lot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+        ]);
+        FinLotReconciliationLink::create([
+            'account_lot_id' => $lot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+
+        $autoMatchedResult = $this->service->query([
+            'user_id' => (int) $user->id,
+            'reconciliation_state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+        ]);
+        $this->assertSame([], $this->items($autoMatchedResult), 'Older auto_matched link must not match when a newer link supersedes it');
+
+        $latestResult = $this->service->query([
+            'user_id' => (int) $user->id,
+            'reconciliation_state' => FinLotReconciliationLink::STATE_ACCEPTED_ACCOUNT_OVERRIDE,
+        ]);
+        $this->assertSame(
+            [(int) $lot->lot_id],
+            array_map(static fn (FinAccountLot $row): int => (int) $row->lot_id, $this->items($latestResult)),
+            'The latest link state must match the filter'
+        );
+    }
+
     private function makeAccount(int $userId, string $name = 'Brokerage'): FinAccounts
     {
         return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
