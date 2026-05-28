@@ -297,7 +297,7 @@ class ReconciliationSummaryService
         ];
     }
 
-    private function documentBrokerName(FileForTaxDocument $taxDocument): string
+    private function documentBrokerName(FileForTaxDocument $taxDocument): ?string
     {
         $parsedData = $taxDocument->parsed_data;
         $entries = is_array($parsedData) && array_is_list($parsedData) ? $parsedData : [$parsedData];
@@ -319,6 +319,8 @@ class ReconciliationSummaryService
             }
         }
 
-        return $taxDocument->original_filename;
+        $filename = trim((string) ($taxDocument->getAttribute('original_filename') ?? ''));
+
+        return $filename !== '' ? $filename : null;
     }
 }

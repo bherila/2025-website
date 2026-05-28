@@ -8,6 +8,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\CapitalGains\LotMatcherResult;
@@ -69,10 +70,17 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $document = $this->makeTaxDocument($user->id, '1099_b');
 
         $service = app(LotMatcherAutoDispatchService::class);
-        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
-        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $firstDispatch = $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $secondDispatch = $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
 
+        $this->assertSame(1, $firstDispatch);
+        $this->assertSame(0, $secondDispatch);
         Queue::assertPushed(LotsMatchJob::class, 1);
+        $this->assertDatabaseCount('lot_match_runs', 1);
+        $this->assertDatabaseHas('lot_match_runs', [
+            'document_id' => $document->document_id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+        ]);
     }
 
     public function test_dispatch_for_account_years_includes_adjacent_tax_year_documents(): void

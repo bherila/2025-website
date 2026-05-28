@@ -73,6 +73,25 @@ class ReconciliationSummaryControllerTest extends TestCase
         $this->assertTrue(Cache::has(ReconciliationSummaryService::cacheKey($user->id, 2025)));
     }
 
+    public function test_summary_endpoint_allows_missing_broker_name_and_filename(): void
+    {
+        $user = $this->createUser();
+        $document = $this->makeBrokerDocument($user->id, null, [
+            'original_filename' => null,
+            'stored_filename' => null,
+            's3_path' => null,
+            'file_hash' => str_repeat('e', 64),
+            'parsed_data' => [[]],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/finance/tax-years/2025/reconciliation-summary')
+            ->assertOk()
+            ->assertJsonPath('documents.0.tax_document_id', $document->id)
+            ->assertJsonPath('documents.0.broker', null)
+            ->assertJsonPath('documents.0.original_filename', null);
+    }
+
     private function makeAccount(int $userId, string $name = 'Brokerage'): FinAccounts
     {
         return FinAccounts::withoutEvents(function () use ($userId, $name): FinAccounts {
