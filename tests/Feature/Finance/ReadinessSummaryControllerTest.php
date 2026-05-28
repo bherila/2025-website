@@ -3,7 +3,10 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -207,6 +210,83 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(0, $data['reconciliation_health']['ok']);
     }
 
+    public function test_counts_document_with_unresolved_account_link_as_missing(): void
+    {
+        // A 1099-B whose account link exists but account_id is null (unresolved)
+        // should count as a missing account, consistent with TaxLotReconciliationService::unresolvedAccountLinks().
+        $doc = $this->createTaxDocument([
+            'form_type' => '1099_b',
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+        ]);
+
+        TaxDocumentAccount::createLink((int) $doc->id, null, '1099_b', 2024);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $this->assertEquals(1, $response->json('missing_account_count'));
+    }
+
+    public function test_reconciliation_health_detects_drift_for_auto_matched_documents_with_amount_mismatch(): void
+    {
+        // A document with auto_matched links but drifted lot amounts should appear
+        // as drift, not ok — LotReconciliationService diagnostics take priority over
+        // clean link states.
+        $account = $this->makeFinAccount();
+        $parsedData = [
+            'payer_name' => 'Test Broker',
+            'total_proceeds' => 1000.00,
+            'total_cost_basis' => 800.00,
+            'total_realized_gain_loss' => 200.00,
+            'transactions' => [
+                [
+                    'symbol' => 'AAPL',
+                    'proceeds' => 1000.00,
+                    'cost_basis' => 800.00,
+                    'realized_gain_loss' => 200.00,
+                    'form_8949_box' => 'D',
+                ],
+            ],
+        ];
+
+        $doc = $this->createBrokerDocument($account, $parsedData);
+
+        // Create an auto_matched reconciliation link so link states appear clean.
+        FinLotReconciliationLink::factory()->create([
+            'document_id' => (int) $doc->document_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+        ]);
+
+        // Create a lot with drifted amounts (proceeds changed after matching).
+        FinAccountLot::create([
+            'acct_id' => $account->acct_id,
+            'symbol' => 'AAPL',
+            'description' => 'Apple Inc.',
+            'quantity' => 10,
+            'purchase_date' => '2023-01-02',
+            'cost_basis' => 800.00,
+            'cost_per_unit' => 80.00,
+            'sale_date' => '2024-02-03',
+            'proceeds' => 999.00,
+            'realized_gain_loss' => 199.00,
+            'is_short_term' => false,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'document_id' => (int) $doc->document_id,
+            'form_8949_box' => 'D',
+            'wash_sale_disallowed' => 0,
+        ]);
+
+        Cache::forget("tax_readiness_summary:{$this->user->id}:2024");
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        // Diagnostics detect amount drift: should be drift, not ok.
+        $this->assertEquals(1, $response->json('reconciliation_health.drift'));
+        $this->assertEquals(0, $response->json('reconciliation_health.ok'));
+    }
+
     public function test_requires_authentication(): void
     {
         $this->app['auth']->forgetGuards();
@@ -232,5 +312,54 @@ class ReadinessSummaryControllerTest extends TestCase
             'is_reviewed' => false,
             ...$overrides,
         ]);
+    }
+
+    private function makeFinAccount(): FinAccounts
+    {
+        return FinAccounts::withoutEvents(function (): FinAccounts {
+            return FinAccounts::withoutGlobalScopes()->forceCreate([
+                'acct_owner' => $this->user->id,
+                'acct_name' => 'Test Brokerage',
+                'acct_number' => '9999',
+                'acct_last_balance' => '0',
+            ]);
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function createBrokerDocument(FinAccounts $account, array $parsedData): FileForTaxDocument
+    {
+        $filename = 'broker-1099-'.uniqid().'.pdf';
+        $doc = app(DocumentIngestionService::class)->createTaxFormDetail([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => 'broker_1099',
+            'original_filename' => $filename,
+            'file_path' => '/tmp/'.$filename,
+            'file_size_bytes' => 1000,
+            'file_hash' => md5($filename),
+            'genai_status' => 'parsed',
+            'is_reviewed' => true,
+            'parsed_data' => [[
+                'account_identifier' => '9999',
+                'account_name' => 'Test Brokerage',
+                'form_type' => '1099_b',
+                'tax_year' => 2024,
+                'parsed_data' => $parsedData,
+            ]],
+        ]);
+
+        TaxDocumentAccount::createLink(
+            (int) $doc->id,
+            $account->acct_id,
+            '1099_b',
+            2024,
+            aiIdentifier: '9999',
+            aiAccountName: 'Test Brokerage',
+        );
+
+        return $doc;
     }
 }

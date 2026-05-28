@@ -4,11 +4,17 @@ namespace App\Services\Finance;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Services\Finance\CapitalGains\LotReconciliationService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
 class ReadinessSummaryService
 {
+    public function __construct(
+        private readonly LotReconciliationService $lotReconciliationService,
+    ) {}
+
     /**
      * Fast, cacheable readiness summary for Tax Preview home view.
      *
@@ -95,25 +101,37 @@ class ReadinessSummaryService
     }
 
     /**
-     * Count 1099-B documents that have no account links.
+     * Count 1099-B documents that either have no account links at all,
+     * or have account links where account_id is null (unresolved links).
      */
     private function missingAccountCount(int $userId, int $year): int
     {
         return FileForTaxDocument::where('user_id', $userId)
             ->where('tax_year', $year)
             ->whereIn('form_type', ['1099_b', 'broker_1099'])
-            ->whereDoesntHave('accountLinks')
+            ->where(function (Builder $query): void {
+                $query->whereDoesntHave('accountLinks')
+                    ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
+                        $linkQuery->whereNull('account_id');
+                    });
+            })
             ->count();
     }
 
     /**
      * Aggregate reconciliation status counts: ok / drift / blocked.
      *
+     * Documents whose link states are all clean (auto_matched or accepted) are
+     * also checked via LotReconciliationService diagnostics to detect amount
+     * drift that occurred after matching (e.g., changed lot amounts). A document
+     * is downgraded from ok to drift when diagnostics report error-severity
+     * findings even though link states are clean.
+     *
      * @return array{ok: int, drift: int, blocked: int}
      */
     private function reconciliationHealth(int $userId, int $year): array
     {
-        $documentIds = $this->reconciliationDocumentIds($userId, $year);
+        $taxDocuments = $this->reconciliationTaxDocuments($userId, $year);
 
         $health = [
             'ok' => 0,
@@ -121,13 +139,21 @@ class ReadinessSummaryService
             'blocked' => 0,
         ];
 
-        if ($documentIds === []) {
+        if ($taxDocuments->isEmpty()) {
             return $health;
         }
 
+        $documentIds = $taxDocuments
+            ->pluck('document_id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
         $linkCounts = $this->linkStateCountsByDocumentIds($documentIds);
 
-        foreach ($documentIds as $documentId) {
+        foreach ($taxDocuments as $taxDocument) {
+            $documentId = (int) $taxDocument->document_id;
             $counts = $linkCounts[$documentId] ?? $this->emptyLinkStateCounts();
             $totalLinks = array_sum($counts);
 
@@ -136,7 +162,14 @@ class ReadinessSummaryService
             } elseif (($counts[FinLotReconciliationLink::STATE_NEEDS_REVIEW] ?? 0) > 0) {
                 $health['drift']++;
             } else {
-                $health['ok']++;
+                // Link states look clean — run the full diagnostic to detect
+                // amount drift (e.g., lot amounts changed after auto-matching).
+                $report = $this->lotReconciliationService->reconcileTaxDocument((int) $taxDocument->id);
+                if ($report->hasErrorDiagnostics()) {
+                    $health['drift']++;
+                } else {
+                    $health['ok']++;
+                }
             }
         }
 
@@ -174,10 +207,11 @@ class ReadinessSummaryService
     }
 
     /**
-     * @return list<int>
+     * @return Collection<int, FileForTaxDocument>
      */
-    private function reconciliationDocumentIds(int $userId, int $year): array
+    private function reconciliationTaxDocuments(int $userId, int $year): Collection
     {
+        /** @var Collection<int, FileForTaxDocument> */
         return FileForTaxDocument::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
@@ -188,6 +222,16 @@ class ReadinessSummaryService
                         $linkQuery->where('form_type', '1099_b');
                     });
             })
+            ->select(['id', 'document_id'])
+            ->get();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function reconciliationDocumentIds(int $userId, int $year): array
+    {
+        return $this->reconciliationTaxDocuments($userId, $year)
             ->pluck('document_id')
             ->map(static fn (mixed $documentId): int => (int) $documentId)
             ->filter(static fn (int $documentId): bool => $documentId > 0)
