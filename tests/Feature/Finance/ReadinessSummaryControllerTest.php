@@ -308,6 +308,59 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(0, $response->json('reconciliation_health.ok'));
     }
 
+    public function test_reconciliation_health_treats_warning_diagnostics_as_drift(): void
+    {
+        $account = $this->makeFinAccount();
+        $parsedData = [
+            'payer_name' => 'Test Broker',
+            'total_proceeds' => 1000.00,
+            'total_cost_basis' => 800.00,
+            'total_realized_gain_loss' => 200.00,
+            'transactions' => [
+                [
+                    'symbol' => 'AAPL',
+                    'proceeds' => 1000.00,
+                    'cost_basis' => 800.00,
+                    'realized_gain_loss' => 200.00,
+                    'form_8949_box' => 'D',
+                ],
+            ],
+        ];
+
+        $doc = $this->createBrokerDocument($account, $parsedData);
+
+        FinLotReconciliationLink::factory()->create([
+            'document_id' => (int) $doc->document_id,
+            'state' => FinLotReconciliationLink::STATE_AUTO_MATCHED,
+        ]);
+
+        FinAccountLot::create([
+            'acct_id' => $account->acct_id,
+            'symbol' => 'AAPL',
+            'description' => 'Apple Inc.',
+            'quantity' => 10,
+            'purchase_date' => '2023-01-02',
+            'cost_basis' => 800.00,
+            'cost_per_unit' => 80.00,
+            'sale_date' => '2024-02-03',
+            'proceeds' => 1000.00,
+            'realized_gain_loss' => 200.00,
+            'is_short_term' => false,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'document_id' => (int) $doc->document_id,
+            'form_8949_box' => null,
+            'wash_sale_disallowed' => 0,
+        ]);
+
+        Cache::forget("tax_readiness_summary:{$this->user->id}:2024");
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk();
+        $this->assertEquals(1, $response->json('reconciliation_health.drift'));
+        $this->assertEquals(0, $response->json('reconciliation_health.ok'));
+    }
+
     public function test_requires_authentication(): void
     {
         $this->app['auth']->forgetGuards();

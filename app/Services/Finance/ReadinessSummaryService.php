@@ -124,7 +124,7 @@ class ReadinessSummaryService
      * Documents whose link states are all clean (auto_matched or accepted) are
      * also checked via LotReconciliationService diagnostics to detect amount
      * drift that occurred after matching (e.g., changed lot amounts). A document
-     * is downgraded from ok to drift when diagnostics report error-severity
+     * is downgraded from ok to drift when diagnostics report warning/error
      * findings even though link states are clean.
      *
      * @return array{ok: int, drift: int, blocked: int}
@@ -165,7 +165,7 @@ class ReadinessSummaryService
                 // Link states look clean — run the full diagnostic to detect
                 // amount drift (e.g., lot amounts changed after auto-matching).
                 $report = $this->lotReconciliationService->reconcileTaxDocument((int) $taxDocument->id);
-                if ($report->hasErrorDiagnostics()) {
+                if ($this->reportNeedsReview($report->toArray())) {
                     $health['drift']++;
                 } else {
                     $health['ok']++;
@@ -174,6 +174,34 @@ class ReadinessSummaryService
         }
 
         return $health;
+    }
+
+    /**
+     * @param  array<string, mixed>  $report
+     */
+    private function reportNeedsReview(array $report): bool
+    {
+        $dashboardStatus = $report['dashboard_status'] ?? null;
+        if (in_array($dashboardStatus, ['drift', 'needs_review'], true)) {
+            return true;
+        }
+
+        $diagnostics = $report['diagnostics'] ?? [];
+        if (! is_array($diagnostics)) {
+            return false;
+        }
+
+        foreach ($diagnostics as $diagnostic) {
+            if (! is_array($diagnostic)) {
+                continue;
+            }
+
+            if (in_array($diagnostic['severity'] ?? null, ['error', 'warning'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function lastMatcherRunAt(int $userId, int $year): ?string
