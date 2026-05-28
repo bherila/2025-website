@@ -28,7 +28,7 @@ interface ReadinessSummary {
   last_matcher_run_at: string | null
 }
 
-type ReadinessFormTarget = 'documents' | 'tax-lot-reconciliation'
+type ReadinessFormTarget = 'tax-lot-reconciliation'
 
 interface ReadinessCardsProps {
   year: number

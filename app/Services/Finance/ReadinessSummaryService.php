@@ -73,15 +73,15 @@ class ReadinessSummaryService
 
             if (in_array($formType, FileForTaxDocument::W2_FORM_TYPES, true)) {
                 $counts['w2']++;
-            } elseif (in_array($formType, ['1099_div'], true)) {
+            } elseif (in_array($formType, ['1099_div', '1099_div_c'], true)) {
                 $counts['1099_div']++;
-            } elseif (in_array($formType, ['1099_int'], true)) {
+            } elseif (in_array($formType, ['1099_int', '1099_int_c'], true)) {
                 $counts['1099_int']++;
             } elseif (in_array($formType, ['1099_b', 'broker_1099'], true)) {
                 $counts['1099_b']++;
             } elseif (in_array($formType, ['1099_r'], true)) {
                 $counts['1099_r']++;
-            } elseif (in_array($formType, ['k1_1065', 'k1_1120s'], true)) {
+            } elseif (in_array($formType, ['k1', 'k1_1065', 'k1_1120s'], true)) {
                 $counts['k1']++;
             } else {
                 $counts['other']++;

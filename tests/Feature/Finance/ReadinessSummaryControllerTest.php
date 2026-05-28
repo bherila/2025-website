@@ -97,6 +97,27 @@ class ReadinessSummaryControllerTest extends TestCase
         $this->assertEquals(1, $data['missing_account_count']);
     }
 
+    public function test_counts_corrected_1099_and_k1_documents_in_their_buckets(): void
+    {
+        $this->createTaxDocument([
+            'form_type' => '1099_div_c',
+        ]);
+        $this->createTaxDocument([
+            'form_type' => '1099_int_c',
+        ]);
+        $this->createTaxDocument([
+            'form_type' => 'k1',
+        ]);
+
+        $response = $this->getJson('/api/finance/tax-years/2024/readiness-summary');
+
+        $response->assertOk()
+            ->assertJsonPath('documents_by_kind.1099_div', 1)
+            ->assertJsonPath('documents_by_kind.1099_int', 1)
+            ->assertJsonPath('documents_by_kind.k1', 1)
+            ->assertJsonPath('documents_by_kind.other', 0);
+    }
+
     public function test_reconciliation_health_uses_persisted_link_states(): void
     {
         $okDocument = $this->createTaxDocument([
