@@ -391,7 +391,7 @@ class FinanceDocumentControllerTest extends TestCase
         $account = $this->makeAccount($user->id);
 
         for ($i = 0; $i < 3; $i++) {
-            $doc = $this->makeDocument($user->id);
+            $doc = $this->makeDocument($user->id, ['document_kind' => FinDocument::KIND_STATEMENT]);
             FinDocumentAccount::create([
                 'document_id' => $doc->id,
                 'account_id' => $account->acct_id,
@@ -414,11 +414,12 @@ class FinanceDocumentControllerTest extends TestCase
         DB::enableQueryLog();
         $response = $this->actingAs($user)->getJson('/api/finance/documents');
         $response->assertOk();
+        $this->assertContains('open_lot_workspace', $response->json('data.0.capabilities'));
         $queryCount = count(DB::getQueryLog());
         DB::disableQueryLog();
 
         // Without eager-loading lots, this would be baseline + N (3 extra).
-        // With 'lots:id,document_id' in with(), total should be ≤ 10.
+        // With 'lots:lot_id,document_id' in with(), total should be ≤ 10.
         $this->assertLessThan(15, $queryCount, "Expected < 15 queries, got {$queryCount}");
     }
 

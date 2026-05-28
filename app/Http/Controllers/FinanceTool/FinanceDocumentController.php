@@ -44,7 +44,7 @@ class FinanceDocumentController extends Controller
             ->with([
                 'accounts.account:acct_id,acct_name,acct_number',
                 'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
-                'lots:id,document_id',
+                'lots:lot_id,document_id',
             ])
             ->orderByDesc('tax_year')
             ->orderByDesc('period_end')
