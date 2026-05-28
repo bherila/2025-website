@@ -4,21 +4,22 @@ namespace App\Finance\RulesEngine\Conditions;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
+use App\Services\Finance\MoneyMath;
 use Illuminate\Database\Eloquent\Builder;
 
 class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
 {
     public function matches(FinAccountLineItems $tx, FinRuleCondition $condition): bool
     {
-        $absAmount = (string) abs((float) $tx->t_amt);
-        $value = (string) $condition->value;
+        $amountCents = abs(MoneyMath::toCents((string) $tx->t_amt));
+        $valueCents = abs(MoneyMath::toCents((string) $condition->value));
+        $valueExtraCents = abs(MoneyMath::toCents((string) $condition->value_extra));
 
         return match (strtoupper($condition->operator)) {
-            'ABOVE' => (float) $absAmount > (float) $value,
-            'BELOW' => (float) $absAmount < (float) $value,
-            'EXACTLY' => bccomp($absAmount, $value, 2) === 0,
-            'BETWEEN' => (float) $absAmount >= (float) $value
-                && (float) $absAmount <= (float) $condition->value_extra,
+            'ABOVE' => $amountCents > $valueCents,
+            'BELOW' => $amountCents < $valueCents,
+            'EXACTLY' => $amountCents === $valueCents,
+            'BETWEEN' => $amountCents >= $valueCents && $amountCents <= $valueExtraCents,
             default => false,
         };
     }

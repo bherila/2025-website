@@ -12,6 +12,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\LotMatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -170,7 +171,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
             }
         };
 
-        $job->handle($matcher);
+        $job->handle($matcher, app(LotMatchRunRecorder::class));
 
         $this->assertSame([['document_id' => 42, 'preserve_decisions' => true]], $matcher->calls);
         $this->assertSame('42', $job->uniqueId());

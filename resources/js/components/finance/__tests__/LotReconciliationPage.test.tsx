@@ -161,6 +161,24 @@ const linksResponse = {
   relink_candidates: [accountLot],
 }
 
+const runsResponse = {
+  tax_document_id: 12,
+  document_id: 120,
+  runs: [{
+    id: 9,
+    document_id: 120,
+    user_id: 1,
+    status: 'succeeded',
+    mode: 'preserve',
+    started_at: '2026-05-10T17:00:00.000Z',
+    finished_at: '2026-05-10T17:01:00.000Z',
+    result_summary: { counts: { needs_review: 1 } },
+    error: null,
+    created_at: '2026-05-10T17:00:00.000Z',
+    updated_at: '2026-05-10T17:01:00.000Z',
+  }],
+}
+
 const yearResponse = {
   user_id: 1,
   tax_year: 2025,
@@ -215,7 +233,7 @@ describe('LotReconciliationPage', () => {
 
   it('posts the expected endpoint for an accept-broker row action', async () => {
     mockedFetchWrapper.get.mockImplementation((url: string) => Promise.resolve(
-      url.includes('lot-reconciliation-links') ? linksResponse : reportResponse,
+      url.includes('lot-match-runs') ? runsResponse : url.includes('lot-reconciliation-links') ? linksResponse : reportResponse,
     ))
     mockedFetchWrapper.post.mockResolvedValue({})
 
@@ -227,6 +245,40 @@ describe('LotReconciliationPage', () => {
 
     await waitFor(() => {
       expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/lot-reconciliation-links/55/accept-broker', {})
+    })
+  })
+
+  it('loads matcher status and posts preserve reruns directly', async () => {
+    mockedFetchWrapper.get.mockImplementation((url: string) => Promise.resolve(
+      url.includes('lot-match-runs') ? runsResponse : url.includes('lot-reconciliation-links') ? linksResponse : reportResponse,
+    ))
+    mockedFetchWrapper.post.mockResolvedValue({})
+
+    render(<LotReconciliationPage taxDocumentId={12} />)
+
+    await waitFor(() => expect(screen.getByText('Matched')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /re-run matcher/i }))
+
+    await waitFor(() => {
+      expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/tax-documents/12/lots-match', { preserve_decisions: true })
+    })
+  })
+
+  it('requires a destructive confirmation for force rebuild', async () => {
+    mockedFetchWrapper.get.mockImplementation((url: string) => Promise.resolve(
+      url.includes('lot-match-runs') ? runsResponse : url.includes('lot-reconciliation-links') ? linksResponse : reportResponse,
+    ))
+    mockedFetchWrapper.post.mockResolvedValue({})
+
+    render(<LotReconciliationPage taxDocumentId={12} />)
+
+    await waitFor(() => expect(screen.getByText(/Synthetic Broker/)).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: /force rebuild/i })[0]!)
+    expect(screen.getByText(/discards accepted matcher decisions/i)).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: /force rebuild/i }).at(-1)!)
+
+    await waitFor(() => {
+      expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/tax-documents/12/lots-match/full-rebuild', { confirm: true })
     })
   })
 })

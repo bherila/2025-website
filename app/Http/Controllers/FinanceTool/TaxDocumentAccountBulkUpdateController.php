@@ -7,9 +7,11 @@ use App\Http\Requests\Finance\BulkUpdateDocumentAccountsRequest;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\ReconciliationSummaryService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class TaxDocumentAccountBulkUpdateController extends Controller
@@ -79,6 +81,7 @@ class TaxDocumentAccountBulkUpdateController extends Controller
 
             return $affected;
         });
+        Cache::forget(ReconciliationSummaryService::cacheKey($userId, (int) $document->tax_year));
 
         /** @var Collection<int, TaxDocumentAccount> $freshLinks */
         $freshLinks = TaxDocumentAccount::query()

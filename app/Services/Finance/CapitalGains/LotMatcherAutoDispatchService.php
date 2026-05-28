@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Log;
 
 class LotMatcherAutoDispatchService
 {
+    public function __construct(
+        private readonly LotMatchRunRecorder $lotMatchRunRecorder,
+    ) {}
+
     /**
      * Dispatch a matcher refresh for one unified document when it contains broker-reported disposition data.
      */
@@ -32,6 +36,7 @@ class LotMatcherAutoDispatchService
 
         $this->queueDocument(
             documentId: (int) $document->id,
+            userId: (int) $document->user_id,
             trigger: $trigger,
             accountId: $accountId,
             taxYear: $taxYear ?? (int) $document->tax_year,
@@ -100,6 +105,7 @@ class LotMatcherAutoDispatchService
 
             $this->queueDocument(
                 documentId: $documentId,
+                userId: (int) $document->user_id,
                 trigger: $trigger,
                 accountId: $accountId,
                 taxYear: $document->tax_year === null ? $years[0] : (int) $document->tax_year,
@@ -213,16 +219,20 @@ class LotMatcherAutoDispatchService
 
     private function queueDocument(
         int $documentId,
+        int $userId,
         LotMatcherAutoTrigger $trigger,
         ?int $accountId,
         ?int $taxYear,
     ): void {
-        LotsMatchJob::dispatch($documentId, $taxYear)
+        $run = $this->lotMatchRunRecorder->queued($documentId, $userId, $taxYear);
+
+        LotsMatchJob::dispatch($documentId, $taxYear, null, (int) $run->id)
             ->delay(now()->addSeconds(LotsMatchJob::DELAY_SECONDS))
             ->afterCommit();
 
         Log::info('Lot matcher auto-dispatch queued', [
             'document_id' => $documentId,
+            'run_id' => (int) $run->id,
             'trigger' => $trigger->value,
             'account_id' => $accountId,
             'tax_year' => $taxYear,

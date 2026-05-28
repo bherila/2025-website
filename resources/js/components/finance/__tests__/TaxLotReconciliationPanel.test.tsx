@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
 
@@ -15,135 +16,181 @@ jest.mock('@/fetchWrapper', () => ({
 jest.mock('sonner', () => ({
   toast: {
     error: jest.fn(),
-    info: jest.fn(),
     success: jest.fn(),
   },
 }))
 
+jest.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
 const mockGet = fetchWrapper.get as jest.Mock
-const mockPost = fetchWrapper.post as jest.Mock
 const mockPostRaw = fetchWrapper.postRaw as jest.Mock
 
-function lot(id: number, overrides: Record<string, unknown> = {}) {
-  return {
-    lot_id: id,
-    acct_id: 10,
-    symbol: 'AAPL',
-    description: 'Apple Inc.',
-    cusip: '037833100',
-    quantity: 10,
-    purchase_date: '2024-01-02',
-    sale_date: '2025-02-03',
-    proceeds: 1250,
-    cost_basis: 1000,
-    realized_gain_loss: 250,
-    is_short_term: false,
-    lot_source: '1099b',
-    form_8949_box: 'D',
-    is_covered: true,
-    accrued_market_discount: 0,
-    wash_sale_disallowed: 0,
-    statement_id: null,
-    close_t_id: null,
-    tax_document_id: null,
-    superseded_by_lot_id: null,
-    reconciliation_status: null,
-    reconciliation_notes: null,
-    tax_document_filename: null,
-    ...overrides,
-  }
+const linkCounts = {
+  auto_matched: 0,
+  needs_review: 1,
+  accepted_broker: 0,
+  accepted_account_override: 0,
+  ignored_duplicate: 0,
+  unlinked: 0,
+  broker_only: 0,
+  account_only: 0,
 }
 
-const response = {
+const summaryResponse = {
+  user_id: 1,
   tax_year: 2025,
   summary: {
-    matched: 1,
-    variance: 0,
-    missing_account: 0,
-    missing_1099b: 0,
-    duplicates: 0,
+    document_count: 1,
     unresolved_account_links: 1,
-    matched_open_transactions: 1,
-    matched_close_transactions: 1,
-    missing_open_transactions: 0,
-    missing_close_transactions: 0,
+    link_state_counts: linkCounts,
+    documents_by_health: {
+      ok: 0,
+      drift: 1,
+      blocked: 0,
+    },
+    problem_bucket_counts: {
+      missing_accounts: 1,
+      mismatches: 1,
+      broker_only: 0,
+      account_only: 0,
+      duplicates: 0,
+      auto_matched: 0,
+    },
   },
-  accounts: [
-    {
-      account_id: 10,
-      account_name: 'Brokerage',
-      summary: {
-        matched: 1,
-        variance: 0,
-        missing_account: 0,
-        missing_1099b: 0,
-        duplicates: 0,
-        unresolved_account_links: 0,
-        matched_open_transactions: 1,
-        matched_close_transactions: 1,
-        missing_open_transactions: 0,
-        missing_close_transactions: 0,
+  documents: [{
+    tax_document_id: 12,
+    document_id: 120,
+    broker: 'Synthetic Broker',
+    form_type: 'broker_1099',
+    original_filename: 'broker.pdf',
+    tax_year: 2025,
+    health: 'drift',
+    last_matched_at: '2026-05-10T17:00:00.000Z',
+    unresolved_account_links: 1,
+    link_state_counts: linkCounts,
+    problem_bucket_counts: {
+      missing_accounts: 1,
+      mismatches: 1,
+      broker_only: 0,
+      account_only: 0,
+      duplicates: 0,
+      auto_matched: 0,
+    },
+    latest_match_run: {
+      id: 9,
+      document_id: 120,
+      user_id: 1,
+      status: 'succeeded',
+      mode: 'preserve',
+      started_at: '2026-05-10T17:00:00.000Z',
+      finished_at: '2026-05-10T17:01:00.000Z',
+      result_summary: { counts: { needs_review: 1 } },
+      error: null,
+      created_at: '2026-05-10T17:00:00.000Z',
+      updated_at: '2026-05-10T17:01:00.000Z',
+    },
+  }],
+  unresolved_account_links: [{
+    id: 55,
+    document_id: 120,
+    tax_document_id: 12,
+    account_id: null,
+    form_type: '1099_b',
+    tax_year: 2025,
+    account_section_label: null,
+    ai_identifier: '1234',
+    ai_account_name: 'Unmatched Brokerage',
+    is_reviewed: false,
+    source_filename: 'broker.pdf',
+    account: null,
+  }],
+}
+
+const linksResponse = {
+  document: {
+    id: 12,
+    document_id: 120,
+    broker: 'Synthetic Broker',
+    tax_year: 2025,
+    form_type: 'broker_1099',
+    original_filename: 'broker.pdf',
+    last_matched_at: '2026-05-10T17:00:00.000Z',
+    account_links: summaryResponse.unresolved_account_links,
+  },
+  summary: {
+    total: 1,
+    link_state_counts: linkCounts,
+  },
+  links: [{
+    id: 77,
+    tax_document_id: 12,
+    broker_lot_id: 101,
+    account_lot_id: 202,
+    state: 'needs_review',
+    match_reason: {
+      reason_code: 'basis_delta',
+      score: 0.91,
+      deltas: {
+        proceeds: 0,
+        basis: 300,
+        wash: 0,
+        qty: 0,
+        date_days: 0,
       },
-      rows: [
-        {
-          status: 'matched',
-          reported_lot: lot(101),
-          account_lot: lot(202, { lot_source: 'analyzer', tax_document_id: null }),
-          candidate_lots: [lot(202, { lot_source: 'analyzer', tax_document_id: null })],
-          transaction_match: {
-            opening: {
-              status: 'matched',
-              transaction: {
-                t_id: 301,
-                t_date: '2024-01-02',
-                t_type: 'Buy',
-                t_amt: -1000,
-                t_symbol: 'AAPL',
-                t_cusip: '037833100',
-                t_qty: 10,
-                t_price: 100,
-                t_description: 'BUY AAPL',
-                t_source: 'import',
-              },
-            },
-            closing: {
-              status: 'matched',
-              transaction: {
-                t_id: 302,
-                t_date: '2025-02-03',
-                t_type: 'Sell',
-                t_amt: 1250,
-                t_symbol: 'AAPL',
-                t_cusip: '037833100',
-                t_qty: -10,
-                t_price: 125,
-                t_description: 'SELL AAPL',
-                t_source: 'import',
-              },
-            },
-          },
-          deltas: {
-            quantity: 0,
-            proceeds: 0,
-            cost_basis: 0,
-            realized_gain_loss: 0,
-            sale_date_days: 0,
-          },
-        },
-      ],
+      notes: null,
     },
-  ],
-  unresolved_account_links: [
-    {
-      id: 55,
-      tax_document_id: 77,
-      filename: 'consolidated.pdf',
-      form_type: '1099_b',
-      tax_year: 2025,
-      ai_identifier: '1234',
-      ai_account_name: 'Unmatched Brokerage',
+    accepted_by_user_id: null,
+    accepted_at: null,
+    broker_lot: {
+      lot_id: 101,
+      acct_id: 10,
+      account_name: 'Brokerage',
+      symbol: 'AAPL',
+      description: 'Apple Inc.',
+      cusip: '037833100',
+      quantity: 10,
+      purchase_date: '2024-01-02',
+      sale_date: '2025-02-03',
+      proceeds: 1250,
+      cost_basis: 1000,
+      wash_sale_disallowed: 0,
+      realized_gain_loss: 250,
+      is_short_term: false,
+      form_8949_box: 'D',
+      is_covered: true,
+      source: 'broker_1099b',
+      lot_source: '1099b',
+      reconciliation_status: 'needs_review',
+      superseded_by_lot_id: null,
     },
-  ],
+    account_lot: {
+      lot_id: 202,
+      acct_id: 10,
+      account_name: 'Brokerage',
+      symbol: 'AAPL',
+      description: 'Apple Inc.',
+      cusip: '037833100',
+      quantity: 10,
+      purchase_date: '2024-01-02',
+      sale_date: '2025-02-03',
+      proceeds: 1250,
+      cost_basis: 1300,
+      wash_sale_disallowed: 0,
+      realized_gain_loss: -50,
+      is_short_term: false,
+      form_8949_box: 'D',
+      is_covered: true,
+      source: 'account_derived',
+      lot_source: 'analyzer',
+      reconciliation_status: 'needs_review',
+      superseded_by_lot_id: null,
+    },
+  }],
+  relink_candidates: [],
 }
 
 beforeEach(() => {
@@ -151,22 +198,39 @@ beforeEach(() => {
 })
 
 describe('TaxLotReconciliationPanel', () => {
-  it('renders summary counts, account rows, and unresolved account links', async () => {
-    mockGet.mockResolvedValue(response)
+  it('loads the summary endpoint first and does not eagerly load bucket rows', async () => {
+    mockGet.mockResolvedValue(summaryResponse)
 
     render(<TaxLotReconciliationPanel selectedYear={2025} />)
 
-    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
-    expect(screen.getByText(/consolidated\.pdf/)).toBeInTheDocument()
-    expect(screen.getByText(/Unmatched Brokerage/)).toBeInTheDocument()
-    expect(screen.getAllByText('AAPL').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Matched').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('button', { name: /export txf/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /export olt xlsx/i })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Synthetic Broker')).toBeInTheDocument())
+    expect(mockGet).toHaveBeenCalledWith('/api/finance/tax-years/2025/reconciliation-summary')
+    expect(mockGet).not.toHaveBeenCalledWith('/api/finance/lots/reconciliation?tax_year=2025')
+    expect(mockGet).not.toHaveBeenCalledWith('/api/finance/tax-documents/12/lot-reconciliation-links')
+    expect(screen.getByText('Unmatched Brokerage')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /resolve account/i })).toBeInTheDocument()
   })
 
-  it('exports all 1099-B lots from the dock reconciliation view', async () => {
-    mockGet.mockResolvedValue(response)
+  it('lazy-loads document problem buckets', async () => {
+    mockGet.mockImplementation((url: string) => Promise.resolve(
+      url.includes('lot-reconciliation-links') ? linksResponse : summaryResponse,
+    ))
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Synthetic Broker')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /buckets/i }))
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/api/finance/tax-documents/12/lot-reconciliation-links')
+    })
+    expect(screen.getByText('Mismatches')).toBeInTheDocument()
+    expect(screen.getByText('AAPL')).toBeInTheDocument()
+    expect(screen.getByText('$300.00')).toBeInTheDocument()
+  })
+
+  it('exports all 1099-B lots from the summary view', async () => {
+    mockGet.mockResolvedValue(summaryResponse)
     mockPostRaw.mockResolvedValue({
       ok: true,
       blob: jest.fn().mockResolvedValue(new Blob(['txf'])),
@@ -177,7 +241,7 @@ describe('TaxLotReconciliationPanel', () => {
 
     render(<TaxLotReconciliationPanel selectedYear={2025} />)
 
-    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Synthetic Broker')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /export txf/i }))
 
     await waitFor(() => {
@@ -187,165 +251,5 @@ describe('TaxLotReconciliationPanel', () => {
         tax_year: 2025,
       })
     })
-
-    expect(URL.createObjectURL).toHaveBeenCalled()
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:txf')
-  })
-
-  it('posts supersede payload when accepting exact matches', async () => {
-    mockGet.mockResolvedValue(response)
-    mockPost.mockResolvedValue({ success: true })
-
-    render(<TaxLotReconciliationPanel selectedYear={2025} />)
-
-    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /accept matches/i }))
-
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/api/finance/10/lots/reconciliation/apply', {
-        supersede: [{ keep_lot_id: 101, drop_lot_id: 202 }],
-      })
-    })
-    expect(mockGet).toHaveBeenCalledTimes(2)
-  })
-
-  it('posts inverse supersede payload when overriding a 1099-B variance with the account lot', async () => {
-    mockGet.mockResolvedValue({
-      ...response,
-      summary: {
-        ...response.summary,
-        matched: 0,
-        variance: 1,
-      },
-      accounts: [{
-        ...response.accounts[0]!,
-        summary: {
-          ...response.accounts[0]!.summary,
-          matched: 0,
-          variance: 1,
-        },
-        rows: [{
-          ...response.accounts[0]!.rows[0]!,
-          status: 'variance',
-          reported_lot: lot(101, { wash_sale_disallowed: null }),
-          account_lot: lot(202, { lot_source: 'analyzer', tax_document_id: null, wash_sale_disallowed: 125 }),
-          candidate_lots: [lot(202, { lot_source: 'analyzer', tax_document_id: null, wash_sale_disallowed: 125 })],
-          deltas: {
-            quantity: 0,
-            proceeds: 0,
-            cost_basis: 0,
-            realized_gain_loss: 0,
-            wash_sale_disallowed: 125,
-            accrued_market_discount: 0,
-            sale_date_days: 0,
-          },
-        }],
-      }],
-    })
-    mockPost.mockResolvedValue({ success: true })
-
-    render(<TaxLotReconciliationPanel selectedYear={2025} />)
-
-    await waitFor(() => expect(screen.getByText('Brokerage')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /override 1099-b/i }))
-
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/api/finance/10/lots/reconciliation/apply', {
-        supersede: [{ keep_lot_id: 202, drop_lot_id: 101 }],
-      })
-    })
-  })
-
-  it('renders applied state for rows that were already superseded', async () => {
-    mockGet.mockResolvedValue({
-      ...response,
-      accounts: [{
-        ...response.accounts[0]!,
-        rows: [{
-          ...response.accounts[0]!.rows[0]!,
-          account_lot: lot(202, {
-            lot_source: 'analyzer',
-            superseded_by_lot_id: 101,
-            reconciliation_status: 'accepted',
-          }),
-          candidate_lots: [lot(202, {
-            lot_source: 'analyzer',
-            superseded_by_lot_id: 101,
-            reconciliation_status: 'accepted',
-          })],
-        }],
-      }],
-    })
-
-    render(<TaxLotReconciliationPanel selectedYear={2025} />)
-
-    await waitFor(() => expect(screen.getByText('Applied')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /use 1099-b/i })).not.toBeInTheDocument()
-  })
-
-  it('renders override applied state when the reported lot was superseded by the account lot', async () => {
-    mockGet.mockResolvedValue({
-      ...response,
-      accounts: [{
-        ...response.accounts[0]!,
-        rows: [{
-          ...response.accounts[0]!.rows[0]!,
-          status: 'variance',
-          reported_lot: lot(101, {
-            superseded_by_lot_id: 202,
-            reconciliation_status: 'accepted',
-          }),
-          account_lot: lot(202, {
-            lot_source: 'analyzer',
-            tax_document_id: null,
-            reconciliation_status: 'accepted',
-          }),
-          candidate_lots: [lot(202, {
-            lot_source: 'analyzer',
-            tax_document_id: null,
-            reconciliation_status: 'accepted',
-          })],
-        }],
-      }],
-    })
-
-    render(<TaxLotReconciliationPanel selectedYear={2025} />)
-
-    await waitFor(() => expect(screen.getByText('Override applied')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /override 1099-b/i })).not.toBeInTheDocument()
-  })
-
-  it('renders accepted state for accepted account-only lots', async () => {
-    mockGet.mockResolvedValue({
-      ...response,
-      accounts: [{
-        ...response.accounts[0]!,
-        rows: [{
-          status: 'missing_1099b',
-          reported_lot: null,
-          account_lot: lot(303, {
-            lot_source: 'analyzer',
-            reconciliation_status: 'accepted',
-          }),
-          candidate_lots: [lot(303, {
-            lot_source: 'analyzer',
-            reconciliation_status: 'accepted',
-          })],
-          transaction_match: null,
-          deltas: {
-            quantity: null,
-            proceeds: null,
-            cost_basis: null,
-            realized_gain_loss: null,
-            sale_date_days: null,
-          },
-        }],
-      }],
-    })
-
-    render(<TaxLotReconciliationPanel selectedYear={2025} />)
-
-    await waitFor(() => expect(screen.getAllByText('Accepted').length).toBeGreaterThanOrEqual(2))
-    expect(screen.queryByRole('button', { name: /^accept$/i })).not.toBeInTheDocument()
   })
 })
