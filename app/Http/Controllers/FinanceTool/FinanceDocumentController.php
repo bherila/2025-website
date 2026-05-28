@@ -16,6 +16,7 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\FileStorageService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
+use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,7 @@ class FinanceDocumentController extends Controller
         private readonly DocumentIngestionService $documentIngestionService,
         private readonly TaxDocumentCreationService $taxDocumentCreationService,
         private readonly TaxDocumentParsedDataNormalizer $taxDocumentParsedDataNormalizer,
+        private readonly TransactionDeletionTombstoneService $transactionDeletionTombstoneService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -117,7 +119,15 @@ class FinanceDocumentController extends Controller
         }
 
         DB::transaction(function () use ($doc): void {
-            $this->documentTransactions($doc)->delete();
+            $transactions = $this->documentTransactions($doc)->get(['t_id', 't_account']);
+            $this->transactionDeletionTombstoneService->record($transactions, (int) $doc->user_id);
+
+            if ($transactions->isNotEmpty()) {
+                FinAccountLineItems::query()
+                    ->whereKey($transactions->pluck('t_id')->all())
+                    ->delete();
+            }
+
             $doc->lots()->delete();
             $doc->accounts()->delete();
             $doc->statements()->delete();
@@ -215,11 +225,14 @@ class FinanceDocumentController extends Controller
      */
     private function confirmationToken(FinDocument $document, array $impact): string
     {
-        return hash('sha256', (string) json_encode([
+        $payload = json_encode([
             'id' => (int) $document->id,
+            'user_id' => (int) $document->user_id,
             'file_hash' => $document->file_hash,
             'impact' => $impact,
-        ]));
+        ], JSON_THROW_ON_ERROR);
+
+        return hash_hmac('sha256', $payload, (string) config('app.key'));
     }
 
     /**

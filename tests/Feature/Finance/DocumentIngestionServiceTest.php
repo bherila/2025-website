@@ -598,7 +598,11 @@ class DocumentIngestionServiceTest extends TestCase
         $documentId = (int) $response->json('document.id');
         $statementId = (int) $response->json('accounts.0.statement_id');
 
-        $this->assertSame(2, FinAccountLineItems::query()->where('statement_id', $statementId)->count());
+        $transactionIds = FinAccountLineItems::query()
+            ->where('statement_id', $statementId)
+            ->pluck('t_id')
+            ->all();
+        $this->assertCount(2, $transactionIds);
 
         $previewResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
         $previewResponse->assertOk()
@@ -614,6 +618,14 @@ class DocumentIngestionServiceTest extends TestCase
 
         $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
         $this->assertSame(0, FinAccountLineItems::query()->where('statement_id', $statementId)->count());
+
+        foreach ($transactionIds as $transactionId) {
+            $this->assertDatabaseHas('fin_account_line_item_deletions', [
+                't_id' => $transactionId,
+                't_account' => $accountId,
+                'user_id' => $user->id,
+            ]);
+        }
     }
 
     public function test_hashless_document_delete_requires_confirmation_token(): void
@@ -645,9 +657,27 @@ class DocumentIngestionServiceTest extends TestCase
             ->assertJsonPath('document.file_hash', null);
         $confirmationToken = (string) $previewResponse->json('confirmation_token');
         $this->assertNotSame('', $confirmationToken);
+        $predictableToken = hash('sha256', (string) json_encode([
+            'id' => $documentId,
+            'user_id' => $user->id,
+            'file_hash' => null,
+            'impact' => [
+                'lots' => 0,
+                'account_links' => 1,
+                'statements' => 1,
+                'transactions' => 0,
+            ],
+        ]));
+        $this->assertNotSame($predictableToken, $confirmationToken);
 
         $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
             'confirm' => true,
+        ])->assertStatus(409);
+        $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
+
+        $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'confirm' => true,
+            'confirmation_token' => $predictableToken,
         ])->assertStatus(409);
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
