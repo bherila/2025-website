@@ -229,6 +229,7 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statem
 Route::middleware(['web', 'auth'])->get('/finance/documents', [FinanceDocumentController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [FinanceDocumentController::class, 'requestUpload']);
 Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
+Route::middleware(['web', 'auth'])->delete('/finance/documents/{id}', [FinanceDocumentController::class, 'destroy']);
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/all/lots', [FinanceLotsController::class, 'showAllLots']);

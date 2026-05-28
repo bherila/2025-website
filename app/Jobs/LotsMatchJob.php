@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -27,14 +28,33 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = self::UNIQUE_FOR_SECONDS;
 
+    public readonly string $queuedAtIso;
+
     public function __construct(
         public readonly int $documentId,
         public readonly ?int $taxYear = null,
-    ) {}
+        ?string $queuedAtIso = null,
+    ) {
+        $this->queuedAtIso = $queuedAtIso ?? now()->toIso8601String();
+    }
 
     public function handle(LotMatcherService $lotMatcherService): void
     {
-        $lotMatcherService->runMatcherForDocument($this->documentId, preserveDecisions: true);
+        $started = hrtime(true);
+        $success = false;
+
+        try {
+            $lotMatcherService->runMatcherForDocument($this->documentId, preserveDecisions: true);
+            $success = true;
+        } finally {
+            Log::info('LotsMatchJob: matcher timing', [
+                'document_id' => $this->documentId,
+                'tax_year' => $this->taxYear,
+                'queue_wait_ms' => $this->queueWaitMs(),
+                'duration_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+                'success' => $success,
+            ]);
+        }
     }
 
     public function uniqueId(): string
@@ -49,5 +69,12 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
             'tax_year' => $this->taxYear,
             'error' => $exception->getMessage(),
         ]);
+    }
+
+    private function queueWaitMs(): int
+    {
+        $queuedAtMs = ((float) CarbonImmutable::parse($this->queuedAtIso)->format('U.u')) * 1000;
+
+        return max(0, (int) round((microtime(true) * 1000) - $queuedAtMs));
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\FinanceTool;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\DeleteFinanceDocumentRequest;
 use App\Http\Requests\Finance\StoreTaxFormDocumentRequest;
 use App\Http\Resources\FinanceTool\FinDocumentResource;
 use App\Models\Files\FileForTaxDocument;
@@ -18,6 +19,7 @@ use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class FinanceDocumentController extends Controller
 {
@@ -77,6 +79,52 @@ class FinanceDocumentController extends Controller
         ]);
     }
 
+    public function destroy(DeleteFinanceDocumentRequest $request, int $id): JsonResponse
+    {
+        $doc = FinDocument::query()
+            ->where('id', $id)
+            ->where('user_id', (int) Auth::id())
+            ->firstOrFail();
+
+        if ($doc->document_kind === FinDocument::KIND_TAX_FORM) {
+            abort(403, 'Tax form documents cannot be deleted via this endpoint. Use DELETE /api/finance/tax-documents/{id} instead.');
+        }
+
+        $impact = $this->deleteImpact($doc);
+
+        if (! $request->boolean('confirm')) {
+            return response()->json([
+                'requires_confirmation' => true,
+                'document' => [
+                    'id' => (int) $doc->id,
+                    'document_kind' => $doc->document_kind,
+                    'original_filename' => $doc->original_filename,
+                    'file_hash' => $doc->file_hash,
+                ],
+                'impact' => $impact,
+            ]);
+        }
+
+        $submittedHash = $request->input('file_hash');
+        if ($doc->file_hash !== null && (! is_string($submittedHash) || ! hash_equals((string) $doc->file_hash, $submittedHash))) {
+            return response()->json([
+                'message' => 'Document changed since delete preview. Refresh and preview the delete impact again.',
+            ], 409);
+        }
+
+        DB::transaction(function () use ($doc): void {
+            $doc->lots()->delete();
+            $doc->accounts()->delete();
+            $doc->statements()->delete();
+            $doc->delete();
+        });
+
+        return response()->json([
+            'success' => true,
+            'impact' => $impact,
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $request->validate([
@@ -120,6 +168,18 @@ class FinanceDocumentController extends Controller
             'document' => $result['document'],
             'accounts' => $result['accounts'],
         ], 201);
+    }
+
+    /**
+     * @return array{lots: int, account_links: int, statements: int}
+     */
+    private function deleteImpact(FinDocument $document): array
+    {
+        return [
+            'lots' => $document->lots()->count(),
+            'account_links' => $document->accounts()->count(),
+            'statements' => $document->statements()->count(),
+        ];
     }
 
     /**
