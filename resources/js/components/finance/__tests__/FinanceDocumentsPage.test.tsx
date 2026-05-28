@@ -19,6 +19,11 @@ jest.mock('../DocumentImportModal', () => ({
   default: ({ open }: { open: boolean }) => open ? <div data-testid="document-import-modal" /> : null,
 }))
 
+jest.mock('@/components/finance/TaxDocumentReviewModal', () => ({
+  __esModule: true,
+  default: ({ open }: { open: boolean }) => open ? <div data-testid="tax-review-modal" /> : null,
+}))
+
 const mockDelete = fetchWrapper.delete as jest.Mock
 const mockGet = fetchWrapper.get as jest.Mock
 
@@ -71,7 +76,10 @@ function detail(overrides: Partial<FinanceDocumentDetail> = {}): FinanceDocument
     parsed_data_warnings: null,
     notes: null,
     statements: [],
+    statement_facet: null,
+    tax_facet: null,
     lot_summary: { count: 0 },
+    lot_summary_facet: { count: 0 },
     ...overrides,
   }
 }
@@ -223,5 +231,149 @@ describe('FinanceDocumentsPage', () => {
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('/api/finance/documents/42', { impact_hash: 'hash-123' })
     })
+  })
+
+  it('renders statement lineage links from the drawer detail payload', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/finance/documents/42') {
+        return Promise.resolve(detail({
+          statement_facet: {
+            document_id: 42,
+            period: { start: '2025-01-01', end: '2025-01-31' },
+            linked_accounts: [{
+              account_id: 12,
+              account: {
+                acct_id: 12,
+                acct_name: 'Fidelity Taxable',
+                acct_number: '1234',
+              },
+            }],
+            balance_snapshots_count: 1,
+            imported_transactions_count: 2,
+            imported_lots_count: 1,
+            parsed_data_needs_review: false,
+            parsed_data_warnings: null,
+            source_job: null,
+            statements: [{
+              id: 90,
+              acct_id: 12,
+              statement_closing_date: '2025-01-31',
+              closing_balance: '1000.00',
+              imported_transactions_count: 2,
+              imported_lots_count: 1,
+              account: {
+                acct_id: 12,
+                acct_name: 'Fidelity Taxable',
+                acct_number: '1234',
+              },
+              source_job: null,
+            }],
+          },
+        }))
+      }
+
+      return Promise.resolve(paginated([makeDocument()]))
+    })
+
+    render(<FinanceDocumentsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('brokerage-statement.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('brokerage-statement.pdf'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Statement lineage')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('link', { name: /Txns/i })).toHaveAttribute(
+      'href',
+      '/finance/account/12/transactions?source_document_id=42',
+    )
+    expect(screen.getByRole('link', { name: /Lots/i })).toHaveAttribute(
+      'href',
+      '/finance/account/12/lots?source_document_id=42',
+    )
+  })
+
+  it('opens the tax review modal from the tax facet', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/finance/documents/42') {
+        return Promise.resolve(detail({
+          document_kind: 'tax_form',
+          tax_year: 2025,
+          tax_facet: {
+            document_id: 42,
+            tax_document_id: 7,
+            form_type: '1099_b',
+            tax_year: 2025,
+            review_status: 'needs_review',
+            parsing_status: 'parsed',
+            is_reviewed: false,
+            parsed_data_summary: {
+              has_parsed_data: true,
+              is_multi_entry: false,
+              entry_count: 1,
+              top_level_keys: ['transactions'],
+              warnings_count: 1,
+              needs_review: true,
+            },
+            account_links: [],
+            downstream_effects: {
+              linked_lots_count: 3,
+              reconciliation_link_counts_by_state: { needs_review: 2 },
+            },
+            review_document: {
+              id: 7,
+              user_id: 1,
+              tax_year: 2025,
+              form_type: '1099_b',
+              employment_entity_id: null,
+              account_id: 12,
+              original_filename: 'tax.pdf',
+              stored_filename: 'stored-tax.pdf',
+              s3_path: null,
+              mime_type: 'application/pdf',
+              file_size_bytes: 100,
+              file_hash: 'hash',
+              is_reviewed: false,
+              notes: null,
+              human_file_size: '100 bytes',
+              download_count: 0,
+              genai_job_id: null,
+              genai_status: 'parsed',
+              parsed_data: null,
+              parsed_data_needs_review: true,
+              parsed_data_warnings: [{ path: 'parsed_data.transactions', code: 'unsupported_field', message: 'Review' }],
+              uploader: null,
+              employment_entity: null,
+              account: null,
+              account_links: [],
+              created_at: '2025-02-01',
+              updated_at: '2025-02-01',
+            },
+          },
+        }))
+      }
+
+      return Promise.resolve(paginated([makeDocument({ document_kind: 'tax_form', tax_year: 2025 })]))
+    })
+
+    render(<FinanceDocumentsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('brokerage-statement.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('brokerage-statement.pdf'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Tax review')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Review$/ }))
+
+    expect(screen.getByTestId('tax-review-modal')).toBeInTheDocument()
   })
 })

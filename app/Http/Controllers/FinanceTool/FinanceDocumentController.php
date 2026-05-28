@@ -189,8 +189,28 @@ class FinanceDocumentController extends Controller
             ->where('user_id', (int) Auth::id())
             ->with([
                 'accounts.account:acct_id,acct_name,acct_number',
-                'taxDocument:id,document_id,form_type,tax_year,is_reviewed,genai_status',
-                'statements:statement_id,document_id,acct_id,statement_closing_date,balance',
+                'genaiJob:id,status,job_type,ai_provider,ai_model,original_filename,parsed_at',
+                'taxDocument.uploader:id,name',
+                'taxDocument.employmentEntity:id,display_name',
+                'taxDocument.account:acct_id,acct_name,acct_number',
+                'taxDocument.accountLinks.account:acct_id,acct_name,acct_number',
+                'statements' => fn ($query) => $query
+                    ->select([
+                        'statement_id',
+                        'document_id',
+                        'acct_id',
+                        'statement_closing_date',
+                        'balance',
+                        'genai_job_id',
+                    ])
+                    ->with([
+                        'account:acct_id,acct_name,acct_number',
+                        'genaiJob:id,status,job_type,ai_provider,ai_model,original_filename,parsed_at',
+                    ])
+                    ->withCount([
+                        'transactions as imported_transactions_count',
+                        'lots as imported_lots_count',
+                    ]),
                 'lots',
             ])
             ->firstOrFail();

@@ -2,10 +2,14 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
+use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\FinStatement;
 use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -200,6 +204,162 @@ class FinanceDocumentControllerTest extends TestCase
             'id', 'document_kind', 'tax_year', 'original_filename',
             'capabilities', 'accounts', 'statements', 'lot_summary',
         ]);
+    }
+
+    public function test_show_returns_statement_lineage_facet(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Taxable Brokerage');
+        $doc = $this->makeDocument($user->id, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'period_start' => '2025-01-01',
+            'period_end' => '2025-01-31',
+        ]);
+
+        FinDocumentAccount::create([
+            'document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+        ]);
+
+        $statement = FinStatement::create([
+            'document_id' => $doc->id,
+            'acct_id' => $account->acct_id,
+            'balance' => '1000.00',
+            'statement_closing_date' => '2025-01-31',
+        ]);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            'statement_id' => $statement->statement_id,
+            't_date' => '2025-01-15',
+            't_amt' => '10.00',
+            't_description' => 'Dividend',
+        ]);
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            'statement_id' => $statement->statement_id,
+            't_date' => '2025-01-16',
+            't_amt' => '-5.00',
+            't_description' => 'Fee',
+        ]);
+
+        $brokerLot = FinAccountLot::query()->create([
+            'acct_id' => $account->acct_id,
+            'document_id' => $doc->id,
+            'statement_id' => $statement->statement_id,
+            'symbol' => 'AAPL',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 100,
+            'cost_per_unit' => 100,
+            'sale_date' => '2025-01-15',
+            'proceeds' => 110,
+            'realized_gain_loss' => 10,
+            'lot_source' => FinAccountLot::SOURCE_1099B,
+        ]);
+        $accountLot = FinAccountLot::query()->create([
+            'acct_id' => $account->acct_id,
+            'document_id' => $doc->id,
+            'statement_id' => $statement->statement_id,
+            'symbol' => 'MSFT',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-02',
+            'cost_basis' => 200,
+            'cost_per_unit' => 200,
+            'sale_date' => '2025-01-16',
+            'proceeds' => 210,
+            'realized_gain_loss' => 10,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+        ]);
+
+        FinLotReconciliationLink::create([
+            'document_id' => $doc->id,
+            'broker_lot_id' => $brokerLot->lot_id,
+            'account_lot_id' => $accountLot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_NEEDS_REVIEW,
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('statement_facet.period.start', '2025-01-01')
+            ->assertJsonPath('statement_facet.period.end', '2025-01-31')
+            ->assertJsonPath('statement_facet.balance_snapshots_count', 1)
+            ->assertJsonPath('statement_facet.imported_transactions_count', 2)
+            ->assertJsonPath('statement_facet.imported_lots_count', 2)
+            ->assertJsonPath('statement_facet.linked_accounts.0.account.acct_name', 'Taxable Brokerage')
+            ->assertJsonPath('lot_summary_facet.count', 2)
+            ->assertJsonPath('lot_summary_facet.counts_by_source.broker_1099b', 1)
+            ->assertJsonPath('lot_summary_facet.counts_by_source.account_derived', 1)
+            ->assertJsonPath('lot_summary_facet.counts_by_reconciliation_state.needs_review', 2);
+    }
+
+    public function test_show_returns_tax_review_facet(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id, 'Brokerage');
+        $doc = $this->makeDocument($user->id, [
+            'document_kind' => FinDocument::KIND_TAX_FORM,
+            'tax_year' => 2025,
+        ]);
+
+        $taxDocument = FileForTaxDocument::create([
+            'user_id' => $user->id,
+            'document_id' => $doc->id,
+            'tax_year' => 2025,
+            'form_type' => FileForTaxDocument::FORM_TYPE_1099_B,
+            'original_filename' => '1099-b.pdf',
+            'stored_filename' => 'stored-1099-b.pdf',
+            's3_path' => "tax_docs/{$user->id}/stored-1099-b.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 100,
+            'file_hash' => str_repeat('a', 64),
+            'uploaded_by_user_id' => $user->id,
+            'genai_status' => 'parsed',
+            'parsed_data' => ['b_total_proceeds' => 123.45],
+            'is_reviewed' => false,
+        ]);
+
+        FinDocumentAccount::create([
+            'document_id' => $doc->id,
+            'account_id' => $account->acct_id,
+            'form_type' => FileForTaxDocument::FORM_TYPE_1099_B,
+            'tax_year' => 2025,
+            'ai_identifier' => '1234',
+            'ai_account_name' => 'Brokerage 1234',
+        ]);
+
+        $lot = FinAccountLot::query()->create([
+            'acct_id' => $account->acct_id,
+            'document_id' => $doc->id,
+            'symbol' => 'AAPL',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 100,
+            'cost_per_unit' => 100,
+            'sale_date' => '2025-02-01',
+            'proceeds' => 125,
+            'realized_gain_loss' => 25,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+        ]);
+
+        FinLotReconciliationLink::create([
+            'document_id' => $doc->id,
+            'broker_lot_id' => $lot->lot_id,
+            'state' => FinLotReconciliationLink::STATE_ACCEPTED_BROKER,
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('tax_facet.tax_document_id', $taxDocument->id)
+            ->assertJsonPath('tax_facet.form_type', FileForTaxDocument::FORM_TYPE_1099_B)
+            ->assertJsonPath('tax_facet.review_status', 'needs_review')
+            ->assertJsonPath('tax_facet.account_links.0.ai_identifier', '1234')
+            ->assertJsonPath('tax_facet.parsed_data_summary.warnings_count', 1)
+            ->assertJsonPath('tax_facet.downstream_effects.linked_lots_count', 1)
+            ->assertJsonPath('tax_facet.downstream_effects.reconciliation_link_counts_by_state.accepted_broker', 1)
+            ->assertJsonPath('tax_facet.review_document.id', $taxDocument->id);
     }
 
     public function test_show_returns_404_for_other_user(): void

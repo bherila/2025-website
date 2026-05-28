@@ -4,6 +4,9 @@ import { fetchWrapper } from '@/fetchWrapper'
 
 import DocumentDrawerHeader from './DocumentDrawerHeader'
 import DocumentImpactPreview from './DocumentImpactPreview'
+import LotSummaryFacet from './LotSummaryFacet'
+import StatementFacet from './StatementFacet'
+import TaxFacet from './TaxFacet'
 import type { FinanceDocument, FinanceDocumentDetail } from './types'
 
 interface DocumentDetailDrawerProps {
@@ -53,6 +56,10 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete document')
     }
+  }
+
+  const handleDetailUpdated = () => {
+    void loadDetail(document.id)
   }
 
   const displayDoc = detail ?? document
@@ -127,27 +134,16 @@ export default function DocumentDetailDrawer({ document, onClose, onDeleted }: D
               </section>
             )}
 
-            {/* Statements facet placeholder */}
-            {detail?.statements && detail.statements.length > 0 && (
-              <section>
-                <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Statements</h3>
-                <ul className="space-y-1 text-sm">
-                  {detail.statements.map((stmt) => (
-                    <li key={stmt.id}>
-                      Statement #{stmt.id}
-                      {stmt.statement_closing_date && ` — ${stmt.statement_closing_date}`}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+            {detail?.statement_facet && <StatementFacet facet={detail.statement_facet} />}
 
-            {/* Lots facet placeholder */}
-            {detail?.lot_summary && detail.lot_summary.count > 0 && (
-              <section>
-                <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Lots</h3>
-                <p className="text-sm">{detail.lot_summary.count} lot(s) associated with this document.</p>
-              </section>
+            {detail?.tax_facet && <TaxFacet facet={detail.tax_facet} onUpdated={handleDetailUpdated} />}
+
+            {detail?.lot_summary_facet && (
+              <LotSummaryFacet
+                documentId={detail.id}
+                summary={detail.lot_summary_facet}
+                accounts={accounts}
+              />
             )}
 
             {/* Actions */}

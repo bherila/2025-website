@@ -67,6 +67,7 @@ function filterTransactions(
 
 export default function TransactionsPage({ accountId, initialAvailableYears = [], userId }: TransactionsPageProps) {
   const isAllAccounts = accountId === 'all'
+  const sourceDocumentId = getUrlParam('source_document_id')
 
   const [data, setData] = useState<AccountLineItem[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -76,6 +77,7 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
   const [availableYears, setAvailableYears] = useState<number[]>(initialAvailableYears)
 
   const [selectedYear, setSelectedYear] = useState<string>(() => {
+    if (sourceDocumentId) return 'all'
     const fromUrl = getUrlParam('year')
     if (fromUrl) return fromUrl
     const currentYear = new Date().getFullYear()
@@ -102,17 +104,18 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
         setAvailableYears(parsedYears)
         const currentYear = new Date().getFullYear()
         setSelectedYear((prev) => {
+          if (sourceDocumentId) return prev
           if (prev !== 'all') return prev
           if (parsedYears.includes(currentYear)) return currentYear.toString()
           const first = parsedYears[0]
           return first !== undefined ? first.toString() : 'all'
         })
       } catch {
-        // keep initialAvailableYears on error
+      // keep initialAvailableYears on error
       }
     }
     fetchYears()
-  }, [accountId, isAllAccounts])
+  }, [accountId, isAllAccounts, sourceDocumentId])
 
   const handleYearChange = (year: string) => {
     setSelectedYear(year)
@@ -133,6 +136,17 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
     const fetchData = async () => {
       try {
         setIsLoading(true)
+
+        if (sourceDocumentId) {
+          const endpoint = isAllAccounts
+            ? '/api/finance/all/line_items'
+            : `/api/finance/${accountId}/line_items`
+          const params = new URLSearchParams({ source_document_id: sourceDocumentId })
+          const fetched = await fetchWrapper.get(`${endpoint}?${params.toString()}`)
+          const parsed = z.array(AccountLineItemSchema).parse(fetched).filter(Boolean)
+          setData(filterTransactions(parsed, selectedYear, filter, selectedTag))
+          return
+        }
 
         const cacheKey = buildCacheKey(accountId)
 
@@ -160,7 +174,7 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
       }
     }
     fetchData()
-  }, [accountId, isAllAccounts, selectedYear, filter, selectedTag, fetchKey, userId])
+  }, [accountId, isAllAccounts, selectedYear, filter, selectedTag, fetchKey, sourceDocumentId, userId])
 
   const highlightTransactionId = useMemo(() => {
     if (typeof window === 'undefined') return undefined
@@ -190,12 +204,15 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
         setData((prev) => prev?.filter((t) => t.t_id?.toString() !== t_id) ?? null)
         await fetchWrapper.delete(`/api/finance/${accountId}/line_items`, { t_id })
       } catch (error) {
-        const refreshed = await fetchWrapper.get(`/api/finance/${accountId}/line_items`)
+        const refreshEndpoint = sourceDocumentId
+          ? `/api/finance/${accountId}/line_items?${new URLSearchParams({ source_document_id: sourceDocumentId }).toString()}`
+          : `/api/finance/${accountId}/line_items`
+        const refreshed = await fetchWrapper.get(refreshEndpoint)
         setData(refreshed)
         console.error('Delete transaction error:', error)
       }
     },
-    [accountId, isAllAccounts],
+    [accountId, isAllAccounts, sourceDocumentId],
   )
 
   const handleRefresh = useCallback(() => setFetchKey((k) => k + 1), [])

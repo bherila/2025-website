@@ -7,6 +7,7 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatement;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
@@ -108,6 +109,60 @@ class FinanceTransactionsApiControllerTest extends TestCase
         $this->assertIsArray($data);
         $this->assertCount(1, $data);
         $this->assertNull($data[0]['t_symbol'] ?? null);
+    }
+
+    public function test_get_line_items_filters_by_source_document_id_through_statement(): void
+    {
+        $user = $this->createUser();
+        $account = FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Taxable Brokerage',
+            'acct_last_balance' => '0',
+        ]));
+        $firstDocument = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'jan.pdf',
+        ]);
+        $secondDocument = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'feb.pdf',
+        ]);
+        $firstStatement = FinStatement::create([
+            'document_id' => $firstDocument->id,
+            'acct_id' => $account->acct_id,
+            'balance' => '1000.00',
+        ]);
+        $secondStatement = FinStatement::create([
+            'document_id' => $secondDocument->id,
+            'acct_id' => $account->acct_id,
+            'balance' => '2000.00',
+        ]);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            'statement_id' => $firstStatement->statement_id,
+            't_date' => '2025-01-15',
+            't_amt' => '10.00',
+            't_description' => 'January statement transaction',
+        ]);
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            'statement_id' => $secondStatement->statement_id,
+            't_date' => '2025-02-15',
+            't_amt' => '20.00',
+            't_description' => 'February statement transaction',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$account->acct_id}/line_items?source_document_id={$firstDocument->id}");
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertIsArray($data);
+        $this->assertCount(1, $data);
+        $this->assertSame('January statement transaction', $data[0]['t_description']);
     }
 
     public function test_get_line_items_returns_404_for_other_user_account(): void

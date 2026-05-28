@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\DB;
@@ -113,6 +114,55 @@ class FinanceLotsControllerTest extends TestCase
         $this->assertCount(2, $data['lots']);
         $this->assertNull($data['summary']); // No summary for open lots
         $this->assertContains(2025, $data['closedYears']);
+    }
+
+    public function test_listing_lots_filters_by_source_document_id(): void
+    {
+        $user = $this->createAdminUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Taxable Brokerage',
+            'acct_last_balance' => '0',
+        ]);
+
+        $firstDocument = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'jan.pdf',
+        ]);
+        $secondDocument = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'feb.pdf',
+        ]);
+
+        FinAccountLot::query()->create([
+            'acct_id' => $acctId,
+            'document_id' => $firstDocument->id,
+            'symbol' => 'AAPL',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-01',
+            'cost_basis' => 100,
+            'cost_per_unit' => 100,
+            'sale_date' => null,
+        ]);
+        FinAccountLot::query()->create([
+            'acct_id' => $acctId,
+            'document_id' => $secondDocument->id,
+            'symbol' => 'MSFT',
+            'quantity' => 1,
+            'purchase_date' => '2025-02-01',
+            'cost_basis' => 200,
+            'cost_per_unit' => 200,
+            'sale_date' => null,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/finance/{$acctId}/lots?status=open&source_document_id={$firstDocument->id}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('lots'));
+        $response->assertJsonPath('lots.0.symbol', 'AAPL');
     }
 
     public function test_listing_closed_lots_with_year(): void
