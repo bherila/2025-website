@@ -307,12 +307,21 @@ class DocumentIngestionService
             return 0;
         }
 
+        $rows = array_map(static function (mixed $transaction): mixed {
+            if (is_array($transaction)) {
+                unset($transaction['statement_id']);
+            }
+
+            return $transaction;
+        }, TransactionImportService::transactionsFromPayload(['transactions' => $transactions]));
+
         $result = $this->transactionImportService->importForUser(
             $userId,
-            TransactionImportService::transactionsFromPayload(['transactions' => $transactions]),
+            $rows,
             [
                 'default_account_id' => $accountId,
                 'default_statement_id' => $statementId,
+                'allow_row_statement_id' => true,
                 'require_type' => false,
                 'source' => 'import',
                 'include_defaults' => true,

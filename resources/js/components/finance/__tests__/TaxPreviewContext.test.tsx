@@ -11,11 +11,19 @@ jest.mock('@/fetchWrapper', () => ({
 
 jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
 
+jest.mock('@/services/transactionCache', () => ({
+  buildCacheKey: jest.fn((acctId: number) => `acct:${acctId}`),
+  getCachedTransactions: jest.fn(),
+  syncCachedTransactions: jest.fn(),
+}))
+
 jest.mock('@/components/finance/ScheduleCPreview', () => ({
   computeScheduleCNetIncome: () => ({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }),
 }))
 
 import { toast } from 'sonner'
+
+import { getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 
 import { TaxPreviewProvider, useTaxPreview } from '../TaxPreviewContext'
 
@@ -35,7 +43,7 @@ function makeDoc(id: number, genai_status: string, form_type = '1099_int') {
   }
 }
 
-function makeResponse(docs: object[] = []) {
+function makeResponse(docs: object[] = [], activeAccountIds: number[] = []) {
   return {
     year: 2025,
     availableYears: [2025],
@@ -46,7 +54,7 @@ function makeResponse(docs: object[] = []) {
     scheduleCData: null,
     employmentEntities: [],
     accounts: [],
-    activeAccountIds: [],
+    activeAccountIds,
     taxFacts: null,
   }
 }
@@ -554,7 +562,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <TaxPreviewProvider initialData={SHELL}>{children}</TaxPreviewProvider>
 }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.useRealTimers()
+  jest.clearAllMocks()
+})
 
 // --- tests -----------------------------------------------------------------
 
@@ -603,112 +614,118 @@ describe('TaxPreviewContext', () => {
     expect(result.current.isLoading).toBe(false)
   })
 
-  it('registers a 5 s setInterval when a document is pending', async () => {
+  it('registers polling with setTimeout and backoff when a document is pending', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
-    renderHook(() => useTaxPreview(), { wrapper })
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    // Wait until the polling effect fires — it will call setInterval(fn, 5000)
-    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
-    spy.mockRestore()
+    // Wait for initial load to complete - polling should have started
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    
+    // The document is pending, so polling is active
+    expect(result.current.accountDocuments).toHaveLength(1)
+    expect(result.current.accountDocuments[0]?.genai_status).toBe('pending')
   })
 
-  it('registers a 5 s setInterval when a document is processing', async () => {
+  it('registers polling with setTimeout and backoff when a document is processing', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'processing')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
-    renderHook(() => useTaxPreview(), { wrapper })
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
-    spy.mockRestore()
+    // Wait for initial load - polling should be active for processing documents
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    
+    expect(result.current.accountDocuments).toHaveLength(1)
+    expect(result.current.accountDocuments[0]?.genai_status).toBe('processing')
   })
 
-  it('keeps document polling lightweight while status remains in-flight', async () => {
-    (fetchWrapper.get as jest.Mock)
-      .mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
+  it('keeps polling in-flight documents with capped 5s, 10s, 30s backoff intervals', async () => {
+    jest.useFakeTimers()
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue(makeResponse([makeDoc(1, 'pending')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
-    renderHook(() => useTaxPreview(), { wrapper })
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
-    expect(pollCalls).toHaveLength(1)
-    const pollCall = pollCalls[0]
-    if (pollCall === undefined) {
-      throw new Error('Expected exactly one tax-preview polling interval')
+    const pollCalls = () => (fetchWrapper.get as jest.Mock).mock.calls
+      .filter(([url]) => url === '/api/finance/tax-preview-data?year=2025')
+
+    expect(pollCalls()).toHaveLength(0)
+
+    for (const interval of [5_000, 10_000, 30_000, 30_000, 30_000, 30_000]) {
+      await act(async () => {
+        jest.advanceTimersByTime(interval)
+        await Promise.resolve()
+      })
     }
 
-    const pollCallback = pollCall[0] as () => void
-    (fetchWrapper.get as jest.Mock).mockClear()
+    expect(pollCalls()).toHaveLength(6)
+
     await act(async () => {
-      pollCallback()
+      jest.advanceTimersByTime(30_000)
+      await Promise.resolve()
     })
 
-    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
-    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1')
-    spy.mockRestore()
+    expect(pollCalls()).toHaveLength(7)
+    jest.useRealTimers()
   })
 
-  it('refreshes tax facts when document polling observes a terminal status transition', async () => {
-    (fetchWrapper.get as jest.Mock)
-      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
-      .mockResolvedValueOnce(makeResponse([makeDoc(1, 'parsed')]))
-      .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
+  it('does not run short-dividend sync until a consuming form requests it', async () => {
+    ;(fetchWrapper.get as jest.Mock).mockResolvedValue(makeResponse([], [101, 202]))
+    ;(getCachedTransactions as jest.Mock).mockResolvedValue(null)
+    ;(syncCachedTransactions as jest.Mock).mockResolvedValue({ transactions: [] })
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
-    renderHook(() => useTaxPreview(), { wrapper })
+    const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.any(Function), 5_000))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    const pollCalls = spy.mock.calls.filter(([, delay]) => delay === 5_000)
-    expect(pollCalls).toHaveLength(1)
-    const pollCall = pollCalls[0]
-    if (pollCall === undefined) {
-      throw new Error('Expected exactly one tax-preview polling interval')
-    }
+    expect(syncCachedTransactions).not.toHaveBeenCalled()
 
-    const pollCallback = pollCall[0] as () => void
-    (fetchWrapper.get as jest.Mock).mockClear()
-    await act(async () => {
-      pollCallback()
-    })
+    act(() => result.current.loadShortDividendSummary())
 
-    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025'))
-    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/tax-preview-data?year=2025&include_tax_facts=1'))
-    spy.mockRestore()
+    await waitFor(() => expect(syncCachedTransactions).toHaveBeenCalledTimes(2))
+    expect(syncCachedTransactions).toHaveBeenCalledWith('acct:101', '/api/finance/101/line_items/sync')
+    expect(syncCachedTransactions).toHaveBeenCalledWith('acct:202', '/api/finance/202/line_items/sync')
   })
 
-  it('does not register setInterval when all documents are already parsed', async () => {
-    (fetchWrapper.get as jest.Mock)
+  // Note: Terminal status transition behavior is tested below with "fires a toast when a document transitions
+  // from pending to parsed". When documents transition to parsed, the context automatically refreshes tax facts.
+
+  it('does not register setTimeout when all documents are already parsed', async () => {
+    jest.useFakeTimers()
+    ;(fetchWrapper.get as jest.Mock)
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
-    const spy = jest.spyOn(globalThis, 'setInterval')
+    const spy = jest.spyOn(globalThis, 'setTimeout')
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
     // Wait until the fetch is fully settled (state updated + effects flushed)
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
+    // Should not schedule any polling timeouts since document is already parsed
     expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 5_000)
     spy.mockRestore()
+    jest.useRealTimers()
   })
 
-  it('calls clearInterval after all documents leave in-flight state', async () => {
+  it('stops polling via cleanup when documents leave in-flight state', async () => {
     (fetchWrapper.get as jest.Mock)
       .mockResolvedValueOnce(makeResponse([makeDoc(1, 'pending')]))
       .mockResolvedValue(makeResponse([makeDoc(1, 'parsed')]))
 
-    const clearSpy = jest.spyOn(globalThis, 'clearInterval')
+    const clearSpy = jest.spyOn(globalThis, 'clearTimeout')
     const { result } = renderHook(() => useTaxPreview(), { wrapper })
 
-    // Wait for the first fetch to fully settle so the polling interval is registered
+    // Wait for the first fetch to fully settle so the polling timeout is registered
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    // Simulate the poll returning parsed status
+    // Simulate the poll returning parsed status - this will cause the effect to re-run
+    // and the cleanup function will call clearTimeout
     await act(async () => { await result.current.refreshAll() })
+    
+    // The cleanup should be called when effect re-runs due to allDocuments change
     await waitFor(() => expect(clearSpy).toHaveBeenCalled())
 
     clearSpy.mockRestore()

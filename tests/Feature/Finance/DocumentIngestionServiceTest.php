@@ -100,7 +100,10 @@ class DocumentIngestionServiceTest extends TestCase
                 'acct_id' => $accountId,
                 'statementInfo' => ['periodEnd' => '2025-02-01'],
                 'statementDetails' => [],
-                'transactions' => [],
+                'transactions' => [
+                    ['t_date' => '2025-03-10', 't_amt' => 250.00, 't_description' => 'Dividend'],
+                    ['t_date' => '2025-03-15', 't_amt' => -75.50, 't_description' => 'Fee'],
+                ],
                 'lots' => [[
                     'symbol' => 'MSFT',
                     'quantity' => 3,
@@ -284,11 +287,11 @@ class DocumentIngestionServiceTest extends TestCase
         $response = $this->actingAs($user)->getJson('/api/finance/documents?document_kind=statement');
 
         $response->assertOk()
-            ->assertJsonPath('0.document_kind', FinDocument::KIND_STATEMENT)
-            ->assertJsonPath('0.original_filename', 'resource.pdf')
-            ->assertJsonPath('0.accounts.0.account_id', $accountId)
-            ->assertJsonMissingPath('0.file_hash')
-            ->assertJsonMissingPath('0.download_history');
+            ->assertJsonPath('data.0.document_kind', FinDocument::KIND_STATEMENT)
+            ->assertJsonPath('data.0.original_filename', 'resource.pdf')
+            ->assertJsonPath('data.0.accounts.0.account_id', $accountId)
+            ->assertJsonMissingPath('data.0.file_hash')
+            ->assertJsonMissingPath('data.0.download_history');
     }
 
     public function test_document_download_history_appends_entries(): void
@@ -517,7 +520,10 @@ class DocumentIngestionServiceTest extends TestCase
                 'acct_id' => $accountId,
                 'statementInfo' => ['periodEnd' => '2025-03-31', 'closingBalance' => 100],
                 'statementDetails' => [],
-                'transactions' => [],
+                'transactions' => [
+                    ['t_date' => '2025-03-10', 't_amt' => 250.00, 't_description' => 'Dividend'],
+                    ['t_date' => '2025-03-15', 't_amt' => -75.50, 't_description' => 'Fee'],
+                ],
                 'lots' => [[
                     'symbol' => 'MSFT',
                     'quantity' => 5,
@@ -531,39 +537,53 @@ class DocumentIngestionServiceTest extends TestCase
 
         $response->assertCreated();
         $documentId = (int) $response->json('document.id');
+        $statementId = (int) $response->json('accounts.0.statement_id');
+        $transactionIds = DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->pluck('t_id')
+            ->all();
 
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseHas('fin_account_lots', ['document_id' => $documentId]);
+        $this->assertCount(2, $transactionIds);
 
-        $previewResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}");
+        $previewResponse = $this->actingAs($user)->getJson("/api/finance/documents/{$documentId}/impact-preview");
         $previewResponse->assertOk()
-            ->assertJsonPath('requires_confirmation', true)
-            ->assertJsonPath('document.file_hash', $fileHash)
-            ->assertJsonPath('impact.lots', 1)
-            ->assertJsonPath('impact.account_links', 1)
-            ->assertJsonPath('impact.statements', 1);
+            ->assertJsonPath('summary.document_id', $documentId)
+            ->assertJsonPath('summary.user_id', $user->id)
+            ->assertJsonPath('summary.lots', 1)
+            ->assertJsonPath('summary.account_links', 1)
+            ->assertJsonPath('summary.statements', 1)
+            ->assertJsonPath('summary.transactions', 2)
+            ->assertJsonStructure(['summary', 'impact_hash']);
+
+        $impactHash = (string) $previewResponse->json('impact_hash');
+        $this->assertNotSame('', $impactHash);
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
-        $staleConfirmResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
-            'confirm' => true,
-            'file_hash' => str_repeat('b', 64),
+        $staleHashResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
+            'impact_hash' => str_repeat('0', 64),
         ]);
-        $staleConfirmResponse->assertStatus(409);
+        $staleHashResponse->assertStatus(409);
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
         $deleteResponse = $this->actingAs($user)->deleteJson("/api/finance/documents/{$documentId}", [
-            'confirm' => true,
-            'file_hash' => $fileHash,
+            'impact_hash' => $impactHash,
         ]);
-        $deleteResponse->assertOk()
-            ->assertJsonPath('success', true)
-            ->assertJsonPath('impact.lots', 1)
-            ->assertJsonPath('impact.account_links', 1)
-            ->assertJsonPath('impact.statements', 1);
+        $deleteResponse->assertOk();
 
         $this->assertDatabaseMissing('fin_documents', ['id' => $documentId]);
         $this->assertDatabaseMissing('fin_account_lots', ['document_id' => $documentId]);
         $this->assertDatabaseMissing('fin_document_accounts', ['document_id' => $documentId]);
+        $this->assertSame(0, DB::table('fin_account_line_items')->where('statement_id', $statementId)->count());
+
+        foreach ($transactionIds as $transactionId) {
+            $this->assertDatabaseHas('fin_account_line_item_deletions', [
+                't_id' => $transactionId,
+                't_account' => $accountId,
+                'user_id' => $user->id,
+            ]);
+        }
     }
 
     public function test_document_delete_is_scoped_to_owner_and_rejects_tax_form_documents(): void
@@ -588,7 +608,9 @@ class DocumentIngestionServiceTest extends TestCase
         $response->assertCreated();
         $documentId = (int) $response->json('document.id');
 
-        $this->actingAs($attacker)->deleteJson("/api/finance/documents/{$documentId}")->assertNotFound();
+        $this->actingAs($attacker)->deleteJson("/api/finance/documents/{$documentId}", [
+            'impact_hash' => str_repeat('0', 64),
+        ])->assertNotFound();
         $this->assertDatabaseHas('fin_documents', ['id' => $documentId]);
 
         $taxDocument = app(TaxDocumentCreationService::class)->createSingleAccountDocument([
@@ -610,8 +632,7 @@ class DocumentIngestionServiceTest extends TestCase
         ]);
 
         $this->actingAs($owner)->deleteJson("/api/finance/documents/{$taxDocument->document_id}", [
-            'confirm' => true,
-            'file_hash' => str_repeat('c', 64),
+            'impact_hash' => str_repeat('0', 64),
         ])->assertForbidden();
     }
 

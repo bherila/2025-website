@@ -19,6 +19,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalApiController;
 use App\Http\Controllers\ClientManagement\StripeWebhookController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\Finance\PalCarryforwardController;
+use App\Http\Controllers\Finance\ReadinessSummaryController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
 use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
@@ -128,6 +129,15 @@ Route::middleware(['web', 'auth'])->post('/finance/rules/reorder', [FinanceRules
 Route::middleware(['web', 'auth'])->post('/finance/rules/{id}/run', [FinanceRulesApiController::class, 'runNow']);
 Route::middleware(['web', 'auth'])->post('/finance/rules/preview-matches', [FinanceRulesApiController::class, 'previewMatches']);
 
+Route::middleware(['web', 'auth'])->get('/finance/documents', [FinanceDocumentController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/documents/summary', [FinanceDocumentController::class, 'summary']);
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}', [FinanceDocumentController::class, 'show'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}/download', [FinanceDocumentController::class, 'download'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->get('/finance/documents/{id}/impact-preview', [FinanceDocumentController::class, 'impactPreview'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->delete('/finance/documents/{id}', [FinanceDocumentController::class, 'destroy'])->where('id', '[0-9]+');
+Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [FinanceDocumentController::class, 'requestUpload']);
+Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
+
 Route::middleware(['web', 'auth'])->get('/finance/schedule-c', [FinanceScheduleCController::class, 'getSummary']);
 
 // Employment Entity routes
@@ -227,10 +237,6 @@ Route::middleware(['web', 'auth'])->post('/user/update-password', [UserApiContro
 Route::middleware(['web', 'auth'])->get('/finance/statement/{statement_id}/details', [StatementController::class, 'getDetails']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/all-statement-details', [StatementController::class, 'getFinStatementDetails']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/import-ib-statement', [StatementController::class, 'importIbStatement']);
-Route::middleware(['web', 'auth'])->get('/finance/documents', [FinanceDocumentController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/finance/documents/request-upload', [FinanceDocumentController::class, 'requestUpload']);
-Route::middleware(['web', 'auth'])->post('/finance/documents', [FinanceDocumentController::class, 'store']);
-Route::middleware(['web', 'auth'])->delete('/finance/documents/{id}', [FinanceDocumentController::class, 'destroy']);
 
 // Lots API routes
 Route::middleware(['web', 'auth'])->get('/finance/lot-workspace', [LotWorkspaceController::class, 'index']);
@@ -527,6 +533,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
