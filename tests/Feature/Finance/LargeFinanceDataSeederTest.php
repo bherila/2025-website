@@ -62,4 +62,38 @@ class LargeFinanceDataSeederTest extends TestCase
         $this->assertGreaterThan(0, (int) ($sourceCounts[FinAccountLot::SOURCE_ACCOUNT_DERIVED] ?? 0));
         $this->assertGreaterThan(0, (int) ($sourceCounts[FinAccountLot::SOURCE_SYNTHETIC_ADJUSTMENT] ?? 0));
     }
+
+    /**
+     * Running the seeder twice must not double the lot count (idempotency).
+     */
+    public function test_seeder_is_idempotent_for_lots(): void
+    {
+        $this->seed(LargeFinanceDataSeeder::class);
+
+        $userId = DB::table('users')
+            ->where('email', 'large-data@example.com')
+            ->value('id');
+
+        $accountIds = DB::table('fin_accounts')
+            ->where('acct_owner', $userId)
+            ->pluck('acct_id')
+            ->all();
+
+        $lotCountAfterFirstRun = DB::table('fin_account_lots')
+            ->whereIn('acct_id', $accountIds)
+            ->count();
+
+        // Run the seeder a second time — lot count must remain identical.
+        $this->seed(LargeFinanceDataSeeder::class);
+
+        $lotCountAfterSecondRun = DB::table('fin_account_lots')
+            ->whereIn('acct_id', $accountIds)
+            ->count();
+
+        $this->assertSame(
+            $lotCountAfterFirstRun,
+            $lotCountAfterSecondRun,
+            "Lot count changed after second seeder run ({$lotCountAfterFirstRun} → {$lotCountAfterSecondRun}); seeder is not idempotent.",
+        );
+    }
 }

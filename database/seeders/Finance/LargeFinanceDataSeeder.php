@@ -166,9 +166,16 @@ class LargeFinanceDataSeeder extends Seeder
     /**
      * Bulk-inserts LOTS_PER_ACCOUNT lots for the given account.
      * Distributes across broker, account-derived, and synthetic-adjustment sources.
+     *
+     * Idempotent: skips insertion entirely when lots already exist for the account
+     * so that running the seeder a second time does not double the row count.
      */
     private function seedLotsForAccount(FinAccounts $account): void
     {
+        if (FinAccountLot::query()->where('acct_id', $account->acct_id)->exists()) {
+            return;
+        }
+
         $now = now()->toDateTimeString();
         $rows = [];
         $chunkSize = 500;
