@@ -28,6 +28,7 @@ class TaxYearLotsMatchController extends Controller
             ->where('user_id', (int) Auth::id())
             ->where('tax_year', $taxYear)
             ->where('is_reviewed', true)
+            ->whereNotNull('document_id')
             ->where(function (Builder $query): void {
                 $query->whereIn('form_type', ['1099_b', 'broker_1099'])
                     ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
