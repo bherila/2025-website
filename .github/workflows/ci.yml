@@ -27,11 +27,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Detect changed paths
         uses: dorny/paths-filter@v4
         id: changes
         with:
+          # Force git-based diffing for pull requests. The PR files API path
+          # can fail before emitting outputs, which skips the whole CI fanout.
+          token: ''
           filters: |
             frontend:
               - '**/*.ts'

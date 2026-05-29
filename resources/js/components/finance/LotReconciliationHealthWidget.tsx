@@ -117,7 +117,9 @@ export default function LotReconciliationHealthWidget({ selectedYear }: LotRecon
             <a
               key={document.tax_document_id}
               href={`/finance/tax-documents/${document.tax_document_id}/lot-reconciliation`}
-              className="grid gap-2 px-4 py-3 text-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_auto_auto]" data-testid={`recon-document-${document.tax_document_id}`}
+              className="grid gap-2 px-4 py-3 text-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_auto_auto]"
+              data-dashboard-status={document.dashboard_status}
+              data-testid={`recon-health-row-${document.tax_document_id}`}
             >
               <div className="min-w-0">
                 <div className="truncate font-medium text-foreground">{document.broker ?? `Tax document #${document.tax_document_id}`}</div>
@@ -141,7 +143,7 @@ function StatusBadge({ status }: { status: LotReconciliationDashboardStatus }): 
   const meta = STATUS_META[status]
   const Icon = meta.icon
   return (
-    <Badge variant="outline" className={cn('justify-self-start gap-1.5', meta.className)}>
+    <Badge variant="outline" className={cn('justify-self-start gap-1.5', meta.className)} data-testid="recon-health-status-badge">
       <Icon className="h-3 w-3" aria-hidden="true" />
       {meta.label}
     </Badge>

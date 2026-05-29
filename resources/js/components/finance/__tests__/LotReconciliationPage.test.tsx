@@ -37,13 +37,14 @@ jest.mock('@/components/ui/dropdown-menu', () => ({
     children,
     disabled,
     onClick,
+    ...props
   }: {
     children: React.ReactNode
     disabled?: boolean
     onClick?: () => void
-  }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>) => <button disabled={disabled} onClick={onClick} {...props}>{children}</button>,
   DropdownMenuSeparator: () => <hr />,
-  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children, ...props }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
 }))
 
 jest.mock('@/components/ui/tooltip', () => ({
@@ -225,6 +226,8 @@ describe('LotReconciliationPage', () => {
       />,
     )
 
+    expect(screen.getByTestId('recon-row-55')).toHaveAttribute('data-link-state', 'needs_review')
+    expect(screen.getByTestId('recon-status-badge')).toHaveTextContent('Needs review')
     expect(screen.getByText('Needs review')).toBeInTheDocument()
     expect(screen.getAllByText('D').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Wash: unknown').length).toBeGreaterThanOrEqual(1)
@@ -241,7 +244,7 @@ describe('LotReconciliationPage', () => {
 
     await waitFor(() => expect(screen.getByText(/Synthetic Broker/)).toBeInTheDocument())
     expect(screen.getByText(/Matcher last ran/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /accept broker/i }))
+    fireEvent.click(screen.getByTestId('recon-action-accept-broker'))
 
     await waitFor(() => {
       expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/lot-reconciliation-links/55/accept-broker', {})
@@ -341,6 +344,7 @@ describe('LotReconciliationHealthWidget', () => {
     render(<LotReconciliationHealthWidget selectedYear={2025} />)
 
     await waitFor(() => expect(screen.getByText('Synthetic Broker')).toBeInTheDocument())
+    expect(screen.getByTestId('recon-health-row-12')).toHaveAttribute('data-dashboard-status', 'needs_review')
     expect(screen.getByText('Needs review')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /re-run all/i }))

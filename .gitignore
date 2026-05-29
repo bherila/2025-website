@@ -23,6 +23,8 @@ package-lock.json
 /public/hot
 /public/storage
 /test-results
+/tests/e2e/.auth
+/tests/e2e/.fixture-state.json
 /storage/*.key
 /storage/pail
 /vendor

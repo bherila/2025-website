@@ -1,6 +1,7 @@
 import { ArrowRight, FileText, Pin } from 'lucide-react'
 
 import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
+import LotReconciliationHealthWidget from '@/components/finance/LotReconciliationHealthWidget'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatFriendlyAmount } from '@/lib/formatCurrency'
@@ -67,6 +68,8 @@ export function DockHomeView(): React.ReactElement {
           stack; click the form name in the header bar to return here.
         </p>
       </header>
+
+      <LotReconciliationHealthWidget selectedYear={taxPreview.year} />
 
       {pinnedEntries.length > 0 && (
         <Card className="border-primary/25 bg-accent/20">

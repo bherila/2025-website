@@ -1,0 +1,110 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1-5'
+
+concurrency:
+  group: e2e-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  finance-lot-reconciliation:
+    name: Finance lot reconciliation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl
+          coverage: none
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Build frontend
+        run: pnpm run build
+
+      - name: Create local app environment
+        run: |
+          cp .env.example .env
+          {
+            echo "APP_ENV=testing"
+            echo "APP_URL=http://127.0.0.1:8000"
+            echo "DB_CONNECTION=sqlite"
+            echo "DB_DATABASE=${GITHUB_WORKSPACE}/database/database.sqlite"
+            echo "CACHE_STORE=file"
+            echo "SESSION_DRIVER=file"
+          } >> .env
+          rm -f database/database.sqlite
+          touch database/database.sqlite
+          php artisan key:generate --no-interaction --force
+
+      - name: Migrate and seed reconciliation fixture
+        run: |
+          php artisan migrate --database=sqlite --no-interaction
+          php artisan finance:seed-recon-drift-fixture --quiet-json > tests/e2e/.fixture-state.json
+
+      - name: Start local Laravel server
+        run: |
+          php artisan serve --host=127.0.0.1 --port=8000 > storage/logs/playwright-server.log 2>&1 &
+          echo "$!" > /tmp/e2e-server.pid
+
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:8000/login > /dev/null; then
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          cat storage/logs/playwright-server.log
+          exit 1
+
+      - name: Run finance Playwright checks
+        run: pnpm run test:e2e:finance-lot-reconciliation
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: finance-lot-reconciliation-playwright-report
+          path: |
+            playwright-report/
+            test-results/playwright/
+            storage/logs/playwright-server.log
+          if-no-files-found: ignore
+          retention-days: 7
