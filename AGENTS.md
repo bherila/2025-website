@@ -80,6 +80,10 @@ This is wall-time only — total CPU is unchanged. Prefer it for iteration loops
 
 **Do not use `php artisan test --parallel`.** It forks N worker processes that each re-run all migrations against their own SQLite `:memory:` DB; on this repo the per-worker migration cost outweighs the parallelism savings on CPU. Wall time drops, but total work grows. Stick with the default serial runner.
 
+### E2E Specs
+
+Playwright specs live under `tests/e2e/`. Finance lot reconciliation E2E coverage must use `php artisan finance:seed-recon-drift-fixture --quiet-json` and read `tests/e2e/.fixture-state.json`; do not handcraft browser-only fixtures. E2E is not part of the per-PR CI gate, so trigger the **E2E Tests** workflow manually before merging changes that touch the reconciliation browser surface.
+
 ## Linting & Formatting
 
 ```bash

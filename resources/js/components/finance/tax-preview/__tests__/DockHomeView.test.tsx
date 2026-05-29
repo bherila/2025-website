@@ -13,6 +13,13 @@ jest.mock('@/components/finance/ScheduleCPreview', () => ({
   computeScheduleCNetIncome: () => ({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }),
 }))
 
+jest.mock('@/components/finance/LotReconciliationHealthWidget', () => ({
+  __esModule: true,
+  default: ({ selectedYear }: { selectedYear: number }) => (
+    <section data-testid="recon-health-widget">Lot reconciliation health - Tax year {selectedYear}</section>
+  ),
+}))
+
 import { TaxPreviewProvider } from '../../TaxPreviewContext'
 import { DockActionsProvider } from '../DockActions'
 import { DockHomeView } from '../DockHomeView'

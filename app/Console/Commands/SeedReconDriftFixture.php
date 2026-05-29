@@ -7,7 +7,11 @@ use Illuminate\Console\Command;
 
 class SeedReconDriftFixture extends Command
 {
-    protected $signature = 'finance:seed-recon-drift-fixture {--tax-year=2025} {--force : Allow running outside local/testing environments}';
+    protected $signature = 'finance:seed-recon-drift-fixture
+        {--tax-year=2025 : Tax year for the fixture}
+        {--owner-email=e2e-recon@example.test : Deterministic fixture owner email}
+        {--quiet-json : Emit only the fixture JSON payload}
+        {--force : Allow running outside local/testing environments}';
 
     protected $description = 'Seed a deterministic lot-reconciliation drift fixture for Playwright E2E coverage';
 
@@ -20,7 +24,8 @@ class SeedReconDriftFixture extends Command
         }
 
         $taxYear = (int) $this->option('tax-year');
-        $payload = $builder->build($taxYear);
+        $ownerEmail = (string) $this->option('owner-email');
+        $payload = $builder->build($taxYear, $ownerEmail);
 
         $this->line(json_encode($payload, JSON_THROW_ON_ERROR));
 

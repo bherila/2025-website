@@ -432,32 +432,33 @@ interface StatusSummaryProps {
 
 function StatusSummary({ counts, diagnosticsCount, maxDelta }: StatusSummaryProps): React.ReactElement {
   return (
-    <section className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6" aria-label="Reconciliation status summary">
-      <SummaryPill label="Needs review" value={counts.needs_review} tone={counts.needs_review > 0 ? 'warn' : 'ok'} />
-      <SummaryPill label="Auto matched" value={counts.auto_matched} tone="ok" />
-      <SummaryPill label="Broker-only" value={counts.broker_only} tone={counts.broker_only > 0 ? 'warn' : 'neutral'} />
-      <SummaryPill label="Account-only" value={counts.account_only} tone={counts.account_only > 0 ? 'warn' : 'neutral'} />
-      <SummaryPill label="Duplicates" value={counts.ignored_duplicate} tone="neutral" />
+    <section className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6" aria-label="Reconciliation status summary" data-testid="recon-status-summary">
+      <SummaryPill label="Needs review" value={counts.needs_review} tone={counts.needs_review > 0 ? 'warn' : 'ok'} testId="recon-summary-needs-review" />
+      <SummaryPill label="Auto matched" value={counts.auto_matched} tone="ok" testId="recon-summary-auto-matched" />
+      <SummaryPill label="Broker-only" value={counts.broker_only} tone={counts.broker_only > 0 ? 'warn' : 'neutral'} testId="recon-summary-broker-only" />
+      <SummaryPill label="Account-only" value={counts.account_only} tone={counts.account_only > 0 ? 'warn' : 'neutral'} testId="recon-summary-account-only" />
+      <SummaryPill label="Duplicates" value={counts.ignored_duplicate} tone="neutral" testId="recon-summary-duplicates" />
       <SummaryPill
         label="Diagnostics"
         value={diagnosticsCount}
         tone={diagnosticsCount > 0 ? 'warn' : 'ok'}
+        testId="recon-summary-diagnostics"
         {...(maxDelta > 0 ? { suffix: `max ${formatMoney(maxDelta)}` } : {})}
       />
     </section>
   )
 }
 
-function SummaryPill({ label, value, tone, suffix }: { label: string; value: number; tone: 'ok' | 'warn' | 'neutral'; suffix?: string }): React.ReactElement {
+function SummaryPill({ label, value, tone, suffix, testId }: { label: string; value: number; tone: 'ok' | 'warn' | 'neutral'; suffix?: string; testId: string }): React.ReactElement {
   return (
     <div className={cn(
       'rounded-md border px-3 py-2',
       tone === 'ok' && 'border-success/25 bg-success/5',
       tone === 'warn' && 'border-warning/30 bg-warning/10',
       tone === 'neutral' && 'border-border bg-muted/20',
-    )}>
+    )} data-testid={testId}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-baseline gap-2">
+      <div className="mt-1 flex items-baseline gap-2" data-testid={`${testId}-value`}>
         <span className="text-lg font-semibold tabular-nums">{value}</span>
         {suffix && <span className="text-xs text-muted-foreground">{suffix}</span>}
       </div>
@@ -527,7 +528,7 @@ export function ReconciliationLotRow({ link, candidates, onAction, onRelink }: R
   const candidateCount = candidatesForLink(link, candidates).length
 
   return (
-    <article className="space-y-3 px-3 py-4">
+    <article className="space-y-3 px-3 py-4" data-link-state={link.state} data-testid={`recon-row-${link.id}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -623,7 +624,7 @@ function StatusBadge({ state }: { state: LotReconciliationLinkState }): React.Re
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant="outline" className={STATE_BADGE_CLASSES[state]}>
+        <Badge variant="outline" className={STATE_BADGE_CLASSES[state]} data-testid="recon-status-badge">
           {STATE_LABELS[state]}
         </Badge>
       </TooltipTrigger>
@@ -659,30 +660,30 @@ export function LotActionMenu({ link, relinkCandidateCount, onAction, onRelink }
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild data-testid={`recon-row-actions-${link.id}`}>
-        <Button type="button" size="icon-sm" variant="outline" aria-label="Lot actions">
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="icon-sm" variant="outline" aria-label="Lot actions" data-link-id={link.id} data-testid="recon-row-actions">
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!hasBothLots} onClick={() => onAction('accept-broker')}>
+        <DropdownMenuItem disabled={!hasBothLots} onClick={() => onAction('accept-broker')} data-testid="recon-action-accept-broker">
           <CheckCircle2 className="h-4 w-4" />
           Accept broker
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!hasBothLots} onClick={() => onAction('accept-account-override')}>
+        <DropdownMenuItem disabled={!hasBothLots} onClick={() => onAction('accept-account-override')} data-testid="recon-action-accept-account-override">
           <Wand2 className="h-4 w-4" />
           Accept account override
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canMarkDuplicate} onClick={() => onAction('mark-duplicate')}>
+        <DropdownMenuItem disabled={!canMarkDuplicate} onClick={() => onAction('mark-duplicate')} data-testid="recon-action-mark-duplicate">
           <Trash2 className="h-4 w-4" />
           Mark duplicate
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canRelink} onClick={onRelink}>
+        <DropdownMenuItem disabled={!canRelink} onClick={onRelink} data-testid="recon-action-relink">
           <Link2 className="h-4 w-4" />
           Relink
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" disabled={link.state === 'unlinked'} onClick={() => onAction('unlink')}>
+        <DropdownMenuItem variant="destructive" disabled={link.state === 'unlinked'} onClick={() => onAction('unlink')} data-testid="recon-action-unlink">
           <Unlink className="h-4 w-4" />
           Unlink
         </DropdownMenuItem>

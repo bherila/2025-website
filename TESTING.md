@@ -28,7 +28,32 @@ silently if skipped — always run it even when your change looks "PHP-trivial".
 
 ## Optional Playwright Checks
 
-Playwright checks are available for ad-hoc Parking Pickup browser verification. They are not part of the mandatory pre-commit checklist and should not be treated as required on every PR.
+Playwright checks are available for ad-hoc browser verification. They are not part of the mandatory pre-commit checklist and should not be treated as required on every PR.
+
+### Finance Lot Reconciliation
+
+The finance reconciliation E2E spec uses a file-backed SQLite database so the seeder, Laravel server, and browser share state.
+
+```bash
+cp .env.example .env
+printf '\nAPP_ENV=testing\nAPP_URL=http://127.0.0.1:8000\nDB_CONNECTION=sqlite\nDB_DATABASE=%s/database/database.sqlite\n' "$PWD" >> .env
+touch database/database.sqlite
+php artisan key:generate --no-interaction --force
+php artisan migrate --database=sqlite --no-interaction
+php artisan finance:seed-recon-drift-fixture --quiet-json > tests/e2e/.fixture-state.json
+php artisan serve --host=127.0.0.1 --port=8000
+```
+
+In another terminal:
+
+```bash
+pnpm exec playwright install chromium
+pnpm run test:e2e:finance-lot-reconciliation
+```
+
+Run a single assertion loop with `pnpm exec playwright test tests/e2e/finance-lot-reconciliation.spec.ts -g "account override"`. The scheduled/manual workflow is **E2E Tests**.
+
+### Parking Pickup
 
 Run them locally when changing Parking Pickup rendering, camera framing, mobile layout, or other browser-visible game behavior:
 
