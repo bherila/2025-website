@@ -155,6 +155,90 @@ class LotsMatchJobTest extends TestCase
         $this->assertSame(1, $coalescedRun->result_summary['counts'][FinLotReconciliationLink::STATE_AUTO_MATCHED]);
     }
 
+    public function test_job_processes_follow_up_run_when_current_run_is_superseded_during_matcher(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $run = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+        $coalescedRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+        $matcher = new class extends LotMatcherService
+        {
+            public int $calls = 0;
+
+            public function __construct()
+            {
+                parent::__construct(app(LotMatcher::class));
+            }
+
+            public function runMatcherForDocument(
+                int $documentId,
+                bool $preserveDecisions = true,
+            ): LotMatcherResult {
+                $this->calls++;
+
+                return new LotMatcherResult($documentId, false, [], [], []);
+            }
+        };
+        $recorder = new class($coalescedRun) extends LotMatchRunRecorder
+        {
+            public int $successAttempts = 0;
+
+            public function __construct(
+                private readonly LotMatchRun $coalescedRun,
+            ) {}
+
+            public function runningIfLatestActive(LotMatchRun $run): ?LotMatchRun
+            {
+                $run->forceFill([
+                    'status' => LotMatchRun::STATUS_RUNNING,
+                    'started_at' => $run->started_at ?? now(),
+                    'finished_at' => null,
+                    'error' => null,
+                ])->save();
+
+                return $run->refresh();
+            }
+
+            public function latestActiveForUpdate(LotMatchRun $run): ?LotMatchRun
+            {
+                return $run->fresh();
+            }
+
+            public function succeededIfLatestActive(LotMatchRun $run, LotMatcherResult $result, ?int $taxYear = null): ?LotMatchRun
+            {
+                $this->successAttempts++;
+                if ($this->successAttempts === 1) {
+                    return null;
+                }
+
+                return $this->succeeded($run, $result, $taxYear);
+            }
+
+            public function latestQueuedPreserveForDocument(int $documentId): ?LotMatchRun
+            {
+                return $this->coalescedRun->fresh();
+            }
+        };
+
+        $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $run->id);
+        $job->handle($matcher, $recorder);
+
+        $this->assertSame(2, $matcher->calls);
+        $this->assertSame(2, $recorder->successAttempts);
+        $this->assertSame(LotMatchRun::STATUS_SUCCEEDED, $coalescedRun->fresh()->status);
+    }
+
     public function test_job_does_not_record_success_after_run_is_superseded_during_matcher(): void
     {
         $user = $this->createUser();

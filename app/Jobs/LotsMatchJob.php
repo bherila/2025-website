@@ -61,15 +61,7 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
         try {
             if ($run instanceof LotMatchRun) {
-                DB::transaction(function () use (&$run, $lotMatcherService, $lotMatchRunRecorder): void {
-                    $run = $this->latestActiveRunForUpdate($run, $lotMatchRunRecorder);
-                    $result = $lotMatcherService->runMatcherForDocument(
-                        $this->documentId,
-                        preserveDecisions: $this->mode !== LotMatchRun::MODE_FORCE,
-                    );
-                    $run = $this->succeedLatestActiveRun($run, $lotMatchRunRecorder, $result);
-
-                });
+                $run = $this->runTrackedMatcher($run, $lotMatcherService, $lotMatchRunRecorder);
             } else {
                 $lotMatcherService->runMatcherForDocument(
                     $this->documentId,
@@ -174,6 +166,49 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
         $coalescedRun = $lotMatchRunRecorder->latestQueuedPreserveForDocument($this->documentId);
         if (! $coalescedRun instanceof LotMatchRun || (int) $coalescedRun->id === (int) $run->id) {
+            return null;
+        }
+
+        return $lotMatchRunRecorder->runningIfLatestActive($coalescedRun);
+    }
+
+    private function runTrackedMatcher(
+        LotMatchRun $run,
+        LotMatcherService $lotMatcherService,
+        LotMatchRunRecorder $lotMatchRunRecorder,
+    ): LotMatchRun {
+        do {
+            try {
+                DB::transaction(function () use (&$run, $lotMatcherService, $lotMatchRunRecorder): void {
+                    $run = $this->latestActiveRunForUpdate($run, $lotMatchRunRecorder);
+                    $result = $lotMatcherService->runMatcherForDocument(
+                        $this->documentId,
+                        preserveDecisions: $this->mode !== LotMatchRun::MODE_FORCE,
+                    );
+                    $run = $this->succeedLatestActiveRun($run, $lotMatchRunRecorder, $result);
+                });
+
+                return $run;
+            } catch (StaleLotMatchRunException) {
+                $coalescedRun = $this->activateCoalescedRunAfterStaleMatch($run, $lotMatchRunRecorder);
+                if (! $coalescedRun instanceof LotMatchRun) {
+                    throw new StaleLotMatchRunException('Lot match run was superseded without a queued coalesced follow-up.');
+                }
+
+                $this->logSkippedStaleRun($run);
+                $run = $coalescedRun;
+            }
+        } while (true);
+    }
+
+    private function activateCoalescedRunAfterStaleMatch(LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder): ?LotMatchRun
+    {
+        if ($this->mode !== LotMatchRun::MODE_PRESERVE) {
+            return null;
+        }
+
+        $coalescedRun = $lotMatchRunRecorder->latestQueuedPreserveForDocument($this->documentId);
+        if (! $coalescedRun instanceof LotMatchRun || (int) $coalescedRun->id <= (int) $run->id) {
             return null;
         }
 
