@@ -24,7 +24,7 @@ describe('passenger loop slots', () => {
     expect(plan.feederPassengers.map((item) => item.id)).toEqual(['p4'])
   })
 
-  it('shifts later loop passengers forward when an earlier slot is vacated and lands the new feeder passenger in the back slot', () => {
+  it('keeps surviving loop passengers in their slots when a slot is vacated and reserves the gap for the next feeder passenger', () => {
     const slots: PassengerLoopSlot[] = [
       { entryStartedAt: null, passengerId: 'p1', offset: -0.34 },
       { entryStartedAt: null, passengerId: 'p2', offset: -0.68 },
@@ -41,10 +41,13 @@ describe('passenger loop slots', () => {
       speed: 1,
     })
 
-    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', 'p4'])
+    // p2 boarded. With no compaction, p1 and p3 stay in their own slots (no movement);
+    // the vacated middle slot is reserved for p4, whose walk-in is delayed until that
+    // slot rotates to the feeder join.
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p4', 'p3'])
     expect(plan.slots.map((slot) => slot.offset)).toEqual([-0.34, -0.68, -1.02])
     const p3Assignment = plan.assignments.find((assignment) => assignment.passenger.id === 'p3')
-    expect(p3Assignment?.shift).toEqual({ previousOffset: -1.02, startedAt: 20 })
+    expect(p3Assignment?.offset).toBe(-1.02)
     expect(p3Assignment?.entryStartedAt).toBeNull()
     expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p4')?.entryStartedAt).toBeGreaterThan(20)
     expect(plan.feederPassengers).toEqual([])
@@ -67,7 +70,7 @@ describe('passenger loop slots', () => {
       speed: 1,
     })
 
-    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', 'p4'])
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p4', 'p3'])
     expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p4')?.entryStartedAt)
       .toBeGreaterThan(20)
     expect(plan.feederPassengers.map((item) => item.id)).toEqual(['p5'])
@@ -127,10 +130,11 @@ describe('passenger loop slots', () => {
       speed: 1,
     })
 
-    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', 'p3', null])
+    // p2 boarded and no feeder passenger is available: the gap stays empty in place and
+    // p1/p3 keep their own slots and offsets (no shifting).
+    expect(plan.slots.map((slot) => slot.passengerId)).toEqual(['p1', null, 'p3'])
     expect(plan.slots.map((slot) => slot.offset)).toEqual([-0.34, -0.68, -1.02])
-    expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p3')?.shift)
-      .toEqual({ previousOffset: -1.02, startedAt: 20 })
+    expect(plan.assignments.find((assignment) => assignment.passenger.id === 'p3')?.offset).toBe(-1.02)
   })
 })
 

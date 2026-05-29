@@ -10,17 +10,11 @@ export interface PassengerLoopSlot {
   offset: number
 }
 
-export interface PassengerLoopShift {
-  previousOffset: number
-  startedAt: number
-}
-
 export interface PassengerLoopAssignment {
   entryStartedAt: number | null
   passenger: Passenger
   sourcePassengers: Passenger[] | null
   offset: number
-  shift: PassengerLoopShift | null
 }
 
 export interface PassengerLoopPlan {
@@ -66,31 +60,12 @@ export function planPassengerLoopSlots({
     }
   })
 
-  const shifts = new Map<string, PassengerLoopShift>()
-  let writeIndex = 0
-  for (let readIndex = 0; readIndex < nextSlots.length; readIndex += 1) {
-    const slot = nextSlots[readIndex]
-    if (!slot || slot.passengerId === null) {
-      continue
-    }
-    if (writeIndex !== readIndex) {
-      const writeSlot = nextSlots[writeIndex]
-      if (writeSlot) {
-        shifts.set(slot.passengerId, {
-          previousOffset: slot.offset,
-          startedAt: now,
-        })
-        writeSlot.passengerId = slot.passengerId
-        writeSlot.entryStartedAt = slot.entryStartedAt !== null && slot.entryStartedAt > now
-          ? now + timeUntilFeederJoin(phase, writeSlot.offset, layout, speed)
-          : slot.entryStartedAt
-        slot.passengerId = null
-        slot.entryStartedAt = null
-      }
-    }
-    writeIndex += 1
-  }
-
+  // No compaction: a passenger keeps its slot (and therefore its loop offset) for its
+  // entire time in the loop. When one boards, its slot is simply left empty in place —
+  // the gap rotates around with the loop and is refilled by a feeder passenger only
+  // once it reaches the feeder join (see the entry assignment below). Re-indexing the
+  // survivors here would make the whole loop lurch forward on every boarding; leaving
+  // them put keeps the loop animation perfectly smooth.
   const occupiedSlotCount = nextSlots.filter((slot) => slot.passengerId !== null).length
   const desiredCapacity = passengers.length > 0 ? Math.max(capacity, occupiedSlotCount) : 0
   while (nextSlots.length > desiredCapacity) {
@@ -156,7 +131,6 @@ export function planPassengerLoopSlots({
       passenger,
       sourcePassengers: slot.entryStartedAt === null ? null : entrySources.get(passenger.id) ?? null,
       offset: slot.offset,
-      shift: shifts.get(passenger.id) ?? null,
     })
   }
   const pendingEntryPassengerIds = new Set(

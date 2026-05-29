@@ -65,44 +65,6 @@ describe('Parking Pickup passenger rendering', () => {
     expect(position.y).toBeCloseTo(0.12 + PASSENGER_HEAD_Y_OFFSET)
   })
 
-  it('tweens a loop shift in offset space so it tracks the rotating loop, not a frozen point', () => {
-    const layout: QueueLayout = {
-      capRadius: 1,
-      depth: 2.7,
-      halfDepth: 1,
-      halfWidth: 2,
-      perimeter: 4 * 2 + Math.PI * 2,
-      straightLength: 4,
-      width: 4.7,
-    }
-    const phase = 1.3
-    const fromOffset = 0.6
-    const mesh = new THREE.Group()
-    const passenger: PassengerRenderItem = {
-      entry: {
-        // A deliberately stale world point. If the shift froze `from` (the old bug),
-        // the passenger would snap here at progress 0 instead of following the loop.
-        from: new THREE.Vector3(-99, 0.12, -99),
-        fromOffset,
-        startedAt: performance.now() / 1000 + 100,
-        duration: 0.3,
-      },
-      id: 'shift-1',
-      layout,
-      mesh,
-      offset: 0,
-    }
-
-    animatePassengers([passenger], phase, 0)
-
-    // progress clamps to 0 (startedAt is in the future) → position must equal the live
-    // loop sample at phase + fromOffset, proving the tween rotates with the phase.
-    const expected = queueVisualPosition(phase + fromOffset, layout, 0)
-    expect(mesh.position.x).toBeCloseTo(expected.x)
-    expect(mesh.position.z).toBeCloseTo(expected.z)
-    expect(mesh.position.distanceTo(new THREE.Vector3(-99, 0.12, -99))).toBeGreaterThan(1)
-  })
-
   it('keeps queue lane offsets deterministic and visual-only', () => {
     const layout: QueueLayout = {
       capRadius: 1,

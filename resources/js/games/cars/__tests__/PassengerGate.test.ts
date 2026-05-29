@@ -149,7 +149,7 @@ describe('passenger gate notifications', () => {
     expect(gateHolds.has('p1')).toBe(false)
   })
 
-  it('boards a passenger shifted just past the gate on the same pass (no extra loop)', () => {
+  it('boards on a genuine gate crossing even when already just past the tight window', () => {
     const passenger: PassengerRenderItem = {
       id: 'p1',
       layout: testLayout,
@@ -158,10 +158,10 @@ describe('passenger gate notifications', () => {
     }
     const onPassengerGate = jest.fn()
 
-    // A boarding closes the gap and bumps this passenger a slot forward, carrying it
-    // across the gate to progress 0.4 (cycle 1) — beyond the tight nearGate window.
-    // CarsScene seeds the gate cycle from the *pre-shift* offset (cycle 0, just before
-    // the gate), so the jump registers as a genuine crossing and it boards this lap.
+    // The passenger has advanced to progress 0.4 (cycle 1) — past the tight nearGate
+    // window — but its recorded cycle is the previous lap (0), so this frame is a
+    // genuine gate crossing. A real crossing must always board a ready match, so a
+    // single dropped/coalesced frame near the gate never forces an extra lap.
     const phase = testLayout.perimeter + 0.4
     notifyPassengerGate([passenger], phase, new Map([['p1', 0]]), testState, [], 20, onPassengerGate)
 

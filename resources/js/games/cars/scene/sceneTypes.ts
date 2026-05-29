@@ -62,12 +62,6 @@ export interface PassengerEntryRenderItem {
   via?: THREE.Vector3
   startedAt: number
   duration: number
-  /**
-   * Loop-shift origin in offset space. When set, the passenger is tweened from this
-   * offset to its current `offset` by sampling the loop curve live each frame, so the
-   * motion rotates with `phase` instead of snapping back to a stale world point.
-   */
-  fromOffset?: number
 }
 
 export interface RoutePoint {

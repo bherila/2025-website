@@ -59,11 +59,7 @@ export function animatePassengers(passengers: PassengerRenderItem[], phase: numb
     if (item.entry) {
       const progress = Math.min(1, Math.max(0, (performance.now() / 1000 - item.entry.startedAt) / item.entry.duration))
       const eased = progress * progress * (3 - 2 * progress)
-      if (item.entry.fromOffset !== undefined) {
-        const shiftedOffset = item.entry.fromOffset + (item.offset - item.entry.fromOffset) * eased
-        const shiftedPosition = queueVisualPosition(phase + shiftedOffset, item.layout, item.laneOffset ?? 0)
-        passengerPosition.set(shiftedPosition.x, y, shiftedPosition.z)
-      } else if (item.entry.via) {
+      if (item.entry.via) {
         const oneMinus = 1 - eased
         passengerPosition.set(
           oneMinus * oneMinus * item.entry.from.x + 2 * oneMinus * eased * item.entry.via.x + eased * eased * targetX,

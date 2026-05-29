@@ -597,19 +597,16 @@ function buildDynamicScene(
   }
 
   for (const assignment of loopPlan.assignments) {
-    const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
+    const { entryStartedAt, offset, passenger, sourcePassengers } = assignment
     const laneOffset = passengerQueueLaneOffset(passenger.id)
     passengerOffsets.set(passenger.id, offset)
     if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null) {
       passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
-    } else if (shift) {
-      // Seed the gate cycle from the *pre-shift* offset, not the new one. A boarding
-      // closes the gap and bumps trailing passengers forward by a slot; if that bump
-      // carries one across the gate, seeding at the new offset would erase the
-      // crossing and force an extra lap. Seeding at the previous offset lets the jump
-      // register as a genuine gate crossing on the next frame.
-      passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, shift.previousOffset, queueLayout))
     }
+    // Loop passengers keep their slot (and offset) for life — boarding never re-indexes
+    // them — so a passenger's `phase + offset` advances continuously. Its gate cycle is
+    // therefore continuous and must NOT be reseeded; the crossing fires naturally as it
+    // rolls up to the gate.
 
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
       colorblindMode,
@@ -630,24 +627,24 @@ function buildDynamicScene(
         // a mid-walk rebuild never snaps the passenger back to the feeder; only its
         // live loop target moves.
         const existing = loopEntries.get(passenger.id)
+        // Use the shared feeder layout (which lists every pending-entry passenger plus
+        // the unassigned feeder) as the walk-in origin, so each pending passenger maps
+        // to its own distinct feeder row. Per-passenger snapshots collapsed every
+        // same-side pending entry to row 0, stacking them into a z-fight once the
+        // single-file lanes removed the side-to-side jitter that used to mask it.
         entry = existing && Math.abs(existing.startedAt + existing.duration - entryStartedAt) < 1e-3
           ? existing
-          : createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
+          : createPassengerEntryAnimation(passenger, loopPlan.feederLayoutPassengers, queueLayout, position, entryStartedAt)
         loopEntries.set(passenger.id, entry)
       } else {
         loopEntries.delete(passenger.id)
       }
     } else {
+      // No shift animation: the phase pull-back keeps `phase + offset` invariant for
+      // every remaining passenger, so a re-indexed passenger is already at its correct
+      // world position and stays put. The gap simply opens at the gate and closes as
+      // the loop rotates the next passenger up to it.
       loopEntries.delete(passenger.id)
-      if (shift) {
-        const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
-        entry = {
-          from: new THREE.Vector3(from.x, 0.12, from.z),
-          fromOffset: shift.previousOffset,
-          startedAt: shift.startedAt,
-          duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
-        }
-      }
     }
     if (entry) {
       setPassengerRenderHandleTransform(handle, entry.from, 0)
@@ -712,3 +709,4 @@ function buildDynamicScene(
 function earlierRefreshAt(current: number | null, candidate: number): number {
   return current === null ? candidate : Math.min(current, candidate)
 }
+
