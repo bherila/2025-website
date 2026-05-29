@@ -1,136 +1,145 @@
 'use client'
 
 import currency from 'currency.js'
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, FileWarning, Link2, Loader2, RefreshCw, Scale } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, ExternalLink, FileSpreadsheet, FileWarning, Loader2, RefreshCw } from 'lucide-react'
 import type { ReactElement } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { LotSourceBadge } from '@/components/finance/lots/shared'
+import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
+import MatcherStatusBadge from '@/components/finance/reconcile/MatcherStatusBadge'
 import { Callout, fmtAmt } from '@/components/finance/tax-preview-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
-import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
+import { cn } from '@/lib/utils'
 import {
-  type TaxLotReconciliationAccount,
-  type TaxLotReconciliationLot,
-  type TaxLotReconciliationResponse,
-  taxLotReconciliationResponseSchema,
-  type TaxLotReconciliationRow,
-  type TaxLotReconciliationStatus,
-} from '@/types/finance/tax-lot-reconciliation'
+  type LotReconciliationLink,
+  type LotReconciliationLinksResponse,
+  lotReconciliationLinksResponseSchema,
+  type LotReconciliationLinkState,
+  type ReconciliationHealth,
+  type TaxYearReconciliationSummaryResponse,
+  taxYearReconciliationSummaryResponseSchema,
+} from '@/types/finance/document-lot-reconciliation'
+import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 
 interface TaxLotReconciliationPanelProps {
   selectedYear: number
 }
 
-interface ApplyPayload {
-  supersede?: Array<{ keep_lot_id: number; drop_lot_id: number }>
-  accept?: number[]
-  conflicts?: Array<{ lot_id: number; status: string; notes?: string | null }>
+type BucketKey = 'mismatches' | 'broker_only' | 'account_only' | 'duplicates' | 'auto_matched' | 'unlinked'
+
+const HEALTH_META: Record<ReconciliationHealth, { label: string; className: string; icon: typeof CheckCircle2 }> = {
+  ok: {
+    label: 'OK',
+    className: 'border-success/30 bg-success/10 text-success',
+    icon: CheckCircle2,
+  },
+  drift: {
+    label: 'Drift',
+    className: 'border-warning/35 bg-warning/10 text-warning',
+    icon: AlertTriangle,
+  },
+  blocked: {
+    label: 'Blocked',
+    className: 'border-destructive/30 bg-destructive/10 text-destructive',
+    icon: FileWarning,
+  },
 }
 
-const STATUS_META: Record<TaxLotReconciliationStatus, { label: string; className: string }> = {
-  matched: { label: 'Matched', className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300' },
-  variance: { label: 'Variance', className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300' },
-  missing_account: { label: 'Missing Account', className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300' },
-  missing_1099b: { label: 'Missing 1099-B', className: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300' },
-  duplicate: { label: 'Duplicate', className: 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300' },
+const STATE_LABELS: Record<LotReconciliationLinkState, string> = {
+  auto_matched: 'Auto matched',
+  needs_review: 'Needs review',
+  accepted_broker: 'Broker accepted',
+  accepted_account_override: 'Account override',
+  ignored_duplicate: 'Duplicate',
+  unlinked: 'Unlinked',
+  broker_only: 'Broker-only',
+  account_only: 'Account-only',
 }
 
-const SUMMARY_ITEMS: Array<{ key: keyof TaxLotReconciliationResponse['summary']; label: string }> = [
-  { key: 'matched', label: 'Matched' },
-  { key: 'variance', label: 'Variances' },
-  { key: 'missing_account', label: 'Missing Account' },
-  { key: 'missing_1099b', label: 'Missing 1099-B' },
-  { key: 'duplicates', label: 'Duplicates' },
-  { key: 'unresolved_account_links', label: 'Unresolved Links' },
-  { key: 'matched_open_transactions', label: 'Matched Buys' },
-  { key: 'matched_close_transactions', label: 'Matched Sells' },
-  { key: 'missing_open_transactions', label: 'Missing Buys' },
-  { key: 'missing_close_transactions', label: 'Missing Sells' },
-]
+const BUCKET_LABELS: Record<BucketKey, string> = {
+  mismatches: 'Mismatches',
+  broker_only: 'Broker-only',
+  account_only: 'Account-only',
+  duplicates: 'Duplicates',
+  auto_matched: 'Auto matched',
+  unlinked: 'Unlinked',
+}
 
-export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconciliationPanelProps) {
-  const [data, setData] = useState<TaxLotReconciliationResponse | null>(null)
+export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconciliationPanelProps): ReactElement | null {
+  const [summary, setSummary] = useState<TaxYearReconciliationSummaryResponse | null>(null)
+  const [linksByDocument, setLinksByDocument] = useState<Record<number, LotReconciliationLinksResponse>>({})
+  const [expandedDocumentId, setExpandedDocumentId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingDocumentId, setLoadingDocumentId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [applyingAccountId, setApplyingAccountId] = useState<number | null>(null)
   const [exporting, setExporting] = useState<'txf' | 'olt' | null>(null)
 
-  const loadReconciliation = useCallback(async () => {
+  const loadSummary = useCallback(async (): Promise<void> => {
     setLoading(true)
+    setLinksByDocument({})
+    setExpandedDocumentId(null)
     try {
-      const response = await fetchWrapper.get(`/api/finance/lots/reconciliation?tax_year=${selectedYear}`)
-      setData(taxLotReconciliationResponseSchema.parse(response))
+      const response = await fetchWrapper.get(`/api/finance/tax-years/${selectedYear}/reconciliation-summary`)
+      setSummary(taxYearReconciliationSummaryResponseSchema.parse(response))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setData(null)
+      setSummary(null)
     } finally {
       setLoading(false)
     }
   }, [selectedYear])
 
   useEffect(() => {
-    void loadReconciliation()
-  }, [loadReconciliation])
+    void loadSummary()
+  }, [loadSummary])
 
-  const hasRows = useMemo(() => data?.accounts.some(account => account.rows.length > 0) ?? false, [data])
+  const hasDocuments = (summary?.summary.document_count ?? 0) > 0
+  const unresolvedLinks = summary?.unresolved_account_links ?? []
 
-  async function apply(accountId: number, payload: ApplyPayload, successMessage: string): Promise<void> {
-    setApplyingAccountId(accountId)
+  const summaryItems = useMemo(() => {
+    if (!summary) {
+      return []
+    }
+
+    return [
+      { label: 'Documents', value: summary.summary.document_count, tone: 'neutral' as const },
+      { label: 'Blocked', value: summary.summary.documents_by_health.blocked, tone: summary.summary.documents_by_health.blocked > 0 ? 'bad' as const : 'neutral' as const },
+      { label: 'Drift', value: summary.summary.documents_by_health.drift, tone: summary.summary.documents_by_health.drift > 0 ? 'warn' as const : 'neutral' as const },
+      { label: 'OK', value: summary.summary.documents_by_health.ok, tone: 'ok' as const },
+      { label: 'Unresolved accounts', value: summary.summary.unresolved_account_links, tone: summary.summary.unresolved_account_links > 0 ? 'bad' as const : 'ok' as const },
+      { label: 'Needs review', value: summary.summary.link_state_counts.needs_review, tone: summary.summary.link_state_counts.needs_review > 0 ? 'warn' as const : 'ok' as const },
+    ]
+  }, [summary])
+
+  async function loadDocumentBuckets(taxDocumentId: number): Promise<void> {
+    if (linksByDocument[taxDocumentId]) {
+      setExpandedDocumentId((current) => current === taxDocumentId ? null : taxDocumentId)
+      return
+    }
+
+    setExpandedDocumentId(taxDocumentId)
+    setLoadingDocumentId(taxDocumentId)
     try {
-      await fetchWrapper.post(`/api/finance/${accountId}/lots/reconciliation/apply`, payload)
-      toast.success(successMessage)
-      await loadReconciliation()
+      const response = await fetchWrapper.get(`/api/finance/tax-documents/${taxDocumentId}/lot-reconciliation-links`)
+      setLinksByDocument((current) => ({
+        ...current,
+        [taxDocumentId]: lotReconciliationLinksResponseSchema.parse(response),
+      }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      toast.error(err instanceof Error ? err.message : 'Failed to load document buckets')
     } finally {
-      setApplyingAccountId(null)
+      setLoadingDocumentId(null)
     }
   }
 
-  async function acceptExactMatches(account: TaxLotReconciliationAccount): Promise<void> {
-    const supersede = account.rows
-      .filter(row => row.status === 'matched')
-      .flatMap(row => supersedeRows(row))
-
-    if (supersede.length === 0) {
-      toast.info('No unapplied exact matches for this account')
-      return
-    }
-
-    await apply(account.account_id, { supersede }, 'Accepted exact matches')
-  }
-
-  async function preferReportedLot(account: TaxLotReconciliationAccount, row: TaxLotReconciliationRow): Promise<void> {
-    const supersede = supersedeRows(row)
-    if (supersede.length === 0) {
-      return
-    }
-
-    await apply(account.account_id, { supersede }, 'Updated lot reconciliation')
-  }
-
-  async function preferAccountLot(account: TaxLotReconciliationAccount, row: TaxLotReconciliationRow): Promise<void> {
-    const supersede = overrideReportedRows(row)
-    if (supersede.length === 0) {
-      return
-    }
-
-    await apply(account.account_id, { supersede }, 'Overrode 1099-B lot with account lot')
-  }
-
-  async function acceptAccountLot(account: TaxLotReconciliationAccount, row: TaxLotReconciliationRow): Promise<void> {
-    if (!row.account_lot) {
-      return
-    }
-
-    await apply(account.account_id, { accept: [row.account_lot.lot_id] }, 'Accepted account-only lot')
+  async function handleResolvedAccount(): Promise<void> {
+    setLinksByDocument({})
+    await loadSummary()
   }
 
   async function exportAll(format: 'txf' | 'olt'): Promise<void> {
@@ -165,7 +174,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
     return (
       <Callout kind="warn" title="Unable to load reconciliation">
         <p>{error}</p>
-        <Button className="mt-3 gap-1.5" variant="outline" size="sm" onClick={() => void loadReconciliation()}>
+        <Button className="mt-3 gap-1.5" variant="outline" size="sm" onClick={() => void loadSummary()}>
           <RefreshCw className="h-3.5 w-3.5" />
           Retry
         </Button>
@@ -173,7 +182,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
     )
   }
 
-  if (!data) {
+  if (!summary) {
     return null
   }
 
@@ -183,356 +192,262 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
         <div className="space-y-1">
           <h2 className="text-base font-semibold">1099-B Lot Reconciliation</h2>
           <p className="text-xs text-muted-foreground">
-            Compares broker-reported 1099-B lots against account lots and native account transactions for {selectedYear}.
+            Review account mapping first, then open only the document buckets that need attention for {selectedYear}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasRows} onClick={() => void exportAll('txf')}>
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasDocuments} onClick={() => void exportAll('txf')}>
             {exporting === 'txf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             Export TXF
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasRows} onClick={() => void exportAll('olt')}>
+          <Button size="sm" variant="outline" className="gap-1.5" disabled={exporting !== null || !hasDocuments} onClick={() => void exportAll('olt')}>
             {exporting === 'olt' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
             Export OLT XLSX
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-        {SUMMARY_ITEMS.map(item => (
-          <div key={item.key} className="rounded-md border border-border bg-card px-3 py-2">
-            <div className="text-[11px] font-medium uppercase text-muted-foreground">{item.label}</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums">{data.summary[item.key]}</div>
-          </div>
+      <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6" aria-label="Reconciliation summary">
+        {summaryItems.map((item) => (
+          <SummaryMetric key={item.label} label={item.label} value={item.value} tone={item.tone} />
         ))}
-      </div>
+      </section>
 
-      {data.unresolved_account_links.length > 0 && (
-        <Callout kind="warn" title="Unresolved consolidated 1099 account links">
+      {unresolvedLinks.length > 0 && (
+        <Callout kind="warn" title="Missing account links">
           <div className="space-y-2">
-            {data.unresolved_account_links.map(link => (
-              <div key={link.id} className="flex items-start gap-2 text-sm">
-                <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  {link.filename ?? `Tax document ${link.tax_document_id}`} has an unresolved {FORM_TYPE_LABELS[link.form_type] ?? link.form_type}
-                  {link.ai_account_name ? ` account (${link.ai_account_name})` : ' account'}.
-                </span>
+            {unresolvedLinks.map((link) => (
+              <div key={link.id} className="flex flex-col gap-2 rounded-md border border-warning/25 bg-background/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 text-sm">
+                  <div className="font-medium">
+                    {link.source_filename ?? `Tax document ${link.tax_document_id}`} · {FORM_TYPE_LABELS[link.form_type ?? ''] ?? link.form_type ?? 'Form'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {link.ai_account_name ?? link.account_section_label ?? link.ai_identifier ?? 'Unresolved account section'}
+                  </div>
+                </div>
+                <MissingAccountResolver
+                  link={link}
+                  taxDocumentId={link.tax_document_id}
+                  triggerLabel="Resolve account"
+                  onResolved={() => void handleResolvedAccount()}
+                />
               </div>
             ))}
           </div>
         </Callout>
       )}
 
-      {!hasRows ? (
+      {!hasDocuments ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          No 1099-B or account statement lots were found for {selectedYear}.
+          No 1099-B documents were found for {selectedYear}.
         </div>
       ) : (
-        data.accounts.map(account => (
-          <AccountReconciliationTable
-            key={account.account_id}
-            account={account}
-            applying={applyingAccountId === account.account_id}
-            onAcceptExact={() => void acceptExactMatches(account)}
-            onUseReported={(row) => void preferReportedLot(account, row)}
-            onOverrideReported={(row) => void preferAccountLot(account, row)}
-            onAcceptAccountLot={(row) => void acceptAccountLot(account, row)}
-          />
-        ))
+        <section className="space-y-3" aria-label="Reconciliation documents">
+          {summary.documents.map((document) => {
+            const linksData = linksByDocument[document.tax_document_id] ?? null
+            const isOpen = expandedDocumentId === document.tax_document_id
+            const isLoadingDocument = loadingDocumentId === document.tax_document_id
+            const hasFinanceDocument = document.document_id !== null
+
+            return (
+              <div key={document.tax_document_id} className="rounded-md border border-border bg-card">
+                <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-sm font-semibold">{document.broker ?? document.original_filename ?? `Document ${document.tax_document_id}`}</h3>
+                      <HealthBadge health={document.health} />
+                      <MatcherStatusBadge run={document.latest_match_run} lastMatchedAt={document.last_matched_at} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {document.original_filename ?? 'No filename'} · doc #{document.tax_document_id}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <BucketCount label="Missing" value={document.problem_bucket_counts.missing_accounts} />
+                    <BucketCount label="Mismatch" value={document.problem_bucket_counts.mismatches} />
+                    <BucketCount label="Broker-only" value={document.problem_bucket_counts.broker_only} />
+                    <BucketCount label="Account-only" value={document.problem_bucket_counts.account_only} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={!hasFinanceDocument || isLoadingDocument}
+                      onClick={() => {
+                        if (hasFinanceDocument) {
+                          void loadDocumentBuckets(document.tax_document_id)
+                        }
+                      }}
+                    >
+                      {isLoadingDocument ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')} />}
+                      Buckets
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                      <a href={`/finance/tax-documents/${document.tax_document_id}/lot-reconciliation`}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+                {isOpen && (
+                  <div className="border-t border-border p-3">
+                    {linksData ? (
+                      <ProblemBuckets linksData={linksData} />
+                    ) : (
+                      <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading buckets...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </section>
       )}
     </div>
   )
 }
 
-function AccountReconciliationTable({
-  account,
-  applying,
-  onAcceptExact,
-  onUseReported,
-  onOverrideReported,
-  onAcceptAccountLot,
-}: {
-  account: TaxLotReconciliationAccount
-  applying: boolean
-  onAcceptExact: () => void
-  onUseReported: (row: TaxLotReconciliationRow) => void
-  onOverrideReported: (row: TaxLotReconciliationRow) => void
-  onAcceptAccountLot: (row: TaxLotReconciliationRow) => void
-}) {
+function SummaryMetric({ label, value, tone }: { label: string; value: number; tone: 'ok' | 'warn' | 'bad' | 'neutral' }): ReactElement {
   return (
-    <section className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">{account.account_name}</h3>
-          <p className="text-xs text-muted-foreground">{account.rows.length} reconciliation rows</p>
-        </div>
-        <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={onAcceptExact}>
-          {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-          Accept Matches
-        </Button>
-      </div>
-
-      <div className="overflow-hidden rounded-md border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Status</TableHead>
-              <TableHead>1099-B Lot</TableHead>
-              <TableHead>Transactions</TableHead>
-              <TableHead>Account Lot</TableHead>
-              <TableHead className="text-right">Proceeds Δ</TableHead>
-              <TableHead className="text-right">Basis Δ</TableHead>
-              <TableHead className="text-right">Gain Δ</TableHead>
-              <TableHead className="text-right">Wash Δ</TableHead>
-              <TableHead className="text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {account.rows.map((row, index) => (
-              <TableRow key={`${row.reported_lot?.lot_id ?? 'account'}-${row.account_lot?.lot_id ?? 'reported'}-${index}`}>
-                <TableCell>
-                  <StatusBadge status={row.status} />
-                </TableCell>
-                <TableCell>
-                  <LotSummary lot={row.reported_lot} source="reported" />
-                </TableCell>
-                <TableCell>
-                  <TransactionMatchSummary row={row} />
-                </TableCell>
-                <TableCell>
-                  <LotSummary lot={row.account_lot} source="account" duplicateCount={row.status === 'duplicate' ? row.candidate_lots.length : 0} />
-                </TableCell>
-                <TableCell className="text-right">{formatDelta(row.deltas.proceeds)}</TableCell>
-                <TableCell className="text-right">{formatDelta(row.deltas.cost_basis)}</TableCell>
-                <TableCell className="text-right">{formatDelta(row.deltas.realized_gain_loss)}</TableCell>
-                <TableCell className="text-right">{formatDelta(row.deltas.wash_sale_disallowed ?? null)}</TableCell>
-                <TableCell className="text-right">
-                  <RowAction
-                    row={row}
-                    applying={applying}
-                    onUseReported={onUseReported}
-                    onOverrideReported={onOverrideReported}
-                    onAcceptAccountLot={onAcceptAccountLot}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </section>
+    <div className={cn(
+      'rounded-md border px-3 py-2',
+      tone === 'ok' && 'border-success/25 bg-success/5',
+      tone === 'warn' && 'border-warning/30 bg-warning/10',
+      tone === 'bad' && 'border-destructive/30 bg-destructive/10',
+      tone === 'neutral' && 'border-border bg-muted/20',
+    )}>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
+    </div>
   )
 }
 
-function StatusBadge({ status }: { status: TaxLotReconciliationStatus }) {
-  const meta = STATUS_META[status]
-  const icon = status === 'matched' ? <CheckCircle2 className="h-3 w-3" /> : status === 'variance' || status === 'duplicate' ? <AlertTriangle className="h-3 w-3" /> : <Scale className="h-3 w-3" />
+function HealthBadge({ health }: { health: ReconciliationHealth }): ReactElement {
+  const meta = HEALTH_META[health]
+  const Icon = meta.icon
+
   return (
-    <Badge variant="outline" className={meta.className}>
-      {icon}
+    <Badge variant="outline" className={cn(meta.className, 'gap-1.5')}>
+      <Icon className="h-3 w-3" />
       {meta.label}
     </Badge>
   )
 }
 
-function LotSummary({ lot, source, duplicateCount = 0 }: { lot: TaxLotReconciliationLot | null; source: 'reported' | 'account'; duplicateCount?: number }) {
-  if (!lot) {
-    return <span className="text-xs text-muted-foreground">{source === 'reported' ? 'No 1099-B lot' : 'No account lot'}</span>
-  }
+function BucketCount({ label, value }: { label: string; value: number }): ReactElement {
+  return (
+    <Badge variant={value > 0 ? 'outline' : 'secondary'} className={value > 0 ? 'border-warning/35 bg-warning/10 text-warning' : ''}>
+      {label}: {value}
+    </Badge>
+  )
+}
 
-  const accepted = lot.reconciliation_status === 'accepted'
+function ProblemBuckets({ linksData }: { linksData: LotReconciliationLinksResponse }): ReactElement {
+  const buckets = bucketLinks(linksData.links)
 
   return (
-    <div className="min-w-0 space-y-0.5 text-xs">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-medium text-foreground">{lot.symbol ?? 'Unknown'}</span>
-        <LotSourceBadge source={lot.source} />
-        {accepted && (
-          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-            Accepted
-          </Badge>
-        )}
-        {duplicateCount > 1 && <Badge variant="secondary">{duplicateCount} candidates</Badge>}
-      </div>
-      <div className="text-muted-foreground">
-        {lot.quantity.toLocaleString()} shares · sold {lot.sale_date ?? 'unknown'}
-      </div>
-      {lot.cusip && <div className="text-muted-foreground">CUSIP {lot.cusip}</div>}
-      <div className="text-muted-foreground">
-        Proceeds {money(lot.proceeds)} · Basis {money(lot.cost_basis)}
-      </div>
-      <div className="text-muted-foreground">
-        Gain {money(lot.realized_gain_loss)} · Wash {money(lot.wash_sale_disallowed)}
-      </div>
-      {lot.form_8949_box && (
-        <div className="text-muted-foreground">
-          Form 8949 box {lot.form_8949_box}{lot.is_covered === false ? ' · noncovered' : ''}
+    <div className="space-y-3">
+      {(Object.keys(BUCKET_LABELS) as BucketKey[]).map((bucketKey) => (
+        <details key={bucketKey} className="rounded-md border border-border" open={bucketKey === 'mismatches' && buckets[bucketKey].length > 0}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="flex-1">{BUCKET_LABELS[bucketKey]}</span>
+            <Badge variant="outline">{buckets[bucketKey].length}</Badge>
+          </summary>
+          <div className="divide-y divide-border border-t border-border">
+            {buckets[bucketKey].length === 0 ? (
+              <div className="px-3 py-4 text-sm text-muted-foreground">No rows in this bucket.</div>
+            ) : (
+              buckets[bucketKey].slice(0, 25).map((link) => <ProblemRow key={link.id} link={link} />)
+            )}
+            {buckets[bucketKey].length > 25 && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">Showing 25 of {buckets[bucketKey].length} rows.</div>
+            )}
+          </div>
+        </details>
+      ))}
+    </div>
+  )
+}
+
+function ProblemRow({ link }: { link: LotReconciliationLink }): ReactElement {
+  const lot = link.broker_lot ?? link.account_lot
+  const deltas = link.match_reason?.deltas
+  const gainDelta = moneyDelta(link.account_lot?.realized_gain_loss, link.broker_lot?.realized_gain_loss)
+
+  return (
+    <div className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[minmax(0,1fr)_160px_160px_160px] md:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{lot?.symbol ?? 'Unknown symbol'}</span>
+          <Badge variant="outline">{STATE_LABELS[link.state]}</Badge>
         </div>
-      )}
-      {lot.tax_document_filename && <div className="truncate text-muted-foreground">{lot.tax_document_filename}</div>}
-    </div>
-  )
-}
-
-function TransactionMatchSummary({ row }: { row: TaxLotReconciliationRow }) {
-  if (!row.transaction_match) {
-    return <span className="text-xs text-muted-foreground">No 1099-B lot</span>
-  }
-
-  return (
-    <div className="space-y-1 text-xs">
-      <TransactionLegSummary label="Buy" leg={row.transaction_match.opening} />
-      <TransactionLegSummary label="Sell" leg={row.transaction_match.closing} />
-    </div>
-  )
-}
-
-function TransactionLegSummary({
-  label,
-  leg,
-}: {
-  label: string
-  leg: NonNullable<TaxLotReconciliationRow['transaction_match']>['opening']
-}) {
-  const transaction = leg.status === 'matched' ? leg.transaction : null
-  const matched = transaction !== null
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <Badge
-        variant="outline"
-        className={matched
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
-          : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300'}
-      >
-        {label}
-      </Badge>
-      {matched ? (
-        <span className="text-muted-foreground">
-          #{transaction.t_id} · {transaction.t_date ?? 'unknown'} · {money(transaction.t_amt)}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">missing</span>
-      )}
-    </div>
-  )
-}
-
-function RowAction({
-  row,
-  applying,
-  onUseReported,
-  onOverrideReported,
-  onAcceptAccountLot,
-}: {
-  row: TaxLotReconciliationRow
-  applying: boolean
-  onUseReported: (row: TaxLotReconciliationRow) => void
-  onOverrideReported: (row: TaxLotReconciliationRow) => void
-  onAcceptAccountLot: (row: TaxLotReconciliationRow) => void
-}) {
-  const supersede = supersedeRows(row)
-  const supersedeApplied = isSupersedeApplied(row)
-  const overrideReported = overrideReportedRows(row)
-  const overrideApplied = isReportedOverrideApplied(row)
-
-  if (overrideApplied) {
-    return <span className="text-xs text-muted-foreground">Override applied</span>
-  }
-
-  if (supersedeApplied) {
-    return <span className="text-xs text-muted-foreground">Applied</span>
-  }
-
-  if (supersede.length > 0 || overrideReported.length > 0) {
-    return (
-      <div className="flex flex-wrap justify-end gap-1.5">
-        {overrideReported.length > 0 && (
-          <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={() => onOverrideReported(row)}>
-            <Scale className="h-3.5 w-3.5" />
-            Override 1099-B
-          </Button>
-        )}
-        {supersede.length > 0 && (
-          <Button size="sm" variant="outline" className="gap-1.5" disabled={applying} onClick={() => onUseReported(row)}>
-            <Link2 className="h-3.5 w-3.5" />
-            Use 1099-B
-          </Button>
-        )}
+        <div className="truncate text-xs text-muted-foreground">
+          {lot?.description ?? 'No description'} · sold {lot?.sale_date ?? 'unknown'} · qty {lot?.quantity ?? 'N/A'}
+        </div>
       </div>
-    )
+      <Metric label="Proceeds delta" value={deltas?.proceeds ?? moneyDelta(link.account_lot?.proceeds, link.broker_lot?.proceeds)} />
+      <Metric label="Basis delta" value={deltas?.basis ?? moneyDelta(link.account_lot?.cost_basis, link.broker_lot?.cost_basis)} />
+      <Metric label="Gain delta" value={gainDelta} />
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number | null | undefined }): ReactElement {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-currency text-sm tabular-nums">{formatNullableMoney(value ?? null)}</div>
+    </div>
+  )
+}
+
+function bucketLinks(links: LotReconciliationLink[]): Record<BucketKey, LotReconciliationLink[]> {
+  const buckets: Record<BucketKey, LotReconciliationLink[]> = {
+    mismatches: [],
+    broker_only: [],
+    account_only: [],
+    duplicates: [],
+    auto_matched: [],
+    unlinked: [],
   }
 
-  if (row.status === 'missing_1099b' && row.account_lot) {
-    if (row.account_lot.reconciliation_status === 'accepted') {
-      return <span className="text-xs text-muted-foreground">Accepted</span>
+  for (const link of links) {
+    if (link.state === 'unlinked') {
+      buckets.unlinked.push(link)
+    } else if (link.state === 'broker_only') {
+      buckets.broker_only.push(link)
+    } else if (link.state === 'account_only') {
+      buckets.account_only.push(link)
+    } else if (link.state === 'ignored_duplicate' || link.match_reason?.reason_code.includes('split')) {
+      buckets.duplicates.push(link)
+    } else if (link.state === 'needs_review') {
+      buckets.mismatches.push(link)
+    } else {
+      buckets.auto_matched.push(link)
     }
-
-    return (
-      <Button size="sm" variant="outline" disabled={applying} onClick={() => onAcceptAccountLot(row)}>
-        Accept
-      </Button>
-    )
   }
 
-  return <span className="text-xs text-muted-foreground">Review</span>
+  return buckets
 }
 
-function isSupersedeApplied(row: TaxLotReconciliationRow): boolean {
-  const reportedLot = row.reported_lot
-  if (!reportedLot) {
-    return false
-  }
-
-  const accountLots = row.status === 'duplicate' ? row.candidate_lots : row.account_lot ? [row.account_lot] : []
-
-  return accountLots.length > 0 && accountLots.every(lot => lot.superseded_by_lot_id === reportedLot.lot_id)
-}
-
-function isReportedOverrideApplied(row: TaxLotReconciliationRow): boolean {
-  const reportedLot = row.reported_lot
-  const accountLot = row.account_lot
-  return Boolean(reportedLot && accountLot && reportedLot.superseded_by_lot_id === accountLot.lot_id)
-}
-
-function supersedeRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: number; drop_lot_id: number }> {
-  const reportedLot = row.reported_lot
-  if (!reportedLot) {
-    return []
-  }
-
-  const accountLots = row.status === 'duplicate' ? row.candidate_lots : row.account_lot ? [row.account_lot] : []
-
-  return accountLots
-    .filter(lot => lot.superseded_by_lot_id !== reportedLot.lot_id)
-    .map(lot => ({ keep_lot_id: reportedLot.lot_id, drop_lot_id: lot.lot_id }))
-}
-
-function overrideReportedRows(row: TaxLotReconciliationRow): Array<{ keep_lot_id: number; drop_lot_id: number }> {
-  const reportedLot = row.reported_lot
-  const accountLot = row.account_lot
-  if (row.status !== 'variance' || !reportedLot || !accountLot || reportedLot.superseded_by_lot_id === accountLot.lot_id) {
-    return []
-  }
-
-  return [{ keep_lot_id: accountLot.lot_id, drop_lot_id: reportedLot.lot_id }]
-}
-
-function money(value: number | null): string {
-  return value === null ? '-' : fmtAmt(value, 2)
-}
-
-function formatDelta(value: number | null): ReactElement {
+function formatNullableMoney(value: number | null): string {
   if (value === null) {
-    return <span className="text-muted-foreground">-</span>
+    return 'N/A'
   }
 
-  const normalized = currency(value).value
-  const className = normalized === 0
-    ? 'text-muted-foreground'
-    : normalized > 0
-      ? 'text-amber-700 dark:text-amber-300'
-      : 'text-red-700 dark:text-red-300'
+  const formatted = fmtAmt(Math.abs(value), 2)
+  return value < 0 ? `(${formatted})` : formatted
+}
 
-  return <span className={`font-mono tabular-nums ${className}`}>{fmtAmt(normalized, 2)}</span>
+function moneyDelta(accountValue: number | null | undefined, brokerValue: number | null | undefined): number | null {
+  if (accountValue === null || accountValue === undefined || brokerValue === null || brokerValue === undefined) {
+    return null
+  }
+
+  return currency(accountValue, { precision: 4 }).subtract(brokerValue).value
 }

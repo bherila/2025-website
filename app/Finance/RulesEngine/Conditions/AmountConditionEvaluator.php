@@ -4,21 +4,22 @@ namespace App\Finance\RulesEngine\Conditions;
 
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinRuleCondition;
+use App\Services\Finance\MoneyMath;
 use Illuminate\Database\Eloquent\Builder;
 
 class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
 {
     public function matches(FinAccountLineItems $tx, FinRuleCondition $condition): bool
     {
-        $absAmount = (string) abs((float) $tx->t_amt);
-        $value = (string) $condition->value;
+        $amountCents = abs(MoneyMath::toCents((string) $tx->t_amt));
+        $valueCents = abs(MoneyMath::toCents((string) $condition->value));
+        $valueExtraCents = abs(MoneyMath::toCents((string) $condition->value_extra));
 
         return match (strtoupper($condition->operator)) {
-            'ABOVE' => (float) $absAmount > (float) $value,
-            'BELOW' => (float) $absAmount < (float) $value,
-            'EXACTLY' => bccomp($absAmount, $value, 2) === 0,
-            'BETWEEN' => (float) $absAmount >= (float) $value
-                && (float) $absAmount <= (float) $condition->value_extra,
+            'ABOVE' => $amountCents > $valueCents,
+            'BELOW' => $amountCents < $valueCents,
+            'EXACTLY' => $amountCents === $valueCents,
+            'BETWEEN' => $amountCents >= $valueCents && $amountCents <= $valueExtraCents,
             default => false,
         };
     }
@@ -28,30 +29,32 @@ class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
      */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
-        $value = (float) $condition->value;
+        $valueCents = abs(MoneyMath::toCents((string) $condition->value));
 
-        $query->where(function ($q) use ($condition, $value) {
+        $query->where(function ($q) use ($condition, $valueCents) {
             $operator = strtoupper($condition->operator);
+            $amountCentsSql = $this->amountCentsSql();
 
             switch ($operator) {
                 case 'ABOVE':
-                    // ABS(t_amt) > value
-                    $q->whereRaw('ABS(t_amt) > ?', [$value]);
+                    $q->whereRaw("{$amountCentsSql} > ?", [$valueCents]);
                     break;
                 case 'BELOW':
-                    // ABS(t_amt) < value
-                    $q->whereRaw('ABS(t_amt) < ?', [$value]);
+                    $q->whereRaw("{$amountCentsSql} < ?", [$valueCents]);
                     break;
                 case 'EXACTLY':
-                    // ABS(t_amt) = value (with tolerance for floating point)
-                    $q->whereRaw('ABS(ABS(t_amt) - ?) < 0.01', [$value]);
+                    $q->whereRaw("{$amountCentsSql} = ?", [$valueCents]);
                     break;
                 case 'BETWEEN':
-                    $valueExtra = (float) $condition->value_extra;
-                    // value <= ABS(t_amt) <= value_extra
-                    $q->whereRaw('ABS(t_amt) >= ? AND ABS(t_amt) <= ?', [$value, $valueExtra]);
+                    $valueExtraCents = abs(MoneyMath::toCents((string) $condition->value_extra));
+                    $q->whereRaw("{$amountCentsSql} >= ? AND {$amountCentsSql} <= ?", [$valueCents, $valueExtraCents]);
                     break;
             }
         });
+    }
+
+    private function amountCentsSql(): string
+    {
+        return 'ROUND(ABS(t_amt) * 100, 0)';
     }
 }

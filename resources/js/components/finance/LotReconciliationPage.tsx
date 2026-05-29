@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 
 import MissingAccountResolver from '@/components/finance/accounts/MissingAccountResolver'
 import { LotSourceBadge } from '@/components/finance/lots/shared'
+import MatcherStatusBadge from '@/components/finance/reconcile/MatcherStatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -41,6 +42,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { fetchWrapper } from '@/fetchWrapper'
 import { cn } from '@/lib/utils'
 import {
+  type LotMatchRunsResponse,
+  lotMatchRunsResponseSchema,
   type LotReconciliationLink,
   type LotReconciliationLinksResponse,
   lotReconciliationLinksResponseSchema,
@@ -115,24 +118,39 @@ const LINK_ACTION_META: Record<LinkAction, { label: string; optimisticState: Lot
   },
 }
 
+function isActiveMatchRunStatus(status: string): boolean {
+  return status === 'queued' || status === 'running'
+}
+
 export default function LotReconciliationPage({ taxDocumentId }: LotReconciliationPageProps): React.ReactElement {
   const [report, setReport] = useState<TaxDocumentReconciliationReport | null>(null)
   const [linksData, setLinksData] = useState<LotReconciliationLinksResponse | null>(null)
+  const [matchRunsData, setMatchRunsData] = useState<LotMatchRunsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null)
   const [relink, setRelink] = useState<RelinkState | null>(null)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
 
+  const loadMatchRuns = useCallback(async (): Promise<LotMatchRunsResponse | null> => {
+    const runsResponse = await fetchWrapper.get(`/api/finance/tax-documents/${taxDocumentId}/lot-match-runs`)
+    const parsed = lotMatchRunsResponseSchema.parse(runsResponse)
+    setMatchRunsData(parsed)
+
+    return parsed
+  }, [taxDocumentId])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [reportResponse, linksResponse] = await Promise.all([
+      const [reportResponse, linksResponse, runsResponse] = await Promise.all([
         fetchWrapper.get(`/api/finance/tax-documents/${taxDocumentId}/lot-reconciliation`),
         fetchWrapper.get(`/api/finance/tax-documents/${taxDocumentId}/lot-reconciliation-links`),
+        fetchWrapper.get(`/api/finance/tax-documents/${taxDocumentId}/lot-match-runs`),
       ])
       setReport(taxDocumentReconciliationReportSchema.parse(reportResponse))
       setLinksData(lotReconciliationLinksResponseSchema.parse(linksResponse))
+      setMatchRunsData(lotMatchRunsResponseSchema.parse(runsResponse))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -150,6 +168,24 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
     () => (linksData?.document.account_links ?? []).filter((link) => link.account_id === null),
     [linksData?.document.account_links],
   )
+  const latestRun = matchRunsData?.runs[0] ?? null
+
+  useEffect(() => {
+    if (!latestRun || !isActiveMatchRunStatus(latestRun.status)) {
+      return undefined
+    }
+
+    const interval = window.setInterval(() => {
+      void loadMatchRuns().then((runsData) => {
+        const nextRun = runsData?.runs[0] ?? null
+        if (nextRun && nextRun.id >= latestRun.id && !isActiveMatchRunStatus(nextRun.status)) {
+          void load()
+        }
+      })
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [latestRun?.id, latestRun?.status, load, loadMatchRuns])
 
   async function runLinkAction(link: LotReconciliationLink, action: LinkAction): Promise<void> {
     const meta = LINK_ACTION_META[action]
@@ -276,11 +312,16 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
             <p className="text-xs text-muted-foreground">
               {formatLastMatchedAt(linksData.document.last_matched_at ?? report.last_matched_at)}
             </p>
+            <MatcherStatusBadge run={latestRun} lastMatchedAt={linksData.document.last_matched_at ?? report.last_matched_at} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" disabled={busyLabel !== null} onClick={() => setConfirmation(confirmations.rerun)}>
+            <Button variant="outline" size="sm" className="gap-1.5" disabled={busyLabel !== null} onClick={() => void runDocumentAction('rerun')}>
               <RefreshCw className="h-3.5 w-3.5" />
               Re-run matcher
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" disabled={busyLabel !== null} onClick={() => setConfirmation(confirmations['force-rerun'])}>
+              <Wand2 className="h-3.5 w-3.5" />
+              Force rebuild
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" disabled={busyLabel !== null} onClick={() => setConfirmation(confirmations.rebuild)}>
               <RotateCcw className="h-3.5 w-3.5" />
@@ -660,11 +701,6 @@ function ConfirmationDialog({ confirmation, busy, onClose, onConfirm }: { confir
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          {confirmation?.action === 'rerun' && (
-            <Button variant="outline" disabled={busy} onClick={() => onConfirm('force-rerun')}>
-              Force re-match
-            </Button>
-          )}
           <Button
             variant={confirmation?.variant === 'destructive' ? 'destructive' : 'default'}
             disabled={busy || !confirmation}
@@ -708,12 +744,13 @@ function RelinkDialog({ relink, candidates, busy, onChange, onClose, onSubmit }:
   )
 }
 
-const confirmations: Record<'rerun' | 'rebuild' | 'reprocess', ConfirmationState> = {
-  rerun: {
-    action: 'rerun',
-    title: 'Re-run matcher?',
-    body: 'This preserves accepted decisions and recalculates mutable link rows from the current lots.',
-    confirmLabel: 'Re-run matcher',
+const confirmations: Record<'force-rerun' | 'rebuild' | 'reprocess', ConfirmationState> = {
+  'force-rerun': {
+    action: 'force-rerun',
+    title: 'Force rebuild matcher links?',
+    body: 'This discards accepted matcher decisions and recreates link rows from the current lots.',
+    confirmLabel: 'Force rebuild',
+    variant: 'destructive',
   },
   rebuild: {
     action: 'rebuild',

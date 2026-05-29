@@ -10,6 +10,8 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class LotMatcherServiceTest extends TestCase
@@ -284,6 +286,32 @@ class LotMatcherServiceTest extends TestCase
         $this->assertNotNull($secondMatchedAt);
         $this->assertTrue(Carbon::parse($secondMatchedAt)->greaterThan(Carbon::parse($firstMatchedAt)));
         $this->assertSame($firstRows, $this->linkRows());
+    }
+
+    public function test_last_matched_at_is_not_recorded_when_outer_transaction_rolls_back(): void
+    {
+        [$document, $account] = $this->documentAndAccount();
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $service = app(LotMatcherService::class);
+        $documentId = (int) $document->document_id;
+
+        Carbon::setTestNow(Carbon::parse('2026-05-10 10:00:00'));
+        try {
+            DB::transaction(function () use ($service, $documentId): void {
+                $service->runMatcherForDocument($documentId);
+
+                throw new \RuntimeException('rollback matcher run');
+            });
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('rollback matcher run', $exception->getMessage());
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $this->assertFalse(Cache::has(LotMatcherService::lastMatchedAtCacheKey($documentId)));
+        $this->assertNull($service->lastMatchedAtForDocument($documentId));
+        $this->assertSame(0, FinLotReconciliationLink::query()->where('document_id', $documentId)->count());
     }
 
     public function test_preview_preserves_accepted_decisions_by_default(): void

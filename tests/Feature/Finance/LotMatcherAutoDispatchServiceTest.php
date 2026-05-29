@@ -3,19 +3,25 @@
 namespace Tests\Feature\Finance;
 
 use App\Enums\Finance\LotMatcherAutoTrigger;
+use App\Jobs\DispatchQueuedLotsMatchRunJob;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\LotMatcher;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Psr\Log\AbstractLogger;
@@ -60,7 +66,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $this->assertCount(2, $queuedRecords);
     }
 
-    public function test_duplicate_tax_document_dispatch_uses_unique_job_lock(): void
+    public function test_duplicate_tax_document_dispatch_coalesces_behind_unique_job_lock(): void
     {
         Cache::flush();
         Queue::fake();
@@ -68,10 +74,51 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $document = $this->makeTaxDocument($user->id, '1099_b');
 
         $service = app(LotMatcherAutoDispatchService::class);
-        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
-        $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $firstDispatch = $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+        $secondDispatch = $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
 
+        $this->assertSame(1, $firstDispatch);
+        $this->assertSame(1, $secondDispatch);
         Queue::assertPushed(LotsMatchJob::class, 1);
+        Queue::assertPushed(DispatchQueuedLotsMatchRunJob::class, 1);
+        $this->assertDatabaseCount('lot_match_runs', 2);
+        $this->assertDatabaseHas('lot_match_runs', [
+            'document_id' => $document->document_id,
+            'status' => LotMatchRun::STATUS_SUPERSEDED,
+        ]);
+        $this->assertDatabaseHas('lot_match_runs', [
+            'document_id' => $document->document_id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+        ]);
+    }
+
+    public function test_coalesced_dispatch_inside_transaction_schedules_follow_up_dispatcher_after_commit(): void
+    {
+        Cache::flush();
+        Queue::fake();
+        $user = $this->createUser();
+        $document = $this->makeTaxDocument($user->id, '1099_b');
+        $lockJob = new LotsMatchJob((int) $document->document_id, 2025);
+        $uniqueLock = new UniqueLock(app(CacheRepository::class));
+        $this->assertTrue($uniqueLock->acquire($lockJob));
+
+        try {
+            DB::transaction(function () use ($document): void {
+                $queued = app(LotMatcherAutoDispatchService::class)
+                    ->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
+
+                $this->assertSame(1, $queued);
+                Queue::assertNotPushed(DispatchQueuedLotsMatchRunJob::class);
+            });
+
+            Queue::assertPushed(
+                DispatchQueuedLotsMatchRunJob::class,
+                fn (DispatchQueuedLotsMatchRunJob $job): bool => $job->documentId === (int) $document->document_id
+                    && $job->taxYear === 2025,
+            );
+        } finally {
+            $uniqueLock->release($lockJob);
+        }
     }
 
     public function test_dispatch_for_account_years_includes_adjacent_tax_year_documents(): void
@@ -170,12 +217,12 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
             }
         };
 
-        $job->handle($matcher);
+        $job->handle($matcher, app(LotMatchRunRecorder::class));
 
         $this->assertSame([['document_id' => 42, 'preserve_decisions' => true]], $matcher->calls);
         $this->assertSame('42', $job->uniqueId());
-        $this->assertSame(300, $job->uniqueFor);
-        $this->assertSame(300, $job->timeout);
+        $this->assertSame(LotsMatchJob::UNIQUE_FOR_SECONDS, $job->uniqueFor);
+        $this->assertSame(LotsMatchJob::TIMEOUT_SECONDS, $job->timeout);
         $this->assertSame(3, $job->tries);
         $this->assertSame([30, 120], $job->backoff);
         $timingRecords = array_values(array_filter(

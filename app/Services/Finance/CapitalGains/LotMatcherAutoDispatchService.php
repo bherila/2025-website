@@ -3,16 +3,26 @@
 namespace App\Services\Finance\CapitalGains;
 
 use App\Enums\Finance\LotMatcherAutoTrigger;
+use App\Jobs\DispatchQueuedLotsMatchRunJob;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class LotMatcherAutoDispatchService
 {
+    public function __construct(
+        private readonly LotMatchRunRecorder $lotMatchRunRecorder,
+    ) {}
+
     /**
      * Dispatch a matcher refresh for one unified document when it contains broker-reported disposition data.
      */
@@ -30,14 +40,13 @@ class LotMatcherAutoDispatchService
             return 0;
         }
 
-        $this->queueDocument(
+        return $this->queueDocument(
             documentId: (int) $document->id,
+            userId: (int) $document->user_id,
             trigger: $trigger,
             accountId: $accountId,
             taxYear: $taxYear ?? (int) $document->tax_year,
-        );
-
-        return 1;
+        ) ? 1 : 0;
     }
 
     /**
@@ -98,13 +107,16 @@ class LotMatcherAutoDispatchService
                 continue;
             }
 
-            $this->queueDocument(
+            $queued = $this->queueDocument(
                 documentId: $documentId,
+                userId: (int) $document->user_id,
                 trigger: $trigger,
                 accountId: $accountId,
                 taxYear: $document->tax_year === null ? $years[0] : (int) $document->tax_year,
             );
-            $queuedDocumentIds[$documentId] = true;
+            if ($queued) {
+                $queuedDocumentIds[$documentId] = true;
+            }
         }
 
         return count($queuedDocumentIds);
@@ -213,20 +225,83 @@ class LotMatcherAutoDispatchService
 
     private function queueDocument(
         int $documentId,
+        int $userId,
         LotMatcherAutoTrigger $trigger,
         ?int $accountId,
         ?int $taxYear,
-    ): void {
-        LotsMatchJob::dispatch($documentId, $taxYear)
-            ->delay(now()->addSeconds(LotsMatchJob::DELAY_SECONDS))
-            ->afterCommit();
+    ): bool {
+        $lockJob = new LotsMatchJob($documentId, $taxYear);
+        $uniqueLock = new UniqueLock(app(CacheRepository::class));
+        if (! $uniqueLock->acquire($lockJob)) {
+            $run = $this->lotMatchRunRecorder->queued($documentId, $userId, $taxYear);
+            $this->dispatchCoalescedRunAfterCommit($run, $taxYear);
+
+            Log::info('Lot matcher auto-dispatch coalesced; job already queued', [
+                'document_id' => $documentId,
+                'run_id' => (int) $run->id,
+                'trigger' => $trigger->value,
+                'account_id' => $accountId,
+                'tax_year' => $taxYear,
+            ]);
+
+            return true;
+        }
+
+        $run = null;
+
+        try {
+            $run = $this->lotMatchRunRecorder->queued($documentId, $userId, $taxYear);
+            $job = (new LotsMatchJob($documentId, $taxYear, null, (int) $run->id))
+                ->delay(now()->addSeconds(LotsMatchJob::DELAY_SECONDS))
+                ->afterCommit();
+
+            app(Dispatcher::class)->dispatch($job);
+        } catch (\Throwable $exception) {
+            $uniqueLock->release($lockJob);
+            if ($run instanceof LotMatchRun) {
+                $this->lotMatchRunRecorder->failed($run, $exception, $taxYear);
+            }
+
+            throw $exception;
+        }
 
         Log::info('Lot matcher auto-dispatch queued', [
             'document_id' => $documentId,
+            'run_id' => (int) $run->id,
             'trigger' => $trigger->value,
             'account_id' => $accountId,
             'tax_year' => $taxYear,
             'delay_seconds' => LotsMatchJob::DELAY_SECONDS,
         ]);
+
+        return true;
+    }
+
+    private function dispatchCoalescedRunAfterCommit(LotMatchRun $run, ?int $taxYear): void
+    {
+        $callback = function () use ($run, $taxYear): void {
+            $run->refresh();
+            if ($run->status !== LotMatchRun::STATUS_QUEUED) {
+                return;
+            }
+
+            DispatchQueuedLotsMatchRunJob::dispatch((int) $run->document_id, $taxYear)
+                ->afterCommit();
+
+            Log::info('Lot matcher auto-dispatch queued coalesced follow-up dispatcher after commit', [
+                'document_id' => (int) $run->document_id,
+                'run_id' => (int) $run->id,
+                'tax_year' => $taxYear,
+            ]);
+        };
+
+        $connection = DB::connection();
+        if ($connection->transactionLevel() > 0) {
+            $connection->afterCommit($callback);
+
+            return;
+        }
+
+        $callback();
     }
 }

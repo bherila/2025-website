@@ -67,6 +67,36 @@ class TaxYearLotsMatchEndpointTest extends TestCase
             ->assertJsonPath('documents', []);
     }
 
+    public function test_year_match_endpoint_skips_unlinked_tax_documents(): void
+    {
+        $user = $this->createUser();
+
+        FileForTaxDocument::create([
+            'user_id' => $user->id,
+            'document_id' => null,
+            'tax_year' => 2025,
+            'form_type' => 'broker_1099',
+            'original_filename' => 'unlinked-broker-1099.pdf',
+            'stored_filename' => fake()->uuid().'.pdf',
+            's3_path' => "tax_docs/{$user->id}/unlinked-broker-1099.pdf",
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1024,
+            'file_hash' => hash('sha256', fake()->uuid()),
+            'uploaded_by_user_id' => $user->id,
+            'is_reviewed' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/finance/tax-years/2025/lots-match')
+            ->assertOk()
+            ->assertJsonPath('document_count', 0)
+            ->assertJsonPath('documents', []);
+
+        $this->assertDatabaseMissing('lot_match_runs', [
+            'user_id' => $user->id,
+        ]);
+    }
+
     public function test_year_match_endpoint_validates_year_range(): void
     {
         $user = $this->createUser();

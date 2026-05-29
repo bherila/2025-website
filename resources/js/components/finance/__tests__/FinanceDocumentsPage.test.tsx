@@ -237,6 +237,11 @@ describe('FinanceDocumentsPage', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/finance/documents/42') {
         return Promise.resolve(detail({
+          lot_summary_facet: {
+            count: 2,
+            counts_by_source: { broker_1099b: 2 },
+            counts_by_reconciliation_state: { needs_review: 2 },
+          },
           statement_facet: {
             document_id: 42,
             period: { start: '2025-01-01', end: '2025-01-31' },
@@ -292,6 +297,10 @@ describe('FinanceDocumentsPage', () => {
       '/finance/account/12/transactions?source_document_id=42',
     )
     expect(screen.getByRole('link', { name: /Lots/i })).toHaveAttribute(
+      'href',
+      '/finance/account/12/lots?source_document_id=42&status=all',
+    )
+    expect(screen.getByRole('link', { name: /Open/i })).toHaveAttribute(
       'href',
       '/finance/account/12/lots?source_document_id=42&status=all',
     )

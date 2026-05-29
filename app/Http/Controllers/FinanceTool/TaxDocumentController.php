@@ -11,12 +11,14 @@ use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\Broker1099ParsedDataShapeService;
+use App\Services\Finance\CapitalGains\ReconciliationSummaryService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -295,6 +297,7 @@ class TaxDocumentController extends Controller
                 );
             }
         });
+        $this->forgetReconciliationSummary($doc);
 
         $freshDoc = $doc->fresh(['uploader:id,name', 'employmentEntity:id,display_name', 'accountLinks.account:acct_id,acct_name,acct_number']);
         if (! $freshDoc instanceof FileForTaxDocument) {
@@ -351,6 +354,7 @@ class TaxDocumentController extends Controller
         }
 
         $link->save();
+        $this->forgetReconciliationSummary($doc);
 
         $responseLink = $link->load('account:acct_id,acct_name,acct_number');
 
@@ -389,8 +393,14 @@ class TaxDocumentController extends Controller
         if ($deleteDoc && $doc->s3_path) {
             $this->fileService->deleteFile($doc->s3_path);
         }
+        $this->forgetReconciliationSummary($doc);
 
         return response()->json(['success' => true]);
+    }
+
+    private function forgetReconciliationSummary(FileForTaxDocument $doc): void
+    {
+        Cache::forget(ReconciliationSummaryService::cacheKey((int) $doc->user_id, (int) $doc->tax_year));
     }
 
     /**

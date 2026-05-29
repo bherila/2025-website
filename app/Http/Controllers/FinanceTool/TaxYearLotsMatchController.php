@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\RunTaxYearLotMatcherRequest;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinLotReconciliationLink;
+use App\Models\FinanceTool\LotMatchRun;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +17,7 @@ class TaxYearLotsMatchController extends Controller
 {
     public function __construct(
         private readonly LotMatcherService $lotMatcherService,
+        private readonly LotMatchRunRecorder $lotMatchRunRecorder,
     ) {}
 
     public function store(RunTaxYearLotMatcherRequest $request, int $year): JsonResponse
@@ -25,6 +28,7 @@ class TaxYearLotsMatchController extends Controller
             ->where('user_id', (int) Auth::id())
             ->where('tax_year', $taxYear)
             ->where('is_reviewed', true)
+            ->whereNotNull('document_id')
             ->where(function (Builder $query): void {
                 $query->whereIn('form_type', ['1099_b', 'broker_1099'])
                     ->orWhereHas('accountLinks', function (Builder $linkQuery): void {
@@ -38,13 +42,31 @@ class TaxYearLotsMatchController extends Controller
         $documentResults = [];
 
         foreach ($documents as $document) {
-            $result = $this->lotMatcherService->runMatcherForDocument((int) $document->document_id, preserveDecisions: true);
+            $run = $this->lotMatchRunRecorder->running(
+                $this->lotMatchRunRecorder->queued(
+                    (int) $document->document_id,
+                    (int) Auth::id(),
+                    $taxYear,
+                    LotMatchRun::MODE_PRESERVE,
+                )
+            );
+
+            try {
+                $result = $this->lotMatcherService->runMatcherForDocument((int) $document->document_id, preserveDecisions: true);
+                $this->lotMatchRunRecorder->succeeded($run, $result, $taxYear);
+            } catch (\Throwable $exception) {
+                $this->lotMatchRunRecorder->failed($run, $exception, $taxYear);
+
+                throw $exception;
+            }
+
             $aggregateCounts = $this->mergeCounts($aggregateCounts, $result->counts);
             $documentResults[] = [
                 'tax_document_id' => (int) $document->id,
                 'document_id' => (int) $document->document_id,
                 'broker' => $document->original_filename,
                 'counts' => $result->counts,
+                'match_run' => $run->payload(),
             ];
         }
 

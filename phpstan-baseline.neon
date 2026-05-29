@@ -49,12 +49,6 @@ parameters:
 			path: app/Console/Commands/Finance/FinanceTransactionsCommand.php
 
 		-
-			message: '#^Property App\\Models\\FinanceTool\\FinAccountLineItems\:\:\$t_amt \(float\|null\) does not accept string\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: app/Finance/RulesEngine/Actions/NegateAmountActionHandler.php
-
-		-
 			message: '#^Offset 0 on array\<string, mixed\> in isset\(\) does not exist\.$#'
 			identifier: isset.offset
 			count: 2

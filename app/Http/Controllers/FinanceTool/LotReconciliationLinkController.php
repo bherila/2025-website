@@ -8,8 +8,10 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\LotMatcherService;
+use App\Services\Finance\CapitalGains\ReconciliationSummaryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class LotReconciliationLinkController extends Controller
 {
@@ -20,37 +22,37 @@ class LotReconciliationLinkController extends Controller
     public function acceptBroker(int $id): JsonResponse
     {
         $link = $this->ownedLink($id);
+        $updatedLink = $this->lotMatcherService->acceptBrokerLink((int) $link->id, (int) Auth::id());
+        $this->forgetSummaryCacheForLink($updatedLink);
 
-        return response()->json($this->linkPayload(
-            $this->lotMatcherService->acceptBrokerLink((int) $link->id, (int) Auth::id()),
-        ));
+        return response()->json($this->linkPayload($updatedLink));
     }
 
     public function acceptAccountOverride(int $id): JsonResponse
     {
         $link = $this->ownedLink($id);
+        $updatedLink = $this->lotMatcherService->acceptAccountOverride((int) $link->id, (int) Auth::id());
+        $this->forgetSummaryCacheForLink($updatedLink);
 
-        return response()->json($this->linkPayload(
-            $this->lotMatcherService->acceptAccountOverride((int) $link->id, (int) Auth::id()),
-        ));
+        return response()->json($this->linkPayload($updatedLink));
     }
 
     public function markDuplicate(int $id): JsonResponse
     {
         $link = $this->ownedLink($id);
+        $updatedLink = $this->lotMatcherService->markDuplicate((int) $link->id, (int) Auth::id());
+        $this->forgetSummaryCacheForLink($updatedLink);
 
-        return response()->json($this->linkPayload(
-            $this->lotMatcherService->markDuplicate((int) $link->id, (int) Auth::id()),
-        ));
+        return response()->json($this->linkPayload($updatedLink));
     }
 
     public function unlink(int $id): JsonResponse
     {
         $link = $this->ownedLink($id);
+        $updatedLink = $this->lotMatcherService->unlinkLot((int) $link->id, (int) Auth::id());
+        $this->forgetSummaryCacheForLink($updatedLink);
 
-        return response()->json($this->linkPayload(
-            $this->lotMatcherService->unlinkLot((int) $link->id, (int) Auth::id()),
-        ));
+        return response()->json($this->linkPayload($updatedLink));
     }
 
     public function relink(RelinkLotReconciliationRequest $request): JsonResponse
@@ -58,10 +60,10 @@ class LotReconciliationLinkController extends Controller
         $validated = $request->validated();
         $brokerLot = $this->ownedBrokerLot((int) $validated['broker_lot_id']);
         $accountLot = $this->ownedAccountLot((int) $validated['account_lot_id']);
+        $updatedLink = $this->lotMatcherService->relinkLot((int) $brokerLot->lot_id, (int) $accountLot->lot_id, (int) Auth::id());
+        $this->forgetSummaryCacheForLink($updatedLink);
 
-        return response()->json($this->linkPayload(
-            $this->lotMatcherService->relinkLot((int) $brokerLot->lot_id, (int) $accountLot->lot_id, (int) Auth::id()),
-        ));
+        return response()->json($this->linkPayload($updatedLink));
     }
 
     private function ownedLink(int $id): FinLotReconciliationLink
@@ -147,5 +149,16 @@ class LotReconciliationLinkController extends Controller
             'acceptedByUserId' => $link->accepted_by_user_id !== null ? (int) $link->accepted_by_user_id : null,
             'acceptedAt' => $link->accepted_at,
         ];
+    }
+
+    private function forgetSummaryCacheForLink(FinLotReconciliationLink $link): void
+    {
+        $taxDocument = $link->relationLoaded('taxDocument') ? $link->getRelation('taxDocument') : $link->taxDocument;
+
+        if (! $taxDocument instanceof FileForTaxDocument) {
+            return;
+        }
+
+        Cache::forget(ReconciliationSummaryService::cacheKey((int) $taxDocument->user_id, (int) $taxDocument->tax_year));
     }
 }

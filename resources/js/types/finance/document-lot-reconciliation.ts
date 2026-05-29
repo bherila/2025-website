@@ -25,6 +25,38 @@ export const lotReconciliationLinkStateCountsSchema = z.object({
 })
 
 export const lotReconciliationDashboardStatusSchema = z.enum(['in_sync', 'needs_review', 'drift'])
+export const reconciliationHealthSchema = z.enum(['ok', 'drift', 'blocked'])
+export const lotMatchRunStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'superseded'])
+export const lotMatchRunModeSchema = z.enum(['preserve', 'force'])
+
+export const lotMatchRunSchema = z.object({
+  id: z.number(),
+  document_id: z.number(),
+  user_id: z.number(),
+  status: lotMatchRunStatusSchema,
+  mode: lotMatchRunModeSchema,
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+  result_summary: z.record(z.string(), z.unknown()).nullable(),
+  error: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export const lotMatchRunsResponseSchema = z.object({
+  tax_document_id: z.number(),
+  document_id: z.number().nullable(),
+  runs: z.array(lotMatchRunSchema),
+})
+
+export const problemBucketCountsSchema = z.object({
+  missing_accounts: z.number(),
+  mismatches: z.number(),
+  broker_only: z.number(),
+  account_only: z.number(),
+  duplicates: z.number(),
+  auto_matched: z.number(),
+})
 
 export const lotReconciliationLotSchema = z.object({
   lot_id: z.number(),
@@ -150,11 +182,49 @@ export const taxYearLotReconciliationResponseSchema = z.object({
   }).passthrough()),
 })
 
+export const taxYearReconciliationSummaryResponseSchema = z.object({
+  user_id: z.number(),
+  tax_year: z.number(),
+  summary: z.object({
+    document_count: z.number(),
+    unresolved_account_links: z.number(),
+    link_state_counts: lotReconciliationLinkStateCountsSchema,
+    documents_by_health: z.object({
+      ok: z.number(),
+      drift: z.number(),
+      blocked: z.number(),
+    }),
+    problem_bucket_counts: problemBucketCountsSchema,
+  }),
+  documents: z.array(z.object({
+    tax_document_id: z.number(),
+    document_id: z.number().nullable(),
+    broker: z.string().nullable(),
+    form_type: z.string(),
+    original_filename: z.string().nullable(),
+    tax_year: z.number(),
+    health: reconciliationHealthSchema,
+    last_matched_at: z.string().nullable(),
+    unresolved_account_links: z.number(),
+    link_state_counts: lotReconciliationLinkStateCountsSchema,
+    problem_bucket_counts: problemBucketCountsSchema,
+    latest_match_run: lotMatchRunSchema.nullable(),
+  })),
+  unresolved_account_links: z.array(accountSuggestionLinkSchema),
+})
+
 export type LotReconciliationLinkState = z.infer<typeof lotReconciliationLinkStateSchema>
 export type LotReconciliationLinkStateCounts = z.infer<typeof lotReconciliationLinkStateCountsSchema>
 export type LotReconciliationDashboardStatus = z.infer<typeof lotReconciliationDashboardStatusSchema>
+export type ReconciliationHealth = z.infer<typeof reconciliationHealthSchema>
+export type LotMatchRunStatus = z.infer<typeof lotMatchRunStatusSchema>
+export type LotMatchRunMode = z.infer<typeof lotMatchRunModeSchema>
+export type LotMatchRun = z.infer<typeof lotMatchRunSchema>
+export type LotMatchRunsResponse = z.infer<typeof lotMatchRunsResponseSchema>
+export type ProblemBucketCounts = z.infer<typeof problemBucketCountsSchema>
 export type LotReconciliationLot = z.infer<typeof lotReconciliationLotSchema>
 export type LotReconciliationLink = z.infer<typeof lotReconciliationLinkSchema>
 export type LotReconciliationLinksResponse = z.infer<typeof lotReconciliationLinksResponseSchema>
 export type TaxDocumentReconciliationReport = z.infer<typeof taxDocumentReconciliationReportSchema>
 export type TaxYearLotReconciliationResponse = z.infer<typeof taxYearLotReconciliationResponseSchema>
+export type TaxYearReconciliationSummaryResponse = z.infer<typeof taxYearReconciliationSummaryResponseSchema>

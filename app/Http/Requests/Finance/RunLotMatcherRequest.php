@@ -23,7 +23,17 @@ class RunLotMatcherRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'preserve_decisions' => ['sometimes', 'boolean'],
+            'preserve_decisions' => ['sometimes', 'accepted'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'preserve_decisions.accepted' => 'Use the confirmed full rebuild endpoint to rerun without preserving decisions.',
         ];
     }
 }

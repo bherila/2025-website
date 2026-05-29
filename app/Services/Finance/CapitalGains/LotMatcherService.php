@@ -137,7 +137,7 @@ class LotMatcherService
             );
         });
 
-        $this->recordLastMatchedAt((int) $document->id);
+        $this->recordLastMatchedAtAfterCommit((int) $document->id);
 
         return $result;
     }
@@ -727,6 +727,20 @@ class LotMatcherService
     private function recordLastMatchedAt(int $documentId): void
     {
         Cache::forever(self::lastMatchedAtCacheKey($documentId), now()->toJSON());
+    }
+
+    private function recordLastMatchedAtAfterCommit(int $documentId): void
+    {
+        $connection = DB::connection();
+        if ($connection->transactionLevel() > 0) {
+            $connection->afterCommit(function () use ($documentId): void {
+                $this->recordLastMatchedAt($documentId);
+            });
+
+            return;
+        }
+
+        $this->recordLastMatchedAt($documentId);
     }
 
     private function lastLinkTimestampForDocument(int $documentId): ?string
