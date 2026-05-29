@@ -43,8 +43,8 @@ export function feederJoinProgress(layout: QueueLayout): number {
 
 export const FEEDER_ROW_SPACING = 0.34
 const FEEDER_FIRST_ROW_DISTANCE = 0.42
-const LOOP_VISUAL_LANE_OFFSETS = [0, -0.16, 0.16] as const
-const FEEDER_VISUAL_LANE_OFFSETS = [0, -0.15, 0.15] as const
+const LOOP_VISUAL_LANE_OFFSETS = [0] as const
+const FEEDER_VISUAL_LANE_OFFSETS = [0] as const
 const DEFAULT_DEPARTURE_OFFSCREEN_X = 22
 const DEPARTURE_VIEWPORT_CLEARANCE = 3.2
 const DEPARTURE_EXIT_SEARCH_LIMIT = 56
