@@ -66,6 +66,7 @@ jobs:
             echo "APP_URL=http://127.0.0.1:8000"
             echo "DB_CONNECTION=sqlite"
             echo "DB_DATABASE=${GITHUB_WORKSPACE}/database/database.sqlite"
+            echo "CACHE_STORE=file"
             echo "SESSION_DRIVER=file"
           } >> .env
           rm -f database/database.sqlite
