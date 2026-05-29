@@ -205,7 +205,11 @@ function BottomControls({
 
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
-      <div className="pointer-events-auto flex items-center gap-2 rounded-3xl border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/80">
+      <div
+        aria-label="Game controls"
+        className="pointer-events-auto flex items-center gap-1.5 rounded-3xl border border-white/70 bg-white/85 p-1.5 shadow-xl shadow-slate-950/20 backdrop-blur-md sm:gap-2 sm:p-2 dark:border-white/10 dark:bg-slate-950/80"
+        role="toolbar"
+      >
         <BottomControlButton
           accentClassName="bg-gradient-to-b from-rose-400 to-rose-600 text-white hover:from-rose-400 hover:to-rose-600"
           confirmation={POWER_UP_CONFIRMATIONS.magnet}
@@ -339,7 +343,7 @@ function BottomControlButton({
     <Button
       aria-label={label}
       className={cn(
-        'relative size-14 rounded-2xl p-0 shadow-md transition-transform active:scale-95 disabled:opacity-40',
+        'relative size-12 rounded-2xl p-0 shadow-md transition-transform active:scale-95 disabled:opacity-40 sm:size-14',
         accentClassName,
       )}
       disabled={disabled}
@@ -348,9 +352,9 @@ function BottomControlButton({
       variant={variant}
       onClick={confirmation ? undefined : onClick}
     >
-      <span className="[&>svg]:size-6">{icon}</span>
+      <span className="[&>svg]:size-5 sm:[&>svg]:size-6">{icon}</span>
       {count !== undefined && (
-        <span className="absolute -right-1.5 -top-1.5 min-w-6 rounded-full border-2 border-white bg-rose-600 px-1 text-xs font-black leading-5 text-white shadow-sm dark:border-slate-950">
+        <span className="absolute -right-1 -top-1 min-w-5 rounded-full border-2 border-white bg-rose-600 px-1 text-[10px] font-black leading-4 text-white shadow-sm sm:-right-1.5 sm:-top-1.5 sm:min-w-6 sm:text-xs sm:leading-5 dark:border-slate-950">
           {count}
         </span>
       )}
