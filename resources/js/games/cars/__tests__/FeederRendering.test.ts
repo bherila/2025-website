@@ -1,7 +1,9 @@
+import * as THREE from 'three'
+
 import { selectFeederPassengersForRendering } from '../CarsScene'
 import { generateLevel, loopPassengerCapacity, type Passenger } from '../gameEngine'
 import { type PassengerLoopSlot, planPassengerLoopSlots } from '../scene/passengerLoopSlots'
-import { feederPassengerPosition, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
+import { feederCurve, feederPassengerPosition, passengerSpacing, queueLayoutForState } from '../scene/sceneGeometry'
 import type { QueueLayout } from '../scene/sceneTypes'
 
 describe('feeder passenger rendering plan', () => {
@@ -42,6 +44,29 @@ describe('feeder passenger rendering plan', () => {
     expect(
       rightSideBeyondLegacyCap.some((passenger) => !legacyCap.some((candidate) => candidate.id === passenger.id)),
     ).toBe(true)
+  })
+
+  it('spreads overflow feeder passengers past the curve end instead of stacking them on the last point', () => {
+    const sideCount = 24
+    const feederPassengers: Passenger[] = Array.from({ length: sideCount }, (_unused, index) => passenger(`p${index + 1}`))
+    const curve = feederCurve(-1, testLayout)
+    const curveStart = curve.getPointAt(0)
+    const length = curve.getLength()
+
+    const positions = feederPassengers.map((p) => feederPassengerPosition(p, feederPassengers, testLayout))
+
+    const lastDistanceFromStart = positions[sideCount - 1]!.distanceTo(curveStart)
+    expect(lastDistanceFromStart).toBeGreaterThan(length)
+
+    const distinctTailPositions = new Set(
+      positions.slice(-6).map((point) => `${point.x.toFixed(3)}:${point.z.toFixed(3)}`),
+    )
+    expect(distinctTailPositions.size).toBe(6)
+
+    const earlierTail = positions[sideCount - 5]!
+    const laterTail = positions[sideCount - 1]!
+    expect(new THREE.Vector3(laterTail.x, 0, laterTail.z).distanceTo(new THREE.Vector3(earlierTail.x, 0, earlierTail.z)))
+      .toBeGreaterThan(0.9)
   })
 
   it('keeps rendered feeder passengers behind pending feeder-entry passengers', () => {
