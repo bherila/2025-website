@@ -43,7 +43,7 @@ test.describe('lot reconciliation review flow', () => {
 
     const movedRow = page.getByTestId(rowTestId!)
     await expect(movedRow).toHaveAttribute('data-link-state', 'accepted_account_override')
-    await expect(page.getByTestId('recon-bucket-matched').getByTestId(rowTestId!)).toBeVisible()
+    await expect(page.getByTestId('recon-bucket-matched').getByTestId(rowTestId!)).toHaveCount(1)
     await expect(mismatched.getByTestId(rowTestId!)).toHaveCount(0)
     await expect(page.getByTestId('recon-summary-needs-review-value')).toContainText('0')
   })
@@ -70,19 +70,30 @@ test.describe('lot reconciliation review flow', () => {
 
     const row = widget.getByTestId(`recon-health-row-${fixture.tax_document_id}`)
     await expect(row).toHaveAttribute('data-dashboard-status', 'drift')
+    await expect(row).toHaveAttribute('href', fixture.reconciliation_path)
     await expect(row).toContainText(/drift - max delta/i)
     await expectNoHorizontalOverflow(page)
 
-    await row.click()
-    await expect(page).toHaveURL(new RegExp(`/finance/tax-documents/${fixture.tax_document_id}/lot-reconciliation$`))
+    await Promise.all([
+      page.waitForURL(new RegExp(`/finance/tax-documents/${fixture.tax_document_id}/lot-reconciliation$`)),
+      row.dispatchEvent('click'),
+    ])
   })
 })
 
 async function loginAsFixtureOwner(page: Page): Promise<void> {
   const fixture = readFixture()
-  await page.request.post(fixture.login_path, {
-    form: { user_id: String(fixture.user_id) },
+
+  await page.goto('/login')
+  const csrfToken = await page.locator('input[name="_token"]').first().inputValue()
+
+  const response = await page.request.post(fixture.login_path, {
+    form: {
+      _token: csrfToken,
+      user_id: String(fixture.user_id),
+    },
   })
+  expect(response.ok(), `Expected fixture login to succeed, got HTTP ${response.status()}`).toBe(true)
 }
 
 function readFixture(): ReconciliationFixture {

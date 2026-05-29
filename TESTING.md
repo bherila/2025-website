@@ -36,7 +36,7 @@ The finance reconciliation E2E spec uses a file-backed SQLite database so the se
 
 ```bash
 cp .env.example .env
-printf '\nAPP_ENV=testing\nAPP_URL=http://127.0.0.1:8000\nDB_CONNECTION=sqlite\nDB_DATABASE=%s/database/database.sqlite\n' "$PWD" >> .env
+printf '\nAPP_ENV=testing\nAPP_URL=http://127.0.0.1:8000\nDB_CONNECTION=sqlite\nDB_DATABASE=%s/database/database.sqlite\nSESSION_DRIVER=file\n' "$PWD" >> .env
 touch database/database.sqlite
 php artisan key:generate --no-interaction --force
 php artisan migrate --database=sqlite --no-interaction

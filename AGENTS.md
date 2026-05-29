@@ -82,7 +82,7 @@ This is wall-time only — total CPU is unchanged. Prefer it for iteration loops
 
 ### E2E Specs
 
-Playwright specs live under `tests/e2e/`. Finance lot reconciliation E2E coverage must use `php artisan finance:seed-recon-drift-fixture --quiet-json` and read `tests/e2e/.fixture-state.json`; do not handcraft browser-only fixtures. E2E is not part of the per-PR CI gate, so trigger the **E2E Tests** workflow manually before merging changes that touch the reconciliation browser surface.
+Playwright specs live under `tests/e2e/`. Finance lot reconciliation E2E coverage must use `php artisan finance:seed-recon-drift-fixture --quiet-json`, read `tests/e2e/.fixture-state.json`, and run Laravel with a persistent test session driver such as `SESSION_DRIVER=file`; do not handcraft browser-only fixtures. E2E is not part of the per-PR CI gate, so trigger the **E2E Tests** workflow manually before merging changes that touch the reconciliation browser surface.
 
 ## Linting & Formatting
 
