@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -59,6 +60,30 @@ class LotMatchRunsTest extends TestCase
         $this->actingAs($user)
             ->getJson("/api/finance/tax-documents/{$otherDocument->id}/lot-match-runs")
             ->assertNotFound();
+    }
+
+    public function test_recorder_does_not_supersede_newer_active_runs(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $olderRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+        $newerRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_FORCE,
+        ]);
+
+        app(LotMatchRunRecorder::class)->running($olderRun);
+
+        $this->assertSame(LotMatchRun::STATUS_RUNNING, $olderRun->fresh()->status);
+        $this->assertSame(LotMatchRun::STATUS_QUEUED, $newerRun->fresh()->status);
     }
 
     public function test_match_endpoints_record_runs_and_require_confirm_for_force_mode(): void

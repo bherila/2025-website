@@ -63,7 +63,7 @@ class LotMatchRunRecorder
         }
 
         $run->refresh();
-        $this->supersedeOlderActiveRuns((int) $run->document_id, (int) $run->id);
+        $this->supersedeActiveRuns((int) $run->document_id, (int) $run->id);
         $run->refresh();
 
         if (! $run->isActive() || $this->hasNewerRun((int) $run->document_id, (int) $run->id)) {
@@ -129,19 +129,6 @@ class LotMatchRunRecorder
     }
 
     private function supersedeActiveRuns(int $documentId, int $currentRunId): void
-    {
-        LotMatchRun::query()
-            ->where('document_id', $documentId)
-            ->where('id', '!=', $currentRunId)
-            ->whereIn('status', [LotMatchRun::STATUS_QUEUED, LotMatchRun::STATUS_RUNNING])
-            ->update([
-                'status' => LotMatchRun::STATUS_SUPERSEDED,
-                'finished_at' => now(),
-                'updated_at' => now(),
-            ]);
-    }
-
-    private function supersedeOlderActiveRuns(int $documentId, int $currentRunId): void
     {
         LotMatchRun::query()
             ->where('document_id', $documentId)
