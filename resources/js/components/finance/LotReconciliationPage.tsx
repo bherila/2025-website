@@ -118,6 +118,10 @@ const LINK_ACTION_META: Record<LinkAction, { label: string; optimisticState: Lot
   },
 }
 
+function isActiveMatchRunStatus(status: string): boolean {
+  return status === 'queued' || status === 'running'
+}
+
 export default function LotReconciliationPage({ taxDocumentId }: LotReconciliationPageProps): React.ReactElement {
   const [report, setReport] = useState<TaxDocumentReconciliationReport | null>(null)
   const [linksData, setLinksData] = useState<LotReconciliationLinksResponse | null>(null)
@@ -167,14 +171,14 @@ export default function LotReconciliationPage({ taxDocumentId }: LotReconciliati
   const latestRun = matchRunsData?.runs[0] ?? null
 
   useEffect(() => {
-    if (latestRun?.status !== 'queued' && latestRun?.status !== 'running') {
+    if (!latestRun || !isActiveMatchRunStatus(latestRun.status)) {
       return undefined
     }
 
     const interval = window.setInterval(() => {
       void loadMatchRuns().then((runsData) => {
         const nextRun = runsData?.runs[0] ?? null
-        if (nextRun && nextRun.id === latestRun.id && nextRun.status !== 'queued' && nextRun.status !== 'running') {
+        if (nextRun && nextRun.id >= latestRun.id && !isActiveMatchRunStatus(nextRun.status)) {
           void load()
         }
       })

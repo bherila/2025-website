@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
@@ -262,6 +262,56 @@ describe('LotReconciliationPage', () => {
     await waitFor(() => {
       expect(mockedFetchWrapper.post).toHaveBeenCalledWith('/api/finance/tax-documents/12/lots-match', { preserve_decisions: true })
     })
+  })
+
+  it('reloads reconciliation rows when a replacement matcher run finishes while polling', async () => {
+    jest.useFakeTimers()
+    const runningRunsResponse = {
+      ...runsResponse,
+      runs: [{
+        ...runsResponse.runs[0]!,
+        status: 'running',
+        finished_at: null,
+        result_summary: null,
+      }],
+    }
+    const replacementRunsResponse = {
+      ...runsResponse,
+      runs: [{
+        ...runsResponse.runs[0]!,
+        id: 10,
+        status: 'succeeded',
+      }],
+    }
+    let matchRunsRequests = 0
+    mockedFetchWrapper.get.mockImplementation((url: string) => {
+      if (url.includes('lot-match-runs')) {
+        matchRunsRequests += 1
+
+        return Promise.resolve(matchRunsRequests === 1 ? runningRunsResponse : replacementRunsResponse)
+      }
+
+      return Promise.resolve(url.includes('lot-reconciliation-links') ? linksResponse : reportResponse)
+    })
+
+    try {
+      render(<LotReconciliationPage taxDocumentId={12} />)
+
+      await waitFor(() => expect(screen.getByText(/Synthetic Broker/)).toBeInTheDocument())
+      const reconciliationCalls = () => mockedFetchWrapper.get.mock.calls
+        .filter(([url]) => url === '/api/finance/tax-documents/12/lot-reconciliation')
+
+      expect(reconciliationCalls()).toHaveLength(1)
+
+      await act(async () => {
+        jest.advanceTimersByTime(5000)
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(reconciliationCalls()).toHaveLength(2))
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('requires a destructive confirmation for force rebuild', async () => {
