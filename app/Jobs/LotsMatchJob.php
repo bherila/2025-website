@@ -8,7 +8,6 @@ use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -21,11 +20,13 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public const int DELAY_SECONDS = 30;
 
-    public const int UNIQUE_FOR_SECONDS = 300;
+    public const int TIMEOUT_SECONDS = 300;
+
+    public const int UNIQUE_FOR_SECONDS = self::DELAY_SECONDS + self::TIMEOUT_SECONDS + 60;
 
     public int $tries = 3;
 
-    public int $timeout = self::UNIQUE_FOR_SECONDS;
+    public int $timeout = self::TIMEOUT_SECONDS;
 
     /**
      * @var list<int>
@@ -189,10 +190,8 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $job = (new self($this->documentId, $this->taxYear, null, (int) $coalescedRun->id, LotMatchRun::MODE_PRESERVE))
+        self::dispatch($this->documentId, $this->taxYear, null, (int) $coalescedRun->id, LotMatchRun::MODE_PRESERVE)
             ->afterCommit();
-
-        app(Dispatcher::class)->dispatch($job);
 
         Log::info('LotsMatchJob: queued coalesced lot match run after permanent failure', [
             'document_id' => $this->documentId,

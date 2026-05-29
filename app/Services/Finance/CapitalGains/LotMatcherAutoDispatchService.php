@@ -3,6 +3,7 @@
 namespace App\Services\Finance\CapitalGains;
 
 use App\Enums\Finance\LotMatcherAutoTrigger;
+use App\Jobs\DispatchQueuedLotsMatchRunJob;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
@@ -13,6 +14,7 @@ use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class LotMatcherAutoDispatchService
@@ -232,6 +234,7 @@ class LotMatcherAutoDispatchService
         $uniqueLock = new UniqueLock(app(CacheRepository::class));
         if (! $uniqueLock->acquire($lockJob)) {
             $run = $this->lotMatchRunRecorder->queued($documentId, $userId, $taxYear);
+            $this->dispatchCoalescedRunAfterCommit($run, $taxYear);
 
             Log::info('Lot matcher auto-dispatch coalesced; job already queued', [
                 'document_id' => $documentId,
@@ -272,5 +275,33 @@ class LotMatcherAutoDispatchService
         ]);
 
         return true;
+    }
+
+    private function dispatchCoalescedRunAfterCommit(LotMatchRun $run, ?int $taxYear): void
+    {
+        $callback = function () use ($run, $taxYear): void {
+            $run->refresh();
+            if ($run->status !== LotMatchRun::STATUS_QUEUED) {
+                return;
+            }
+
+            DispatchQueuedLotsMatchRunJob::dispatch((int) $run->document_id, $taxYear)
+                ->afterCommit();
+
+            Log::info('Lot matcher auto-dispatch queued coalesced follow-up dispatcher after commit', [
+                'document_id' => (int) $run->document_id,
+                'run_id' => (int) $run->id,
+                'tax_year' => $taxYear,
+            ]);
+        };
+
+        $connection = DB::connection();
+        if ($connection->transactionLevel() > 0) {
+            $connection->afterCommit($callback);
+
+            return;
+        }
+
+        $callback();
     }
 }

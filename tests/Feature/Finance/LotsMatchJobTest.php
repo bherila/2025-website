@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Jobs\DispatchQueuedLotsMatchRunJob;
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
@@ -14,8 +15,12 @@ use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\LotMatcher;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Queue\Jobs\FakeJob;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -72,6 +77,7 @@ class LotsMatchJobTest extends TestCase
 
     public function test_permanent_failure_dispatches_latest_coalesced_queued_run(): void
     {
+        Cache::flush();
         Queue::fake();
         $user = $this->createUser();
         $account = $this->makeAccount($user->id);
@@ -91,16 +97,79 @@ class LotsMatchJobTest extends TestCase
         ]);
 
         $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $run->id);
-        $job->failed(new \RuntimeException('Matcher failed permanently.'));
+        try {
+            $job->failed(new \RuntimeException('Matcher failed permanently.'));
 
-        $this->assertSame(LotMatchRun::STATUS_FAILED, $run->fresh()->status);
-        Queue::assertPushed(
-            LotsMatchJob::class,
-            fn (LotsMatchJob $queuedJob): bool => $queuedJob->documentId === (int) $document->document_id
-                && $queuedJob->taxYear === 2025
-                && $queuedJob->runId === (int) $coalescedRun->id
-                && $queuedJob->mode === LotMatchRun::MODE_PRESERVE,
-        );
+            $this->assertSame(LotMatchRun::STATUS_FAILED, $run->fresh()->status);
+            Queue::assertPushed(
+                LotsMatchJob::class,
+                fn (LotsMatchJob $queuedJob): bool => $queuedJob->documentId === (int) $document->document_id
+                    && $queuedJob->taxYear === 2025
+                    && $queuedJob->runId === (int) $coalescedRun->id
+                    && $queuedJob->mode === LotMatchRun::MODE_PRESERVE,
+            );
+        } finally {
+            Cache::flush();
+        }
+    }
+
+    public function test_follow_up_dispatcher_dispatches_latest_queued_run_when_matcher_lock_is_available(): void
+    {
+        Cache::flush();
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $run = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+
+        $job = new DispatchQueuedLotsMatchRunJob((int) $document->document_id, 2025);
+        try {
+            $job->handle(app(LotMatchRunRecorder::class), app(CacheRepository::class), app(Dispatcher::class));
+
+            Queue::assertPushed(
+                LotsMatchJob::class,
+                fn (LotsMatchJob $queuedJob): bool => $queuedJob->documentId === (int) $document->document_id
+                    && $queuedJob->taxYear === 2025
+                    && $queuedJob->runId === (int) $run->id
+                    && $queuedJob->mode === LotMatchRun::MODE_PRESERVE,
+            );
+        } finally {
+            Cache::flush();
+        }
+    }
+
+    public function test_follow_up_dispatcher_releases_when_matcher_lock_is_still_held(): void
+    {
+        Cache::flush();
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+        $lockJob = new LotsMatchJob((int) $document->document_id, 2025);
+        $uniqueLock = new UniqueLock(app(CacheRepository::class));
+        $this->assertTrue($uniqueLock->acquire($lockJob));
+
+        try {
+            $job = new DispatchQueuedLotsMatchRunJob((int) $document->document_id, 2025);
+            $job->withFakeQueueInteractions();
+            $job->handle(app(LotMatchRunRecorder::class), app(CacheRepository::class), app(Dispatcher::class));
+
+            $job->assertReleased(DispatchQueuedLotsMatchRunJob::RELEASE_AFTER_SECONDS);
+            Queue::assertNotPushed(LotsMatchJob::class);
+        } finally {
+            $uniqueLock->release($lockJob);
+        }
     }
 
     public function test_job_keeps_run_active_after_retryable_failure(): void
