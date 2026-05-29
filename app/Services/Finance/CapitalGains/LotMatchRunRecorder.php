@@ -4,6 +4,7 @@ namespace App\Services\Finance\CapitalGains;
 
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\LotMatchRun;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Cache;
 
 class LotMatchRunRecorder
@@ -32,6 +33,42 @@ class LotMatchRunRecorder
             'finished_at' => null,
             'error' => null,
         ])->save();
+
+        return $run;
+    }
+
+    public function runningIfLatestActive(LotMatchRun $run): ?LotMatchRun
+    {
+        $updated = LotMatchRun::query()
+            ->whereKey((int) $run->id)
+            ->whereIn('status', [LotMatchRun::STATUS_QUEUED, LotMatchRun::STATUS_RUNNING])
+            ->whereNotExists(function (QueryBuilder $query) use ($run): void {
+                $query->selectRaw('1')
+                    ->from('lot_match_runs as newer_runs')
+                    ->whereColumn('newer_runs.document_id', 'lot_match_runs.document_id')
+                    ->where('newer_runs.id', '>', (int) $run->id);
+            })
+            ->update([
+                'status' => LotMatchRun::STATUS_RUNNING,
+                'started_at' => $run->started_at ?? now(),
+                'finished_at' => null,
+                'error' => null,
+                'updated_at' => now(),
+            ]);
+
+        if ($updated === 0) {
+            $run->refresh();
+
+            return null;
+        }
+
+        $run->refresh();
+        $this->supersedeOlderActiveRuns((int) $run->document_id, (int) $run->id);
+        $run->refresh();
+
+        if (! $run->isActive() || $this->hasNewerRun((int) $run->document_id, (int) $run->id)) {
+            return null;
+        }
 
         return $run;
     }
@@ -102,6 +139,27 @@ class LotMatchRunRecorder
                 'finished_at' => now(),
                 'updated_at' => now(),
             ]);
+    }
+
+    private function supersedeOlderActiveRuns(int $documentId, int $currentRunId): void
+    {
+        LotMatchRun::query()
+            ->where('document_id', $documentId)
+            ->where('id', '<', $currentRunId)
+            ->whereIn('status', [LotMatchRun::STATUS_QUEUED, LotMatchRun::STATUS_RUNNING])
+            ->update([
+                'status' => LotMatchRun::STATUS_SUPERSEDED,
+                'finished_at' => now(),
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function hasNewerRun(int $documentId, int $runId): bool
+    {
+        return LotMatchRun::query()
+            ->where('document_id', $documentId)
+            ->where('id', '>', $runId)
+            ->exists();
     }
 
     /**

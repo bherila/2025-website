@@ -65,6 +65,36 @@ class LotsMatchJobTest extends TestCase
         }
     }
 
+    public function test_job_skips_superseded_run(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $staleRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_SUPERSEDED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+            'finished_at' => now(),
+        ]);
+        $latestRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_SUCCEEDED,
+            'mode' => LotMatchRun::MODE_FORCE,
+            'started_at' => now(),
+            'finished_at' => now(),
+        ]);
+        $matcher = \Mockery::mock(LotMatcherService::class);
+        $matcher->shouldReceive('runMatcherForDocument')->never();
+
+        $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $staleRun->id);
+        $job->handle($matcher, app(LotMatchRunRecorder::class));
+
+        $this->assertSame(LotMatchRun::STATUS_SUPERSEDED, $staleRun->fresh()->status);
+        $this->assertSame(LotMatchRun::STATUS_SUCCEEDED, $latestRun->fresh()->status);
+    }
+
     public function test_force_mode_rebuilds_preserved_decisions(): void
     {
         $user = $this->createUser();

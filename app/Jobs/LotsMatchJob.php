@@ -48,7 +48,18 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         $success = false;
         $run = $this->resolveRun($lotMatchRunRecorder);
         if ($run instanceof LotMatchRun) {
-            $run = $lotMatchRunRecorder->running($run);
+            $run = $lotMatchRunRecorder->runningIfLatestActive($run);
+            if (! $run instanceof LotMatchRun) {
+                Log::info('LotsMatchJob: skipped stale lot match run', [
+                    'document_id' => $this->documentId,
+                    'tax_year' => $this->taxYear,
+                    'run_id' => $this->runId,
+                    'mode' => $this->mode,
+                    'queue_wait_ms' => $this->queueWaitMs(),
+                ]);
+
+                return;
+            }
         }
 
         try {
