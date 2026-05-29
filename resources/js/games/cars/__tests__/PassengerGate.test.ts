@@ -158,10 +158,12 @@ describe('passenger gate notifications', () => {
     }
     const onPassengerGate = jest.fn()
 
-    // A loop shift reseeds the gate cycle to the current cycle (so crossedGate is
-    // false) and can carry the passenger a full slot past the gate. Progress 0.4 is
-    // beyond the old narrow window but the match is ready, so it must still board.
-    notifyPassengerGate([passenger], 0.4, new Map([['p1', 0]]), testState, [], 20, onPassengerGate)
+    // A boarding closes the gap and bumps this passenger a slot forward, carrying it
+    // across the gate to progress 0.4 (cycle 1) — beyond the tight nearGate window.
+    // CarsScene seeds the gate cycle from the *pre-shift* offset (cycle 0, just before
+    // the gate), so the jump registers as a genuine crossing and it boards this lap.
+    const phase = testLayout.perimeter + 0.4
+    notifyPassengerGate([passenger], phase, new Map([['p1', 0]]), testState, [], 20, onPassengerGate)
 
     expect(onPassengerGate).toHaveBeenCalledWith('p1')
   })

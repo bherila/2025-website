@@ -600,8 +600,15 @@ function buildDynamicScene(
     const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
     const laneOffset = passengerQueueLaneOffset(passenger.id)
     passengerOffsets.set(passenger.id, offset)
-    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null || shift) {
+    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null) {
       passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
+    } else if (shift) {
+      // Seed the gate cycle from the *pre-shift* offset, not the new one. A boarding
+      // closes the gap and bumps trailing passengers forward by a slot; if that bump
+      // carries one across the gate, seeding at the new offset would erase the
+      // crossing and force an extra lap. Seeding at the previous offset lets the jump
+      // register as a genuine gate crossing on the next frame.
+      passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, shift.previousOffset, queueLayout))
     }
 
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
@@ -636,6 +643,7 @@ function buildDynamicScene(
         const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
         entry = {
           from: new THREE.Vector3(from.x, 0.12, from.z),
+          fromOffset: shift.previousOffset,
           startedAt: shift.startedAt,
           duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
         }

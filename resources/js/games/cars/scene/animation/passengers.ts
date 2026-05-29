@@ -27,12 +27,12 @@ const PASSENGER_GATE_HOLD_SECONDS = 1.25
 
 /**
  * How far past the gate (in passenger-slot widths) a passenger can still board.
- * Must exceed one slot: when the loop shifts after a boarding, a passenger's
- * offset can jump forward by a full slot and its gate cycle is reseeded, which
- * erases the single-frame `crossedGate` edge. A window narrower than one slot
- * would let that passenger skip the gate and require an extra full loop.
+ * A tight window keeps boarding visually anchored to the gate. The shift-jump case
+ * (a boarding bumps a trailing passenger across the gate) is handled upstream by
+ * seeding the gate cycle from the pre-shift offset in CarsScene, so it registers as
+ * a real `crossedGate` edge — this window only needs to absorb frame-to-frame travel.
  */
-const GATE_BOARDING_WINDOW_SLOTS = 1.8
+const GATE_BOARDING_WINDOW_SLOTS = 0.9
 
 export interface PassengerGateHold {
   cycle: number
@@ -59,7 +59,11 @@ export function animatePassengers(passengers: PassengerRenderItem[], phase: numb
     if (item.entry) {
       const progress = Math.min(1, Math.max(0, (performance.now() / 1000 - item.entry.startedAt) / item.entry.duration))
       const eased = progress * progress * (3 - 2 * progress)
-      if (item.entry.via) {
+      if (item.entry.fromOffset !== undefined) {
+        const shiftedOffset = item.entry.fromOffset + (item.offset - item.entry.fromOffset) * eased
+        const shiftedPosition = queueVisualPosition(phase + shiftedOffset, item.layout, item.laneOffset ?? 0)
+        passengerPosition.set(shiftedPosition.x, y, shiftedPosition.z)
+      } else if (item.entry.via) {
         const oneMinus = 1 - eased
         passengerPosition.set(
           oneMinus * oneMinus * item.entry.from.x + 2 * oneMinus * eased * item.entry.via.x + eased * eased * targetX,
