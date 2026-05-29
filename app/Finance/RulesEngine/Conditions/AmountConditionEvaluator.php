@@ -29,30 +29,32 @@ class AmountConditionEvaluator implements QueryConditionEvaluatorInterface
      */
     public function applyToQuery(Builder $query, FinRuleCondition $condition): void
     {
-        $value = (float) $condition->value;
+        $valueCents = abs(MoneyMath::toCents((string) $condition->value));
 
-        $query->where(function ($q) use ($condition, $value) {
+        $query->where(function ($q) use ($condition, $valueCents) {
             $operator = strtoupper($condition->operator);
+            $amountCentsSql = $this->amountCentsSql();
 
             switch ($operator) {
                 case 'ABOVE':
-                    // ABS(t_amt) > value
-                    $q->whereRaw('ABS(t_amt) > ?', [$value]);
+                    $q->whereRaw("{$amountCentsSql} > ?", [$valueCents]);
                     break;
                 case 'BELOW':
-                    // ABS(t_amt) < value
-                    $q->whereRaw('ABS(t_amt) < ?', [$value]);
+                    $q->whereRaw("{$amountCentsSql} < ?", [$valueCents]);
                     break;
                 case 'EXACTLY':
-                    // ABS(t_amt) = value (with tolerance for floating point)
-                    $q->whereRaw('ABS(ABS(t_amt) - ?) < 0.01', [$value]);
+                    $q->whereRaw("{$amountCentsSql} = ?", [$valueCents]);
                     break;
                 case 'BETWEEN':
-                    $valueExtra = (float) $condition->value_extra;
-                    // value <= ABS(t_amt) <= value_extra
-                    $q->whereRaw('ABS(t_amt) >= ? AND ABS(t_amt) <= ?', [$value, $valueExtra]);
+                    $valueExtraCents = abs(MoneyMath::toCents((string) $condition->value_extra));
+                    $q->whereRaw("{$amountCentsSql} >= ? AND {$amountCentsSql} <= ?", [$valueCents, $valueExtraCents]);
                     break;
             }
         });
+    }
+
+    private function amountCentsSql(): string
+    {
+        return 'ROUND(ABS(t_amt) * 100, 0)';
     }
 }
