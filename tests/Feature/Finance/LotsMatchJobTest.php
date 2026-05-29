@@ -16,6 +16,7 @@ use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\LotMatcher;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Queue\Jobs\FakeJob;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class LotsMatchJobTest extends TestCase
@@ -67,6 +68,39 @@ class LotsMatchJobTest extends TestCase
             $this->assertSame(LotMatchRun::STATUS_FAILED, $run->status);
             $this->assertNotNull($run->error);
         }
+    }
+
+    public function test_permanent_failure_dispatches_latest_coalesced_queued_run(): void
+    {
+        Queue::fake();
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $run = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_RUNNING,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+            'started_at' => now(),
+        ]);
+        $coalescedRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+
+        $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $run->id);
+        $job->failed(new \RuntimeException('Matcher failed permanently.'));
+
+        $this->assertSame(LotMatchRun::STATUS_FAILED, $run->fresh()->status);
+        Queue::assertPushed(
+            LotsMatchJob::class,
+            fn (LotsMatchJob $queuedJob): bool => $queuedJob->documentId === (int) $document->document_id
+                && $queuedJob->taxYear === 2025
+                && $queuedJob->runId === (int) $coalescedRun->id
+                && $queuedJob->mode === LotMatchRun::MODE_PRESERVE,
+        );
     }
 
     public function test_job_keeps_run_active_after_retryable_failure(): void

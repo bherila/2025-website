@@ -8,6 +8,7 @@ use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -99,12 +100,17 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
+        $run = null;
+        $lotMatchRunRecorder = app(LotMatchRunRecorder::class);
+
         if ($this->runId !== null) {
             $run = LotMatchRun::query()->find($this->runId);
             if ($run instanceof LotMatchRun && $run->status !== LotMatchRun::STATUS_FAILED) {
-                app(LotMatchRunRecorder::class)->failed($run, $exception, $this->taxYear);
+                $run = $lotMatchRunRecorder->failed($run, $exception, $this->taxYear);
             }
         }
+
+        $this->dispatchCoalescedRunAfterPermanentFailure($run, $lotMatchRunRecorder);
 
         Log::error('LotsMatchJob: permanent failure while refreshing lot reconciliation links', [
             'document_id' => $this->documentId,
@@ -170,6 +176,30 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         }
 
         return $lotMatchRunRecorder->runningIfLatestActive($coalescedRun);
+    }
+
+    private function dispatchCoalescedRunAfterPermanentFailure(?LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder): void
+    {
+        if (! $run instanceof LotMatchRun) {
+            return;
+        }
+
+        $coalescedRun = $lotMatchRunRecorder->latestQueuedPreserveForDocument($this->documentId);
+        if (! $coalescedRun instanceof LotMatchRun || (int) $coalescedRun->id <= (int) $run->id) {
+            return;
+        }
+
+        $job = (new self($this->documentId, $this->taxYear, null, (int) $coalescedRun->id, LotMatchRun::MODE_PRESERVE))
+            ->afterCommit();
+
+        app(Dispatcher::class)->dispatch($job);
+
+        Log::info('LotsMatchJob: queued coalesced lot match run after permanent failure', [
+            'document_id' => $this->documentId,
+            'tax_year' => $this->taxYear,
+            'failed_run_id' => (int) $run->id,
+            'coalesced_run_id' => (int) $coalescedRun->id,
+        ]);
     }
 
     private function runTrackedMatcher(
