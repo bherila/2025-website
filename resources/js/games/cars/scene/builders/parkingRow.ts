@@ -28,7 +28,7 @@ export function createParkingRow(state: GameState): THREE.Object3D {
   const asphaltShape = parkingApronShape(ASPHALT_WIDTH, ASPHALT_DEPTH)
   const asphalt = new THREE.Mesh(
     new THREE.ExtrudeGeometry(asphaltShape, { depth: 0.06, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: '#667386', roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: '#7c8799', roughness: 0.62, metalness: 0.0, envMapIntensity: 0.5 }),
   )
   asphalt.rotation.x = -Math.PI / 2
   asphalt.position.set(0, 0.07, ASPHALT_CENTER_Z)
@@ -47,10 +47,10 @@ export function createParkingRow(state: GameState): THREE.Object3D {
 
     const slotShape = roundedRectShape(slotWidth, slotDepth, 0.18)
     const fillColor = slot.kind === 'vip'
-      ? '#facc15'
+      ? '#fbce2e'
       : slot.unlocked
-        ? '#8a96ab'
-        : '#5b6675'
+        ? '#97a2b5'
+        : '#5f6b7c'
     const slotBase = new THREE.Mesh(
       new THREE.ExtrudeGeometry(slotShape, { depth: 0.025, bevelEnabled: false }),
       new THREE.MeshBasicMaterial({ color: fillColor }),
@@ -64,13 +64,14 @@ export function createParkingRow(state: GameState): THREE.Object3D {
     const outlineColor = slot.kind === 'vip'
       ? '#a16207'
       : slot.unlocked
-        ? '#dbe6f1'
-        : '#8793a4'
-    const outline = makeRoundedRectOutline(slotWidth, slotDepth, 0.18, 0.06)
-    const outlineMesh = new THREE.Mesh(
-      outline,
-      new THREE.MeshBasicMaterial({ color: outlineColor }),
-    )
+        ? '#e3edf7'
+        : '#aeb9c8'
+    const outlineMesh = slot.kind === 'regular' && !slot.unlocked
+      ? makeRoundedRectDashedOutline(slotWidth, slotDepth, 0.18, outlineColor)
+      : new THREE.Mesh(
+        makeRoundedRectOutline(slotWidth, slotDepth, 0.18, 0.06),
+        new THREE.MeshBasicMaterial({ color: outlineColor }),
+      )
     outlineMesh.rotation.x = -Math.PI / 2
     outlineMesh.rotation.z = tiltAngle
     outlineMesh.position.set(position.x, 0.145, position.z)
@@ -146,6 +147,19 @@ function makeRoundedRectOutline(width: number, height: number, radius: number, t
   outer.holes.push(inner)
 
   return new THREE.ExtrudeGeometry(outer, { depth: 0.018, bevelEnabled: false })
+}
+
+function makeRoundedRectDashedOutline(width: number, height: number, radius: number, color: string): THREE.Line {
+  const shape = roundedRectShape(width, height, radius)
+  const points = shape.getPoints(96).map((point) => new THREE.Vector3(point.x, point.y, 0))
+  const geometry = new THREE.BufferGeometry().setFromPoints(points)
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineDashedMaterial({ color, dashSize: 0.12, gapSize: 0.08, linewidth: 1 }),
+  )
+  line.computeLineDistances()
+
+  return line
 }
 
 function roundedRectPath(width: number, height: number, radius: number): THREE.Path {

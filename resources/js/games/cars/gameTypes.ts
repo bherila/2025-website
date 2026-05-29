@@ -9,6 +9,7 @@ export const CAR_COLORS = {
   orange: { label: 'Orange', hex: '#f97316' },
   cyan: { label: 'Cyan', hex: '#22d3ee' },
   brown: { label: 'Brown', hex: '#92400e' },
+  lime: { label: 'Lime', hex: '#84cc16' },
 } as const
 
 export type CarColor = keyof typeof CAR_COLORS
@@ -22,6 +23,7 @@ export const CAR_PATTERN_VALUES = [
   'chevron',
   'ring',
   'crosshatch',
+  'plus',
 ] as const
 
 export type CarPattern = typeof CAR_PATTERN_VALUES[number]
@@ -35,6 +37,7 @@ export const CAR_PATTERNS = {
   orange: 'chevron',
   cyan: 'ring',
   brown: 'crosshatch',
+  lime: 'plus',
 } as const satisfies Record<CarColor, CarPattern>
 
 export type Direction = 'up' | 'up-right' | 'right' | 'down-right' | 'down' | 'down-left' | 'left' | 'up-left'

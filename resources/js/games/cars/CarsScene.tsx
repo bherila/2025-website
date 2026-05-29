@@ -1,5 +1,6 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 import {
   CAR_COLORS,
@@ -169,18 +170,30 @@ export function CarsScene({
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.toneMapping = THREE.NeutralToneMapping
+    renderer.toneMappingExposure = 1.0
     rendererRef.current = renderer
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight('#ffffff', '#7c8a9a', 2.2)
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = environmentTexture
+    scene.environmentIntensity = 0.35
+    pmrem.dispose()
+
+    const ambient = new THREE.HemisphereLight('#ffffff', '#7c8a9a', 1.9)
     scene.add(ambient)
 
-    const sun = new THREE.DirectionalLight('#ffffff', 2.8)
+    const sun = new THREE.DirectionalLight('#ffffff', 2.4)
     sun.position.set(-5, 10, 5)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     scene.add(sun)
+
+    const rim = new THREE.DirectionalLight('#dbeafe', 0.6)
+    rim.position.set(5, 6, -4)
+    scene.add(rim)
 
     const content = new THREE.Group()
     scene.add(content)

@@ -17,7 +17,7 @@ const shared = {
     '\\.(css|less|scss|sass)$': '<rootDir>/resources/js/__mocks__/styleMock.ts',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!dayjs).+\\.js$',
+    '/node_modules/(?!.*(?:dayjs|three)[@/]).+\\.js$',
   ],
   transform: {
     '^.+\\.(ts|tsx)$': ['@swc/jest', {
