@@ -26,7 +26,14 @@ export function createBoxMesh(box: MarbleBox, colorblindMode: boolean, options: 
   const color = options.displayHidden ? '#a4b1c4' : MARBLE_COLORS[box.color].hex
   const body = new THREE.Mesh(
     new RoundedBoxGeometry(0.88, 0.36, 0.74, 4, 0.1),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.02 }),
+    new THREE.MeshPhysicalMaterial({
+      color,
+      roughness: 0.35,
+      metalness: 0.0,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.22,
+      envMapIntensity: 0.25,
+    }),
   )
   body.castShadow = true
   body.receiveShadow = true

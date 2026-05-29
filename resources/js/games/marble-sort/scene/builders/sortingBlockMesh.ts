@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 import {
   MARBLE_COLORS,
@@ -73,11 +74,14 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
   const group = new THREE.Group()
   const hex = MARBLE_COLORS[block.color].hex
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(BLOCK_WIDTH, BLOCK_HEIGHT, SORTING_STACK_BLOCK_DEPTH),
-    new THREE.MeshStandardMaterial({
+    new RoundedBoxGeometry(BLOCK_WIDTH, BLOCK_HEIGHT, SORTING_STACK_BLOCK_DEPTH, 4, 0.07),
+    new THREE.MeshPhysicalMaterial({
       color: hex,
-      roughness: 0.4,
-      metalness: 0.02,
+      roughness: 0.32,
+      metalness: 0.0,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.2,
+      envMapIntensity: 0.3,
     }),
   )
   body.castShadow = true
@@ -85,10 +89,14 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
   group.add(body)
 
   const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(BLOCK_WIDTH * 0.985, BLOCK_HEIGHT * 0.3, SORTING_STACK_BLOCK_DEPTH * 0.985),
-    new THREE.MeshStandardMaterial({
+    new RoundedBoxGeometry(BLOCK_WIDTH * 0.985, BLOCK_HEIGHT * 0.3, SORTING_STACK_BLOCK_DEPTH * 0.985, 3, 0.04),
+    new THREE.MeshPhysicalMaterial({
       color: darken(hex, 0.28),
-      roughness: 0.55,
+      roughness: 0.5,
+      metalness: 0.0,
+      clearcoat: 0.4,
+      clearcoatRoughness: 0.3,
+      envMapIntensity: 0.25,
     }),
   )
   rim.position.y = -BLOCK_HEIGHT / 2 + 0.04
@@ -109,14 +117,21 @@ export function createSortingBlockMesh(block: SortingBlock, isActive: boolean): 
       if (filled) {
         const marble = new THREE.Mesh(
           new THREE.SphereGeometry(STUD_RADIUS * 0.92, 22, 14),
-          new THREE.MeshStandardMaterial({ color: hex, roughness: 0.28, metalness: 0.05 }),
+          new THREE.MeshPhysicalMaterial({
+            color: hex,
+            roughness: 0.2,
+            metalness: 0.0,
+            clearcoat: 0.6,
+            clearcoatRoughness: 0.15,
+            envMapIntensity: 0.4,
+          }),
         )
         marble.position.set(dimpleX, dimpleY + STUD_RADIUS * 0.55, 0)
         marble.castShadow = true
         group.add(marble)
         const highlight = new THREE.Mesh(
           new THREE.SphereGeometry(STUD_RADIUS * 0.3, 12, 8),
-          new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5 }),
+          new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35 }),
         )
         highlight.position.set(dimpleX - STUD_RADIUS * 0.3, dimpleY + STUD_RADIUS * 0.85, STUD_RADIUS * 0.3)
         group.add(highlight)

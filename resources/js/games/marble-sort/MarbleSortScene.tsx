@@ -1,5 +1,6 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 import {
   type GameState,
@@ -373,9 +374,16 @@ export function MarbleSortScene({
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.toneMapping = THREE.NeutralToneMapping
+    renderer.toneMappingExposure = 1.0
     rendererRef.current = renderer
     container.appendChild(renderer.domElement)
+
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environmentIntensity = 0.3
+    pmrem.dispose()
 
     const stackGroups = stackGroupsRef.current
     const marbleEntries = marbleEntriesRef.current
@@ -385,16 +393,16 @@ export function MarbleSortScene({
     const arrivedAttempts = arrivedAttemptsRef.current
     const fallingIds = fallingIdsRef.current
 
-    const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 2.4)
+    const ambient = new THREE.HemisphereLight('#ffffff', '#86d5a3', 1.7)
     scene.add(ambient)
 
-    const sun = new THREE.DirectionalLight('#ffffff', 2.4)
+    const sun = new THREE.DirectionalLight('#ffffff', 2.3)
     sun.position.set(-3, 11, 4)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     scene.add(sun)
 
-    const rim = new THREE.DirectionalLight('#bcdfff', 0.8)
+    const rim = new THREE.DirectionalLight('#bcdfff', 0.7)
     rim.position.set(4, 6, -3)
     scene.add(rim)
 

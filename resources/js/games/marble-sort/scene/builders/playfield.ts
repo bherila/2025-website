@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 import {
   BASIN_EXIT_HALF_WIDTH,
@@ -31,11 +32,13 @@ const BOTTOM_TRAY_CENTER_Z = (BOTTOM_TRAY_NORTH_Z + BOTTOM_TRAY_SOUTH_Z) / 2
 export function createPlayfield(): THREE.Group {
   const group = new THREE.Group()
 
-  const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 22),
-    new THREE.MeshBasicMaterial({ color: '#54c074' }),
-  )
-  grass.rotation.x = -Math.PI / 2
+  const grass = createCanvasPlane(20, 26, (context, w, h) => {
+    const gradient = context.createRadialGradient(w / 2, h * 0.46, w * 0.08, w / 2, h * 0.5, w * 0.72)
+    gradient.addColorStop(0, '#64d184')
+    gradient.addColorStop(1, '#3fa45e')
+    context.fillStyle = gradient
+    context.fillRect(0, 0, w, h)
+  })
   grass.position.set(0, -0.06, 0)
   group.add(grass)
 
@@ -49,21 +52,23 @@ export function createPlayfield(): THREE.Group {
 
   // Plate sized exactly to the 3x5 grid of cells — anything larger would jut
   // south and occlude the painted funnel below the grid.
+  // Recessed frame that reads as part of the green tray rather than a glaring
+  // white slab; the cells sit proud of it as light sockets.
   const gridPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(3.85, 0.08, GRID_STEP_Z * 4 + GRID_CELL_SIZE),
-    new THREE.MeshStandardMaterial({ color: '#e3eaf5', roughness: 0.55 }),
+    new RoundedBoxGeometry(4.15, 0.16, GRID_STEP_Z * 4 + GRID_CELL_SIZE + 0.3, 4, 0.12),
+    new THREE.MeshStandardMaterial({ color: '#39955a', roughness: 0.7 }),
   )
-  gridPlate.position.set(0, 0.02, GRID_ORIGIN_Z + GRID_STEP_Z * 2)
+  gridPlate.position.set(0, -0.02, GRID_ORIGIN_Z + GRID_STEP_Z * 2)
   gridPlate.receiveShadow = true
   group.add(gridPlate)
 
   for (let row = 0; row < 5; row += 1) {
     for (let column = 0; column < 3; column += 1) {
       const cell = new THREE.Mesh(
-        new THREE.BoxGeometry(GRID_CELL_SIZE - GRID_CELL_GAP, 0.06, GRID_CELL_SIZE - GRID_CELL_GAP),
-        new THREE.MeshStandardMaterial({ color: '#f1f4fb', roughness: 0.6 }),
+        new RoundedBoxGeometry(GRID_CELL_SIZE - GRID_CELL_GAP, 0.08, GRID_CELL_SIZE - GRID_CELL_GAP, 3, 0.08),
+        new THREE.MeshStandardMaterial({ color: '#dce6ef', roughness: 0.7 }),
       )
-      cell.position.set(GRID_ORIGIN_X + column * GRID_STEP_X, 0.09, GRID_ORIGIN_Z + row * GRID_STEP_Z)
+      cell.position.set(GRID_ORIGIN_X + column * GRID_STEP_X, 0.07, GRID_ORIGIN_Z + row * GRID_STEP_Z)
       cell.receiveShadow = true
       group.add(cell)
     }

@@ -1,4 +1,4 @@
-import { Accessibility, ChevronDown, HelpCircle, Magnet, MoveRight, RotateCcw, Shuffle } from 'lucide-react'
+import { Accessibility, ChevronDown, Coins, HelpCircle, Magnet, MoveRight, Package, RotateCcw, Shuffle } from 'lucide-react'
 import { type ComponentProps, type Dispatch, type ReactElement, type ReactNode, type SetStateAction } from 'react'
 
 import {
@@ -130,18 +130,18 @@ function MobileStatsHeader({
   return (
     <header className="sm:hidden">
       <button
-        className="flex h-12 w-full items-center justify-between rounded-lg border border-white/70 bg-white/85 px-3 text-left shadow-sm shadow-slate-950/5 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80"
+        className="flex h-14 w-full items-center justify-between rounded-2xl border border-white/70 bg-white/85 px-2.5 text-left shadow-lg shadow-slate-950/10 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/80"
         type="button"
         onClick={() => onStatsExpandedChange((current) => !current)}
       >
-        <span className="flex items-center gap-3">
-          <Metric label="Level" value={String(state.level)} />
-          <Metric label="Score" value={state.levelScore.toLocaleString()} />
-          <Metric label="Boxes" value={String(stats.boxCount)} />
+        <span className="flex items-center gap-2">
+          <LevelPill level={state.level} />
+          <Chip icon={<Coins className="size-4 text-amber-500" />} value={state.levelScore.toLocaleString()} />
+          <Chip icon={<Package className="size-4 text-sky-500" />} value={String(stats.boxCount)} />
         </span>
-        <ChevronDown className={cn('size-5 text-slate-500 transition-transform', statsExpanded && 'rotate-180')} />
+        <ChevronDown className={cn('mr-1 size-5 shrink-0 text-slate-400 transition-transform', statsExpanded && 'rotate-180')} />
       </button>
-      <div className={cn('mt-2 grid grid-cols-3 gap-1.5 rounded-lg border border-white/60 bg-white/75 p-1.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-900/70', !statsExpanded && 'hidden')}>
+      <div className={cn('mt-2 grid grid-cols-3 gap-1.5 rounded-2xl border border-white/60 bg-white/75 p-1.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-900/70', !statsExpanded && 'hidden')}>
         <Metric label="Total" value={state.totalScore.toLocaleString()} />
         <Metric label="Best" value={state.highScore.toLocaleString()} />
         <Metric label="Belt" value={`${stats.conveyorCount}/${state.conveyorCapacity}`} />
@@ -160,12 +160,9 @@ function MobileStatsHeader({
 
 function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindModeChange }: StatsHeaderProps): ReactElement {
   return (
-    <header className="hidden items-center justify-between gap-4 rounded-lg border border-white/70 bg-white/75 px-3 py-2 shadow-sm shadow-slate-950/5 backdrop-blur-md sm:flex dark:border-white/10 dark:bg-slate-900/75">
+    <header className="hidden items-center justify-between gap-4 rounded-2xl border border-white/70 bg-white/75 px-3 py-2 shadow-lg shadow-slate-950/10 backdrop-blur-md sm:flex dark:border-white/10 dark:bg-slate-900/75">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex min-w-24 items-center gap-3 rounded-lg bg-slate-950 px-3 py-2 text-white shadow-sm shadow-slate-950/15 dark:bg-white dark:text-slate-950">
-          <span className="text-[10px] font-bold uppercase leading-none text-white/60 dark:text-slate-500">Level</span>
-          <span className="text-2xl font-black leading-none tabular-nums">{state.level}</span>
-        </div>
+        <LevelPill level={state.level} />
         <div className="flex flex-wrap items-center gap-1.5">
           <Metric label="Level Score" value={state.levelScore.toLocaleString()} />
           <Metric label="Total" value={state.totalScore.toLocaleString()} />
@@ -208,8 +205,9 @@ function BottomControls({
 
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
-      <div className="pointer-events-auto grid grid-cols-5 gap-1.5 rounded-lg border border-white/70 bg-white/80 p-1.5 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/75">
+      <div className="pointer-events-auto flex items-center gap-2 rounded-3xl border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/80">
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-rose-400 to-rose-600 text-white hover:from-rose-400 hover:to-rose-600"
           confirmation={POWER_UP_CONFIRMATIONS.magnet}
           count={state.powerUps.magnet}
           disabled={state.powerUps.magnet < 1 || stats.conveyorCount < 1 || actionDisabled}
@@ -218,6 +216,7 @@ function BottomControls({
           onClick={onMagnet}
         />
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-violet-400 to-violet-600 text-white hover:from-violet-400 hover:to-violet-600"
           confirmation={POWER_UP_CONFIRMATIONS.shuffle}
           count={state.powerUps.shuffle}
           disabled={state.powerUps.shuffle < 1 || stats.boxCount < 2 || actionDisabled}
@@ -226,6 +225,7 @@ function BottomControls({
           onClick={onShuffle}
         />
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-sky-400 to-sky-600 text-white hover:from-sky-400 hover:to-sky-600"
           confirmation={POWER_UP_CONFIRMATIONS.extraBelt}
           count={state.powerUps.extraBelt}
           disabled={state.powerUps.extraBelt < 1 || actionDisabled}
@@ -233,6 +233,7 @@ function BottomControls({
           label={labelForPowerUp('extraBelt')}
           onClick={onExtraBelt}
         />
+        <span className="mx-0.5 h-9 w-px shrink-0 bg-slate-300/70 dark:bg-white/10" />
         <BottomControlButton
           disabled={false}
           icon={<RotateCcw />}
@@ -249,6 +250,29 @@ function BottomControls({
         />
       </div>
     </div>
+  )
+}
+
+function LevelPill({ level }: { level: number }): ReactElement {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 px-3 py-1.5 text-white shadow-md shadow-indigo-950/25">
+      <span className="text-[10px] font-bold uppercase leading-none text-white/70">Level</span>
+      <span className="text-2xl font-black leading-none tabular-nums">{level}</span>
+    </div>
+  )
+}
+
+interface ChipProps {
+  icon: ReactNode
+  value: string
+}
+
+function Chip({ icon, value }: ChipProps): ReactElement {
+  return (
+    <span className="flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1.5 shadow-xs dark:border-white/10 dark:bg-white/10">
+      {icon}
+      <span className="text-sm font-black leading-none tabular-nums text-slate-900 dark:text-slate-50">{value}</span>
+    </span>
   )
 }
 
@@ -295,12 +319,14 @@ interface BottomControlButtonProps {
   icon: ReactNode
   label: string
   onClick: () => void
+  accentClassName?: string
   confirmation?: PowerUpConfirmation
   count?: number
   variant?: ComponentProps<typeof Button>['variant']
 }
 
 function BottomControlButton({
+  accentClassName,
   confirmation,
   count,
   disabled,
@@ -312,16 +338,19 @@ function BottomControlButton({
   const button = (
     <Button
       aria-label={label}
-      className={cn('relative size-11 rounded-lg p-0', count !== undefined && 'pr-0')}
+      className={cn(
+        'relative size-14 rounded-2xl p-0 shadow-md transition-transform active:scale-95 disabled:opacity-40',
+        accentClassName,
+      )}
       disabled={disabled}
       size="icon"
       type="button"
       variant={variant}
       onClick={confirmation ? undefined : onClick}
     >
-      <span className="size-5">{icon}</span>
+      <span className="[&>svg]:size-6">{icon}</span>
       {count !== undefined && (
-        <span className="absolute -right-1 -top-1 min-w-5 rounded-full border border-white bg-rose-600 px-1 text-[10px] font-black leading-5 text-white shadow-sm">
+        <span className="absolute -right-1.5 -top-1.5 min-w-6 rounded-full border-2 border-white bg-rose-600 px-1 text-xs font-black leading-5 text-white shadow-sm dark:border-slate-950">
           {count}
         </span>
       )}
