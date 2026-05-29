@@ -248,6 +248,7 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
             const linksData = linksByDocument[document.tax_document_id] ?? null
             const isOpen = expandedDocumentId === document.tax_document_id
             const isLoadingDocument = loadingDocumentId === document.tax_document_id
+            const hasFinanceDocument = document.document_id !== null
 
             return (
               <div key={document.tax_document_id} className="rounded-md border border-border bg-card">
@@ -267,7 +268,17 @@ export default function TaxLotReconciliationPanel({ selectedYear }: TaxLotReconc
                     <BucketCount label="Mismatch" value={document.problem_bucket_counts.mismatches} />
                     <BucketCount label="Broker-only" value={document.problem_bucket_counts.broker_only} />
                     <BucketCount label="Account-only" value={document.problem_bucket_counts.account_only} />
-                    <Button variant="outline" size="sm" className="gap-1.5" disabled={isLoadingDocument} onClick={() => void loadDocumentBuckets(document.tax_document_id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={!hasFinanceDocument || isLoadingDocument}
+                      onClick={() => {
+                        if (hasFinanceDocument) {
+                          void loadDocumentBuckets(document.tax_document_id)
+                        }
+                      }}
+                    >
                       {isLoadingDocument ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')} />}
                       Buckets
                     </Button>

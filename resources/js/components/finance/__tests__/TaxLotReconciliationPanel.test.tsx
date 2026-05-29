@@ -193,6 +193,15 @@ const linksResponse = {
   relink_candidates: [],
 }
 
+const unlinkedSummaryResponse = {
+  ...summaryResponse,
+  documents: [{
+    ...summaryResponse.documents[0],
+    document_id: null,
+    latest_match_run: null,
+  }],
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
 })
@@ -227,6 +236,19 @@ describe('TaxLotReconciliationPanel', () => {
     expect(screen.getByText('Mismatches')).toBeInTheDocument()
     expect(screen.getByText('AAPL')).toBeInTheDocument()
     expect(screen.getByText('$300.00')).toBeInTheDocument()
+  })
+
+  it('does not load problem buckets for unlinked summary documents', async () => {
+    mockGet.mockResolvedValue(unlinkedSummaryResponse)
+
+    render(<TaxLotReconciliationPanel selectedYear={2025} />)
+
+    await waitFor(() => expect(screen.getByText('Synthetic Broker')).toBeInTheDocument())
+    const bucketsButton = screen.getByRole('button', { name: /buckets/i })
+
+    expect(bucketsButton).toBeDisabled()
+    fireEvent.click(bucketsButton)
+    expect(mockGet).not.toHaveBeenCalledWith('/api/finance/tax-documents/12/lot-reconciliation-links')
   })
 
   it('exports all 1099-B lots from the summary view', async () => {
