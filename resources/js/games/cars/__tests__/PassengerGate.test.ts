@@ -149,6 +149,23 @@ describe('passenger gate notifications', () => {
     expect(gateHolds.has('p1')).toBe(false)
   })
 
+  it('boards a passenger shifted just past the gate on the same pass (no extra loop)', () => {
+    const passenger: PassengerRenderItem = {
+      id: 'p1',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const onPassengerGate = jest.fn()
+
+    // A loop shift reseeds the gate cycle to the current cycle (so crossedGate is
+    // false) and can carry the passenger a full slot past the gate. Progress 0.4 is
+    // beyond the old narrow window but the match is ready, so it must still board.
+    notifyPassengerGate([passenger], 0.4, new Map([['p1', 0]]), testState, [], 20, onPassengerGate)
+
+    expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
   it('consumes gate crossings when no matching parked car exists', () => {
     const bluePassenger: PassengerRenderItem = {
       id: 'blue-loop',

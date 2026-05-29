@@ -116,8 +116,8 @@ export function DesktopStatsHeader({ colorblindMode, stats, state, onColorblindM
   return (
     <header className="hidden items-center justify-between gap-4 rounded-xl border border-white/70 bg-white/75 px-3 py-2 shadow-sm shadow-slate-950/5 backdrop-blur-md sm:flex dark:border-white/10 dark:bg-slate-900/75 dark:shadow-slate-950/25">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex min-w-24 flex-col items-center rounded-lg bg-slate-950 px-3 py-2 text-white shadow-sm shadow-slate-950/15 dark:bg-white dark:text-slate-950">
-          <span className="text-[10px] font-bold uppercase leading-none text-white/60 dark:text-slate-500">Level</span>
+        <div className="flex min-w-24 flex-col items-center rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 px-3 py-2 text-white shadow-md shadow-indigo-950/25">
+          <span className="text-[10px] font-bold uppercase leading-none text-white/70">Level</span>
           <span className="text-2xl font-black leading-none tabular-nums">{state.level}</span>
           <DifficultyBadge level={state.level} />
         </div>
@@ -166,8 +166,9 @@ export function BottomControls({
 
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
-      <div className="pointer-events-auto grid grid-cols-6 gap-1.5 rounded-2xl border border-white/70 bg-white/80 p-1.5 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/75">
+      <div className="pointer-events-auto flex items-center gap-2 rounded-3xl border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/80">
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 hover:from-amber-300 hover:to-amber-500"
           active={vipSelectionActive}
           confirmation={vipSelectionActive ? undefined : POWER_UP_CONFIRMATIONS.vip}
           count={state.powerUps.vip}
@@ -177,6 +178,7 @@ export function BottomControls({
           onClick={() => onVipSelectionActiveChange((current) => !current)}
         />
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-violet-400 to-violet-600 text-white hover:from-violet-400 hover:to-violet-600"
           confirmation={POWER_UP_CONFIRMATIONS.shuffle}
           count={state.powerUps.shuffle}
           disabled={state.powerUps.shuffle < 1 || levelEnded}
@@ -185,6 +187,7 @@ export function BottomControls({
           onClick={onShuffle}
         />
         <BottomControlButton
+          accentClassName="bg-gradient-to-b from-sky-400 to-sky-600 text-white hover:from-sky-400 hover:to-sky-600"
           confirmation={POWER_UP_CONFIRMATIONS.fill}
           count={state.powerUps.fill}
           disabled={state.powerUps.fill < 1 || stats.parkedCars < 1 || levelEnded}
@@ -192,6 +195,7 @@ export function BottomControls({
           label="Fill"
           onClick={onFill}
         />
+        <span className="mx-0.5 h-9 w-px shrink-0 bg-slate-300/70 dark:bg-white/10" />
         <BottomControlButton
           disabled={!stats.hasLockedRegularSlot || levelEnded}
           icon={<Plus />}
@@ -277,6 +281,7 @@ function Metric({ emphasis = false, label, value }: MetricProps): ReactElement {
 }
 
 interface BottomControlButtonProps {
+  accentClassName?: string
   active?: boolean
   confirmation?: PowerUpConfirmation | undefined
   count?: number
@@ -288,6 +293,7 @@ interface BottomControlButtonProps {
 }
 
 function BottomControlButton({
+  accentClassName,
   active = false,
   confirmation,
   count = -1,
@@ -302,7 +308,8 @@ function BottomControlButton({
       aria-label={label}
       aria-pressed={active ? true : undefined}
       className={cn(
-        'relative size-11 min-w-0 rounded-xl border-slate-200 bg-white/90 p-0 text-slate-800 shadow-sm shadow-slate-950/10 hover:-translate-y-0.5 hover:bg-white sm:size-12 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/15 [&_svg]:size-5',
+        'relative size-12 min-w-0 rounded-2xl border-slate-200 bg-white/90 p-0 text-slate-800 shadow-md shadow-slate-950/10 transition-transform hover:-translate-y-0.5 hover:bg-white active:scale-95 disabled:opacity-40 sm:size-14 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/15 [&_svg]:size-6',
+        accentClassName,
         active && 'border-amber-300 bg-amber-300 text-amber-950 shadow-amber-950/15 ring-2 ring-amber-200 dark:border-amber-300 dark:bg-amber-300 dark:text-amber-950 dark:ring-amber-200/50',
       )}
       disabled={disabled}
@@ -312,7 +319,7 @@ function BottomControlButton({
     >
       {icon}
       {count >= 0 && (
-        <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-white bg-rose-500 text-[11px] font-black leading-none text-white shadow-sm dark:border-slate-950">
+        <span className="absolute -right-1.5 -top-1.5 flex min-w-6 items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-xs font-black leading-5 text-white shadow-sm dark:border-slate-950">
           {count}
         </span>
       )}

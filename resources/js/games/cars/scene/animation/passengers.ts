@@ -25,6 +25,15 @@ import type {
 
 const PASSENGER_GATE_HOLD_SECONDS = 1.25
 
+/**
+ * How far past the gate (in passenger-slot widths) a passenger can still board.
+ * Must exceed one slot: when the loop shifts after a boarding, a passenger's
+ * offset can jump forward by a full slot and its gate cycle is reseeded, which
+ * erases the single-frame `crossedGate` edge. A window narrower than one slot
+ * would let that passenger skip the gate and require an extra full loop.
+ */
+const GATE_BOARDING_WINDOW_SLOTS = 1.8
+
 export interface PassengerGateHold {
   cycle: number
   expiresAt: number
@@ -141,7 +150,7 @@ export function notifyPassengerGate(
     const currentCycle = passengerGateCycle(phase, passenger.offset, passenger.layout)
     const previousCycle = passengerGateCycles.get(passenger.id) ?? currentCycle
     const crossedGate = currentCycle > previousCycle
-    const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * 0.9
+    const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * GATE_BOARDING_WINDOW_SLOTS
     const canBoard = canBoardPassengerAtParkingGate(state, passenger.id, unavailableCarIds)
     const heldGate = passengerGateHolds.get(passenger.id)
 

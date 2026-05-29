@@ -1,9 +1,11 @@
 import * as THREE from 'three'
 
-import type { GameState } from '../../gameEngine'
+import { type GameState, loopPassengerCapacity } from '../../gameEngine'
 import { QUEUE_Z } from '../sceneConstants'
-import { feederCurve, queueLayoutForState } from '../sceneGeometry'
+import { feederCurve, feederFillDistance, feederTrackCurve, queueLayoutForState } from '../sceneGeometry'
 import { createTextSprite } from '../threeUtils'
+
+const FEEDER_TRACK_MAX_EXTENSION = 16
 
 const TRACK_OUTER_PAD = 0.42
 const TRACK_INNER_PAD = 0.28
@@ -65,19 +67,31 @@ export function createQueueTrack(state: GameState): THREE.Object3D {
   walkway.position.set(0, 0.13, QUEUE_Z + capRadius + TRACK_OUTER_PAD + 0.78)
   group.add(walkway)
 
+  const extraDistance = feederTrackExtension(state, layout)
   for (const side of [-1, 1] as const) {
-    const curve = feederCurve(side, layout)
-    const trim = flatRibbonAlongCurve(curve, 0.72, 0.05, '#dbe6ef', '#9fb0c4', 0.08)
+    const curve = feederTrackCurve(side, layout, extraDistance)
+    const samples = Math.max(48, Math.ceil(curve.getLength() / 0.18))
+    const trim = flatRibbonAlongCurve(curve, 0.72, 0.05, '#dbe6ef', '#9fb0c4', 0.08, samples)
     trim.position.y = 0.05
     group.add(trim)
 
-    const feeder = flatRibbonAlongCurve(curve, 0.62, 0.08, '#6f7c93')
+    const feeder = flatRibbonAlongCurve(curve, 0.62, 0.08, '#6f7c93', undefined, undefined, samples)
     feeder.position.y = 0.06
     feeder.receiveShadow = true
     group.add(feeder)
   }
 
   return group
+}
+
+function feederTrackExtension(state: GameState, layout: ReturnType<typeof queueLayoutForState>): number {
+  const feederCount = Math.max(0, state.passengerQueue.length - loopPassengerCapacity(state))
+  const perSideMax = Math.ceil(feederCount / 2)
+  const curveLength = feederCurve(1, layout).getLength()
+  // Extend a little past the last passenger so the walkway never ends under a feet.
+  const needed = feederFillDistance(perSideMax) + 0.4 - curveLength
+
+  return Math.max(0, Math.min(FEEDER_TRACK_MAX_EXTENSION, needed))
 }
 
 function flatRibbonAlongCurve(
@@ -87,8 +101,8 @@ function flatRibbonAlongCurve(
   color: string,
   emissive?: string,
   emissiveIntensity?: number,
+  samples = 48,
 ): THREE.Mesh {
-  const samples = 48
   const lefts: Array<{ x: number, z: number }> = []
   const rights: Array<{ x: number, z: number }> = []
   for (let i = 0; i <= samples; i += 1) {

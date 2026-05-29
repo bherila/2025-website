@@ -41,7 +41,8 @@ export function feederJoinProgress(layout: QueueLayout): number {
   return normalizeLoopDistance(layout.straightLength / 2 - boardingGateDistance(layout), layout.perimeter)
 }
 
-const FEEDER_ROW_SPACING = 0.34
+export const FEEDER_ROW_SPACING = 0.34
+const FEEDER_FIRST_ROW_DISTANCE = 0.42
 const LOOP_VISUAL_LANE_OFFSETS = [0, -0.16, 0.16] as const
 const FEEDER_VISUAL_LANE_OFFSETS = [0, -0.15, 0.15] as const
 const DEFAULT_DEPARTURE_OFFSCREEN_X = 22
@@ -61,7 +62,7 @@ export function feederPassengerPosition(passenger: Passenger, feederPassengers: 
   }
   const curve = feederCurve(side, layout)
   const length = curve.getLength()
-  const distanceFromLoop = 0.42 + row * FEEDER_ROW_SPACING
+  const distanceFromLoop = FEEDER_FIRST_ROW_DISTANCE + row * FEEDER_ROW_SPACING
   let point: THREE.Vector3
   let tangent: THREE.Vector3
   if (distanceFromLoop <= length - 0.05) {
@@ -76,6 +77,33 @@ export function feederPassengerPosition(passenger: Passenger, feederPassengers: 
   point.y = 0
 
   return point
+}
+
+/**
+ * Total along-path distance from the loop join out to the last feeder passenger
+ * on one side, matching the spacing used by {@link feederPassengerPosition}.
+ */
+export function feederFillDistance(perSideCount: number): number {
+  return FEEDER_FIRST_ROW_DISTANCE + Math.max(0, perSideCount - 1) * FEEDER_ROW_SPACING
+}
+
+/**
+ * The feeder curve continued past its end along the end tangent — the same path
+ * overflow feeder passengers walk along — so the walkway ribbon can follow it
+ * instead of cutting off at the bezier's end.
+ */
+export function feederTrackCurve(side: -1 | 1, layout: QueueLayout, extraDistance: number): THREE.Curve<THREE.Vector3> {
+  const curve = feederCurve(side, layout)
+  if (extraDistance <= 0.01) {
+    return curve
+  }
+  const tangent = curve.getTangentAt(1)
+  const end = curve.getPointAt(1)
+  const path = new THREE.CurvePath<THREE.Vector3>()
+  path.add(curve)
+  path.add(new THREE.LineCurve3(end, end.clone().addScaledVector(tangent, extraDistance)))
+
+  return path
 }
 
 export function feederCurve(side: -1 | 1, layout: QueueLayout): THREE.CubicBezierCurve3 {

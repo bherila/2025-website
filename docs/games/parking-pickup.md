@@ -38,9 +38,10 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - The loop perimeter is sized so that when at active capacity, the passengers visibly fill it with no extra gap.
 - When an active-loop passenger boards, the rest of the loop shifts one slot forward so the visible front-of-loop passenger is always the next-in-queue to board. The trailing slot becomes empty and is refilled by the feeder front when it reaches the feeder join. Shifted passengers interpolate from their previous slot position to their new one so the advance reads as a forward step, not a teleport.
 - Passengers from the active feeder walk into the back of the loop along a curved bezier path that joins tangentially.
+- The feeder walkway track is drawn along the same path the passengers follow, including the straight continuation past the bezier's end (along its end tangent) that overflow passengers walk on, so the walkway never cuts off mid-queue. The track length scales with the level's feeder count and its far tail clips off-screen.
 - Passenger positions should be stable while walking; they should not appear or disappear except when boarding.
 - Passenger boarding is gate-based: a passenger is eligible to board only when their loop position crosses the parking gate at the bottom-front of the stadium.
-- Boarding should be tolerant around the gate. If a matching car is already parked and ready while the passenger is at the gate, the passenger should board instead of being forced into another full loop.
+- Boarding should be tolerant around the gate. If a matching car is already parked and ready while the passenger is at the gate, the passenger should board instead of being forced into another full loop. The boarding window extends more than one queue-slot past the gate so that a loop shift (which reassigns offsets and reseeds the gate cycle when another passenger boards) cannot bump a passenger past the window and force an extra lap before it matches.
 - Boarding should not be globally blocked by unrelated car movement. Only a car that is still driving into its parking space is unavailable for boarding.
 - A boarding passenger should visibly leave the queue and walk to the matched parked car instead of disappearing.
 - A level is complete only when every car has departed AND both feeder queues plus the loop are empty.
@@ -68,6 +69,7 @@ The page uses `resources/views/layouts/game.blade.php`, matching the PHR and Fin
 - On portrait screens, the score and level summary is collapsed into a compact top bar so the play area gets most of the viewport.
 - The primary action controls overlap the bottom edge of the gameplay area.
 - Bottom controls are icon buttons. VIP, Shuffle, Fill, Open Spot, and Reset expose their text labels through shadcn tooltips on hover or focus instead of inline button text.
+- The bottom bar styling matches the candy look shared with Marble Sort: the power-up buttons (VIP gold, Shuffle violet, Fill sky) are color-coded with a remaining-count badge and sit in a group divided from the Open Spot / Reset / Tutorial actions, and the desktop Level readout is a gradient pill.
 - VIP, Shuffle, and Fill use shadcn confirmation dialogs before the power-up action is committed.
 - Each power-up confirmation dialog includes a short description of the effect and a clear action button such as "Use VIP".
 - Open Spot has a tooltip but does not use the power-up confirmation flow because it is a parking-space action, not an inventory power-up.
