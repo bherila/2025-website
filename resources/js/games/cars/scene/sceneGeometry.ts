@@ -61,10 +61,17 @@ export function feederPassengerPosition(passenger: Passenger, feederPassengers: 
   }
   const curve = feederCurve(side, layout)
   const length = curve.getLength()
-  const distanceFromLoop = Math.min(length - 0.05, 0.42 + row * FEEDER_ROW_SPACING)
-  const t = Math.min(1, distanceFromLoop / Math.max(0.01, length))
-  const point = curve.getPointAt(t)
-  const tangent = curve.getTangentAt(t)
+  const distanceFromLoop = 0.42 + row * FEEDER_ROW_SPACING
+  let point: THREE.Vector3
+  let tangent: THREE.Vector3
+  if (distanceFromLoop <= length - 0.05) {
+    const t = distanceFromLoop / Math.max(0.01, length)
+    point = curve.getPointAt(t)
+    tangent = curve.getTangentAt(t)
+  } else {
+    tangent = curve.getTangentAt(1)
+    point = curve.getPointAt(1).addScaledVector(tangent, distanceFromLoop - length)
+  }
   offsetPointByNormal(point, tangent, passengerFeederLaneOffset(passenger.id))
   point.y = 0
 
