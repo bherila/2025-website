@@ -117,7 +117,7 @@ The Fill button opens a confirmation dialog before passengers are pulled from th
 - Ten-seat cars are useful anchors because parking one too early can occupy a slot until its passengers feed into the active loop. Four-seat cars are used as relief valves because they can clear slots quickly when they are part of the intended window.
 - Hidden-color cars are selected only from obstructed visible cars after the solvable order has been established, so hiding color information does not change the underlying solution.
 - The active loop is smaller than the total passenger queue on normal levels, so the full passenger queue is not available immediately. The loop sizes itself to the active capacity so it never has wrap-around overlap — when capacity shrinks (late-level cleanup), excess empty slots are pruned so passengers never land in near-duplicate positions.
-- Feeder passengers are persistent render items: when one boards or shifts forward in the queue, the rest interpolate to their new positions instead of teleporting between rebuilds.
+- Feeder passengers are persistent render items: as the passengers ahead of them enter the loop, the feeder rows advance and each passenger interpolates to its new row position instead of teleporting between rebuilds. (Loop passengers, by contrast, never move — see the no-compaction note in the Passenger Queue section.)
 - Difficulty ramps gradually with level: levels 1–3 remain tutorial-like, levels 4–9 introduce at least one queue-aware decoy choice, level 10+ requires more decision pressure, and super-hard levels require several wrong-choice traps while still preserving a no-rescue solution.
 
 ## Scoring And Progress
