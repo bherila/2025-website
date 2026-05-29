@@ -51,7 +51,7 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         $success = false;
         $run = $this->resolveRun($lotMatchRunRecorder);
         if ($run instanceof LotMatchRun) {
-            $run = $lotMatchRunRecorder->runningIfLatestActive($run);
+            $run = $this->activateRunOrCoalesced($run, $lotMatchRunRecorder);
             if (! $run instanceof LotMatchRun) {
                 $this->logSkippedStaleRun();
 
@@ -159,6 +159,25 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         }
 
         return $activeRun;
+    }
+
+    private function activateRunOrCoalesced(LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder): ?LotMatchRun
+    {
+        $activeRun = $lotMatchRunRecorder->runningIfLatestActive($run);
+        if ($activeRun instanceof LotMatchRun) {
+            return $activeRun;
+        }
+
+        if ($this->mode !== LotMatchRun::MODE_PRESERVE) {
+            return null;
+        }
+
+        $coalescedRun = $lotMatchRunRecorder->latestQueuedPreserveForDocument($this->documentId);
+        if (! $coalescedRun instanceof LotMatchRun || (int) $coalescedRun->id === (int) $run->id) {
+            return null;
+        }
+
+        return $lotMatchRunRecorder->runningIfLatestActive($coalescedRun);
     }
 
     private function succeedLatestActiveRun(LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder, LotMatcherResult $result): LotMatchRun

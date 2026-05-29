@@ -141,6 +141,19 @@ class LotMatchRunRecorder
         return $run;
     }
 
+    public function latestQueuedPreserveForDocument(int $documentId): ?LotMatchRun
+    {
+        /** @var LotMatchRun|null $run */
+        $run = LotMatchRun::query()
+            ->where('document_id', $documentId)
+            ->where('status', LotMatchRun::STATUS_QUEUED)
+            ->where('mode', LotMatchRun::MODE_PRESERVE)
+            ->latest('id')
+            ->first();
+
+        return $run;
+    }
+
     public function userIdForDocument(int $documentId): ?int
     {
         $document = FinDocument::query()->find($documentId);

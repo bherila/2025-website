@@ -231,14 +231,17 @@ class LotMatcherAutoDispatchService
         $lockJob = new LotsMatchJob($documentId, $taxYear);
         $uniqueLock = new UniqueLock(app(CacheRepository::class));
         if (! $uniqueLock->acquire($lockJob)) {
-            Log::info('Lot matcher auto-dispatch skipped; job already queued', [
+            $run = $this->lotMatchRunRecorder->queued($documentId, $userId, $taxYear);
+
+            Log::info('Lot matcher auto-dispatch coalesced; job already queued', [
                 'document_id' => $documentId,
+                'run_id' => (int) $run->id,
                 'trigger' => $trigger->value,
                 'account_id' => $accountId,
                 'tax_year' => $taxYear,
             ]);
 
-            return false;
+            return true;
         }
 
         $run = null;

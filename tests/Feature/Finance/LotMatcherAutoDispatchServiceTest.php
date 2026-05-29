@@ -62,7 +62,7 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $this->assertCount(2, $queuedRecords);
     }
 
-    public function test_duplicate_tax_document_dispatch_uses_unique_job_lock(): void
+    public function test_duplicate_tax_document_dispatch_coalesces_behind_unique_job_lock(): void
     {
         Cache::flush();
         Queue::fake();
@@ -74,9 +74,13 @@ class LotMatcherAutoDispatchServiceTest extends TestCase
         $secondDispatch = $service->dispatchForDocument((int) $document->document_id, LotMatcherAutoTrigger::ParsedDataRebuild);
 
         $this->assertSame(1, $firstDispatch);
-        $this->assertSame(0, $secondDispatch);
+        $this->assertSame(1, $secondDispatch);
         Queue::assertPushed(LotsMatchJob::class, 1);
-        $this->assertDatabaseCount('lot_match_runs', 1);
+        $this->assertDatabaseCount('lot_match_runs', 2);
+        $this->assertDatabaseHas('lot_match_runs', [
+            'document_id' => $document->document_id,
+            'status' => LotMatchRun::STATUS_SUPERSEDED,
+        ]);
         $this->assertDatabaseHas('lot_match_runs', [
             'document_id' => $document->document_id,
             'status' => LotMatchRun::STATUS_QUEUED,

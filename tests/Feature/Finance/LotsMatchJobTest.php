@@ -124,6 +124,37 @@ class LotsMatchJobTest extends TestCase
         $this->assertSame(LotMatchRun::STATUS_SUCCEEDED, $latestRun->fresh()->status);
     }
 
+    public function test_job_runs_latest_coalesced_queued_run_when_original_was_superseded(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $this->makeBrokerLot($account, $document);
+        $this->makeAccountLot($account);
+        $staleRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_SUPERSEDED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+            'finished_at' => now(),
+        ]);
+        $coalescedRun = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+
+        $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $staleRun->id);
+        $job->handle(app(LotMatcherService::class), app(LotMatchRunRecorder::class));
+
+        $staleRun->refresh();
+        $coalescedRun->refresh();
+        $this->assertSame(LotMatchRun::STATUS_SUPERSEDED, $staleRun->status);
+        $this->assertSame(LotMatchRun::STATUS_SUCCEEDED, $coalescedRun->status);
+        $this->assertSame(1, $coalescedRun->result_summary['counts'][FinLotReconciliationLink::STATE_AUTO_MATCHED]);
+    }
+
     public function test_job_does_not_record_success_after_run_is_superseded_during_matcher(): void
     {
         $user = $this->createUser();
