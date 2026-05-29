@@ -9,9 +9,11 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
+use App\Services\Finance\LotMatcher;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Queue\Jobs\FakeJob;
 use Tests\TestCase;
@@ -120,6 +122,57 @@ class LotsMatchJobTest extends TestCase
 
         $this->assertSame(LotMatchRun::STATUS_SUPERSEDED, $staleRun->fresh()->status);
         $this->assertSame(LotMatchRun::STATUS_SUCCEEDED, $latestRun->fresh()->status);
+    }
+
+    public function test_job_does_not_record_success_after_run_is_superseded_during_matcher(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $run = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+        $matcher = new class((int) $document->document_id, $user->id) extends LotMatcherService
+        {
+            public ?int $newerRunId = null;
+
+            public function __construct(
+                private readonly int $documentId,
+                private readonly int $userId,
+            ) {
+                parent::__construct(app(LotMatcher::class));
+            }
+
+            public function runMatcherForDocument(
+                int $documentId,
+                bool $preserveDecisions = true,
+            ): LotMatcherResult {
+                $newerRun = app(LotMatchRunRecorder::class)->queued(
+                    documentId: $this->documentId,
+                    userId: $this->userId,
+                    taxYear: 2025,
+                    mode: LotMatchRun::MODE_FORCE,
+                );
+                $this->newerRunId = (int) $newerRun->id;
+
+                $result = new LotMatcherResult($documentId, false, [], [], []);
+
+                return $result;
+            }
+        };
+
+        $job = new LotsMatchJob((int) $document->document_id, 2025, null, (int) $run->id);
+        $job->handle($matcher, app(LotMatchRunRecorder::class));
+
+        $run->refresh();
+        $this->assertSame(LotMatchRun::STATUS_RUNNING, $run->status);
+        $this->assertNull($run->result_summary);
+        $this->assertDatabaseMissing('lot_match_runs', [
+            'id' => $matcher->newerRunId,
+        ]);
     }
 
     public function test_force_mode_rebuilds_preserved_decisions(): void

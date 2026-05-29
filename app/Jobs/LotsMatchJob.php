@@ -2,13 +2,16 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\StaleLotMatchRunException;
 use App\Models\FinanceTool\LotMatchRun;
+use App\Services\Finance\CapitalGains\LotMatcherResult;
 use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class LotsMatchJob implements ShouldBeUnique, ShouldQueue
@@ -50,27 +53,34 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         if ($run instanceof LotMatchRun) {
             $run = $lotMatchRunRecorder->runningIfLatestActive($run);
             if (! $run instanceof LotMatchRun) {
-                Log::info('LotsMatchJob: skipped stale lot match run', [
-                    'document_id' => $this->documentId,
-                    'tax_year' => $this->taxYear,
-                    'run_id' => $this->runId,
-                    'mode' => $this->mode,
-                    'queue_wait_ms' => $this->queueWaitMs(),
-                ]);
+                $this->logSkippedStaleRun();
 
                 return;
             }
         }
 
         try {
-            $result = $lotMatcherService->runMatcherForDocument(
-                $this->documentId,
-                preserveDecisions: $this->mode !== LotMatchRun::MODE_FORCE,
-            );
             if ($run instanceof LotMatchRun) {
-                $lotMatchRunRecorder->succeeded($run, $result, $this->taxYear);
+                DB::transaction(function () use (&$run, $lotMatcherService, $lotMatchRunRecorder): void {
+                    $run = $this->latestActiveRunForUpdate($run, $lotMatchRunRecorder);
+                    $result = $lotMatcherService->runMatcherForDocument(
+                        $this->documentId,
+                        preserveDecisions: $this->mode !== LotMatchRun::MODE_FORCE,
+                    );
+                    $run = $this->succeedLatestActiveRun($run, $lotMatchRunRecorder, $result);
+
+                });
+            } else {
+                $lotMatcherService->runMatcherForDocument(
+                    $this->documentId,
+                    preserveDecisions: $this->mode !== LotMatchRun::MODE_FORCE,
+                );
             }
             $success = true;
+        } catch (StaleLotMatchRunException) {
+            $this->logSkippedStaleRun($run);
+
+            return;
         } catch (\Throwable $exception) {
             if ($run instanceof LotMatchRun && $this->hasExhaustedAttempts()) {
                 $lotMatchRunRecorder->failed($run, $exception, $this->taxYear);
@@ -141,8 +151,39 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         return max(0, (int) round((microtime(true) * 1000) - $queuedAtMs));
     }
 
+    private function latestActiveRunForUpdate(LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder): LotMatchRun
+    {
+        $activeRun = $lotMatchRunRecorder->latestActiveForUpdate($run);
+        if (! $activeRun instanceof LotMatchRun) {
+            throw new StaleLotMatchRunException('Lot match run is no longer the latest active run.');
+        }
+
+        return $activeRun;
+    }
+
+    private function succeedLatestActiveRun(LotMatchRun $run, LotMatchRunRecorder $lotMatchRunRecorder, LotMatcherResult $result): LotMatchRun
+    {
+        $succeededRun = $lotMatchRunRecorder->succeededIfLatestActive($run, $result, $this->taxYear);
+        if (! $succeededRun instanceof LotMatchRun) {
+            throw new StaleLotMatchRunException('Lot match run was superseded before success could be recorded.');
+        }
+
+        return $succeededRun;
+    }
+
     private function hasExhaustedAttempts(): bool
     {
         return $this->attempts() >= $this->tries;
+    }
+
+    private function logSkippedStaleRun(?LotMatchRun $run = null): void
+    {
+        Log::info('LotsMatchJob: skipped stale lot match run', [
+            'document_id' => $this->documentId,
+            'tax_year' => $this->taxYear,
+            'run_id' => $run instanceof LotMatchRun ? (int) $run->id : $this->runId,
+            'mode' => $this->mode,
+            'queue_wait_ms' => $this->queueWaitMs(),
+        ]);
     }
 }

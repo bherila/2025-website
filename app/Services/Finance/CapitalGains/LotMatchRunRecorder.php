@@ -73,6 +73,25 @@ class LotMatchRunRecorder
         return $run;
     }
 
+    public function latestActiveForUpdate(LotMatchRun $run): ?LotMatchRun
+    {
+        /** @var LotMatchRun|null $lockedRun */
+        $lockedRun = LotMatchRun::query()
+            ->whereKey((int) $run->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $lockedRun instanceof LotMatchRun) {
+            return null;
+        }
+
+        if (! $lockedRun->isActive() || $this->hasNewerRun((int) $lockedRun->document_id, (int) $lockedRun->id)) {
+            return null;
+        }
+
+        return $lockedRun;
+    }
+
     public function succeeded(LotMatchRun $run, LotMatcherResult $result, ?int $taxYear = null): LotMatchRun
     {
         $run->forceFill([
@@ -85,6 +104,16 @@ class LotMatchRunRecorder
         $this->invalidateSummaryCache((int) $run->user_id, $taxYear);
 
         return $run;
+    }
+
+    public function succeededIfLatestActive(LotMatchRun $run, LotMatcherResult $result, ?int $taxYear = null): ?LotMatchRun
+    {
+        $activeRun = $this->latestActiveForUpdate($run);
+        if (! $activeRun instanceof LotMatchRun) {
+            return null;
+        }
+
+        return $this->succeeded($activeRun, $result, $taxYear);
     }
 
     public function failed(LotMatchRun $run, \Throwable $exception, ?int $taxYear = null): LotMatchRun
