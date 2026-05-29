@@ -13,6 +13,7 @@ use App\Services\Finance\CapitalGains\LotMatcherService;
 use App\Services\Finance\CapitalGains\LotMatchRunRecorder;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Queue\Jobs\FakeJob;
 use Tests\TestCase;
 
 class LotsMatchJobTest extends TestCase
@@ -57,11 +58,37 @@ class LotsMatchJobTest extends TestCase
 
         try {
             $job = new LotsMatchJob(999999, 2025, null, (int) $run->id);
+            $this->setJobAttempts($job, $job->tries);
             $job->handle(app(LotMatcherService::class), app(LotMatchRunRecorder::class));
         } finally {
             $run->refresh();
             $this->assertSame(LotMatchRun::STATUS_FAILED, $run->status);
             $this->assertNotNull($run->error);
+        }
+    }
+
+    public function test_job_keeps_run_active_after_retryable_failure(): void
+    {
+        $user = $this->createUser();
+        $account = $this->makeAccount($user->id);
+        $document = $this->makeBrokerDocument($user->id, $account);
+        $run = LotMatchRun::create([
+            'document_id' => $document->document_id,
+            'user_id' => $user->id,
+            'status' => LotMatchRun::STATUS_QUEUED,
+            'mode' => LotMatchRun::MODE_PRESERVE,
+        ]);
+
+        $this->expectException(ModelNotFoundException::class);
+
+        try {
+            $job = new LotsMatchJob(999999, 2025, null, (int) $run->id);
+            $this->setJobAttempts($job, 1);
+            $job->handle(app(LotMatcherService::class), app(LotMatchRunRecorder::class));
+        } finally {
+            $run->refresh();
+            $this->assertSame(LotMatchRun::STATUS_RUNNING, $run->status);
+            $this->assertNull($run->error);
         }
     }
 
@@ -211,5 +238,13 @@ class LotsMatchJobTest extends TestCase
             'form_8949_box' => 'D',
             'wash_sale_disallowed' => 0,
         ], $overrides));
+    }
+
+    private function setJobAttempts(LotsMatchJob $job, int $attempts): void
+    {
+        $job->withFakeQueueInteractions();
+        if ($job->job instanceof FakeJob) {
+            $job->job->attempts = $attempts;
+        }
     }
 }

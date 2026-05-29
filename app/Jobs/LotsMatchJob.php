@@ -72,7 +72,7 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
             }
             $success = true;
         } catch (\Throwable $exception) {
-            if ($run instanceof LotMatchRun) {
+            if ($run instanceof LotMatchRun && $this->hasExhaustedAttempts()) {
                 $lotMatchRunRecorder->failed($run, $exception, $this->taxYear);
             }
 
@@ -139,5 +139,10 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
         $queuedAtMs = ((float) CarbonImmutable::parse($this->queuedAtIso)->format('U.u')) * 1000;
 
         return max(0, (int) round((microtime(true) * 1000) - $queuedAtMs));
+    }
+
+    private function hasExhaustedAttempts(): bool
+    {
+        return $this->attempts() >= $this->tries;
     }
 }
