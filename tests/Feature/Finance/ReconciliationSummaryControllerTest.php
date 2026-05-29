@@ -62,7 +62,7 @@ class ReconciliationSummaryControllerTest extends TestCase
             ->assertJsonPath('unresolved_account_links.0.tax_document_id', $blockedDocument->id);
     }
 
-    public function test_summary_endpoint_caches_per_user_and_year(): void
+    public function test_summary_endpoint_does_not_cache_membership_sensitive_response(): void
     {
         $user = $this->createUser();
 
@@ -70,7 +70,7 @@ class ReconciliationSummaryControllerTest extends TestCase
             ->getJson('/api/finance/tax-years/2025/reconciliation-summary')
             ->assertOk();
 
-        $this->assertTrue(Cache::has(ReconciliationSummaryService::cacheKey($user->id, 2025)));
+        $this->assertFalse(Cache::has(ReconciliationSummaryService::cacheKey($user->id, 2025)));
     }
 
     public function test_summary_endpoint_allows_missing_broker_name_and_filename(): void

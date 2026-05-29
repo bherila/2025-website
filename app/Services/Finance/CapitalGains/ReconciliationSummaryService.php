@@ -9,7 +9,6 @@ use App\Models\FinanceTool\LotMatchRun;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 
 class ReconciliationSummaryService
 {
@@ -39,9 +38,7 @@ class ReconciliationSummaryService
      */
     public function summaryForYear(int $userId, int $year): array
     {
-        return Cache::remember(self::cacheKey($userId, $year), now()->addSeconds(60), function () use ($userId, $year): array {
-            return $this->uncachedSummaryForYear($userId, $year);
-        });
+        return $this->uncachedSummaryForYear($userId, $year);
     }
 
     /**
