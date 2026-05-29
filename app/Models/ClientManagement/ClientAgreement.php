@@ -2,6 +2,7 @@
 
 namespace App\Models\ClientManagement;
 
+use App\Casts\ClientManagement\BillingCadenceCast;
 use App\Enums\ClientManagement\BillingCadence;
 use App\Enums\ClientManagement\FirstCycleProration;
 use App\Models\User;
@@ -54,7 +55,7 @@ class ClientAgreement extends Model
         'retainer_hours' => 'decimal:4',
         'rollover_months' => 'integer',
         'is_visible_to_client' => 'boolean',
-        'billing_cadence' => BillingCadence::class,
+        'billing_cadence' => BillingCadenceCast::class,
         'bill_overage_interim' => 'boolean',
         'first_cycle_proration' => FirstCycleProration::class,
         'initial_rollover_hours' => 'decimal:4',
