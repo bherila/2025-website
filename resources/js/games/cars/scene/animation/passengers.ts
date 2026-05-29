@@ -103,7 +103,7 @@ export function createPassengerEntryAnimation(
   previousFeederPassengers: Passenger[],
   previousLayout: ReturnType<typeof queueLayoutForState>,
   target: THREE.Vector3,
-  startedAt = performance.now() / 1000,
+  joinAt = performance.now() / 1000,
 ): NonNullable<PassengerRenderItem['entry']> {
   const from = feederPassengerPosition(passenger, previousFeederPassengers, previousLayout)
   from.y = 0.1
@@ -111,12 +111,17 @@ export function createPassengerEntryAnimation(
   const via = feederCurve(side, previousLayout).getPointAt(0.08)
   via.y = 0.1
   const distance = from.distanceTo(via) + via.distanceTo(target)
+  const duration = Math.max(0.55, Math.min(1.05, distance * 0.18))
 
+  // `joinAt` is when the empty loop slot reaches the feeder join. The walk-in must
+  // *complete* at that moment so the passenger merges into the gap as it arrives —
+  // starting at the join instead would make the passenger chase a slot that has
+  // already moved several positions along the loop, cutting across the others.
   return {
     from,
     via,
-    startedAt,
-    duration: Math.max(0.55, Math.min(1.05, distance * 0.18)),
+    startedAt: joinAt - duration,
+    duration,
   }
 }
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 import { canBoardPassengerAtParkingGate, type Car, type GameState, type ParkingSlot } from '../gameEngine'
-import { notifyPassengerGate, type PassengerGateHold } from '../scene/animation/passengers'
+import { createPassengerEntryAnimation, notifyPassengerGate, type PassengerGateHold } from '../scene/animation/passengers'
 import type { MovingCarRenderItem, PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
 
 describe('passenger gate notifications', () => {
@@ -201,6 +201,23 @@ describe('passenger gate notifications', () => {
     notifyPassengerGate([passenger], 0, new Map([['p1', -1]]), testState, [], 20, onPassengerGate)
 
     expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
+  it('times the feeder walk-in to complete as the empty slot reaches the join', () => {
+    // The animation must finish at the join time so the passenger merges into the
+    // gap as it arrives, instead of starting there and chasing a slot that has
+    // already moved several positions along the loop (which crosses other passengers).
+    const joinAt = 10
+    const entry = createPassengerEntryAnimation(
+      { color: 'red', feederSide: 'left', id: 'p1' },
+      [{ color: 'red', feederSide: 'left', id: 'p1' }],
+      testLayout,
+      new THREE.Vector3(0, 0.1, 0),
+      joinAt,
+    )
+
+    expect(entry.startedAt + entry.duration).toBeCloseTo(joinAt)
+    expect(entry.startedAt).toBeLessThan(joinAt)
   })
 
   it('rejects ineligible passenger ids via canBoardPassengerAtParkingGate', () => {

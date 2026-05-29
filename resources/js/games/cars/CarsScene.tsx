@@ -120,6 +120,7 @@ export function CarsScene({
   const passengerGateHoldsRef = useRef<Map<string, PassengerGateHold>>(new Map())
   const passengerQueueRefreshAtRef = useRef<number | null>(null)
   const feederPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map())
+  const loopEntriesRef = useRef<Map<string, NonNullable<PassengerRenderItem['entry']>>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
   const fieldCarMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
   const movingCarsRef = useRef<MovingCarRenderItem[]>([])
@@ -345,6 +346,7 @@ export function CarsScene({
       passengerGateHoldsRef.current.clear()
       passengerQueueRefreshAtRef.current = null
       feederPositionsRef.current.clear()
+      loopEntriesRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
         clearGroup(effectsRef.current)
@@ -429,6 +431,7 @@ export function CarsScene({
       movingCarsRef.current,
       colorblindMode,
       feederPositionsRef.current,
+      loopEntriesRef.current,
     )
     if (blockedCarAttempt && previousBlockedAttemptRef.current !== blockedCarAttempt.nonce) {
       const car = state.cars.find((candidate) => candidate.id === blockedCarAttempt.carId)
@@ -502,6 +505,7 @@ function buildDynamicScene(
   movingCars: MovingCarRenderItem[],
   colorblindMode: boolean,
   feederPositions: Map<string, THREE.Vector3>,
+  loopEntries: Map<string, NonNullable<PassengerRenderItem['entry']>>,
 ): number | null {
   const activeParkingCarIds = new Set(
     movingCars
@@ -586,6 +590,11 @@ function buildDynamicScene(
       passengerGateCycles.delete(id)
     }
   }
+  for (const id of loopEntries.keys()) {
+    if (!currentPassengerIds.has(id)) {
+      loopEntries.delete(id)
+    }
+  }
 
   for (const assignment of loopPlan.assignments) {
     const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
@@ -602,14 +611,34 @@ function buildDynamicScene(
     const position = queueVisualPosition(passengerPhase + offset, queueLayout, laneOffset)
     let entry: PassengerRenderItem['entry'] | null = null
     if (entryStartedAt !== null && sourcePassengers) {
-      entry = createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
-      nextPassengerQueueRefreshAt = earlierRefreshAt(nextPassengerQueueRefreshAt, passengerQueueRefreshAtForEntry(entry))
-    } else if (shift) {
-      const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
-      entry = {
-        from: new THREE.Vector3(from.x, 0.12, from.z),
-        startedAt: shift.startedAt,
-        duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
+      // `entryStartedAt` is when the empty slot reaches the feeder join — the moment
+      // the walk-in should *finish*. Schedule the rebuild that releases the feeder
+      // layout slot after the join plus the retention window.
+      nextPassengerQueueRefreshAt = earlierRefreshAt(
+        nextPassengerQueueRefreshAt,
+        entryStartedAt + PASSENGER_LOOP_ENTRY_RETENTION_SECONDS + PASSENGER_QUEUE_REFRESH_EPSILON_SECONDS,
+      )
+      if (now < entryStartedAt) {
+        // Reuse the in-flight entry across rebuilds (keyed by the same join time) so
+        // a mid-walk rebuild never snaps the passenger back to the feeder; only its
+        // live loop target moves.
+        const existing = loopEntries.get(passenger.id)
+        entry = existing && Math.abs(existing.startedAt + existing.duration - entryStartedAt) < 1e-3
+          ? existing
+          : createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
+        loopEntries.set(passenger.id, entry)
+      } else {
+        loopEntries.delete(passenger.id)
+      }
+    } else {
+      loopEntries.delete(passenger.id)
+      if (shift) {
+        const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
+        entry = {
+          from: new THREE.Vector3(from.x, 0.12, from.z),
+          startedAt: shift.startedAt,
+          duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
+        }
       }
     }
     if (entry) {
