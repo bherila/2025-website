@@ -44,9 +44,22 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
     setOpen(isOpen)
   }
 
+  function handleClear() {
+    setPendingRange(undefined)
+    onFromChange('')
+    onToChange('')
+    setOpen(false)
+  }
+
   function handleSelect(range: DateRange | undefined) {
+    if (!range) {
+      handleClear()
+      return
+    }
     setPendingRange(range)
-    if (range?.from && range?.to) {
+    // react-day-picker v10 sets from === to on the first click; only commit once
+    // the user has picked a genuine range (two distinct dates).
+    if (range.from && range.to && range.from.getTime() !== range.to.getTime()) {
       onFromChange(toInputValue(range.from))
       onToChange(toInputValue(range.to))
       setOpen(false)
@@ -82,6 +95,13 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
           onSelect={handleSelect}
           numberOfMonths={2}
         />
+        {(from || to) && (
+          <div className="flex justify-end border-t p-2">
+            <Button variant="ghost" size="sm" onClick={handleClear}>
+              Clear
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )
