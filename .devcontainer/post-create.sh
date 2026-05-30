@@ -45,6 +45,15 @@ php -m | grep -qi '^zip$' || { echo "ERROR: PHP zip extension is missing"; exit 
 
 XDEBUG_MODE=off composer install --no-interaction --prefer-dist
 
+echo "==> Laravel env"
+if [ ! -f .env ]; then
+  cp .env.example .env
+fi
+
+if ! grep -Eq '^APP_KEY=base64:.+' .env; then
+  XDEBUG_MODE=off php artisan key:generate --ansi --force
+fi
+
 echo "==> Versions"
 php -v | head -n 1
 composer --version
