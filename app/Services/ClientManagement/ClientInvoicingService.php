@@ -371,9 +371,11 @@ class ClientInvoicingService
             throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
         }
 
-        // Check for overlapping periods with other invoices for the same company
+        // Check for overlapping periods with other invoices for the same company.
+        // Ad-hoc invoices are not tied to any agreement cycle and must not block cadence generation.
         $overlappingInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->whereNotIn('status', ['void'])
+            ->whereNotIn('invoice_kind', InvoiceKind::cycleGuardExclusions())
             ->where(function ($query) use ($periodStart, $periodEnd) {
                 $query->where('period_start', '<', $periodEnd)
                     ->where('period_end', '>', $periodStart);
@@ -997,7 +999,7 @@ class ClientInvoicingService
             $overlappingInvoice = ClientInvoice::query()
                 ->where('client_company_id', $company->id)
                 ->whereNotIn('status', ['void'])
-                ->where('invoice_kind', '!=', InvoiceKind::InterimOverage->value)
+                ->whereNotIn('invoice_kind', InvoiceKind::cycleGuardExclusions())
                 ->where(function ($query) use ($periodStart, $periodEnd): void {
                     $query->where('period_start', '<', $periodEnd)
                         ->where('period_end', '>', $periodStart);

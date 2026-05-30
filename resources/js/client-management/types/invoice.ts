@@ -69,7 +69,7 @@ export const InvoiceSchema = z.object({
   status: z.enum(['draft', 'issued', 'paid', 'void', 'canceled']),
   period_start: z.string().nullable(),
   period_end: z.string().nullable(),
-  invoice_kind: z.enum(['cadence_period', 'interim_overage', 'terminal']).optional(),
+  invoice_kind: z.enum(['cadence_period', 'interim_overage', 'terminal', 'ad_hoc']).optional(),
   cycle_start: z.string().nullable().optional(),
   cycle_end: z.string().nullable().optional(),
   retainer_hours_included: z.string(),

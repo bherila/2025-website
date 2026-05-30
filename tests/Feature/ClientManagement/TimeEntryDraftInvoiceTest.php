@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\ClientManagement;
 
+use App\Enums\ClientManagement\InvoiceKind;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Models\User;
@@ -462,5 +464,56 @@ class TimeEntryDraftInvoiceTest extends TestCase
 
         // is_invoiced should be false for draft invoice
         $this->assertFalse($invoicedEntry['is_invoiced']);
+    }
+
+    public function test_can_create_time_entry_when_date_overlaps_issued_ad_hoc_invoice(): void
+    {
+        $this->actingAs($this->admin);
+
+        ClientInvoice::create([
+            'client_company_id' => $this->company->id,
+            'client_agreement_id' => null,
+            'invoice_number' => 'ADHOC-TEST-001',
+            'period_start' => '2024-01-01',
+            'period_end' => '2024-01-31',
+            'invoice_total' => 190.00,
+            'status' => 'issued',
+            'invoice_kind' => InvoiceKind::AdHoc->value,
+        ]);
+
+        $response = $this->postJson("/api/client/portal/{$this->company->slug}/time-entries", [
+            'project_id' => $this->project->id,
+            'time' => '1:00',
+            'date_worked' => '2024-01-15',
+            'name' => 'Work during ad-hoc period',
+            'is_billable' => true,
+            'job_type' => 'Software Development',
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_cannot_create_time_entry_when_date_overlaps_issued_cadence_invoice(): void
+    {
+        $this->actingAs($this->admin);
+
+        $invoicingService = app(ClientInvoicingService::class);
+        $invoice = $invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+        $invoice->issue();
+
+        $response = $this->postJson("/api/client/portal/{$this->company->slug}/time-entries", [
+            'project_id' => $this->project->id,
+            'time' => '1:00',
+            'date_worked' => '2024-01-15',
+            'name' => 'Work during issued period',
+            'is_billable' => true,
+            'job_type' => 'Software Development',
+        ]);
+
+        $response->assertStatus(403);
     }
 }

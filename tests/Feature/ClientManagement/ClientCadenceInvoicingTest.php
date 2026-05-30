@@ -1199,6 +1199,36 @@ class ClientCadenceInvoicingTest extends TestCase
         );
     }
 
+    public function test_ad_hoc_invoice_does_not_block_cadence_generation(): void
+    {
+        $agreement = $this->createAgreement([
+            'billing_cadence' => BillingCadence::Quarterly->value,
+            'active_date' => Carbon::parse('2026-01-01'),
+        ]);
+
+        // An ad-hoc invoice with dates fully inside the cadence cycle must not block cadence generation.
+        ClientInvoice::create([
+            'client_company_id' => $this->company->id,
+            'client_agreement_id' => null,
+            'period_start' => Carbon::parse('2026-02-01'),
+            'period_end' => Carbon::parse('2026-02-28'),
+            'invoice_number' => 'INV-ADHOC-OVERLAP',
+            'invoice_total' => 190,
+            'status' => 'issued',
+            'invoice_kind' => InvoiceKind::AdHoc->value,
+        ]);
+
+        $invoice = $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::parse('2026-01-01'),
+            Carbon::parse('2026-03-31'),
+            $agreement,
+        );
+
+        $this->assertNotNull($invoice);
+        $this->assertEquals(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
