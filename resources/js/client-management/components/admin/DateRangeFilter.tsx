@@ -31,6 +31,10 @@ function toInputValue(date: Date | undefined): string {
 export default function DateRangeFilter({ from, to, onFromChange, onToChange, className }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined)
+  // Tracks whether the user has clicked a start date and is now picking an end date.
+  // react-day-picker v10 returns { from: d, to: d } on the first click, so we cannot
+  // rely on from !== to to distinguish "first click" from "second click".
+  const [hasStartDate, setHasStartDate] = useState(false)
 
   const committed: DateRange = {
     from: toDate(from),
@@ -40,12 +44,14 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
   function handleOpenChange(isOpen: boolean) {
     if (isOpen) {
       setPendingRange(undefined)
+      setHasStartDate(false)
     }
     setOpen(isOpen)
   }
 
   function handleClear() {
     setPendingRange(undefined)
+    setHasStartDate(false)
     onFromChange('')
     onToChange('')
     setOpen(false)
@@ -53,16 +59,22 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
 
   function handleSelect(range: DateRange | undefined) {
     if (!range) {
-      handleClear()
+      // User deselected (e.g. clicked the start date a second time) — reset pending
+      // without clearing the already-committed filter.
+      setPendingRange(undefined)
+      setHasStartDate(false)
       return
     }
     setPendingRange(range)
-    // react-day-picker v10 sets from === to on the first click; only commit once
-    // the user has picked a genuine range (two distinct dates).
-    if (range.from && range.to && range.from.getTime() !== range.to.getTime()) {
+    if (!hasStartDate) {
+      // First click: start date chosen, keep popover open for end date.
+      setHasStartDate(true)
+    } else if (range.from && range.to) {
+      // Second click: commit whatever range DayPicker produced, including single-day.
       onFromChange(toInputValue(range.from))
       onToChange(toInputValue(range.to))
       setOpen(false)
+      setHasStartDate(false)
     }
   }
 
