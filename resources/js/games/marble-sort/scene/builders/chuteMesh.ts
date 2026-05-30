@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 import { type Chute } from '../../gameEngine'
 import { chutePosition } from '../sceneGeometry'
@@ -9,8 +10,15 @@ export function createChuteMesh(chute: Chute): THREE.Group {
   group.position.copy(chutePosition(chute.row, chute.side))
 
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.62, 0.28, 0.62),
-    new THREE.MeshStandardMaterial({ color: '#4f7edb', roughness: 0.42 }),
+    new RoundedBoxGeometry(0.62, 0.28, 0.62, 4, 0.08),
+    new THREE.MeshPhysicalMaterial({
+      color: '#4f7edb',
+      roughness: 0.34,
+      metalness: 0.0,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.2,
+      envMapIntensity: 0.3,
+    }),
   )
   body.castShadow = true
   body.receiveShadow = true
@@ -18,8 +26,15 @@ export function createChuteMesh(chute: Chute): THREE.Group {
 
   // Trim plate facing the grid so the chute reads as "attached" to the grid edge.
   const trim = new THREE.Mesh(
-    new THREE.BoxGeometry(0.08, 0.32, 0.66),
-    new THREE.MeshStandardMaterial({ color: '#2452a7', roughness: 0.5 }),
+    new RoundedBoxGeometry(0.08, 0.32, 0.66, 3, 0.04),
+    new THREE.MeshPhysicalMaterial({
+      color: '#2452a7',
+      roughness: 0.4,
+      metalness: 0.0,
+      clearcoat: 0.5,
+      clearcoatRoughness: 0.25,
+      envMapIntensity: 0.3,
+    }),
   )
   trim.position.x = chute.side === 'left' ? 0.32 : -0.32
   group.add(trim)

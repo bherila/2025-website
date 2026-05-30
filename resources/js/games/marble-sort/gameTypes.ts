@@ -7,14 +7,14 @@ export const SORTING_BLOCK_CAPACITY = 3
 export const BASE_CONVEYOR_CAPACITY = 27
 
 export const MARBLE_COLORS = {
-  blue: { label: 'blue', hex: '#2563eb' },
-  yellow: { label: 'yellow', hex: '#facc15' },
-  purple: { label: 'purple', hex: '#a855f7' },
-  green: { label: 'green', hex: '#22c55e' },
-  red: { label: 'red', hex: '#fb4f78' },
-  orange: { label: 'orange', hex: '#fb9b13' },
-  black: { label: 'black', hex: '#3f3f46' },
-  white: { label: 'white', hex: '#e9fbff' },
+  blue: { label: 'blue', hex: '#2f7bf6' },
+  yellow: { label: 'yellow', hex: '#ffce1f' },
+  purple: { label: 'purple', hex: '#b15cff' },
+  green: { label: 'green', hex: '#2fd16a' },
+  red: { label: 'red', hex: '#ff5277' },
+  orange: { label: 'orange', hex: '#ff9f1c' },
+  black: { label: 'black', hex: '#2c313c' },
+  white: { label: 'white', hex: '#f2fbff' },
 } as const
 
 export type MarbleColor = keyof typeof MARBLE_COLORS
