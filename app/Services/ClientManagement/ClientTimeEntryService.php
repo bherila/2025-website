@@ -128,6 +128,7 @@ class ClientTimeEntryService
     {
         $issuedInvoice = ClientInvoice::where('client_company_id', $company->id)
             ->whereIn('status', ['issued', 'paid'])
+            ->whereNotIn('invoice_kind', [InvoiceKind::AdHoc->value])
             ->where('period_start', '<=', $dateWorked)
             ->where('period_end', '>=', $dateWorked)
             ->first();
