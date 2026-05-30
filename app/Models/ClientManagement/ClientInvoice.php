@@ -115,9 +115,7 @@ class ClientInvoice extends Model
     {
         // Use tryFrom() on the raw DB value to avoid a ValueError when the column
         // holds a value that was written before the enum case was added.
-        return InvoiceKind::tryFrom($this->getRawOriginal('invoice_kind') ?? '')
-            ?->value
-            ?? InvoiceKind::CadencePeriod->value;
+        return (InvoiceKind::tryFrom($this->getRawOriginal('invoice_kind') ?? '') ?? InvoiceKind::CadencePeriod)->value;
     }
 
     /**
