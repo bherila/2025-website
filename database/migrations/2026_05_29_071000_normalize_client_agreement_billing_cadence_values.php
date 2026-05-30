@@ -1,8 +1,10 @@
 <?php
 
+use App\Casts\ClientManagement\BillingCadenceCast;
 use App\Enums\ClientManagement\BillingCadence;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 return new class extends Migration
 {
@@ -17,13 +19,19 @@ return new class extends Migration
             ->orderBy('id')
             ->chunkById(500, function ($agreements): void {
                 foreach ($agreements as $agreement) {
-                    $normalized = $this->normalizeCadenceValue((string) $agreement->billing_cadence);
+                    $normalized = BillingCadenceCast::normalizeCadenceValue((string) $agreement->billing_cadence);
 
                     if ($normalized === $agreement->billing_cadence) {
                         continue;
                     }
 
                     if (BillingCadence::tryFrom($normalized) === null) {
+                        Log::warning('normalize_billing_cadence migration: unrecognised value, skipping', [
+                            'agreement_id' => $agreement->id,
+                            'raw_value' => $agreement->billing_cadence,
+                            'normalized' => $normalized,
+                        ]);
+
                         continue;
                     }
 
@@ -38,21 +46,4 @@ return new class extends Migration
      * Reverse the migrations.
      */
     public function down(): void {}
-
-    private function normalizeCadenceValue(string $value): string
-    {
-        $normalized = trim($value);
-
-        if (
-            (str_starts_with($normalized, '"') && str_ends_with($normalized, '"'))
-            || (str_starts_with($normalized, '\'') && str_ends_with($normalized, '\''))
-        ) {
-            $normalized = substr($normalized, 1, -1);
-        }
-
-        return match (strtolower($normalized)) {
-            'semiannual', 'semi-annual' => BillingCadence::SemiAnnual->value,
-            default => $normalized,
-        };
-    }
 };

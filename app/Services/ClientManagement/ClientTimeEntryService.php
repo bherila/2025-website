@@ -2,6 +2,7 @@
 
 namespace App\Services\ClientManagement;
 
+use App\Enums\ClientManagement\InvoiceKind;
 use App\Exceptions\ClientManagement\ClientManagementActionException;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
@@ -146,6 +147,7 @@ class ClientTimeEntryService
     {
         $draftInvoices = ClientInvoice::where('client_company_id', $company->id)
             ->where('status', 'draft')
+            ->whereNotIn('invoice_kind', [InvoiceKind::AdHoc->value])
             ->orderBy('period_start')
             ->get();
 

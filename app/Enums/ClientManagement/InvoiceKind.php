@@ -16,4 +16,15 @@ enum InvoiceKind: string
     case InterimOverage = 'interim_overage';
     case Terminal = 'terminal';
     case AdHoc = 'ad_hoc';
+
+    /**
+     * Invoice kinds that are not tied to a recurring agreement cycle and must not
+     * block cadence invoice generation when their periods overlap.
+     *
+     * @return list<string>
+     */
+    public static function cycleGuardExclusions(): array
+    {
+        return [self::InterimOverage->value, self::AdHoc->value];
+    }
 }

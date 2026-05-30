@@ -41,7 +41,7 @@ class BillingCadenceCast implements CastsAttributes
         return self::normalizeCadenceValue((string) $value);
     }
 
-    private static function normalizeCadenceValue(string $value): string
+    public static function normalizeCadenceValue(string $value): string
     {
         $normalized = trim($value);
 
@@ -54,7 +54,7 @@ class BillingCadenceCast implements CastsAttributes
 
         return match (strtolower($normalized)) {
             'semiannual', 'semi-annual' => BillingCadence::SemiAnnual->value,
-            default => $normalized,
+            default => strtolower($normalized),
         };
     }
 }
