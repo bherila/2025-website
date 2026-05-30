@@ -30,35 +30,44 @@ function toInputValue(date: Date | undefined): string {
 
 export default function DateRangeFilter({ from, to, onFromChange, onToChange, className }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
+  const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined)
 
-  const selected: DateRange = {
+  const committed: DateRange = {
     from: toDate(from),
     to: toDate(to),
   }
 
+  function handleOpenChange(isOpen: boolean) {
+    if (isOpen) {
+      setPendingRange(undefined)
+    }
+    setOpen(isOpen)
+  }
+
   function handleSelect(range: DateRange | undefined) {
-    onFromChange(toInputValue(range?.from))
-    onToChange(toInputValue(range?.to))
+    setPendingRange(range)
     if (range?.from && range?.to) {
+      onFromChange(toInputValue(range.from))
+      onToChange(toInputValue(range.to))
       setOpen(false)
     }
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           className={cn('w-[240px] justify-start text-left font-normal', !from && !to && 'text-muted-foreground', className)}
         >
           <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-          {selected.from ? (
-            selected.to ? (
+          {committed.from ? (
+            committed.to ? (
               <>
-                {format(selected.from, 'MMM d, y')} – {format(selected.to, 'MMM d, y')}
+                {format(committed.from, 'MMM d, y')} – {format(committed.to, 'MMM d, y')}
               </>
             ) : (
-              format(selected.from, 'MMM d, y')
+              format(committed.from, 'MMM d, y')
             )
           ) : (
             <span>Date range</span>
@@ -68,8 +77,8 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="range"
-          {...(selected.from ? { defaultMonth: selected.from } : {})}
-          selected={selected}
+          {...(pendingRange?.from ? { defaultMonth: pendingRange.from } : committed.from ? { defaultMonth: committed.from } : {})}
+          selected={pendingRange}
           onSelect={handleSelect}
           numberOfMonths={2}
         />
