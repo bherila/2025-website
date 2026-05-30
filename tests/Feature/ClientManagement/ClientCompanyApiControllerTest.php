@@ -10,6 +10,7 @@ use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ClientCompanyApiControllerTest extends TestCase
@@ -182,6 +183,27 @@ class ClientCompanyApiControllerTest extends TestCase
             ->actingAs($this->createUser())
             ->getJson('/api/client/mgmt/companies')
             ->assertForbidden();
+    }
+
+    public function test_admin_can_fetch_company_list_when_agreement_has_quoted_legacy_semi_annual_value(): void
+    {
+        $admin = $this->createAdminUser();
+        $company = ClientCompany::factory()->create();
+        $agreement = ClientAgreement::factory()->for($company)->create([
+            'billing_cadence' => 'monthly',
+        ]);
+
+        DB::table('client_agreements')
+            ->where('id', $agreement->id)
+            ->update([
+                'billing_cadence' => '"semi_annual"',
+            ]);
+
+        $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies')
+            ->assertOk()
+            ->assertJsonPath('0.current_billing_cadence', 'semi_annual');
     }
 
     public function test_admin_can_fetch_company_detail_with_agreements(): void
