@@ -217,7 +217,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
 
       - name: Cache Composer dependencies
         uses: actions/cache@v5
@@ -242,7 +242,7 @@ jobs:
             phpstan-
 
       - name: Run PHPStan
-        run: vendor/bin/phpstan analyse --no-progress
+        run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress
 
   backend-tests:
     name: Backend Tests
@@ -267,7 +267,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
 
       - name: Cache Composer dependencies
         uses: actions/cache@v5
@@ -376,7 +376,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
 
       - name: Cache Composer dependencies
         uses: actions/cache@v5

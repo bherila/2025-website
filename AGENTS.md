@@ -6,7 +6,7 @@
 
 ## Architecture Overview
 
-**Stack**: Laravel 13 (PHP 8.3+) + React 19 / TypeScript via Vite hybrid:
+**Stack**: Laravel 13 (PHP 8.5+) + React 19 / TypeScript via Vite hybrid:
 - Blade templates mount React components via script tags containing JSON data
 - All dynamic data fetching goes through JSON API endpoints (`/api/` prefix)
 - Vite handles bundling
@@ -204,7 +204,7 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-- php - 8.3
+- php - 8.5
 - laravel/framework (LARAVEL) - v13
 - laravel/prompts (PROMPTS) - v0
 - laravel/boost (BOOST) - v2
