@@ -1,5 +1,6 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 import {
   CAR_COLORS,
@@ -119,6 +120,7 @@ export function CarsScene({
   const passengerGateHoldsRef = useRef<Map<string, PassengerGateHold>>(new Map())
   const passengerQueueRefreshAtRef = useRef<number | null>(null)
   const feederPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map())
+  const loopEntriesRef = useRef<Map<string, NonNullable<PassengerRenderItem['entry']>>>(new Map())
   const boardingPassengersRef = useRef<BoardingPassengerRenderItem[]>([])
   const fieldCarMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
   const movingCarsRef = useRef<MovingCarRenderItem[]>([])
@@ -169,18 +171,30 @@ export function CarsScene({
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.toneMapping = THREE.NeutralToneMapping
+    renderer.toneMappingExposure = 1.0
     rendererRef.current = renderer
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight('#ffffff', '#7c8a9a', 2.2)
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = environmentTexture
+    scene.environmentIntensity = 0.35
+    pmrem.dispose()
+
+    const ambient = new THREE.HemisphereLight('#ffffff', '#7c8a9a', 1.9)
     scene.add(ambient)
 
-    const sun = new THREE.DirectionalLight('#ffffff', 2.8)
+    const sun = new THREE.DirectionalLight('#ffffff', 2.4)
     sun.position.set(-5, 10, 5)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     scene.add(sun)
+
+    const rim = new THREE.DirectionalLight('#dbeafe', 0.6)
+    rim.position.set(5, 6, -4)
+    scene.add(rim)
 
     const content = new THREE.Group()
     scene.add(content)
@@ -332,6 +346,7 @@ export function CarsScene({
       passengerGateHoldsRef.current.clear()
       passengerQueueRefreshAtRef.current = null
       feederPositionsRef.current.clear()
+      loopEntriesRef.current.clear()
       boardingPassengersRef.current = []
       if (effectsRef.current) {
         clearGroup(effectsRef.current)
@@ -416,6 +431,7 @@ export function CarsScene({
       movingCarsRef.current,
       colorblindMode,
       feederPositionsRef.current,
+      loopEntriesRef.current,
     )
     if (blockedCarAttempt && previousBlockedAttemptRef.current !== blockedCarAttempt.nonce) {
       const car = state.cars.find((candidate) => candidate.id === blockedCarAttempt.carId)
@@ -489,6 +505,7 @@ function buildDynamicScene(
   movingCars: MovingCarRenderItem[],
   colorblindMode: boolean,
   feederPositions: Map<string, THREE.Vector3>,
+  loopEntries: Map<string, NonNullable<PassengerRenderItem['entry']>>,
 ): number | null {
   const activeParkingCarIds = new Set(
     movingCars
@@ -573,14 +590,23 @@ function buildDynamicScene(
       passengerGateCycles.delete(id)
     }
   }
+  for (const id of loopEntries.keys()) {
+    if (!currentPassengerIds.has(id)) {
+      loopEntries.delete(id)
+    }
+  }
 
   for (const assignment of loopPlan.assignments) {
-    const { entryStartedAt, offset, passenger, shift, sourcePassengers } = assignment
+    const { entryStartedAt, offset, passenger, sourcePassengers } = assignment
     const laneOffset = passengerQueueLaneOffset(passenger.id)
     passengerOffsets.set(passenger.id, offset)
-    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null || shift) {
+    if (!passengerGateCycles.has(passenger.id) || entryStartedAt !== null) {
       passengerGateCycles.set(passenger.id, passengerGateCycle(passengerPhase, offset, queueLayout))
     }
+    // Loop passengers keep their slot (and offset) for life — boarding never re-indexes
+    // them — so a passenger's `phase + offset` advances continuously. Its gate cycle is
+    // therefore continuous and must NOT be reseeded; the crossing fires naturally as it
+    // rolls up to the gate.
 
     const handle = createPassengerInstanceHandle(passengerPools, CAR_COLORS[passenger.color].hex, {
       colorblindMode,
@@ -589,15 +615,36 @@ function buildDynamicScene(
     const position = queueVisualPosition(passengerPhase + offset, queueLayout, laneOffset)
     let entry: PassengerRenderItem['entry'] | null = null
     if (entryStartedAt !== null && sourcePassengers) {
-      entry = createPassengerEntryAnimation(passenger, sourcePassengers, queueLayout, position, entryStartedAt)
-      nextPassengerQueueRefreshAt = earlierRefreshAt(nextPassengerQueueRefreshAt, passengerQueueRefreshAtForEntry(entry))
-    } else if (shift) {
-      const from = queueVisualPosition(passengerPhase + shift.previousOffset, queueLayout, laneOffset)
-      entry = {
-        from: new THREE.Vector3(from.x, 0.12, from.z),
-        startedAt: shift.startedAt,
-        duration: Math.max(0.18, spacing / Math.max(0.001, PASSENGER_SPEED)),
+      // `entryStartedAt` is when the empty slot reaches the feeder join — the moment
+      // the walk-in should *finish*. Schedule the rebuild that releases the feeder
+      // layout slot after the join plus the retention window.
+      nextPassengerQueueRefreshAt = earlierRefreshAt(
+        nextPassengerQueueRefreshAt,
+        entryStartedAt + PASSENGER_LOOP_ENTRY_RETENTION_SECONDS + PASSENGER_QUEUE_REFRESH_EPSILON_SECONDS,
+      )
+      if (now < entryStartedAt) {
+        // Reuse the in-flight entry across rebuilds (keyed by the same join time) so
+        // a mid-walk rebuild never snaps the passenger back to the feeder; only its
+        // live loop target moves.
+        const existing = loopEntries.get(passenger.id)
+        // Use the shared feeder layout (which lists every pending-entry passenger plus
+        // the unassigned feeder) as the walk-in origin, so each pending passenger maps
+        // to its own distinct feeder row. Per-passenger snapshots collapsed every
+        // same-side pending entry to row 0, stacking them into a z-fight once the
+        // single-file lanes removed the side-to-side jitter that used to mask it.
+        entry = existing && Math.abs(existing.startedAt + existing.duration - entryStartedAt) < 1e-3
+          ? existing
+          : createPassengerEntryAnimation(passenger, loopPlan.feederLayoutPassengers, queueLayout, position, entryStartedAt)
+        loopEntries.set(passenger.id, entry)
+      } else {
+        loopEntries.delete(passenger.id)
       }
+    } else {
+      // No shift animation: the phase pull-back keeps `phase + offset` invariant for
+      // every remaining passenger, so a re-indexed passenger is already at its correct
+      // world position and stays put. The gap simply opens at the gate and closes as
+      // the loop rotates the next passenger up to it.
+      loopEntries.delete(passenger.id)
     }
     if (entry) {
       setPassengerRenderHandleTransform(handle, entry.from, 0)
@@ -662,3 +709,4 @@ function buildDynamicScene(
 function earlierRefreshAt(current: number | null, candidate: number): number {
   return current === null ? candidate : Math.min(current, candidate)
 }
+

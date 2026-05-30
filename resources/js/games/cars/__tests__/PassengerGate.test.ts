@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 import { canBoardPassengerAtParkingGate, type Car, type GameState, type ParkingSlot } from '../gameEngine'
-import { notifyPassengerGate, type PassengerGateHold } from '../scene/animation/passengers'
+import { createPassengerEntryAnimation, notifyPassengerGate, type PassengerGateHold } from '../scene/animation/passengers'
 import type { MovingCarRenderItem, PassengerRenderItem, QueueLayout } from '../scene/sceneTypes'
 
 describe('passenger gate notifications', () => {
@@ -149,6 +149,25 @@ describe('passenger gate notifications', () => {
     expect(gateHolds.has('p1')).toBe(false)
   })
 
+  it('boards on a genuine gate crossing even when already just past the tight window', () => {
+    const passenger: PassengerRenderItem = {
+      id: 'p1',
+      layout: testLayout,
+      mesh: new THREE.Group(),
+      offset: 0,
+    }
+    const onPassengerGate = jest.fn()
+
+    // The passenger has advanced to progress 0.4 (cycle 1) — past the tight nearGate
+    // window — but its recorded cycle is the previous lap (0), so this frame is a
+    // genuine gate crossing. A real crossing must always board a ready match, so a
+    // single dropped/coalesced frame near the gate never forces an extra lap.
+    const phase = testLayout.perimeter + 0.4
+    notifyPassengerGate([passenger], phase, new Map([['p1', 0]]), testState, [], 20, onPassengerGate)
+
+    expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
   it('consumes gate crossings when no matching parked car exists', () => {
     const bluePassenger: PassengerRenderItem = {
       id: 'blue-loop',
@@ -184,6 +203,23 @@ describe('passenger gate notifications', () => {
     notifyPassengerGate([passenger], 0, new Map([['p1', -1]]), testState, [], 20, onPassengerGate)
 
     expect(onPassengerGate).toHaveBeenCalledWith('p1')
+  })
+
+  it('times the feeder walk-in to complete as the empty slot reaches the join', () => {
+    // The animation must finish at the join time so the passenger merges into the
+    // gap as it arrives, instead of starting there and chasing a slot that has
+    // already moved several positions along the loop (which crosses other passengers).
+    const joinAt = 10
+    const entry = createPassengerEntryAnimation(
+      { color: 'red', feederSide: 'left', id: 'p1' },
+      [{ color: 'red', feederSide: 'left', id: 'p1' }],
+      testLayout,
+      new THREE.Vector3(0, 0.1, 0),
+      joinAt,
+    )
+
+    expect(entry.startedAt + entry.duration).toBeCloseTo(joinAt)
+    expect(entry.startedAt).toBeLessThan(joinAt)
   })
 
   it('rejects ineligible passenger ids via canBoardPassengerAtParkingGate', () => {

@@ -50,6 +50,15 @@ test.describe('Parking Pickup visual smoke', () => {
     expect(pixelRatio(image, boardRegion, isLightBoardPixel)).toBeGreaterThan(0.2)
   })
 
+  test('exposes the styled power-up and action controls', async ({ page }) => {
+    await page.goto('/games/parking-pickup')
+
+    await expect(page.getByText(/Level 1 is ready/)).toBeVisible()
+    for (const name of ['VIP', 'Shuffle', 'Fill', 'Open Spot', 'Reset', 'Tutorial']) {
+      await expect(page.getByRole('button', { name })).toBeVisible()
+    }
+  })
+
   test('keeps playfield framing stable through level completion', async ({ page }, testInfo) => {
     await loadNearCompleteLevel(page)
     await page.goto('/games/parking-pickup')

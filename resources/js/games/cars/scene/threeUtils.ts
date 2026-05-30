@@ -103,7 +103,7 @@ export function clearGroup(group: THREE.Group): void {
 export function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     const mesh = child as THREE.Mesh
-    if (mesh.geometry) {
+    if (mesh.geometry && mesh.geometry.userData.cached !== true) {
       mesh.geometry.dispose()
     }
 
@@ -120,7 +120,7 @@ export function disposeObject(object: THREE.Object3D): void {
 
 function disposeMaterial(material: THREE.Material): void {
   const maybeTextured = material as THREE.Material & { map?: THREE.Texture }
-  if (maybeTextured.map) {
+  if (maybeTextured.map && maybeTextured.map.userData.cached !== true) {
     maybeTextured.map.dispose()
   }
   material.dispose()
@@ -129,6 +129,13 @@ function disposeMaterial(material: THREE.Material): void {
 export function lighten(hex: string): string {
   const color = new THREE.Color(hex)
   color.lerp(new THREE.Color('#ffffff'), 0.18)
+
+  return `#${color.getHexString()}`
+}
+
+export function darken(hex: string, amount = 0.42): string {
+  const color = new THREE.Color(hex)
+  color.lerp(new THREE.Color('#0b1120'), amount)
 
   return `#${color.getHexString()}`
 }

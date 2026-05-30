@@ -25,6 +25,15 @@ import type {
 
 const PASSENGER_GATE_HOLD_SECONDS = 1.25
 
+/**
+ * How far past the gate (in passenger-slot widths) a passenger can still board.
+ * A tight window keeps boarding visually anchored to the gate. The shift-jump case
+ * (a boarding bumps a trailing passenger across the gate) is handled upstream by
+ * seeding the gate cycle from the pre-shift offset in CarsScene, so it registers as
+ * a real `crossedGate` edge — this window only needs to absorb frame-to-frame travel.
+ */
+const GATE_BOARDING_WINDOW_SLOTS = 0.9
+
 export interface PassengerGateHold {
   cycle: number
   expiresAt: number
@@ -94,7 +103,7 @@ export function createPassengerEntryAnimation(
   previousFeederPassengers: Passenger[],
   previousLayout: ReturnType<typeof queueLayoutForState>,
   target: THREE.Vector3,
-  startedAt = performance.now() / 1000,
+  joinAt = performance.now() / 1000,
 ): NonNullable<PassengerRenderItem['entry']> {
   const from = feederPassengerPosition(passenger, previousFeederPassengers, previousLayout)
   from.y = 0.1
@@ -102,12 +111,17 @@ export function createPassengerEntryAnimation(
   const via = feederCurve(side, previousLayout).getPointAt(0.08)
   via.y = 0.1
   const distance = from.distanceTo(via) + via.distanceTo(target)
+  const duration = Math.max(0.55, Math.min(1.05, distance * 0.18))
 
+  // `joinAt` is when the empty loop slot reaches the feeder join. The walk-in must
+  // *complete* at that moment so the passenger merges into the gap as it arrives —
+  // starting at the join instead would make the passenger chase a slot that has
+  // already moved several positions along the loop, cutting across the others.
   return {
     from,
     via,
-    startedAt,
-    duration: Math.max(0.55, Math.min(1.05, distance * 0.18)),
+    startedAt: joinAt - duration,
+    duration,
   }
 }
 
@@ -141,7 +155,7 @@ export function notifyPassengerGate(
     const currentCycle = passengerGateCycle(phase, passenger.offset, passenger.layout)
     const previousCycle = passengerGateCycles.get(passenger.id) ?? currentCycle
     const crossedGate = currentCycle > previousCycle
-    const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * 0.9
+    const nearGate = passengerGateProgress(phase, passenger.offset, passenger.layout) <= passengerSpacing() * GATE_BOARDING_WINDOW_SLOTS
     const canBoard = canBoardPassengerAtParkingGate(state, passenger.id, unavailableCarIds)
     const heldGate = passengerGateHolds.get(passenger.id)
 
