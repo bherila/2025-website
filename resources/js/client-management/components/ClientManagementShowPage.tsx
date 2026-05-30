@@ -1,230 +1,44 @@
-import { Activity, ArrowLeft, ExternalLink, FileText, Plus, Receipt, Repeat, Users, X } from 'lucide-react'
-import { useCallback,useEffect,useState } from 'react'
+import { Repeat, X } from 'lucide-react'
+import { useCallback } from 'react'
 
-import AdminInvoiceList from '@/client-management/components/admin/AdminInvoiceList'
-import { AgreementStatusBadges, CadenceBadge } from '@/client-management/components/admin/ClientBadges'
-import CyclePreviewPanel from '@/client-management/components/admin/CyclePreviewPanel'
+import ActivityTab from '@/client-management/components/admin/company/ActivityTab'
+import AgreementsTab from '@/client-management/components/admin/company/AgreementsTab'
+import ClientManagementHeader from '@/client-management/components/admin/company/ClientManagementHeader'
+import CompanyOverviewTab from '@/client-management/components/admin/company/CompanyOverviewTab'
+import InvoicesTab from '@/client-management/components/admin/company/InvoicesTab'
+import TimeExpensesTab from '@/client-management/components/admin/company/TimeExpensesTab'
 import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
-import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
 import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
+import { useClientCompanyDetail } from '@/client-management/hooks/useClientCompanyDetail'
+import { useCreateAgreement } from '@/client-management/hooks/useCreateAgreement'
+import { useDismissibleAlert } from '@/client-management/hooks/useDismissibleAlert'
+import { useHashTab } from '@/client-management/hooks/useHashTab'
 import type { ClientCompany } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
-import { fetchWrapper } from '@/fetchWrapper'
 
 interface ClientManagementShowPageProps {
   companyId: number
 }
 
-interface CompanyFormData {
-  company_name: string
-  slug: string
-  address: string
-  website: string
-  phone_number: string
-  default_hourly_rate: string
-  additional_notes: string
-  is_active: boolean
-  stripe_billing_enabled: boolean
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  if (typeof error === 'string' && error.trim()) {
-    return error
-  }
-
-  return fallback
-}
-
-function normalizeCompanyResponse(value: unknown): ClientCompany {
-  if (!isRecord(value)) {
-    throw new Error('Unexpected response from the company detail API.')
-  }
-
-  const company = value as unknown as ClientCompany
-
-  return {
-    ...company,
-    users: Array.isArray(company.users) ? company.users : [],
-    agreements: Array.isArray(company.agreements) ? company.agreements : [],
-  }
-}
-
-function companyToFormData(company: ClientCompany): CompanyFormData {
-  return {
-    company_name: company.company_name,
-    slug: company.slug || '',
-    address: company.address || '',
-    website: company.website || '',
-    phone_number: company.phone_number || '',
-    default_hourly_rate: company.default_hourly_rate || '',
-    additional_notes: company.additional_notes || '',
-    is_active: company.is_active ?? true,
-    stripe_billing_enabled: company.stripe_billing_enabled ?? true,
-  }
-}
-
 export default function ClientManagementShowPage({ companyId }: ClientManagementShowPageProps) {
-  const [company, setCompany] = useState<ClientCompany | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [inviteModalOpen, setInviteModalOpen] = useState(false)
-  const [userToRemove, setUserToRemove] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState(() => window.location.hash.replace('#', '') || 'overview')
-  const [alertInfo, setAlertInfo] = useState<{
-    show: boolean
-    message: string
-    variant: 'default' | 'destructive'
-  } | null>(null)
+  const { alertInfo, showAlert, dismissAlert } = useDismissibleAlert()
+  const showError = useCallback((message: string) => showAlert(message, 'destructive'), [showAlert])
+  const { company, setCompany, loading, fetchCompany } = useClientCompanyDetail(companyId, showError)
+  const [activeTab, changeTab] = useHashTab('overview')
+  const { createAgreement, creating } = useCreateAgreement(companyId, showError)
 
-  const [formData, setFormData] = useState<CompanyFormData>({
-    company_name: '',
-    slug: '',
-    address: '',
-    website: '',
-    phone_number: '',
-    default_hourly_rate: '',
-    additional_notes: '',
-    is_active: true,
-    stripe_billing_enabled: true
-  })
-
-  useEffect(() => {
-    if (alertInfo?.show) {
-      const timer = setTimeout(() => {
-        setAlertInfo(null)
-      }, 5000) // 5 seconds
-      return () => clearTimeout(timer)
-    }
-  }, [alertInfo])
-
-  const fetchCompany = useCallback(async () => {
-    setLoading(true);
-    try {
-      const found = normalizeCompanyResponse(await fetchWrapper.get(`/api/client/mgmt/companies/${companyId}`))
-
-      setCompany(found)
-      setFormData(companyToFormData(found))
-    } catch (error) {
-      console.error('Error fetching company:', error)
-      setAlertInfo({
-        show: true,
-        message: getErrorMessage(error, 'Failed to load company details.'),
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [companyId])
-
-  useEffect(() => {
-    fetchCompany()
-  }, [fetchCompany])
-
-  useEffect(() => {
-    const onHashChange = () => setActiveTab(window.location.hash.replace('#', '') || 'overview')
-    window.addEventListener('hashchange', onHashChange)
-
-    return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-
-    try {
-      const data = await fetchWrapper.put(`/api/client/mgmt/companies/${companyId}`, formData)
-
-      if (!isRecord(data) || !('company' in data)) {
-        throw new Error('Unexpected response from the company update API.')
-      }
-
-      const updatedCompany = normalizeCompanyResponse(data.company)
-
-      setCompany(updatedCompany)
-      setFormData(companyToFormData(updatedCompany))
-      setAlertInfo({ show: true, message: 'Company updated successfully', variant: 'default' })
-    } catch (error) {
-      console.error('Error updating company:', error)
-      setAlertInfo({
-        show: true,
-        message: getErrorMessage(error, 'Failed to update company'),
-        variant: 'destructive'
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRemoveUser = async (userId: number) => {
-    try {
-      await fetchWrapper.delete(`/api/client/mgmt/${companyId}/users/${userId}`, {})
-      setUserToRemove(null)
-      await fetchCompany()
-    } catch (error) {
-      console.error('Error removing user:', error)
-      setAlertInfo({
-        show: true,
-        message: getErrorMessage(error, 'Failed to remove user'),
-        variant: 'destructive'
-      })
-    }
-  }
-
-  const handleCreateAgreement = async () => {
-    setSaving(true)
-    try {
-      const formData = new FormData()
-      formData.append('client_company_id', companyId.toString())
-      
-      const response = await fetchWrapper.postRaw('/client/mgmt/agreement', formData)
-
-      if (response.redirected) {
-        window.location.href = response.url
-      } else if (response.ok) {
-        await response.text()
-        if (response.url) {
-            window.location.href = response.url
-        }
-      } else {
-        throw new Error('Failed to create agreement')
-      }
-    } catch (error) {
-      console.error('Error creating agreement:', error)
-      setAlertInfo({
-        show: true,
-        message: getErrorMessage(error, 'Failed to create agreement'),
-        variant: 'destructive'
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
+  const renderAlert = () =>
+    alertInfo && (
+      <Alert variant={alertInfo.variant} className="mb-4 relative">
+        <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
+        <AlertDescription>{alertInfo.message}</AlertDescription>
+        <button onClick={dismissAlert} className="absolute top-2 right-2 p-1">
+          <X className="h-4 w-4" />
+        </button>
+      </Alert>
+    )
 
   if (loading) {
     return <div className="p-8">Loading...</div>
@@ -233,25 +47,18 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   if (!company) {
     return (
       <div className="p-8">
-        {alertInfo?.show && (
-          <Alert variant={alertInfo.variant} className="mb-4 relative">
-            <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
-            <AlertDescription>{alertInfo.message}</AlertDescription>
-            <button onClick={() => setAlertInfo(null)} className="absolute top-2 right-2 p-1">
-              <X className="h-4 w-4" />
-            </button>
-          </Alert>
-        )}
+        {renderAlert()}
         Company not found
       </div>
     )
   }
 
-  const activeAgreement = company.agreements.find((agreement) => !agreement.termination_date) ?? company.agreements[0] ?? null
+  const activeAgreement =
+    company.agreements.find((agreement) => !agreement.termination_date) ?? company.agreements[0] ?? null
 
-  const changeTab = (value: string) => {
-    setActiveTab(value)
-    window.history.replaceState(null, '', `#${value}`)
+  const handleSaved = (updated: ClientCompany) => {
+    setCompany(updated)
+    showAlert('Company updated successfully')
   }
 
   return (
@@ -263,462 +70,68 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
         currentPage="manage"
       />
       <div className="container mx-auto p-8 max-w-7xl">
-        {alertInfo?.show && (
-          <Alert variant={alertInfo.variant} className="mb-4 relative">
-            <AlertTitle>{alertInfo.variant === 'destructive' ? 'Error' : 'Success'}</AlertTitle>
-            <AlertDescription>{alertInfo.message}</AlertDescription>
-            <button onClick={() => setAlertInfo(null)} className="absolute top-2 right-2 p-1">
-              <X className="h-4 w-4" />
-            </button>
-          </Alert>
-        )}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Client Company Details</h1>
-          <div className="flex gap-2">
-            {company.slug && (
-              <Button 
-                variant="secondary"
-                onClick={() => window.location.href = `/client/portal/${company.slug}/invoices`}
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                Invoices
-              </Button>
-            )}
-            <Button 
-              variant="secondary" 
-              onClick={() => window.location.href = '/client/mgmt'}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to List
-            </Button>
-            {company.slug && (
-              <Button
-                variant="default"
-                onClick={() => window.location.href = `/client/portal/${company.slug}`}
-              >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                View Portal
-              </Button>
-            )}
-          </div>
-        </div>
+        {renderAlert()}
+        <ClientManagementHeader company={company} />
 
-      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-4">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="agreements">Agreements</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="time">Time & Expenses</TabsTrigger>
-          <TabsTrigger value="recurring">Recurring items</TabsTrigger>
-          <TabsTrigger value="activity">Notes / Activity</TabsTrigger>
-        </TabsList>
+        <Tabs value={activeTab} onValueChange={changeTab} className="space-y-4">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="agreements">Agreements</TabsTrigger>
+            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="time">Time & Expenses</TabsTrigger>
+            <TabsTrigger value="recurring">Recurring items</TabsTrigger>
+            <TabsTrigger value="activity">Notes / Activity</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="overview">
-      <div className="space-y-6">
-        <CyclePreviewPanel company={company} agreement={activeAgreement} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="company_name">Company Name *</Label>
-                  <Input
-                    id="company_name"
-                    value={formData.company_name}
-                    onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                    required
-                  />
-                </div>
+          <TabsContent value="overview">
+            <CompanyOverviewTab
+              company={company}
+              companyId={companyId}
+              activeAgreement={activeAgreement}
+              onSaved={handleSaved}
+              onError={showError}
+              onChanged={fetchCompany}
+              onCreateAgreement={() => void createAgreement()}
+              creating={creating}
+              onViewAllAgreements={() => changeTab('agreements')}
+            />
+          </TabsContent>
 
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="slug">Slug (URL identifier)</Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">/client/portal/</span>
-                    <Input
-                      id="slug"
-                      value={formData.slug}
-                      onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                      placeholder="company-slug"
-                      className="flex-1"
-                    />
-                  </div>
-                  {company?.slug && (
-                    <a 
-                      href={`/client/portal/${company.slug}`} 
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      View Client Portal →
-                    </a>
-                  )}
-                </div>
+          <TabsContent value="agreements">
+            <AgreementsTab
+              agreements={company.agreements}
+              onCreateAgreement={() => void createAgreement()}
+              creating={creating}
+            />
+          </TabsContent>
 
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Textarea
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    rows={3}
-                  />
-                </div>
+          <TabsContent value="invoices">
+            <InvoicesTab companyId={company.id} agreements={company.agreements} />
+          </TabsContent>
 
-                <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    type="url"
-                    value={formData.website}
-                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="https://"
-                  />
-                </div>
+          <TabsContent value="time">
+            <TimeExpensesTab company={company} />
+          </TabsContent>
 
-                <div className="space-y-2">
-                  <Label htmlFor="phone_number">Phone Number</Label>
-                  <Input
-                    id="phone_number"
-                    type="tel"
-                    value={formData.phone_number}
-                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                  />
-                </div>
+          <TabsContent value="recurring">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Repeat className="h-5 w-5" />
+                  Recurring Items
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RecurringItemsEditor companyId={company.id} agreement={activeAgreement} onChanged={fetchCompany} />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                <div className="space-y-2">
-                  <Label htmlFor="default_hourly_rate">Default Hourly Rate ($)</Label>
-                  <Input
-                    id="default_hourly_rate"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.default_hourly_rate}
-                    onChange={(e) => setFormData({ ...formData, default_hourly_rate: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <div className="flex items-center space-x-2 pt-2">
-                    <Checkbox
-                      id="is_active"
-                      checked={formData.is_active}
-                      onCheckedChange={(checked) => 
-                        setFormData({ ...formData, is_active: checked === true })
-                      }
-                    />
-                    <Label htmlFor="is_active" className="font-normal cursor-pointer">
-                      Is Active
-                    </Label>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Stripe Billing</Label>
-                  <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                    <Checkbox
-                      id="stripe_billing_enabled"
-                      checked={formData.stripe_billing_enabled}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, stripe_billing_enabled: checked === true })
-                      }
-                      className="mt-1"
-                    />
-                    <div className="grid gap-1">
-                      <Label htmlFor="stripe_billing_enabled" className="font-normal cursor-pointer">
-                        Enable Stripe invoice payments
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Hide Stripe payment options on this client's invoices when disabled.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="additional_notes">Additional Notes</Label>
-                  <Textarea
-                    id="additional_notes"
-                    value={formData.additional_notes}
-                    onChange={(e) => setFormData({ ...formData, additional_notes: e.target.value })}
-                    rows={4}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 pt-4">
-                <Button type="submit" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-                {company.last_activity && (
-                  <span className="text-sm text-muted-foreground">
-                    Last activity: {new Date(company.last_activity).toLocaleString()}
-                  </span>
-                )}
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Associated Users</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setInviteModalOpen(true)}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add User
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {company.users.length === 0 ? (
-              <p className="text-muted-foreground">No users assigned to this company yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {company.users.map(user => (
-                  <Badge key={user.id} variant="secondary" className="flex items-center gap-1 pr-1">
-                    <span>{user.name}</span>
-                    <button
-                      onClick={() => setUserToRemove(user.id)}
-                      className="ml-1 hover:bg-destructive/20 rounded-sm p-0.5"
-                      title="Remove user"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>Agreements</CardTitle>
-            </div>
-            <Button size="sm" onClick={handleCreateAgreement} disabled={saving}>
-              Create New Agreement
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {company.agreements.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No agreements found for this company.</p>
-            ) : (
-              <div className="space-y-3">
-                {company.agreements.map(agreement => (
-                  <div 
-                    key={agreement.id} 
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                    onClick={() => window.location.href = `/client/mgmt/agreement/${agreement.id}`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {new Date(agreement.active_date).toLocaleDateString()}
-                        </span>
-                        {agreement.client_company_signed_date ? (
-                          <Badge variant="default" className="bg-green-600">Signed</Badge>
-                        ) : (
-                          <Badge variant="secondary">Draft</Badge>
-                        )}
-                        {agreement.termination_date && (
-                          <Badge variant="destructive">Terminated</Badge>
-                        )}
-                        {agreement.is_visible_to_client && (
-                          <Badge variant="outline">Visible to Client</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {agreement.monthly_retainer_hours} hrs/mo @ ${agreement.monthly_retainer_fee}/mo
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="sm">View →</Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Metadata</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="font-medium">ID:</span> {company.id}
-              </div>
-              <div>
-                <span className="font-medium">Created:</span>{' '}
-                {new Date(company.created_at).toLocaleDateString()}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="activity">
+            <ActivityTab company={company} />
+          </TabsContent>
+        </Tabs>
       </div>
-        </TabsContent>
-
-        <TabsContent value="agreements">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Agreement Timeline</CardTitle>
-              <Button size="sm" onClick={handleCreateAgreement} disabled={saving}>
-                Create New Agreement
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.agreements.length === 0 ? (
-                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                  No agreements found for this company.
-                </div>
-              ) : (
-                company.agreements.map((agreement) => (
-                  <div
-                    key={agreement.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4 hover:bg-muted/40"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{new Date(agreement.active_date).toLocaleDateString()}</span>
-                        <CadenceBadge value={agreement.billing_cadence ?? 'monthly'} />
-                        <AgreementStatusBadges
-                          signedAt={agreement.client_company_signed_date}
-                          terminatedAt={agreement.termination_date}
-                          visible={agreement.is_visible_to_client}
-                        />
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {agreement.monthly_retainer_hours} hrs/mo at ${agreement.monthly_retainer_fee}/mo
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => window.location.href = `/client/mgmt/agreement/${agreement.id}`}>
-                      Open
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="invoices">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5" />
-                Admin Invoices
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdminInvoiceList companyId={company.id} agreements={company.agreements} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="time">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Time & Expenses
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md border p-3">
-                <div className="text-sm text-muted-foreground">Uninvoiced hours</div>
-                <div className="mt-1 text-2xl font-semibold">{(company.uninvoiced_hours ?? 0).toFixed(2)}</div>
-              </div>
-              <div className="rounded-md border p-3">
-                <div className="text-sm text-muted-foreground">Complete task value</div>
-                <div className="mt-1 text-2xl font-semibold">${(company.uninvoiced_task_complete_total ?? 0).toFixed(2)}</div>
-              </div>
-              <div className="rounded-md border p-3">
-                <div className="text-sm text-muted-foreground">Incomplete task value</div>
-                <div className="mt-1 text-2xl font-semibold">${(company.uninvoiced_task_incomplete_total ?? 0).toFixed(2)}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="recurring">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Repeat className="h-5 w-5" />
-                Recurring Items
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecurringItemsEditor companyId={company.id} agreement={activeAgreement} onChanged={fetchCompany} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="activity">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Notes / Activity log
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(company.activities ?? []).length === 0 ? (
-                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                  No activity has been logged for this company yet.
-                </div>
-              ) : (
-                (company.activities ?? []).map((activity) => (
-                  <div key={activity.id} className="rounded-md border p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-medium">{activity.action.replaceAll('.', ' ')}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {activity.created_at ? new Date(activity.created_at).toLocaleString() : ''}
-                      </div>
-                    </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {activity.actor_name ? `By ${activity.actor_name}` : 'System'}
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <AlertDialog open={userToRemove !== null} onOpenChange={(open) => !open && setUserToRemove(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove user</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the selected user from this company.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => userToRemove !== null && void handleRemoveUser(userToRemove)}>
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <InvitePeopleModal
-        open={inviteModalOpen}
-        onOpenChange={setInviteModalOpen}
-        companies={company ? [company] : []}
-        onSuccess={fetchCompany}
-        preselectedCompanyId={company?.id || null}
-      />
-    </div>
     </>
   )
 }

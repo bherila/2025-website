@@ -1,4 +1,4 @@
-import { ChevronRight, FileText, Loader2, Receipt, RefreshCw } from 'lucide-react'
+import { Loader2, Receipt, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import type { ClientCompany } from '@/client-management/types/common'
@@ -6,18 +6,11 @@ import type { Invoice, InvoiceListItem } from '@/client-management/types/invoice
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 
+import { fromPortalInvoice, type NormalizedInvoice } from '../shared/invoices/invoiceAdapters'
+import { InvoiceTable } from '../shared/invoices/InvoiceTable'
 import ClientPortalNav from './ClientPortalNav'
-import { InvoiceListStatusBadge } from './PortalBadges'
 
 interface ClientPortalInvoicesPageProps {
   slug: string
@@ -101,6 +94,12 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
     }
   }
 
+  const handleOpen = (invoice: NormalizedInvoice) => {
+    window.location.href = `/client/portal/${slug}/invoice/${invoice.id}`
+  }
+
+  const normalizedInvoices = invoices.map(fromPortalInvoice)
+
   if (loading) {
     return (
       <>
@@ -158,68 +157,12 @@ export default function ClientPortalInvoicesPage({ slug, companyName, companyId,
           )}
         </div>
 
-        {invoices.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No invoices yet</h3>
-              <p className="text-muted-foreground">Invoices will appear here once they are issued.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="border border-muted/50 rounded-md overflow-hidden bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="py-2">Invoice #</TableHead>
-                  <TableHead className="py-2">Period</TableHead>
-                  <TableHead className="py-2">Due Date</TableHead>
-                  <TableHead className="py-2">Status</TableHead>
-                  <TableHead className="text-right py-2">Total</TableHead>
-                  <TableHead className="w-[40px] py-2 text-right">
-                    <ChevronRight className="h-3 w-3 ml-auto text-muted-foreground/50" />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map(invoice => (
-                  <TableRow
-                    key={invoice.client_invoice_id}
-                    className="cursor-pointer group"
-                    onClick={() => window.location.href = `/client/portal/${slug}/invoice/${invoice.client_invoice_id}`}
-                  >
-                    <TableCell className="py-3 font-medium">
-                      {invoice.invoice_number || `INV-${invoice.client_invoice_id}`}
-                    </TableCell>
-                    <TableCell className="py-3 text-muted-foreground">
-                      {invoice.period_start && invoice.period_end ? (
-                        <span className="text-xs">
-                          {new Date(invoice.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(invoice.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="py-3 text-muted-foreground">
-                      {invoice.status === 'issued' && invoice.due_date ? (
-                        <span className="text-xs">
-                          {new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <InvoiceListStatusBadge status={invoice.status} periodEnd={invoice.period_end} />
-                    </TableCell>
-                    <TableCell className="text-right py-3 font-semibold">
-                      ${parseFloat(invoice.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="py-3 text-right">
-                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        <InvoiceTable
+          mode="portal"
+          invoices={normalizedInvoices}
+          slug={slug}
+          onOpen={handleOpen}
+        />
       </div>
     </>
   )

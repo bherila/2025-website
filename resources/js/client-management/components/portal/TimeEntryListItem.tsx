@@ -9,27 +9,41 @@ import {
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { abbreviateName } from '@/lib/nameUtils'
 
+import { clientInvoiceHref } from '../shared/time/invoiceHref'
 import DisabledEditButton from './DisabledEditButton'
-import { BillabilityBadge, DeferredBadge, InvoicedBadge, ProjectBadge } from './PortalBadges'
+import { BillabilityBadge, DeferrableBadge, InvoicedBadge, ProjectBadge, UpcomingMicroBadge } from './PortalBadges'
 
 interface TimeEntryListItemProps {
   entry: TimeEntry
   slug: string
   showDate?: boolean
-  onEdit?: (entry: TimeEntry) => void
+  showProject?: boolean
+  onEdit?: ((entry: TimeEntry) => void) | undefined
 }
 
-export default function TimeEntryListItem({ 
-  entry, 
-  slug, 
+export default function TimeEntryListItem({
+  entry,
+  slug,
   showDate = true,
-  onEdit 
+  showProject = true,
+  onEdit,
 }: TimeEntryListItemProps) {
   const isAdmin = useIsUserAdmin()
   const handleClick = () => {
     if (isAdmin && !entry.is_invoiced && onEdit) {
       onEdit(entry)
     }
+  }
+
+  function renderBillingBadge() {
+    if (entry.is_billable && entry.client_invoice) {
+      const href = clientInvoiceHref(slug, entry.client_invoice.client_invoice_id)
+      if (entry.client_invoice.status === 'draft') {
+        return <UpcomingMicroBadge href={href} />
+      }
+      return <InvoicedBadge href={href} />
+    }
+    return <BillabilityBadge isBillable={entry.is_billable} />
   }
 
   return (
@@ -49,15 +63,9 @@ export default function TimeEntryListItem({
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
           <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
           <div className="flex items-center gap-2 flex-wrap">
-            {entry.is_billable && entry.is_invoiced ? (
-              <InvoicedBadge href={entry.client_invoice ? `/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}` : undefined} />
-            ) : (
-              <BillabilityBadge isBillable={entry.is_billable} />
-            )}
-            {entry.project && <ProjectBadge name={entry.project.name} />}
-            {isAdmin && entry.is_deferred_billing && !entry.is_invoiced && (
-              <DeferredBadge title="Deferred: will be billed on a future invoice when retainer capacity is available." />
-            )}
+            {renderBillingBadge()}
+            {isAdmin && entry.is_deferred_billing && <DeferrableBadge />}
+            {showProject && entry.project && <ProjectBadge name={entry.project.name} />}
           </div>
         </div>
       </TableCell>
