@@ -75,7 +75,7 @@ All scheduled commands use `withoutOverlapping()` to prevent concurrent executio
 These instructions are for deploying to a cPanel-hosted Apache server with the document root set to `~/public_html`.
 
 ### Prerequisites
-- PHP 8.3 or higher
+- PHP 8.5 or higher
 - Composer
 - Node.js 18+ and pnpm
 - MySQL or compatible database (if using database features)

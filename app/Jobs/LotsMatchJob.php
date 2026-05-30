@@ -35,16 +35,34 @@ class LotsMatchJob implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = self::UNIQUE_FOR_SECONDS;
 
-    public readonly string $queuedAtIso;
+    /**
+     * These three properties were added after some jobs were already serialized.
+     * Class-body defaults + __wakeup() ensure old payloads deserialize cleanly
+     * without hitting "typed property must not be accessed before initialization".
+     */
+    public string $queuedAtIso = '';
+
+    public ?int $runId = null;
+
+    public string $mode = LotMatchRun::MODE_PRESERVE;
 
     public function __construct(
         public readonly int $documentId,
         public readonly ?int $taxYear = null,
         ?string $queuedAtIso = null,
-        public readonly ?int $runId = null,
-        public readonly string $mode = LotMatchRun::MODE_PRESERVE,
+        ?int $runId = null,
+        string $mode = LotMatchRun::MODE_PRESERVE,
     ) {
         $this->queuedAtIso = $queuedAtIso ?? now()->toIso8601String();
+        $this->runId = $runId;
+        $this->mode = $mode;
+    }
+
+    public function __wakeup(): void
+    {
+        if ($this->queuedAtIso === '') {
+            $this->queuedAtIso = now()->toIso8601String();
+        }
     }
 
     public function handle(LotMatcherService $lotMatcherService, LotMatchRunRecorder $lotMatchRunRecorder): void
