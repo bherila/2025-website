@@ -1,7 +1,6 @@
 import { AlertTriangle, ChevronRight, FileText } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { hasStripePaymentFailure } from '@/client-management/components/admin/AdminInvoiceList'
 import { InvoiceKindBadge } from '@/client-management/components/admin/ClientBadges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TableCell, TableRow } from '@/components/ui/table'
@@ -10,6 +9,7 @@ import type { NormalizedInvoice } from './invoiceAdapters'
 import { InvoicePeriod } from './InvoicePeriod'
 import { InvoiceStatusCell } from './InvoiceStatusCell'
 import { InvoiceTotal } from './InvoiceTotal'
+import { hasStripePaymentFailure } from './stripeUtils'
 
 // ── Admin row ──────────────────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ export function PortalInvoiceTableRow({ invoice, slug: _slug, onOpen }: PortalIn
         {invoice.invoice_number ?? `INV-${invoice.id}`}
       </TableCell>
       <TableCell className="py-3 text-muted-foreground">
-        {invoice.period_start ?? invoice.period_end ? (
+        {invoice.period_start && invoice.period_end ? (
           <InvoicePeriod start={invoice.period_start} end={invoice.period_end} variant="portal" />
         ) : '-'}
       </TableCell>

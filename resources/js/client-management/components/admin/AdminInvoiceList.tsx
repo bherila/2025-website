@@ -12,6 +12,9 @@ import { fetchWrapper } from '@/fetchWrapper'
 
 import { fromAdminInvoice, type NormalizedInvoice } from '../shared/invoices/invoiceAdapters'
 import { InvoiceTable } from '../shared/invoices/InvoiceTable'
+import { hasStripePaymentFailure } from '../shared/invoices/stripeUtils'
+
+export { hasStripePaymentFailure }
 
 export interface AdminInvoice {
   id: number
@@ -51,10 +54,6 @@ function countByKind(results: Record<string, unknown>): string {
   ].filter(Boolean)
 
   return parts.length > 0 ? `Created ${parts.join(', ')}.` : 'No new invoices to generate.'
-}
-
-export function hasStripePaymentFailure(invoice: Pick<AdminInvoice, 'stripe_failure_reason' | 'stripe_payment_status'>): boolean {
-  return Boolean(invoice.stripe_failure_reason || ['failed', 'canceled'].includes(invoice.stripe_payment_status ?? ''))
 }
 
 export default function AdminInvoiceList({ companyId, agreements = [] }: AdminInvoiceListProps) {

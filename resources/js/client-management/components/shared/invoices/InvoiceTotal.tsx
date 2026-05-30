@@ -2,13 +2,13 @@ import currency from 'currency.js'
 
 interface InvoiceTotalProps {
   value: number | string
-  /** 'admin' uses currency.js format() ($1,234.00). 'portal' uses $1,234.00 via currency.js too. */
+  /** 'admin' renders plain text ($1,234.00). 'portal' renders bold text ($1,234.00). */
   variant?: 'admin' | 'portal'
 }
 
 /**
  * Formats a money total consistently using currency.js (no raw arithmetic).
- * Both variants produce the same output; the prop is kept for future divergence.
+ * The portal variant wraps the amount in a bold span; the admin variant renders plain text.
  */
 export function InvoiceTotal({ value, variant = 'admin' }: InvoiceTotalProps) {
   const formatted = currency(value).format()
