@@ -1,7 +1,7 @@
 import { RefreshCw, RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import DateInput from '@/client-management/components/admin/DateInput'
+import DateRangeFilter from '@/client-management/components/admin/DateRangeFilter'
 import type { BillingCadence } from '@/client-management/types/client-agreement'
 import type { Agreement } from '@/client-management/types/common'
 import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
@@ -223,57 +223,54 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="issued">Issued</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="void">Void</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              <SelectItem value="cadence_period">Cadence period</SelectItem>
-              <SelectItem value="interim_overage">Interim overage</SelectItem>
-              <SelectItem value="terminal">Terminal</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={agreementFilter} onValueChange={setAgreementFilter}>
-            <SelectTrigger className="w-[190px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All agreements</SelectItem>
-              {agreements.map((agreement) => (
-                <SelectItem key={agreement.id} value={String(agreement.id)}>
-                  {formatBillingCadence((agreement.billing_cadence ?? 'monthly') as BillingCadence)} from {formatDate(agreement.active_date)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={stripeFailureFilter} onValueChange={setStripeFailureFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stripe results</SelectItem>
-              <SelectItem value="failed">Stripe failures</SelectItem>
-              <SelectItem value="clear">No Stripe failure</SelectItem>
-            </SelectContent>
-          </Select>
-          <DateInput id="invoice-date-from" value={dateFrom} onValueChange={setDateFrom} />
-          <DateInput id="invoice-date-to" value={dateTo} onValueChange={setDateTo} />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="issued">Issued</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="void">Void</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={kindFilter} onValueChange={setKindFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All kinds</SelectItem>
+            <SelectItem value="cadence_period">Cadence period</SelectItem>
+            <SelectItem value="interim_overage">Interim overage</SelectItem>
+            <SelectItem value="terminal">Terminal</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={agreementFilter} onValueChange={setAgreementFilter}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All agreements</SelectItem>
+            {agreements.map((agreement) => (
+              <SelectItem key={agreement.id} value={String(agreement.id)}>
+                {formatBillingCadence((agreement.billing_cadence ?? 'monthly') as BillingCadence)} from {formatDate(agreement.active_date)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={stripeFailureFilter} onValueChange={setStripeFailureFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Stripe results</SelectItem>
+            <SelectItem value="failed">Stripe failures</SelectItem>
+            <SelectItem value="clear">No Stripe failure</SelectItem>
+          </SelectContent>
+        </Select>
+        <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
         <Button onClick={() => void generateAll()} disabled={loading}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Generate drafts
