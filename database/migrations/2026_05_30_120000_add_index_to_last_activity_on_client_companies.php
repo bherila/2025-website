@@ -13,7 +13,7 @@ return new class extends Migration
         }
 
         Schema::table('client_companies', function (Blueprint $table): void {
-            $table->index('last_activity');
+            $table->index('last_activity', 'client_companies_last_activity_idx');
         });
     }
 
@@ -24,7 +24,7 @@ return new class extends Migration
         }
 
         Schema::table('client_companies', function (Blueprint $table): void {
-            $table->dropIndex(['last_activity']);
+            $table->dropIndex('client_companies_last_activity_idx');
         });
     }
 };

@@ -92,7 +92,6 @@ export default function AssociatedUsersCard({ company, companyId, onChanged, onE
       <InvitePeopleModal
         open={inviteModalOpen}
         onOpenChange={setInviteModalOpen}
-        companies={[company]}
         onSuccess={onChanged}
         preselectedCompanyId={companyId}
       />
