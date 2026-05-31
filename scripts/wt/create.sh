@@ -18,7 +18,7 @@ mkdir -p "$WT_ROOT"
 WT_ROOT_ABS="$(cd "$WT_ROOT" && pwd)"
 
 # Drop path separators and any chars that aren't safe identifiers, then strip
-# leading dots/dashes so the result can't be "." / ".." / "-..." — without this
+# leading dots/dashes so the result can't be "." / ".." / "-..." - without this
 # guard a name like "../foo" survives sanitization (it contains only allowed
 # chars under the old allowlist) and escapes WT_ROOT.
 SAFE_NAME="$(printf '%s' "$NAME" | tr -cs 'A-Za-z0-9._-' '-' | sed 's:^[.-]*::; s:-*$::')"
@@ -36,10 +36,13 @@ case "$WT_PATH" in
 esac
 
 if [[ -e "$WT_PATH" ]]; then
-  # Only reuse if it's a real registered git worktree — a stale plain directory
+  # Only reuse if it's a real registered git worktree - a stale plain directory
   # from a prior failed run shouldn't masquerade as success.
+  # Match the whole `worktree <path>` line literally - porcelain separates label
+  # and value with a single space, so awk's $2 would truncate paths that
+  # legitimately contain spaces (e.g. WORKTREE_ROOT="/tmp/my trees").
   if git -C "$PRIMARY_ROOT" worktree list --porcelain 2>/dev/null \
-       | awk -v p="$WT_PATH" '$1=="worktree" && $2==p {found=1} END {exit !found}'; then
+       | grep -Fxq "worktree $WT_PATH"; then
     echo "[wt] reusing existing worktree: $WT_PATH" >&2
     echo "$WT_PATH"
     exit 0
@@ -75,9 +78,9 @@ cow_copy_dir() {
   rsync -a "$src/" "$dst/"
 }
 
-# vendor/ is large and immutable enough that a CoW clone + composer install
+# vendor/ is large and immutable enough that a CoW clone plus composer install
 # reconcile is much faster than a cold install. node_modules is left to pnpm
-# (its global virtual store + frozen-lockfile install is faster than cloning).
+# because its global virtual store and frozen-lockfile install are fast.
 cow_copy_dir "$PRIMARY_ROOT/vendor" "$WT_PATH/vendor"
 
 (
