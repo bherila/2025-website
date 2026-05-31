@@ -714,7 +714,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
       <InvitePeopleModal
         open={inviteModalOpen}
         onOpenChange={setInviteModalOpen}
-        companies={company ? [company] : []}
         onSuccess={fetchCompany}
         preselectedCompanyId={company?.id || null}
       />

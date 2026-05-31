@@ -377,6 +377,7 @@ Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates
 
 // Client Management API routes
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies', [ClientCompanyApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/company-options', [ClientCompanyApiController::class, 'options']);
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'show']);
 Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'update']);
 Route::middleware(['web', 'auth'])->get('/client/mgmt/users', [ClientCompanyApiController::class, 'getUsers']);

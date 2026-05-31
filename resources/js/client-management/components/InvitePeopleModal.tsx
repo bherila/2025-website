@@ -1,7 +1,7 @@
 import { AlertCircle } from 'lucide-react'
 import { useEffect,useState } from 'react'
 
-import type { ClientCompany,User } from '@/client-management/types/common'
+import type { CompanyOption,User } from '@/client-management/types/common'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -12,7 +12,6 @@ import { fetchWrapper } from '@/fetchWrapper'
 interface InvitePeopleModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  companies: ClientCompany[]
   onSuccess: () => void
   preselectedCompanyId?: number | null
 }
@@ -31,8 +30,9 @@ function getErrorMessage(error: unknown): string {
   return 'An unexpected error occurred'
 }
 
-export default function InvitePeopleModal({ open, onOpenChange, companies, onSuccess, preselectedCompanyId }: InvitePeopleModalProps) {
+export default function InvitePeopleModal({ open, onOpenChange, onSuccess, preselectedCompanyId }: InvitePeopleModalProps) {
   const [users, setUsers] = useState<User[]>([])
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
@@ -58,6 +58,21 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
     }
   }
 
+  const fetchCompanies = async () => {
+    try {
+      const data = await fetchWrapper.get('/api/client/mgmt/company-options')
+
+      if (!Array.isArray(data)) {
+        throw new Error('Unexpected response from the company options API.')
+      }
+
+      setCompanies(data as CompanyOption[])
+    } catch (error) {
+      console.error('Error fetching companies:', error)
+      setCompanies([])
+    }
+  }
+
   const fetchCurrentUser = async () => {
     try {
       // Get current user from app-initial-data script tag
@@ -78,6 +93,7 @@ export default function InvitePeopleModal({ open, onOpenChange, companies, onSuc
   useEffect(() => {
     if (open) {
       fetchUsers()
+      fetchCompanies()
       fetchCurrentUser()
       setError(null)
       if (preselectedCompanyId) {

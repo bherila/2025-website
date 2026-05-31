@@ -8,10 +8,13 @@ use App\Services\ClientManagement\DeferredBillingAllocator;
 use App\Services\ClientManagement\OverpaymentCreditService;
 use App\Traits\SerializesDatesAsLocal;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 
 class ClientInvoice extends Model
 {
@@ -20,6 +23,13 @@ class ClientInvoice extends Model
     protected $table = 'client_invoices';
 
     protected $primaryKey = 'client_invoice_id';
+
+    /**
+     * Statuses for invoices that no longer carry a collectible balance.
+     *
+     * @var list<string>
+     */
+    public const SETTLED_STATUSES = ['paid', 'void'];
 
     protected $appends = ['payments_total', 'remaining_balance'];
 
@@ -150,6 +160,50 @@ class ClientInvoice extends Model
     public function getRemainingBalanceAttribute(): float
     {
         return (float) $this->invoice_total - (float) $this->payments_total;
+    }
+
+    /**
+     * Scope to invoices that may still carry a balance (not paid or voided).
+     *
+     * @param  Builder<ClientInvoice>  $query
+     * @return Builder<ClientInvoice>
+     */
+    public function scopeUnpaid(Builder $query): Builder
+    {
+        return $query->whereNotIn('status', self::SETTLED_STATUSES);
+    }
+
+    /**
+     * Portable SQL fragment for one invoice's remaining balance, clamped at
+     * zero. Mirrors {@see getRemainingBalanceAttribute()} plus the per-card
+     * `> 0` filter, so overpaid invoices contribute 0 rather than a negative
+     * amount. Soft-deleted payments are excluded to match the eager-loaded
+     * `payments` relation. Uses only ANSI SQL so it runs on both MySQL and
+     * SQLite.
+     */
+    public static function clampedRemainingSql(string $invoiceAlias = 'client_invoices'): string
+    {
+        $paid = 'COALESCE((SELECT SUM(p.amount) FROM client_invoice_payments p'
+            ." WHERE p.client_invoice_id = {$invoiceAlias}.client_invoice_id"
+            .' AND p.deleted_at IS NULL), 0)';
+
+        return "CASE WHEN {$invoiceAlias}.invoice_total - {$paid} > 0"
+            ." THEN {$invoiceAlias}.invoice_total - {$paid} ELSE 0 END";
+    }
+
+    /**
+     * Correlated subquery yielding a client company's open balance: the sum of
+     * clamped remaining balances across its non-settled invoices. Shared by the
+     * company-list `balance_due` sort and the global `open_balance` stat so the
+     * two can never disagree. Correlates on `client_companies.id`.
+     */
+    public static function companyOpenBalanceSubquery(): QueryBuilder
+    {
+        return DB::table('client_invoices as ci')
+            ->selectRaw('COALESCE(SUM('.self::clampedRemainingSql('ci').'), 0)')
+            ->whereColumn('ci.client_company_id', 'client_companies.id')
+            ->whereNull('ci.deleted_at')
+            ->whereNotIn('ci.status', self::SETTLED_STATUSES);
     }
 
     /**

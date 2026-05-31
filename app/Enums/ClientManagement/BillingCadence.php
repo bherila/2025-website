@@ -33,6 +33,28 @@ enum BillingCadence: string
     }
 
     /**
+     * Map of every cadence backing value to its month count.
+     *
+     * Single source of truth for any consumer (including SQL `CASE`
+     * expressions) that needs the cadence multiplier, so it can never drift
+     * from {@see monthsInCycle()}.
+     *
+     * @return array<string, int>
+     */
+    public static function monthsInCycleMap(): array
+    {
+        return array_reduce(
+            self::cases(),
+            function (array $carry, self $cadence): array {
+                $carry[$cadence->value] = $cadence->monthsInCycle();
+
+                return $carry;
+            },
+            []
+        );
+    }
+
+    /**
      * Returns the first day of the billing cycle that contains the given date,
      * aligned to calendar quarters/years.
      *
