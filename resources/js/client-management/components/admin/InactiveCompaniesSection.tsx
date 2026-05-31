@@ -12,18 +12,51 @@ interface InactiveCompaniesSectionProps {
   count: number
 }
 
+const PER_PAGE = 50
+
 /**
  * Collapsible list of inactive companies. The list is fetched lazily on first
- * expand so it never bloats the active-company payload.
+ * expand so it never bloats the active-company payload, and pages through the
+ * remaining companies on demand so none beyond the first page are unreachable.
  */
 export default function InactiveCompaniesSection({ count }: InactiveCompaniesSectionProps) {
   const [open, setOpen] = useState(false)
   const [companies, setCompanies] = useState<ClientCompany[] | null>(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (count <= 0) {
     return null
+  }
+
+  const fetchPage = async (nextPage: number, append: boolean): Promise<void> => {
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
+    setError(null)
+
+    try {
+      const response = await fetchWrapper.get(
+        `/api/client/mgmt/companies?status=inactive&per_page=${PER_PAGE}&sort=name&page=${nextPage}`
+      ) as CompanyListResponse
+      setCompanies((previous) => (append && previous ? [...previous, ...response.data] : response.data))
+      setPage(response.meta.current_page)
+      setHasMore(response.meta.has_more)
+    } catch (fetchError) {
+      console.error('Error fetching inactive companies:', fetchError)
+      setError('Failed to load inactive companies.')
+      if (!append) {
+        setCompanies([])
+      }
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
   }
 
   const toggle = async (): Promise<void> => {
@@ -34,20 +67,12 @@ export default function InactiveCompaniesSection({ count }: InactiveCompaniesSec
       return
     }
 
-    setLoading(true)
-    setError(null)
+    await fetchPage(1, false)
+  }
 
-    try {
-      const response = await fetchWrapper.get(
-        '/api/client/mgmt/companies?status=inactive&per_page=50&sort=name'
-      ) as CompanyListResponse
-      setCompanies(response.data)
-    } catch (fetchError) {
-      console.error('Error fetching inactive companies:', fetchError)
-      setError('Failed to load inactive companies.')
-      setCompanies([])
-    } finally {
-      setLoading(false)
+  const loadMore = (): void => {
+    if (hasMore && !loadingMore) {
+      void fetchPage(page + 1, true)
     }
   }
 
@@ -107,6 +132,15 @@ export default function InactiveCompaniesSection({ count }: InactiveCompaniesSec
               </CardHeader>
             </Card>
           ))}
+
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore && <Spinner size="small" className="mr-2 h-4 w-4" />}
+                Load more
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
