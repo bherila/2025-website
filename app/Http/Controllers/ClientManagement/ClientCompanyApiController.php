@@ -25,11 +25,23 @@ class ClientCompanyApiController extends Controller
     /**
      * Get all client companies with their users.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         Gate::authorize('Admin');
 
-        $companies = $this->applyCompanyMetricAggregates(
+        $status = $this->resolveStatusFilter($request->string('status')->toString());
+        $sort = $request->string('sort')->toString() ?: 'name';
+        $search = trim($request->string('search')->toString());
+        $needsAttentionOnly = $request->boolean('needs_attention');
+        $stripeDisabledOnly = $request->boolean('stripe_disabled');
+        $perPage = min(50, max(1, $request->integer('per_page', 25)));
+
+        // The needs-attention rule depends on periodRetainerHours()/cadence,
+        // which is not pure SQL, so resolve the (active) attention set once in
+        // PHP and reuse it for the KPI stat, the filter, and the per-card flag.
+        $attentionIds = $this->needsAttentionCompanyIds();
+
+        $query = $this->applyCompanyMetricAggregates(
             ClientCompany::query()
                 ->with([
                     'agreements' => function ($query): void {
@@ -40,6 +52,7 @@ class ClientCompanyApiController extends Controller
                                 'active_date',
                                 'termination_date',
                                 'monthly_retainer_hours',
+                                'retainer_hours',
                                 'billing_cadence'
                             )
                             ->orderByDesc('active_date')
@@ -51,14 +64,51 @@ class ClientCompanyApiController extends Controller
                             ->orderBy('users.name');
                     },
                 ])
-        )
-            ->orderByDesc('is_active')
-            ->orderBy('company_name')
-            ->get()
-            ->map(fn (ClientCompany $company): array => $this->serializeCompanyForIndex($company))
-            ->values();
+        );
 
-        return response()->json($companies);
+        $this->applyStatusFilter($query, $status);
+
+        if ($search !== '') {
+            $query->where(function (Builder $builder) use ($search): void {
+                $builder
+                    ->where('company_name', 'like', '%'.$search.'%')
+                    ->orWhere('slug', 'like', '%'.$search.'%');
+            });
+        }
+
+        if ($needsAttentionOnly) {
+            $query->whereIn('id', $attentionIds !== [] ? $attentionIds : [0]);
+        }
+
+        if ($stripeDisabledOnly) {
+            $query->where('stripe_billing_enabled', false);
+        }
+
+        $this->applySort($query, $sort, $status, $attentionIds);
+
+        $paginator = $query->paginate($perPage);
+
+        $companies = collect($paginator->items())
+            ->map(fn (ClientCompany $company): array => $this->serializeCompanyForIndex($company))
+            ->values()
+            ->all();
+
+        return response()->json([
+            'data' => $companies,
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+                'has_more' => $paginator->hasMorePages(),
+                'sort' => $sort,
+                'status' => $status,
+                'search' => $search,
+                'needs_attention' => $needsAttentionOnly,
+                'stripe_disabled' => $stripeDisabledOnly,
+            ],
+            'stats' => $this->companyStats($attentionIds),
+        ]);
     }
 
     /**
@@ -82,7 +132,7 @@ class ClientCompanyApiController extends Controller
                             'due_date',
                             'status'
                         )
-                        ->whereNotIn('status', ['paid', 'void'])
+                        ->unpaid()
                         ->with([
                             'payments' => function ($query): void {
                                 $query->select('client_invoice_payment_id', 'client_invoice_id', 'amount');
@@ -129,6 +179,152 @@ class ClientCompanyApiController extends Controller
             ], 'invoice_total');
     }
 
+    private function resolveStatusFilter(string $status): string
+    {
+        return in_array($status, ['active', 'inactive', 'all'], true) ? $status : 'active';
+    }
+
+    /**
+     * @param  Builder<ClientCompany>  $query
+     */
+    private function applyStatusFilter(Builder $query, string $status): void
+    {
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+    }
+
+    /**
+     * @param  Builder<ClientCompany>  $query
+     * @param  list<int>  $attentionIds
+     */
+    private function applySort(Builder $query, string $sort, string $status, array $attentionIds): void
+    {
+        switch ($sort) {
+            case 'balance_due':
+                $query
+                    ->addSelect(['balance_due_sort' => ClientInvoice::companyOpenBalanceSubquery()])
+                    ->orderByDesc('balance_due_sort')
+                    ->orderBy('company_name');
+
+                break;
+            case 'last_activity':
+                $query
+                    ->orderByRaw('last_activity is null')
+                    ->orderByDesc('last_activity')
+                    ->orderBy('company_name');
+
+                break;
+            case 'needs_attention':
+                if ($attentionIds !== []) {
+                    $query->orderByRaw('CASE WHEN id IN ('.implode(',', $attentionIds).') THEN 0 ELSE 1 END');
+                }
+                $query->orderBy('company_name');
+
+                break;
+            default:
+                if ($status === 'all') {
+                    $query->orderByDesc('is_active');
+                }
+                $query->orderBy('company_name');
+
+                break;
+        }
+    }
+
+    /**
+     * IDs of active companies that currently need attention (unpaid balance, or
+     * uninvoiced hours beyond the period retainer). Computed in PHP over a lean
+     * projection so it stays identical to the per-card flag and the KPI stat.
+     *
+     * @return list<int>
+     */
+    private function needsAttentionCompanyIds(): array
+    {
+        return ClientCompany::query()
+            ->select('client_companies.id')
+            ->where('is_active', true)
+            ->with(['agreements' => function ($query): void {
+                $query
+                    ->select('id', 'client_company_id', 'active_date', 'termination_date', 'monthly_retainer_hours', 'retainer_hours', 'billing_cadence')
+                    ->orderByDesc('active_date')
+                    ->orderByDesc('id');
+            }])
+            ->withSum([
+                'timeEntries as uninvoiced_minutes' => function ($query): void {
+                    $query
+                        ->where('is_billable', true)
+                        ->whereNull('client_invoice_line_id');
+                },
+            ], 'minutes_worked')
+            ->addSelect(['open_balance' => ClientInvoice::companyOpenBalanceSubquery()])
+            ->get()
+            ->filter(fn (ClientCompany $company): bool => $this->companyNeedsAttention($company))
+            ->map(fn (ClientCompany $company): int => (int) $company->id)
+            ->values()
+            ->all();
+    }
+
+    private function companyNeedsAttention(ClientCompany $company): bool
+    {
+        if ($this->numericCompanyAttribute($company, 'open_balance') > 0) {
+            return true;
+        }
+
+        $uninvoicedHours = round($this->numericCompanyAttribute($company, 'uninvoiced_minutes') / 60, 2);
+        $currentAgreement = $this->currentAgreement($company->getRelation('agreements'));
+        $periodRetainerHours = $currentAgreement?->periodRetainerHours();
+
+        return $uninvoicedHours > ($periodRetainerHours ?? 0.0);
+    }
+
+    /**
+     * Global KPI tile figures, independent of pagination/search/filter.
+     *
+     * @param  list<int>  $attentionIds
+     * @return array{active_clients: int, inactive_clients: int, open_balance: float, needs_attention: int, stripe_disabled: int}
+     */
+    private function companyStats(array $attentionIds): array
+    {
+        $activeClients = ClientCompany::query()->where('is_active', true)->count();
+        $inactiveClients = ClientCompany::query()->where('is_active', false)->count();
+        $stripeDisabled = ClientCompany::query()
+            ->where('is_active', true)
+            ->where('stripe_billing_enabled', false)
+            ->count();
+
+        $openBalance = (float) DB::table('client_invoices as ci')
+            ->join('client_companies as c', 'c.id', '=', 'ci.client_company_id')
+            ->where('c.is_active', true)
+            ->whereNull('c.deleted_at')
+            ->whereNull('ci.deleted_at')
+            ->whereNotIn('ci.status', ClientInvoice::SETTLED_STATUSES)
+            ->selectRaw('COALESCE(SUM('.ClientInvoice::clampedRemainingSql('ci').'), 0) as total')
+            ->value('total');
+
+        return [
+            'active_clients' => $activeClients,
+            'inactive_clients' => $inactiveClients,
+            'open_balance' => round($openBalance, 2),
+            'needs_attention' => count($attentionIds),
+            'stripe_disabled' => $stripeDisabled,
+        ];
+    }
+
+    /**
+     * Resolve the agreement that currently governs billing: the active one if
+     * present, otherwise the most recent.
+     *
+     * @param  Collection<int, ClientAgreement>  $agreements
+     */
+    private function currentAgreement(Collection $agreements): ?ClientAgreement
+    {
+        return $agreements->first(fn (ClientAgreement $agreement): bool => $agreement->isActive())
+            ?? $agreements->first();
+    }
+
     /**
      * Build the shared metric block for a company that has had metric aggregates applied.
      *
@@ -144,20 +340,18 @@ class ClientCompanyApiController extends Controller
         $unpaidInvoices = $invoices
             ->filter(fn (ClientInvoice $invoice): bool => $invoice->remaining_balance > 0)
             ->values();
-        $currentAgreement = $agreements
-            ->first(fn (ClientAgreement $agreement): bool => $agreement->isActive())
-            ?? $agreements->first();
+        $currentAgreement = $this->currentAgreement($agreements);
         $uninvoicedHours = round($this->numericCompanyAttribute($company, 'uninvoiced_minutes') / 60, 2);
-        $retainerHours = $currentAgreement ? (float) $currentAgreement->monthly_retainer_hours : null;
-        $cycleProgress = $retainerHours && $retainerHours > 0
-            ? min(100.0, round(($uninvoicedHours / $retainerHours) * 100, 1))
+        $periodRetainerHours = $currentAgreement?->periodRetainerHours();
+        $cycleProgress = $periodRetainerHours !== null && $periodRetainerHours > 0
+            ? min(100.0, round(($uninvoicedHours / $periodRetainerHours) * 100, 1))
             : null;
 
         return [
             'current_billing_cadence' => $currentAgreement?->effectiveBillingCadence()->value,
-            'current_retainer_hours' => $retainerHours,
+            'current_retainer_hours' => $periodRetainerHours,
             'current_cycle_progress' => $cycleProgress,
-            'needs_attention' => $unpaidInvoices->isNotEmpty() || $uninvoicedHours > ($retainerHours ?? 0),
+            'needs_attention' => $unpaidInvoices->isNotEmpty() || $uninvoicedHours > ($periodRetainerHours ?? 0.0),
             'total_balance_due' => round((float) $unpaidInvoices->sum(
                 fn (ClientInvoice $invoice): float => $invoice->remaining_balance
             ), 2),
@@ -434,6 +628,22 @@ class ClientCompanyApiController extends Controller
         $users = User::select('id', 'name', 'email', 'last_login_date')->orderBy('name')->get();
 
         return response()->json($users);
+    }
+
+    /**
+     * Lightweight company list for selects (e.g. the invite-people modal),
+     * independent of the paginated index payload.
+     */
+    public function options(): JsonResponse
+    {
+        Gate::authorize('Admin');
+
+        $companies = ClientCompany::query()
+            ->orderByDesc('is_active')
+            ->orderBy('company_name')
+            ->get(['id', 'company_name', 'slug']);
+
+        return response()->json($companies);
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -118,46 +119,68 @@ class ClientCompanyApiControllerTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonCount(1)
+            ->assertJsonCount(1, 'data')
             ->assertJsonStructure([
-                [
-                    'id',
-                    'company_name',
-                    'slug',
-                    'is_active',
-                    'stripe_billing_enabled',
-                    'created_at',
-                    'users' => [
-                        [
-                            'id',
-                            'name',
-                            'email',
-                            'user_role',
-                            'last_login_date',
+                'data' => [
+                    [
+                        'id',
+                        'company_name',
+                        'slug',
+                        'is_active',
+                        'stripe_billing_enabled',
+                        'created_at',
+                        'needs_attention',
+                        'users' => [
+                            [
+                                'id',
+                                'name',
+                                'email',
+                                'user_role',
+                                'last_login_date',
+                            ],
+                        ],
+                        'total_balance_due',
+                        'uninvoiced_hours',
+                        'uninvoiced_task_total',
+                        'uninvoiced_task_complete_total',
+                        'uninvoiced_task_incomplete_total',
+                        'lifetime_value',
+                        'unpaid_invoices' => [
+                            [
+                                'client_invoice_id',
+                                'invoice_number',
+                                'invoice_total',
+                                'issue_date',
+                                'due_date',
+                                'status',
+                                'remaining_balance',
+                            ],
                         ],
                     ],
-                    'total_balance_due',
-                    'uninvoiced_hours',
-                    'uninvoiced_task_total',
-                    'uninvoiced_task_complete_total',
-                    'uninvoiced_task_incomplete_total',
-                    'lifetime_value',
-                    'unpaid_invoices' => [
-                        [
-                            'client_invoice_id',
-                            'invoice_number',
-                            'invoice_total',
-                            'issue_date',
-                            'due_date',
-                            'status',
-                            'remaining_balance',
-                        ],
-                    ],
+                ],
+                'meta' => [
+                    'current_page',
+                    'per_page',
+                    'last_page',
+                    'total',
+                    'has_more',
+                    'sort',
+                    'status',
+                    'search',
+                    'needs_attention',
+                    'stripe_disabled',
+                ],
+                'stats' => [
+                    'active_clients',
+                    'inactive_clients',
+                    'open_balance',
+                    'needs_attention',
+                    'stripe_disabled',
                 ],
             ]);
 
         $payload = $response->json();
-        $companyPayload = $payload[0];
+        $companyPayload = $payload['data'][0];
 
         $this->assertSame('Acme Consulting', $companyPayload['company_name']);
         $this->assertTrue($companyPayload['stripe_billing_enabled']);
@@ -173,6 +196,13 @@ class ClientCompanyApiControllerTest extends TestCase
         $this->assertSame('INV-001', $companyPayload['unpaid_invoices'][0]['invoice_number']);
         $this->assertEquals(375, $companyPayload['unpaid_invoices'][0]['remaining_balance']);
         $this->assertArrayNotHasKey('payments', $companyPayload['unpaid_invoices'][0]);
+        $this->assertTrue($companyPayload['needs_attention']);
+
+        $this->assertSame(1, $payload['stats']['active_clients']);
+        $this->assertEquals(375, $payload['stats']['open_balance']);
+        $this->assertSame(1, $payload['stats']['needs_attention']);
+        $this->assertSame(0, $payload['stats']['stripe_disabled']);
+        $this->assertSame(1, $payload['meta']['total']);
     }
 
     public function test_non_admin_cannot_fetch_company_list(): void
@@ -191,6 +221,8 @@ class ClientCompanyApiControllerTest extends TestCase
         $company = ClientCompany::factory()->create();
         $agreement = ClientAgreement::factory()->for($company)->create([
             'billing_cadence' => 'monthly',
+            'monthly_retainer_hours' => 10,
+            'retainer_hours' => null,
         ]);
 
         DB::table('client_agreements')
@@ -199,11 +231,21 @@ class ClientCompanyApiControllerTest extends TestCase
                 'billing_cadence' => '"semi_annual"',
             ]);
 
-        $this
+        // 20 uninvoiced hours against a semi-annual period retainer of 60 hours
+        // (10 monthly x 6 months) => 33.3% and NOT needing attention. A SQL CASE
+        // over the raw quoted column would mis-multiply; the PHP path must not.
+        $this->seedUninvoicedMinutes($company, $admin, 1200);
+
+        $companyPayload = $this
             ->actingAs($admin)
             ->getJson('/api/client/mgmt/companies')
             ->assertOk()
-            ->assertJsonPath('0.current_billing_cadence', 'semi_annual');
+            ->json('data.0');
+
+        $this->assertSame('semi_annual', $companyPayload['current_billing_cadence']);
+        $this->assertEquals(60, $companyPayload['current_retainer_hours']);
+        $this->assertEquals(33.3, $companyPayload['current_cycle_progress']);
+        $this->assertFalse($companyPayload['needs_attention']);
     }
 
     public function test_admin_can_fetch_company_detail_with_agreements(): void
@@ -332,6 +374,252 @@ class ClientCompanyApiControllerTest extends TestCase
         ]);
     }
 
+    public function test_company_list_is_paginated(): void
+    {
+        $admin = $this->createAdminUser();
+        ClientCompany::factory()->count(30)->create(['is_active' => true]);
+
+        $firstPage = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies')
+            ->assertOk();
+
+        $this->assertCount(25, $firstPage->json('data'));
+        $this->assertSame(30, $firstPage->json('meta.total'));
+        $this->assertSame(2, $firstPage->json('meta.last_page'));
+        $this->assertTrue($firstPage->json('meta.has_more'));
+
+        $secondPage = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?page=2')
+            ->assertOk();
+
+        $this->assertCount(5, $secondPage->json('data'));
+        $this->assertFalse($secondPage->json('meta.has_more'));
+    }
+
+    public function test_company_list_search_matches_name_and_slug(): void
+    {
+        $admin = $this->createAdminUser();
+        ClientCompany::factory()->create(['company_name' => 'Alpha Corp', 'slug' => 'alpha-corp']);
+        ClientCompany::factory()->create(['company_name' => 'Beta Industries', 'slug' => 'beta-industries']);
+
+        $byName = $this->actingAs($admin)->getJson('/api/client/mgmt/companies?search=alpha')->assertOk();
+        $this->assertCount(1, $byName->json('data'));
+        $this->assertSame('Alpha Corp', $byName->json('data.0.company_name'));
+
+        $bySlug = $this->actingAs($admin)->getJson('/api/client/mgmt/companies?search=beta-ind')->assertOk();
+        $this->assertCount(1, $bySlug->json('data'));
+        $this->assertSame('Beta Industries', $bySlug->json('data.0.company_name'));
+    }
+
+    public function test_company_list_sorts_by_balance_due_descending(): void
+    {
+        $admin = $this->createAdminUser();
+        $small = ClientCompany::factory()->create(['company_name' => 'Small Balance']);
+        $large = ClientCompany::factory()->create(['company_name' => 'Large Balance']);
+        $this->createInvoice($small, ['invoice_number' => 'SB-1', 'invoice_total' => 100, 'status' => 'issued']);
+        $this->createInvoice($large, ['invoice_number' => 'LB-1', 'invoice_total' => 900, 'status' => 'issued']);
+
+        $response = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?sort=balance_due')
+            ->assertOk();
+
+        $this->assertSame('Large Balance', $response->json('data.0.company_name'));
+        $this->assertSame('Small Balance', $response->json('data.1.company_name'));
+    }
+
+    public function test_company_list_sorts_by_last_activity_with_nulls_last(): void
+    {
+        $admin = $this->createAdminUser();
+        ClientCompany::factory()->create(['company_name' => 'Stale', 'last_activity' => Carbon::create(2026, 1, 1)]);
+        ClientCompany::factory()->create(['company_name' => 'Fresh', 'last_activity' => Carbon::create(2026, 5, 1)]);
+        ClientCompany::factory()->create(['company_name' => 'Never', 'last_activity' => null]);
+
+        $names = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?sort=last_activity')
+            ->assertOk()
+            ->json('data.*.company_name');
+
+        $this->assertSame(['Fresh', 'Stale', 'Never'], $names);
+    }
+
+    public function test_needs_attention_filter_and_sort(): void
+    {
+        $admin = $this->createAdminUser();
+        $attention = ClientCompany::factory()->create(['company_name' => 'Owes Money']);
+        $this->createInvoice($attention, ['invoice_number' => 'OM-1', 'invoice_total' => 250, 'status' => 'issued']);
+        ClientCompany::factory()->create(['company_name' => 'All Clear']);
+
+        $filtered = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?needs_attention=1')
+            ->assertOk();
+        $this->assertCount(1, $filtered->json('data'));
+        $this->assertSame('Owes Money', $filtered->json('data.0.company_name'));
+
+        $sorted = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?sort=needs_attention')
+            ->assertOk();
+        $this->assertSame('Owes Money', $sorted->json('data.0.company_name'));
+    }
+
+    public function test_cycle_progress_and_attention_use_period_retainer_for_quarterly(): void
+    {
+        $admin = $this->createAdminUser();
+        $company = ClientCompany::factory()->create(['company_name' => 'Quarterly Co']);
+        ClientAgreement::factory()->for($company)->create([
+            'active_date' => Carbon::create(2026, 1, 1),
+            'termination_date' => null,
+            'billing_cadence' => 'quarterly',
+            'monthly_retainer_hours' => 10,
+            'retainer_hours' => null,
+        ]);
+        // 20 uninvoiced hours vs a 30-hour quarterly period retainer => 66.7%, not flagged.
+        $this->seedUninvoicedMinutes($company, $admin, 1200);
+
+        $payload = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies')
+            ->assertOk()
+            ->json('data.0');
+
+        $this->assertEquals(30, $payload['current_retainer_hours']);
+        $this->assertEquals(66.7, $payload['current_cycle_progress']);
+        $this->assertFalse($payload['needs_attention']);
+    }
+
+    public function test_monthly_retainer_flags_attention_when_hours_exceed_monthly_period(): void
+    {
+        $admin = $this->createAdminUser();
+        $company = ClientCompany::factory()->create(['company_name' => 'Monthly Co']);
+        ClientAgreement::factory()->for($company)->create([
+            'active_date' => Carbon::create(2026, 1, 1),
+            'termination_date' => null,
+            'billing_cadence' => 'monthly',
+            'monthly_retainer_hours' => 10,
+            'retainer_hours' => null,
+        ]);
+        // 20 uninvoiced hours vs a 10-hour monthly period retainer => over, flagged, capped at 100%.
+        $this->seedUninvoicedMinutes($company, $admin, 1200);
+
+        $payload = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies')
+            ->assertOk()
+            ->json('data.0');
+
+        $this->assertEquals(10, $payload['current_retainer_hours']);
+        $this->assertEquals(100, $payload['current_cycle_progress']);
+        $this->assertTrue($payload['needs_attention']);
+    }
+
+    public function test_open_balance_stat_matches_sum_of_card_balances(): void
+    {
+        $admin = $this->createAdminUser();
+        $a = ClientCompany::factory()->create();
+        $b = ClientCompany::factory()->create();
+        $this->createInvoice($a, ['invoice_number' => 'A-1', 'invoice_total' => 300, 'status' => 'issued']);
+        $overpaid = $this->createInvoice($b, ['invoice_number' => 'B-1', 'invoice_total' => 100, 'status' => 'issued']);
+        // Overpaid invoice must contribute 0, never a negative, to the open balance.
+        ClientInvoicePayment::create([
+            'client_invoice_id' => $overpaid->client_invoice_id,
+            'amount' => 150,
+            'payment_date' => Carbon::create(2026, 5, 4),
+            'payment_method' => 'ACH',
+        ]);
+
+        $response = $this->actingAs($admin)->getJson('/api/client/mgmt/companies')->assertOk();
+
+        $cardSum = array_sum(array_column($response->json('data'), 'total_balance_due'));
+        $this->assertEquals(300, $cardSum);
+        $this->assertEquals(300, $response->json('stats.open_balance'));
+        $attentionCount = count(array_filter(array_column($response->json('data'), 'needs_attention')));
+        $this->assertSame($attentionCount, $response->json('stats.needs_attention'));
+    }
+
+    public function test_stats_are_global_and_ignore_filters(): void
+    {
+        $admin = $this->createAdminUser();
+        $attention = ClientCompany::factory()->create(['company_name' => 'Owes Money']);
+        $this->createInvoice($attention, ['invoice_number' => 'OM-1', 'invoice_total' => 400, 'status' => 'issued']);
+        ClientCompany::factory()->create(['company_name' => 'All Clear']);
+
+        $response = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/companies?search=All+Clear')
+            ->assertOk();
+
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('All Clear', $response->json('data.0.company_name'));
+        $this->assertSame(2, $response->json('stats.active_clients'));
+        $this->assertSame(1, $response->json('stats.needs_attention'));
+        $this->assertEquals(400, $response->json('stats.open_balance'));
+    }
+
+    public function test_status_filter_scopes_active_inactive_and_all(): void
+    {
+        $admin = $this->createAdminUser();
+        ClientCompany::factory()->create(['company_name' => 'Active Co', 'is_active' => true]);
+        ClientCompany::factory()->create(['company_name' => 'Inactive Co', 'is_active' => false]);
+
+        $active = $this->actingAs($admin)->getJson('/api/client/mgmt/companies?status=active')->assertOk();
+        $this->assertSame(['Active Co'], $active->json('data.*.company_name'));
+
+        $inactive = $this->actingAs($admin)->getJson('/api/client/mgmt/companies?status=inactive')->assertOk();
+        $this->assertSame(['Inactive Co'], $inactive->json('data.*.company_name'));
+
+        $all = $this->actingAs($admin)->getJson('/api/client/mgmt/companies?status=all')->assertOk();
+        $this->assertCount(2, $all->json('data'));
+    }
+
+    public function test_admin_can_fetch_company_options(): void
+    {
+        $admin = $this->createAdminUser();
+        ClientCompany::factory()->create(['company_name' => 'Beta Co']);
+        ClientCompany::factory()->create(['company_name' => 'Alpha Co']);
+
+        $response = $this
+            ->actingAs($admin)
+            ->getJson('/api/client/mgmt/company-options')
+            ->assertOk()
+            ->assertJsonStructure([['id', 'company_name', 'slug']]);
+
+        $this->assertSame(['Alpha Co', 'Beta Co'], $response->json('*.company_name'));
+    }
+
+    public function test_non_admin_cannot_fetch_company_options(): void
+    {
+        $this->createAdminUser();
+
+        $this
+            ->actingAs($this->createUser())
+            ->getJson('/api/client/mgmt/company-options')
+            ->assertForbidden();
+    }
+
+    private function seedUninvoicedMinutes(ClientCompany $company, User $actor, int $minutes): void
+    {
+        $project = ClientProject::factory()->create([
+            'client_company_id' => $company->id,
+            'creator_user_id' => $actor->id,
+        ]);
+
+        ClientTimeEntry::factory()->create([
+            'project_id' => $project->id,
+            'client_company_id' => $company->id,
+            'minutes_worked' => $minutes,
+            'is_billable' => true,
+            'client_invoice_line_id' => null,
+            'user_id' => $actor->id,
+            'creator_user_id' => $actor->id,
+        ]);
+    }
+
+
     public function test_admin_can_fetch_company_detail_with_metric_block(): void
     {
         $admin = $this->createAdminUser();
@@ -417,6 +705,9 @@ class ClientCompanyApiControllerTest extends TestCase
         $this->assertNotEmpty($payload['agreements']);
     }
 
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
     /**
      * @param  array<string, mixed>  $overrides
      */

@@ -1,17 +1,18 @@
 import currency from 'currency.js'
-import { AlertCircle, ChevronDown, ChevronUp, Clock, CreditCard, DollarSign, ExternalLink, FileText, Package, Plus, Search, TrendingUp, Users, Wrench } from 'lucide-react'
-import { useCallback,useEffect,useState } from 'react'
+import { AlertCircle, CreditCard, DollarSign, Plus, Search, Users } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { CadenceBadge } from '@/client-management/components/admin/ClientBadges'
+import CompanyCard from '@/client-management/components/admin/CompanyCard'
+import InactiveCompaniesSection from '@/client-management/components/admin/InactiveCompaniesSection'
+import KpiTile from '@/client-management/components/admin/KpiTile'
 import InvitePeopleModal from '@/client-management/components/InvitePeopleModal'
-import type { ClientCompany } from '@/client-management/types/common'
+import type { ClientCompany, CompanyListResponse, CompanySort, GlobalStats, ListMeta } from '@/client-management/types/common'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
 
 function getErrorMessage(error: unknown): string {
@@ -26,77 +27,117 @@ function getErrorMessage(error: unknown): string {
   return 'Failed to load client companies.'
 }
 
-function formatLastLogin(lastLogin: string | null | undefined): string {
-  if (!lastLogin) return 'never logged in'
-  const date = new Date(lastLogin)
-  return `last login ${date.toLocaleDateString()}`
-}
+const SORT_OPTIONS: { value: CompanySort; label: string }[] = [
+  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'balance_due', label: 'Balance due' },
+  { value: 'needs_attention', label: 'Needs attention' },
+  { value: 'last_activity', label: 'Last activity' },
+]
 
 export default function ClientManagementIndexPage() {
   const [companies, setCompanies] = useState<ClientCompany[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showInactive, setShowInactive] = useState(false)
+  const [meta, setMeta] = useState<ListMeta | null>(null)
+  const [stats, setStats] = useState<GlobalStats | null>(null)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [sort, setSort] = useState<CompanySort>('name')
   const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false)
+  const [stripeDisabledOnly, setStripeDisabledOnly] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
+  const requestIdRef = useRef(0)
 
-  const fetchCompanies = useCallback(async (): Promise<void> => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const fetchCompanies = useCallback(async (page: number, append: boolean): Promise<void> => {
+    const requestId = ++requestIdRef.current
+
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
 
     try {
-      const data = await fetchWrapper.get('/api/client/mgmt/companies')
-
-      if (!Array.isArray(data)) {
-        throw new Error('Unexpected response from the company list API.')
+      const params = new URLSearchParams({ sort, page: String(page) })
+      if (debouncedSearch) {
+        params.set('search', debouncedSearch)
+      }
+      if (needsAttentionOnly) {
+        params.set('needs_attention', '1')
+      }
+      if (stripeDisabledOnly) {
+        params.set('stripe_disabled', '1')
       }
 
-      setCompanies(data as ClientCompany[])
-    } catch (error) {
-      console.error('Error fetching companies:', error)
-      setCompanies([])
-      setError(getErrorMessage(error))
+      const response = await fetchWrapper.get(`/api/client/mgmt/companies?${params.toString()}`) as CompanyListResponse
+
+      // Ignore responses superseded by a newer request (search/filter races).
+      if (requestId !== requestIdRef.current) {
+        return
+      }
+
+      setMeta(response.meta)
+      setStats(response.stats)
+      setCompanies((previous) => (append ? [...previous, ...response.data] : response.data))
+    } catch (caught) {
+      if (requestId !== requestIdRef.current) {
+        return
+      }
+
+      console.error('Error fetching companies:', caught)
+      setError(getErrorMessage(caught))
+      if (!append) {
+        setCompanies([])
+      }
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
-  }, [])
+  }, [debouncedSearch, sort, needsAttentionOnly, stripeDisabledOnly])
 
   useEffect(() => {
-    void fetchCompanies()
+    void fetchCompanies(1, false)
   }, [fetchCompanies])
 
-  const openInviteModal = (companyId?: number) => {
-    setSelectedCompanyId(companyId || null)
+  const loadMore = (): void => {
+    if (meta && meta.has_more && !loadingMore) {
+      void fetchCompanies(meta.current_page + 1, true)
+    }
+  }
+
+  const openInviteModal = (companyId?: number): void => {
+    setSelectedCompanyId(companyId ?? null)
     setInviteModalOpen(true)
   }
 
-  const filteredCompanies = companies.filter((company) => {
-    const matchesSearch = [company.company_name, company.slug ?? '']
-      .join(' ')
-      .toLowerCase()
-      .includes(search.toLowerCase())
-    const matchesAttention = !needsAttentionOnly || Boolean(company.needs_attention)
+  const initialLoading = loading && stats === null
 
-    return matchesSearch && matchesAttention
-  })
-  const activeCompanies = filteredCompanies.filter(c => c.is_active)
-  const inactiveCompanies = filteredCompanies.filter(c => !c.is_active)
-  const totalBalanceDue = activeCompanies.reduce(
-    (total, company) => total.add(company.total_balance_due ?? 0),
-    currency(0)
-  )
-  const stripeDisabledCompanies = activeCompanies.filter(company => company.stripe_billing_enabled === false).length
-
-  if (loading) {
+  if (initialLoading) {
     return (
-      <div className="container mx-auto p-8 max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
+      <div className="container mx-auto max-w-6xl p-8">
+        <div className="mb-6 flex items-center justify-between">
           <Skeleton className="h-9 w-64" />
           <div className="flex gap-2">
             <Skeleton className="h-10 w-32" />
             <Skeleton className="h-10 w-32" />
           </div>
+        </div>
+        <div className="mb-6 grid gap-3 md:grid-cols-4">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
         </div>
         <div className="space-y-4">
           <Skeleton className="h-32 w-full" />
@@ -108,17 +149,19 @@ export default function ClientManagementIndexPage() {
   }
 
   return (
-    <div className="container mx-auto p-8 max-w-6xl">
+    <div className="container mx-auto max-w-6xl p-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">Client Management</h1>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => openInviteModal()}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
             Invite People
           </Button>
-          <Button onClick={() => window.location.href = '/client/mgmt/new'}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Company
+          <Button asChild>
+            <a href="/client/mgmt/new">
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+              New Company
+            </a>
           </Button>
         </div>
       </div>
@@ -129,7 +172,7 @@ export default function ClientManagementIndexPage() {
           <AlertTitle>Unable to load companies</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
             <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={() => void fetchCompanies()}>
+            <Button variant="outline" size="sm" onClick={() => void fetchCompanies(1, false)}>
               Retry
             </Button>
           </AlertDescription>
@@ -137,273 +180,95 @@ export default function ClientManagementIndexPage() {
       )}
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Users className="h-4 w-4" />
-            Active clients
-          </div>
-          <div className="mt-2 text-2xl font-semibold">{activeCompanies.length}</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <DollarSign className="h-4 w-4" />
-            Open balance
-          </div>
-          <div className="mt-2 text-2xl font-semibold">{totalBalanceDue.format()}</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AlertCircle className="h-4 w-4" />
-            Need attention
-          </div>
-          <div className="mt-2 text-2xl font-semibold">{activeCompanies.filter(company => company.needs_attention).length}</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CreditCard className="h-4 w-4" />
-            Stripe disabled
-          </div>
-          <div className="mt-2 text-2xl font-semibold">{stripeDisabledCompanies}</div>
-        </div>
+        <KpiTile icon={Users} label="Active clients" value={stats?.active_clients ?? '—'} />
+        <KpiTile
+          icon={DollarSign}
+          label="Open balance"
+          value={stats ? currency(stats.open_balance).format() : '—'}
+          onClick={() => setSort('balance_due')}
+          active={sort === 'balance_due'}
+        />
+        <KpiTile
+          icon={AlertCircle}
+          label="Need attention"
+          value={stats?.needs_attention ?? '—'}
+          kind={stats && stats.needs_attention > 0 ? 'yellow' : 'default'}
+          onClick={() => setNeedsAttentionOnly((value) => !value)}
+          active={needsAttentionOnly}
+        />
+        <KpiTile
+          icon={CreditCard}
+          label="Stripe disabled"
+          value={stats?.stripe_disabled ?? '—'}
+          kind={stats && stats.stripe_disabled > 0 ? 'red' : 'default'}
+          onClick={() => setStripeDisabledOnly((value) => !value)}
+          active={stripeDisabledOnly}
+        />
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
             className="pl-9"
             placeholder="Search clients"
+            aria-label="Search clients"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        <Select value={sort} onValueChange={(value) => setSort(value as CompanySort)}>
+          <SelectTrigger className="w-[180px]" aria-label="Sort companies">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           variant={needsAttentionOnly ? 'default' : 'outline'}
-          onClick={() => setNeedsAttentionOnly(!needsAttentionOnly)}
+          onClick={() => setNeedsAttentionOnly((value) => !value)}
+          aria-pressed={needsAttentionOnly}
         >
           Needs attention
         </Button>
-        <div className="text-sm text-muted-foreground">
-          {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {loading && <Spinner size="small" className="h-4 w-4" />}
+          {meta ? `${meta.total} ${meta.total === 1 ? 'company' : 'companies'}` : null}
         </div>
       </div>
 
       <div className="space-y-4">
-        {activeCompanies.map(company => (
-          <Card key={company.id}>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <CardTitle className="text-xl">{company.company_name}</CardTitle>
-                    <CadenceBadge value={company.current_billing_cadence} />
-                    <Badge
-                      variant="outline"
-                      className={company.stripe_billing_enabled === false ? 'border-amber-300 text-amber-700' : 'text-muted-foreground'}
-                    >
-                      {company.stripe_billing_enabled === false ? 'Stripe Off' : 'Stripe On'}
-                    </Badge>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <div className="text-sm text-muted-foreground">
-                      {company.users.length} {company.users.length === 1 ? 'user' : 'users'}
-                    </div>
-                    {company.total_balance_due !== undefined && company.total_balance_due > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <DollarSign className="h-4 w-4 text-orange-600" />
-                        <span className="font-medium text-orange-600">
-                          {currency(company.total_balance_due).format()} balance due
-                        </span>
-                      </div>
-                    )}
-                    {company.uninvoiced_hours !== undefined && company.uninvoiced_hours > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Clock className="h-4 w-4 text-blue-600" />
-                        <span className="font-medium text-blue-600">
-                          {company.uninvoiced_hours.toFixed(2)} uninvoiced hours
-                        </span>
-                      </div>
-                    )}
-                    {company.uninvoiced_task_total !== undefined && company.uninvoiced_task_total > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Package className="h-4 w-4 text-purple-600" />
-                        <span className="font-medium text-purple-600">
-                          {currency(company.uninvoiced_task_total).format()} uninvoiced tasks
-                          {company.uninvoiced_task_complete_total !== undefined && company.uninvoiced_task_complete_total > 0 && (
-                            <span className="ml-1 text-xs">
-                              ({currency(company.uninvoiced_task_complete_total).format()} complete, {currency(company.uninvoiced_task_incomplete_total ?? 0).format()} incomplete)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                    {company.lifetime_value !== undefined && company.lifetime_value > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                        <span className="font-medium text-green-600">
-                          {currency(company.lifetime_value).format()} lifetime value
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 sm:justify-end">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => window.location.href = `/client/mgmt/${company.id}`}
-                  >
-                    <Wrench className="mr-1.5 h-3.5 w-3.5" />
-                    Manage
-                  </Button>
-                  {company.slug && (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => window.location.href = `/client/portal/${company.slug}`}
-                    >
-                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                      Portal
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-4">
-              {company.current_cycle_progress !== null && company.current_cycle_progress !== undefined && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Cycle progress</span>
-                    <span>{company.current_cycle_progress.toFixed(1)}%</span>
-                  </div>
-                  <Progress value={company.current_cycle_progress} />
-                </div>
-              )}
-
-              {company.unpaid_invoices && company.unpaid_invoices.length > 0 && (
-                <div className="border-t pt-3">
-                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                    <FileText className="h-4 w-4" />
-                    Unpaid Invoices
-                  </h4>
-                  <div className="space-y-2">
-                    {company.unpaid_invoices.map(invoice => (
-                      <div key={invoice.client_invoice_id} className="flex justify-between items-center text-sm p-2 bg-muted/30 rounded-md border border-muted">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{invoice.invoice_number}</span>
-                          <span className="text-muted-foreground">Due: {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</span>
-                          <Badge variant={invoice.status === 'issued' ? 'destructive' : 'secondary'} className="text-[10px] py-0 px-1.5">
-                            {invoice.status.toUpperCase()}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-orange-600">{currency(Number(invoice.remaining_balance)).format()}</span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-7 px-2 text-xs"
-                            onClick={() => window.location.href = `/client/portal/${company.slug}/invoice/${invoice.client_invoice_id}`}
-                          >
-                            View →
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {company.users.length > 0 ? (
-                <div className="flex flex-wrap gap-2 items-center">
-                  {company.users.map(user => (
-                    <Badge key={user.id} variant="secondary" className="py-1">
-                      <span>{user.name}</span>
-                      <span className="ml-1 text-xs opacity-70">({formatLastLogin(user.last_login_date)})</span>
-                    </Badge>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openInviteModal(company.id)}
-                    className="h-7"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add User
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openInviteModal(company.id)}
-                  className="h-7"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add User
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+        {companies.map((company) => (
+          <CompanyCard key={company.id} company={company} onAddUser={openInviteModal} />
         ))}
 
-        {activeCompanies.length === 0 && (
+        {!loading && companies.length === 0 && (
           <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            No active companies match the current filters.
+            No companies match the current filters.
           </div>
         )}
       </div>
 
-      {inactiveCompanies.length > 0 && (
-        <div className="mt-8">
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-muted-foreground"
-            onClick={() => setShowInactive(!showInactive)}
-          >
-            {showInactive ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
-            Inactive Companies ({inactiveCompanies.length})
+      {meta?.has_more && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore && <Spinner size="small" className="mr-2 h-4 w-4" />}
+            Load more
           </Button>
-          
-          {showInactive && (
-            <div className="mt-4 space-y-4">
-              {inactiveCompanies.map(company => (
-                <Card key={company.id} className="opacity-60">
-                  <CardHeader className="pb-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-xl">{company.company_name}</CardTitle>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Badge variant="outline">Inactive</Badge>
-                          <Badge
-                            variant="outline"
-                            className={company.stripe_billing_enabled === false ? 'border-amber-300 text-amber-700' : 'text-muted-foreground'}
-                          >
-                            {company.stripe_billing_enabled === false ? 'Stripe Off' : 'Stripe On'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => window.location.href = `/client/mgmt/${company.id}`}
-                      >
-                        <Wrench className="mr-1.5 h-3.5 w-3.5" />
-                        Manage
-                      </Button>
-                    </div>
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
-          )}
         </div>
       )}
+
+      <InactiveCompaniesSection count={stats?.inactive_clients ?? 0} />
 
       <InvitePeopleModal
         open={inviteModalOpen}
         onOpenChange={setInviteModalOpen}
-        companies={companies}
-        onSuccess={fetchCompanies}
+        onSuccess={() => void fetchCompanies(1, false)}
         preselectedCompanyId={selectedCompanyId}
       />
     </div>

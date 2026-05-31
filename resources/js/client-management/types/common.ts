@@ -45,6 +45,43 @@ export interface ClientCompany {
   activities?: ClientCompanyActivity[]
 }
 
+export type CompanySort = 'name' | 'balance_due' | 'needs_attention' | 'last_activity'
+
+export type CompanyStatusFilter = 'active' | 'inactive' | 'all'
+
+export interface CompanyOption {
+  id: number
+  company_name: string
+  slug: string | null
+}
+
+export interface ListMeta {
+  current_page: number
+  per_page: number
+  last_page: number
+  total: number
+  has_more: boolean
+  sort: CompanySort
+  status: CompanyStatusFilter
+  search: string
+  needs_attention: boolean
+  stripe_disabled: boolean
+}
+
+export interface GlobalStats {
+  active_clients: number
+  inactive_clients: number
+  open_balance: number
+  needs_attention: number
+  stripe_disabled: number
+}
+
+export interface CompanyListResponse {
+  data: ClientCompany[]
+  meta: ListMeta
+  stats: GlobalStats
+}
+
 export interface Project {
   id: number
   name: string
