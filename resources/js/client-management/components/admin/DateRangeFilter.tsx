@@ -66,6 +66,15 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
     setHasStartDate(false)
   }
 
+  function handleApplyTo() {
+    if (!pendingRange?.from) return
+    onFromChange('')
+    onToChange(toInputValue(pendingRange.from))
+    setOpen(false)
+    setPendingRange(undefined)
+    setHasStartDate(false)
+  }
+
   function handleSelect(range: DateRange | undefined) {
     if (!range) {
       if (hasStartDate && pendingRange?.from) {
@@ -104,14 +113,12 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
           className={cn('w-[240px] justify-start text-left font-normal', !from && !to && 'text-muted-foreground', className)}
         >
           <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-          {committed.from ? (
-            committed.to ? (
-              <>
-                {format(committed.from, 'MMM d, y')} – {format(committed.to, 'MMM d, y')}
-              </>
-            ) : (
-              <>From {format(committed.from, 'MMM d, y')}</>
-            )
+          {committed.from && committed.to ? (
+            <>{format(committed.from, 'MMM d, y')} – {format(committed.to, 'MMM d, y')}</>
+          ) : committed.from ? (
+            <>From {format(committed.from, 'MMM d, y')}</>
+          ) : committed.to ? (
+            <>To {format(committed.to, 'MMM d, y')}</>
           ) : (
             <span>Date range</span>
           )}
@@ -128,9 +135,14 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
         {(hasStartDate || from || to) && (
           <div className="flex items-center justify-between border-t p-2">
             {hasStartDate && pendingRange?.from && (
-              <Button variant="outline" size="sm" onClick={handleApplyFrom}>
-                From {format(pendingRange.from, 'MMM d')} only
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleApplyFrom}>
+                  From {format(pendingRange.from, 'MMM d')} only
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleApplyTo}>
+                  To {format(pendingRange.from, 'MMM d')} only
+                </Button>
+              </div>
             )}
             {(from || to) && (
               <Button variant="ghost" size="sm" onClick={handleClear} className="ml-auto">
