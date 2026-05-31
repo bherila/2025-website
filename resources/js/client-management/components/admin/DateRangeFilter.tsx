@@ -59,10 +59,19 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
 
   function handleSelect(range: DateRange | undefined) {
     if (!range) {
-      // User deselected (e.g. clicked the start date a second time) — reset pending
-      // without clearing the already-committed filter.
-      setPendingRange(undefined)
-      setHasStartDate(false)
+      if (hasStartDate && pendingRange?.from) {
+        // User clicked the already-selected start date a second time — commit as a single-day range.
+        const singleDay = toInputValue(pendingRange.from)
+        onFromChange(singleDay)
+        onToChange(singleDay)
+        setOpen(false)
+        setPendingRange(undefined)
+        setHasStartDate(false)
+      } else {
+        // No start date yet — just reset (e.g. spurious deselect on popover open).
+        setPendingRange(undefined)
+        setHasStartDate(false)
+      }
       return
     }
     setPendingRange(range)
