@@ -1,10 +1,8 @@
 'use client'
 
-import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
-import type { YearSelection } from '@/lib/financeRouteBuilder'
 
 import { DockActionsProvider } from './tax-preview/DockActions'
 import { DockHeaderBar } from './tax-preview/DockHeaderBar'
@@ -24,12 +22,10 @@ function TaxPreviewPageContent(): React.ReactElement {
     isLoading,
     error,
     pendingReviewCount,
-    refreshAll,
   } = useTaxPreview()
-
   const [isExporting, setIsExporting] = useState(false)
 
-  const handleYearChange = useCallback((year: YearSelection) => {
+  const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') {
       return
     }
@@ -77,25 +73,13 @@ function TaxPreviewPageContent(): React.ReactElement {
     <DockActionsProvider exportXlsx={handleExportXlsx} isExportingXlsx={isExporting}>
       <div className="flex h-full flex-col">
         <DockHeaderBar
-          year={selectedYear}
+          selectedYear={selectedYear}
           availableYears={availableYears}
-          isLoading={isLoading && availableYears.length === 0}
-          onYearChange={handleYearChange}
+          isLoadingYears={isLoading && availableYears.length === 0}
           pendingReviewCount={pendingReviewCount}
+          onYearChange={handleYearChange}
         />
-        {error && (
-          <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span className="flex-1">{error}</span>
-            <button
-              onClick={() => void refreshAll()}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs hover:bg-destructive/20"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Retry
-            </button>
-          </div>
-        )}
+        {error && <div className="border-b border-border px-4 py-2 text-sm text-destructive">{error}</div>}
         <TaxEstimateHeader defaultTier={hasColumns ? 'slim' : 'expanded'} />
         <div className="relative min-h-0 flex-1">
           <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
@@ -105,7 +89,7 @@ function TaxPreviewPageContent(): React.ReactElement {
   )
 }
 
-export default function TaxPreviewPage({ initialData }: { initialData?: TaxPreviewPreload | null }) {
+export default function TaxPreviewPage({ initialData }: { initialData?: TaxPreviewPreload | null }): React.ReactElement {
   return (
     <TaxPreviewProvider initialData={initialData ?? null}>
       <TaxPreviewPageContent />

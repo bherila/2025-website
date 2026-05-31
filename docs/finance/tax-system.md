@@ -186,19 +186,19 @@ php artisan finance:tax-reconcile --user=1 --year=2025 --fixture=tests/Fixtures/
 
 Committed fixtures must be anonymized: line numbers, labels, expected amounts, fact paths, precision, and notes are OK; raw documents, taxpayer names, payer names, SSNs, account names, and account numbers are not. Keep private source artifacts in ignored `training_data/tax_reconciliation/` when they help local debugging. The default 2025 fixture currently verifies Schedule 1, Schedule B, and Form 4952 line values against the backend fact layer; add Schedule D/Form 8949 lines as filed-return fixtures become available.
 
-### Tab Structure
+### Dock Form Structure
 
-Tab IDs are defined in `resources/js/components/finance/tax-tab-ids.ts`.
+The dock form registry is defined in `resources/js/components/finance/tax-preview/registry.tsx`. Some preview components still use source-navigation IDs from `resources/js/components/finance/tax-tab-ids.ts`; dock adapters translate those IDs to form IDs.
 
 ```
-Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule 2 | Schedule 3 | Schedule E | Schedule SE | Capital Gains | Form 1116 | Form 6251 | Form 8582 | Form 8995 | Schedule C | Tax Estimate | Action Items
+Home | Documents | Tax Estimate | Action Items | Schedules | Forms | Worksheets
 ```
 
-| Tab | Component(s) | Description |
+| Dock entry | Component(s) | Description |
 |-----|---|---|
-| Overview | `TaxIncomeOverview` | Income card grid + unified Tax Documents & Estimated Positions table + W-2 Income Summary |
-| W-2 | `TaxDocumentReviewModal` + `FinanceDocumentsPage` | W-2/W-2c intake through the unified document inbox and detailed review modal |
-| Schedules | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
+| Home | `DockHomeView` | Pinned, recent, app, form, and worksheet launchers |
+| Documents | `TaxDocuments1099Section`, `TaxDocumentsSection` | Account and W-2 document management with review actions |
+| Schedule B / Form 4952 | `ScheduleBPreview` + `Form4952Preview` | Schedule B (interest/dividends) + Form 4952 (investment interest) |
 | Schedule A | `ScheduleAPreview` + `UserDeductionsSection` | Itemized deductions — investment interest (K-1, 1099, short dividends) + user-entered SALT/mortgage/charitable via `fin_user_deductions` |
 | Schedule 1 | `Schedule1Preview` | Part I (additional income: Schedule C line 3, Schedule E line 5, 1099-MISC line 8z → line 10 total) + Part II (adjustments: deductible SE tax line 15, placeholders for HSA/health insurance/IRA/student loan → line 26 total). Feeds Form 1040 lines 8 and 10. |
 | Schedule 2 | `AdditionalTaxesPreview` (per-section) | Additional taxes (AMT line 1, Form 8959 Additional Medicare, Form 8960 NIIT) — surfaced both here and on the Tax Estimate tab. |
@@ -211,7 +211,7 @@ Overview | W-2 | Schedules | Schedule A | Schedule 1 | Schedule 2 | Schedule 3 |
 | Form 8582 | `Form8582Preview` | Passive activity loss limitations with per-activity breakdown and carryforward persistence |
 | Form 8995 | `Form8995Preview` | Sec. 199A QBI deduction — per-partnership breakdown, threshold check, estimated deduction |
 | Schedule C | `ScheduleCTab` | Self-employment income/expenses + Form 8829 home office |
-| Tax Estimate | `AdditionalTaxesPreview` + `Form1040Preview` + `TotalsTable` | Additional taxes (Schedule 2) + Form 1040 preview + federal/state tax tables |
+| Tax Estimate | `TaxEstimateHeader`, `AdditionalTaxesPreview`, `Form1040Preview`, `TotalsTable` | Additional taxes (Schedule 2), Form 1040 preview, federal/state tax tables, and estimated tax payments |
 | Action Items | `ActionItemsTab` | Resolved/outstanding alerts |
 
 **Short dividend integration:** `TaxPreviewContext` fetches transactions for all active accounts on load, runs `analyzeShortDividends()`, and exposes `shortDividendSummary` on the context. `Form4952Preview` receives `shortDividendDeduction` (the >45-day bucket total) as investment interest expense. `ScheduleAPreview` renders both the K-1/1099 sources and the short dividend breakdown in one place. See [lot-analyzer.md](lot-analyzer.md#short-dividend-analysis) for details.
@@ -844,9 +844,9 @@ Per-account upload uses the `ghost` variant **Add** dropdown with per-form-type 
 
 ## Tax Preview Page Layout
 
-The Tax Preview page (`TaxPreviewPage.tsx`) is a dock-style drill-down shell (see Tab Structure above for referenced internal sections). The home card view opens `Form`, `Schedule`, `App`, and `Worksheet` destinations, and selections open as columns in the shell. The `Tax Estimate`, `Account Documents`, and `Action Items` sections remain available as top-level dock app targets.
+The Tax Preview page (`TaxPreviewPage.tsx`) is a dock interface (see Dock Form Structure above). `DockHomeView` is the landing surface, `DockHeaderBar` owns year navigation/review/export actions, and `MillerShell` renders selected forms as columns.
 
-`Form1040Preview` is purely presentational — it receives backend `Form1040Facts`, maps them into `Form1040LineItem[]`, and shares that same mapping with `TaxPreviewContext` for the XLSX workbook export. Each 1040 line has an optional `navTab` that opens the corresponding schedule or form column in the dock shell on click, and an optional `sources` array for the drill-down data source modal.
+`Form1040Preview` is purely presentational — it receives pre-computed `Form1040LineItem[]` from `taxReturn.form1040` (computed once in `TaxPreviewContext` and shared with the XLSX workbook export). Each 1040 line has an optional `navTab` that the dock adapter translates to the relevant form column on click, and an optional `sources` array for the drill-down data source modal.
 
 All schedule computations (Schedule 1, B, C, D, E, SE, Forms 1116/4952/6251/8582/8959/8960/8995) run once in `TaxPreviewContext` and their results are stored on `TaxReturn1040`. Preview components receive pre-computed data — they do not recompute.
 
