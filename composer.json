@@ -9,7 +9,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": ">=8.4.1 <8.6",
+        "php": ">=8.3 <8.6",
         "bherila/genai-laravel": "@dev",
         "erusev/parsedown": "^1.7",
         "helgesverre/toon": "^3.1",
@@ -94,7 +94,7 @@
     },
     "config": {
         "platform": {
-            "php": "8.4.1"
+            "php": "8.3.0"
         },
         "optimize-autoloader": true,
         "preferred-install": "dist",
