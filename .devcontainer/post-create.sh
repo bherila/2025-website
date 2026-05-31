@@ -35,7 +35,7 @@ clone_or_fetch bherila/genai-laravel
 
 echo "==> Node / pnpm"
 corepack enable || true
-corepack prepare pnpm@10 --activate || true
+corepack prepare pnpm@11 --activate || true
 pnpm install --frozen-lockfile --prefer-offline
 
 echo "==> PHP / Composer"
