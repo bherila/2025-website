@@ -8,8 +8,8 @@
   "remoteUser": "vscode",
   "features": {
     "ghcr.io/devcontainers/features/node:2": {
-      "version": "22",
-      "pnpmVersion": "10",
+      "version": "24",
+      "pnpmVersion": "11.5.0",
       "nodeGypDependencies": true
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
