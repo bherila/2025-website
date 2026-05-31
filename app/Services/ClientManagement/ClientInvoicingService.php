@@ -8,7 +8,6 @@ use App\Enums\ClientManagement\InvoiceKind;
 use App\Enums\ClientManagement\InvoiceLineType;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
-use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientExpense;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
@@ -838,12 +837,7 @@ class ClientInvoicingService
             $invoice->recalculateTotal();
             $this->updateInvoicePeriodFromLineItems($invoice);
 
-            ClientCompanyActivity::record($company, 'invoice.generated', $invoice, [
-                'invoice_kind' => $invoice->invoiceKindValue(),
-                'period_start' => $invoice->period_start?->toDateString(),
-                'period_end' => $invoice->period_end?->toDateString(),
-                'invoice_total' => (float) $invoice->invoice_total,
-            ]);
+            (new InvoiceActivityLogger)->recordGenerated($company, $invoice);
 
             return $invoice->fresh(['lineItems']);
         });
@@ -1179,14 +1173,7 @@ class ClientInvoicingService
             (new OverpaymentCreditService)->applyCreditsToDraftInvoice($invoice);
             $invoice->recalculateTotal();
 
-            ClientCompanyActivity::record($company, 'invoice.generated', $invoice, [
-                'invoice_kind' => $invoice->invoiceKindValue(),
-                'period_start' => $invoice->period_start?->toDateString(),
-                'period_end' => $invoice->period_end?->toDateString(),
-                'cycle_start' => $invoice->cycle_start?->toDateString(),
-                'cycle_end' => $invoice->cycle_end?->toDateString(),
-                'invoice_total' => (float) $invoice->invoice_total,
-            ]);
+            (new InvoiceActivityLogger)->recordGenerated($company, $invoice);
 
             return $invoice->fresh(['lineItems']);
         });
@@ -1393,14 +1380,7 @@ class ClientInvoicingService
             (new OverpaymentCreditService)->applyCreditsToDraftInvoice($invoice);
             $invoice->recalculateTotal();
 
-            ClientCompanyActivity::record($company, 'invoice.generated', $invoice, [
-                'invoice_kind' => $invoice->invoiceKindValue(),
-                'period_start' => $invoice->period_start?->toDateString(),
-                'period_end' => $invoice->period_end?->toDateString(),
-                'cycle_start' => $invoice->cycle_start?->toDateString(),
-                'cycle_end' => $invoice->cycle_end?->toDateString(),
-                'invoice_total' => (float) $invoice->invoice_total,
-            ]);
+            (new InvoiceActivityLogger)->recordGenerated($company, $invoice);
 
             return $invoice->fresh(['lineItems']);
         });

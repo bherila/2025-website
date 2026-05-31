@@ -332,6 +332,91 @@ class ClientCompanyApiControllerTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_fetch_company_detail_with_metric_block(): void
+    {
+        $admin = $this->createAdminUser();
+
+        $company = ClientCompany::factory()->create([
+            'company_name' => 'Metrics Co',
+            'slug' => 'metrics-co',
+            'is_active' => true,
+        ]);
+
+        ClientAgreement::factory()->for($company)->create([
+            'active_date' => Carbon::create(2026, 1, 1),
+            'monthly_retainer_hours' => 10,
+            'monthly_retainer_fee' => 1000,
+        ]);
+
+        $project = ClientProject::factory()->create([
+            'client_company_id' => $company->id,
+            'creator_user_id' => $admin->id,
+            'slug' => 'metrics-project',
+        ]);
+
+        ClientTimeEntry::factory()->create([
+            'project_id' => $project->id,
+            'client_company_id' => $company->id,
+            'minutes_worked' => 120,
+            'is_billable' => true,
+            'client_invoice_line_id' => null,
+            'user_id' => $admin->id,
+            'creator_user_id' => $admin->id,
+        ]);
+
+        ClientTask::create([
+            'project_id' => $project->id,
+            'name' => 'Billable milestone',
+            'milestone_price' => 500,
+            'completed_at' => Carbon::create(2026, 5, 10),
+            'creator_user_id' => $admin->id,
+        ]);
+        ClientTask::create([
+            'project_id' => $project->id,
+            'name' => 'Incomplete milestone',
+            'milestone_price' => 300,
+            'creator_user_id' => $admin->id,
+        ]);
+
+        $unpaidInvoice = $this->createInvoice($company, [
+            'invoice_number' => 'DET-001',
+            'invoice_total' => 600,
+            'status' => 'issued',
+            'due_date' => Carbon::create(2026, 5, 15),
+        ]);
+        ClientInvoicePayment::create([
+            'client_invoice_id' => $unpaidInvoice->client_invoice_id,
+            'amount' => 100,
+            'payment_date' => Carbon::create(2026, 5, 12),
+            'payment_method' => 'ACH',
+        ]);
+
+        $this->createInvoice($company, [
+            'invoice_number' => 'DET-PAID',
+            'invoice_total' => 1000,
+            'status' => 'paid',
+        ]);
+
+        $response = $this
+            ->actingAs($admin)
+            ->getJson("/api/client/mgmt/companies/{$company->id}");
+
+        $response->assertOk();
+
+        $payload = $response->json();
+
+        $this->assertEquals(2.0, $payload['uninvoiced_hours']);
+        $this->assertEquals(800, $payload['uninvoiced_task_total']);
+        $this->assertEquals(500, $payload['uninvoiced_task_complete_total']);
+        $this->assertEquals(300, $payload['uninvoiced_task_incomplete_total']);
+        $this->assertEquals(500, $payload['total_balance_due']);
+        $this->assertEquals(1000, $payload['lifetime_value']);
+        $this->assertCount(1, $payload['unpaid_invoices']);
+        $this->assertSame('DET-001', $payload['unpaid_invoices'][0]['invoice_number']);
+        $this->assertEquals(500, $payload['unpaid_invoices'][0]['remaining_balance']);
+        $this->assertNotEmpty($payload['agreements']);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */

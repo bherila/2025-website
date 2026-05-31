@@ -11,6 +11,7 @@ use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\User;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -28,26 +29,48 @@ class ClientCompanyApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        $companies = ClientCompany::query()
+        $companies = $this->applyCompanyMetricAggregates(
+            ClientCompany::query()
+                ->with([
+                    'agreements' => function ($query): void {
+                        $query
+                            ->select(
+                                'id',
+                                'client_company_id',
+                                'active_date',
+                                'termination_date',
+                                'monthly_retainer_hours',
+                                'billing_cadence'
+                            )
+                            ->orderByDesc('active_date')
+                            ->orderByDesc('id');
+                    },
+                    'users' => function ($query): void {
+                        $query
+                            ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
+                            ->orderBy('users.name');
+                    },
+                ])
+        )
+            ->orderByDesc('is_active')
+            ->orderBy('company_name')
+            ->get()
+            ->map(fn (ClientCompany $company): array => $this->serializeCompanyForIndex($company))
+            ->values();
+
+        return response()->json($companies);
+    }
+
+    /**
+     * Apply all metric aggregate subquery selects to the given query builder.
+     *
+     * @param  Builder<ClientCompany>  $query
+     * @return Builder<ClientCompany>
+     */
+    private function applyCompanyMetricAggregates(Builder $query): Builder
+    {
+        return $query
             ->with([
-                'agreements' => function ($query): void {
-                    $query
-                        ->select(
-                            'id',
-                            'client_company_id',
-                            'active_date',
-                            'termination_date',
-                            'monthly_retainer_hours',
-                            'billing_cadence'
-                        )
-                        ->orderByDesc('active_date')
-                        ->orderByDesc('id');
-                },
-                'users' => function ($query): void {
-                    $query
-                        ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
-                        ->orderBy('users.name');
-                },
                 'invoices' => function ($query): void {
                     $query
                         ->select(
@@ -103,20 +126,15 @@ class ClientCompanyApiController extends Controller
                 'invoices as lifetime_value' => function ($query): void {
                     $query->where('status', 'paid');
                 },
-            ], 'invoice_total')
-            ->orderByDesc('is_active')
-            ->orderBy('company_name')
-            ->get()
-            ->map(fn (ClientCompany $company): array => $this->serializeCompanyForIndex($company))
-            ->values();
-
-        return response()->json($companies);
+            ], 'invoice_total');
     }
 
     /**
+     * Build the shared metric block for a company that has had metric aggregates applied.
+     *
      * @return array<string, mixed>
      */
-    private function serializeCompanyForIndex(ClientCompany $company): array
+    private function serializeCompanyMetrics(ClientCompany $company): array
     {
         /** @var Collection<int, ClientInvoice> $invoices */
         $invoices = $company->getRelation('invoices');
@@ -136,20 +154,6 @@ class ClientCompanyApiController extends Controller
             : null;
 
         return [
-            'id' => $company->id,
-            'company_name' => $company->company_name,
-            'slug' => $company->slug,
-            'address' => $company->address,
-            'website' => $company->website,
-            'phone_number' => $company->phone_number,
-            'default_hourly_rate' => $company->default_hourly_rate,
-            'additional_notes' => $company->additional_notes,
-            'is_active' => (bool) $company->is_active,
-            'stripe_billing_enabled' => (bool) $company->stripe_billing_enabled,
-            'last_activity' => $this->serializeDateForJson($company->last_activity),
-            'created_at' => $this->serializeDateForJson($company->created_at),
-            'users' => $this->serializeUsersForIndex($company),
-            'agreements' => [],
             'current_billing_cadence' => $currentAgreement?->effectiveBillingCadence()->value,
             'current_retainer_hours' => $retainerHours,
             'current_cycle_progress' => $cycleProgress,
@@ -166,6 +170,29 @@ class ClientCompanyApiController extends Controller
                 ->map(fn (ClientInvoice $invoice): array => $this->serializeUnpaidInvoiceForIndex($invoice))
                 ->all(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeCompanyForIndex(ClientCompany $company): array
+    {
+        return array_merge([
+            'id' => $company->id,
+            'company_name' => $company->company_name,
+            'slug' => $company->slug,
+            'address' => $company->address,
+            'website' => $company->website,
+            'phone_number' => $company->phone_number,
+            'default_hourly_rate' => $company->default_hourly_rate,
+            'additional_notes' => $company->additional_notes,
+            'is_active' => (bool) $company->is_active,
+            'stripe_billing_enabled' => (bool) $company->stripe_billing_enabled,
+            'last_activity' => $this->serializeDateForJson($company->last_activity),
+            'created_at' => $this->serializeDateForJson($company->created_at),
+            'users' => $this->serializeUsersForIndex($company),
+            'agreements' => [],
+        ], $this->serializeCompanyMetrics($company));
     }
 
     /**
@@ -274,26 +301,28 @@ class ClientCompanyApiController extends Controller
 
     private function findCompanyForDetail(int $id): ClientCompany
     {
-        return ClientCompany::query()
-            ->with([
-                'users' => function ($query): void {
-                    $query
-                        ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
-                        ->orderBy('users.name');
-                },
-                'agreements' => function ($query): void {
-                    $query
-                        ->orderByDesc('active_date')
-                        ->orderByDesc('id');
-                },
-                'agreements.recurringItems',
-                'activities' => function ($query): void {
-                    $query
-                        ->with('actor:id,name,email')
-                        ->latest()
-                        ->limit(100);
-                },
-            ])
+        return $this->applyCompanyMetricAggregates(
+            ClientCompany::query()
+                ->with([
+                    'users' => function ($query): void {
+                        $query
+                            ->select('users.id', 'users.name', 'users.email', 'users.user_role', 'users.last_login_date')
+                            ->orderBy('users.name');
+                    },
+                    'agreements' => function ($query): void {
+                        $query
+                            ->orderByDesc('active_date')
+                            ->orderByDesc('id');
+                    },
+                    'agreements.recurringItems',
+                    'activities' => function ($query): void {
+                        $query
+                            ->with('actor:id,name,email')
+                            ->latest()
+                            ->limit(100);
+                    },
+                ])
+        )
             ->findOrFail($id);
     }
 
@@ -302,7 +331,7 @@ class ClientCompanyApiController extends Controller
      */
     private function serializeCompanyForDetail(ClientCompany $company): array
     {
-        return [
+        return array_merge([
             'id' => $company->id,
             'company_name' => $company->company_name,
             'slug' => $company->slug,
@@ -319,7 +348,7 @@ class ClientCompanyApiController extends Controller
             'users' => $this->serializeUsersForIndex($company),
             'agreements' => $this->serializeAgreementsForDetail($company),
             'activities' => $this->serializeActivitiesForDetail($company),
-        ];
+        ], $this->serializeCompanyMetrics($company));
     }
 
     /**

@@ -42,7 +42,7 @@ describe('TimeEntryListItem - deferred badge', () => {
     _resetCache()
   })
 
-  it('renders Deferred badge for admin viewers', () => {
+  it('renders Deferable badge for admin viewers', () => {
     hydrateAdmin(true)
     render(
       <table>
@@ -51,10 +51,10 @@ describe('TimeEntryListItem - deferred badge', () => {
         </tbody>
       </table>,
     )
-    expect(screen.getByText(/Deferred/)).toBeInTheDocument()
+    expect(screen.getByText(/Deferable/)).toBeInTheDocument()
   })
 
-  it('hides Deferred badge for non-admins', () => {
+  it('hides Deferable badge for non-admins', () => {
     hydrateAdmin(false)
     render(
       <table>
@@ -63,10 +63,10 @@ describe('TimeEntryListItem - deferred badge', () => {
         </tbody>
       </table>,
     )
-    expect(screen.queryByText(/Deferred/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Deferable/)).not.toBeInTheDocument()
   })
 
-  it('does not render Deferred badge for non-deferred entries', () => {
+  it('does not render Deferable badge for non-deferred entries', () => {
     hydrateAdmin(true)
     const entry = deferredEntry()
     entry.is_deferred_billing = false
@@ -77,6 +77,6 @@ describe('TimeEntryListItem - deferred badge', () => {
         </tbody>
       </table>,
     )
-    expect(screen.queryByText(/Deferred/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Deferable/)).not.toBeInTheDocument()
   })
 })
