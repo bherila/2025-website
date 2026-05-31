@@ -7,24 +7,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import SummaryTile from '@/components/ui/summary-tile'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIsUserAdmin } from '@/hooks/useAppInitialData'
 import { formatHours } from '@/lib/formatHours'
 
- import ClientPortalNav from './ClientPortalNav'
-import DisabledEditButton from './DisabledEditButton'
- import NewTimeEntryModal from './NewTimeEntryModal'
-import { BillabilityBadge, DeferrableBadge, InvoicedBadge, ProjectBadge, UpcomingMicroBadge } from './PortalBadges'
- import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
+import type { SummaryMetric } from '../shared/time/MetricGrid'
+import { MetricGrid } from '../shared/time/MetricGrid'
+import ClientPortalNav from './ClientPortalNav'
+import NewTimeEntryModal from './NewTimeEntryModal'
+import TimeEntryListItem from './TimeEntryListItem'
+import TimeTrackingMonthSummaryRow from './TimeTrackingMonthSummaryRow'
+
 interface ClientPortalTimePageProps {
   slug: string
   companyName: string
@@ -38,14 +32,6 @@ function formatMonthYear(yearMonth: string): string {
   const [year, month] = yearMonth.split('-')
   const date = new Date(parseInt(year!), parseInt(month!) - 1)
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function abbreviateName(name: string | null | undefined): string {
-// ... existing abbreviateName function ...
-  if (!name) return 'Unknown'
-  const parts = name.trim().split(/\s+/)
-  if (parts.length < 2) return name
-  return `${parts[0]} ${parts[1]![0]}.`
 }
 
 export default function ClientPortalTimePage({ slug, companyName, companyId, initialCompanyUsers, initialProjects }: ClientPortalTimePageProps) {
@@ -180,6 +166,36 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
     return acc
   }, {} as Record<string, TimeEntry[]>) || {}
 
+  const summaryMetrics: SummaryMetric[] = [
+    {
+      key: 'total-time',
+      title: 'Total Time',
+      value: data?.total_time || '0:00',
+      icon: Clock,
+    },
+    {
+      key: 'billable-hours',
+      title: 'Billable Hours',
+      value: data?.billable_time || '0:00',
+      tone: 'green',
+      icon: Clock,
+    },
+    ...(data?.total_unbilled_hours && data.total_unbilled_hours > 0
+      ? [{
+          key: 'pending-billing',
+          title: 'Pending Billing',
+          value: formatHours(data.total_unbilled_hours),
+          tone: 'blue' as const,
+          icon: Info,
+          helpText: (
+            <p className="text-[10px] opacity-80 mt-1 leading-tight font-medium">
+              Billable hours from periods without an active agreement.
+            </p>
+          ),
+        }]
+      : []),
+  ]
+
   if (loading) {
     return (
       <TooltipProvider>
@@ -227,33 +243,7 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
 
           {/* Summary Bar */}
           <div className="mb-6 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryTile
-                title="Total Time"
-                icon={Clock}
-              >
-                {data?.total_time || '0:00'}
-              </SummaryTile>
-
-              <SummaryTile
-                title="Billable Hours"
-                icon={Clock}
-                kind="green"
-              >
-                {data?.billable_time || '0:00'}
-              </SummaryTile>
-
-              {data?.total_unbilled_hours && data.total_unbilled_hours > 0 ? (
-                <SummaryTile
-                  title="Pending Billing"
-                  icon={Info}
-                  kind="blue"
-                >
-                  {formatHours(data.total_unbilled_hours)}
-                  <p className="text-[10px] opacity-80 mt-1 leading-tight font-medium">Billable hours from periods without an active agreement.</p>
-                </SummaryTile>
-              ) : null}
-            </div>
+            <MetricGrid metrics={summaryMetrics} />
           </div>
 
           {(!data?.monthly_data || data.monthly_data.length === 0) ? (
@@ -352,63 +342,14 @@ export default function ClientPortalTimePage({ slug, companyName, companyId, ini
                                 const showProject = !prevEntry || prevEntry.project?.id !== entry.project?.id || showDate
 
                                 return (
-                                  <TableRow
+                                  <TimeEntryListItem
                                     key={entry.id}
-                                    className={`group ${isAdmin && !entry.is_invoiced ? 'cursor-pointer' : ''}`}
-                                    onClick={() => isAdmin && !entry.is_invoiced && openEditModal(entry)}
-                                  >
-                                    <TableCell className="py-2 align-top">
-                                      {showDate && (
-                                        <span className="text-sm font-medium">
-                                          {new Date(entry.date_worked).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="py-2 align-top">
-                                      <div className="flex flex-col">
-                                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold leading-none mb-1">{entry.job_type}</span>
-                                        <span className="text-sm leading-tight mb-2">{entry.name || '--'}</span>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          {entry.is_billable && entry.client_invoice ? (
-                                            entry.client_invoice.status === 'draft' ? (
-                                              <UpcomingMicroBadge href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} />
-                                            ) : (
-                                              <InvoicedBadge href={`/client/portal/${slug}/invoices/${entry.client_invoice.client_invoice_id}`} />
-                                            )
-                                          ) : (
-                                            <BillabilityBadge isBillable={entry.is_billable} />
-                                          )}
-                                          {isAdmin && entry.is_deferred_billing && <DeferrableBadge />}
-                                          {entry.project && <ProjectBadge name={entry.project.name} />}
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="py-2 align-top">
-                                      <span className="text-sm whitespace-nowrap text-muted-foreground">{abbreviateName(entry.user?.name)}</span>
-                                    </TableCell>
-                                    <TableCell className="text-right py-2 align-top text-sm">
-                                      {entry.formatted_time}
-                                    </TableCell>
-                                    {isAdmin && (
-                                      <TableCell className="py-1 align-top text-right">
-                                        {entry.is_invoiced ? (
-                                          <DisabledEditButton />
-                                        ) : (
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              openEditModal(entry)
-                                            }}
-                                          >
-                                            <Pencil className="h-3 w-3 text-muted-foreground" />
-                                          </Button>
-                                        )}
-                                      </TableCell>
-                                    )}
-                                  </TableRow>
+                                    entry={entry}
+                                    slug={slug}
+                                    showDate={showDate}
+                                    showProject={showProject}
+                                    onEdit={isAdmin ? openEditModal : undefined}
+                                  />
                                 )
                               })}
                             </TableBody>

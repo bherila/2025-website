@@ -74,7 +74,7 @@ describe('ClientManagementShowPage', () => {
     mockPut.mockReset()
   })
 
-  it('saves company details through fetchWrapper and keeps agreements renderable', async () => {
+  it('saves company details through the edit dialog and renders the active agreement', async () => {
     mockGet.mockResolvedValue(createCompany())
     mockPut.mockResolvedValue({
       company: createCompany({
@@ -85,6 +85,12 @@ describe('ClientManagementShowPage', () => {
     })
 
     render(<ClientManagementShowPage companyId={1} />)
+
+    // The overview shows the active agreement via the shared AgreementCard ("at" wording).
+    expect(await screen.findByText('10.00 hrs/mo at $1000.00/mo')).toBeInTheDocument()
+
+    // The edit form lives in a dialog now.
+    fireEvent.click(screen.getByRole('button', { name: /Edit company/i }))
 
     fireEvent.change(await screen.findByLabelText('Company Name *'), {
       target: { value: 'Renamed Consulting' },
@@ -107,8 +113,8 @@ describe('ClientManagementShowPage', () => {
     })
 
     expect(await screen.findByText('Company updated successfully')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Renamed Consulting')).toBeInTheDocument()
-    expect(screen.getByText('10.00 hrs/mo @ $1000.00/mo')).toBeInTheDocument()
+    // After save the dialog closes and the profile summary reflects the new name.
+    expect((await screen.findAllByText('Renamed Consulting')).length).toBeGreaterThan(0)
   })
 
   it('shows the save error returned by fetchWrapper', async () => {
@@ -118,6 +124,8 @@ describe('ClientManagementShowPage', () => {
     mockPut.mockRejectedValueOnce('Internal Server Error')
 
     render(<ClientManagementShowPage companyId={1} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Edit company/i }))
 
     fireEvent.change(await screen.findByLabelText('Company Name *'), {
       target: { value: 'Renamed Consulting' },

@@ -1,18 +1,20 @@
-import currency from 'currency.js'
-import { AlertTriangle, FileText, RefreshCw, RotateCcw } from 'lucide-react'
+import { RefreshCw, RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { InvoiceKindBadge, InvoiceStatusBadge } from '@/client-management/components/admin/ClientBadges'
-import DateInput from '@/client-management/components/admin/DateInput'
+import DateRangeFilter from '@/client-management/components/admin/DateRangeFilter'
 import type { BillingCadence } from '@/client-management/types/client-agreement'
 import type { Agreement } from '@/client-management/types/common'
 import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
+
+import { fromAdminInvoice, type NormalizedInvoice } from '../shared/invoices/invoiceAdapters'
+import { InvoiceTable } from '../shared/invoices/InvoiceTable'
+import { hasStripePaymentFailure } from '../shared/invoices/stripeUtils'
+
+export { hasStripePaymentFailure }
 
 export interface AdminInvoice {
   id: number
@@ -52,10 +54,6 @@ function countByKind(results: Record<string, unknown>): string {
   ].filter(Boolean)
 
   return parts.length > 0 ? `Created ${parts.join(', ')}.` : 'No new invoices to generate.'
-}
-
-export function hasStripePaymentFailure(invoice: Pick<AdminInvoice, 'stripe_failure_reason' | 'stripe_payment_status'>): boolean {
-  return Boolean(invoice.stripe_failure_reason || ['failed', 'canceled'].includes(invoice.stripe_payment_status ?? ''))
 }
 
 export default function AdminInvoiceList({ companyId, agreements = [] }: AdminInvoiceListProps) {
@@ -116,6 +114,11 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
     })
   }, [agreementFilter, dateFrom, dateTo, invoices, kindFilter, statusFilter, stripeFailureFilter])
 
+  const normalizedInvoices = useMemo(
+    () => filteredInvoices.map(fromAdminInvoice),
+    [filteredInvoices],
+  )
+
   const selectedInvoices = useMemo(
     () => invoices.filter((invoice) => selected.includes(invoice.id)),
     [invoices, selected],
@@ -137,11 +140,11 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
     }
   }
 
-  const runInvoiceAction = async (invoice: AdminInvoice, action: 'issue' | 'mark-paid' | 'void') => {
+  const runInvoiceAction = async (invoiceId: number, action: 'issue' | 'mark-paid' | 'void') => {
     setLoading(true)
     setError(null)
     try {
-      await fetchWrapper.post(`/api/client/mgmt/companies/${companyId}/invoices/${invoice.id}/${action}`, {})
+      await fetchWrapper.post(`/api/client/mgmt/companies/${companyId}/invoices/${invoiceId}/${action}`, {})
       await loadInvoices()
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
@@ -168,9 +171,9 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
     }
   }
 
-  const regenerateInvoice = async (invoice: AdminInvoice) => {
-    const cycleStart = invoice.cycle_start ?? invoice.period_start
-    const cycleEnd = invoice.cycle_end ?? invoice.period_end
+  const regenerateInvoice = async (invoice: NormalizedInvoice) => {
+    const cycleStart = invoice.cycle_start
+    const cycleEnd = invoice.cycle_end
     if (!cycleStart || !cycleEnd) {
       setError('This invoice does not have a period that can be regenerated.')
       return
@@ -199,59 +202,75 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
       : [...current, invoiceId])
   }
 
+  const renderActions = (invoice: NormalizedInvoice) => (
+    <>
+      {invoice.status === 'draft' && (
+        <Button size="sm" variant="outline" onClick={() => void runInvoiceAction(invoice.id, 'issue')}>Issue</Button>
+      )}
+      {invoice.status !== 'paid' && invoice.status !== 'void' && (
+        <Button size="sm" variant="outline" onClick={() => void runInvoiceAction(invoice.id, 'mark-paid')}>Paid</Button>
+      )}
+      {invoice.status !== 'void' && invoice.status !== 'paid' && (
+        <Button size="sm" variant="destructive" onClick={() => void runInvoiceAction(invoice.id, 'void')}>Void</Button>
+      )}
+      {invoice.status === 'draft' && (
+        <Button size="sm" variant="ghost" onClick={() => void regenerateInvoice(invoice)}>
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      )}
+    </>
+  )
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="issued">Issued</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="void">Void</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              <SelectItem value="cadence_period">Cadence period</SelectItem>
-              <SelectItem value="interim_overage">Interim overage</SelectItem>
-              <SelectItem value="terminal">Terminal</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={agreementFilter} onValueChange={setAgreementFilter}>
-            <SelectTrigger className="w-[190px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All agreements</SelectItem>
-              {agreements.map((agreement) => (
-                <SelectItem key={agreement.id} value={String(agreement.id)}>
-                  {formatBillingCadence((agreement.billing_cadence ?? 'monthly') as BillingCadence)} from {formatDate(agreement.active_date)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={stripeFailureFilter} onValueChange={setStripeFailureFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stripe results</SelectItem>
-              <SelectItem value="failed">Stripe failures</SelectItem>
-              <SelectItem value="clear">No Stripe failure</SelectItem>
-            </SelectContent>
-          </Select>
-          <DateInput id="invoice-date-from" value={dateFrom} onValueChange={setDateFrom} />
-          <DateInput id="invoice-date-to" value={dateTo} onValueChange={setDateTo} />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="issued">Issued</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="void">Void</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={kindFilter} onValueChange={setKindFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All kinds</SelectItem>
+            <SelectItem value="cadence_period">Cadence period</SelectItem>
+            <SelectItem value="interim_overage">Interim overage</SelectItem>
+            <SelectItem value="terminal">Terminal</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={agreementFilter} onValueChange={setAgreementFilter}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All agreements</SelectItem>
+            {agreements.map((agreement) => (
+              <SelectItem key={agreement.id} value={String(agreement.id)}>
+                {formatBillingCadence((agreement.billing_cadence ?? 'monthly') as BillingCadence)} from {formatDate(agreement.active_date)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={stripeFailureFilter} onValueChange={setStripeFailureFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Stripe results</SelectItem>
+            <SelectItem value="failed">Stripe failures</SelectItem>
+            <SelectItem value="clear">No Stripe failure</SelectItem>
+          </SelectContent>
+        </Select>
+        <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
         <Button onClick={() => void generateAll()} disabled={loading}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Generate drafts
@@ -280,87 +299,13 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10" />
-              <TableHead>Invoice</TableHead>
-              <TableHead>Cycle</TableHead>
-              <TableHead>Kind</TableHead>
-              <TableHead>Hours</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Stripe Failure</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredInvoices.map((invoice) => (
-              <TableRow key={invoice.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selected.includes(invoice.id)}
-                    onCheckedChange={() => toggleSelected(invoice.id)}
-                  />
-                </TableCell>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    {invoice.invoice_number ?? `Draft ${invoice.id}`}
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-sm">
-                  {formatDate(invoice.cycle_start ?? invoice.period_start)} - {formatDate(invoice.cycle_end ?? invoice.period_end)}
-                </TableCell>
-                <TableCell><InvoiceKindBadge value={invoice.invoice_kind} /></TableCell>
-                <TableCell className="text-sm">
-                  {Number(invoice.hours_worked ?? 0).toFixed(2)} worked / {Number(invoice.retainer_hours_included ?? 0).toFixed(2)} retained
-                </TableCell>
-                <TableCell>{currency(invoice.invoice_total).format()}</TableCell>
-                <TableCell><InvoiceStatusBadge value={invoice.status} /></TableCell>
-                <TableCell className="max-w-[220px] text-xs text-muted-foreground">
-                  {hasStripePaymentFailure(invoice) ? (
-                    <div className="flex items-start gap-2 text-destructive">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span className="line-clamp-2">
-                        {invoice.stripe_failure_reason ?? `Stripe payment ${invoice.stripe_payment_status}`}
-                      </span>
-                    </div>
-                  ) : (
-                    <span>—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-2">
-                    {invoice.status === 'draft' && (
-                      <Button size="sm" variant="outline" onClick={() => void runInvoiceAction(invoice, 'issue')}>Issue</Button>
-                    )}
-                    {invoice.status !== 'paid' && invoice.status !== 'void' && (
-                      <Button size="sm" variant="outline" onClick={() => void runInvoiceAction(invoice, 'mark-paid')}>Paid</Button>
-                    )}
-                    {invoice.status !== 'void' && invoice.status !== 'paid' && (
-                      <Button size="sm" variant="destructive" onClick={() => void runInvoiceAction(invoice, 'void')}>Void</Button>
-                    )}
-                    {invoice.status === 'draft' && (
-                      <Button size="sm" variant="ghost" onClick={() => void regenerateInvoice(invoice)}>
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {filteredInvoices.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                  No invoices match these filters.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <InvoiceTable
+        mode="admin"
+        invoices={normalizedInvoices}
+        selected={selected}
+        onToggleSelected={toggleSelected}
+        renderActions={renderActions}
+      />
     </div>
   )
 }
