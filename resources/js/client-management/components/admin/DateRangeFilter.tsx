@@ -57,6 +57,15 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
     setOpen(false)
   }
 
+  function handleApplyFrom() {
+    if (!pendingRange?.from) return
+    onFromChange(toInputValue(pendingRange.from))
+    onToChange('')
+    setOpen(false)
+    setPendingRange(undefined)
+    setHasStartDate(false)
+  }
+
   function handleSelect(range: DateRange | undefined) {
     if (!range) {
       if (hasStartDate && pendingRange?.from) {
@@ -101,7 +110,7 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
                 {format(committed.from, 'MMM d, y')} – {format(committed.to, 'MMM d, y')}
               </>
             ) : (
-              format(committed.from, 'MMM d, y')
+              <>From {format(committed.from, 'MMM d, y')}</>
             )
           ) : (
             <span>Date range</span>
@@ -116,11 +125,18 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, cl
           onSelect={handleSelect}
           numberOfMonths={2}
         />
-        {(from || to) && (
-          <div className="flex justify-end border-t p-2">
-            <Button variant="ghost" size="sm" onClick={handleClear}>
-              Clear
-            </Button>
+        {(hasStartDate || from || to) && (
+          <div className="flex items-center justify-between border-t p-2">
+            {hasStartDate && pendingRange?.from && (
+              <Button variant="outline" size="sm" onClick={handleApplyFrom}>
+                From {format(pendingRange.from, 'MMM d')} only
+              </Button>
+            )}
+            {(from || to) && (
+              <Button variant="ghost" size="sm" onClick={handleClear} className="ml-auto">
+                Clear
+              </Button>
+            )}
           </div>
         )}
       </PopoverContent>
