@@ -39,8 +39,15 @@ class ClientProposalApiController extends Controller
     {
         Gate::authorize('Admin');
 
-        return ClientProposal::with(['items', 'clientCompany', 'agreement', 'project', 'acceptedByUser', 'respondedByUser'])
-            ->findOrFail($id);
+        return ClientProposal::with([
+            'items',
+            'clientCompany',
+            'agreement',
+            'project',
+            'acceptedByUser',
+            'respondedByUser',
+            'versions:id,root_id,version,status,created_at',
+        ])->findOrFail($id);
     }
 
     public function store(StoreClientProposalRequest $request): JsonResponse

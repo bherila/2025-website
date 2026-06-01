@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,6 +36,12 @@ interface ProposalBuilderPageProps {
   proposalId: number
   companyId: number
   companyName: string
+}
+
+interface VersionRow {
+  id: number
+  version: number
+  status: string
 }
 
 interface FormState {
@@ -95,12 +101,17 @@ export default function ProposalBuilderPage({ proposalId, companyId, companyName
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
   const [items, setItems] = useState<EditableItem[]>([])
+  const [versions, setVersions] = useState<VersionRow[]>([])
 
   const applyProposal = useCallback((data: unknown) => {
     const parsed = ProposalSchema.parse(data)
     setProposal(parsed)
     setForm(toFormState(parsed))
     setItems(toEditableItems(parsed))
+    const raw = data as { versions?: VersionRow[] }
+    if (Array.isArray(raw.versions)) {
+      setVersions([...raw.versions].sort((a, b) => a.version - b.version))
+    }
   }, [])
 
   const fetchProposal = useCallback(async () => {
@@ -267,6 +278,11 @@ export default function ProposalBuilderPage({ proposalId, companyId, companyName
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Badge variant="outline">v{proposal.version}</Badge>
           <ProposalStatusBadge value={proposal.status} />
+          {!isEditable && proposal.status !== 'accepted' && (
+            <Button variant="outline" size="sm" onClick={() => void handleRevision()} disabled={saving}>
+              Create Revision
+            </Button>
+          )}
         </div>
       </div>
 
@@ -325,13 +341,6 @@ export default function ProposalBuilderPage({ proposalId, companyId, companyName
               </>
             )}
           </CardContent>
-          {proposal.status !== 'accepted' && (
-            <CardFooter>
-              <Button onClick={() => void handleRevision()} disabled={saving}>
-                Create Revision
-              </Button>
-            </CardFooter>
-          )}
         </Card>
       )}
 
@@ -539,6 +548,30 @@ export default function ProposalBuilderPage({ proposalId, companyId, companyName
           <ProposalItemsEditor items={items} onChange={setItems} disabled={!isEditable} />
         </CardContent>
       </Card>
+
+      {versions.length > 1 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Version History</CardTitle>
+            <CardDescription>Every version of this proposal chain.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {versions.map((version) => (
+              <a
+                key={version.id}
+                href={`/client/mgmt/proposal/${version.id}`}
+                className={`flex items-center justify-between rounded-md border p-3 hover:bg-muted/40 ${version.id === proposal.id ? 'border-primary bg-muted/40' : ''}`}
+              >
+                <span className="flex items-center gap-2">
+                  <Badge variant="outline">v{version.version}</Badge>
+                  {version.id === proposal.id && <span className="text-xs text-muted-foreground">(current)</span>}
+                </span>
+                <ProposalStatusBadge value={version.status} />
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {isEditable && (
         <div className="flex flex-wrap justify-between gap-3">
