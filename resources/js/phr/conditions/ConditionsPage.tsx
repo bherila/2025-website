@@ -505,8 +505,8 @@ export default function ConditionsPage({ patientId, onDrill }: PhrListPageProps)
       {crud.canManage && (
         <div className="mb-6 flex flex-wrap items-start gap-2">
           <AddForm busy={crud.isMutating('add')} onSubmit={addCondition} />
-          <Button size="sm" variant="outline" asChild>
-            <a href={`/phr/patient/${patientId}/documents?job_type=phr_problem_list`}>Import via GenAI</a>
+          <Button type="button" size="sm" variant="outline" onClick={() => onDrill?.({ id: 'documents' })}>
+            Import via GenAI
           </Button>
         </div>
       )}

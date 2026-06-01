@@ -236,8 +236,8 @@ export default function ImmunizationsPage({ patientId, onDrill }: PhrListPagePro
       {crud.canManage && (
         <div className="mb-6 flex flex-wrap items-start gap-2">
           <AddForm busy={crud.isMutating('add')} onSubmit={addImmunization} />
-          <Button size="sm" variant="outline" asChild>
-            <a href={`/phr/patient/${patientId}/documents?job_type=phr_immunization`}>Import via GenAI</a>
+          <Button type="button" size="sm" variant="outline" onClick={() => onDrill?.({ id: 'documents' })}>
+            Import via GenAI
           </Button>
         </div>
       )}
