@@ -18,7 +18,7 @@ export default function ClientPortalProposalsPage({
   proposals,
 }: ClientPortalProposalsPageProps) {
   const openProposal = (proposal: Proposal) => {
-    window.location.href = `/client/portal/${slug}/proposal/${proposal.id}`
+    window.location.href = `/client/portal/${encodeURIComponent(slug)}/proposal/${encodeURIComponent(String(proposal.id))}`
   }
 
   return (

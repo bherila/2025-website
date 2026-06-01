@@ -90,6 +90,39 @@ class ProposalClientActionsTest extends TestCase
         Mail::assertSent(ProposalActionMail::class, fn (ProposalActionMail $mail) => $mail->action === 'changes_requested');
     }
 
+    public function test_member_can_accept_after_requesting_changes_on_the_latest_version(): void
+    {
+        $proposal = ClientProposal::factory()->for($this->company)
+            ->sent()
+            ->create(['status' => ProposalStatus::ChangesRequested]);
+
+        $this->actingAs($this->member)
+            ->postJson("/api/client/portal/{$this->company->slug}/proposals/{$proposal->id}/accept", [
+                'name' => 'Carl Client',
+                'title' => 'Owner',
+            ])
+            ->assertOk()
+            ->assertJsonPath('proposal.status', ProposalStatus::Accepted->value);
+
+        $this->assertSame(1, ClientAgreement::where('source_proposal_id', $proposal->id)->count());
+    }
+
+    public function test_cannot_act_on_a_superseded_version(): void
+    {
+        $original = ClientProposal::factory()->for($this->company)->sent()->create();
+        // A newer draft revision exists, so $original is no longer the latest version.
+        ClientProposal::factory()->revisionOf($original)->create();
+
+        $this->actingAs($this->member)
+            ->postJson("/api/client/portal/{$this->company->slug}/proposals/{$original->id}/accept", [
+                'name' => 'Carl Client',
+                'title' => 'Owner',
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame(0, ClientAgreement::where('source_proposal_id', $original->id)->count());
+    }
+
     public function test_non_member_cannot_act_on_a_proposal(): void
     {
         $proposal = ClientProposal::factory()->for($this->company)->sent()->create();

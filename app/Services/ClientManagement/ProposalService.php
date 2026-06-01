@@ -176,6 +176,15 @@ class ProposalService
         }
 
         $result = DB::transaction(function () use ($proposal, $user, $selectedItemIds, $name, $title): array {
+            // Re-read under a row lock and re-check before materializing side effects,
+            // so two overlapping accepts (double-click, retry, two tabs) cannot each
+            // create their own agreement/invoice/project/tasks.
+            $proposal = ClientProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+
+            if (! $proposal->isPending()) {
+                throw new ClientManagementActionException('This proposal is not awaiting a decision.', 422);
+            }
+
             $company = $proposal->clientCompany;
             $proposal->loadMissing('items');
 

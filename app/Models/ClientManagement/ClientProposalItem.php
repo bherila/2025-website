@@ -5,6 +5,7 @@ namespace App\Models\ClientManagement;
 use App\Enums\ClientManagement\ChargeCadence;
 use App\Enums\ClientManagement\ProposalItemKind;
 use App\Traits\SerializesDatesAsLocal;
+use Database\Factories\ClientManagement\ClientProposalItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class ClientProposalItem extends Model
 {
+    /** @use HasFactory<ClientProposalItemFactory> */
     use HasFactory, SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_proposal_items';

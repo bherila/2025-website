@@ -20,7 +20,7 @@ return new class extends Migration
 
         if (! $this->hasForeignKey('client_agreements', ['source_proposal_id'])) {
             Schema::table('client_agreements', function (Blueprint $table): void {
-                $table->foreign('source_proposal_id')
+                $table->foreign('source_proposal_id', 'ca_source_proposal_fk')
                     ->references('id')
                     ->on('client_proposals')
                     ->nullOnDelete();
@@ -38,7 +38,7 @@ return new class extends Migration
 
             Schema::table('client_agreements', function (Blueprint $table) use ($hasForeignKey): void {
                 if ($hasForeignKey) {
-                    $table->dropForeign(['source_proposal_id']);
+                    $table->dropForeign('ca_source_proposal_fk');
                 }
 
                 $table->dropColumn('source_proposal_id');

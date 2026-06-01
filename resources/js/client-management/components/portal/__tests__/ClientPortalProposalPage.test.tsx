@@ -141,6 +141,49 @@ describe('ClientPortalProposalPage', () => {
     })
   })
 
+  it('shows recurring add-ons with their cadence so they are not hidden before acceptance', () => {
+    const proposal = makeProposal()
+    proposal.items.push({
+      id: 14,
+      kind: 'add_on',
+      description: 'Managed hosting',
+      amount: '99.00',
+      charge_cadence: 'monthly',
+      is_optional: true,
+      is_selected: false,
+      sort_order: 3,
+    } as Proposal['items'][number])
+
+    render(
+      <ClientPortalProposalPage slug="acme" companyName="Acme" companyId={1} initialProposal={proposal} initialCanAct />,
+    )
+
+    expect(screen.getByText('Managed hosting')).toBeInTheDocument()
+    expect(screen.getByText('$99.00 / month')).toBeInTheDocument()
+    // Recurring charges are billed separately and must not change the upfront total.
+    expect(screen.getByText('$2,612.50')).toBeInTheDocument()
+  })
+
+  it('reflects the persisted selection (not the opt-out default) once the proposal is no longer actionable', () => {
+    const proposal = makeProposal()
+    proposal.status = 'accepted'
+    // The optional Analytics add-on (id 12) was opted out at acceptance.
+    proposal.items = proposal.items.map((item) => (item.id === 12 ? { ...item, is_selected: false } : { ...item, is_selected: true }))
+
+    render(
+      <ClientPortalProposalPage
+        slug="acme"
+        companyName="Acme"
+        companyId={1}
+        initialProposal={proposal}
+        initialCanAct={false}
+      />,
+    )
+
+    // Total reflects the opted-out Analytics add-on: 2000 + 375 − 262.50 (no 500).
+    expect(screen.getByText('$2,112.50')).toBeInTheDocument()
+  })
+
   it('sends a reason when rejecting', async () => {
     mockPost.mockResolvedValue({ proposal: { ...makeProposal(), status: 'rejected' } })
     renderPage()

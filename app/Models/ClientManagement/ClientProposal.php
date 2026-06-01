@@ -9,6 +9,7 @@ use App\Enums\ClientManagement\ProposalStatus;
 use App\Models\User;
 use App\Services\Finance\MoneyMath;
 use App\Traits\SerializesDatesAsLocal;
+use Database\Factories\ClientManagement\ClientProposalFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class ClientProposal extends Model
 {
+    /** @use HasFactory<ClientProposalFactory> */
     use HasFactory, SerializesDatesAsLocal, SoftDeletes;
 
     protected $table = 'client_proposals';
@@ -176,10 +178,14 @@ class ClientProposal extends Model
 
     /**
      * Whether the proposal is awaiting a client decision on its latest version.
+     *
+     * Mirrors {@see canBeActedOnByClient()} exactly so the server action gate and
+     * the client-facing "can act" flag never disagree (e.g. a latest
+     * `changes_requested` version stays actionable rather than 422-ing).
      */
     public function isPending(): bool
     {
-        return $this->status === ProposalStatus::Sent && $this->isLatestVersion();
+        return $this->canBeActedOnByClient();
     }
 
     /**

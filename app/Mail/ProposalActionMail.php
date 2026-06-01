@@ -27,7 +27,7 @@ class ProposalActionMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $company = $this->proposal->clientCompany?->company_name ?? 'Client';
+        $company = $this->proposal->clientCompany->company_name ?? 'Client';
         $verb = match ($this->action) {
             'accepted' => 'accepted',
             'rejected' => 'rejected',
@@ -58,7 +58,7 @@ class ProposalActionMail extends Mailable
             markdown: 'emails.proposals.action',
             with: [
                 'action' => $this->action,
-                'companyName' => $this->proposal->clientCompany?->company_name ?? 'Client',
+                'companyName' => $this->proposal->clientCompany->company_name ?? 'Client',
                 'title' => $this->proposal->title,
                 'version' => $this->proposal->version,
                 'clientResponse' => $this->proposal->client_response_message,

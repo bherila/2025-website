@@ -31,6 +31,18 @@ function isUpfront(item: ProposalItem): boolean {
   return item.kind === 'add_on' && item.charge_cadence === 'one_time'
 }
 
+function isRecurringAddOn(item: ProposalItem): boolean {
+  return item.kind === 'add_on' && item.charge_cadence !== 'one_time'
+}
+
+const CADENCE_LABELS: Record<ProposalItem['charge_cadence'], string> = {
+  monthly: 'month',
+  quarterly: 'quarter',
+  semi_annual: '6 months',
+  annual: 'year',
+  one_time: 'one-time',
+}
+
 export default function ClientPortalProposalPage({
   slug,
   companyName,
@@ -46,12 +58,17 @@ export default function ClientPortalProposalPage({
   const [name, setName] = useState('')
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [links, setLinks] = useState<{ agreementId?: number; invoiceId?: number }>({})
+  const [links, setLinks] = useState<{ agreementId?: number }>({})
 
-  // Optional items default to selected — the client opts OUT.
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    () => new Set(proposal.items.filter((item) => item.is_optional).map((item) => item.id)),
-  )
+  // While the proposal is actionable, optional items default to selected — the
+  // client opts OUT. Once it has been responded to, reflect the persisted
+  // selection so a reloaded accepted proposal shows exactly what was chosen.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => {
+    const source = initialCanAct
+      ? proposal.items.filter((item) => item.is_optional)
+      : proposal.items.filter((item) => item.is_selected)
+    return new Set(source.map((item) => item.id))
+  })
 
   // The server flag guarantees this is the latest version; the status check keeps
   // actions hidden once the client has accepted/rejected within this session.
@@ -110,7 +127,9 @@ export default function ClientPortalProposalPage({
       setProposal(data.proposal)
       setMode('idle')
       if (action === 'accept') {
-        setLinks({ agreementId: data.agreement_id, invoiceId: data.invoice_id })
+        // The upfront invoice is created as a draft and is not yet visible to the
+        // client, so we only surface the agreement link here.
+        setLinks({ agreementId: data.agreement_id })
         setSuccess('Proposal accepted. Your agreement has been created.')
       } else if (action === 'reject') {
         setSuccess('Proposal rejected.')
@@ -223,6 +242,37 @@ export default function ClientPortalProposalPage({
               </div>
             )}
 
+            {proposal.items.some(isRecurringAddOn) && (
+              <div className="mt-2 space-y-3 rounded-md border bg-muted/40 p-3">
+                <p className="text-sm font-medium">Recurring charges (billed separately from the total above)</p>
+                {proposal.items.filter(isRecurringAddOn).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {item.is_optional ? (
+                        <Checkbox
+                          id={`item-${item.id}`}
+                          checked={selectedIds.has(item.id)}
+                          onCheckedChange={(checked) => toggle(item.id, Boolean(checked))}
+                          disabled={!canAct}
+                        />
+                      ) : (
+                        <span className="inline-block w-4" />
+                      )}
+                      <Label htmlFor={`item-${item.id}`} className="font-normal">
+                        {item.description}
+                        {item.is_optional && <span className="ml-2 text-xs text-muted-foreground">(optional)</span>}
+                      </Label>
+                    </div>
+                    <span className="font-medium">
+                      {item.amount
+                        ? `${currency(item.amount).format()} / ${CADENCE_LABELS[item.charge_cadence]}`
+                        : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-2 text-lg font-bold">
               <span>Total Due</span>
               <span>{currency(net).format()}</span>
@@ -262,13 +312,6 @@ export default function ClientPortalProposalPage({
                 <p>
                   <a className="underline" href={`/client/portal/${slug}/agreement/${links.agreementId ?? proposal.agreement_id}`}>
                     View your agreement →
-                  </a>
-                </p>
-              )}
-              {links.invoiceId && (
-                <p>
-                  <a className="underline" href={`/client/portal/${slug}/invoice/${links.invoiceId}`}>
-                    View your invoice →
                   </a>
                 </p>
               )}

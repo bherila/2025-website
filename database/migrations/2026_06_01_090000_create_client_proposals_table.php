@@ -22,15 +22,15 @@ return new class extends Migration
                 $table->id();
 
                 // Ownership + version chain
-                $table->foreignId('client_company_id')->constrained('client_companies')->cascadeOnDelete();
+                $table->foreignId('client_company_id')->constrained('client_companies', indexName: 'cp_company_fk')->cascadeOnDelete();
                 $table->unsignedBigInteger('root_id')->nullable()
                     ->comment('First version of this chain. Set to own id for v1 after insert.');
                 $table->unsignedInteger('version')->default(1);
                 $table->unsignedBigInteger('previous_version_id')->nullable();
 
                 // Materialization links
-                $table->foreignId('agreement_id')->nullable()->constrained('client_agreements')->nullOnDelete();
-                $table->foreignId('project_id')->nullable()->constrained('client_projects')->nullOnDelete();
+                $table->foreignId('agreement_id')->nullable()->constrained('client_agreements', indexName: 'cp_agreement_fk')->nullOnDelete();
+                $table->foreignId('project_id')->nullable()->constrained('client_projects', indexName: 'cp_project_fk')->nullOnDelete();
 
                 // Lifecycle
                 $table->string('status', 30)->default('draft')
@@ -68,11 +68,11 @@ return new class extends Migration
                 $table->string('response_name')->nullable();
                 $table->string('response_title')->nullable();
                 $table->timestamp('responded_at')->nullable();
-                $table->foreignId('responded_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('responded_by_user_id')->nullable()->constrained('users', indexName: 'cp_responded_by_fk')->nullOnDelete();
 
                 // Accept signature (acceptance is the binding signature)
                 $table->timestamp('accepted_at')->nullable();
-                $table->foreignId('accepted_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('accepted_by_user_id')->nullable()->constrained('users', indexName: 'cp_accepted_by_fk')->nullOnDelete();
                 $table->string('accept_signature_name')->nullable();
                 $table->string('accept_signature_title')->nullable();
 
@@ -84,15 +84,15 @@ return new class extends Migration
 
                 // Self-referential FKs are declared inline (within CREATE TABLE) so they
                 // work on both MySQL and SQLite, which cannot add FKs via ALTER TABLE.
-                $table->foreign('previous_version_id')->references('id')->on('client_proposals')->nullOnDelete();
-                $table->foreign('root_id')->references('id')->on('client_proposals')->nullOnDelete();
+                $table->foreign('previous_version_id', 'cp_prev_version_fk')->references('id')->on('client_proposals')->nullOnDelete();
+                $table->foreign('root_id', 'cp_root_fk')->references('id')->on('client_proposals')->nullOnDelete();
             });
         }
 
         if (! Schema::hasTable('client_proposal_items')) {
             Schema::create('client_proposal_items', function (Blueprint $table): void {
                 $table->id();
-                $table->foreignId('client_proposal_id')->constrained('client_proposals')->cascadeOnDelete();
+                $table->foreignId('client_proposal_id')->constrained('client_proposals', indexName: 'cpi_proposal_fk')->cascadeOnDelete();
                 $table->string('kind', 20)->comment('ProposalItemKind: scope or add_on');
                 $table->string('description');
                 $table->decimal('amount', 10, 2)->nullable()->comment('NULL for scope; required for add_on.');
