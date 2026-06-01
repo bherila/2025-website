@@ -21,7 +21,6 @@ use App\Models\ClientManagement\ClientProposal;
 use App\Models\ClientManagement\ClientTask;
 use App\Models\User;
 use App\Services\Finance\MoneyMath;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -35,6 +34,8 @@ use Illuminate\Support\Facades\Mail;
  */
 class ProposalService
 {
+    public function __construct(private readonly InvoiceNumberGenerator $invoiceNumberGenerator) {}
+
     /**
      * Create a blank draft proposal for a company (admin authoring entrypoint).
      */
@@ -223,7 +224,7 @@ class ProposalService
                 'client_agreement_id' => $agreement->id,
                 'period_start' => $acceptedAt->toDateString(),
                 'period_end' => $acceptedAt->toDateString(),
-                'invoice_number' => $this->generateInvoiceNumber($company, $acceptedAt),
+                'invoice_number' => $this->invoiceNumberGenerator->generate($company, $acceptedAt),
                 'invoice_total' => 0,
                 'due_date' => $dueDate,
                 'status' => 'draft',
@@ -527,26 +528,6 @@ class ProposalService
         }
 
         $proposal->items()->whereNotIn('id', $keepIds)->delete();
-    }
-
-    /**
-     * Replicate the company-prefixed invoice number format used by
-     * {@see ClientInvoicingService} (which keeps it protected).
-     */
-    private function generateInvoiceNumber(ClientCompany $company, Carbon $periodEnd): string
-    {
-        $rawPrefix = strtoupper(substr((string) preg_replace('/[^a-zA-Z0-9]/', '', (string) $company->company_name), 0, 4));
-        $prefix = $rawPrefix !== '' ? "{$rawPrefix}-" : '';
-        $yearMonth = $periodEnd->format('Ym');
-
-        $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
-            ->where('invoice_number', 'like', "{$rawPrefix}%{$yearMonth}-%")
-            ->orderBy('invoice_number', 'desc')
-            ->first();
-
-        $seq = $lastInvoice ? ((int) substr((string) $lastInvoice->invoice_number, -3)) + 1 : 1;
-
-        return sprintf('%s%s-%03d', $prefix, $yearMonth, $seq);
     }
 
     /**

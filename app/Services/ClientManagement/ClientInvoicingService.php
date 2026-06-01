@@ -50,6 +50,8 @@ class ClientInvoicingService
 
     protected RecurringItemBiller $recurringItemBiller;
 
+    protected InvoiceNumberGenerator $invoiceNumberGenerator;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -65,10 +67,12 @@ class ClientInvoicingService
         ?RolloverCalculator $rolloverCalculator = null,
         ?BillingCycleResolver $billingCycleResolver = null,
         ?RecurringItemBiller $recurringItemBiller = null,
+        ?InvoiceNumberGenerator $invoiceNumberGenerator = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
         $this->recurringItemBiller = $recurringItemBiller ?? new RecurringItemBiller;
+        $this->invoiceNumberGenerator = $invoiceNumberGenerator ?? new InvoiceNumberGenerator;
     }
 
     /**
@@ -621,7 +625,7 @@ class ClientInvoicingService
                 }
                 $invoice->lineItems()->where('line_type', 'expense')->delete();
             } else {
-                $invoiceData['invoice_number'] = $this->generateInvoiceNumber($company, $agreement, $periodEnd);
+                $invoiceData['invoice_number'] = $this->invoiceNumberGenerator->generate($company, $periodEnd);
                 $invoiceData['invoice_total'] = 0;
                 $invoice = ClientInvoice::create($invoiceData);
             }
@@ -1033,7 +1037,7 @@ class ClientInvoicingService
                     'client_agreement_id' => $agreement->id,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
-                    'invoice_number' => $this->generateInvoiceNumber($company, $agreement, $periodEnd),
+                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodEnd),
                     'invoice_total' => 0,
                     'status' => 'draft',
                     'invoice_kind' => InvoiceKind::CadencePeriod->value,
@@ -1326,7 +1330,7 @@ class ClientInvoicingService
                     'client_agreement_id' => $agreement->id,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
-                    'invoice_number' => $this->generateInvoiceNumber($company, $agreement, $periodEnd),
+                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodEnd),
                     'invoice_total' => 0,
                     'status' => 'draft',
                     'invoice_kind' => InvoiceKind::InterimOverage->value,
@@ -2563,31 +2567,6 @@ class ClientInvoicingService
             ->sum('unused_hours_balance');
 
         return (float) $rolloverHours;
-    }
-
-    /**
-     * Generate a unique invoice number.
-     * Uses the YYYYMM of the period_end date to ensure invoice numbers match the billing period.
-     */
-    protected function generateInvoiceNumber(ClientCompany $company, ClientAgreement $agreement, Carbon $periodEnd): string
-    {
-        $rawPrefix = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $company->company_name), 0, 4));
-        $prefix = $rawPrefix ? "$rawPrefix-" : '';
-        $yearMonth = $periodEnd->format('Ym');
-
-        $lastInvoice = ClientInvoice::where('client_company_id', $company->id)
-            ->where('invoice_number', 'like', "{$rawPrefix}%{$yearMonth}-%")
-            ->orderBy('invoice_number', 'desc')
-            ->first();
-
-        if ($lastInvoice) {
-            $lastSeq = (int) substr($lastInvoice->invoice_number, -3);
-            $seq = $lastSeq + 1;
-        } else {
-            $seq = 1;
-        }
-
-        return sprintf('%s%s-%03d', $prefix, $yearMonth, $seq);
     }
 
     /**
