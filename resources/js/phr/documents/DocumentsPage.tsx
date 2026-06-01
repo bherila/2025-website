@@ -266,7 +266,7 @@ export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) 
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="@container grid min-w-0 gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
@@ -297,8 +297,11 @@ export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) 
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_minmax(360px,420px)]">
-        <aside className="grid content-start gap-4 rounded-lg border border-border bg-card p-4">
+      <div
+        className="grid min-w-0 gap-4 @min-[72rem]:grid-cols-[260px_minmax(0,1fr)_minmax(360px,420px)]"
+        data-testid="documents-pane-layout"
+      >
+        <aside className="grid min-w-0 content-start gap-4 rounded-lg border border-border bg-card p-4">
           <div className="grid gap-3">
             <h2 className="text-sm font-semibold text-card-foreground">Filters</h2>
             <LabeledSelect
@@ -348,7 +351,7 @@ export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) 
               <label className="grid gap-1 text-sm font-medium text-foreground">
                 Summary
                 <textarea
-                  className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                  className="min-h-20 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                   value={uploadForm.summary}
                   onChange={(event) => setUploadForm((current) => ({ ...current, summary: event.target.value }))}
                 />
@@ -459,7 +462,7 @@ export default function DocumentsPage({ patientId, onDrill }: PhrListPageProps) 
                 <label className="grid gap-1 text-sm font-medium text-foreground">
                   Summary
                   <textarea
-                    className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                    className="min-h-24 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                     value={editForm.summary ?? ''}
                     onChange={(event) => setEditForm({ ...editForm, summary: event.target.value })}
                   />
@@ -515,7 +518,7 @@ function LabeledSelect({ label, value, children, onChange }: LabeledSelectProps)
     <label className="grid gap-1 text-sm font-medium text-foreground">
       {label}
       <select
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+        className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
