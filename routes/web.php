@@ -8,6 +8,8 @@ use App\Http\Controllers\ClientManagement\ClientAgreementController;
 use App\Http\Controllers\ClientManagement\ClientCompanyController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementController;
 use App\Http\Controllers\ClientManagement\ClientPortalController;
+use App\Http\Controllers\ClientManagement\ClientPortalProposalController;
+use App\Http\Controllers\ClientManagement\ClientProposalController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
@@ -131,11 +133,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/client/mgmt/agreement', [ClientAgreementController::class, 'store'])->name('client-management.agreement.store');
     Route::get('/client/mgmt/agreement/{id}', [ClientAgreementController::class, 'show'])->name('client-management.agreement.show');
 
+    // Proposal Management Routes (Admin)
+    Route::post('/client/mgmt/proposal', [ClientProposalController::class, 'store'])->name('client-management.proposal.store');
+    Route::get('/client/mgmt/proposal/{id}', [ClientProposalController::class, 'show'])->name('client-management.proposal.show');
+
     // Client Portal Routes
     Route::get('/client/portal/{slug}', [ClientPortalController::class, 'index'])->name('client-portal.index');
     Route::get('/client/portal/{slug}/time', [ClientPortalController::class, 'time'])->name('client-portal.time');
     Route::get('/client/portal/{slug}/project/{projectSlug}', [ClientPortalController::class, 'project'])->name('client-portal.project');
     Route::get('/client/portal/{slug}/agreement/{agreementId}', [ClientPortalAgreementController::class, 'show'])->name('client-portal.agreement');
+    Route::get('/client/portal/{slug}/proposals', [ClientPortalProposalController::class, 'index'])->name('client-portal.proposals');
+    Route::get('/client/portal/{slug}/proposal/{proposalId}', [ClientPortalProposalController::class, 'show'])->name('client-portal.proposal');
     Route::get('/client/portal/{slug}/invoices', [ClientPortalController::class, 'invoices'])->name('client-portal.invoices');
     Route::get('/client/portal/{slug}/billing', [ClientPortalController::class, 'billing'])->name('client-portal.billing');
     Route::get('/client/portal/{slug}/invoice/{invoiceId}', [ClientPortalController::class, 'invoice'])->name('client-portal.invoice');
