@@ -13,11 +13,12 @@ return new class extends Migration
     {
         Schema::create('inbound_emails', function (Blueprint $table) {
             $table->id();
-            $table->string('message_id')->nullable()->index();
-            $table->string('from_email');
-            $table->string('from_name')->nullable();
-            $table->string('to_email')->nullable();
-            $table->string('subject')->nullable();
+            $table->char('idempotency_key', 64)->nullable()->unique();
+            $table->text('message_id')->nullable();
+            $table->text('from_email');
+            $table->text('from_name')->nullable();
+            $table->text('to_email')->nullable();
+            $table->text('subject')->nullable();
             $table->longText('text_body')->nullable();
             $table->longText('html_body')->nullable();
             $table->json('headers')->nullable();

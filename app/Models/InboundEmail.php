@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\SerializesDatesAsLocal;
 use Database\Factories\InboundEmailFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,8 +11,10 @@ class InboundEmail extends Model
 {
     /** @use HasFactory<InboundEmailFactory> */
     use HasFactory;
+    use SerializesDatesAsLocal;
 
     protected $fillable = [
+        'idempotency_key',
         'message_id',
         'from_email',
         'from_name',
