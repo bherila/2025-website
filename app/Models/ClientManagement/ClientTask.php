@@ -5,6 +5,8 @@ namespace App\Models\ClientManagement;
 use App\Models\User;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientTask extends Model
@@ -37,40 +39,50 @@ class ClientTask extends Model
 
     /**
      * Get the project this task belongs to.
+     *
+     * @return BelongsTo<ClientProject, $this>
      */
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(ClientProject::class, 'project_id');
     }
 
     /**
      * Get the user assigned to this task.
+     *
+     * @return BelongsTo<User, $this>
      */
-    public function assignee()
+    public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_user_id');
     }
 
     /**
      * Get the user who created this task.
+     *
+     * @return BelongsTo<User, $this>
      */
-    public function creator()
+    public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_user_id');
     }
 
     /**
      * Get the time entries for this task.
+     *
+     * @return HasMany<ClientTimeEntry, $this>
      */
-    public function timeEntries()
+    public function timeEntries(): HasMany
     {
         return $this->hasMany(ClientTimeEntry::class, 'task_id');
     }
 
     /**
      * Get the invoice line this task was billed on.
+     *
+     * @return BelongsTo<ClientInvoiceLine, $this>
      */
-    public function invoiceLine()
+    public function invoiceLine(): BelongsTo
     {
         return $this->belongsTo(ClientInvoiceLine::class, 'client_invoice_line_id', 'client_invoice_line_id');
     }
@@ -86,7 +98,7 @@ class ClientTask extends Model
     /**
      * Mark the task as completed.
      */
-    public function markCompleted()
+    public function markCompleted(): void
     {
         $this->completed_at = now();
         $this->save();
@@ -95,7 +107,7 @@ class ClientTask extends Model
     /**
      * Mark the task as not completed.
      */
-    public function markNotCompleted()
+    public function markNotCompleted(): void
     {
         $this->completed_at = null;
         $this->save();

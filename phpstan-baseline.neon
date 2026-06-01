@@ -199,34 +199,10 @@ parameters:
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
 
 		-
-			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
-			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
 			message: '#^Using nullsafe method call on non\-nullable type Carbon\\Carbon\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/ClientManagement/ClientPortalApiController.php
-
-		-
-			message: '#^Relation ''assignee'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
-
-		-
-			message: '#^Relation ''creator'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
-			count: 1
-			path: app/Http/Controllers/ClientManagement/ClientPortalController.php
 
 		-
 			message: '#^Relation ''timeEntries'' is not found in App\\Models\\ClientManagement\\ClientInvoiceLine model\.$#'
@@ -877,48 +853,6 @@ parameters:
 			path: app/Models/ClientManagement/ClientProject.php
 
 		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:assignee\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:creator\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:invoiceLine\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:markCompleted\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:markNotCompleted\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:project\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
-			message: '#^Method App\\Models\\ClientManagement\\ClientTask\:\:timeEntries\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: app/Models/ClientManagement/ClientTask.php
-
-		-
 			message: '#^Class App\\Models\\ClientManagement\\ClientTimeEntry uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
@@ -1441,20 +1375,8 @@ parameters:
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 
 		-
-			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkAllFragmentsToLines\(\) has parameter \$fragmentsToLines with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
 			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkTimeEntriesToLine\(\) has parameter \$entries with no type specified\.$#'
 			identifier: missingType.parameter
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
-			message: '#^Relation ''project'' is not found in App\\Models\\ClientManagement\\ClientTask model\.$#'
-			identifier: larastan.relationExistence
 			count: 1
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 
