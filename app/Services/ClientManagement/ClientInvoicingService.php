@@ -52,6 +52,8 @@ class ClientInvoicingService
 
     protected InvoiceNumberGenerator $invoiceNumberGenerator;
 
+    protected AgreementSelector $agreementSelector;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -68,11 +70,13 @@ class ClientInvoicingService
         ?BillingCycleResolver $billingCycleResolver = null,
         ?RecurringItemBiller $recurringItemBiller = null,
         ?InvoiceNumberGenerator $invoiceNumberGenerator = null,
+        ?AgreementSelector $agreementSelector = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
         $this->recurringItemBiller = $recurringItemBiller ?? new RecurringItemBiller;
         $this->invoiceNumberGenerator = $invoiceNumberGenerator ?? new InvoiceNumberGenerator;
+        $this->agreementSelector = $agreementSelector ?? new AgreementSelector;
     }
 
     /**
@@ -104,10 +108,10 @@ class ClientInvoicingService
     public function generateAllInvoices(ClientCompany $company): array
     {
         $results = $this->emptyGenerationResults();
-        $agreements = $this->agreementsForInvoiceGeneration($company);
+        $agreements = $this->agreementSelector->agreementsForInvoiceGeneration($company);
 
         foreach ($agreements as $agreement) {
-            $successorAgreement = $this->successorAgreementForGeneration($agreements, $agreement);
+            $successorAgreement = $this->agreementSelector->successorAgreementForGeneration($agreements, $agreement);
             $agreementResults = $agreement->effectiveBillingCadence() === BillingCadence::Monthly
                 ? $this->generateAllMonthlyInvoicesForAgreement(
                     $company,
@@ -136,7 +140,7 @@ class ClientInvoicingService
     {
         // Use active agreement if available; otherwise fall back to the most recently
         // terminated agreement so we can still issue post-termination invoices.
-        $agreement = $this->agreementForInvoiceGeneration($company);
+        $agreement = $this->agreementSelector->agreementForInvoiceGeneration($company);
 
         if ($agreement->effectiveBillingCadence() !== BillingCadence::Monthly) {
             throw new \Exception('generateAllMonthlyInvoices only supports monthly agreements. Use generateAllInvoices for cadence-aware generation.');
@@ -1195,7 +1199,7 @@ class ClientInvoicingService
         ?array $immediateLedger = null,
     ): ?ClientInvoice {
         $periodStart = $monthStart->copy()->startOfMonth()->startOfDay();
-        $agreement = $agreement ?? $this->agreementCoveringDate($company, $periodStart);
+        $agreement = $agreement ?? $this->agreementSelector->agreementCoveringDate($company, $periodStart);
 
         if (! $agreement) {
             throw new \Exception('No agreement found for this interim overage period.');
@@ -1971,79 +1975,6 @@ class ClientInvoicingService
         }
 
         return $exact ?? $fallback;
-    }
-
-    /**
-     * Use active agreement if available; otherwise fall back to the most
-     * recently terminated agreement so invoice generation can handle trailing
-     * post-termination work.
-     */
-    protected function agreementForInvoiceGeneration(ClientCompany $company): ClientAgreement
-    {
-        $agreement = $company->activeAgreement() ?? $company->mostRecentAgreement();
-        if (! $agreement) {
-            throw new \Exception('No agreement found for this client company.');
-        }
-
-        return $agreement;
-    }
-
-    /**
-     * Return every historical agreement segment that can still produce invoices.
-     *
-     * @return Collection<int, ClientAgreement>
-     */
-    protected function agreementsForInvoiceGeneration(ClientCompany $company): Collection
-    {
-        $agreements = $company->agreements()
-            ->where(function ($query): void {
-                $query->where('active_date', '<=', now())
-                    ->orWhere(function ($query): void {
-                        $query->where('billing_cadence', '!=', BillingCadence::Monthly->value)
-                            ->where('active_date', '<=', now()->copy()->addMonth());
-                    });
-            })
-            ->orderBy('active_date')
-            ->orderBy('id')
-            ->get();
-
-        if ($agreements->isEmpty()) {
-            throw new \Exception('No agreement found for this client company.');
-        }
-
-        return $agreements;
-    }
-
-    /**
-     * @param  Collection<int, ClientAgreement>  $agreements
-     */
-    protected function successorAgreementForGeneration(Collection $agreements, ClientAgreement $agreement): ?ClientAgreement
-    {
-        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
-
-        return $agreements->first(function (ClientAgreement $candidate) use ($agreement, $activeDate): bool {
-            if ((int) $candidate->id === (int) $agreement->id) {
-                return false;
-            }
-
-            $candidateActiveDate = Carbon::parse($candidate->active_date)->startOfDay();
-
-            return $candidateActiveDate->gt($activeDate)
-                || ($candidateActiveDate->eq($activeDate) && (int) $candidate->id > (int) $agreement->id);
-        });
-    }
-
-    protected function agreementCoveringDate(ClientCompany $company, Carbon $date): ?ClientAgreement
-    {
-        return $company->agreements()
-            ->where('active_date', '<=', $date->toDateString())
-            ->where(function ($query) use ($date): void {
-                $query->whereNull('termination_date')
-                    ->orWhere('termination_date', '>=', $date->toDateString());
-            })
-            ->orderBy('active_date', 'desc')
-            ->orderBy('id', 'desc')
-            ->first();
     }
 
     /**
