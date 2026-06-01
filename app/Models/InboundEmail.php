@@ -11,6 +11,7 @@ class InboundEmail extends Model
 {
     /** @use HasFactory<InboundEmailFactory> */
     use HasFactory;
+
     use SerializesDatesAsLocal;
 
     protected $fillable = [

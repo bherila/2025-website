@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Models\ClientManagement;
 
-use App\Enums\ClientManagement\BillingCadence;
 use App\Models\ClientManagement\ClientAgreement;
 use PHPUnit\Framework\TestCase;
 

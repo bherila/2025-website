@@ -464,7 +464,7 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
-    public function test_prorated_first_cycle_scales_retainer_hours_and_fee_by_covered_days(): void
+    public function test_quarterly_first_cycle_anchors_to_active_date_instead_of_calendar_quarter(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));
 
@@ -474,7 +474,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'first_cycle_proration' => FirstCycleProration::ProrateHours->value,
                 'monthly_retainer_hours' => 10,
                 'monthly_retainer_fee' => 1000,
-                'active_date' => Carbon::parse('2026-02-15'),
+                'active_date' => Carbon::parse('2026-02-01'),
             ]);
 
             $this->invoicingService->generateAllInvoices($this->company);
@@ -484,20 +484,20 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->with('lineItems')
                 ->firstOrFail();
 
-            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
-            $this->assertEquals(15.0, (float) $invoice->retainer_hours_included);
+            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
             $this->assertNotNull($retainerLine);
-            $this->assertEquals(1500.0, (float) $retainerLine->line_total);
-            $this->assertEquals(15.0, (float) $retainerLine->hours);
+            $this->assertEquals(3000.0, (float) $retainerLine->line_total);
+            $this->assertEquals(30.0, (float) $retainerLine->hours);
         } finally {
             Carbon::setTestNow();
         }
     }
 
-    public function test_align_next_cycle_stub_scales_retainer_hours_and_fee_by_covered_days(): void
+    public function test_quarterly_active_date_anchor_ignores_align_next_cycle_policy(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));
 
@@ -507,7 +507,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'first_cycle_proration' => FirstCycleProration::AlignNextCycle->value,
                 'monthly_retainer_hours' => 10,
                 'monthly_retainer_fee' => 1000,
-                'active_date' => Carbon::parse('2026-02-15'),
+                'active_date' => Carbon::parse('2026-02-01'),
             ]);
 
             $this->invoicingService->generateAllInvoices($this->company);
@@ -517,19 +517,19 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->with('lineItems')
                 ->firstOrFail();
 
-            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
-            $this->assertEquals(15.0, (float) $invoice->retainer_hours_included);
+            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
             $this->assertNotNull($retainerLine);
-            $this->assertEquals(1500.0, (float) $retainerLine->line_total);
+            $this->assertEquals(3000.0, (float) $retainerLine->line_total);
         } finally {
             Carbon::setTestNow();
         }
     }
 
-    public function test_full_period_first_cycle_keeps_full_touched_month_retainer(): void
+    public function test_quarterly_active_date_anchor_ignores_full_period_policy(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));
 
@@ -539,7 +539,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'first_cycle_proration' => FirstCycleProration::FullPeriod->value,
                 'monthly_retainer_hours' => 10,
                 'monthly_retainer_fee' => 1000,
-                'active_date' => Carbon::parse('2026-02-15'),
+                'active_date' => Carbon::parse('2026-02-01'),
             ]);
 
             $this->invoicingService->generateAllInvoices($this->company);
@@ -549,19 +549,19 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->with('lineItems')
                 ->firstOrFail();
 
-            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
-            $this->assertEquals(20.0, (float) $invoice->retainer_hours_included);
+            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
             $this->assertNotNull($retainerLine);
-            $this->assertEquals(2000.0, (float) $retainerLine->line_total);
+            $this->assertEquals(3000.0, (float) $retainerLine->line_total);
         } finally {
             Carbon::setTestNow();
         }
     }
 
-    public function test_full_period_first_cycle_keeps_full_period_retainer_override(): void
+    public function test_quarterly_active_date_anchor_keeps_period_retainer_override(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));
 
@@ -573,7 +573,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'monthly_retainer_fee' => 0,
                 'retainer_hours' => 30,
                 'retainer_fee' => 3000,
-                'active_date' => Carbon::parse('2026-02-15'),
+                'active_date' => Carbon::parse('2026-02-01'),
             ]);
 
             $this->createTimeEntry('2026-02-20', 20);
@@ -585,8 +585,8 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->with('lineItems')
                 ->firstOrFail();
 
-            $this->assertEquals('2026-02-15', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
             $this->assertEquals(20.0, (float) $invoice->hours_worked);
             $this->assertEquals(0.0, (float) $invoice->hours_billed_at_rate);

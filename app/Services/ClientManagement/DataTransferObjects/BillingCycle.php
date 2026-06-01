@@ -7,9 +7,9 @@ use Carbon\Carbon;
 /**
  * Represents a single billing cycle produced by BillingCycleResolver.
  *
- * A cycle spans [$start, $end] inclusive and covers $monthCount calendar
- * months. For a prorated first cycle, $isProrated = true and the month
- * count may be less than the cadence's standard monthsInCycle().
+ * A cycle spans [$start, $end] inclusive and covers $monthCount touched
+ * calendar months. $isProrated marks cycles clipped by an agreement boundary
+ * or the requested generation ceiling.
  */
 class BillingCycle
 {
