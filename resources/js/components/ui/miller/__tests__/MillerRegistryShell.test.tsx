@@ -21,8 +21,22 @@ function MockComponent({ instance, onDrill }: MillerRenderProps<TestState, Id>):
 
 const registry: Record<Id, MillerRegistryEntry<TestState, Id>> = {
   home: { id: 'home', label: 'Home', shortLabel: 'Home', presentation: 'app', component: MockComponent },
-  'form-1040': { id: 'form-1040', label: 'Form 1040', shortLabel: '1040', presentation: 'column', component: MockComponent },
-  'sch-1': { id: 'sch-1', label: 'Schedule 1', shortLabel: 'Sch 1', presentation: 'column', component: MockComponent },
+  'form-1040': {
+    id: 'form-1040',
+    label: 'Form 1040',
+    shortLabel: '1040',
+    presentation: 'column',
+    component: MockComponent,
+    wide: true,
+  },
+  'sch-1': {
+    id: 'sch-1',
+    label: 'Schedule 1',
+    shortLabel: 'Sch 1',
+    presentation: 'column',
+    component: MockComponent,
+    size: 'full',
+  },
   'form-1116': {
     id: 'form-1116',
     label: 'Form 1116',
@@ -74,6 +88,19 @@ describe('MillerRegistryShell', () => {
     const sections = document.querySelectorAll('[data-miller-id]')
     expect(sections).toHaveLength(1)
     expect(sections[0]?.getAttribute('data-miller-id')).toBe('form-1040')
+  })
+
+  it('maps registry size and deprecated wide entries to column widths', () => {
+    window.location.hash = '#/form-1040/sch-1'
+    render(<ShellHarness />)
+    const wideColumn = document.querySelector<HTMLElement>('[data-miller-id="form-1040"]')
+    const fullColumn = document.querySelector<HTMLElement>('[data-miller-id="sch-1"]')
+
+    expect(wideColumn).not.toBeNull()
+    expect(fullColumn).not.toBeNull()
+    expect(wideColumn!.className).toContain('md:w-[760px]')
+    expect(fullColumn!.className).toContain('md:w-[1040px]')
+    expect(fullColumn!.className).toContain('xl:w-[1200px]')
   })
 
   it('renders instance tabs for multi-instance columns', () => {

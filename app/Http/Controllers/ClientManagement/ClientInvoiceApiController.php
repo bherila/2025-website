@@ -13,7 +13,6 @@ use App\Services\ClientManagement\ClientInvoiceOperationsService;
 use App\Services\ClientManagement\ClientInvoicingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 class ClientInvoiceApiController extends Controller
@@ -32,7 +31,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function index(ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $invoices = $this->invoiceOperationsService->summarizeInvoices(
             $this->invoiceOperationsService->listInvoices($company)
@@ -46,7 +44,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function show(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             Log::debug('unVoid: company mismatch', [
@@ -74,7 +71,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function store(StoreClientInvoiceRequest $request, ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         try {
             $invoice = $this->invoicingService->generateInvoice(
@@ -102,7 +98,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function generateAll(ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         try {
             $results = $this->invoicingService->generateAllInvoices($company);
@@ -121,7 +116,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function generateInterim(GenerateInterimOverageInvoiceRequest $request, ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         try {
             $invoice = $this->invoicingService->generateInterimOverageInvoice($company, $request->periodStart());
@@ -153,7 +147,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function update(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             Log::debug('unVoid: company mismatch', [
@@ -191,7 +184,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function issue(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -221,7 +213,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function markPaid(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -246,7 +237,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function void(ClientCompany $company, int $invoiceId): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
 
@@ -278,7 +268,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function unVoid(Request $request, ClientCompany $company, int $invoiceId): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $invoice = ClientInvoice::where('client_invoice_id', $invoiceId)->firstOrFail();
 
@@ -324,7 +313,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function destroy(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -344,7 +332,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function addLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -390,7 +377,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function removeLineItem(ClientCompany $company, ClientInvoice $invoice, int $lineId): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id) {
             return response()->json(['error' => 'Invoice does not belong to this company'], 404);
@@ -426,7 +412,6 @@ class ClientInvoiceApiController extends Controller
      */
     public function updateLineItem(Request $request, ClientCompany $company, ClientInvoice $invoice, int $lineId): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($invoice->client_company_id != $company->id || ! $invoice->isEditable()) {
             abort(403);
@@ -466,7 +451,6 @@ class ClientInvoiceApiController extends Controller
 
     public function getPayments(ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id) {
             abort(404);
         }
@@ -476,7 +460,6 @@ class ClientInvoiceApiController extends Controller
 
     public function addPayment(Request $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
     {
-        Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id) {
             abort(404);
         }
@@ -502,7 +485,6 @@ class ClientInvoiceApiController extends Controller
 
     public function updatePayment(Request $request, ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment): JsonResponse
     {
-        Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
             abort(404);
         }
@@ -527,7 +509,6 @@ class ClientInvoiceApiController extends Controller
 
     public function deletePayment(ClientCompany $company, ClientInvoice $invoice, ClientInvoicePayment $payment): JsonResponse
     {
-        Gate::authorize('Admin');
         if ($invoice->client_company_id != $company->id || $payment->client_invoice_id != $invoice->client_invoice_id) {
             abort(404);
         }

@@ -82,7 +82,7 @@ export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
       id: col.id,
       label: entry.label,
       shortLabel: entry.shortLabel,
-      wide: entry.wide,
+      size: entry.size ?? (entry.wide ? 'wide' : undefined),
       dataAttributes: { 'data-miller-id': col.id },
       topAccessory: entry.instances ? (
         <MillerInstanceTabs
