@@ -9,6 +9,7 @@
   'companyName' => $company->company_name,
   'companyId' => $company->id,
   'proposal' => $proposal,
+  'canAct' => $proposal->canBeActedOnByClient(),
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
 </script>
 @endpush

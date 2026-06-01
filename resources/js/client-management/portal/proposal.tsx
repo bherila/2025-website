@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         companyName={serverData.companyName}
         companyId={serverData.companyId}
         initialProposal={parsed.data}
+        initialCanAct={Boolean(serverData.canAct)}
       />
     )
   })

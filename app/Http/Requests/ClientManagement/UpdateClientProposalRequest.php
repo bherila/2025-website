@@ -4,6 +4,7 @@ namespace App\Http\Requests\ClientManagement;
 
 use App\Enums\ClientManagement\ChargeCadence;
 use App\Enums\ClientManagement\ProposalItemKind;
+use App\Models\ClientManagement\ClientProposal;
 use Illuminate\Validation\Rule;
 
 /**
@@ -17,7 +18,12 @@ class UpdateClientProposalRequest extends StoreClientProposalRequest
     public function rules(): array
     {
         return [
-            'project_id' => ['nullable', 'exists:client_projects,id'],
+            'project_id' => [
+                'nullable',
+                Rule::exists('client_projects', 'id')->where(
+                    fn ($query) => $query->where('client_company_id', $this->proposalCompanyId()),
+                ),
+            ],
             'title' => ['sometimes', 'string', 'max:255'],
             'body_markdown' => ['nullable', 'string'],
             'base_amount' => ['sometimes', 'numeric', 'min:0'],
@@ -40,5 +46,13 @@ class UpdateClientProposalRequest extends StoreClientProposalRequest
             'items.*.is_optional' => ['sometimes', 'boolean'],
             'items.*.sort_order' => ['sometimes', 'integer'],
         ];
+    }
+
+    /**
+     * The company that owns the proposal being updated (project_id must belong to it).
+     */
+    private function proposalCompanyId(): ?int
+    {
+        return ClientProposal::find($this->route('id'))?->client_company_id;
     }
 }

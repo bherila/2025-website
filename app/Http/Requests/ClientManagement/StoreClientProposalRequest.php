@@ -20,7 +20,12 @@ class StoreClientProposalRequest extends FormRequest
     {
         return [
             'client_company_id' => ['required', 'exists:client_companies,id'],
-            'project_id' => ['nullable', 'exists:client_projects,id'],
+            'project_id' => [
+                'nullable',
+                Rule::exists('client_projects', 'id')->where(
+                    fn ($query) => $query->where('client_company_id', $this->input('client_company_id')),
+                ),
+            ],
             'title' => ['required', 'string', 'max:255'],
             'body_markdown' => ['nullable', 'string'],
             'base_amount' => ['required', 'numeric', 'min:0'],

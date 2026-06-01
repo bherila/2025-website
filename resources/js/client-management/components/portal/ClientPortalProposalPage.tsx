@@ -21,6 +21,8 @@ interface ClientPortalProposalPageProps {
   companyName: string
   companyId: number
   initialProposal: Proposal
+  /** Server-computed: this is the latest version AND its status allows a client action. */
+  initialCanAct?: boolean
 }
 
 type Mode = 'idle' | 'accept' | 'reject' | 'request_changes'
@@ -34,6 +36,7 @@ export default function ClientPortalProposalPage({
   companyName,
   companyId,
   initialProposal,
+  initialCanAct = false,
 }: ClientPortalProposalPageProps) {
   const [proposal, setProposal] = useState<Proposal>(initialProposal)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +53,9 @@ export default function ClientPortalProposalPage({
     () => new Set(proposal.items.filter((item) => item.is_optional).map((item) => item.id)),
   )
 
-  const canAct = proposal.status === 'sent' || proposal.status === 'changes_requested'
+  // The server flag guarantees this is the latest version; the status check keeps
+  // actions hidden once the client has accepted/rejected within this session.
+  const canAct = initialCanAct && (proposal.status === 'sent' || proposal.status === 'changes_requested')
 
   const net = useMemo(() => {
     let total = currency(proposal.base_amount)

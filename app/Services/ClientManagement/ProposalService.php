@@ -464,7 +464,10 @@ class ProposalService
     private function resolveProject(ClientProposal $proposal, User $user): ClientProject
     {
         if ($proposal->project_id) {
-            return ClientProject::findOrFail($proposal->project_id);
+            return ClientProject::query()
+                ->where('client_company_id', $proposal->client_company_id)
+                ->whereKey($proposal->project_id)
+                ->firstOrFail();
         }
 
         $base = ClientProject::generateSlug($proposal->title) ?: 'proposal';

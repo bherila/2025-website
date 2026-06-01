@@ -6,6 +6,7 @@ use App\Enums\ClientManagement\ProposalStatus;
 use App\Mail\ProposalActionMail;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientProposal;
 use App\Models\User;
 use Carbon\Carbon;
@@ -119,5 +120,27 @@ class ProposalClientActionsTest extends TestCase
             ->postJson("/api/client/portal/{$this->company->slug}/proposals/{$proposal->id}/reject", [])
             ->assertStatus(422)
             ->assertJsonValidationErrors('reason');
+    }
+
+    public function test_cannot_author_a_proposal_against_another_companys_project(): void
+    {
+        $otherCompany = ClientCompany::factory()->create(['slug' => 'other-co']);
+        $foreignProject = ClientProject::create([
+            'client_company_id' => $otherCompany->id,
+            'name' => 'Foreign project',
+            'slug' => 'foreign-project',
+            'creator_user_id' => $this->admin->id,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->postJson('/api/client/mgmt/proposals', [
+                'client_company_id' => $this->company->id,
+                'project_id' => $foreignProject->id,
+                'title' => 'Cross-company attempt',
+                'base_amount' => 1000,
+                'payment_net_days' => 30,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('project_id');
     }
 }

@@ -99,7 +99,13 @@ describe('ClientPortalProposalPage', () => {
 
   const renderPage = () =>
     render(
-      <ClientPortalProposalPage slug="acme" companyName="Acme" companyId={1} initialProposal={makeProposal()} />,
+      <ClientPortalProposalPage
+        slug="acme"
+        companyName="Acme"
+        companyId={1}
+        initialProposal={makeProposal()}
+        initialCanAct
+      />,
     )
 
   it('shows the maximum net with all optional items selected by default', () => {
