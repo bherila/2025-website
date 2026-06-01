@@ -55,6 +55,8 @@ describe('InvoiceSchema (zod)', () => {
       due_date: null,
       paid_date: null,
       notes: null,
+      starting_unused_hours: null,
+      starting_negative_hours: null,
       negative_offset: 10,
       payments_total: '7281.24',
       remaining_balance: '0.00',

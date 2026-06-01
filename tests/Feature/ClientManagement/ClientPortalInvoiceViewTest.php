@@ -117,9 +117,11 @@ class ClientPortalInvoiceViewTest extends TestCase
         $this->assertEqualsWithDelta(0.5, (float) $inv['carried_in_hours'], 0.001);
         $this->assertEqualsWithDelta(1.5, (float) $inv['current_month_hours'], 0.001);
 
-        // Starting balances were null and should be omitted from the payload (null -> undefined).
-        $this->assertArrayNotHasKey('starting_unused_hours', $inv);
-        $this->assertArrayNotHasKey('starting_negative_hours', $inv);
+        // Starting balances are nullable and should be present as explicit nulls.
+        $this->assertArrayHasKey('starting_unused_hours', $inv);
+        $this->assertArrayHasKey('starting_negative_hours', $inv);
+        $this->assertNull($inv['starting_unused_hours']);
+        $this->assertNull($inv['starting_negative_hours']);
 
         // Monetary summary fields should still be present
         $this->assertArrayHasKey('remaining_balance', $inv);

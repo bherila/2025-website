@@ -58,6 +58,10 @@ function renderInvoicePeriod(start: string | null | undefined, end: string | nul
     return formattedStart ?? formattedEnd
 }
 
+function parseNullableDecimal(value: string | null): number | undefined {
+    return value === null ? undefined : parseFloat(value)
+}
+
 interface ClientPortalInvoicePageProps {
     slug: string;
     companyName: string;
@@ -656,8 +660,8 @@ export default function ClientPortalInvoicePage({
                             catchUpHoursBilled={parseFloat(invoice.hours_billed_at_rate)}
                             negativeBalance={parseFloat(invoice.negative_hours_balance)}
                             remainingPool={parseFloat(invoice.unused_hours_balance)}
-                            startingUnusedHours={parseFloat(invoice.starting_unused_hours)}
-                            startingNegativeHours={parseFloat(invoice.starting_negative_hours)}
+                            startingUnusedHours={parseNullableDecimal(invoice.starting_unused_hours)}
+                            startingNegativeHours={parseNullableDecimal(invoice.starting_negative_hours)}
                         />
                     </div>
                 </div>
