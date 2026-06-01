@@ -56,6 +56,8 @@ class ClientInvoicingService
 
     protected InvoiceLineComposer $invoiceLineComposer;
 
+    protected InterimOverageGenerator $interimOverageGenerator;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -76,6 +78,7 @@ class ClientInvoicingService
         ?RetainerCalculator $retainerCalculator = null,
         ?InvoiceLedgerBuilder $invoiceLedgerBuilder = null,
         ?InvoiceLineComposer $invoiceLineComposer = null,
+        ?InterimOverageGenerator $interimOverageGenerator = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
@@ -86,6 +89,14 @@ class ClientInvoicingService
         $this->invoiceLedgerBuilder = $invoiceLedgerBuilder
             ?? new InvoiceLedgerBuilder($this->rolloverCalculator, $this->billingCycleResolver, $this->retainerCalculator);
         $this->invoiceLineComposer = $invoiceLineComposer ?? new InvoiceLineComposer($this->recurringItemBiller);
+        $this->interimOverageGenerator = $interimOverageGenerator
+            ?? new InterimOverageGenerator(
+                $this->agreementSelector,
+                $this->billingCycleResolver,
+                $this->invoiceLedgerBuilder,
+                $this->invoiceLineComposer,
+                $this->invoiceNumberGenerator,
+            );
     }
 
     /**
@@ -1207,200 +1218,12 @@ class ClientInvoicingService
         ?ClientAgreement $agreement = null,
         ?array $immediateLedger = null,
     ): ?ClientInvoice {
-        $periodStart = $monthStart->copy()->startOfMonth()->startOfDay();
-        $agreement = $agreement ?? $this->agreementSelector->agreementCoveringDate($company, $periodStart);
-
-        if (! $agreement) {
-            throw new \Exception('No agreement found for this interim overage period.');
-        }
-
-        if ($agreement->effectiveBillingCadence() === BillingCadence::Monthly) {
-            throw new \Exception('Interim overage invoices only apply to non-monthly billing cadences.');
-        }
-
-        if (! (bool) $agreement->bill_overage_interim) {
-            return null;
-        }
-
-        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
-        $terminationDate = $agreement->termination_date
-            ? Carbon::parse($agreement->termination_date)->startOfDay()
-            : null;
-
-        // Resolve the cycle from a date inside the agreement window. For
-        // mid-month-start agreements, $periodStart can be before active_date
-        // and SemiAnnual cycle resolution would otherwise throw.
-        $cycleProbe = $periodStart->lt($activeDate) ? $activeDate->copy() : $periodStart->copy();
-        $cycle = $this->billingCycleResolver->cycleContaining($agreement, $cycleProbe);
-
-        if ($periodStart->lt($cycle->start)) {
-            $periodStart = $cycle->start->copy();
-        }
-        if ($periodStart->lt($activeDate)) {
-            $periodStart = $activeDate->copy();
-        }
-
-        $periodEnd = $monthStart->copy()->endOfMonth()->startOfDay();
-        if ($periodEnd->gt($cycle->end)) {
-            $periodEnd = $cycle->end->copy();
-        }
-        if ($terminationDate && $periodEnd->gt($terminationDate)) {
-            $periodEnd = $terminationDate->copy();
-        }
-
-        if ($periodEnd->gte($cycle->end)) {
-            return null;
-        }
-
-        return DB::transaction(function () use ($company, $agreement, $cycle, $periodStart, $periodEnd, $immediateLedger): ?ClientInvoice {
-            // Serialize interim generation for this agreement; invoice rows below may not exist yet.
-            ClientAgreement::query()
-                ->whereKey($agreement->getKey())
-                ->lockForUpdate()
-                ->first();
-
-            $issuedCycleInvoice = ClientInvoice::query()
-                ->where('client_company_id', $company->id)
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                ->whereDate('cycle_start', $cycle->start->toDateString())
-                ->whereDate('cycle_end', $cycle->end->toDateString())
-                ->whereIn('status', ['issued', 'paid'])
-                ->lockForUpdate()
-                ->first();
-
-            if ($issuedCycleInvoice) {
-                throw new \Exception("A cadence invoice (#{$issuedCycleInvoice->invoice_number}) already exists for this cycle.");
-            }
-
-            $existingInvoice = ClientInvoice::query()
-                ->where('client_company_id', $company->id)
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
-                ->whereDate('period_start', $periodStart->toDateString())
-                ->whereDate('period_end', $periodEnd->toDateString())
-                ->whereDate('cycle_start', $cycle->start->toDateString())
-                ->whereDate('cycle_end', $cycle->end->toDateString())
-                ->whereNotIn('status', ['void'])
-                ->lockForUpdate()
-                ->first();
-
-            if ($existingInvoice && $existingInvoice->isIssued()) {
-                throw new \Exception("An issued interim invoice (#{$existingInvoice->invoice_number}) already exists for this period and cannot be modified.");
-            }
-
-            // Interim invoices read MonthSummary::closing->excessHours, which is populated only with immediate-excess ledgers.
-            $immediateLedger ??= $this->invoiceLedgerBuilder->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
-            $this->assertImmediateLedgerSupportsInterimOverage($immediateLedger, $cycle, $periodEnd);
-            $cumulativeExcessHours = $this->cumulativeInterimExcessHoursThrough($immediateLedger, $cycle, $periodEnd);
-            $alreadyBilledHours = ClientInvoice::query()
-                ->where('client_company_id', $company->id)
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::InterimOverage->value)
-                ->whereDate('cycle_start', $cycle->start->toDateString())
-                ->whereDate('cycle_end', $cycle->end->toDateString())
-                ->whereDate('period_end', '<', $periodStart->toDateString())
-                ->whereNotIn('status', ['void'])
-                ->sum('hours_billed_at_rate');
-
-            $targetOverageHours = round(max(0.0, $cumulativeExcessHours - (float) $alreadyBilledHours), 4);
-            if ($targetOverageHours <= 0.0) {
-                return null;
-            }
-
-            (new AllocationService)->recombineUnlinkedFragments($company->id);
-
-            $entries = ClientTimeEntry::query()
-                ->where('client_company_id', $company->id)
-                ->whereNull('client_invoice_line_id')
-                ->where('is_billable', true)
-                ->where('is_deferred_billing', false)
-                ->whereBetween('date_worked', [$periodStart, $periodEnd])
-                ->orderBy('date_worked')
-                ->orderBy('id')
-                ->get();
-
-            $entryHours = round($entries->sum('minutes_worked') / 60, 4);
-            $overageHours = round(min($targetOverageHours, $entryHours), 4);
-            if ($overageHours <= 0.0) {
-                return null;
-            }
-
-            if ($existingInvoice) {
-                $invoice = $existingInvoice;
-                $invoice->update([
-                    'period_start' => $periodStart,
-                    'period_end' => $periodEnd,
-                    'cycle_start' => $cycle->start,
-                    'cycle_end' => $cycle->end,
-                    'invoice_kind' => InvoiceKind::InterimOverage->value,
-                    'status' => 'draft',
-                ]);
-                $this->invoiceLineComposer->resetSystemGeneratedLines($invoice);
-            } else {
-                $invoice = ClientInvoice::create([
-                    'client_company_id' => $company->id,
-                    'client_agreement_id' => $agreement->id,
-                    'period_start' => $periodStart,
-                    'period_end' => $periodEnd,
-                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodEnd),
-                    'invoice_total' => 0,
-                    'status' => 'draft',
-                    'invoice_kind' => InvoiceKind::InterimOverage->value,
-                    'cycle_start' => $cycle->start,
-                    'cycle_end' => $cycle->end,
-                ]);
-            }
-
-            $splitter = new TimeEntrySplitter;
-            $plan = $splitter->allocateTimeEntries(
-                $entries,
-                max(0.0, $entryHours - $overageHours),
-                0.0,
-                0.0,
-            );
-
-            $billableFragments = array_merge(
-                $plan->catchUpFragments,
-                $plan->billableCatchupFragments,
-            );
-
-            $line = ClientInvoiceLine::create([
-                'client_invoice_id' => $invoice->client_invoice_id,
-                'client_agreement_id' => $agreement->id,
-                'description' => 'Interim overage hours for '.$periodStart->format('F Y'),
-                'quantity' => $this->formatHoursForQuantity($overageHours),
-                'unit_price' => $agreement->hourly_rate,
-                'line_total' => round($overageHours * (float) $agreement->hourly_rate, 2),
-                'line_type' => InvoiceLineType::AdditionalHours->value,
-                'hours' => $overageHours,
-                'line_date' => $periodEnd,
-                'sort_order' => 1,
-            ]);
-
-            $this->invoiceLineComposer->linkAllFragmentsToLines([
-                $line->client_invoice_line_id => $billableFragments,
-            ], $splitter);
-
-            $monthSummary = $this->invoiceLedgerBuilder->findLedgerMonth($immediateLedger, $periodEnd->format('Y-m'), $cycle->start->format('Y-m-d'));
-            $invoice->update([
-                'retainer_hours_included' => 0,
-                'hours_worked' => $entryHours,
-                'rollover_hours_used' => $monthSummary ? $monthSummary->closing->hoursUsedFromRollover : 0,
-                'unused_hours_balance' => $monthSummary ? $monthSummary->closing->unusedHours + $monthSummary->closing->remainingRollover : 0,
-                'negative_hours_balance' => 0,
-                'starting_unused_hours' => $monthSummary ? $monthSummary->opening->rolloverHours : 0,
-                'starting_negative_hours' => $monthSummary ? $monthSummary->opening->negativeOffset + $monthSummary->opening->remainingNegativeBalance : 0,
-                'hours_billed_at_rate' => $overageHours,
-            ]);
-
-            (new OverpaymentCreditService)->applyCreditsToDraftInvoice($invoice);
-            $invoice->recalculateTotal();
-
-            (new InvoiceActivityLogger)->recordGenerated($company, $invoice);
-
-            return $invoice->fresh(['lineItems']);
-        });
+        return $this->interimOverageGenerator->generateInterimOverageInvoice(
+            $company,
+            $monthStart,
+            $agreement,
+            $immediateLedger,
+        );
     }
 
     /**
@@ -1415,68 +1238,12 @@ class ClientInvoicingService
         BillingCycle $cycle,
         ?array $immediateLedger = null,
     ): array {
-        $results = [
-            'generated' => [],
-            'updated' => [],
-        ];
-
-        if ($agreement->effectiveBillingCadence() === BillingCadence::Monthly || ! (bool) $agreement->bill_overage_interim) {
-            return $results;
-        }
-
-        $cursor = $cycle->start->copy()->startOfMonth();
-        $today = now()->startOfDay();
-
-        while ($cursor->lte($cycle->end)) {
-            $periodStart = $cursor->copy()->startOfMonth();
-            if ($periodStart->lt($cycle->start)) {
-                $periodStart = $cycle->start->copy();
-            }
-
-            $periodEnd = $cursor->copy()->endOfMonth()->startOfDay();
-            if ($periodEnd->gt($cycle->end)) {
-                $periodEnd = $cycle->end->copy();
-            }
-
-            if ($periodEnd->lt($cycle->end) && $periodEnd->lte($today)) {
-                $existingInvoice = ClientInvoice::query()
-                    ->where('client_company_id', $company->id)
-                    ->where('client_agreement_id', $agreement->id)
-                    ->where('invoice_kind', InvoiceKind::InterimOverage->value)
-                    ->whereDate('period_start', $periodStart->toDateString())
-                    ->whereDate('period_end', $periodEnd->toDateString())
-                    ->whereDate('cycle_start', $cycle->start->toDateString())
-                    ->whereDate('cycle_end', $cycle->end->toDateString())
-                    ->whereNotIn('status', ['void'])
-                    ->first();
-
-                if ($existingInvoice && in_array($existingInvoice->status, ['issued', 'paid'], true)) {
-                    $cursor->addMonth()->startOfMonth();
-
-                    continue;
-                }
-
-                $invoice = $this->generateInterimOverageInvoice($company, $periodStart, $agreement, $immediateLedger);
-                if ($invoice) {
-                    $result = [
-                        'period' => $this->formatPeriodLabel($periodStart, $periodEnd),
-                        'invoice_id' => $invoice->client_invoice_id,
-                        'invoice_number' => $invoice->invoice_number,
-                        'invoice_kind' => $invoice->invoiceKindValue(),
-                    ];
-
-                    if ($existingInvoice) {
-                        $results['updated'][] = $result;
-                    } else {
-                        $results['generated'][] = $result;
-                    }
-                }
-            }
-
-            $cursor->addMonth()->startOfMonth();
-        }
-
-        return $results;
+        return $this->interimOverageGenerator->ensureInterimOveragesForCycle(
+            $company,
+            $agreement,
+            $cycle,
+            $immediateLedger,
+        );
     }
 
     /**
@@ -1498,54 +1265,9 @@ class ClientInvoicingService
         return $this->billingCycleResolver->cycleContaining($agreement, $referenceDate)->end;
     }
 
-    /**
-     * @param  array<int, MonthSummary>  $immediateLedger  Ledger built with billExcessImmediately=true so closing excessHours contains billable interim overage.
-     */
-    protected function assertImmediateLedgerSupportsInterimOverage(array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): void
-    {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
-        $periodMonthEnd = $periodEnd->copy()->startOfMonth();
-        $cycleStartKey = $cycle->start->format('Y-m-d');
-
-        foreach ($immediateLedger as $summary) {
-            if (! $this->invoiceLedgerBuilder->ledgerRowBelongsToCycleThrough($summary, $cycleStartKey, $cycleMonthStart, $periodMonthEnd)) {
-                continue;
-            }
-
-            if (! $summary->billExcessImmediately) {
-                throw new \LogicException('Interim overage invoices require a ledger built with billExcessImmediately=true.');
-            }
-        }
-    }
-
-    /**
-     * @param  array<int, MonthSummary>  $immediateLedger  Ledger built with billExcessImmediately=true so closing excessHours contains billable interim overage.
-     */
-    protected function cumulativeInterimExcessHoursThrough(array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): float
-    {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
-        $periodMonthEnd = $periodEnd->copy()->startOfMonth();
-        $cycleStartKey = $cycle->start->format('Y-m-d');
-
-        return round((float) collect($immediateLedger)
-            ->filter(fn (MonthSummary $summary): bool => $this->invoiceLedgerBuilder->ledgerRowBelongsToCycleThrough(
-                $summary,
-                $cycleStartKey,
-                $cycleMonthStart,
-                $periodMonthEnd,
-            ))
-            ->sum(fn (MonthSummary $summary): float => $summary->closing->excessHours), 4);
-    }
-
     protected function interimOverageHoursForCycle(ClientAgreement $agreement, BillingCycle $cycle): float
     {
-        return round((float) ClientInvoice::query()
-            ->where('client_agreement_id', $agreement->id)
-            ->where('invoice_kind', InvoiceKind::InterimOverage->value)
-            ->whereDate('cycle_start', $cycle->start->toDateString())
-            ->whereDate('cycle_end', $cycle->end->toDateString())
-            ->whereNotIn('status', ['void'])
-            ->sum('hours_billed_at_rate'), 4);
+        return $this->interimOverageGenerator->interimOverageHoursForCycle($agreement, $cycle);
     }
 
     /**

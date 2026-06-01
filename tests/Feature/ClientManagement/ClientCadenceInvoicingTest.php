@@ -229,7 +229,7 @@ class ClientCadenceInvoicingTest extends TestCase
             ]);
 
             $this->createTimeEntry('2025-12-10', 0.5);
-            $this->createTimeEntry('2026-02-10', 1.5);
+            $this->createTimeEntry('2026-02-10', 2.0);
 
             $this->invoicingService->generateAllInvoices($this->company);
 
@@ -246,13 +246,14 @@ class ClientCadenceInvoicingTest extends TestCase
             $this->assertEquals('2026-02-28', $invoice->period_end->toDateString());
             $this->assertEquals('2025-11-01', $invoice->cycle_start->toDateString());
             $this->assertEquals('2026-04-30', $invoice->cycle_end->toDateString());
-            $this->assertEquals(1.0, (float) $invoice->hours_billed_at_rate);
-            $this->assertEquals(375.0, (float) $invoice->invoice_total);
+            $this->assertEquals(1.5, (float) $invoice->hours_billed_at_rate);
+            $this->assertEquals(562.50, (float) $invoice->invoice_total);
 
             $additionalHoursLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::AdditionalHours->value);
             $this->assertNotNull($additionalHoursLine);
-            $this->assertEquals(1.0, (float) $additionalHoursLine->hours);
-            $this->assertEquals(375.0, (float) $additionalHoursLine->line_total);
+            $this->assertSame('1:30', $additionalHoursLine->quantity);
+            $this->assertEquals(1.5, (float) $additionalHoursLine->hours);
+            $this->assertEquals(562.50, (float) $additionalHoursLine->line_total);
         } finally {
             Carbon::setTestNow();
         }
