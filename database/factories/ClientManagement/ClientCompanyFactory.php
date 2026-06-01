@@ -20,7 +20,7 @@ class ClientCompanyFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->company();
+        $name = fake()->unique()->company();
 
         return [
             'company_name' => $name,
