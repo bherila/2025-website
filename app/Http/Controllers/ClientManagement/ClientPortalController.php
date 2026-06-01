@@ -182,9 +182,8 @@ class ClientPortalController extends Controller
 
         $invoice = $query->firstOrFail();
 
-        // Use the model's canonical detailed serialization for the head JSON
-        // and strip explicit nulls so the client receives a compact payload.
-        $invoicePayload = $this->removeNullsRecursive($invoice->toDetailedArray());
+        // Use the model's canonical detailed serialization for the head JSON.
+        $invoicePayload = $invoice->toDetailedArray();
 
         // Get previous and next invoice IDs for navigation
         $isAdmin = auth()->user()->hasRole('admin');
@@ -226,27 +225,6 @@ class ClientPortalController extends Controller
             'stripePublishableKey' => $company->stripe_billing_enabled ? config('services.stripe.publishable_key') : null,
             'stripeMaxAmountCents' => config('client-management.stripe.max_amount_cents', 100000),
         ]);
-    }
-
-    /**
-     * Utility: recursively remove null values from arrays so Blade JSON can omit nulls.
-     */
-    private function removeNullsRecursive(mixed $data): mixed
-    {
-        if (is_array($data)) {
-            foreach ($data as $k => $v) {
-                $clean = $this->removeNullsRecursive($v);
-                if ($clean === null) {
-                    unset($data[$k]);
-                } else {
-                    $data[$k] = $clean;
-                }
-            }
-
-            return $data;
-        }
-
-        return $data === null ? null : $data;
     }
 
     /**
