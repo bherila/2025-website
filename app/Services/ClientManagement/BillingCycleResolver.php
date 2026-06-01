@@ -3,7 +3,6 @@
 namespace App\Services\ClientManagement;
 
 use App\Enums\ClientManagement\BillingCadence;
-use App\Enums\ClientManagement\FirstCycleProration;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Services\ClientManagement\DataTransferObjects\BillingCycle;
 use Carbon\Carbon;
@@ -20,14 +19,16 @@ class BillingCycleResolver
 {
     /**
      * Yield each billing cycle from the agreement's active date through
-     * min(termination_date, $through), calendar-aligned.
+     * min(termination_date, $through).
+     *
+     * Monthly cadence uses calendar months. Non-monthly cadences are anchored
+     * to active_date and span their configured number of months.
      *
      * @return iterable<BillingCycle>
      */
     public function cyclesForAgreement(ClientAgreement $agreement, CarbonInterface $through): iterable
     {
         $cadence = $agreement->effectiveBillingCadence();
-        $proration = $agreement->effectiveFirstCycleProration();
         $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
         $terminationDate = $agreement->termination_date
             ? Carbon::instance($agreement->termination_date)->startOfDay()
@@ -42,7 +43,6 @@ class BillingCycleResolver
             return;
         }
 
-        // For monthly cadence, always treat as align_next_cycle / no proration needed
         if ($cadence === BillingCadence::Monthly) {
             foreach ($this->generateMonthlyCycles($activeDate, $ceiling) as $cycle) {
                 yield $cycle;
@@ -50,44 +50,8 @@ class BillingCycleResolver
 
             return;
         }
-        if ($cadence === BillingCadence::SemiAnnual) {
-            // Note: first_cycle_proration and bill_overage_interim are not applied
-            // for semi-annual cadence. Cycles are anchored to active_date and always
-            // span exactly 6 months (or clipped at termination/ceiling).
-            $cursor = $activeDate->copy();
-            while ($cursor->lte($ceiling)) {
-                $cycleStart = $cursor->copy();
-                $cycleEnd = $cycleStart->copy()->addMonths(6)->subDay();
-                $clippedEnd = $cycleEnd->gt($ceiling) ? $ceiling->copy() : $cycleEnd->copy();
-                yield $this->makeCycle($cycleStart, $clippedEnd, $clippedEnd->lt($cycleEnd));
-                $cursor = $cycleEnd->copy()->addDay();
-            }
 
-            return;
-        }
-
-        // Non-monthly cadences: handle first cycle per proration policy
-        $firstCycleStart = $cadence->cycleStart($activeDate);
-        $firstCycleEnd = $cadence->cycleEnd($activeDate);
-
-        yield from $this->buildFirstCycle($cadence, $proration, $activeDate, $firstCycleStart, $firstCycleEnd, $ceiling);
-
-        // Subsequent full cycles
-        $cursor = $firstCycleEnd->copy()->addDay();
-        if ($proration === FirstCycleProration::AlignNextCycle) {
-            // The stub was already emitted; full cycles start at the next calendar boundary
-            $cursor = $cadence->cycleStart($activeDate)->addMonths($cadence->monthsInCycle());
-        }
-
-        while ($cursor->lte($ceiling)) {
-            $cycleStart = $cursor->copy();
-            $cycleEnd = $cadence->cycleEnd($cycleStart);
-            $clippedEnd = $cycleEnd->gt($ceiling) ? $ceiling->copy() : $cycleEnd->copy();
-
-            yield $this->makeCycle($cycleStart, $clippedEnd, $clippedEnd->lt($cycleEnd));
-
-            $cursor = $cycleEnd->copy()->addDay();
-        }
+        yield from $this->generateActiveDateAnchoredCycles($cadence, $activeDate, $ceiling);
     }
 
     /**
@@ -96,7 +60,7 @@ class BillingCycleResolver
     public function cycleContaining(ClientAgreement $agreement, CarbonInterface $date): BillingCycle
     {
         $cadence = $agreement->effectiveBillingCadence();
-        if ($cadence === BillingCadence::SemiAnnual) {
+        if ($cadence !== BillingCadence::Monthly) {
             $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
             if (Carbon::instance($date)->startOfDay()->lt($activeDate)) {
                 throw new \InvalidArgumentException(
@@ -104,14 +68,15 @@ class BillingCycleResolver
                 );
             }
             $resolved = $activeDate->copy();
-            while ($resolved->gt($date)) {
-                $resolved->subMonths(6);
-            }
-            while ($resolved->copy()->addMonths(6)->subDay()->lt($date)) {
-                $resolved->addMonths(6);
+            while ($resolved->copy()->addMonths($cadence->monthsInCycle())->subDay()->lt($date)) {
+                $resolved->addMonths($cadence->monthsInCycle());
             }
 
-            return $this->makeCycle($resolved->copy(), $resolved->copy()->addMonths(6)->subDay(), false);
+            return $this->makeCycle(
+                $resolved->copy(),
+                $resolved->copy()->addMonths($cadence->monthsInCycle())->subDay(),
+                false
+            );
         }
         $start = $cadence->cycleStart($date);
         $end = $cadence->cycleEnd($date);
@@ -146,46 +111,23 @@ class BillingCycleResolver
     }
 
     /**
-     * Build the first cycle according to the proration policy.
+     * Generate non-monthly cadence cycles anchored to the agreement active date.
      *
      * @return iterable<BillingCycle>
      */
-    private function buildFirstCycle(
-        BillingCadence $cadence,
-        FirstCycleProration $proration,
-        Carbon $activeDate,
-        Carbon $standardStart,
-        Carbon $standardEnd,
-        Carbon $ceiling
-    ): iterable {
-        switch ($proration) {
-            case FirstCycleProration::ProrateHours:
-                // Bill from activeDate to the end of the first standard cycle
-                $clippedEnd = $standardEnd->gt($ceiling) ? $ceiling->copy() : $standardEnd->copy();
-                $isProrated = $activeDate->gt($standardStart) || $clippedEnd->lt($standardEnd);
+    private function generateActiveDateAnchoredCycles(BillingCadence $cadence, Carbon $activeDate, Carbon $ceiling): iterable
+    {
+        $cursor = $activeDate->copy();
+        $monthsInCycle = $cadence->monthsInCycle();
 
-                yield $this->makeCycle($activeDate->copy(), $clippedEnd, $isProrated);
-                break;
+        while ($cursor->lte($ceiling)) {
+            $cycleStart = $cursor->copy();
+            $cycleEnd = $cycleStart->copy()->addMonths($monthsInCycle)->subDay();
+            $clippedEnd = $cycleEnd->gt($ceiling) ? $ceiling->copy() : $cycleEnd->copy();
 
-            case FirstCycleProration::FullPeriod:
-                $clippedEnd = $standardEnd->gt($ceiling) ? $ceiling->copy() : $standardEnd->copy();
+            yield $this->makeCycle($cycleStart, $clippedEnd, $clippedEnd->lt($cycleEnd));
 
-                yield $this->makeCycle($activeDate->copy(), $clippedEnd, false);
-                break;
-
-            case FirstCycleProration::AlignNextCycle:
-                // Emit a short stub from activeDate to the end of the first standard cycle,
-                // then full cycles begin at the next boundary.
-                $stubEnd = $standardEnd->gt($ceiling) ? $ceiling->copy() : $standardEnd->copy();
-
-                if ($activeDate->eq($standardStart)) {
-                    // Agreement starts exactly on a cycle boundary — emit a regular first cycle
-                    yield $this->makeCycle($activeDate->copy(), $stubEnd, $stubEnd->lt($standardEnd));
-                } else {
-                    // Stub period (treated as monthly-like)
-                    yield $this->makeCycle($activeDate->copy(), $stubEnd, true);
-                }
-                break;
+            $cursor = $cycleEnd->copy()->addDay();
         }
     }
 
