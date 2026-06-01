@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { ClientInvoicePaymentHydrationSchema,ClientInvoicePaymentSchema } from './invoice-payment'
+import { ClientInvoicePaymentHydrationSchema, ClientInvoicePaymentSchema } from './invoice-payment'
 import { coerceMoney, coerceNumberLike, nullableStringDefault } from './zod-helpers'
 
 // Basic time entry schema (used as a subitem on an invoice line)
@@ -21,6 +21,11 @@ export const DeferredPendingBilledInvoiceSchema = z.object({
 })
 export type DeferredPendingBilledInvoice = z.infer<typeof DeferredPendingBilledInvoiceSchema>
 
+export const DeferredPendingBilledInvoiceHydrationSchema = DeferredPendingBilledInvoiceSchema.extend({
+  invoice_number: nullableStringDefault,
+  issue_date: nullableStringDefault,
+})
+
 export const DeferredPendingEntrySchema = z.object({
   id: z.number(),
   hours: z.number(),
@@ -29,6 +34,11 @@ export const DeferredPendingEntrySchema = z.object({
   billed_invoice: DeferredPendingBilledInvoiceSchema.optional(),
 })
 export type DeferredPendingEntry = z.infer<typeof DeferredPendingEntrySchema>
+
+export const DeferredPendingEntryHydrationSchema = DeferredPendingEntrySchema.extend({
+  name: nullableStringDefault,
+  billed_invoice: DeferredPendingBilledInvoiceHydrationSchema.optional(),
+})
 
 export const InvoiceLineSchema = z.object({
   client_invoice_line_id: z.number(),
@@ -43,6 +53,17 @@ export const InvoiceLineSchema = z.object({
   client_agreement_recurring_item_id: z.number().nullable().optional(),
 })
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>
+
+export const InvoiceLineTimeEntryHydrationSchema = InvoiceLineTimeEntrySchema.extend({
+  name: nullableStringDefault,
+  date_worked: nullableStringDefault,
+})
+
+export const InvoiceLineHydrationSchema = InvoiceLineSchema.extend({
+  hours: coerceNumberLike('0').nullable().optional().default(null),
+  line_date: nullableStringDefault,
+  time_entries: z.array(InvoiceLineTimeEntryHydrationSchema).optional(),
+})
 
 export const InvoiceStripePaymentSchema = z.object({
   id: z.number(),
@@ -125,7 +146,7 @@ export const InvoiceHydrationSchema = z.object({
   starting_negative_hours: coerceNumberLike('0').optional(),
   hours_billed_at_rate: coerceNumberLike('0').optional(),
   notes: z.string().nullable().optional(),
-  line_items: z.array(InvoiceLineSchema).optional().default([]),
+  line_items: z.array(InvoiceLineHydrationSchema).optional().default([]),
   payments: z.array(ClientInvoicePaymentHydrationSchema).optional().default([]),
   stripe_payments: z.array(InvoiceStripePaymentSchema).optional().default([]),
   remaining_balance: coerceMoney('0.00').optional(),
@@ -133,7 +154,7 @@ export const InvoiceHydrationSchema = z.object({
   credit_applied: z.number().optional(),
   overpaid_amount: z.number().optional(),
   available_credit_after: z.number().optional(),
-  deferred_pending: z.array(DeferredPendingEntrySchema).optional(),
+  deferred_pending: z.array(DeferredPendingEntryHydrationSchema).optional(),
   previous_invoice_id: z.number().nullable().optional(),
   next_invoice_id: z.number().nullable().optional(),
 })
