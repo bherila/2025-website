@@ -6,13 +6,14 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Services\ClientManagement\BillingCycleResolver;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Validator;
 
 class StoreClientInvoiceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check();
+        return Gate::allows('Admin');
     }
 
     /** @return array<string, mixed> */

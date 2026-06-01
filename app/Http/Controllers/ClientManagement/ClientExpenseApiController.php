@@ -9,7 +9,6 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
 
 class ClientExpenseApiController extends Controller
 {
@@ -18,7 +17,6 @@ class ClientExpenseApiController extends Controller
      */
     public function index(ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $expenses = ClientExpense::where('client_company_id', $company->id)
             ->with(['project:id,name,slug', 'creator:id,name', 'finLineItem'])
@@ -56,7 +54,6 @@ class ClientExpenseApiController extends Controller
      */
     public function store(Request $request, ClientCompany $company): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $validated = $request->validate([
             'description' => 'required|string|max:255',
@@ -108,7 +105,6 @@ class ClientExpenseApiController extends Controller
      */
     public function show(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
@@ -129,7 +125,6 @@ class ClientExpenseApiController extends Controller
      */
     public function update(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
@@ -173,7 +168,6 @@ class ClientExpenseApiController extends Controller
      */
     public function destroy(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
@@ -189,7 +183,6 @@ class ClientExpenseApiController extends Controller
      */
     public function markReimbursed(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
@@ -216,7 +209,6 @@ class ClientExpenseApiController extends Controller
      */
     public function linkToFinanceLineItem(Request $request, ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);
@@ -242,7 +234,6 @@ class ClientExpenseApiController extends Controller
      */
     public function unlinkFromFinanceLineItem(ClientCompany $company, ClientExpense $expense): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if ($expense->client_company_id !== $company->id) {
             return response()->json(['error' => 'Expense does not belong to this company'], 404);

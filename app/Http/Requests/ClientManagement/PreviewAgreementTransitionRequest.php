@@ -8,6 +8,7 @@ use App\Models\ClientManagement\ClientAgreement;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -18,7 +19,7 @@ class PreviewAgreementTransitionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return auth()->check();
+        return Gate::allows('Admin');
     }
 
     /**

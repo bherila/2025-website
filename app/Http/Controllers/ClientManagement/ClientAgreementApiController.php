@@ -13,7 +13,6 @@ use App\Services\ClientManagement\AgreementTransitionService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class ClientAgreementApiController extends Controller
@@ -23,7 +22,6 @@ class ClientAgreementApiController extends Controller
      */
     public function index(int $companyId): Collection
     {
-        Gate::authorize('Admin');
 
         $company = ClientCompany::findOrFail($companyId);
 
@@ -35,7 +33,6 @@ class ClientAgreementApiController extends Controller
      */
     public function show(int $id): ClientAgreement
     {
-        Gate::authorize('Admin');
 
         return ClientAgreement::with('clientCompany', 'signedByUser', 'recurringItems')->findOrFail($id);
     }
@@ -45,7 +42,6 @@ class ClientAgreementApiController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $agreement = ClientAgreement::with('clientCompany')->findOrFail($id);
 
@@ -125,7 +121,6 @@ class ClientAgreementApiController extends Controller
      */
     public function terminate(Request $request, int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $agreement = ClientAgreement::with('clientCompany')->findOrFail($id);
 
@@ -151,7 +146,6 @@ class ClientAgreementApiController extends Controller
         PreviewAgreementTransitionRequest $request,
         AgreementTransitionService $transitionService,
     ): JsonResponse {
-        Gate::authorize('Admin');
 
         if ((int) $agreement->client_company_id !== (int) $company->id) {
             return response()->json(['error' => 'Agreement does not belong to this company'], 404);
@@ -175,7 +169,6 @@ class ClientAgreementApiController extends Controller
         StoreAgreementTransitionRequest $request,
         AgreementTransitionService $transitionService,
     ): JsonResponse {
-        Gate::authorize('Admin');
 
         if ((int) $agreement->client_company_id !== (int) $company->id) {
             return response()->json(['error' => 'Agreement does not belong to this company'], 404);
@@ -200,7 +193,6 @@ class ClientAgreementApiController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $agreement = ClientAgreement::with('clientCompany')->findOrFail($id);
         $companyId = $agreement->client_company_id;

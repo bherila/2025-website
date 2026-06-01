@@ -7,6 +7,7 @@ use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientAgreementRecurringItem;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -14,7 +15,7 @@ class StoreClientAgreementRecurringItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check();
+        return Gate::allows('Admin');
     }
 
     /** @return array<string, mixed> */

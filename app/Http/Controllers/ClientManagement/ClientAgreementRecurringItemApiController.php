@@ -9,13 +9,11 @@ use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientAgreementRecurringItem;
 use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Gate;
 
 class ClientAgreementRecurringItemApiController extends Controller
 {
     public function index(ClientCompany $company, ClientAgreement $agreement): JsonResponse
     {
-        Gate::authorize('Admin');
 
         if (! $this->agreementBelongsToCompany($agreement, $company)) {
             return response()->json(['error' => 'Agreement does not belong to this company'], 404);
@@ -36,7 +34,6 @@ class ClientAgreementRecurringItemApiController extends Controller
         ClientCompany $company,
         ClientAgreement $agreement,
     ): JsonResponse {
-        Gate::authorize('Admin');
 
         if (! $this->agreementBelongsToCompany($agreement, $company)) {
             return response()->json(['error' => 'Agreement does not belong to this company'], 404);
@@ -56,7 +53,6 @@ class ClientAgreementRecurringItemApiController extends Controller
         ClientAgreement $agreement,
         ClientAgreementRecurringItem $recurringItem,
     ): JsonResponse {
-        Gate::authorize('Admin');
 
         if (! $this->agreementBelongsToCompany($agreement, $company)
             || ! $this->itemBelongsToAgreement($recurringItem, $agreement)) {
@@ -76,7 +72,6 @@ class ClientAgreementRecurringItemApiController extends Controller
         ClientAgreement $agreement,
         ClientAgreementRecurringItem $recurringItem,
     ): JsonResponse {
-        Gate::authorize('Admin');
 
         if (! $this->agreementBelongsToCompany($agreement, $company)
             || ! $this->itemBelongsToAgreement($recurringItem, $agreement)) {

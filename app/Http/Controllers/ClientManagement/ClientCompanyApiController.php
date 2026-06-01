@@ -16,7 +16,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -27,7 +26,6 @@ class ClientCompanyApiController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $status = $this->resolveStatusFilter($request->string('status')->toString());
         $sort = $request->string('sort')->toString() ?: 'name';
@@ -448,7 +446,6 @@ class ClientCompanyApiController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $company = $this->findCompanyForDetail($id);
 
@@ -460,7 +457,6 @@ class ClientCompanyApiController extends Controller
      */
     public function update(UpdateClientCompanyRequest $request, int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $validatedData = $request->validated();
 
@@ -623,7 +619,6 @@ class ClientCompanyApiController extends Controller
      */
     public function getUsers(): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $users = User::select('id', 'name', 'email', 'last_login_date')->orderBy('name')->get();
 
@@ -636,7 +631,6 @@ class ClientCompanyApiController extends Controller
      */
     public function options(): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $companies = ClientCompany::query()
             ->orderByDesc('is_active')
@@ -651,7 +645,6 @@ class ClientCompanyApiController extends Controller
      */
     public function createUserAndAssign(Request $request): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',

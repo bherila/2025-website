@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\FinDocumentAccount;
 use App\Services\Finance\DocumentCapabilityService;
 use Tests\TestCase;
 
@@ -89,7 +91,7 @@ class DocumentCapabilityServiceTest extends TestCase
         $document->genai_status = 'completed';
         $document->parsed_data_needs_review = false;
 
-        $mockLink = new \App\Models\FinanceTool\FinDocumentAccount;
+        $mockLink = new FinDocumentAccount;
         $mockLink->account_id = null;
         $document->setRelation('accounts', collect([$mockLink]));
 
@@ -126,7 +128,7 @@ class DocumentCapabilityServiceTest extends TestCase
         $document->parsed_data_needs_review = false;
         $document->setRelation('accounts', collect([]));
 
-        $mockLot = new \App\Models\FinanceTool\FinAccountLot;
+        $mockLot = new FinAccountLot;
         $document->setRelation('lots', collect([$mockLot]));
 
         $caps = $this->service->capabilities($document);
@@ -217,7 +219,7 @@ class DocumentCapabilityServiceTest extends TestCase
         $document->parsed_data_needs_review = false;
         $document->setRelation('accounts', collect([]));
 
-        $mockLot = new \App\Models\FinanceTool\FinAccountLot;
+        $mockLot = new FinAccountLot;
         $document->setRelation('lots', collect([$mockLot]));
 
         $caps = $this->service->capabilities($document);
