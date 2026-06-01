@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 
 export type MillerPresentation = 'column' | 'modal' | 'app'
+export type MillerColumnSize = 'narrow' | 'default' | 'wide' | 'full'
 
 export interface MillerInstanceRef {
   key: string
@@ -30,6 +31,8 @@ export interface MillerRegistryEntry<State, Id extends string, Meta = unknown> {
     create: (state: State) => MillerInstanceRef
     allowCreate: boolean
   }
-  wide?: boolean
+  size?: MillerColumnSize | undefined
+  /** @deprecated Use size instead. */
+  wide?: boolean | undefined
   meta?: Meta
 }

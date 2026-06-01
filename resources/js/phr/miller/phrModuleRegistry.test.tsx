@@ -76,4 +76,10 @@ describe('phrModuleRegistry', () => {
       rendered.unmount()
     }
   })
+
+  it('registers Documents as full width and visual detail columns as wide', () => {
+    expect(phrModuleRegistry.documents.size).toBe('full')
+    expect(phrModuleRegistry['vitals-trend'].size).toBe('wide')
+    expect(phrModuleRegistry['document-viewer'].size).toBe('wide')
+  })
 })

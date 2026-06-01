@@ -22,7 +22,7 @@ export function PhrHomeView({ patientId, replaceFrom }: PhrHomeViewProps): React
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="mx-auto w-full max-w-5xl space-y-4 p-6">
       <div className="space-y-1">
         <h1 className="text-lg font-semibold text-foreground">Patient {patientId}</h1>
         <p className="text-sm text-muted-foreground">Select a module to view records.</p>
