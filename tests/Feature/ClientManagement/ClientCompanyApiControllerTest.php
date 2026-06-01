@@ -619,7 +619,6 @@ class ClientCompanyApiControllerTest extends TestCase
         ]);
     }
 
-
     public function test_admin_can_fetch_company_detail_with_metric_block(): void
     {
         $admin = $this->createAdminUser();
