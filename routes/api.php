@@ -379,70 +379,74 @@ Route::middleware(['web', 'auth'])->post('/login-audit/{id}/suspicious', [LoginA
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/duplicates', [FinanceTransactionsDedupeApiController::class, 'findDuplicates']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/merge-duplicates', [FinanceTransactionsDedupeApiController::class, 'mergeDuplicates']);
 
-// Client Management API routes
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies', [ClientCompanyApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/company-options', [ClientCompanyApiController::class, 'options']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{id}', [ClientCompanyApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/users', [ClientCompanyApiController::class, 'getUsers']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/assign-user', [ClientCompanyUserController::class, 'store']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/create-user-and-assign', [ClientCompanyApiController::class, 'createUserAndAssign']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/{companyId}/users/{userId}', [ClientCompanyUserController::class, 'destroy']);
+// Client Management API routes (Admin)
+Route::middleware(['web', 'auth', 'can:Admin'])
+    ->prefix('client/mgmt')
+    ->group(function (): void {
+        Route::get('/companies', [ClientCompanyApiController::class, 'index']);
+        Route::get('/company-options', [ClientCompanyApiController::class, 'options']);
+        Route::get('/companies/{id}', [ClientCompanyApiController::class, 'show']);
+        Route::put('/companies/{id}', [ClientCompanyApiController::class, 'update']);
+        Route::get('/users', [ClientCompanyApiController::class, 'getUsers']);
+        Route::post('/assign-user', [ClientCompanyUserController::class, 'store']);
+        Route::post('/create-user-and-assign', [ClientCompanyApiController::class, 'createUserAndAssign']);
+        Route::delete('/{companyId}/users/{userId}', [ClientCompanyUserController::class, 'destroy']);
 
-// Client Agreement API routes (Admin)
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{companyId}/agreements', [ClientAgreementApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/agreements/{id}/terminate', [ClientAgreementApiController::class, 'terminate']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/agreements/{id}', [ClientAgreementApiController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/agreements/{agreement}/transition/preview', [ClientAgreementApiController::class, 'transitionPreview']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/agreements/{agreement}/transition', [ClientAgreementApiController::class, 'transition']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'store']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'destroy']);
+        // Client Agreement API routes
+        Route::get('/companies/{companyId}/agreements', [ClientAgreementApiController::class, 'index']);
+        Route::get('/agreements/{id}', [ClientAgreementApiController::class, 'show']);
+        Route::put('/agreements/{id}', [ClientAgreementApiController::class, 'update']);
+        Route::post('/agreements/{id}/terminate', [ClientAgreementApiController::class, 'terminate']);
+        Route::delete('/agreements/{id}', [ClientAgreementApiController::class, 'destroy']);
+        Route::post('/companies/{company}/agreements/{agreement}/transition/preview', [ClientAgreementApiController::class, 'transitionPreview']);
+        Route::post('/companies/{company}/agreements/{agreement}/transition', [ClientAgreementApiController::class, 'transition']);
+        Route::get('/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'index']);
+        Route::post('/companies/{company}/agreements/{agreement}/recurring-items', [ClientAgreementRecurringItemApiController::class, 'store']);
+        Route::put('/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'update']);
+        Route::delete('/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'destroy']);
 
-// Client Proposal API routes (Admin)
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{companyId}/proposals', [ClientProposalApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals', [ClientProposalApiController::class, 'store']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals/{id}/send', [ClientProposalApiController::class, 'send']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals/{id}/revisions', [ClientProposalApiController::class, 'createRevision']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/proposals/{id}/preview', [ClientProposalApiController::class, 'preview']);
+        // Client Proposal API routes
+        Route::get('/companies/{companyId}/proposals', [ClientProposalApiController::class, 'index']);
+        Route::post('/proposals', [ClientProposalApiController::class, 'store']);
+        Route::get('/proposals/{id}', [ClientProposalApiController::class, 'show']);
+        Route::put('/proposals/{id}', [ClientProposalApiController::class, 'update']);
+        Route::delete('/proposals/{id}', [ClientProposalApiController::class, 'destroy']);
+        Route::post('/proposals/{id}/send', [ClientProposalApiController::class, 'send']);
+        Route::post('/proposals/{id}/revisions', [ClientProposalApiController::class, 'createRevision']);
+        Route::get('/proposals/{id}/preview', [ClientProposalApiController::class, 'preview']);
 
-// Client Invoice API routes (Admin)
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices', [ClientInvoiceApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-all', [ClientInvoiceApiController::class, 'generateAll']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/generate-interim/{yyyymm}', [ClientInvoiceApiController::class, 'generateInterim'])->where('yyyymm', '[0-9]{6}');
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices', [ClientInvoiceApiController::class, 'store']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/issue', [ClientInvoiceApiController::class, 'issue']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/mark-paid', [ClientInvoiceApiController::class, 'markPaid']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/void', [ClientInvoiceApiController::class, 'void']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/unvoid', [ClientInvoiceApiController::class, 'unVoid']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/line-items', [ClientInvoiceApiController::class, 'addLineItem']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}', [ClientInvoiceApiController::class, 'updateLineItem']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/line-items/{lineId}', [ClientInvoiceApiController::class, 'removeLineItem']);
+        // Client Invoice API routes
+        Route::get('/companies/{company}/invoices', [ClientInvoiceApiController::class, 'index']);
+        Route::get('/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'show']);
+        Route::post('/companies/{company}/invoices/generate-all', [ClientInvoiceApiController::class, 'generateAll']);
+        Route::post('/companies/{company}/invoices/generate-interim/{yyyymm}', [ClientInvoiceApiController::class, 'generateInterim'])->where('yyyymm', '[0-9]{6}');
+        Route::post('/companies/{company}/invoices', [ClientInvoiceApiController::class, 'store']);
+        Route::put('/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'update']);
+        Route::post('/companies/{company}/invoices/{invoice}/issue', [ClientInvoiceApiController::class, 'issue']);
+        Route::post('/companies/{company}/invoices/{invoice}/mark-paid', [ClientInvoiceApiController::class, 'markPaid']);
+        Route::post('/companies/{company}/invoices/{invoice}/void', [ClientInvoiceApiController::class, 'void']);
+        Route::post('/companies/{company}/invoices/{invoice}/unvoid', [ClientInvoiceApiController::class, 'unVoid']);
+        Route::delete('/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'destroy']);
+        Route::post('/companies/{company}/invoices/{invoice}/line-items', [ClientInvoiceApiController::class, 'addLineItem']);
+        Route::put('/companies/{company}/invoices/{invoice}/line-items/{lineId}', [ClientInvoiceApiController::class, 'updateLineItem']);
+        Route::delete('/companies/{company}/invoices/{invoice}/line-items/{lineId}', [ClientInvoiceApiController::class, 'removeLineItem']);
 
-// Client Invoice Payment API routes (Admin)
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}/payments', [ClientInvoiceApiController::class, 'getPayments']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/invoices/{invoice}/payments', [ClientInvoiceApiController::class, 'addPayment']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [ClientInvoiceApiController::class, 'updatePayment']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/invoices/{invoice}/payments/{payment}', [ClientInvoiceApiController::class, 'deletePayment']);
+        // Client Invoice Payment API routes
+        Route::get('/companies/{company}/invoices/{invoice}/payments', [ClientInvoiceApiController::class, 'getPayments']);
+        Route::post('/companies/{company}/invoices/{invoice}/payments', [ClientInvoiceApiController::class, 'addPayment']);
+        Route::put('/companies/{company}/invoices/{invoice}/payments/{payment}', [ClientInvoiceApiController::class, 'updatePayment']);
+        Route::delete('/companies/{company}/invoices/{invoice}/payments/{payment}', [ClientInvoiceApiController::class, 'deletePayment']);
 
-// Client Expense API routes (Admin)
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/expenses', [ClientExpenseApiController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses', [ClientExpenseApiController::class, 'store']);
-Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'show']);
-Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'update']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses/{expense}/mark-reimbursed', [ClientExpenseApiController::class, 'markReimbursed']);
-Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/expenses/{expense}/link-finance', [ClientExpenseApiController::class, 'linkToFinanceLineItem']);
-Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/expenses/{expense}/link-finance', [ClientExpenseApiController::class, 'unlinkFromFinanceLineItem']);
+        // Client Expense API routes
+        Route::get('/companies/{company}/expenses', [ClientExpenseApiController::class, 'index']);
+        Route::post('/companies/{company}/expenses', [ClientExpenseApiController::class, 'store']);
+        Route::get('/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'show']);
+        Route::put('/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'update']);
+        Route::delete('/companies/{company}/expenses/{expense}', [ClientExpenseApiController::class, 'destroy']);
+        Route::post('/companies/{company}/expenses/{expense}/mark-reimbursed', [ClientExpenseApiController::class, 'markReimbursed']);
+        Route::post('/companies/{company}/expenses/{expense}/link-finance', [ClientExpenseApiController::class, 'linkToFinanceLineItem']);
+        Route::delete('/companies/{company}/expenses/{expense}/link-finance', [ClientExpenseApiController::class, 'unlinkFromFinanceLineItem']);
+    });
 
 // Client Portal API routes
 Route::middleware(['web', 'auth'])->get('/client/portal/companies', [ClientPortalApiController::class, 'getAccessibleCompanies']);

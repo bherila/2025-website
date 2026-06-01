@@ -215,6 +215,16 @@ class ClientCompanyApiControllerTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_client_management_routes_reject_authenticated_non_admin_users(): void
+    {
+        $this->createAdminUser();
+
+        $this
+            ->actingAs($this->createUser())
+            ->getJson('/api/client/mgmt/company-options')
+            ->assertForbidden();
+    }
+
     public function test_admin_can_fetch_company_list_when_agreement_has_quoted_legacy_semi_annual_value(): void
     {
         $admin = $this->createAdminUser();
@@ -618,7 +628,6 @@ class ClientCompanyApiControllerTest extends TestCase
             'creator_user_id' => $actor->id,
         ]);
     }
-
 
     public function test_admin_can_fetch_company_detail_with_metric_block(): void
     {

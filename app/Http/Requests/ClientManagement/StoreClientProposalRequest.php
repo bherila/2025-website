@@ -5,6 +5,7 @@ namespace App\Http\Requests\ClientManagement;
 use App\Enums\ClientManagement\ChargeCadence;
 use App\Enums\ClientManagement\ProposalItemKind;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -12,7 +13,7 @@ class StoreClientProposalRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check();
+        return Gate::allows('Admin');
     }
 
     /** @return array<string, mixed> */

@@ -5,6 +5,7 @@ namespace App\Http\Requests\ClientManagement;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 
 class GenerateInterimOverageInvoiceRequest extends FormRequest
 {
@@ -13,7 +14,7 @@ class GenerateInterimOverageInvoiceRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return auth()->check();
+        return Gate::allows('Admin');
     }
 
     /**

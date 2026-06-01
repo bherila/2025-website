@@ -7,7 +7,6 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 
 class ClientCompanyUserController extends Controller
 {
@@ -16,7 +15,6 @@ class ClientCompanyUserController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $validated = $request->validate([
             'client_company_id' => 'required|exists:client_companies,id',
@@ -41,7 +39,6 @@ class ClientCompanyUserController extends Controller
      */
     public function destroy(int $companyId, int $userId): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $company = ClientCompany::findOrFail($companyId);
         $company->users()->detach($userId);

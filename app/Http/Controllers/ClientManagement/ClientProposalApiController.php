@@ -11,7 +11,6 @@ use App\Models\ClientManagement\ClientProposal;
 use App\Services\ClientManagement\ProposalService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Gate;
 
 class ClientProposalApiController extends Controller
 {
@@ -24,7 +23,6 @@ class ClientProposalApiController extends Controller
      */
     public function index(int $companyId): Collection
     {
-        Gate::authorize('Admin');
 
         $company = ClientCompany::findOrFail($companyId);
 
@@ -37,7 +35,6 @@ class ClientProposalApiController extends Controller
 
     public function show(int $id): ClientProposal
     {
-        Gate::authorize('Admin');
 
         return ClientProposal::with([
             'items',
@@ -52,7 +49,6 @@ class ClientProposalApiController extends Controller
 
     public function store(StoreClientProposalRequest $request): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $data = $request->validated();
         $company = ClientCompany::findOrFail($data['client_company_id']);
@@ -67,7 +63,6 @@ class ClientProposalApiController extends Controller
 
     public function update(UpdateClientProposalRequest $request, int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $proposal = ClientProposal::findOrFail($id);
         $data = $request->validated();
@@ -85,7 +80,6 @@ class ClientProposalApiController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $proposal = ClientProposal::findOrFail($id);
 
@@ -101,7 +95,6 @@ class ClientProposalApiController extends Controller
 
     public function send(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $proposal = ClientProposal::with('clientCompany')->findOrFail($id);
 
@@ -116,7 +109,6 @@ class ClientProposalApiController extends Controller
 
     public function createRevision(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $proposal = ClientProposal::with(['clientCompany', 'items'])->findOrFail($id);
         $revision = $this->proposals->createRevision($proposal, auth()->user());
@@ -126,7 +118,6 @@ class ClientProposalApiController extends Controller
 
     public function preview(int $id): JsonResponse
     {
-        Gate::authorize('Admin');
 
         $proposal = ClientProposal::with('items')->findOrFail($id);
 
