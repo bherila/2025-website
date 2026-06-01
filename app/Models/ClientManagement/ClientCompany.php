@@ -84,6 +84,16 @@ class ClientCompany extends Model
     }
 
     /**
+     * Get the proposals associated with this client company.
+     *
+     * @return HasMany<ClientProposal, $this>
+     */
+    public function proposals(): HasMany
+    {
+        return $this->hasMany(ClientProposal::class, 'client_company_id');
+    }
+
+    /**
      * Get the currently active agreement.
      */
     public function activeAgreement(): ?ClientAgreement

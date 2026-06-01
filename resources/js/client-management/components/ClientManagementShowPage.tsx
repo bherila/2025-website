@@ -6,11 +6,13 @@ import AgreementsTab from '@/client-management/components/admin/company/Agreemen
 import ClientManagementHeader from '@/client-management/components/admin/company/ClientManagementHeader'
 import CompanyOverviewTab from '@/client-management/components/admin/company/CompanyOverviewTab'
 import InvoicesTab from '@/client-management/components/admin/company/InvoicesTab'
+import ProposalsTab from '@/client-management/components/admin/company/ProposalsTab'
 import TimeExpensesTab from '@/client-management/components/admin/company/TimeExpensesTab'
 import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
 import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
 import { useClientCompanyDetail } from '@/client-management/hooks/useClientCompanyDetail'
 import { useCreateAgreement } from '@/client-management/hooks/useCreateAgreement'
+import { useCreateProposal } from '@/client-management/hooks/useCreateProposal'
 import { useDismissibleAlert } from '@/client-management/hooks/useDismissibleAlert'
 import { useHashTab } from '@/client-management/hooks/useHashTab'
 import type { ClientCompany } from '@/client-management/types/common'
@@ -28,6 +30,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
   const { company, setCompany, loading, fetchCompany } = useClientCompanyDetail(companyId, showError)
   const [activeTab, changeTab] = useHashTab('overview')
   const { createAgreement, creating } = useCreateAgreement(companyId, showError)
+  const { createProposal, creating: creatingProposal } = useCreateProposal(companyId, showError)
 
   const renderAlert = () =>
     alertInfo && (
@@ -76,6 +79,7 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
         <Tabs value={activeTab} onValueChange={changeTab} className="space-y-4">
           <TabsList className="flex h-auto w-full flex-wrap justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="proposals">Proposals</TabsTrigger>
             <TabsTrigger value="agreements">Agreements</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="time">Time & Expenses</TabsTrigger>
@@ -94,6 +98,14 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
               onCreateAgreement={() => void createAgreement()}
               creating={creating}
               onViewAllAgreements={() => changeTab('agreements')}
+            />
+          </TabsContent>
+
+          <TabsContent value="proposals">
+            <ProposalsTab
+              companyId={company.id}
+              onCreateProposal={() => void createProposal()}
+              creating={creatingProposal}
             />
           </TabsContent>
 

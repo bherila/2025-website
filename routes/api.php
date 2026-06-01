@@ -16,6 +16,8 @@ use App\Http\Controllers\ClientManagement\ClientInvoicePaymentIntentApiControlle
 use App\Http\Controllers\ClientManagement\ClientPaymentMethodApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalAgreementApiController;
 use App\Http\Controllers\ClientManagement\ClientPortalApiController;
+use App\Http\Controllers\ClientManagement\ClientPortalProposalApiController;
+use App\Http\Controllers\ClientManagement\ClientProposalApiController;
 use App\Http\Controllers\ClientManagement\StripeWebhookController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\Finance\PalCarryforwardController;
@@ -400,6 +402,16 @@ Route::middleware(['web', 'auth'])->post('/client/mgmt/companies/{company}/agree
 Route::middleware(['web', 'auth'])->put('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'update']);
 Route::middleware(['web', 'auth'])->delete('/client/mgmt/companies/{company}/agreements/{agreement}/recurring-items/{recurringItem}', [ClientAgreementRecurringItemApiController::class, 'destroy']);
 
+// Client Proposal API routes (Admin)
+Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{companyId}/proposals', [ClientProposalApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals', [ClientProposalApiController::class, 'store']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->put('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'update']);
+Route::middleware(['web', 'auth'])->delete('/client/mgmt/proposals/{id}', [ClientProposalApiController::class, 'destroy']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals/{id}/send', [ClientProposalApiController::class, 'send']);
+Route::middleware(['web', 'auth'])->post('/client/mgmt/proposals/{id}/revisions', [ClientProposalApiController::class, 'createRevision']);
+Route::middleware(['web', 'auth'])->get('/client/mgmt/proposals/{id}/preview', [ClientProposalApiController::class, 'preview']);
+
 // Client Invoice API routes (Admin)
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices', [ClientInvoiceApiController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/client/mgmt/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'show']);
@@ -459,6 +471,13 @@ Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/agreements/{agree
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/agreements/{agreementId}/sign', [ClientPortalAgreementApiController::class, 'sign']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices', [ClientPortalAgreementApiController::class, 'getInvoices']);
 Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/invoices/{invoiceId}', [ClientPortalAgreementApiController::class, 'getInvoice']);
+
+// Client Portal Proposal API routes
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/proposals', [ClientPortalProposalApiController::class, 'index']);
+Route::middleware(['web', 'auth'])->get('/client/portal/{slug}/proposals/{proposalId}', [ClientPortalProposalApiController::class, 'show']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/proposals/{proposalId}/accept', [ClientPortalProposalApiController::class, 'accept']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/proposals/{proposalId}/reject', [ClientPortalProposalApiController::class, 'reject']);
+Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/proposals/{proposalId}/request-changes', [ClientPortalProposalApiController::class, 'requestChanges']);
 
 // User Management API routes (Admin only)
 Route::middleware(['web', 'auth'])->get('/admin/users', [UserManagementApiController::class, 'index']);
