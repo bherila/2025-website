@@ -3,7 +3,6 @@
 namespace App\Services\ClientManagement;
 
 use App\Enums\ClientManagement\BillingCadence;
-use App\Enums\ClientManagement\FirstCycleProration;
 use App\Enums\ClientManagement\InvoiceKind;
 use App\Enums\ClientManagement\InvoiceLineType;
 use App\Models\ClientManagement\ClientAgreement;
@@ -54,6 +53,8 @@ class ClientInvoicingService
 
     protected AgreementSelector $agreementSelector;
 
+    protected RetainerCalculator $retainerCalculator;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -71,12 +72,14 @@ class ClientInvoicingService
         ?RecurringItemBiller $recurringItemBiller = null,
         ?InvoiceNumberGenerator $invoiceNumberGenerator = null,
         ?AgreementSelector $agreementSelector = null,
+        ?RetainerCalculator $retainerCalculator = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
         $this->recurringItemBiller = $recurringItemBiller ?? new RecurringItemBiller;
         $this->invoiceNumberGenerator = $invoiceNumberGenerator ?? new InvoiceNumberGenerator;
         $this->agreementSelector = $agreementSelector ?? new AgreementSelector;
+        $this->retainerCalculator = $retainerCalculator ?? new RetainerCalculator($this->billingCycleResolver);
     }
 
     /**
@@ -1073,8 +1076,8 @@ class ClientInvoicingService
                 ->orderBy('id')
                 ->get();
 
-            $retainerHours = $this->cycleRetainerHours($agreement, $cycle, $cycleLedger);
-            $retainerFee = $this->cycleRetainerFee($agreement, $cycle, $cycleLedger);
+            $retainerHours = $this->retainerCalculator->cycleRetainerHours($agreement, $cycle, $cycleLedger);
+            $retainerFee = $this->retainerCalculator->cycleRetainerFee($agreement, $cycle, $cycleLedger);
 
             $splitter = new TimeEntrySplitter;
             $plan = $splitter->allocateTimeEntries(
@@ -1537,7 +1540,7 @@ class ClientInvoicingService
             $monthEnd = $cursor->copy()->endOfMonth()->startOfDay();
             $monthKey = $monthStart->format('Y-m');
             $monthEntries = $entriesByMonth->get($monthKey, collect());
-            $retainerMultiplier = $this->monthRetainerMultiplier($agreement, $monthStart, $monthEnd);
+            $retainerMultiplier = $this->retainerCalculator->monthRetainerMultiplier($agreement, $monthStart, $monthEnd);
 
             $months[] = [
                 'year_month' => $monthKey,
@@ -1577,7 +1580,7 @@ class ClientInvoicingService
         $ledger = [];
 
         foreach ($this->billingCycleResolver->cyclesForAgreement($agreement, $ledgerEnd) as $cycle) {
-            $cyclePool = $this->cyclePeriodRetainerHours($agreement, $cycle);
+            $cyclePool = $this->retainerCalculator->cyclePeriodRetainerHours($agreement, $cycle);
             $cumulativeWorked = 0.0;
             $cumulativeExcess = 0.0;
             $cycleStartKey = $cycle->start->format('Y-m-d');
@@ -1704,13 +1707,13 @@ class ClientInvoicingService
         $last = $cycleSummaries->last();
 
         if ($agreement->retainer_hours !== null) {
-            $retainerHours = $this->cyclePeriodRetainerHours($agreement, $cycle);
+            $retainerHours = $this->retainerCalculator->cyclePeriodRetainerHours($agreement, $cycle);
             $hoursWorked = round((float) $cycleSummaries->sum('hoursWorked'), 4);
             $coveredHours = round(min($hoursWorked, $retainerHours), 4);
 
             return [
                 'retainer_hours' => $retainerHours,
-                'retainer_multiplier' => $this->cyclePeriodRetainerMultiplier($agreement, $cycle),
+                'retainer_multiplier' => $this->retainerCalculator->cyclePeriodRetainerMultiplier($agreement, $cycle),
                 'covered_hours' => $coveredHours,
                 'hours_worked' => $hoursWorked,
                 'rollover_hours_used' => 0.0,
@@ -1766,119 +1769,6 @@ class ClientInvoicingService
         }
 
         return $this->billingCycleResolver->cycleContaining($agreement, $referenceDate)->end;
-    }
-
-    /**
-     * Resolve retainer hours for this concrete cadence cycle.
-     *
-     * @param  array<string, float>  $cycleLedger
-     */
-    protected function cycleRetainerHours(ClientAgreement $agreement, BillingCycle $cycle, array $cycleLedger): float
-    {
-        if ($agreement->retainer_hours !== null) {
-            return $this->cyclePeriodRetainerHours($agreement, $cycle);
-        }
-
-        return $cycleLedger['retainer_hours'];
-    }
-
-    protected function cyclePeriodRetainerHours(ClientAgreement $agreement, BillingCycle $cycle): float
-    {
-        return round((float) $agreement->retainer_hours * $this->cyclePeriodRetainerMultiplier($agreement, $cycle), 4);
-    }
-
-    /**
-     * Resolve retainer fee for this concrete cadence cycle.
-     *
-     * @param  array<string, float>  $cycleLedger
-     */
-    protected function cycleRetainerFee(ClientAgreement $agreement, BillingCycle $cycle, array $cycleLedger): float
-    {
-        if ($agreement->retainer_fee !== null) {
-            return round((float) $agreement->retainer_fee * $this->cyclePeriodRetainerMultiplier($agreement, $cycle), 2);
-        }
-
-        return round((float) $agreement->monthly_retainer_fee * $cycleLedger['retainer_multiplier'], 2);
-    }
-
-    /**
-     * Multiplier to apply to retainer_hours / retainer_fee for the given cycle.
-     *
-     * The window is the cycle's effective entitlement — start = max(cycle.start,
-     * natural cycle start) and end = min(natural cycle end, termination_date) —
-     * over the natural cycle length. We deliberately ignore the cycle's end as
-     * yielded by `cyclesForAgreement(...)` because that may have been clipped
-     * by `$through` (e.g., when an interim ledger is built mid-cycle), which is
-     * not a real shortening of the client's retainer entitlement.
-     */
-    protected function cyclePeriodRetainerMultiplier(ClientAgreement $agreement, BillingCycle $cycle): float
-    {
-        $naturalCycle = $this->billingCycleResolver->cycleContaining($agreement, $cycle->start);
-
-        $activeDate = Carbon::instance($agreement->active_date)->startOfDay();
-        $fullPeriodFirstCycle = $agreement->effectiveFirstCycleProration() === FirstCycleProration::FullPeriod
-            && $cycle->start->isSameDay($activeDate)
-            && $cycle->start->gt($naturalCycle->start);
-
-        $effectiveStart = $fullPeriodFirstCycle || $naturalCycle->start->gt($cycle->start)
-            ? $naturalCycle->start->copy()
-            : $cycle->start->copy();
-        $effectiveEnd = $naturalCycle->end->copy();
-
-        $terminationDate = $agreement->termination_date
-            ? Carbon::parse($agreement->termination_date)->startOfDay()
-            : null;
-        if ($terminationDate !== null && $terminationDate->lt($effectiveEnd)) {
-            $effectiveEnd = $terminationDate->copy();
-        }
-
-        if ($effectiveStart->gt($effectiveEnd)) {
-            return 0.0;
-        }
-
-        $naturalDays = $naturalCycle->start->diffInDays($naturalCycle->end) + 1;
-        if ($naturalDays <= 0) {
-            return 1.0;
-        }
-
-        $effectiveDays = $effectiveStart->diffInDays($effectiveEnd) + 1;
-        if ($effectiveDays >= $naturalDays) {
-            return 1.0;
-        }
-
-        return $effectiveDays / $naturalDays;
-    }
-
-    protected function monthRetainerMultiplier(ClientAgreement $agreement, Carbon $monthStart, Carbon $monthEnd): float
-    {
-        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
-        $terminationDate = $agreement->termination_date
-            ? Carbon::parse($agreement->termination_date)->startOfDay()
-            : null;
-
-        if ($activeDate->lte($monthStart) && (! $terminationDate || $terminationDate->gte($monthEnd))) {
-            return 1.0;
-        }
-
-        $coveredStart = $activeDate->gt($monthStart) ? $activeDate->copy() : $monthStart->copy();
-        $coveredEnd = $monthEnd->copy();
-        if ($terminationDate && $terminationDate->lt($coveredEnd)) {
-            $coveredEnd = $terminationDate->copy();
-        }
-
-        if ($coveredStart->gt($coveredEnd)) {
-            return 0.0;
-        }
-
-        if ($coveredStart->isSameDay($monthStart) && $coveredEnd->isSameDay($monthEnd)) {
-            return 1.0;
-        }
-
-        if ($agreement->effectiveFirstCycleProration() === FirstCycleProration::FullPeriod) {
-            return 1.0;
-        }
-
-        return round(($coveredStart->diffInDays($coveredEnd) + 1) / $monthStart->daysInMonth, 4);
     }
 
     /**
