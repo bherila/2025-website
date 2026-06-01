@@ -55,6 +55,8 @@ class ClientInvoicingService
 
     protected RetainerCalculator $retainerCalculator;
 
+    protected InvoiceLedgerBuilder $invoiceLedgerBuilder;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -73,6 +75,7 @@ class ClientInvoicingService
         ?InvoiceNumberGenerator $invoiceNumberGenerator = null,
         ?AgreementSelector $agreementSelector = null,
         ?RetainerCalculator $retainerCalculator = null,
+        ?InvoiceLedgerBuilder $invoiceLedgerBuilder = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
@@ -80,6 +83,8 @@ class ClientInvoicingService
         $this->invoiceNumberGenerator = $invoiceNumberGenerator ?? new InvoiceNumberGenerator;
         $this->agreementSelector = $agreementSelector ?? new AgreementSelector;
         $this->retainerCalculator = $retainerCalculator ?? new RetainerCalculator($this->billingCycleResolver);
+        $this->invoiceLedgerBuilder = $invoiceLedgerBuilder
+            ?? new InvoiceLedgerBuilder($this->rolloverCalculator, $this->billingCycleResolver, $this->retainerCalculator);
     }
 
     /**
@@ -874,7 +879,7 @@ class ClientInvoicingService
     {
         $through = $this->cadenceGenerationThroughDate($agreement);
         $billExcessImmediately = (bool) $agreement->bill_overage_interim;
-        $cycleLedger = $this->buildAgreementLedgerThrough(
+        $cycleLedger = $this->invoiceLedgerBuilder->buildAgreementLedgerThrough(
             $company,
             $agreement,
             $through,
@@ -979,7 +984,7 @@ class ClientInvoicingService
                 ->first();
 
             if ((bool) $agreement->bill_overage_interim) {
-                $ledger ??= $this->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
+                $ledger ??= $this->invoiceLedgerBuilder->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
                 $immediateLedger ??= $ledger;
             }
 
@@ -1057,13 +1062,13 @@ class ClientInvoicingService
             $allocationService = new AllocationService;
             $allocationService->recombineUnlinkedFragments($company->id);
 
-            $ledger ??= $this->buildAgreementLedgerThrough(
+            $ledger ??= $this->invoiceLedgerBuilder->buildAgreementLedgerThrough(
                 $company,
                 $agreement,
                 $periodEnd,
                 (bool) $agreement->bill_overage_interim,
             );
-            $cycleLedger = $this->summarizeLedgerForCycle($agreement, $ledger, $cycle);
+            $cycleLedger = $this->invoiceLedgerBuilder->summarizeLedgerForCycle($agreement, $ledger, $cycle);
             $interimBilledHours = $this->interimOverageHoursForCycle($agreement, $cycle);
 
             $entries = ClientTimeEntry::query()
@@ -1284,7 +1289,7 @@ class ClientInvoicingService
             }
 
             // Interim invoices read MonthSummary::closing->excessHours, which is populated only with immediate-excess ledgers.
-            $immediateLedger ??= $this->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
+            $immediateLedger ??= $this->invoiceLedgerBuilder->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
             $this->assertImmediateLedgerSupportsInterimOverage($immediateLedger, $cycle, $periodEnd);
             $cumulativeExcessHours = $this->cumulativeInterimExcessHoursThrough($immediateLedger, $cycle, $periodEnd);
             $alreadyBilledHours = ClientInvoice::query()
@@ -1376,7 +1381,7 @@ class ClientInvoicingService
                 $line->client_invoice_line_id => $billableFragments,
             ], $splitter);
 
-            $monthSummary = $this->findLedgerMonth($immediateLedger, $periodEnd->format('Y-m'), $cycle->start->format('Y-m-d'));
+            $monthSummary = $this->invoiceLedgerBuilder->findLedgerMonth($immediateLedger, $periodEnd->format('Y-m'), $cycle->start->format('Y-m-d'));
             $invoice->update([
                 'retainer_hours_included' => 0,
                 'hours_worked' => $entryHours,
@@ -1474,285 +1479,6 @@ class ClientInvoicingService
     }
 
     /**
-     * Build the monthly ledger for one agreement through a given date.
-     *
-     * @return array<int, MonthSummary>
-     */
-    protected function buildAgreementLedgerThrough(
-        ClientCompany $company,
-        ClientAgreement $agreement,
-        Carbon $through,
-        bool $billExcessImmediately = false,
-    ): array {
-        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
-        $terminationDate = $agreement->termination_date
-            ? Carbon::parse($agreement->termination_date)->startOfDay()
-            : null;
-        $ledgerEnd = $through->copy()->startOfDay();
-
-        if ($terminationDate && $terminationDate->lt($ledgerEnd)) {
-            $ledgerEnd = $terminationDate->copy();
-        }
-
-        if ($activeDate->gt($ledgerEnd)) {
-            return [];
-        }
-
-        $billableEntries = ClientTimeEntry::query()
-            ->where('client_company_id', $company->id)
-            ->where('is_billable', true)
-            ->whereBetween('date_worked', [$activeDate, $ledgerEnd])
-            ->get();
-
-        if ($agreement->retainer_hours !== null) {
-            /** @var array<string, float> $hoursByDate */
-            $hoursByDate = [];
-            foreach ($billableEntries as $entry) {
-                $dateKey = Carbon::parse($entry->date_worked)->format('Y-m-d');
-                $hoursByDate[$dateKey] = ($hoursByDate[$dateKey] ?? 0.0) + ((float) $entry->minutes_worked / 60);
-            }
-
-            return $this->buildPeriodRetainerLedgerThrough(
-                $agreement,
-                $ledgerEnd,
-                $hoursByDate,
-                $billExcessImmediately,
-            );
-        }
-
-        $entriesByMonth = $billableEntries
-            ->groupBy(fn (ClientTimeEntry $entry): string => Carbon::parse($entry->date_worked)->format('Y-m'));
-
-        $months = [];
-        $initialRolloverHours = (float) ($agreement->initial_rollover_hours ?? 0);
-        if ($initialRolloverHours > 0) {
-            $months[] = [
-                'year_month' => $activeDate->copy()->startOfMonth()->subMonth()->format('Y-m'),
-                'retainer_hours' => round($initialRolloverHours, 4),
-                'hours_worked' => 0.0,
-                'reset_rollover' => false,
-            ];
-        }
-
-        $cursor = $activeDate->copy()->startOfMonth();
-        while ($cursor->lte($ledgerEnd)) {
-            $monthStart = $cursor->copy()->startOfMonth();
-            $monthEnd = $cursor->copy()->endOfMonth()->startOfDay();
-            $monthKey = $monthStart->format('Y-m');
-            $monthEntries = $entriesByMonth->get($monthKey, collect());
-            $retainerMultiplier = $this->retainerCalculator->monthRetainerMultiplier($agreement, $monthStart, $monthEnd);
-
-            $months[] = [
-                'year_month' => $monthKey,
-                'retainer_hours' => round((float) $agreement->monthly_retainer_hours * $retainerMultiplier, 4),
-                'hours_worked' => round($monthEntries->sum('minutes_worked') / 60, 4),
-                'reset_rollover' => false,
-            ];
-
-            $cursor->addMonth()->startOfMonth();
-        }
-
-        return $this->rolloverCalculator->calculateMultipleMonths(
-            $months,
-            (int) $agreement->rollover_months,
-            $billExcessImmediately,
-        );
-    }
-
-    /**
-     * Build a cycle-pooled ledger for agreements that use native period
-     * retainer terms (retainer_hours / retainer_fee).
-     *
-     * Each cycle's retainer is a single pool that is consumed across its
-     * months. Excess hours and interim overages are computed against the
-     * cycle pool rather than per-month monthly_retainer_hours, so interim
-     * billing stays consistent with the final cadence reckoning.
-     *
-     * @param  array<string, float>  $hoursByDate  Billable hours summed per work date (Y-m-d). Date keys outside any cycle window are simply unused.
-     * @return array<int, MonthSummary>
-     */
-    protected function buildPeriodRetainerLedgerThrough(
-        ClientAgreement $agreement,
-        Carbon $ledgerEnd,
-        array $hoursByDate,
-        bool $billExcessImmediately,
-    ): array {
-        $ledger = [];
-
-        foreach ($this->billingCycleResolver->cyclesForAgreement($agreement, $ledgerEnd) as $cycle) {
-            $cyclePool = $this->retainerCalculator->cyclePeriodRetainerHours($agreement, $cycle);
-            $cumulativeWorked = 0.0;
-            $cumulativeExcess = 0.0;
-            $cycleStartKey = $cycle->start->format('Y-m-d');
-
-            $cursor = $cycle->start->copy()->startOfMonth();
-            $lastMonth = $cycle->end->copy()->startOfMonth();
-            if ($lastMonth->gt($ledgerEnd)) {
-                $lastMonth = $ledgerEnd->copy()->startOfMonth();
-            }
-
-            $isFirstMonthOfCycle = true;
-
-            while ($cursor->lte($lastMonth)) {
-                $monthStart = $cursor->copy()->startOfMonth();
-                $monthEnd = $cursor->copy()->endOfMonth()->startOfDay();
-
-                // Clip to the cycle's portion of this calendar month so adjacent
-                // cycles sharing a boundary month don't claim each other's hours.
-                $rangeStart = $monthStart->gt($cycle->start) ? $monthStart : $cycle->start->copy()->startOfDay();
-                $rangeEnd = $monthEnd->lt($cycle->end) ? $monthEnd : $cycle->end->copy()->startOfDay();
-                if ($rangeEnd->gt($ledgerEnd)) {
-                    $rangeEnd = $ledgerEnd->copy();
-                }
-
-                $monthHoursWorked = 0.0;
-                if ($rangeStart->lte($rangeEnd)) {
-                    $dateCursor = $rangeStart->copy();
-                    while ($dateCursor->lte($rangeEnd)) {
-                        $monthHoursWorked += $hoursByDate[$dateCursor->format('Y-m-d')] ?? 0.0;
-                        $dateCursor->addDay();
-                    }
-                }
-                $monthHoursWorked = round($monthHoursWorked, 4);
-
-                $openingPool = round(max(0.0, $cyclePool - $cumulativeWorked), 4);
-                $cumulativeWorked = round($cumulativeWorked + $monthHoursWorked, 4);
-
-                $monthFromRetainer = round(min($monthHoursWorked, $openingPool), 4);
-
-                if ($billExcessImmediately) {
-                    $newCumulativeExcess = round(max(0.0, $cumulativeWorked - $cyclePool), 4);
-                    $monthExcess = round($newCumulativeExcess - $cumulativeExcess, 4);
-                    $cumulativeExcess = $newCumulativeExcess;
-                    $negativeBalance = 0.0;
-                } else {
-                    $monthExcess = 0.0;
-                    $negativeBalance = round(max(0.0, $cumulativeWorked - $cyclePool), 4);
-                }
-
-                $closingPool = round(max(0.0, $cyclePool - $cumulativeWorked), 4);
-
-                $monthRetainer = $isFirstMonthOfCycle ? $cyclePool : 0.0;
-                $isFirstMonthOfCycle = false;
-
-                $ledger[] = new MonthSummary(
-                    opening: new OpeningBalance(
-                        retainerHours: $monthRetainer,
-                        rolloverHours: 0.0,
-                        expiredHours: 0.0,
-                        totalAvailable: $openingPool,
-                        negativeOffset: 0.0,
-                        invoicedNegativeBalance: 0.0,
-                        effectiveRetainerHours: $monthRetainer,
-                        remainingNegativeBalance: 0.0,
-                    ),
-                    closing: new ClosingBalance(
-                        hoursUsedFromRetainer: $monthFromRetainer,
-                        hoursUsedFromRollover: 0.0,
-                        unusedHours: $closingPool,
-                        excessHours: $monthExcess,
-                        negativeBalance: $negativeBalance,
-                        remainingRollover: 0.0,
-                    ),
-                    hoursWorked: $monthHoursWorked,
-                    yearMonth: $cursor->format('Y-m'),
-                    retainerHours: $monthRetainer,
-                    billExcessImmediately: $billExcessImmediately,
-                    cycleStart: $cycleStartKey,
-                );
-
-                $cursor->addMonth()->startOfMonth();
-            }
-        }
-
-        return $ledger;
-    }
-
-    /**
-     * @param  array<int, MonthSummary>  $ledger
-     * @return array{
-     *     retainer_hours: float,
-     *     retainer_multiplier: float,
-     *     covered_hours: float,
-     *     hours_worked: float,
-     *     rollover_hours_used: float,
-     *     unused_hours: float,
-     *     negative_hours: float,
-     *     starting_unused_hours: float,
-     *     starting_negative_hours: float
-     * }
-     */
-    protected function summarizeLedgerForCycle(ClientAgreement $agreement, array $ledger, BillingCycle $cycle): array
-    {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
-        $cycleMonthEnd = $cycle->end->copy()->startOfMonth();
-        $cycleStartKey = $cycle->start->format('Y-m-d');
-        $cycleSummaries = collect($ledger)
-            ->filter(function (MonthSummary $summary) use ($cycleMonthStart, $cycleMonthEnd, $cycleStartKey): bool {
-                // For period-retainer rows, match by the owning cycle (boundary
-                // months can appear in adjacent cycles' rows).
-                if ($summary->cycleStart !== null) {
-                    return $summary->cycleStart === $cycleStartKey;
-                }
-
-                $monthStart = Carbon::parse($summary->yearMonth.'-01')->startOfDay();
-
-                return $monthStart->betweenIncluded($cycleMonthStart, $cycleMonthEnd);
-            })
-            ->values();
-
-        /** @var MonthSummary|null $first */
-        $first = $cycleSummaries->first();
-        /** @var MonthSummary|null $last */
-        $last = $cycleSummaries->last();
-
-        if ($agreement->retainer_hours !== null) {
-            $retainerHours = $this->retainerCalculator->cyclePeriodRetainerHours($agreement, $cycle);
-            $hoursWorked = round((float) $cycleSummaries->sum('hoursWorked'), 4);
-            $coveredHours = round(min($hoursWorked, $retainerHours), 4);
-
-            return [
-                'retainer_hours' => $retainerHours,
-                'retainer_multiplier' => $this->retainerCalculator->cyclePeriodRetainerMultiplier($agreement, $cycle),
-                'covered_hours' => $coveredHours,
-                'hours_worked' => $hoursWorked,
-                'rollover_hours_used' => 0.0,
-                'unused_hours' => round(max(0.0, $retainerHours - $hoursWorked), 4),
-                'negative_hours' => round(max(0.0, $hoursWorked - $retainerHours), 4),
-                'starting_unused_hours' => 0.0,
-                'starting_negative_hours' => 0.0,
-            ];
-        }
-
-        $retainerHours = round((float) $cycleSummaries->sum('retainerHours'), 4);
-        $monthlyRetainerHours = (float) $agreement->monthly_retainer_hours;
-
-        return [
-            'retainer_hours' => $retainerHours,
-            'retainer_multiplier' => $monthlyRetainerHours > 0
-                ? round($retainerHours / $monthlyRetainerHours, 4)
-                : (float) $cycleSummaries->count(),
-            'covered_hours' => round((float) $cycleSummaries->sum(
-                fn (MonthSummary $summary): float => $summary->closing->hoursUsedFromRetainer
-                    + $summary->closing->hoursUsedFromRollover
-                    + $summary->opening->negativeOffset
-            ), 4),
-            'hours_worked' => round((float) $cycleSummaries->sum('hoursWorked'), 4),
-            'rollover_hours_used' => round((float) $cycleSummaries->sum(
-                fn (MonthSummary $summary): float => $summary->closing->hoursUsedFromRollover
-            ), 4),
-            'unused_hours' => $last
-                ? round($last->closing->unusedHours + $last->closing->remainingRollover, 4)
-                : 0.0,
-            'negative_hours' => $last ? round($last->closing->negativeBalance, 4) : 0.0,
-            'starting_unused_hours' => $first ? round($first->opening->rolloverHours, 4) : 0.0,
-            'starting_negative_hours' => $first
-                ? round($first->opening->negativeOffset + $first->opening->remainingNegativeBalance, 4)
-                : 0.0,
-        ];
-    }
-
-    /**
      * Resolve the last date invoice generation should cover for cadence-based agreements.
      */
     protected function cadenceGenerationThroughDate(ClientAgreement $agreement): Carbon
@@ -1781,7 +1507,7 @@ class ClientInvoicingService
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
         foreach ($immediateLedger as $summary) {
-            if (! $this->ledgerRowBelongsToCycleThrough($summary, $cycleStartKey, $cycleMonthStart, $periodMonthEnd)) {
+            if (! $this->invoiceLedgerBuilder->ledgerRowBelongsToCycleThrough($summary, $cycleStartKey, $cycleMonthStart, $periodMonthEnd)) {
                 continue;
             }
 
@@ -1801,33 +1527,13 @@ class ClientInvoicingService
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
         return round((float) collect($immediateLedger)
-            ->filter(fn (MonthSummary $summary): bool => $this->ledgerRowBelongsToCycleThrough(
+            ->filter(fn (MonthSummary $summary): bool => $this->invoiceLedgerBuilder->ledgerRowBelongsToCycleThrough(
                 $summary,
                 $cycleStartKey,
                 $cycleMonthStart,
                 $periodMonthEnd,
             ))
             ->sum(fn (MonthSummary $summary): float => $summary->closing->excessHours), 4);
-    }
-
-    /**
-     * Decide whether a ledger row belongs to the given cycle, up through
-     * $periodMonthEnd. Period-retainer rows match by their owning cycleStart;
-     * legacy monthly-rollover rows match by calendar yearMonth range.
-     */
-    protected function ledgerRowBelongsToCycleThrough(
-        MonthSummary $summary,
-        string $cycleStartKey,
-        Carbon $cycleMonthStart,
-        Carbon $periodMonthEnd,
-    ): bool {
-        $monthStart = Carbon::parse($summary->yearMonth.'-01')->startOfDay();
-
-        if ($summary->cycleStart !== null) {
-            return $summary->cycleStart === $cycleStartKey && $monthStart->lte($periodMonthEnd);
-        }
-
-        return $monthStart->betweenIncluded($cycleMonthStart, $periodMonthEnd);
     }
 
     protected function interimOverageHoursForCycle(ClientAgreement $agreement, BillingCycle $cycle): float
@@ -1839,32 +1545,6 @@ class ClientInvoicingService
             ->whereDate('cycle_end', $cycle->end->toDateString())
             ->whereNotIn('status', ['void'])
             ->sum('hours_billed_at_rate'), 4);
-    }
-
-    /**
-     * @param  array<int, MonthSummary>  $ledger
-     * @param  string|null  $cycleStart  When provided, prefer a row owned by this cycle to disambiguate boundary months shared across cycles.
-     */
-    protected function findLedgerMonth(array $ledger, string $yearMonth, ?string $cycleStart = null): ?MonthSummary
-    {
-        // Legacy rollover rows carry cycleStart=null; period-retainer rows carry
-        // the owning cycle. Prefer an exact (yearMonth, cycleStart) match; fall
-        // back to the first matching row when only one row exists for this Y-m
-        // (the unambiguous case).
-        $exact = null;
-        $fallback = null;
-        foreach ($ledger as $summary) {
-            if ($summary->yearMonth !== $yearMonth) {
-                continue;
-            }
-            if ($cycleStart !== null && $summary->cycleStart === $cycleStart) {
-                $exact = $summary;
-                break;
-            }
-            $fallback ??= $summary;
-        }
-
-        return $exact ?? $fallback;
     }
 
     /**
