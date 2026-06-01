@@ -35,21 +35,11 @@ class ClientPortalController extends Controller
         $users = $company->users()->orderBy('name')->get();
 
         $recentTimeEntries = $company->timeEntries()
-            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name', 'invoiceLine.invoice:client_invoice_id,invoice_number,issue_date'])
+            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
+            ->withPortalInvoiceContext()
             ->orderBy('date_worked', 'desc')
             ->limit(5)
-            ->get()
-            ->map(function ($entry) {
-                $ci = $entry->invoiceLine?->invoice;
-                if ($ci) {
-                    $entry->client_invoice = $ci;
-                    $entry->client_invoice->invoice_date = $ci->issue_date ? $ci->issue_date->toDateString() : null;
-                } else {
-                    $entry->client_invoice = null;
-                }
-
-                return $entry;
-            });
+            ->get();
 
         return view('client-management.portal.index', [
             'company' => $company,
@@ -177,7 +167,7 @@ class ClientPortalController extends Controller
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
         if (! auth()->user()->hasRole('admin')) {
-            $query->whereIn('status', ['issued', 'paid']);
+            $query->visibleToClientPortal();
         }
 
         $invoice = $query->firstOrFail();
@@ -185,36 +175,11 @@ class ClientPortalController extends Controller
         // Use the model's canonical detailed serialization for the head JSON.
         $invoicePayload = $invoice->toDetailedArray();
 
-        // Get previous and next invoice IDs for navigation
         $isAdmin = auth()->user()->hasRole('admin');
-        $navQuery = ClientInvoice::where('client_company_id', $company->id);
-        if (! $isAdmin) {
-            $navQuery->whereIn('status', ['issued', 'paid']);
-        }
-
-        $invoicePayload['previous_invoice_id'] = (clone $navQuery)
-            ->where(function ($q) use ($invoice) {
-                $q->where('period_start', '<', $invoice->period_start)
-                    ->orWhere(function ($q2) use ($invoice) {
-                        $q2->where('period_start', '=', $invoice->period_start)
-                            ->where('client_invoice_id', '<', $invoice->client_invoice_id);
-                    });
-            })
-            ->orderBy('period_start', 'desc')
-            ->orderBy('client_invoice_id', 'desc')
-            ->value('client_invoice_id');
-
-        $invoicePayload['next_invoice_id'] = (clone $navQuery)
-            ->where(function ($q) use ($invoice) {
-                $q->where('period_start', '>', $invoice->period_start)
-                    ->orWhere(function ($q2) use ($invoice) {
-                        $q2->where('period_start', '=', $invoice->period_start)
-                            ->where('client_invoice_id', '>', $invoice->client_invoice_id);
-                    });
-            })
-            ->orderBy('period_start', 'asc')
-            ->orderBy('client_invoice_id', 'asc')
-            ->value('client_invoice_id');
+        $invoicePayload = array_merge(
+            $invoicePayload,
+            $invoice->portalNavigationIds(includeDrafts: $isAdmin)
+        );
 
         return view('client-management.portal.invoice', [
             'company' => $company,

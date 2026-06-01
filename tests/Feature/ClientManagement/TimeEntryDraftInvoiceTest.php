@@ -461,9 +461,56 @@ class TimeEntryDraftInvoiceTest extends TestCase
         $this->assertNotNull($invoicedEntry, 'Should have an entry linked to invoice');
         $this->assertArrayHasKey('status', $invoicedEntry['client_invoice']);
         $this->assertEquals('draft', $invoicedEntry['client_invoice']['status']);
+        $this->assertArrayHasKey('invoice_date', $invoicedEntry['client_invoice']);
+        $this->assertNull($invoicedEntry['client_invoice']['invoice_date']);
 
         // is_invoiced should be false for draft invoice
         $this->assertFalse($invoicedEntry['is_invoiced']);
+    }
+
+    public function test_portal_index_hydration_includes_invoice_status_for_recent_time_entries(): void
+    {
+        $this->actingAs($this->admin);
+
+        ClientTimeEntry::create([
+            'project_id' => $this->project->id,
+            'client_company_id' => $this->company->id,
+            'name' => 'Recent work item',
+            'minutes_worked' => 90,
+            'date_worked' => '2024-01-15',
+            'user_id' => $this->admin->id,
+            'creator_user_id' => $this->admin->id,
+            'is_billable' => true,
+            'job_type' => 'Software Development',
+        ]);
+
+        $invoicingService = app(ClientInvoicingService::class);
+        $invoice = $invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 1, 1),
+            Carbon::create(2024, 1, 31)
+        );
+
+        $response = $this->get("/client/portal/{$this->company->slug}");
+        $response->assertStatus(200);
+
+        preg_match(
+            '/<script id="client-portal-initial-data" type="application\/json">\s*(.*?)\s*<\/script>/s',
+            $response->getContent(),
+            $matches
+        );
+
+        $this->assertArrayHasKey(1, $matches);
+
+        $payload = json_decode($matches[1], true);
+        $recentEntry = collect($payload['recentTimeEntries'])
+            ->first(fn (array $entry): bool => $entry['client_invoice'] !== null);
+
+        $this->assertNotNull($recentEntry, 'Should have a recent entry linked to invoice');
+        $this->assertSame($invoice->client_invoice_id, $recentEntry['client_invoice']['client_invoice_id']);
+        $this->assertSame('draft', $recentEntry['client_invoice']['status']);
+        $this->assertArrayHasKey('invoice_date', $recentEntry['client_invoice']);
+        $this->assertNull($recentEntry['client_invoice']['invoice_date']);
     }
 
     public function test_can_create_time_entry_when_date_overlaps_issued_ad_hoc_invoice(): void

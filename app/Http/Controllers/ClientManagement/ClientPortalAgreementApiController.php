@@ -88,7 +88,7 @@ class ClientPortalAgreementApiController extends Controller
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
         if (! $isAdmin) {
-            $query->whereIn('status', ['issued', 'paid']);
+            $query->visibleToClientPortal();
         }
 
         return $query->orderBy('issue_date', 'desc')
@@ -114,43 +114,16 @@ class ClientPortalAgreementApiController extends Controller
             ->firstOrFail();
 
         // Admins can see all invoices, but clients can only see issued or paid ones.
-        if (! $isAdmin && ! in_array($invoice->status, ['issued', 'paid'])) {
+        if (! $isAdmin && ! in_array($invoice->status, ClientInvoice::CLIENT_VISIBLE_STATUSES, true)) {
             abort(404);
         }
 
         // Use canonical serializer from the model (includes hours breakdown, payments_total, line_items, etc.)
         $data = $invoice->toDetailedArray();
 
-        // Get previous and next invoice IDs
-        $navQuery = ClientInvoice::where('client_company_id', $company->id);
-        if (! $isAdmin) {
-            $navQuery->whereIn('status', ['issued', 'paid']);
-        }
-
-        $data['previous_invoice_id'] = (clone $navQuery)
-            ->where(function ($q) use ($invoice) {
-                $q->where('period_start', '<', $invoice->period_start)
-                    ->orWhere(function ($q2) use ($invoice) {
-                        $q2->where('period_start', '=', $invoice->period_start)
-                            ->where('client_invoice_id', '<', $invoice->client_invoice_id);
-                    });
-            })
-            ->orderBy('period_start', 'desc')
-            ->orderBy('client_invoice_id', 'desc')
-            ->value('client_invoice_id');
-
-        $data['next_invoice_id'] = (clone $navQuery)
-            ->where(function ($q) use ($invoice) {
-                $q->where('period_start', '>', $invoice->period_start)
-                    ->orWhere(function ($q2) use ($invoice) {
-                        $q2->where('period_start', '=', $invoice->period_start)
-                            ->where('client_invoice_id', '>', $invoice->client_invoice_id);
-                    });
-            })
-            ->orderBy('period_start', 'asc')
-            ->orderBy('client_invoice_id', 'asc')
-            ->value('client_invoice_id');
-
-        return $data;
+        return array_merge(
+            $data,
+            $invoice->portalNavigationIds(includeDrafts: $isAdmin)
+        );
     }
 }
