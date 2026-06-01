@@ -137,6 +137,8 @@ class InvoiceSummaryConsistencyTest extends TestCase
 
         $content = $response->getContent();
         preg_match('/<script id="client-portal-initial-data" type="application\/json">\s*(.*?)\s*<\/script>/s', $content, $matches);
+        $this->assertArrayHasKey(1, $matches);
+
         $payload = json_decode($matches[1], true);
 
         $this->assertEquals($inv1->client_invoice_id, $payload['invoice']['previous_invoice_id']);
@@ -148,5 +150,46 @@ class InvoiceSummaryConsistencyTest extends TestCase
         $this->assertNull($payload['invoice']['due_date']);
         $this->assertNull($payload['invoice']['notes']);
         $this->assertNull($payload['invoice']['cycle_start']);
+    }
+
+    public function test_portal_navigation_ids_can_include_or_exclude_draft_invoices(): void
+    {
+        $company = ClientCompany::factory()->create();
+
+        $januaryInvoice = ClientInvoice::create([
+            'client_company_id' => $company->id,
+            'period_start' => '2024-01-01',
+            'period_end' => '2024-01-31',
+            'status' => 'issued',
+            'invoice_number' => 'INV-1',
+        ]);
+
+        $februaryDraft = ClientInvoice::create([
+            'client_company_id' => $company->id,
+            'period_start' => '2024-02-01',
+            'period_end' => '2024-02-29',
+            'status' => 'draft',
+            'invoice_number' => 'INV-2',
+        ]);
+
+        $marchInvoice = ClientInvoice::create([
+            'client_company_id' => $company->id,
+            'period_start' => '2024-03-01',
+            'period_end' => '2024-03-31',
+            'status' => 'issued',
+            'invoice_number' => 'INV-3',
+        ]);
+
+        $clientVisibleNavigation = $januaryInvoice->portalNavigationIds();
+        $adminNavigation = $januaryInvoice->portalNavigationIds(includeDrafts: true);
+
+        $this->assertSame($marchInvoice->client_invoice_id, $clientVisibleNavigation['next_invoice_id']);
+        $this->assertSame($februaryDraft->client_invoice_id, $adminNavigation['next_invoice_id']);
+
+        $clientVisibleNavigation = $marchInvoice->portalNavigationIds();
+        $adminNavigation = $marchInvoice->portalNavigationIds(includeDrafts: true);
+
+        $this->assertSame($januaryInvoice->client_invoice_id, $clientVisibleNavigation['previous_invoice_id']);
+        $this->assertSame($februaryDraft->client_invoice_id, $adminNavigation['previous_invoice_id']);
     }
 }
