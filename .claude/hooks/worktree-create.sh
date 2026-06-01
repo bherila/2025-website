@@ -16,6 +16,7 @@ if command -v jq >/dev/null 2>&1 && [[ -n "$PAYLOAD" ]]; then
     .name // .subagent_name // .agent_id // .agent_type // empty
   ' 2>/dev/null || true)"
 fi
-NAME="${NAME:-claude-$(date +%Y%m%d-%H%M%S)}"
+NAME="${NAME:-claude-$(date +%Y%m%d-%H%M%S)-$$-$RANDOM}"
 
+cd "$ROOT"
 exec "$ROOT/scripts/wt/create.sh" "$NAME"

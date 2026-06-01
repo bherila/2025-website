@@ -42,7 +42,7 @@ if [[ -e "$WT_PATH" ]]; then
   # and value with a single space, so awk's $2 would truncate paths that
   # legitimately contain spaces (e.g. WORKTREE_ROOT="/tmp/my trees").
   if git -C "$PRIMARY_ROOT" worktree list --porcelain 2>/dev/null \
-       | grep -Fxq "worktree $WT_PATH"; then
+       | awk -v line="worktree $WT_PATH" '$0 == line { found=1 } END { exit found ? 0 : 1 }'; then
     echo "[wt] reusing existing worktree: $WT_PATH" >&2
     echo "$WT_PATH"
     exit 0
