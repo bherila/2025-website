@@ -31,6 +31,13 @@ class ClientInvoice extends Model
      */
     public const SETTLED_STATUSES = ['paid', 'void'];
 
+    /**
+     * Statuses visible to non-admin client portal users.
+     *
+     * @var list<string>
+     */
+    public const CLIENT_VISIBLE_STATUSES = ['issued', 'paid'];
+
     protected $appends = ['payments_total', 'remaining_balance'];
 
     protected $fillable = [
@@ -171,6 +178,17 @@ class ClientInvoice extends Model
     public function scopeUnpaid(Builder $query): Builder
     {
         return $query->whereNotIn('status', self::SETTLED_STATUSES);
+    }
+
+    /**
+     * Scope to invoices visible to non-admin client portal users.
+     *
+     * @param  Builder<ClientInvoice>  $query
+     * @return Builder<ClientInvoice>
+     */
+    public function scopeVisibleToClientPortal(Builder $query): Builder
+    {
+        return $query->whereIn('status', self::CLIENT_VISIBLE_STATUSES);
     }
 
     /**
@@ -429,6 +447,43 @@ class ClientInvoice extends Model
                 ];
             })->toArray(),
         ];
+    }
+
+    /**
+     * Return adjacent invoice IDs for portal previous/next navigation.
+     *
+     * @return array{previous_invoice_id: int|null, next_invoice_id: int|null}
+     */
+    public function portalNavigationIds(bool $includeDrafts = false): array
+    {
+        return [
+            'previous_invoice_id' => $this->portalAdjacentInvoiceId(previous: true, includeDrafts: $includeDrafts),
+            'next_invoice_id' => $this->portalAdjacentInvoiceId(previous: false, includeDrafts: $includeDrafts),
+        ];
+    }
+
+    private function portalAdjacentInvoiceId(bool $previous, bool $includeDrafts): ?int
+    {
+        $query = self::query()
+            ->where('client_company_id', $this->client_company_id)
+            ->when(! $includeDrafts, fn (Builder $query): Builder => $query->visibleToClientPortal());
+
+        $operator = $previous ? '<' : '>';
+        $direction = $previous ? 'desc' : 'asc';
+
+        $invoiceId = $query
+            ->where(function (Builder $query) use ($operator): void {
+                $query->where('period_start', $operator, $this->period_start)
+                    ->orWhere(function (Builder $query) use ($operator): void {
+                        $query->where('period_start', '=', $this->period_start)
+                            ->where('client_invoice_id', $operator, $this->client_invoice_id);
+                    });
+            })
+            ->orderBy('period_start', $direction)
+            ->orderBy('client_invoice_id', $direction)
+            ->value('client_invoice_id');
+
+        return $invoiceId === null ? null : (int) $invoiceId;
     }
 
     /**

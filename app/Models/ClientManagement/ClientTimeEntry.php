@@ -78,40 +78,50 @@ class ClientTimeEntry extends Model
 
     /**
      * Get the project this time entry belongs to.
+     *
+     * @return BelongsTo<ClientProject, $this>
      */
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(ClientProject::class, 'project_id');
     }
 
     /**
      * Get the client company this time entry belongs to.
+     *
+     * @return BelongsTo<ClientCompany, $this>
      */
-    public function clientCompany()
+    public function clientCompany(): BelongsTo
     {
         return $this->belongsTo(ClientCompany::class, 'client_company_id');
     }
 
     /**
      * Get the task this time entry is associated with.
+     *
+     * @return BelongsTo<ClientTask, $this>
      */
-    public function task()
+    public function task(): BelongsTo
     {
         return $this->belongsTo(ClientTask::class, 'task_id');
     }
 
     /**
      * Get the user who did the work.
+     *
+     * @return BelongsTo<User, $this>
      */
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
     /**
      * Get the user who created this time entry.
+     *
+     * @return BelongsTo<User, $this>
      */
-    public function creator()
+    public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_user_id');
     }
@@ -157,6 +167,20 @@ class ClientTimeEntry extends Model
     }
 
     /**
+     * Eager-load the compact invoice context used by portal time-entry payloads.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeWithPortalInvoiceContext(Builder $query): Builder
+    {
+        return $query->with([
+            'invoiceLine:client_invoice_line_id,client_invoice_id',
+            'invoiceLine.invoice:client_invoice_id,invoice_number,status,issue_date',
+        ]);
+    }
+
+    /**
      * Check if this time entry is on an issued or paid invoice (not editable).
      */
     public function isOnIssuedInvoice(): bool
@@ -167,7 +191,7 @@ class ClientTimeEntry extends Model
         $this->loadMissing('invoiceLine.invoice');
         $invoice = $this->invoiceLine?->invoice;
 
-        return $invoice && in_array($invoice->status, ['issued', 'paid']);
+        return $invoice && in_array($invoice->status, ClientInvoice::CLIENT_VISIBLE_STATUSES, true);
     }
 
     /**
@@ -197,16 +221,22 @@ class ClientTimeEntry extends Model
     }
 
     /**
-     * Get the associated invoice via the line item, including status.
+     * Get the compact invoice context used by portal time-entry payloads.
+     *
+     * @return array{client_invoice_id: int, invoice_number: string|null, invoice_date: string|null, status: string}|null
      */
-    public function getClientInvoiceAttribute()
+    public function getClientInvoiceAttribute(): ?array
     {
         $invoice = $this->invoiceLine?->invoice;
-        if ($invoice) {
-            // Ensure status is always available for client-side display logic
-            $invoice->makeVisible('status');
+        if (! $invoice) {
+            return null;
         }
 
-        return $invoice;
+        return [
+            'client_invoice_id' => (int) $invoice->client_invoice_id,
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_date' => $invoice->issue_date?->toDateString(),
+            'status' => (string) $invoice->status,
+        ];
     }
 }

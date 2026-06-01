@@ -286,24 +286,11 @@ class ClientPortalApiController extends Controller
         Gate::authorize('ClientCompanyMember', $company->id);
 
         $entries = ClientTimeEntry::where('client_company_id', $company->id)
-            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name', 'invoiceLine.invoice:client_invoice_id,invoice_number,status,issue_date'])
+            ->with(['user:id,name,email', 'project:id,name,slug', 'task:id,name'])
+            ->withPortalInvoiceContext()
             ->orderBy('date_worked', 'desc')
             ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($entry) {
-                // Manually map the nested invoice relationship to the expected structure
-                $ci = $entry->invoiceLine?->invoice;
-                if ($ci) {
-                    $entry->client_invoice = $ci;
-                    $entry->client_invoice->invoice_date = $ci->issue_date ? $ci->issue_date->toDateString() : null;
-                    // Include status so the frontend can distinguish draft vs issued
-                    $entry->client_invoice->status = $ci->status;
-                } else {
-                    $entry->client_invoice = null;
-                }
-
-                return $entry;
-            });
+            ->get();
 
         // Calculate totals
         $totalMinutes = $entries->sum('minutes_worked');
