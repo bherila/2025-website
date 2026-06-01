@@ -42,4 +42,9 @@ return [
         'financial_connections_enabled' => env('STRIPE_FINANCIAL_CONNECTIONS_ENABLED', false),
     ],
 
+    'brevo' => [
+        'dsn' => env('MAILER_DSN'),
+        'inbound_secret' => env('BREVO_INBOUND_SECRET'),
+    ],
+
 ];

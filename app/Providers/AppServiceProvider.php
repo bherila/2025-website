@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Csp\AddCspHeaders;
+use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -70,5 +72,14 @@ class AppServiceProvider extends ServiceProvider
         // Register Spatie CSP middleware globally so CSP headers are added
         $kernel = $this->app->make(Kernel::class);
         $kernel->pushMiddleware(AddCspHeaders::class);
+
+        // Register the Brevo (Symfony bridge) mail transport so MAIL_MAILER=brevo works
+        $this->app['mail.manager']->extend('brevo', function ($config) {
+            $configuration = $this->app->make('config');
+
+            return (new BrevoTransportFactory)->create(
+                Dsn::fromString($configuration->get('services.brevo.dsn'))
+            );
+        });
     }
 }

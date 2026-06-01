@@ -83,9 +83,11 @@ use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
+use App\Http\Controllers\Webhooks\BrevoInboundController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/webhooks/stripe', StripeWebhookController::class);
+Route::post('/webhooks/brevo/inbound', [BrevoInboundController::class, 'handle']);
 
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conversion/compute', [RothConversionController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
