@@ -392,8 +392,8 @@ class ClientInvoice extends Model
                 ->values()
                 ->map(fn (ClientInvoiceStripePayment $payment) => $payment->toActivityArray())
                 ->all(),
-            'payments_total' => $this->payments_total,
-            'remaining_balance' => $this->remaining_balance,
+            'payments_total' => $this->formatMoneyForPayload($paymentsTotal),
+            'remaining_balance' => $this->formatMoneyForPayload((float) $this->remaining_balance),
             'credit_applied' => $creditApplied,
             'overpaid_amount' => $overpaidAmount,
             'available_credit_after' => $availableCreditAfter,
@@ -416,6 +416,7 @@ class ClientInvoice extends Model
                     'line_type' => $line->line_type,
                     'hours' => $line->hours,
                     'line_date' => $line->line_date?->toDateString(),
+                    'client_agreement_recurring_item_id' => $line->client_agreement_recurring_item_id,
                     'time_entries_count' => $line->timeEntries->count(),
                     'time_entries' => $line->timeEntries->map(function ($entry) {
                         return [
@@ -449,7 +450,7 @@ class ClientInvoice extends Model
      * Void and canceled invoices intentionally return no deferred-work rows:
      * there is no actionable invoice-period billing state to explain.
      *
-     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}>
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice: array{id: int, invoice_number: string|null, issue_date: string|null}|null}>
      */
     protected function buildDeferredPendingList(): array
     {
@@ -465,7 +466,7 @@ class ClientInvoice extends Model
     }
 
     /**
-     * @return list<array{id: int, hours: float, date_worked: string, name: string|null}>
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice: null}>
      */
     protected function buildOutstandingDeferredList(): array
     {
@@ -478,11 +479,20 @@ class ClientInvoice extends Model
             remainingCapacityHours: 0.0,
         );
 
-        return $result->skipped;
+        return collect($result->skipped)
+            ->map(fn (array $entry): array => [
+                'id' => (int) $entry['id'],
+                'hours' => (float) $entry['hours'],
+                'date_worked' => (string) $entry['date_worked'],
+                'name' => $entry['name'] ?? null,
+                'billed_invoice' => null,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
-     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}>
+     * @return list<array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice: array{id: int, invoice_number: string|null, issue_date: string|null}|null}>
      */
     protected function buildOriginalPeriodDeferredList(): array
     {
@@ -514,7 +524,7 @@ class ClientInvoice extends Model
     }
 
     /**
-     * @return array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice?: array{id: int, invoice_number: string|null, issue_date: string|null}}
+     * @return array{id: int, hours: float, date_worked: string, name: string|null, billed_invoice: array{id: int, invoice_number: string|null, issue_date: string|null}|null}
      */
     protected function summariseDeferredEntry(ClientTimeEntry $entry): array
     {
@@ -523,6 +533,7 @@ class ClientInvoice extends Model
             'hours' => round(((int) $entry->minutes_worked) / 60, 4),
             'date_worked' => $entry->date_worked->format('Y-m-d'),
             'name' => $entry->name,
+            'billed_invoice' => null,
         ];
 
         $futureInvoice = $entry->invoiceLine?->invoice;
@@ -535,5 +546,10 @@ class ClientInvoice extends Model
         }
 
         return $summary;
+    }
+
+    private function formatMoneyForPayload(float $amount): string
+    {
+        return number_format(round($amount, 2), 2, '.', '');
     }
 }

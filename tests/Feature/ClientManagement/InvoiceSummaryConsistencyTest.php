@@ -5,13 +5,14 @@ namespace Tests\Feature\ClientManagement;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientInvoice;
+use App\Models\ClientManagement\ClientInvoiceLine;
 use App\Models\User;
 use Carbon\Carbon;
 use Tests\TestCase;
 
 class InvoiceSummaryConsistencyTest extends TestCase
 {
-    public function test_to_detailed_array_includes_all_summary_fields()
+    public function test_to_detailed_array_includes_all_summary_fields(): void
     {
         $company = ClientCompany::factory()->create();
         $agreement = ClientAgreement::create([
@@ -46,7 +47,63 @@ class InvoiceSummaryConsistencyTest extends TestCase
         $this->assertEquals(5, $data['negative_offset']);
     }
 
-    public function test_invoice_navigation_ids_are_present_in_controller_response()
+    public function test_to_detailed_array_emits_complete_stable_invoice_shape(): void
+    {
+        $company = ClientCompany::factory()->create();
+
+        $invoice = ClientInvoice::create([
+            'client_company_id' => $company->id,
+            'period_start' => '2024-01-01',
+            'period_end' => '2024-01-31',
+            'status' => 'draft',
+            'invoice_total' => 125.5,
+            'retainer_hours_included' => 10,
+            'hours_worked' => 2,
+        ]);
+
+        ClientInvoiceLine::create([
+            'client_invoice_id' => $invoice->client_invoice_id,
+            'description' => 'Retainer work',
+            'quantity' => '2',
+            'unit_price' => 0,
+            'line_total' => 0,
+            'line_type' => 'prior_month_retainer',
+            'hours' => 2,
+            'line_date' => null,
+        ]);
+
+        $data = $invoice->fresh()->toDetailedArray();
+
+        $this->assertArrayHasKey('invoice_number', $data);
+        $this->assertArrayHasKey('issue_date', $data);
+        $this->assertArrayHasKey('due_date', $data);
+        $this->assertArrayHasKey('paid_date', $data);
+        $this->assertArrayHasKey('cycle_start', $data);
+        $this->assertArrayHasKey('cycle_end', $data);
+        $this->assertArrayHasKey('notes', $data);
+        $this->assertArrayHasKey('deferred_pending', $data);
+        $this->assertNull($data['invoice_number']);
+        $this->assertNull($data['issue_date']);
+        $this->assertNull($data['due_date']);
+        $this->assertNull($data['paid_date']);
+        $this->assertNull($data['cycle_start']);
+        $this->assertNull($data['cycle_end']);
+        $this->assertNull($data['notes']);
+        $this->assertSame([], $data['deferred_pending']);
+        $this->assertSame('0.00', $data['payments_total']);
+        $this->assertSame('125.50', $data['remaining_balance']);
+        $this->assertIsFloat($data['negative_offset']);
+
+        $line = $data['line_items'][0];
+        $this->assertArrayHasKey('line_date', $line);
+        $this->assertArrayHasKey('client_agreement_recurring_item_id', $line);
+        $this->assertArrayHasKey('time_entries', $line);
+        $this->assertNull($line['line_date']);
+        $this->assertNull($line['client_agreement_recurring_item_id']);
+        $this->assertSame([], $line['time_entries']);
+    }
+
+    public function test_invoice_navigation_ids_are_present_in_controller_response(): void
     {
         $admin = User::factory()->create(['user_role' => 'admin']);
         $company = ClientCompany::factory()->create(['slug' => 'test-co']);
@@ -84,5 +141,12 @@ class InvoiceSummaryConsistencyTest extends TestCase
 
         $this->assertEquals($inv1->client_invoice_id, $payload['invoice']['previous_invoice_id']);
         $this->assertEquals($inv3->client_invoice_id, $payload['invoice']['next_invoice_id']);
+        $this->assertArrayHasKey('due_date', $payload['invoice']);
+        $this->assertArrayHasKey('notes', $payload['invoice']);
+        $this->assertArrayHasKey('cycle_start', $payload['invoice']);
+        $this->assertArrayHasKey('deferred_pending', $payload['invoice']);
+        $this->assertNull($payload['invoice']['due_date']);
+        $this->assertNull($payload['invoice']['notes']);
+        $this->assertNull($payload['invoice']['cycle_start']);
     }
 }
