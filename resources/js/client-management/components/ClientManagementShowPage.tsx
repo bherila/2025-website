@@ -5,8 +5,6 @@ import ActivityTab from '@/client-management/components/admin/company/ActivityTa
 import AgreementsTab from '@/client-management/components/admin/company/AgreementsTab'
 import ClientManagementHeader from '@/client-management/components/admin/company/ClientManagementHeader'
 import CompanyOverviewTab from '@/client-management/components/admin/company/CompanyOverviewTab'
-import InvoicesTab from '@/client-management/components/admin/company/InvoicesTab'
-import TimeExpensesTab from '@/client-management/components/admin/company/TimeExpensesTab'
 import RecurringItemsEditor from '@/client-management/components/admin/RecurringItemsEditor'
 import ClientPortalNav from '@/client-management/components/portal/ClientPortalNav'
 import { useClientCompanyDetail } from '@/client-management/hooks/useClientCompanyDetail'
@@ -77,8 +75,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
           <TabsList className="flex h-auto w-full flex-wrap justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="agreements">Agreements</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="time">Time & Expenses</TabsTrigger>
             <TabsTrigger value="recurring">Recurring items</TabsTrigger>
             <TabsTrigger value="activity">Notes / Activity</TabsTrigger>
           </TabsList>
@@ -103,14 +99,6 @@ export default function ClientManagementShowPage({ companyId }: ClientManagement
               onCreateAgreement={() => void createAgreement()}
               creating={creating}
             />
-          </TabsContent>
-
-          <TabsContent value="invoices">
-            <InvoicesTab companyId={company.id} agreements={company.agreements} />
-          </TabsContent>
-
-          <TabsContent value="time">
-            <TimeExpensesTab company={company} />
           </TabsContent>
 
           <TabsContent value="recurring">
