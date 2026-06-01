@@ -63,6 +63,18 @@ beforeEach(() => {
 })
 
 describe('DocumentsPage', () => {
+  it('uses a container query for the internal pane layout', async () => {
+    render(<DocumentsPage patientId={42} />)
+
+    await screen.findAllByText('January Labs')
+
+    const paneLayout = screen.getByTestId('documents-pane-layout')
+
+    expect(paneLayout.parentElement).toHaveClass('@container')
+    expect(paneLayout.className).toContain('@min-[72rem]:grid-cols-[260px_minmax(0,1fr)_minmax(360px,420px)]')
+    expect(paneLayout.className).not.toContain('xl:grid-cols')
+  })
+
   it('loads documents and refetches when filters change', async () => {
     render(<DocumentsPage patientId={42} />)
 
