@@ -49,6 +49,23 @@ export function InvoiceStatusBadge({ value }: BadgeProps) {
   return <Badge variant={variant}>{humanize(value)}</Badge>
 }
 
+const PROPOSAL_STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  draft: 'secondary',
+  sent: 'outline',
+  changes_requested: 'outline',
+  accepted: 'default',
+  rejected: 'destructive',
+  expired: 'secondary',
+}
+
+export function ProposalStatusBadge({ value }: BadgeProps) {
+  if (!value) {
+    return <Badge variant="secondary">Draft</Badge>
+  }
+
+  return <Badge variant={PROPOSAL_STATUS_VARIANTS[value] ?? 'secondary'}>{humanize(value)}</Badge>
+}
+
 interface AgreementStatusBadgesProps {
   signedAt?: string | null
   terminatedAt?: string | null

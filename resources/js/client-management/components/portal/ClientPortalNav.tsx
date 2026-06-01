@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown, Clock, CreditCard, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
+import { ChevronDown, ClipboardList, Clock, CreditCard, FileText, FolderOpen, Home, Receipt, Settings } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { PortalNavButton } from '@/components/nav/PortalNavButton'
@@ -40,9 +40,10 @@ interface Company {
 interface ClientPortalNavProps {
   slug: string
   companyName: string
-  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'expenses' | 'billing' | 'manage'
+  currentPage: 'home' | 'project' | 'time' | 'invoices' | 'invoice' | 'agreement' | 'proposals' | 'proposal' | 'expenses' | 'billing' | 'manage'
   currentProjectSlug?: string | undefined
   projectName?: string | undefined
+  proposalTitle?: string | undefined
   invoiceNumber?: string | undefined
   projects?: Project[] | undefined
   companyId?: number | undefined
@@ -60,6 +61,8 @@ export function getPagePathSuffix(currentPage: ClientPortalNavProps['currentPage
     case 'billing': return '/billing'
     case 'invoices': return '/invoices'
     case 'invoice': return '/invoices'  // strip invoice ID, go to list
+    case 'proposals': return '/proposals'
+    case 'proposal': return '/proposals'  // strip proposal ID, go to list
     case 'home':
     case 'project':    // project slugs are company-specific
     case 'agreement':  // agreement IDs are company-specific
@@ -76,6 +79,7 @@ export default function ClientPortalNav({
   currentPage,
   currentProjectSlug,
   projectName,
+  proposalTitle,
   invoiceNumber,
   projects: initialProjects,
   companyId
@@ -195,6 +199,14 @@ export default function ClientPortalNav({
                 <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/expenses`)}>
                   <Receipt className="h-4 w-4 mr-1" />
                   Expenses
+                </a>
+              </PortalNavButton>
+
+              {/* Proposals */}
+              <PortalNavButton active={currentPage === 'proposals' || currentPage === 'proposal'} asChild>
+                <a href={safeHref(`/client/portal/${encodeURIComponent(slug)}/proposals`)}>
+                  <ClipboardList className="h-4 w-4 mr-1" />
+                  Proposals
                 </a>
               </PortalNavButton>
 
@@ -336,6 +348,28 @@ export default function ClientPortalNav({
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
                     <BreadcrumbPage>Agreement</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'proposals' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Proposals</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+
+              {currentPage === 'proposal' && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink href={safeHref(`/client/portal/${encodeURIComponent(slug)}/proposals`)}>Proposals</BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{proposalTitle || 'Proposal'}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </>
               )}

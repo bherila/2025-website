@@ -364,7 +364,9 @@ jobs:
     needs:
       - test
       - frontend-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs['frontend-build'].result == 'success'
+    # Include a status check so skipped optional jobs upstream of Run Tests do
+    # not trigger GitHub Actions' implicit success() guard and skip deployment.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs['frontend-build'].result == 'success' }}
     runs-on: ubuntu-latest
     environment: prod
     permissions:
