@@ -20,6 +20,7 @@ class ClientAgreement extends Model
     protected $table = 'client_agreements';
 
     protected $fillable = [
+        'source_proposal_id',
         'client_company_id',
         'active_date',
         'termination_date',
@@ -69,6 +70,16 @@ class ClientAgreement extends Model
     public function clientCompany(): BelongsTo
     {
         return $this->belongsTo(ClientCompany::class, 'client_company_id');
+    }
+
+    /**
+     * Get the proposal version that materialized this agreement (if any).
+     *
+     * @return BelongsTo<ClientProposal, $this>
+     */
+    public function sourceProposal(): BelongsTo
+    {
+        return $this->belongsTo(ClientProposal::class, 'source_proposal_id');
     }
 
     /**
