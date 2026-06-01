@@ -75,4 +75,15 @@ class ProposalRevisionTest extends TestCase
 
         $this->assertFalse($v1->fresh()->isPending(), 'A superseded version is no longer pending');
     }
+
+    public function test_sending_a_revision_hides_prior_versions_from_the_client(): void
+    {
+        $v1 = ClientProposal::factory()->for($this->company)->sent()->create();
+        $v2 = $this->service->createRevision($v1->fresh('items'), $this->admin);
+
+        $this->service->send($v2, $this->admin);
+
+        $this->assertFalse((bool) $v1->fresh()->is_visible_to_client, 'The superseded version must be hidden from the client');
+        $this->assertTrue((bool) $v2->fresh()->is_visible_to_client, 'The latest sent version stays visible');
+    }
 }

@@ -1,7 +1,6 @@
 import '@testing-library/jest-dom'
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 
 import ClientPortalProposalPage from '@/client-management/components/portal/ClientPortalProposalPage'
 import type { Proposal } from '@/client-management/types/proposal'

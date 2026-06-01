@@ -21,7 +21,9 @@ export default function ProposalList({
   emptyMessage = 'No proposals yet for this company.',
   className = 'space-y-3',
 }: ProposalListProps) {
-  if (proposals.length === 0) {
+  const latest = latestPerChain(proposals)
+
+  if (latest.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">{emptyMessage}</div>
     )
@@ -29,9 +31,22 @@ export default function ProposalList({
 
   return (
     <div className={className}>
-      {proposals.map((proposal) => (
+      {latest.map((proposal) => (
         <ProposalCard key={proposal.id} proposal={proposal} onOpen={onOpen} actionLabel={actionLabel} />
       ))}
     </div>
   )
+}
+
+/** Collapses a version chain (grouped by `root_id`) down to its highest version. */
+function latestPerChain(proposals: Proposal[]): Proposal[] {
+  const byChain = new Map<number, Proposal>()
+  for (const proposal of proposals) {
+    const chainId = proposal.root_id ?? proposal.id
+    const current = byChain.get(chainId)
+    if (!current || proposal.version > current.version) {
+      byChain.set(chainId, proposal)
+    }
+  }
+  return [...byChain.values()]
 }

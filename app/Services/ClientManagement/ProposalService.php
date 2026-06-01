@@ -91,6 +91,13 @@ class ProposalService
                 'sent_at' => now(),
             ]);
 
+            // Only the newly-sent version of a chain stays client-visible so the
+            // portal never surfaces (or lets the client act on) a superseded one.
+            ClientProposal::query()
+                ->where('root_id', $proposal->root_id ?? $proposal->id)
+                ->whereKeyNot($proposal->id)
+                ->update(['is_visible_to_client' => false]);
+
             ClientCompanyActivity::record($proposal->clientCompany, 'proposal.sent', $proposal, [
                 'version' => $proposal->version,
             ], $user->id);
