@@ -80,11 +80,17 @@ export const PHR_LIST_MODULES: { id: PhrModuleId; label: string; shortLabel: str
 export type PhrModuleMeta = Record<string, never>
 
 export type PhrRegistryEntry = MillerRegistryEntry<PhrShellState, PhrModuleId, PhrModuleMeta>
+type PhrColumnSize = PhrRegistryEntry['size']
 export type PhrRenderProps = MillerRenderProps<PhrShellState, PhrModuleId>
 
 export interface PhrListPageProps {
   patientId: number
   onDrill?: (target: MillerDrillTarget<PhrModuleId>) => void
+}
+
+interface PhrDetailPageProps {
+  patientId: number
+  recordId: string
 }
 
 const SummaryPage = lazy(() => import('@/phr/summary/SummaryPage'))
@@ -125,21 +131,24 @@ function makeListEntry(
   label: string,
   shortLabel: string,
   PageComponent: React.ComponentType<PhrListPageProps>,
+  size?: PhrColumnSize,
 ): PhrRegistryEntry {
   function ListColumn({ state, onDrill }: PhrRenderProps) {
     if (state.patientId === undefined) return noPatientState()
     return <PageComponent patientId={state.patientId} onDrill={onDrill} />
   }
   ListColumn.displayName = `${id}ListColumn`
-  return { id, label, shortLabel, presentation: 'column', component: ListColumn }
+  const entry: PhrRegistryEntry = { id, label, shortLabel, presentation: 'column', component: ListColumn }
+  if (size !== undefined) entry.size = size
+  return entry
 }
 
 function makeDetailEntry(
   id: PhrModuleId,
   label: string,
   shortLabel: string,
-  DetailComponent: React.ComponentType<any>,
-  wide = false,
+  DetailComponent: React.ComponentType<PhrDetailPageProps>,
+  size?: PhrColumnSize,
 ): PhrRegistryEntry {
   function DetailColumn({ state, instance }: PhrRenderProps) {
     if (state.patientId === undefined) return noPatientState()
@@ -154,7 +163,7 @@ function makeDetailEntry(
   }
   DetailColumn.displayName = `${id}DetailColumn`
   const entry: PhrRegistryEntry = { id, label, shortLabel, presentation: 'column', component: DetailColumn }
-  if (wide) entry.wide = true
+  if (size !== undefined) entry.size = size
   return entry
 }
 
@@ -164,7 +173,7 @@ export const phrModuleRegistry: Record<PhrModuleId, PhrRegistryEntry> = {
   'lab-panel-detail': makeDetailEntry('lab-panel-detail', 'Lab Panel', 'Lab Panel', LabPanelDetail),
   vitals: makeListEntry('vitals', 'Vitals', 'Vitals', VitalsPage),
   'vitals-reading-detail': makeDetailEntry('vitals-reading-detail', 'Vital Reading', 'Vital', VitalsReadingDetail),
-  'vitals-trend': makeDetailEntry('vitals-trend', 'Vitals Trend', 'Trend', VitalsTrend, true),
+  'vitals-trend': makeDetailEntry('vitals-trend', 'Vitals Trend', 'Trend', VitalsTrend, 'wide'),
   imaging: makeListEntry('imaging', 'Imaging', 'Imaging', ImagingPage),
   'imaging-study-detail': makeDetailEntry('imaging-study-detail', 'Study Detail', 'Study', ImagingStudyDetail),
   'office-visits': makeListEntry('office-visits', 'Office Visits', 'Visits', OfficeVisitsPage),
@@ -179,8 +188,8 @@ export const phrModuleRegistry: Record<PhrModuleId, PhrRegistryEntry> = {
   'immunization-detail': makeDetailEntry('immunization-detail', 'Immunization Detail', 'Immunization', ImmunizationDetail),
   allergies: makeListEntry('allergies', 'Allergies', 'Allergies', AllergiesPage),
   'allergy-detail': makeDetailEntry('allergy-detail', 'Allergy Detail', 'Allergy', AllergyDetail),
-  documents: makeListEntry('documents', 'Documents', 'Docs', DocumentsPage),
-  'document-viewer': makeDetailEntry('document-viewer', 'Document Viewer', 'Document', DocumentViewer, true),
+  documents: makeListEntry('documents', 'Documents', 'Docs', DocumentsPage, 'full'),
+  'document-viewer': makeDetailEntry('document-viewer', 'Document Viewer', 'Document', DocumentViewer, 'wide'),
   access: makeListEntry('access', 'Access', 'Access', AccessPage),
   'access-grant-detail': makeDetailEntry('access-grant-detail', 'Access Grant', 'Grant', AccessGrantDetail),
 }

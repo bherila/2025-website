@@ -4,6 +4,15 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
+import type { MillerColumnSize } from './millerRegistry'
+
+const MILLER_COLUMN_SIZE_CLASSES: Record<MillerColumnSize, string> = {
+  narrow: 'w-full md:w-[400px]',
+  default: 'w-full md:w-[520px]',
+  wide: 'w-full md:w-[760px]',
+  full: 'w-full md:w-[1040px] xl:w-[1200px]',
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false
@@ -20,6 +29,8 @@ export interface MillerColumnShellColumn {
   id: string
   label: string
   shortLabel: string
+  size?: MillerColumnSize | undefined
+  /** @deprecated Use size instead. */
   wide?: boolean | undefined
   dataAttributes?: Record<`data-${string}`, string | number | boolean | undefined>
   topAccessory?: ReactNode
@@ -32,6 +43,10 @@ interface MillerColumnShellProps {
   onTruncate: (depth: number) => void
   className?: string
   homeColumnClassName?: string
+}
+
+function getMillerColumnSizeClass(column: Pick<MillerColumnShellColumn, 'size' | 'wide'>): string {
+  return MILLER_COLUMN_SIZE_CLASSES[column.size ?? (column.wide ? 'wide' : 'default')]
 }
 
 export function MillerColumnShell({
@@ -105,7 +120,7 @@ export function MillerColumnShell({
           className={cn(
             'relative flex flex-col bg-card',
             hasColumns
-              ? 'hidden w-[960px] shrink-0 border-r border-border md:flex'
+              ? ['hidden shrink-0 border-r border-border md:flex', MILLER_COLUMN_SIZE_CLASSES.full]
               : 'w-full',
             homeColumnClassName,
           )}
@@ -121,7 +136,7 @@ export function MillerColumnShell({
               key={column.key}
               className={cn(
                 'relative flex shrink-0 flex-col border-r border-border bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200',
-                column.wide ? 'w-full md:w-[960px]' : 'w-full md:w-[480px]',
+                getMillerColumnSizeClass(column),
                 isLast ? '' : 'hidden md:flex',
               )}
               data-column-id={column.id}

@@ -11,13 +11,15 @@ const COLUMN: MillerColumnShellColumn = {
   children: <div>Column content</div>,
 }
 
+interface HarnessProps {
+  columns?: MillerColumnShellColumn[]
+  onTruncate?: jest.Mock
+}
+
 function Harness({
   columns = [COLUMN],
   onTruncate = jest.fn(),
-}: {
-  columns?: MillerColumnShellColumn[]
-  onTruncate?: jest.Mock
-}): React.ReactElement {
+}: HarnessProps): React.ReactElement {
   return (
     <MillerColumnShell
       homeView={<div>Home</div>}
@@ -27,7 +29,47 @@ function Harness({
   )
 }
 
+function expectColumnClass(id: string, expectedClass: string): void {
+  const column = document.querySelector<HTMLElement>(`section[data-column-id="${id}"]`)
+  expect(column).not.toBeNull()
+  expect(column!.className).toContain(expectedClass)
+}
+
 describe('MillerColumnShell', () => {
+  it('maps column size values to responsive width classes', () => {
+    render(
+      <Harness
+        columns={[
+          { ...COLUMN, key: 'narrow', id: 'narrow', size: 'narrow' },
+          { ...COLUMN, key: 'default', id: 'default' },
+          { ...COLUMN, key: 'wide', id: 'wide', size: 'wide' },
+          { ...COLUMN, key: 'full', id: 'full', size: 'full' },
+        ]}
+      />,
+    )
+
+    expectColumnClass('narrow', 'md:w-[400px]')
+    expectColumnClass('default', 'md:w-[520px]')
+    expectColumnClass('wide', 'md:w-[760px]')
+    expectColumnClass('full', 'md:w-[1040px]')
+    expectColumnClass('full', 'xl:w-[1200px]')
+  })
+
+  it('keeps deprecated wide columns compatible with the wide size', () => {
+    render(<Harness columns={[{ ...COLUMN, key: 'wide', id: 'wide', wide: true }]} />)
+
+    expectColumnClass('wide', 'md:w-[760px]')
+  })
+
+  it('uses the full width scale for the home column when columns are open', () => {
+    render(<Harness />)
+
+    const homeColumn = screen.getByText('Home').closest('section')
+    expect(homeColumn).not.toBeNull()
+    expect(homeColumn!.className).toContain('md:w-[1040px]')
+    expect(homeColumn!.className).toContain('xl:w-[1200px]')
+  })
+
   it('clicking the close button truncates the column at that depth', () => {
     const onTruncate = jest.fn()
     render(<Harness onTruncate={onTruncate} />)
