@@ -59,6 +59,7 @@ export default defineConfig({
         'resources/js/client-management/admin/agreement.tsx',
         'resources/js/client-management/admin/create.tsx',
         'resources/js/client-management/admin/index.tsx',
+        'resources/js/client-management/admin/proposal.tsx',
         'resources/js/client-management/admin/show.tsx',
         'resources/js/client-management/portal/agreement.tsx',
         'resources/js/client-management/portal/billing.tsx',
