@@ -574,13 +574,12 @@ describe('PHR page mounts', () => {
   })
 
   it('renders condition actions including GenAI import handoff', async () => {
-    render(<ConditionsPage patientId={PATIENT_ID} />)
+    const onDrill = jest.fn()
+    render(<ConditionsPage patientId={PATIENT_ID} onDrill={onDrill} />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: /add condition/i })).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /import via genai/i })).toHaveAttribute(
-      'href',
-      `/phr/patient/${PATIENT_ID}/documents?job_type=phr_problem_list`,
-    )
+    fireEvent.click(screen.getByRole('button', { name: /import via genai/i }))
+    expect(onDrill).toHaveBeenCalledWith({ id: 'documents' })
   })
 
   it('renders procedure manual entry with import guidance', async () => {
@@ -591,13 +590,12 @@ describe('PHR page mounts', () => {
   })
 
   it('renders immunization actions including GenAI import handoff', async () => {
-    render(<ImmunizationsPage patientId={PATIENT_ID} />)
+    const onDrill = jest.fn()
+    render(<ImmunizationsPage patientId={PATIENT_ID} onDrill={onDrill} />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: /add immunization/i })).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /import via genai/i })).toHaveAttribute(
-      'href',
-      `/phr/patient/${PATIENT_ID}/documents?job_type=phr_immunization`,
-    )
+    fireEvent.click(screen.getByRole('button', { name: /import via genai/i }))
+    expect(onDrill).toHaveBeenCalledWith({ id: 'documents' })
   })
 
   it('renders allergy manual entry with import guidance', async () => {
