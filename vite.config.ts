@@ -68,6 +68,8 @@ export default defineConfig({
         'resources/js/client-management/portal/invoice.tsx',
         'resources/js/client-management/portal/invoices.tsx',
         'resources/js/client-management/portal/project.tsx',
+        'resources/js/client-management/portal/proposal.tsx',
+        'resources/js/client-management/portal/proposals.tsx',
         'resources/js/client-management/portal/time.tsx',
         'resources/js/user-management.tsx',
         'resources/js/admin-genai-jobs.tsx',
