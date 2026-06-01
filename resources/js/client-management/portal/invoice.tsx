@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Invalid or missing hydrated invoice payload - aborting mount.', recheck.error)
           }
         } else {
-          console.error('Invalid or missing hydrated invoice payload - aborting mount.', strict.error)
+          console.error('Invalid or missing hydrated invoice payload - aborting mount.', relaxed.error)
         }
       }
     }
