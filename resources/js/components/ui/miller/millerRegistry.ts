@@ -3,6 +3,11 @@ import type { ComponentType } from 'react'
 export type MillerPresentation = 'column' | 'modal' | 'app'
 export type MillerColumnSize = 'narrow' | 'default' | 'wide' | 'full'
 
+export interface KeyAmount {
+  label: string
+  value: number
+}
+
 export interface MillerInstanceRef {
   key: string
   label: string

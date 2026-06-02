@@ -1,6 +1,8 @@
-import type { MillerDrillTarget, MillerRegistryEntry, MillerRenderProps } from '@/components/ui/miller'
+import type { KeyAmount, MillerDrillTarget, MillerRegistryEntry, MillerRenderProps } from '@/components/ui/miller'
 
 import type { useTaxPreview } from '../TaxPreviewContext'
+
+export type { KeyAmount } from '@/components/ui/miller'
 
 export type TaxPreviewState = ReturnType<typeof useTaxPreview>
 
@@ -45,11 +47,6 @@ export type InstanceRef = { key: string; label: string }
 export type DrillTarget = MillerDrillTarget<FormId>
 
 export type FormRenderProps = MillerRenderProps<TaxPreviewState, FormId>
-
-export interface KeyAmount {
-  label: string
-  value: number
-}
 
 export interface TaxFormMeta {
   category: FormCategory

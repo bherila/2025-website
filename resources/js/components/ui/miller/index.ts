@@ -2,6 +2,7 @@ export type { MillerColumnShellColumn } from './MillerColumnShell'
 export { MillerColumnShell } from './MillerColumnShell'
 export { MillerInstanceTabs } from './MillerInstanceTabs'
 export type {
+  KeyAmount,
   MillerDrillTarget,
   MillerInstanceRef,
   MillerPresentation,
