@@ -14,6 +14,8 @@ import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
+import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import K3AllInOneView from '@/components/finance/K3AllInOneView'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import Schedule3Preview from '@/components/finance/Schedule3Preview'
@@ -99,13 +101,14 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleBAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleBPreview
       taxFacts={state.taxFacts?.scheduleB ?? null}
       selectedYear={state.year}
       onOpenDoc={reviewK1Doc}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
     />
   )
 }
@@ -125,13 +128,14 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   )
 }
 
-function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleEAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleEPreview
       taxFacts={state.taxFacts?.scheduleE ?? null}
       selectedYear={state.year}
       onOpenDoc={openTaxDocumentDetail}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
     />
   )
 }
@@ -243,6 +247,8 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
       onReviewNow={reviewK1Doc}
       onBulkSetSbpElection={bulkSetSbpElection}
       onOpenWorksheet={() => onDrill({ id: 'wks-1116-apportionment' })}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
+      onOpenAllK3={() => onDrill({ id: 'k3-all-in-one' })}
       {...(category ? { category } : {})}
     />
   )
@@ -541,6 +547,23 @@ function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactEle
 
 function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {
   return <CapitalGainsReconciliationPanel selectedYear={state.year} />
+}
+
+function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  return (
+    <K1AllInOneView
+      k1Docs={state.reviewedK1Docs}
+      taxFacts={state.taxFacts ?? null}
+      onReviewDoc={reviewK1Doc}
+      onDrill={onDrill}
+    />
+  )
+}
+
+function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} />
 }
 
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
@@ -950,6 +973,31 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'app',
     component: CapitalGainsReconciliationAdapter,
     wide: true,
+  },
+  'k1-all-in-one': {
+    id: 'k1-all-in-one',
+    label: 'All-in-One K-1',
+    shortLabel: 'All K-1s',
+    keywords: ['K-1', 'all in one', 'partnership', 'compare', 'unified', 'K-3', 'side by side'],
+    category: 'App',
+    presentation: 'column',
+    size: 'full',
+    component: K1AllInOneAdapter,
+    hasData: (state) => state.reviewedK1Docs.length > 0,
+  },
+  'k3-all-in-one': {
+    id: 'k3-all-in-one',
+    label: 'All-in-One K-3',
+    shortLabel: 'All K-3s',
+    keywords: ['K-3', 'foreign', 'foreign tax credit', 'partnership', 'compare', 'unified', 'basket', '1116'],
+    category: 'App',
+    presentation: 'column',
+    size: 'wide',
+    component: K3AllInOneAdapter,
+    hasData: (state) => state.reviewedK1Docs.some((doc) => {
+      const parsed = doc.parsed_data as unknown as { k3?: { sections?: unknown[] } } | null
+      return Array.isArray(parsed?.k3?.sections) && parsed.k3.sections.length > 0
+    }),
   },
   'wks-se-401k': {
     id: 'wks-se-401k',

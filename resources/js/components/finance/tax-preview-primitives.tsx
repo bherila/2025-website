@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight, HelpCircle, Search } from 'lucide-react'
+import { ArrowRight, ChevronRight, HelpCircle, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -72,6 +72,29 @@ export function DetailsButton({
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
+  )
+}
+
+/**
+ * Header button that drills into the All-in-One K-1 view (pushes a Miller column).
+ * The `ArrowRight` icon signals a column push, matching the dock's drill convention.
+ */
+export function OpenAllK1Button({ onClick }: { onClick: () => void }) {
+  return (
+    <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={onClick}>
+      View all K-1s
+      <ArrowRight className="h-3 w-3" />
+    </Button>
+  )
+}
+
+/** Header button that drills into the All-in-One K-3 (foreign income & tax) view. */
+export function OpenAllK3Button({ onClick }: { onClick: () => void }) {
+  return (
+    <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={onClick}>
+      View all K-3s
+      <ArrowRight className="h-3 w-3" />
+    </Button>
   )
 }
 

@@ -1,12 +1,13 @@
 'use client'
 
-import { FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { FormBlock, FormLine, FormTotalLine, OpenAllK1Button } from '@/components/finance/tax-preview-primitives'
 import type { ScheduleBFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface ScheduleBPreviewProps {
   taxFacts?: ScheduleBFacts | null
   selectedYear: number
   onOpenDoc?: (docId: number) => void
+  onOpenAllK1?: () => void
 }
 
 function detailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => void) {
@@ -58,6 +59,7 @@ export default function ScheduleBPreview({
   taxFacts,
   selectedYear,
   onOpenDoc,
+  onOpenAllK1,
 }: ScheduleBPreviewProps): React.ReactElement {
   if (!taxFacts) {
     return (
@@ -69,9 +71,12 @@ export default function ScheduleBPreview({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="mb-0.5 text-base font-semibold">Schedule B — {selectedYear}</h3>
-        <p className="text-xs text-muted-foreground">Interest and Ordinary Dividends</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="mb-0.5 text-base font-semibold">Schedule B — {selectedYear}</h3>
+          <p className="text-xs text-muted-foreground">Interest and Ordinary Dividends</p>
+        </div>
+        {onOpenAllK1 && <OpenAllK1Button onClick={onOpenAllK1} />}
       </div>
 
       <div className="grid grid-cols-1 gap-4">
