@@ -146,7 +146,8 @@ class PhrPatientCrudTest extends TestCase
         $response = $this->actingAs($this->createUser())->get('/phr/patients/manage');
 
         $response->assertOk();
-        $response->assertViewIs('phr.manage');
+        $response->assertViewIs('phr.shell');
+        $response->assertSee('data-active-section="manage-patients"', false);
         $response->assertSee('phr-page-content');
     }
 }

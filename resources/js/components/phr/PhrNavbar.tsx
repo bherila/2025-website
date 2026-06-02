@@ -1,7 +1,7 @@
 'use client'
 
 import { ArrowLeft, Settings } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +11,6 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { parseHash, serializeRoute } from '@/components/ui/miller'
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -22,18 +21,27 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { PhrSection } from '@/lib/phrRouteBuilder'
-import { patientUrl, phrSectionUrl } from '@/lib/phrRouteBuilder'
+import { phrSectionUrl } from '@/lib/phrRouteBuilder'
 import { cn } from '@/lib/utils'
-import { PHR_MODULE_IDS_SET } from '@/phr/miller/phrModuleRegistry'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
 
 interface PhrNavbarProps {
   patientId?: number
   activeSection?: PhrSection
-  children?: React.ReactNode
+  children?: ReactNode
+  className?: string
+  onPatientChange?: (patientId: number) => void
+  onSectionChange?: (section: PhrSection) => void
 }
 
-export default function PhrNavbar({ patientId, activeSection, children }: PhrNavbarProps) {
+export default function PhrNavbar({
+  patientId,
+  activeSection,
+  children,
+  className,
+  onPatientChange,
+  onSectionChange,
+}: PhrNavbarProps) {
   const [patients, setPatients] = useState<PhrPatient[]>([])
   const [searchValue, setSearchValue] = useState('')
   const [isComboboxOpen, setIsComboboxOpen] = useState(false)
@@ -74,18 +82,20 @@ export default function PhrNavbar({ patientId, activeSection, children }: PhrNav
   function handlePatientSelect(patient: PhrPatient): void {
     setSearchValue('')
     setIsComboboxOpen(false)
-    const currentHash = typeof window !== 'undefined' ? window.location.hash : ''
-    let newHash = ''
-    if (currentHash) {
-      const parsed = parseHash(currentHash, PHR_MODULE_IDS_SET)
-      const stripped = { columns: parsed.columns.map((col) => ({ id: col.id })) }
-      newHash = serializeRoute(stripped)
+    onPatientChange?.(patient.id)
+  }
+
+  function handleSectionClick(section: PhrSection, event: MouseEvent<HTMLAnchorElement>): void {
+    if (!onSectionChange) {
+      return
     }
-    window.location.href = patientUrl(patient.id) + newHash
+
+    event.preventDefault()
+    onSectionChange(section)
   }
 
   return (
-    <div>
+    <div className={cn('min-h-0', className)}>
       <div className="w-full border-b border-border/40 bg-background">
         <div className="flex h-12 items-center gap-2 px-4">
           <Tooltip>
@@ -154,6 +164,7 @@ export default function PhrNavbar({ patientId, activeSection, children }: PhrNav
               <NavigationMenuItem>
                 <NavigationMenuLink
                   href={phrSectionUrl('patients')}
+                  onClick={(event) => handleSectionClick('patients', event)}
                   aria-current={activeSection === 'patients' ? 'page' : undefined}
                   className={cn(
                     navigationMenuTriggerStyle(),
@@ -168,6 +179,7 @@ export default function PhrNavbar({ patientId, activeSection, children }: PhrNav
                 <NavigationMenuItem>
                   <NavigationMenuLink
                     href={phrSectionUrl('manage-patients')}
+                    onClick={(event) => handleSectionClick('manage-patients', event)}
                     aria-current={activeSection === 'manage-patients' ? 'page' : undefined}
                     className={cn(
                       navigationMenuTriggerStyle(),
@@ -184,6 +196,7 @@ export default function PhrNavbar({ patientId, activeSection, children }: PhrNav
               <NavigationMenuItem>
                 <NavigationMenuLink
                   href={phrSectionUrl('imports')}
+                  onClick={(event) => handleSectionClick('imports', event)}
                   aria-current={activeSection === 'imports' ? 'page' : undefined}
                   className={cn(
                     navigationMenuTriggerStyle(),
@@ -199,6 +212,7 @@ export default function PhrNavbar({ patientId, activeSection, children }: PhrNav
                   <TooltipTrigger asChild>
                     <NavigationMenuLink
                       href={phrSectionUrl('config')}
+                      onClick={(event) => handleSectionClick('config', event)}
                       aria-current={activeSection === 'config' ? 'page' : undefined}
                       aria-label="Config"
                       className={cn(

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 describe('PhrNavbar', () => {
   let fetchSpy: jest.SpiedFunction<typeof fetch>
@@ -84,19 +84,34 @@ describe('PhrNavbar', () => {
     })
   })
 
-  it('patient swap navigates to new patient URL preserving hash columns without instances', async () => {
+  it('patient swap notifies the shell without assigning a new document URL', async () => {
     const PhrNavbar = (await import('@/components/phr/PhrNavbar')).default
+    const onPatientChange = jest.fn()
 
     await act(async () => {
-      render(<PhrNavbar patientId={1} />)
+      render(<PhrNavbar patientId={1} onPatientChange={onPatientChange} />)
     })
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toBeInTheDocument()
     })
 
-    // Verify section links still render
-    expect(screen.getByRole('link', { name: 'Patients' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Manage Patients' })).toBeInTheDocument()
+    fireEvent.focus(screen.getByRole('combobox'))
+    fireEvent.click(await screen.findByText('Bob'))
+
+    expect(onPatientChange).toHaveBeenCalledWith(2)
+  })
+
+  it('section links can be handled by the client shell', async () => {
+    const PhrNavbar = (await import('@/components/phr/PhrNavbar')).default
+    const onSectionChange = jest.fn()
+
+    await act(async () => {
+      render(<PhrNavbar activeSection="patients" onSectionChange={onSectionChange} />)
+    })
+
+    fireEvent.click(screen.getByRole('link', { name: 'Imports' }))
+
+    expect(onSectionChange).toHaveBeenCalledWith('imports')
   })
 })
