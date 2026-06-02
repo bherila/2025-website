@@ -6,6 +6,7 @@ import { MillerRegistryShell } from '@/components/ui/miller'
 import type { PhrSection } from '@/lib/phrRouteBuilder'
 import { patientUrl } from '@/lib/phrRouteBuilder'
 
+import { PhrCommandPalette, usePhrCommandPaletteShortcut } from './PhrCommandPalette'
 import { PhrDockHomeView } from './PhrDockHomeView'
 import { phrModuleRegistry, type PhrShellState } from './phrModuleRegistry'
 import { usePhrRoute } from './usePhrRoute'
@@ -21,6 +22,8 @@ interface PhrMillerShellProps {
 export function PhrMillerShell({ patientId, onPatientChange, onSectionChange }: PhrMillerShellProps): ReactElement {
   const [activePatientId, setActivePatientId] = useState<number | undefined>(patientId)
   const { route, pushColumn, replaceFrom, truncateTo, navigate } = usePhrRoute()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  usePhrCommandPaletteShortcut(paletteOpen, setPaletteOpen)
 
   const handlePatientChange = useCallback((nextPatientId: number): void => {
     setActivePatientId(nextPatientId)
@@ -54,6 +57,12 @@ export function PhrMillerShell({ patientId, onPatientChange, onSectionChange }: 
           />
         </Suspense>
       </div>
+      <PhrCommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onDrill={pushColumn}
+        registry={phrModuleRegistry}
+      />
     </PhrNavbar>
   )
 }
