@@ -551,10 +551,9 @@ function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.Re
 
 function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
-  const k1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
   return (
     <K1AllInOneView
-      k1Docs={k1Docs}
+      k1Docs={state.reviewedK1Docs}
       taxFacts={state.taxFacts ?? null}
       onReviewDoc={reviewK1Doc}
       onDrill={onDrill}
@@ -564,8 +563,7 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
 
 function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
-  const k1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
-  return <K3AllInOneView k1Docs={k1Docs} onReviewDoc={reviewK1Doc} />
+  return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} />
 }
 
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
@@ -985,7 +983,7 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'column',
     size: 'full',
     component: K1AllInOneAdapter,
-    hasData: (state) => state.accountDocuments.some((doc) => doc.form_type === 'k1'),
+    hasData: (state) => state.reviewedK1Docs.length > 0,
   },
   'k3-all-in-one': {
     id: 'k3-all-in-one',
@@ -996,10 +994,7 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'column',
     size: 'wide',
     component: K3AllInOneAdapter,
-    hasData: (state) => state.accountDocuments.some((doc) => {
-      if (doc.form_type !== 'k1') {
-        return false
-      }
+    hasData: (state) => state.reviewedK1Docs.some((doc) => {
       const parsed = doc.parsed_data as unknown as { k3?: { sections?: unknown[] } } | null
       return Array.isArray(parsed?.k3?.sections) && parsed.k3.sections.length > 0
     }),

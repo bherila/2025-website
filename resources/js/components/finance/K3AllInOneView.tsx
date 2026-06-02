@@ -84,14 +84,22 @@ function part2ByLine(data: FK1StructuredData): Map<string, Part2Agg> {
   return byLine
 }
 
-/** Part III §4 foreign taxes aggregated by country for a single K-1. */
+/**
+ * Part III §4 foreign taxes aggregated by country for a single K-1. Handles both
+ * the canonical nested shape (`data.line1_foreignTaxesPaid.countries`) and the
+ * flat tool shape (`data.countries`).
+ */
 function part3ByCountry(data: FK1StructuredData): Map<string, number> {
   const byCountry = new Map<string, number>()
   const section = data.k3?.sections?.find((s) => s.sectionId === 'part3_section4')
-  const countries = (section?.data?.countries as Array<Record<string, unknown>> | undefined) ?? []
+  const sectionData = (section?.data ?? {}) as Record<string, unknown>
+  const nestedKey = Object.keys(sectionData).find((key) => key.includes('foreignTax') || key.includes('foreign_tax'))
+  const nested = nestedKey ? (sectionData[nestedKey] as Record<string, unknown> | undefined) : undefined
+  const countries = ((nested?.countries ?? sectionData.countries) as Array<Record<string, unknown>> | undefined) ?? []
   for (const entry of countries) {
     const country = String(entry.country ?? '').trim() || '—'
-    byCountry.set(country, currency(byCountry.get(country) ?? 0).add(num(entry.amount_usd)).value)
+    const amount = num(entry.amount_usd ?? entry.total ?? entry.passiveForeign)
+    byCountry.set(country, currency(byCountry.get(country) ?? 0).add(amount).value)
   }
   return byCountry
 }

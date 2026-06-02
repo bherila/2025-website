@@ -10,6 +10,7 @@ import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
 import type { DrillTarget } from '@/components/finance/tax-preview/formRegistry'
 import { AmountCell } from '@/components/finance/tax-preview-primitives'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import { buildK1RoutingIndex, k1CellKey, type K1CellRouting } from '@/lib/finance/k1RoutingIndex'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { getK1PartnerName, normalizeK1Code, parseK1Field, sumK1CodeItems } from '@/lib/finance/k1Utils'
@@ -72,24 +73,6 @@ function firstLine(value: string | null | undefined): string | null {
     return null
   }
   return value.split('\n')[0]?.trim() ?? null
-}
-
-/** Grand total of K-3 Part III §4 foreign taxes (USD) for a single K-1. */
-function k3ForeignTaxTotal(data: FK1StructuredData): number | null {
-  const section = data.k3?.sections?.find((s) => s.sectionId === 'part3_section4')
-  if (!section) {
-    return null
-  }
-  const sectionData = section.data as Record<string, unknown>
-  const grandTotal = sectionData?.grandTotalUSD
-  if (typeof grandTotal === 'number') {
-    return grandTotal
-  }
-  const countries = sectionData?.countries as Array<{ amount_usd?: number }> | undefined
-  if (countries?.length) {
-    return countries.reduce((acc, row) => acc.add(row.amount_usd ?? 0), currency(0)).value
-  }
-  return null
 }
 
 function buildSections(columns: K1Column[]): K1Section[] {
@@ -176,7 +159,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       kind: 'money',
       routable: true,
       fromHint: 'K-3 Part III, Section 4',
-      value: (data) => k3ForeignTaxTotal(data),
+      value: (data) => extractK3ForeignTaxTotal(data),
       staticDestinations: [
         { routing: 'k3_all_in_one', routingReason: 'Open the full K-3 foreign income & tax breakdown across all funds.', label: 'K-3 detail', formId: 'k3-all-in-one' },
         { routing: 'form_1116_line_8', routingReason: 'Foreign taxes paid feed the Form 1116 foreign tax credit.', label: 'Form 1116', formId: 'form-1116' },
@@ -192,25 +175,11 @@ function buildSections(columns: K1Column[]): K1Section[] {
   ].filter((section) => section.rows.length > 0)
 }
 
-function DestinationCell({
-  routings,
-  routable,
-  hasValue,
-  onDrill,
-}: {
-  routings: K1CellRouting[]
-  routable: boolean
-  hasValue: boolean
-  onDrill: (target: DrillTarget) => void
-}) {
-  if (routings.length === 0) {
-    if (routable && hasValue) {
-      return (
-        <span className="text-[11px] italic text-warning">needs review — depends on K-1 footnotes</span>
-      )
-    }
-    return <span className="text-muted-foreground">—</span>
-  }
+function NeedsReviewMarker() {
+  return <span className="text-[11px] italic text-warning">needs review — depends on K-1 footnotes</span>
+}
+
+function DestinationChips({ routings, onDrill }: { routings: K1CellRouting[]; onDrill: (target: DrillTarget) => void }) {
   return (
     <div className="flex flex-wrap gap-1">
       {routings.map((routing) => {
@@ -246,6 +215,54 @@ function DestinationCell({
   )
 }
 
+interface DestinationGroup {
+  key: number
+  label: string
+  routings: K1CellRouting[]
+  needsReview: boolean
+}
+
+/**
+ * Renders destinations per fund so a fund with a value but no computed routing
+ * shows its own "needs review" marker instead of inheriting another fund's
+ * destination. When every contributing fund agrees, the shared destinations are
+ * shown once; divergence (the point of fund-type-aware routing) is shown per fund.
+ */
+function DestinationCell({
+  row,
+  groups,
+  onDrill,
+}: {
+  row: K1Row
+  groups: DestinationGroup[]
+  onDrill: (target: DrillTarget) => void
+}) {
+  if (row.staticDestinations) {
+    return <DestinationChips routings={row.staticDestinations} onDrill={onDrill} />
+  }
+  if (groups.length === 0) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  const signature = (group: DestinationGroup): string =>
+    `${group.needsReview ? 'R' : ''}${group.routings.map((r) => r.routing).sort().join(',')}`
+  const allAgree = groups.every((group) => signature(group) === signature(groups[0]!))
+  if (allAgree) {
+    return groups[0]!.needsReview ? <NeedsReviewMarker /> : <DestinationChips routings={groups[0]!.routings} onDrill={onDrill} />
+  }
+  return (
+    <div className="space-y-1">
+      {groups.map((group) => (
+        <div key={group.key} className="flex items-center gap-1.5">
+          <span className="max-w-[84px] truncate text-[9px] uppercase tracking-wide text-muted-foreground" title={group.label}>
+            {group.label}
+          </span>
+          {group.needsReview ? <NeedsReviewMarker /> : <DestinationChips routings={group.routings} onDrill={onDrill} />}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill }: K1AllInOneViewProps): React.ReactElement {
   const columns = useMemo<K1Column[]>(() => {
     return k1Docs
@@ -273,25 +290,6 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
         No reviewed K-1s for this year yet. Review at least one K-1 to populate the all-in-one view.
       </div>
     )
-  }
-
-  const rowDestinations = (row: K1Row): K1CellRouting[] => {
-    if (row.staticDestinations) {
-      return row.staticDestinations
-    }
-    if (!row.box) {
-      return []
-    }
-    const merged: K1CellRouting[] = []
-    for (const column of columns) {
-      const entries = routingIndex.get(k1CellKey(column.doc.id, row.box, row.code)) ?? []
-      for (const entry of entries) {
-        if (!merged.some((existing) => existing.routing === entry.routing)) {
-          merged.push(entry)
-        }
-      }
-    }
-    return merged
   }
 
   return (
@@ -326,7 +324,7 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
                 key={section.title}
                 section={section}
                 columns={columns}
-                rowDestinations={rowDestinations}
+                routingIndex={routingIndex}
                 onReviewDoc={onReviewDoc}
                 onDrill={onDrill}
               />
@@ -341,13 +339,13 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
 function SectionRows({
   section,
   columns,
-  rowDestinations,
+  routingIndex,
   onReviewDoc,
   onDrill,
 }: {
   section: K1Section
   columns: K1Column[]
-  rowDestinations: (row: K1Row) => K1CellRouting[]
+  routingIndex: Map<string, K1CellRouting[]>
   onReviewDoc: (docId: number) => void
   onDrill: (target: DrillTarget) => void
 }): React.ReactElement {
@@ -360,7 +358,6 @@ function SectionRows({
         </td>
       </tr>
       {section.rows.map((row) => {
-        const destinations = rowDestinations(row)
         const moneyValues = row.kind === 'money'
           ? columns.map((column) => {
               const value = row.value(column.data)
@@ -370,7 +367,18 @@ function SectionRows({
         const total = row.kind === 'money'
           ? moneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
           : null
-        const hasValue = row.kind === 'money' && moneyValues.some((value) => value !== null && value !== 0)
+        // Per-fund destination groups — only funds that actually have a value on
+        // this line contribute, so an unrouted fund is never masked by another's routing.
+        const destinationGroups: DestinationGroup[] = row.box
+          ? columns.flatMap((column, index) => {
+              const numeric = moneyValues[index] ?? null
+              if (numeric === null || numeric === 0) {
+                return []
+              }
+              const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
+              return [{ key: column.doc.id, label: column.partnerName, routings, needsReview: row.routable && routings.length === 0 }]
+            })
+          : []
 
         return (
           <tr key={row.key} className="border-b border-dashed border-border/50 hover:bg-muted/10">
@@ -421,7 +429,7 @@ function SectionRows({
               {row.fromHint ?? '—'}
             </td>
             <td className="px-3 py-1.5 text-left align-top">
-              <DestinationCell routings={destinations} routable={row.routable} hasValue={hasValue} onDrill={onDrill} />
+              <DestinationCell row={row} groups={destinationGroups} onDrill={onDrill} />
             </td>
           </tr>
         )

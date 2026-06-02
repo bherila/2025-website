@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import K1AllInOneView from '@/components/finance/K1AllInOneView'
 import type { FK1StructuredData, K1CodeItem, K1FieldValue } from '@/types/finance/k1-data'
@@ -43,8 +43,8 @@ function source(overrides: Partial<TaxFactSource>): TaxFactSource {
 // Portfolio fund (Alpha) and trader fund (Trader) — same Box 11 Code A routes
 // differently per fund, demonstrating footnote/fund-type-aware destinations.
 const docs: TaxDocument[] = [
-  k1Doc(101, { A: field('11-1111111'), B: field('Alpha Fund LP'), '5': field('1000'), '8': field('50') }, { '11': [{ code: 'A', value: '100' }] }),
-  k1Doc(102, { A: field('22-2222222'), B: field('Trader Fund LP'), '5': field('2000') }, { '11': [{ code: 'A', value: '200' }] }),
+  k1Doc(101, { A: field('11-1111111'), B: field('Alpha Fund LP'), '5': field('1000'), '7': field('60'), '8': field('50') }, { '11': [{ code: 'A', value: '100' }] }),
+  k1Doc(102, { A: field('22-2222222'), B: field('Trader Fund LP'), '5': field('2000'), '7': field('80') }, { '11': [{ code: 'A', value: '200' }] }),
 ]
 
 const taxFacts = {
@@ -60,6 +60,12 @@ const taxFacts = {
   scheduleE: {
     box11ZZSources: [
       source({ taxDocumentId: 102, box: '11', code: 'A', routing: 'schedule_e_line_28', routingReason: 'Trader fund — ordinary nonpassive' }),
+    ],
+  },
+  // Box 7 (royalties): only Alpha is routed; Trader has a value with no routing.
+  scheduleA: {
+    otherItemizedSources: [
+      source({ taxDocumentId: 101, box: '7', routing: 'schedule_a_line_16' }),
     ],
   },
 } as unknown as TaxPreviewFacts
@@ -103,10 +109,20 @@ describe('K1AllInOneView', () => {
     expect(screen.getByRole('button', { name: 'Sch E line 28' })).toBeInTheDocument()
   })
 
+  it('does not mask an unrouted fund with another fund’s destination on the same line', () => {
+    renderView()
+    // Box 7 royalties: Alpha routes to Sch A line 16; Trader has a value but no
+    // routing — it must show its own "needs review", not inherit Alpha's chip.
+    const royalties = screen.getByText('Royalties').closest('tr')!
+    expect(within(royalties).getByRole('button', { name: 'Sch A line 16' })).toBeInTheDocument()
+    expect(within(royalties).getByText(/needs review/)).toBeInTheDocument()
+  })
+
   it('flags a routable line with no computed destination as needing review', () => {
     renderView()
     // Box 8 (ST capital gain) has a value but no source routing it anywhere.
-    expect(screen.getByText(/needs review — depends on K-1 footnotes/)).toBeInTheDocument()
+    const stGain = screen.getByText('ST capital gain').closest('tr')!
+    expect(within(stGain).getByText(/needs review — depends on K-1 footnotes/)).toBeInTheDocument()
   })
 
   it('renders an empty state when there are no parsed K-1s', () => {
