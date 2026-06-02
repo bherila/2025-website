@@ -2,13 +2,14 @@
 
 import currency from 'currency.js'
 
-import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
+import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip, OpenAllK1Button } from '@/components/finance/tax-preview-primitives'
 import type { ScheduleEFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface ScheduleEPreviewProps {
   taxFacts?: ScheduleEFacts | null
   selectedYear: number
   onOpenDoc?: (docId: number) => void
+  onOpenAllK1?: () => void
 }
 
 function sourceDetailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => void) {
@@ -49,7 +50,7 @@ function SourceLines({
   )
 }
 
-export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc }: ScheduleEPreviewProps) {
+export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc, onOpenAllK1 }: ScheduleEPreviewProps) {
   if (!taxFacts) {
     return <FactsLoadingPlaceholder label="Schedule E" />
   }
@@ -77,11 +78,14 @@ export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc }: 
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold mb-0.5">Schedule E — {selectedYear}</h3>
-        <p className="text-xs text-muted-foreground">
-          Supplemental Income and Loss — Partnerships &amp; S Corporations (Part II)
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold mb-0.5">Schedule E — {selectedYear}</h3>
+          <p className="text-xs text-muted-foreground">
+            Supplemental Income and Loss — Partnerships &amp; S Corporations (Part II)
+          </p>
+        </div>
+        {onOpenAllK1 && <OpenAllK1Button onClick={onOpenAllK1} />}
       </div>
 
       {taxFacts.miscIncomeSources.length > 0 && (

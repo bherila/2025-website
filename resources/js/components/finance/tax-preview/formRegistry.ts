@@ -14,6 +14,7 @@ export type FormId =
   | 'w2-summary'
   | 'tax-lot-reconciliation'
   | 'capital-gains-reconciliation'
+  | 'k1-all-in-one'
   | 'form-1040'
   | 'sch-1'
   | 'sch-2'

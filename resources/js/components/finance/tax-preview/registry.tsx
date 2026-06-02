@@ -14,6 +14,7 @@ import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
+import K1AllInOneView from '@/components/finance/K1AllInOneView'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import Schedule3Preview from '@/components/finance/Schedule3Preview'
@@ -99,13 +100,14 @@ function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
   )
 }
 
-function ScheduleBAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleBAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
   return (
     <ScheduleBPreview
       taxFacts={state.taxFacts?.scheduleB ?? null}
       selectedYear={state.year}
       onOpenDoc={reviewK1Doc}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
     />
   )
 }
@@ -125,13 +127,14 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   )
 }
 
-function ScheduleEAdapter({ state }: FormRenderProps): React.ReactElement {
+function ScheduleEAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
   return (
     <ScheduleEPreview
       taxFacts={state.taxFacts?.scheduleE ?? null}
       selectedYear={state.year}
       onOpenDoc={openTaxDocumentDetail}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
     />
   )
 }
@@ -243,6 +246,7 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
       onReviewNow={reviewK1Doc}
       onBulkSetSbpElection={bulkSetSbpElection}
       onOpenWorksheet={() => onDrill({ id: 'wks-1116-apportionment' })}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
       {...(category ? { category } : {})}
     />
   )
@@ -541,6 +545,19 @@ function TaxLotReconciliationAdapter({ state }: FormRenderProps): React.ReactEle
 
 function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.ReactElement {
   return <CapitalGainsReconciliationPanel selectedYear={state.year} />
+}
+
+function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  const k1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
+  return (
+    <K1AllInOneView
+      k1Docs={k1Docs}
+      taxFacts={state.taxFacts ?? null}
+      onReviewDoc={reviewK1Doc}
+      onDrill={onDrill}
+    />
+  )
 }
 
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
@@ -950,6 +967,17 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'app',
     component: CapitalGainsReconciliationAdapter,
     wide: true,
+  },
+  'k1-all-in-one': {
+    id: 'k1-all-in-one',
+    label: 'All-in-One K-1',
+    shortLabel: 'All K-1s',
+    keywords: ['K-1', 'all in one', 'partnership', 'compare', 'unified', 'K-3', 'side by side'],
+    category: 'App',
+    presentation: 'column',
+    size: 'full',
+    component: K1AllInOneAdapter,
+    hasData: (state) => state.accountDocuments.some((doc) => doc.form_type === 'k1'),
   },
   'wks-se-401k': {
     id: 'wks-se-401k',

@@ -1,0 +1,116 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+
+import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import type { FK1StructuredData, K1CodeItem, K1FieldValue } from '@/types/finance/k1-data'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
+
+function field(value: string): K1FieldValue {
+  return { value }
+}
+
+function k1Doc(
+  id: number,
+  fields: Record<string, K1FieldValue>,
+  codes: Record<string, K1CodeItem[]> = {},
+): TaxDocument {
+  const data: FK1StructuredData = { schemaVersion: '2026.1', formType: 'K-1-1065', fields, codes }
+  return { id, parsed_data: data, employment_entity: null } as unknown as TaxDocument
+}
+
+function source(overrides: Partial<TaxFactSource>): TaxFactSource {
+  return {
+    sourceType: 'K1',
+    routing: null,
+    id: `src-${Math.random()}`,
+    label: 'label',
+    amount: 0,
+    taxDocumentId: null,
+    taxDocumentAccountId: null,
+    accountId: null,
+    formType: 'K-1-1065',
+    box: null,
+    code: null,
+    routingReason: null,
+    notes: null,
+    isReviewed: false,
+    reviewStatus: 'pending',
+    reviewAction: null,
+    ...overrides,
+  }
+}
+
+// Portfolio fund (Alpha) and trader fund (Trader) — same Box 11 Code A routes
+// differently per fund, demonstrating footnote/fund-type-aware destinations.
+const docs: TaxDocument[] = [
+  k1Doc(101, { A: field('11-1111111'), B: field('Alpha Fund LP'), '5': field('1000'), '8': field('50') }, { '11': [{ code: 'A', value: '100' }] }),
+  k1Doc(102, { A: field('22-2222222'), B: field('Trader Fund LP'), '5': field('2000') }, { '11': [{ code: 'A', value: '200' }] }),
+]
+
+const taxFacts = {
+  scheduleB: {
+    interestSources: [
+      source({ taxDocumentId: 101, box: '5', routing: 'schedule_b_line_1' }),
+      source({ taxDocumentId: 102, box: '5', routing: 'schedule_b_line_1' }),
+    ],
+    ordinaryDividendSources: [
+      source({ taxDocumentId: 101, box: '11', code: 'A', routing: 'schedule_b_line_5' }),
+    ],
+  },
+  scheduleE: {
+    box11ZZSources: [
+      source({ taxDocumentId: 102, box: '11', code: 'A', routing: 'schedule_e_line_28', routingReason: 'Trader fund — ordinary nonpassive' }),
+    ],
+  },
+} as unknown as TaxPreviewFacts
+
+function renderView(overrides: Partial<React.ComponentProps<typeof K1AllInOneView>> = {}) {
+  const onReviewDoc = jest.fn()
+  const onDrill = jest.fn()
+  render(
+    <K1AllInOneView k1Docs={docs} taxFacts={taxFacts} onReviewDoc={onReviewDoc} onDrill={onDrill} {...overrides} />,
+  )
+  return { onReviewDoc, onDrill }
+}
+
+describe('K1AllInOneView', () => {
+  it('renders one column per fund plus a Total column with cross-fund sums', () => {
+    renderView()
+    // Names appear in both the column header and the Box B "Partnership info" row.
+    expect(screen.getAllByText('Alpha Fund LP').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Trader Fund LP').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Total')).toBeInTheDocument()
+    // Box 5 interest: 1000 + 2000 = 3000
+    expect(screen.getByText('$3,000')).toBeInTheDocument()
+  })
+
+  it('opens the K-1 review modal when a fund value cell is clicked', () => {
+    const { onReviewDoc } = renderView()
+    fireEvent.click(screen.getByRole('button', { name: '$1,000' }))
+    expect(onReviewDoc).toHaveBeenCalledWith(101)
+  })
+
+  it('drills into the destination form when a destination chip is clicked', () => {
+    const { onDrill } = renderView()
+    fireEvent.click(screen.getByRole('button', { name: 'Sch B line 1' }))
+    expect(onDrill).toHaveBeenCalledWith({ id: 'sch-b' })
+  })
+
+  it('shows divergent per-fund destinations on the same line', () => {
+    renderView()
+    // Box 11 Code A: portfolio fund -> Sch B line 5, trader fund -> Sch E line 28
+    expect(screen.getByRole('button', { name: 'Sch B line 5' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sch E line 28' })).toBeInTheDocument()
+  })
+
+  it('flags a routable line with no computed destination as needing review', () => {
+    renderView()
+    // Box 8 (ST capital gain) has a value but no source routing it anywhere.
+    expect(screen.getByText(/needs review — depends on K-1 footnotes/)).toBeInTheDocument()
+  })
+
+  it('renders an empty state when there are no parsed K-1s', () => {
+    renderView({ k1Docs: [] })
+    expect(screen.getByText(/No reviewed K-1s for this year yet/)).toBeInTheDocument()
+  })
+})

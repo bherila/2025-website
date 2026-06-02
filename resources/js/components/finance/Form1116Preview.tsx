@@ -4,7 +4,7 @@ import currency from 'currency.js'
 import { Calculator } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
-import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Callout, fmtAmt, FormBlock, FormLine, FormTotalLine, OpenAllK1Button } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
 import {
   ASSUMED_FOREIGN_WITHHOLDING_RATE,
@@ -34,6 +34,8 @@ interface Form1116PreviewProps {
    * Miller column.
    */
   onOpenWorksheet?: () => void
+  /** Drills into the All-in-One K-1 view (pushes a Miller column). */
+  onOpenAllK1?: () => void
   /**
    * When set, scopes rendered content to a single FTC category.
    * - 'passive': renders Parts I/II/III for passive income, hides general blocks
@@ -93,6 +95,7 @@ export default function Form1116Preview({
   onReviewNow,
   onBulkSetSbpElection,
   onOpenWorksheet,
+  onOpenAllK1,
   category,
 }: Form1116PreviewProps) {
   const lines = 'passiveIncomeSources' in form1116 ? form1116FactsToLines(form1116) : form1116
@@ -163,17 +166,20 @@ export default function Form1116Preview({
               : 'Passive category foreign tax credit — dollar-for-dollar offset against U.S. tax.'}
           </p>
         </div>
-        {foreignTaxSummaries.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs gap-1"
-            onClick={() => onOpenWorksheet ? onOpenWorksheet() : setWorksheetOpen(true)}
-          >
-            <Calculator className="h-3 w-3" />
-            1116 Worksheet
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onOpenAllK1 && <OpenAllK1Button onClick={onOpenAllK1} />}
+          {foreignTaxSummaries.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => onOpenWorksheet ? onOpenWorksheet() : setWorksheetOpen(true)}
+            >
+              <Calculator className="h-3 w-3" />
+              1116 Worksheet
+            </Button>
+          )}
+        </div>
       </div>
 
       {aboveSimplifiedThreshold ? (
