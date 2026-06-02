@@ -10,17 +10,14 @@ use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientExpense;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoiceLine;
-use App\Models\ClientManagement\ClientTask;
 use App\Models\ClientManagement\ClientTimeEntry;
 use App\Services\ClientManagement\DataTransferObjects\BillingCycle;
 use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
-use App\Services\ClientManagement\DataTransferObjects\DeferredAllocationResult;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
 use App\Services\ClientManagement\DataTransferObjects\TimeEntryFragment;
 use App\Support\ClientManagement\BillingCadenceLabel;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -57,6 +54,8 @@ class ClientInvoicingService
 
     protected InvoiceLedgerBuilder $invoiceLedgerBuilder;
 
+    protected InvoiceLineComposer $invoiceLineComposer;
+
     /**
      * Deferred entries that were not billed on the most recent
      * {@see generateInvoice()} call because they didn't fit in the
@@ -76,6 +75,7 @@ class ClientInvoicingService
         ?AgreementSelector $agreementSelector = null,
         ?RetainerCalculator $retainerCalculator = null,
         ?InvoiceLedgerBuilder $invoiceLedgerBuilder = null,
+        ?InvoiceLineComposer $invoiceLineComposer = null,
     ) {
         $this->rolloverCalculator = $rolloverCalculator ?? new RolloverCalculator;
         $this->billingCycleResolver = $billingCycleResolver ?? new BillingCycleResolver;
@@ -85,6 +85,7 @@ class ClientInvoicingService
         $this->retainerCalculator = $retainerCalculator ?? new RetainerCalculator($this->billingCycleResolver);
         $this->invoiceLedgerBuilder = $invoiceLedgerBuilder
             ?? new InvoiceLedgerBuilder($this->rolloverCalculator, $this->billingCycleResolver, $this->retainerCalculator);
+        $this->invoiceLineComposer = $invoiceLineComposer ?? new InvoiceLineComposer($this->recurringItemBiller);
     }
 
     /**
@@ -802,7 +803,7 @@ class ClientInvoicingService
             }
 
             // Now process all fragments and link them to lines, handling splits correctly
-            $this->linkAllFragmentsToLines($fragmentsToLines, $splitter);
+            $this->invoiceLineComposer->linkAllFragmentsToLines($fragmentsToLines, $splitter);
 
             // Monthly retainer fee for month M (the month after the work period).
             // Not charged when the agreement was terminated before the retainer month.
@@ -823,9 +824,9 @@ class ClientInvoicingService
                 ]);
             }
 
-            $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
-            $this->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
-            $this->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
 
             // Deferred-billing allocator: never splits, never triggers catch-up.
             // Termination mode force-bills all outstanding deferred entries at hourly rate.
@@ -833,7 +834,7 @@ class ClientInvoicingService
             if ($isRetainerMonthPostTermination) {
                 $deferredToBill = $deferredAllocator->collectForTermination($company, $periodEnd);
                 if ($deferredToBill->isNotEmpty()) {
-                    $this->addDeferredTerminationLine($invoice, $agreement, $deferredToBill, $sortOrder);
+                    $this->invoiceLineComposer->addDeferredTerminationLine($invoice, $agreement, $deferredToBill, $sortOrder);
                 }
                 $this->deferredSkipped = [];
             } else {
@@ -842,7 +843,7 @@ class ClientInvoicingService
                     ($currentMonthCapacity - $plan->totalCurrentMonthRetainerHours);
                 $deferredResult = $deferredAllocator->allocate($company, $periodEnd, $remainingCapacity);
                 if ($deferredResult->hasBilled()) {
-                    $this->addDeferredRetainerLine($invoice, $agreement, $deferredResult, $periodEnd, $sortOrder);
+                    $this->invoiceLineComposer->addDeferredRetainerLine($invoice, $agreement, $deferredResult, $periodEnd, $sortOrder);
                 }
                 $this->deferredSkipped = $deferredResult->skipped;
             }
@@ -1039,7 +1040,7 @@ class ClientInvoicingService
                     'invoice_kind' => InvoiceKind::CadencePeriod->value,
                     'status' => 'draft',
                 ]);
-                $this->resetSystemGeneratedLines($invoice);
+                $this->invoiceLineComposer->resetSystemGeneratedLines($invoice);
             } else {
                 // For cadence-period invoices the invoice period and cadence cycle match.
                 // Interim-overage invoices will use the same cycle columns while keeping
@@ -1145,7 +1146,7 @@ class ClientInvoicingService
                 ]);
             }
 
-            $this->linkAllFragmentsToLines($fragmentsToLines, $splitter);
+            $this->invoiceLineComposer->linkAllFragmentsToLines($fragmentsToLines, $splitter);
 
             ClientInvoiceLine::create([
                 'client_invoice_id' => $invoice->client_invoice_id,
@@ -1161,14 +1162,14 @@ class ClientInvoicingService
                 'sort_order' => $sortOrder++,
             ]);
 
-            $this->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
-            $this->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
-            $this->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addReimbursableExpenses($company, $invoice, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addBillableMilestoneTasks($company, $invoice, $periodEnd, $sortOrder);
+            $this->invoiceLineComposer->addRecurringItemLines($invoice, $agreement, $periodStart, $periodEnd, $sortOrder);
 
             $remainingCapacity = max(0.0, $cycleLedger['covered_hours'] - $plan->totalPriorMonthRetainerHours);
             $deferredResult = (new DeferredBillingAllocator)->allocate($company, $periodEnd, $remainingCapacity);
             if ($deferredResult->hasBilled()) {
-                $this->addDeferredRetainerLine($invoice, $agreement, $deferredResult, $periodEnd, $sortOrder);
+                $this->invoiceLineComposer->addDeferredRetainerLine($invoice, $agreement, $deferredResult, $periodEnd, $sortOrder);
                 $remainingCapacity = max(0.0, $remainingCapacity - $deferredResult->hoursBilled);
             }
             $this->deferredSkipped = $deferredResult->skipped;
@@ -1335,7 +1336,7 @@ class ClientInvoicingService
                     'invoice_kind' => InvoiceKind::InterimOverage->value,
                     'status' => 'draft',
                 ]);
-                $this->resetSystemGeneratedLines($invoice);
+                $this->invoiceLineComposer->resetSystemGeneratedLines($invoice);
             } else {
                 $invoice = ClientInvoice::create([
                     'client_company_id' => $company->id,
@@ -1377,7 +1378,7 @@ class ClientInvoicingService
                 'sort_order' => 1,
             ]);
 
-            $this->linkAllFragmentsToLines([
+            $this->invoiceLineComposer->linkAllFragmentsToLines([
                 $line->client_invoice_line_id => $billableFragments,
             ], $splitter);
 
@@ -1604,47 +1605,6 @@ class ClientInvoicingService
         ];
     }
 
-    /**
-     * Remove generated lines from a draft invoice before regeneration.
-     */
-    protected function resetSystemGeneratedLines(ClientInvoice $invoice): void
-    {
-        $systemLines = $invoice->lineItems()
-            ->whereIn('line_type', InvoiceLineType::systemGeneratedValues())
-            ->get();
-
-        foreach ($systemLines as $line) {
-            $line->timeEntries()->update(['client_invoice_line_id' => null]);
-            $line->tasks()->update(['client_invoice_line_id' => null]);
-        }
-        $invoice->lineItems()->whereIn('line_type', InvoiceLineType::systemGeneratedValues())->delete();
-
-        $expenseLines = $invoice->lineItems()->where('line_type', InvoiceLineType::Expense->value)->get();
-        foreach ($expenseLines as $line) {
-            $line->expenses()->update(['client_invoice_line_id' => null]);
-        }
-        $invoice->lineItems()->where('line_type', InvoiceLineType::Expense->value)->delete();
-    }
-
-    /**
-     * Add recurring fixed-fee item incidences to a cadence-period invoice.
-     */
-    protected function addRecurringItemLines(
-        ClientInvoice $invoice,
-        ClientAgreement $agreement,
-        Carbon $periodStart,
-        Carbon $periodEnd,
-        int &$sortOrder,
-    ): void {
-        $agreement->loadMissing('recurringItems');
-
-        foreach ($this->recurringItemBiller->linesForCycle($agreement, $periodStart, $periodEnd) as $lineData) {
-            $line = $this->recurringItemBiller->buildLine($lineData, $sortOrder++);
-            $line->client_invoice_id = $invoice->client_invoice_id;
-            $line->save();
-        }
-    }
-
     protected function formatPeriodLabel(Carbon $periodStart, Carbon $periodEnd): string
     {
         if ($periodStart->isSameMonth($periodEnd)) {
@@ -1710,238 +1670,6 @@ class ClientInvoicingService
             'unused' => round($netUnused, 4),
             'negative' => round($netNegative, 4),
         ];
-    }
-
-    /**
-     * Add reimbursable expenses to the invoice.
-     */
-    protected function addReimbursableExpenses(
-        ClientCompany $company,
-        ClientInvoice $invoice,
-        Carbon $invoiceDate,
-        int &$sortOrder
-    ): void {
-        // Get all un-invoiced reimbursable expenses up to and including the invoice date
-        $expenses = ClientExpense::where('client_company_id', $company->id)
-            ->where('is_reimbursable', true)
-            ->whereNull('client_invoice_line_id')
-            ->where('expense_date', '<=', $invoiceDate)
-            ->orderBy('expense_date')
-            ->get();
-
-        foreach ($expenses as $expense) {
-            $line = ClientInvoiceLine::create([
-                'client_invoice_id' => $invoice->client_invoice_id,
-                'client_agreement_id' => $invoice->client_agreement_id,
-                'description' => $expense->description,
-                'quantity' => 1,
-                'unit_price' => $expense->amount,
-                'line_total' => $expense->amount,
-                'line_type' => 'expense',
-                'hours' => null,
-                'line_date' => $expense->expense_date,
-                'sort_order' => $sortOrder++,
-            ]);
-
-            // Link expense to invoice line
-            $expense->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
-        }
-    }
-
-    /**
-     * Add billable milestone tasks (with milestone_price > 0) to the invoice.
-     *
-     * Includes all unbilled tasks completed on or before the period end.
-     * This handles the case where a task was completed in a prior period where
-     * the invoice was already issued/paid — such tasks are carried forward to
-     * the next available (draft or new) invoice.
-     */
-    protected function addBillableMilestoneTasks(
-        ClientCompany $company,
-        ClientInvoice $invoice,
-        Carbon $periodEnd,
-        int &$sortOrder
-    ): void {
-        $tasks = ClientTask::whereHas('project', function ($q) use ($company) {
-            $q->where('client_company_id', $company->id);
-        })
-            ->where('milestone_price', '>', 0)
-            ->whereNotNull('completed_at')
-            ->whereNull('client_invoice_line_id')
-            ->where('completed_at', '<=', $periodEnd->copy()->endOfDay())
-            ->orderBy('completed_at')
-            ->get();
-
-        foreach ($tasks as $task) {
-            $line = ClientInvoiceLine::create([
-                'client_invoice_id' => $invoice->client_invoice_id,
-                'client_agreement_id' => $invoice->client_agreement_id,
-                'description' => 'Milestone: '.$task->name,
-                'quantity' => '1',
-                'unit_price' => $task->milestone_price,
-                'line_total' => $task->milestone_price,
-                'line_type' => 'milestone',
-                'hours' => null,
-                'line_date' => $task->completed_at,
-                'sort_order' => $sortOrder++,
-            ]);
-
-            // Link task to invoice line
-            $task->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
-        }
-    }
-
-    /**
-     * Add a single prior_month_retainer line that covers all deferred time
-     * entries that fit in the remaining capacity for this period.
-     *
-     * The whole-entry invariant (see docs/client-management/deferred-billing.md):
-     * each entry is attached directly — TimeEntrySplitter is never involved.
-     */
-    protected function addDeferredRetainerLine(
-        ClientInvoice $invoice,
-        ClientAgreement $agreement,
-        DeferredAllocationResult $result,
-        Carbon $periodEnd,
-        int &$sortOrder,
-    ): void {
-        $hours = $result->hoursBilled;
-        $line = ClientInvoiceLine::create([
-            'client_invoice_id' => $invoice->client_invoice_id,
-            'client_agreement_id' => $agreement->id,
-            'description' => sprintf(
-                'Deferred work items applied to retainer (%s)',
-                $this->formatHoursForQuantity($hours),
-            ),
-            'quantity' => '',
-            'unit_price' => 0,
-            'line_total' => 0,
-            'line_type' => 'prior_month_retainer',
-            'hours' => $hours,
-            'line_date' => $periodEnd,
-            'sort_order' => $sortOrder++,
-        ]);
-
-        foreach ($result->billed as $candidate) {
-            $candidate->entry->update([
-                'client_invoice_line_id' => $line->client_invoice_line_id,
-            ]);
-        }
-    }
-
-    /**
-     * Add an additional_hours line that force-bills every outstanding deferred
-     * entry at the agreement's hourly rate. Used on termination invoices so
-     * the client is never left with unbilled deferred work.
-     *
-     * @param  Collection<int, ClientTimeEntry>  $entries
-     */
-    /**
-     * @param  Collection<int, ClientTimeEntry>  $entries
-     */
-    protected function addDeferredTerminationLine(
-        ClientInvoice $invoice,
-        ClientAgreement $agreement,
-        Collection $entries,
-        int &$sortOrder,
-    ): void {
-        $totalMinutes = (int) $entries->sum('minutes_worked');
-        if ($totalMinutes <= 0) {
-            return;
-        }
-        $hours = round($totalMinutes / 60, 4);
-        $rate = (float) $agreement->hourly_rate;
-
-        $line = ClientInvoiceLine::create([
-            'client_invoice_id' => $invoice->client_invoice_id,
-            'client_agreement_id' => $agreement->id,
-            'description' => sprintf(
-                'Deferred work items billed on agreement termination (%s @ $%.2f/hr)',
-                $this->formatHoursForQuantity($hours),
-                $rate,
-            ),
-            'quantity' => $this->formatHoursForQuantity($hours),
-            'unit_price' => $rate,
-            'line_total' => round($hours * $rate, 2),
-            'line_type' => 'additional_hours',
-            'hours' => $hours,
-            'line_date' => $invoice->period_end,
-            'sort_order' => $sortOrder++,
-        ]);
-
-        foreach ($entries as $entry) {
-            $entry->update(['client_invoice_line_id' => $line->client_invoice_line_id]);
-        }
-        // We intentionally do NOT add these hours to `hours_billed_at_rate` —
-        // that field tracks the catch-up/overage pool used by the cumulative
-        // balance snapshot, which is a different concept. The $ amount is
-        // captured by line_total.
-    }
-
-    /**
-     * Link all time entry fragments to their respective invoice lines, handling splits correctly.
-     *
-     * @param  array  $fragmentsToLines  Map of line_id => TimeEntryFragment[]
-     */
-    protected function linkAllFragmentsToLines(array $fragmentsToLines, TimeEntrySplitter $splitter): void
-    {
-        // Group all fragments by their original time entry ID across all lines
-        $entrySplitPlan = [];  // entry_id => [['line_id' => X, 'minutes' => Y], ...]
-
-        foreach ($fragmentsToLines as $lineId => $fragments) {
-            foreach ($fragments as $fragment) {
-                $entryId = $fragment->originalTimeEntryId;
-                if (! isset($entrySplitPlan[$entryId])) {
-                    $entrySplitPlan[$entryId] = [];
-                }
-                $entrySplitPlan[$entryId][] = [
-                    'line_id' => $lineId,
-                    'minutes' => $fragment->minutes,
-                ];
-            }
-        }
-
-        // Process each entry that needs to be split/linked
-        foreach ($entrySplitPlan as $entryId => $splits) {
-            $entry = ClientTimeEntry::find($entryId);
-            if (! $entry) {
-                continue;
-            }
-
-            // If only one split and it uses the entire entry, link directly
-            if (count($splits) == 1 && $splits[0]['minutes'] >= $entry->minutes_worked) {
-                $entry->update(['client_invoice_line_id' => $splits[0]['line_id']]);
-
-                continue;
-            }
-
-            // Need to split the entry into multiple pieces
-            $remainingEntry = $entry;
-            $totalMinutes = $entry->minutes_worked;
-            $processedMinutes = 0;
-
-            foreach ($splits as $i => $split) {
-                $minutesForThisSplit = min($split['minutes'], $totalMinutes - $processedMinutes);
-
-                if ($minutesForThisSplit <= 0) {
-                    break;
-                }
-
-                $isLastSplit = ($i == count($splits) - 1) || ($processedMinutes + $minutesForThisSplit >= $totalMinutes);
-
-                if ($isLastSplit) {
-                    // Last piece - just link the remaining entry
-                    $remainingEntry->update(['client_invoice_line_id' => $split['line_id']]);
-                } else {
-                    // Split off a piece for this line
-                    $splitResult = $splitter->splitEntry($remainingEntry, $minutesForThisSplit);
-                    $splitResult['primary']->update(['client_invoice_line_id' => $split['line_id']]);
-                    $remainingEntry = $splitResult['overflow'];  // Continue with the overflow
-                }
-
-                $processedMinutes += $minutesForThisSplit;
-            }
-        }
     }
 
     /**
