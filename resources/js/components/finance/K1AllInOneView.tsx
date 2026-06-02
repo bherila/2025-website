@@ -168,7 +168,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
   }
 
   const k3Rows: K1Row[] = []
-  if (columns.some((c) => k3ForeignTaxTotal(c.data) !== null)) {
+  if (columns.some((c) => (c.data.k3?.sections?.length ?? 0) > 0)) {
     k3Rows.push({
       key: 'k3-foreign-tax',
       label: 'K-3 Part III §4 — Foreign taxes (total USD)',
@@ -178,6 +178,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       fromHint: 'K-3 Part III, Section 4',
       value: (data) => k3ForeignTaxTotal(data),
       staticDestinations: [
+        { routing: 'k3_all_in_one', routingReason: 'Open the full K-3 foreign income & tax breakdown across all funds.', label: 'K-3 detail', formId: 'k3-all-in-one' },
         { routing: 'form_1116_line_8', routingReason: 'Foreign taxes paid feed the Form 1116 foreign tax credit.', label: 'Form 1116', formId: 'form-1116' },
       ],
     })

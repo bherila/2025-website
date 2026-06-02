@@ -1,0 +1,81 @@
+import { fireEvent, render, screen, within } from '@testing-library/react'
+
+import K3AllInOneView from '@/components/finance/K3AllInOneView'
+import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
+import type { TaxDocument } from '@/types/finance/tax-document'
+
+function k1WithK3(id: number, name: string, sections: K3Section[]): TaxDocument {
+  const data: FK1StructuredData = {
+    schemaVersion: '2026.1',
+    formType: 'K-1-1065',
+    fields: { B: { value: name } },
+    codes: {},
+    k3: { sections },
+  }
+  return { id, parsed_data: data, employment_entity: null } as unknown as TaxDocument
+}
+
+function part2(rows: Array<Record<string, unknown>>): K3Section {
+  return { sectionId: 'part2_section1', title: 'Part II', data: { rows } }
+}
+
+function part3(countries: Array<Record<string, unknown>>): K3Section {
+  return { sectionId: 'part3_section4', title: 'Part III §4', data: { countries } }
+}
+
+// Alpha: passive interest (Ireland). Trader: passive + general dividends (Cayman).
+const docs: TaxDocument[] = [
+  k1WithK3(201, 'Alpha Fund LP', [
+    part2([{ line: '1', description: 'Interest', country: 'Ireland', col_a_us_source: '0', col_c_passive: '8010', col_d_general: '0', col_g_total: '8010' }]),
+    part3([{ country: 'Ireland', amount_usd: 1201 }]),
+  ]),
+  k1WithK3(202, 'Trader Fund LP', [
+    part2([{ line: '2', description: 'Dividends', country: 'Cayman', col_a_us_source: '0', col_c_passive: '16047', col_d_general: '500', col_g_total: '16547' }]),
+    part3([{ country: 'Cayman', amount_usd: 842 }]),
+  ]),
+]
+
+function renderView(overrides: Partial<React.ComponentProps<typeof K3AllInOneView>> = {}) {
+  const onReviewDoc = jest.fn()
+  render(<K3AllInOneView k1Docs={docs} onReviewDoc={onReviewDoc} {...overrides} />)
+  return { onReviewDoc }
+}
+
+describe('K3AllInOneView', () => {
+  it('pivots K-3 across funds with a Total column', () => {
+    renderView()
+    expect(screen.getByText('K-3 Part II — Foreign Income')).toBeInTheDocument()
+    expect(screen.getByText(/K-3 Part III/)).toBeInTheDocument()
+    // Both fund headers present (column headers).
+    expect(screen.getAllByText('Alpha Fund LP').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Trader Fund LP').length).toBeGreaterThanOrEqual(1)
+    // Part III foreign taxes are pivoted per country (Ireland 1,201; Cayman 842),
+    // each summed into the per-row Total column (single fund ⇒ cell == total).
+    expect(screen.getAllByText('$1,201').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('$842').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('switches the Part II basket via the category tabs', () => {
+    renderView()
+    // Default tab is Total: dividends total shows 16,547 (Trader cell + Total column).
+    expect(screen.getAllByText('$16,547').length).toBeGreaterThanOrEqual(1)
+    // Switch to General: dividends general portion is 500.
+    fireEvent.click(screen.getByRole('button', { name: 'General' }))
+    expect(screen.getAllByText('$500').length).toBeGreaterThanOrEqual(1)
+    // Switch to Passive: dividends passive portion is 16,047.
+    fireEvent.click(screen.getByRole('button', { name: 'Passive' }))
+    expect(screen.getAllByText('$16,047').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('opens the K-1 source when a value cell is clicked', () => {
+    const { onReviewDoc } = renderView()
+    const ireland = screen.getByText('Ireland').closest('tr')!
+    fireEvent.click(within(ireland).getByRole('button', { name: '$1,201' }))
+    expect(onReviewDoc).toHaveBeenCalledWith(201)
+  })
+
+  it('renders an empty state when no K-1 has K-3 data', () => {
+    renderView({ k1Docs: [] })
+    expect(screen.getByText(/No K-3 .* data found/)).toBeInTheDocument()
+  })
+})

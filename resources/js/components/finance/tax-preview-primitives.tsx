@@ -88,6 +88,16 @@ export function OpenAllK1Button({ onClick }: { onClick: () => void }) {
   )
 }
 
+/** Header button that drills into the All-in-One K-3 (foreign income & tax) view. */
+export function OpenAllK3Button({ onClick }: { onClick: () => void }) {
+  return (
+    <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={onClick}>
+      View all K-3s
+      <ArrowRight className="h-3 w-3" />
+    </Button>
+  )
+}
+
 export function InfoTooltip({ children }: { children: React.ReactNode }) {
   return (
     <Tooltip>

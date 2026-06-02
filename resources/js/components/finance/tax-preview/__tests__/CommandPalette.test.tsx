@@ -94,6 +94,14 @@ const mockRegistry: FormRegistry = {
     presentation: 'column',
     ...sharedDefaults,
   },
+  'k3-all-in-one': {
+    id: 'k3-all-in-one',
+    label: 'All-in-One K-3',
+    shortLabel: 'All K-3s',
+    category: 'App',
+    presentation: 'column',
+    ...sharedDefaults,
+  },
   'form-1040': {
     id: 'form-1040',
     label: 'Form 1040 — U.S. Individual Income Tax Return',

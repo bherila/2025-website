@@ -15,6 +15,7 @@ import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import K3AllInOneView from '@/components/finance/K3AllInOneView'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
 import Schedule3Preview from '@/components/finance/Schedule3Preview'
@@ -247,6 +248,7 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
       onBulkSetSbpElection={bulkSetSbpElection}
       onOpenWorksheet={() => onDrill({ id: 'wks-1116-apportionment' })}
       onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
+      onOpenAllK3={() => onDrill({ id: 'k3-all-in-one' })}
       {...(category ? { category } : {})}
     />
   )
@@ -558,6 +560,12 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
       onDrill={onDrill}
     />
   )
+}
+
+function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  const k1Docs = state.accountDocuments.filter((doc) => doc.form_type === 'k1')
+  return <K3AllInOneView k1Docs={k1Docs} onReviewDoc={reviewK1Doc} />
 }
 
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
@@ -978,6 +986,23 @@ const rawFormRegistry: FormRegistry = {
     size: 'full',
     component: K1AllInOneAdapter,
     hasData: (state) => state.accountDocuments.some((doc) => doc.form_type === 'k1'),
+  },
+  'k3-all-in-one': {
+    id: 'k3-all-in-one',
+    label: 'All-in-One K-3',
+    shortLabel: 'All K-3s',
+    keywords: ['K-3', 'foreign', 'foreign tax credit', 'partnership', 'compare', 'unified', 'basket', '1116'],
+    category: 'App',
+    presentation: 'column',
+    size: 'wide',
+    component: K3AllInOneAdapter,
+    hasData: (state) => state.accountDocuments.some((doc) => {
+      if (doc.form_type !== 'k1') {
+        return false
+      }
+      const parsed = doc.parsed_data as unknown as { k3?: { sections?: unknown[] } } | null
+      return Array.isArray(parsed?.k3?.sections) && parsed.k3.sections.length > 0
+    }),
   },
   'wks-se-401k': {
     id: 'wks-se-401k',
