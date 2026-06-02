@@ -606,6 +606,49 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_mid_month_monthly_retainer_truncated_boundary_cycle_keeps_final_month_ledger(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-01'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'active_date' => Carbon::parse('2025-02-15'),
+                'termination_date' => Carbon::parse('2025-05-20'),
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'retainer_hours' => null,
+                'retainer_fee' => null,
+                'rollover_months' => 0,
+                'bill_overage_interim' => false,
+            ]);
+
+            $this->createTimeEntry('2025-02-20', 1.0);
+            $this->createTimeEntry('2025-05-19', 0.7);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $cycleInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->orderBy('cycle_start')
+                ->get();
+
+            $this->assertCount(2, $cycleInvoices);
+            $this->assertEquals('2025-02-15', $cycleInvoices[0]->cycle_start->toDateString());
+            $this->assertEquals('2025-05-14', $cycleInvoices[0]->cycle_end->toDateString());
+            $this->assertEquals('2025-05-15', $cycleInvoices[1]->cycle_start->toDateString());
+            $this->assertEquals('2025-05-20', $cycleInvoices[1]->cycle_end->toDateString());
+            $this->assertEquals(1.0, (float) $cycleInvoices[0]->hours_worked);
+            $this->assertEquals(0.7, (float) $cycleInvoices[1]->hours_worked);
+            $this->assertEquals(1.7, (float) $cycleInvoices->sum('hours_worked'));
+            $this->assertEqualsWithDelta(6.452, (float) $cycleInvoices[1]->retainer_hours_included, 0.0001);
+            $this->assertEquals(0.0, (float) $cycleInvoices[1]->hours_billed_at_rate);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_quarterly_active_date_anchor_keeps_period_retainer_override(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));

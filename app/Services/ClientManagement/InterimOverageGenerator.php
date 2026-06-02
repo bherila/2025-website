@@ -322,7 +322,7 @@ class InterimOverageGenerator
     private function assertImmediateLedgerSupportsInterimOverage(ClientAgreement $agreement, array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): void
     {
         $cycleMonthStart = $this->invoiceLedgerBuilder->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
-        $periodMonthEnd = $periodEnd->copy()->startOfMonth();
+        $periodMonthEnd = $this->invoiceLedgerBuilder->cycleMonthEndForLegacyMonthlyLedger($agreement, $cycle, $periodEnd);
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
         foreach ($immediateLedger as $summary) {
@@ -342,7 +342,7 @@ class InterimOverageGenerator
     private function cumulativeInterimExcessHoursThrough(ClientAgreement $agreement, array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): float
     {
         $cycleMonthStart = $this->invoiceLedgerBuilder->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
-        $periodMonthEnd = $periodEnd->copy()->startOfMonth();
+        $periodMonthEnd = $this->invoiceLedgerBuilder->cycleMonthEndForLegacyMonthlyLedger($agreement, $cycle, $periodEnd);
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
         return round((float) collect($immediateLedger)

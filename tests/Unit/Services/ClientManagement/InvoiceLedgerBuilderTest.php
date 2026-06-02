@@ -91,6 +91,44 @@ class InvoiceLedgerBuilderTest extends TestCase
         $this->assertSame(18.0, $secondCycle['hours_worked']);
     }
 
+    public function test_summarize_legacy_monthly_ledger_moves_boundary_month_to_truncated_final_cycle(): void
+    {
+        $company = ClientCompany::factory()->create();
+        $agreement = ClientAgreement::factory()->for($company)->create([
+            'active_date' => '2024-02-15',
+            'termination_date' => '2024-05-20',
+            'monthly_retainer_hours' => 10,
+            'rollover_months' => 0,
+            'initial_rollover_hours' => 0,
+            'retainer_hours' => null,
+            'billing_cadence' => BillingCadence::Quarterly->value,
+        ]);
+
+        $cycles = iterator_to_array((new BillingCycleResolver)->cyclesForAgreement(
+            $agreement,
+            Carbon::parse('2024-08-14'),
+        ));
+        $ledger = [
+            $this->summary('2024-02', hoursWorked: 1.0, retainerHours: 10.0),
+            $this->summary('2024-03', hoursWorked: 2.0, retainerHours: 10.0),
+            $this->summary('2024-04', hoursWorked: 3.0, retainerHours: 10.0),
+            $this->summary('2024-05', hoursWorked: 4.0, retainerHours: 10.0),
+        ];
+
+        $builder = new InvoiceLedgerBuilder;
+        $firstCycle = $builder->summarizeLedgerForCycle($agreement, $ledger, $cycles[0]);
+        $finalCycle = $builder->summarizeLedgerForCycle($agreement, $ledger, $cycles[1]);
+
+        $this->assertSame('2024-05-15', $cycles[1]->start->toDateString());
+        $this->assertSame('2024-05-20', $cycles[1]->end->toDateString());
+        $this->assertSame(30.0, $firstCycle['retainer_hours']);
+        $this->assertSame(6.0, $firstCycle['hours_worked']);
+        $this->assertSame(10.0, $finalCycle['retainer_hours']);
+        $this->assertSame(4.0, $finalCycle['hours_worked']);
+        $this->assertSame(40.0, $firstCycle['retainer_hours'] + $finalCycle['retainer_hours']);
+        $this->assertSame(10.0, $firstCycle['hours_worked'] + $finalCycle['hours_worked']);
+    }
+
     public function test_ledger_row_belongs_to_cycle_through_respects_cycle_owner_and_period_end(): void
     {
         $builder = new InvoiceLedgerBuilder;
