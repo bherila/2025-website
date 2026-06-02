@@ -78,4 +78,23 @@ describe('K3AllInOneView', () => {
     renderView({ k1Docs: [] })
     expect(screen.getByText(/No K-3 .* data found/)).toBeInTheDocument()
   })
+
+  it('sums all Part II category columns when col_g_total is missing', () => {
+    const doc = k1WithK3(301, 'Branch Fund LP', [
+      // No col_g_total; foreign-branch + sourced-by-partner must be included.
+      part2([{ line: '1', description: 'Interest', col_a_us_source: '100', col_b_foreign_branch: '200', col_f_sourced_by_partner: '400' }]),
+    ])
+    render(<K3AllInOneView k1Docs={[doc]} onReviewDoc={jest.fn()} />)
+    // Default tab is Total: 100 + 200 + 400 = 700 (cell + Total column).
+    expect(screen.getAllByText('$700').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows a fallback total row when Part III has only a grand total', () => {
+    const doc = k1WithK3(302, 'Aggregate Fund LP', [
+      { sectionId: 'part3_section4', title: 'Part III §4', data: { line1_foreignTaxesPaid: { grandTotalUSD: 500 } } },
+    ])
+    render(<K3AllInOneView k1Docs={[doc]} onReviewDoc={jest.fn()} />)
+    expect(screen.getByText(/no country breakdown/)).toBeInTheDocument()
+    expect(screen.getAllByText('$500').length).toBeGreaterThanOrEqual(1)
+  })
 })

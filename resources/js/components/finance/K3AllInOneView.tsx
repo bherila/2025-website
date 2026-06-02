@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
 import { AmountCell, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import { getK1PartnerName } from '@/lib/finance/k1Utils'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -58,9 +59,14 @@ function part2ByLine(data: FK1StructuredData): Map<string, Part2Agg> {
       const us = num(row.col_a_us_source)
       const passive = num(row.col_c_passive)
       const general = num(row.col_d_general)
+      // When no explicit col_g total, sum every category column (col_a..col_f) so
+      // foreign-branch / 901(j) / sourced-by-partner amounts aren't dropped.
       const total = row.col_g_total !== undefined && row.col_g_total !== ''
         ? num(row.col_g_total)
-        : currency(us).add(passive).add(general).value
+        : Object.entries(row).reduce(
+            (acc, [key, value]) => (key.startsWith('col_') && !key.startsWith('col_g') ? acc.add(num(value)) : acc),
+            currency(0),
+          ).value
       const description = String(row.description ?? row.line_description ?? '').trim()
       const country = String(row.country ?? '').trim()
       const line = String(row.line ?? description ?? '').trim() || '—'
@@ -100,6 +106,14 @@ function part3ByCountry(data: FK1StructuredData): Map<string, number> {
     const country = String(entry.country ?? '').trim() || '—'
     const amount = num(entry.amount_usd ?? entry.total ?? entry.passiveForeign)
     byCountry.set(country, currency(byCountry.get(country) ?? 0).add(amount).value)
+  }
+  // Some K-1s carry only a grand total with no country breakdown — still surface
+  // the amount as a single fallback row rather than hiding the taxes entirely.
+  if (byCountry.size === 0) {
+    const grandTotal = extractK3ForeignTaxTotal(data)
+    if (grandTotal !== 0) {
+      byCountry.set('(total — no country breakdown)', grandTotal)
+    }
   }
   return byCountry
 }
