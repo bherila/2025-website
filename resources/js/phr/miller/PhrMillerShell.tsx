@@ -1,7 +1,10 @@
 import type { ReactElement } from 'react'
-import { Suspense } from 'react'
+import { Suspense, useCallback, useState } from 'react'
 
+import PhrNavbar from '@/components/phr/PhrNavbar'
 import { MillerRegistryShell } from '@/components/ui/miller'
+import type { PhrSection } from '@/lib/phrRouteBuilder'
+import { patientUrl } from '@/lib/phrRouteBuilder'
 
 import { PhrHomeView } from './PhrHomeView'
 import { phrModuleRegistry, type PhrShellState } from './phrModuleRegistry'
@@ -11,25 +14,46 @@ const LOADING = <div role="status" aria-live="polite" className="p-8 text-sm tex
 
 interface PhrMillerShellProps {
   patientId: number | undefined
+  onPatientChange?: (patientId: number) => void
+  onSectionChange?: (section: PhrSection) => void
 }
 
-export function PhrMillerShell({ patientId }: PhrMillerShellProps): ReactElement {
+export function PhrMillerShell({ patientId, onPatientChange, onSectionChange }: PhrMillerShellProps): ReactElement {
+  const [activePatientId, setActivePatientId] = useState<number | undefined>(patientId)
   const { route, pushColumn, replaceFrom, truncateTo, navigate } = usePhrRoute()
 
-  const state: PhrShellState = { patientId }
+  const handlePatientChange = useCallback((nextPatientId: number): void => {
+    setActivePatientId(nextPatientId)
+    onPatientChange?.(nextPatientId)
+
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', `${patientUrl(nextPatientId)}${window.location.hash}`)
+    }
+  }, [onPatientChange])
+
+  const state: PhrShellState = { patientId: activePatientId }
 
   return (
-    <Suspense fallback={LOADING}>
-      <MillerRegistryShell
-        registry={phrModuleRegistry}
-        state={state}
-        homeView={<PhrHomeView patientId={patientId} replaceFrom={replaceFrom} />}
-        route={route}
-        pushColumn={pushColumn}
-        replaceFrom={replaceFrom}
-        truncateTo={truncateTo}
-        navigate={navigate}
-      />
-    </Suspense>
+    <PhrNavbar
+      {...(activePatientId !== undefined ? { patientId: activePatientId } : {})}
+      className="flex h-full flex-col"
+      onPatientChange={handlePatientChange}
+      {...(onSectionChange ? { onSectionChange } : {})}
+    >
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <Suspense fallback={LOADING}>
+          <MillerRegistryShell
+            registry={phrModuleRegistry}
+            state={state}
+            homeView={<PhrHomeView patientId={activePatientId} replaceFrom={replaceFrom} />}
+            route={route}
+            pushColumn={pushColumn}
+            replaceFrom={replaceFrom}
+            truncateTo={truncateTo}
+            navigate={navigate}
+          />
+        </Suspense>
+      </div>
+    </PhrNavbar>
   )
 }

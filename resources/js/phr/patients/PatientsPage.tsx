@@ -1,5 +1,5 @@
 import { Plus, UserRound } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { type MouseEvent, useCallback, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,13 +8,18 @@ import { patientUrl } from '@/lib/phrRouteBuilder'
 import { errorMessage } from '@/phr/shared'
 import { type PhrPatient, PhrPatientListResponseSchema } from '@/phr/types'
 
+interface PatientsPageProps {
+  onPatientSelect?: (patientId: number, hash?: string) => void
+  onManagePatients?: () => void
+}
+
 const ACCESS_BADGE: Record<string, string> = {
   owner: 'bg-primary/10 text-primary',
   manager: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300',
   viewer: 'bg-muted text-muted-foreground',
 }
 
-export default function PatientsPage() {
+export default function PatientsPage({ onPatientSelect, onManagePatients }: PatientsPageProps) {
   const [patients, setPatients] = useState<PhrPatient[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +42,24 @@ export default function PatientsPage() {
     void loadPatients()
   }, [loadPatients])
 
+  function handleManagePatientsClick(event: MouseEvent<HTMLAnchorElement>): void {
+    if (!onManagePatients) {
+      return
+    }
+
+    event.preventDefault()
+    onManagePatients()
+  }
+
+  function handlePatientClick(event: MouseEvent<HTMLAnchorElement>, patientId: number, hash?: string): void {
+    if (!onPatientSelect) {
+      return
+    }
+
+    event.preventDefault()
+    onPatientSelect(patientId, hash)
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -45,7 +68,7 @@ export default function PatientsPage() {
           <p className="mt-1 text-sm text-muted-foreground">Your patient profiles and shared records.</p>
         </div>
         <Button asChild>
-          <a href="/phr/patients/manage">
+          <a href="/phr/patients/manage" onClick={handleManagePatientsClick}>
             <Plus className="mr-2 h-4 w-4" />
             Add Patient
           </a>
@@ -68,7 +91,7 @@ export default function PatientsPage() {
             <p className="mt-1 text-sm text-muted-foreground">Add a profile to start tracking health records.</p>
           </div>
           <Button asChild>
-            <a href="/phr/patients/manage">Add Patient</a>
+            <a href="/phr/patients/manage" onClick={handleManagePatientsClick}>Add Patient</a>
           </Button>
         </div>
       )}
@@ -78,6 +101,7 @@ export default function PatientsPage() {
           <a
             key={patient.id}
             href={patientUrl(patient.id)}
+            onClick={(event) => handlePatientClick(event, patient.id)}
             className="group flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-accent/40"
           >
             <div className="flex items-start justify-between gap-2">
@@ -107,8 +131,13 @@ export default function PatientsPage() {
                   variant="secondary"
                   className="text-xs"
                   onClick={(e) => {
+                    if (!onPatientSelect) {
+                      return
+                    }
+
                     e.preventDefault()
-                    window.location.href = patientUrl(patient.id) + '#/' + tab
+                    e.stopPropagation()
+                    onPatientSelect(patient.id, `#/${tab}`)
                   }}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}

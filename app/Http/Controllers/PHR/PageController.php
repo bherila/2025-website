@@ -19,22 +19,22 @@ class PageController extends Controller
 
     public function patients(): View
     {
-        return view('phr.patients');
+        return $this->shell('patients', 'PHR Patients');
     }
 
     public function managePatients(): View
     {
-        return view('phr.manage');
+        return $this->shell('manage-patients', 'Manage Patients');
     }
 
     public function imports(): View
     {
-        return view('phr.imports');
+        return $this->shell('imports', 'PHR Imports');
     }
 
     public function config(): View
     {
-        return view('phr.config');
+        return $this->shell('config', 'PHR Config');
     }
 
     public function patient(Request $request, int $patient): View
@@ -44,9 +44,16 @@ class PageController extends Controller
         $userId = (int) $user->id;
         $resolvedPatient = $this->accessService->accessiblePatient($patient, $userId);
 
-        return view('phr.patient', [
-            'patientId' => $resolvedPatient->id,
-            'canManage' => $this->accessService->canWrite($resolvedPatient, $userId),
+        return $this->shell(null, 'PHR', $resolvedPatient->id, $this->accessService->canWrite($resolvedPatient, $userId));
+    }
+
+    private function shell(?string $activeSection, string $title, ?int $patientId = null, bool $canManage = false): View
+    {
+        return view('phr.shell', [
+            'activeSection' => $activeSection,
+            'patientId' => $patientId,
+            'canManage' => $canManage,
+            'title' => $title,
         ]);
     }
 }
