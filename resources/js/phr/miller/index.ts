@@ -9,7 +9,6 @@
  */
 
 export { PhrDockHomeView } from './PhrDockHomeView'
-export { PhrHomeView } from './PhrHomeView'
 export { PhrMillerShell } from './PhrMillerShell'
 export type {
   PhrListPageProps,
