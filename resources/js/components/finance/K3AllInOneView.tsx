@@ -33,7 +33,13 @@ const CATEGORIES: { key: Category; label: string }[] = [
 
 interface Part2Agg {
   description: string
-  country: string
+  us: number
+  passive: number
+  general: number
+  total: number
+}
+
+interface ColRow {
   us: number
   passive: number
   general: number
@@ -47,43 +53,76 @@ function num(value: unknown): number {
   return parseFieldVal(String(value ?? '')) ?? 0
 }
 
-/** Part II foreign income aggregated by K-3 line for a single K-1. */
+/** Normalizes a K-3 Part II row to category amounts, summing all columns when no explicit total. */
+function colRowFrom(row: Record<string, unknown>, kind: 'tool' | 'canonical'): ColRow {
+  if (kind === 'tool') {
+    const explicit = row.col_g_total
+    const total = explicit !== undefined && explicit !== ''
+      ? num(explicit)
+      : Object.entries(row).reduce(
+          (acc, [key, value]) => (key.startsWith('col_') && !key.startsWith('col_g') ? acc.add(num(value)) : acc),
+          currency(0),
+        ).value
+    return { us: num(row.col_a_us_source), passive: num(row.col_c_passive), general: num(row.col_d_general), total }
+  }
+  // Canonical per-country rows use single-letter column keys a–g.
+  const total = row.g !== undefined && row.g !== ''
+    ? num(row.g)
+    : currency(0).add(num(row.a)).add(num(row.b)).add(num(row.c)).add(num(row.d)).add(num(row.e)).add(num(row.f)).value
+  return { us: num(row.a), passive: num(row.c), general: num(row.d), total }
+}
+
+function addAgg(byLine: Map<string, Part2Agg>, line: string, description: string, cr: ColRow): void {
+  const prev = byLine.get(line)
+  if (prev) {
+    prev.us = currency(prev.us).add(cr.us).value
+    prev.passive = currency(prev.passive).add(cr.passive).value
+    prev.general = currency(prev.general).add(cr.general).value
+    prev.total = currency(prev.total).add(cr.total).value
+    if (!prev.description && description) {
+      prev.description = description
+    }
+  } else {
+    byLine.set(line, { description, ...cr })
+  }
+}
+
+/**
+ * Part II foreign income aggregated by K-3 line for a single K-1. Handles both the
+ * flat tool shape (`section.data.rows`) and the canonical shape (`section.data`
+ * keyed by `lineN_<desc>` objects each holding per-country `.rows`).
+ */
 function part2ByLine(data: FK1StructuredData): Map<string, Part2Agg> {
   const byLine = new Map<string, Part2Agg>()
   for (const section of data.k3?.sections ?? []) {
     if (section.sectionId !== 'part2_section1' && section.sectionId !== 'part2_section2') {
       continue
     }
-    const rows = (section.data?.rows as Array<Record<string, unknown>> | undefined) ?? []
-    for (const row of rows) {
-      const us = num(row.col_a_us_source)
-      const passive = num(row.col_c_passive)
-      const general = num(row.col_d_general)
-      // When no explicit col_g total, sum every category column (col_a..col_f) so
-      // foreign-branch / 901(j) / sourced-by-partner amounts aren't dropped.
-      const total = row.col_g_total !== undefined && row.col_g_total !== ''
-        ? num(row.col_g_total)
-        : Object.entries(row).reduce(
-            (acc, [key, value]) => (key.startsWith('col_') && !key.startsWith('col_g') ? acc.add(num(value)) : acc),
-            currency(0),
-          ).value
-      const description = String(row.description ?? row.line_description ?? '').trim()
-      const country = String(row.country ?? '').trim()
-      const line = String(row.line ?? description ?? '').trim() || '—'
-      const prev = byLine.get(line)
-      if (prev) {
-        prev.us = currency(prev.us).add(us).value
-        prev.passive = currency(prev.passive).add(passive).value
-        prev.general = currency(prev.general).add(general).value
-        prev.total = currency(prev.total).add(total).value
-        if (!prev.description && description) {
-          prev.description = description
-        }
-        if (!prev.country && country) {
-          prev.country = country
+    const sectionData = (section.data ?? {}) as Record<string, unknown>
+    if (Array.isArray(sectionData.rows)) {
+      for (const row of sectionData.rows as Array<Record<string, unknown>>) {
+        const description = String(row.description ?? row.line_description ?? '').trim()
+        const line = String(row.line ?? description ?? '').trim() || '—'
+        addAgg(byLine, line, description, colRowFrom(row, 'tool'))
+      }
+      continue
+    }
+    for (const [key, value] of Object.entries(sectionData)) {
+      if (!key.startsWith('line') || typeof value !== 'object' || value === null) {
+        continue
+      }
+      const match = key.match(/^line(\w+?)_(.*)$/)
+      const line = match?.[1] ?? key
+      const description = (match?.[2] ?? '').replace(/_/g, ' ').trim()
+      const lineData = value as Record<string, unknown>
+      const rows = lineData.rows as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          addAgg(byLine, line, description, colRowFrom(row, 'canonical'))
         }
       } else {
-        byLine.set(line, { description, country, us, passive, general, total })
+        const fallback = (lineData.totals ?? lineData) as Record<string, unknown>
+        addAgg(byLine, line, description, colRowFrom(fallback, 'canonical'))
       }
     }
   }
@@ -103,7 +142,8 @@ function part3ByCountry(data: FK1StructuredData): Map<string, number> {
   const nested = nestedKey ? (sectionData[nestedKey] as Record<string, unknown> | undefined) : undefined
   const countries = ((nested?.countries ?? sectionData.countries) as Array<Record<string, unknown>> | undefined) ?? []
   for (const entry of countries) {
-    const country = String(entry.country ?? '').trim() || '—'
+    // Canonical country breakdowns key the country by ISO `code` (e.g. DE/JP).
+    const country = String(entry.country ?? entry.code ?? '').trim() || '—'
     const amount = num(entry.amount_usd ?? entry.total ?? entry.passiveForeign)
     byCountry.set(country, currency(byCountry.get(country) ?? 0).add(amount).value)
   }
@@ -250,7 +290,7 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc }: K3AllInOneViewPr
   const part2Lines = [...new Set(part2.flatMap(({ byLine }) => [...byLine.keys()]))].sort(compareLines)
   const part2Rows = part2Lines.map((line) => {
     const agg = part2.map(({ byLine }) => byLine.get(line)).find((value) => value !== undefined)
-    const label = `${agg?.description || `Line ${line}`}${agg?.country ? ` (${agg.country})` : ''}`
+    const label = agg?.description || `Line ${line}`
     return {
       key: line,
       label,

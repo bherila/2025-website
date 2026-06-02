@@ -97,4 +97,24 @@ describe('K3AllInOneView', () => {
     expect(screen.getByText(/no country breakdown/)).toBeInTheDocument()
     expect(screen.getAllByText('$500').length).toBeGreaterThanOrEqual(1)
   })
+
+  it('reads canonical Part II line objects (lineN_* with per-country rows)', () => {
+    const doc = k1WithK3(303, 'Canon Fund LP', [
+      { sectionId: 'part2_section1', title: 'Part II', data: { line1_interest: { rows: [{ country: 'IE', a: '0', c: '8010', d: '0', g: '8010' }] } } },
+    ])
+    render(<K3AllInOneView k1Docs={[doc]} onReviewDoc={jest.fn()} />)
+    expect(screen.getByText('interest')).toBeInTheDocument()
+    expect(screen.getAllByText('$8,010').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('reads canonical Part III country codes (DE/JP) and amounts', () => {
+    const doc = k1WithK3(304, 'Code Fund LP', [
+      { sectionId: 'part3_section4', title: 'Part III §4', data: { line1_foreignTaxesPaid: { countries: [{ code: 'DE', total: 300 }, { code: 'JP', passiveForeign: 200 }] } } },
+    ])
+    render(<K3AllInOneView k1Docs={[doc]} onReviewDoc={jest.fn()} />)
+    expect(screen.getByText('DE')).toBeInTheDocument()
+    expect(screen.getByText('JP')).toBeInTheDocument()
+    expect(screen.getAllByText('$300').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('$200').length).toBeGreaterThanOrEqual(1)
+  })
 })
