@@ -8,6 +8,7 @@
  * - Response: validate with a zod schema sibling to the module's list-response schema in `types.ts`
  */
 
+export { PhrDockHomeView } from './PhrDockHomeView'
 export { PhrHomeView } from './PhrHomeView'
 export { PhrMillerShell } from './PhrMillerShell'
 export type {
@@ -20,6 +21,7 @@ export type {
   PhrRenderProps,
   PhrShellState,
 } from './phrModuleRegistry'
-export { PHR_DETAIL_MODULES, PHR_LIST_MODULES, PHR_MODULE_IDS, PHR_MODULE_IDS_SET, phrModuleRegistry } from './phrModuleRegistry'
+export { getPhrModuleMeta, PHR_DETAIL_MODULES, PHR_LIST_MODULES, PHR_MODULE_IDS, PHR_MODULE_IDS_SET, phrModuleRegistry } from './phrModuleRegistry'
 export { PhrNotFoundColumn } from './PhrNotFoundColumn'
+export { usePhrDockPrefs } from './usePhrDockPrefs'
 export { usePhrRoute } from './usePhrRoute'

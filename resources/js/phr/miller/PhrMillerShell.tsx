@@ -6,7 +6,7 @@ import { MillerRegistryShell } from '@/components/ui/miller'
 import type { PhrSection } from '@/lib/phrRouteBuilder'
 import { patientUrl } from '@/lib/phrRouteBuilder'
 
-import { PhrHomeView } from './PhrHomeView'
+import { PhrDockHomeView } from './PhrDockHomeView'
 import { phrModuleRegistry, type PhrShellState } from './phrModuleRegistry'
 import { usePhrRoute } from './usePhrRoute'
 
@@ -45,7 +45,7 @@ export function PhrMillerShell({ patientId, onPatientChange, onSectionChange }: 
           <MillerRegistryShell
             registry={phrModuleRegistry}
             state={state}
-            homeView={<PhrHomeView patientId={activePatientId} replaceFrom={replaceFrom} />}
+            homeView={<PhrDockHomeView patientId={activePatientId} replaceFrom={replaceFrom} />}
             route={route}
             pushColumn={pushColumn}
             replaceFrom={replaceFrom}
