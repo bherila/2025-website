@@ -5,7 +5,7 @@ import { Suspense } from 'react'
 import type { MillerDrillTarget } from '@/components/ui/miller'
 
 import type { PhrModuleCategory, PhrModuleId } from './phrModuleRegistry'
-import { PHR_DETAIL_MODULES, PHR_LIST_MODULES, phrModuleRegistry } from './phrModuleRegistry'
+import { getPhrModuleMeta, PHR_DETAIL_MODULES, PHR_LIST_MODULES, phrModuleRegistry } from './phrModuleRegistry'
 
 interface MockListPageProps {
   patientId: number
@@ -127,6 +127,7 @@ describe('phrModuleRegistry', () => {
     for (const [id, expectedMetadata] of Object.entries(EXPECTED_MODULE_METADATA) as [PhrModuleId, ExpectedModuleMetadata][]) {
       expect(phrModuleRegistry[id]).toMatchObject(expectedMetadata)
       expect(phrModuleRegistry[id].meta).toMatchObject(expectedMetadata)
+      expect(getPhrModuleMeta(phrModuleRegistry[id])).toMatchObject(expectedMetadata)
     }
   })
 })

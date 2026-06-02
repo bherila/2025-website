@@ -89,6 +89,20 @@ export interface PhrModuleDefinition {
 type PhrColumnSize = PhrRegistryEntry['size']
 export type PhrRenderProps = MillerRenderProps<PhrShellState, PhrModuleId>
 
+export function getPhrModuleMeta(entry: PhrRegistryEntry): PhrModuleMeta {
+  const meta = entry.meta ?? {
+    category: entry.category,
+    keywords: entry.keywords,
+  }
+
+  return {
+    category: meta.category,
+    keywords: meta.keywords,
+    ...(meta.keyAmounts ?? entry.keyAmounts ? { keyAmounts: meta.keyAmounts ?? entry.keyAmounts } : {}),
+    ...(meta.hasData ?? entry.hasData ? { hasData: meta.hasData ?? entry.hasData } : {}),
+  }
+}
+
 const SUMMARY_MODULE = {
   id: 'summary',
   label: 'Summary',
