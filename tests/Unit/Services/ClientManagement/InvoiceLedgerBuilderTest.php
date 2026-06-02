@@ -2,10 +2,12 @@
 
 namespace Tests\Unit\Services\ClientManagement;
 
+use App\Enums\ClientManagement\BillingCadence;
 use App\Models\ClientManagement\ClientAgreement;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientProject;
 use App\Models\ClientManagement\ClientTimeEntry;
+use App\Services\ClientManagement\BillingCycleResolver;
 use App\Services\ClientManagement\DataTransferObjects\ClosingBalance;
 use App\Services\ClientManagement\DataTransferObjects\MonthSummary;
 use App\Services\ClientManagement\DataTransferObjects\OpeningBalance;
@@ -52,6 +54,43 @@ class InvoiceLedgerBuilderTest extends TestCase
         $this->assertSame(8.0, $ledger[0]->closing->unusedHours);
     }
 
+    public function test_summarize_legacy_monthly_ledger_counts_mid_month_boundary_once(): void
+    {
+        $company = ClientCompany::factory()->create();
+        $agreement = ClientAgreement::factory()->for($company)->create([
+            'active_date' => '2024-02-15',
+            'termination_date' => null,
+            'monthly_retainer_hours' => 10,
+            'rollover_months' => 0,
+            'initial_rollover_hours' => 0,
+            'retainer_hours' => null,
+            'billing_cadence' => BillingCadence::Quarterly->value,
+        ]);
+
+        $cycles = iterator_to_array((new BillingCycleResolver)->cyclesForAgreement(
+            $agreement,
+            Carbon::parse('2024-08-14'),
+        ));
+        $ledger = [
+            $this->summary('2024-02', hoursWorked: 1.0, retainerHours: 10.0),
+            $this->summary('2024-03', hoursWorked: 2.0, retainerHours: 10.0),
+            $this->summary('2024-04', hoursWorked: 3.0, retainerHours: 10.0),
+            $this->summary('2024-05', hoursWorked: 4.0, retainerHours: 10.0),
+            $this->summary('2024-06', hoursWorked: 5.0, retainerHours: 10.0),
+            $this->summary('2024-07', hoursWorked: 6.0, retainerHours: 10.0),
+            $this->summary('2024-08', hoursWorked: 7.0, retainerHours: 10.0),
+        ];
+
+        $builder = new InvoiceLedgerBuilder;
+        $firstCycle = $builder->summarizeLedgerForCycle($agreement, $ledger, $cycles[0]);
+        $secondCycle = $builder->summarizeLedgerForCycle($agreement, $ledger, $cycles[1]);
+
+        $this->assertSame(70.0, $firstCycle['retainer_hours'] + $secondCycle['retainer_hours']);
+        $this->assertSame(28.0, $firstCycle['hours_worked'] + $secondCycle['hours_worked']);
+        $this->assertSame(30.0, $secondCycle['retainer_hours']);
+        $this->assertSame(18.0, $secondCycle['hours_worked']);
+    }
+
     public function test_ledger_row_belongs_to_cycle_through_respects_cycle_owner_and_period_end(): void
     {
         $builder = new InvoiceLedgerBuilder;
@@ -90,8 +129,12 @@ class InvoiceLedgerBuilderTest extends TestCase
         $this->assertNull($builder->findLedgerMonth([$first, $second], '2026-04'));
     }
 
-    private function summary(string $yearMonth, ?string $cycleStart = null): MonthSummary
-    {
+    private function summary(
+        string $yearMonth,
+        ?string $cycleStart = null,
+        float $hoursWorked = 0.0,
+        float $retainerHours = 0.0,
+    ): MonthSummary {
         return new MonthSummary(
             opening: new OpeningBalance(
                 retainerHours: 0.0,
@@ -111,9 +154,9 @@ class InvoiceLedgerBuilderTest extends TestCase
                 negativeBalance: 0.0,
                 remainingRollover: 0.0,
             ),
-            hoursWorked: 0.0,
+            hoursWorked: $hoursWorked,
             yearMonth: $yearMonth,
-            retainerHours: 0.0,
+            retainerHours: $retainerHours,
             cycleStart: $cycleStart,
         );
     }

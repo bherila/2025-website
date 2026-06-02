@@ -562,6 +562,46 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_mid_month_monthly_retainer_boundary_month_is_not_counted_twice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-20'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-15'),
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'retainer_hours' => null,
+                'retainer_fee' => null,
+                'rollover_months' => 0,
+                'bill_overage_interim' => false,
+            ]);
+
+            // Adjacent cycles share calendar month 2026-05:
+            // cycle 1 is 2025-11-15 -> 2026-05-14, cycle 2 is 2026-05-15 -> 2026-11-14.
+            $this->createTimeEntry('2025-11-20', 1.0);
+            $this->createTimeEntry('2026-05-10', 0.5);
+            $this->createTimeEntry('2026-05-19', 0.7);
+            $this->createTimeEntry('2026-06-10', 0.8);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $cycleInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->orderBy('cycle_start')
+                ->get();
+
+            $this->assertCount(2, $cycleInvoices);
+            $this->assertEquals(3.0, (float) $cycleInvoices->sum('hours_worked'));
+            $this->assertEquals(0.8, (float) $cycleInvoices[1]->hours_worked);
+            $this->assertEquals(60.0, (float) $cycleInvoices[1]->retainer_hours_included);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_quarterly_active_date_anchor_keeps_period_retainer_override(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-03-15'));

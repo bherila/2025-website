@@ -230,7 +230,7 @@ class InvoiceLedgerBuilder
      */
     public function summarizeLedgerForCycle(ClientAgreement $agreement, array $ledger, BillingCycle $cycle): array
     {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
+        $cycleMonthStart = $this->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
         $cycleMonthEnd = $cycle->end->copy()->startOfMonth();
         $cycleStartKey = $cycle->start->format('Y-m-d');
         $cycleSummaries = collect($ledger)
@@ -296,6 +296,24 @@ class InvoiceLedgerBuilder
                 ? round($first->opening->negativeOffset + $first->opening->remainingNegativeBalance, 4)
                 : 0.0,
         ];
+    }
+
+    /**
+     * Return the first calendar-month row a legacy monthly ledger should count
+     * for this cycle. Period-retainer ledgers carry cycle ownership directly;
+     * legacy rows do not, so a shared mid-month boundary belongs to the cycle
+     * ending in that calendar month.
+     */
+    public function cycleMonthStartForLegacyMonthlyLedger(ClientAgreement $agreement, BillingCycle $cycle): Carbon
+    {
+        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
+        $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
+
+        if ($cycle->start->isSameDay($activeDate) || $cycle->start->isSameDay($cycleMonthStart)) {
+            return $cycleMonthStart;
+        }
+
+        return $cycleMonthStart->addMonth()->startOfMonth();
     }
 
     public function ledgerRowBelongsToCycleThrough(

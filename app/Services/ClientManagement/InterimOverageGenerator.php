@@ -117,8 +117,8 @@ class InterimOverageGenerator
             }
 
             $immediateLedger ??= $this->invoiceLedgerBuilder->buildAgreementLedgerThrough($company, $agreement, $periodEnd, true);
-            $this->assertImmediateLedgerSupportsInterimOverage($immediateLedger, $cycle, $periodEnd);
-            $cumulativeExcessHours = $this->cumulativeInterimExcessHoursThrough($immediateLedger, $cycle, $periodEnd);
+            $this->assertImmediateLedgerSupportsInterimOverage($agreement, $immediateLedger, $cycle, $periodEnd);
+            $cumulativeExcessHours = $this->cumulativeInterimExcessHoursThrough($agreement, $immediateLedger, $cycle, $periodEnd);
             $alreadyBilledHours = ClientInvoice::query()
                 ->where('client_company_id', $company->id)
                 ->where('client_agreement_id', $agreement->id)
@@ -319,9 +319,9 @@ class InterimOverageGenerator
     /**
      * @param  array<int, MonthSummary>  $immediateLedger  Ledger built with billExcessImmediately=true so closing excessHours contains billable interim overage.
      */
-    private function assertImmediateLedgerSupportsInterimOverage(array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): void
+    private function assertImmediateLedgerSupportsInterimOverage(ClientAgreement $agreement, array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): void
     {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
+        $cycleMonthStart = $this->invoiceLedgerBuilder->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
         $periodMonthEnd = $periodEnd->copy()->startOfMonth();
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
@@ -339,9 +339,9 @@ class InterimOverageGenerator
     /**
      * @param  array<int, MonthSummary>  $immediateLedger  Ledger built with billExcessImmediately=true so closing excessHours contains billable interim overage.
      */
-    private function cumulativeInterimExcessHoursThrough(array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): float
+    private function cumulativeInterimExcessHoursThrough(ClientAgreement $agreement, array $immediateLedger, BillingCycle $cycle, Carbon $periodEnd): float
     {
-        $cycleMonthStart = $cycle->start->copy()->startOfMonth();
+        $cycleMonthStart = $this->invoiceLedgerBuilder->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
         $periodMonthEnd = $periodEnd->copy()->startOfMonth();
         $cycleStartKey = $cycle->start->format('Y-m-d');
 
