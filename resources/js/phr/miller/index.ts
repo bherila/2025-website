@@ -10,7 +10,16 @@
 
 export { PhrHomeView } from './PhrHomeView'
 export { PhrMillerShell } from './PhrMillerShell'
-export type { PhrListPageProps, PhrModuleId, PhrRegistryEntry, PhrRenderProps, PhrShellState } from './phrModuleRegistry'
-export { PHR_LIST_MODULES, PHR_MODULE_IDS, PHR_MODULE_IDS_SET, phrModuleRegistry } from './phrModuleRegistry'
+export type {
+  PhrListPageProps,
+  PhrModuleCategory,
+  PhrModuleDefinition,
+  PhrModuleId,
+  PhrModuleMeta,
+  PhrRegistryEntry,
+  PhrRenderProps,
+  PhrShellState,
+} from './phrModuleRegistry'
+export { PHR_DETAIL_MODULES, PHR_LIST_MODULES, PHR_MODULE_IDS, PHR_MODULE_IDS_SET, phrModuleRegistry } from './phrModuleRegistry'
 export { PhrNotFoundColumn } from './PhrNotFoundColumn'
 export { usePhrRoute } from './usePhrRoute'

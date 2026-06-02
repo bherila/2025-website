@@ -4,8 +4,8 @@ import { Suspense } from 'react'
 
 import type { MillerDrillTarget } from '@/components/ui/miller'
 
-import type { PhrModuleId } from './phrModuleRegistry'
-import { phrModuleRegistry } from './phrModuleRegistry'
+import type { PhrModuleCategory, PhrModuleId } from './phrModuleRegistry'
+import { PHR_DETAIL_MODULES, PHR_LIST_MODULES, phrModuleRegistry } from './phrModuleRegistry'
 
 interface MockListPageProps {
   patientId: number
@@ -51,6 +51,38 @@ const LIST_MODULES: PhrModuleId[] = [
   'access',
 ]
 
+interface ExpectedModuleMetadata {
+  category: PhrModuleCategory
+  keywords: string[]
+}
+
+const EXPECTED_MODULE_METADATA: Record<PhrModuleId, ExpectedModuleMetadata> = {
+  summary: { category: 'Clinical', keywords: ['summary', 'overview', 'health'] },
+  labs: { category: 'Clinical', keywords: ['labs', 'laboratory', 'results', 'bloodwork'] },
+  'lab-panel-detail': { category: 'Clinical', keywords: ['labs', 'laboratory', 'results', 'bloodwork'] },
+  vitals: { category: 'Clinical', keywords: ['vitals', 'blood pressure', 'weight', 'height'] },
+  'vitals-reading-detail': { category: 'Clinical', keywords: ['vitals', 'blood pressure', 'weight', 'height'] },
+  'vitals-trend': { category: 'Clinical', keywords: ['vitals', 'blood pressure', 'weight', 'height'] },
+  imaging: { category: 'Documents & Imaging', keywords: ['imaging', 'radiology', 'xray', 'mri', 'ct'] },
+  'imaging-study-detail': { category: 'Documents & Imaging', keywords: ['imaging', 'radiology', 'xray', 'mri', 'ct'] },
+  'office-visits': { category: 'Clinical', keywords: ['visits', 'appointments', 'encounters'] },
+  'office-visit-detail': { category: 'Clinical', keywords: ['visits', 'appointments', 'encounters'] },
+  medications: { category: 'Clinical', keywords: ['medications', 'prescriptions', 'drugs', 'rx'] },
+  'medication-detail': { category: 'Clinical', keywords: ['medications', 'prescriptions', 'drugs', 'rx'] },
+  conditions: { category: 'Clinical', keywords: ['conditions', 'diagnoses', 'problems'] },
+  'condition-detail': { category: 'Clinical', keywords: ['conditions', 'diagnoses', 'problems'] },
+  procedures: { category: 'Clinical', keywords: ['procedures', 'surgery', 'treatments'] },
+  'procedure-detail': { category: 'Clinical', keywords: ['procedures', 'surgery', 'treatments'] },
+  immunizations: { category: 'Clinical', keywords: ['immunizations', 'vaccines', 'shots'] },
+  'immunization-detail': { category: 'Clinical', keywords: ['immunizations', 'vaccines', 'shots'] },
+  allergies: { category: 'Clinical', keywords: ['allergies', 'reactions'] },
+  'allergy-detail': { category: 'Clinical', keywords: ['allergies', 'reactions'] },
+  documents: { category: 'Documents & Imaging', keywords: ['documents', 'files', 'records', 'upload'] },
+  'document-viewer': { category: 'Documents & Imaging', keywords: ['documents', 'files', 'records', 'upload'] },
+  access: { category: 'Admin', keywords: ['access', 'sharing', 'permissions', 'caregivers'] },
+  'access-grant-detail': { category: 'Admin', keywords: ['access', 'sharing', 'permissions', 'caregivers'] },
+}
+
 describe('phrModuleRegistry', () => {
   beforeEach(() => {
     for (const id of LIST_MODULES) {
@@ -81,5 +113,20 @@ describe('phrModuleRegistry', () => {
     expect(phrModuleRegistry.documents.size).toBe('full')
     expect(phrModuleRegistry['vitals-trend'].size).toBe('wide')
     expect(phrModuleRegistry['document-viewer'].size).toBe('wide')
+  })
+
+  it('registers category and keyword metadata for every module', () => {
+    const configuredModuleIds = new Set([...PHR_LIST_MODULES, ...PHR_DETAIL_MODULES].map((module) => module.id))
+
+    expect(configuredModuleIds).toEqual(new Set(Object.keys(EXPECTED_MODULE_METADATA)))
+
+    for (const module of [...PHR_LIST_MODULES, ...PHR_DETAIL_MODULES]) {
+      expect(module).toMatchObject(EXPECTED_MODULE_METADATA[module.id])
+    }
+
+    for (const [id, expectedMetadata] of Object.entries(EXPECTED_MODULE_METADATA) as [PhrModuleId, ExpectedModuleMetadata][]) {
+      expect(phrModuleRegistry[id]).toMatchObject(expectedMetadata)
+      expect(phrModuleRegistry[id].meta).toMatchObject(expectedMetadata)
+    }
   })
 })
