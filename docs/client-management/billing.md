@@ -97,6 +97,13 @@ For monthly invoices, `period_start` and `period_end` represent the **work perio
 
 Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
 
+The invoice **number** (`PREFIX-YYYYMM-NNN`) follows a single rule regardless of cadence length: it is keyed to the **first month of the retainer period billed in advance** — i.e. the month the invoice is issued. A semiannual cycle covering May–October is issued May 1 → `…-202605-…`; a monthly retainer for June is issued June 1 → `…-202606-…`.
+
+The two code paths reach that month from different anchors only because they label the `period` columns differently:
+
+- **Non-monthly cadence** (quarterly, semiannual, annual) stores the coverage window itself in `period_start`/`period_end`, so the number uses `period_start` directly.
+- **Monthly** retains the legacy "prior-period" labeling — `period_start`/`period_end` hold the *prior work month (M-1)* while the retainer covers month M — so the number uses `period_end + 1 month` (the same month M) via `InvoiceNumberGenerator::generateForIssueMonth()`.
+
 For cadence-period invoices, `period_start` / `period_end` and `cycle_start` / `cycle_end` all describe the full cadence window. For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent quarterly or annual cadence window.
 
 ## Invoice Balance Fields

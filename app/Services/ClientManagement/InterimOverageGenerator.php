@@ -169,7 +169,7 @@ class InterimOverageGenerator
                     'client_agreement_id' => $agreement->id,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
-                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodEnd),
+                    'invoice_number' => $this->invoiceNumberGenerator->generateForIssueMonth($company, $periodEnd),
                     'invoice_total' => 0,
                     'status' => 'draft',
                     'invoice_kind' => InvoiceKind::InterimOverage->value,

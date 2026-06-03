@@ -649,7 +649,7 @@ class ClientInvoicingService
                 }
                 $invoice->lineItems()->where('line_type', 'expense')->delete();
             } else {
-                $invoiceData['invoice_number'] = $this->invoiceNumberGenerator->generate($company, $periodEnd);
+                $invoiceData['invoice_number'] = $this->invoiceNumberGenerator->generateForIssueMonth($company, $periodEnd);
                 $invoiceData['invoice_total'] = 0;
                 $invoice = ClientInvoice::create($invoiceData);
             }
@@ -1056,12 +1056,17 @@ class ClientInvoicingService
                 // For cadence-period invoices the invoice period and cadence cycle match.
                 // Interim-overage invoices will use the same cycle columns while keeping
                 // their own narrower monthly period.
+                //
+                // Unlike the monthly path (work in arrears, retainer for the next month),
+                // a cadence retainer covers the cycle itself and is billed in advance at the
+                // cycle start. The number is therefore keyed to period_start (the cycle's
+                // first/issue month), e.g. a May 1 invoice covering May-Oct is numbered 2026-05.
                 $invoice = ClientInvoice::create([
                     'client_company_id' => $company->id,
                     'client_agreement_id' => $agreement->id,
                     'period_start' => $periodStart,
                     'period_end' => $periodEnd,
-                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodEnd),
+                    'invoice_number' => $this->invoiceNumberGenerator->generate($company, $periodStart),
                     'invoice_total' => 0,
                     'status' => 'draft',
                     'invoice_kind' => InvoiceKind::CadencePeriod->value,
