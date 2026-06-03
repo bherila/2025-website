@@ -407,9 +407,11 @@ class ClientInvoicingService
             ->whereNotIn('status', ['void'])
             ->first();
 
-        // If invoice exists and is already issued, it cannot be changed.
-        if ($invoice && $invoice->isIssued()) {
-            throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
+        // If invoice exists and is already settled (issued/paid/void), it cannot be changed.
+        // Keyed on status, not isIssued(): a draft can be marked paid directly, leaving
+        // issue_date null, and such a paid invoice must never be silently rewritten to draft.
+        if ($invoice && $invoice->isImmutable()) {
+            throw new \Exception("A settled invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
         }
 
         // Check for overlapping periods with other invoices for the same company.
@@ -941,8 +943,8 @@ class ClientInvoicingService
                 ->lockForUpdate()
                 ->first();
 
-            if ($invoice && $invoice->isIssued()) {
-                throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
+            if ($invoice && $invoice->isImmutable()) {
+                throw new \Exception("A settled invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
             }
 
             $overlappingInvoice = ClientInvoice::query()

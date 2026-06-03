@@ -1015,6 +1015,176 @@ class ClientCadenceInvoicingTest extends TestCase
             );
             $this->assertSame($paidInvoice->client_invoice_id, $cycleInvoices->first()->client_invoice_id);
             $this->assertSame('paid', $cycleInvoices->first()->fresh()->status);
+
+            // Known limitation while the legacy row is un-migrated: because its
+            // period_start/period_end still equal the billed cycle, the paid row also
+            // matches the work-cycle lookup for the NEXT retainer period, so the Dec-May
+            // 2027 cycle is deferred (not generated) until the row is re-keyed via
+            // client-management:migrate-legacy-cadence-invoices. Harmless here — the cycle
+            // has no unbilled billable time. The after-migration test below proves the
+            // re-key restores normal generation.
+            $nextCycle = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-12-01')
+                ->get();
+            $this->assertCount(0, $nextCycle, 'The next cycle stays deferred until the legacy row is re-keyed.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /**
+     * The manual single-invoice generate path (generateInvoice) bypasses the bulk-loop
+     * status skip. A paid invoice can carry a null issue_date (a draft marked paid
+     * directly), so immutability must be keyed on status, not isIssued(): generating the
+     * next cycle must NOT silently overwrite the settled paid invoice or orphan its payment.
+     */
+    public function test_manual_generate_does_not_overwrite_a_paid_legacy_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-03'));
+
+        try {
+            $company = ClientCompany::factory()->create([
+                'company_name' => 'Atlas Imaging',
+                'slug' => 'atlas-imaging',
+            ]);
+
+            $agreement = ClientAgreement::factory()->for($company)->create([
+                'agreement_text' => 'Semiannual retainer',
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2026-06-01'),
+                'termination_date' => null,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 250,
+                'hourly_rate' => 350,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => false,
+                'first_cycle_proration' => 'prorate_hours',
+            ]);
+
+            // Paid with a NULL issue_date (markPaid never sets issue_date), legacy period == cycle.
+            $paidInvoice = ClientInvoice::create([
+                'client_company_id' => $company->id,
+                'client_agreement_id' => $agreement->id,
+                'period_start' => Carbon::parse('2026-06-01'),
+                'period_end' => Carbon::parse('2026-11-30'),
+                'cycle_start' => Carbon::parse('2026-06-01'),
+                'cycle_end' => Carbon::parse('2026-11-30'),
+                'invoice_number' => 'ATLA-202611-001',
+                'invoice_total' => 250,
+                'retainer_hours_included' => 1,
+                'hours_worked' => 0,
+                'status' => 'draft',
+                'invoice_kind' => InvoiceKind::CadencePeriod->value,
+            ]);
+            $paidInvoice->payments()->create([
+                'amount' => 250,
+                'payment_date' => '2026-06-05',
+                'payment_method' => 'Wire',
+            ]);
+            $paidInvoice->markPaid('2026-06-05');
+            $this->assertNull($paidInvoice->fresh()->issue_date, 'Fixture must reproduce a paid invoice with null issue_date.');
+
+            // Manually generating the period whose work cycle is the paid invoice's window
+            // must refuse rather than overwrite the settled invoice.
+            $threw = false;
+            try {
+                $this->invoicingService->generateInvoice(
+                    $company,
+                    Carbon::parse('2026-06-01'),
+                    Carbon::parse('2026-11-30'),
+                    $agreement,
+                );
+            } catch (\Exception $e) {
+                $threw = true;
+            }
+
+            $this->assertTrue($threw, 'Generating over a settled (paid) invoice must throw, not silently rewrite it.');
+
+            $fresh = $paidInvoice->fresh();
+            $this->assertSame('paid', $fresh->status);
+            $this->assertSame('ATLA-202611-001', (string) $fresh->invoice_number);
+            $this->assertSame('2026-06-01', $fresh->period_start->toDateString());
+            $this->assertSame('2026-11-30', $fresh->period_end->toDateString());
+            $this->assertSame(1, $fresh->payments()->count(), 'The payment must not be orphaned.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /**
+     * After the legacy row is re-keyed to the prior-period layout (what
+     * client-management:migrate-legacy-cadence-invoices does), the next cadence cycle
+     * generates normally while the paid invoice is still recognized (skipped) for its cycle.
+     */
+    public function test_re_keying_legacy_paid_invoice_unblocks_next_cycle(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-03'));
+
+        try {
+            $company = ClientCompany::factory()->create([
+                'company_name' => 'Atlas Imaging',
+                'slug' => 'atlas-imaging',
+            ]);
+
+            $agreement = ClientAgreement::factory()->for($company)->create([
+                'agreement_text' => 'Semiannual retainer',
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2026-06-01'),
+                'termination_date' => null,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 250,
+                'hourly_rate' => 350,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => false,
+                'first_cycle_proration' => 'prorate_hours',
+            ]);
+
+            $paidInvoice = ClientInvoice::create([
+                'client_company_id' => $company->id,
+                'client_agreement_id' => $agreement->id,
+                // Re-keyed layout: period = the prior work cycle, cycle = the billed cycle.
+                'period_start' => Carbon::parse('2025-12-01'),
+                'period_end' => Carbon::parse('2026-05-31'),
+                'cycle_start' => Carbon::parse('2026-06-01'),
+                'cycle_end' => Carbon::parse('2026-11-30'),
+                'invoice_number' => 'ATLA-202611-001',
+                'invoice_total' => 250,
+                'retainer_hours_included' => 1,
+                'hours_worked' => 0,
+                'status' => 'draft',
+                'invoice_kind' => InvoiceKind::CadencePeriod->value,
+            ]);
+            $paidInvoice->markPaid('2026-06-05');
+
+            $this->invoicingService->generateAllInvoices($company);
+
+            // The paid cycle is still recognized — not re-billed.
+            $firstCycle = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-06-01')
+                ->whereDate('cycle_end', '2026-11-30')
+                ->get();
+            $this->assertCount(1, $firstCycle);
+            $this->assertSame('paid', $firstCycle->first()->fresh()->status);
+
+            // The next cycle now generates as a fresh draft.
+            $nextCycle = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-12-01')
+                ->whereDate('cycle_end', '2027-05-31')
+                ->get();
+            $this->assertCount(1, $nextCycle, 'Re-keying the legacy row unblocks the next cadence cycle.');
+            $this->assertSame('draft', $nextCycle->first()->status);
         } finally {
             Carbon::setTestNow();
         }
