@@ -1,6 +1,9 @@
 overrides:
   glob: '>=10.5.0'
 
+minimumReleaseAgeExclude:
+  - bwh-auth
+
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
