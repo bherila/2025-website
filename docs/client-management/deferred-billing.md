@@ -39,7 +39,7 @@ When generating a post-termination invoice (`isRetainerMonthPostTermination = tr
 
 ## Regeneration
 
-Draft invoices auto-regenerate whenever a time entry in their period changes (see [billing.md](billing.md#draft-invoice-regeneration)). The regeneration flow already:
+Draft invoices auto-regenerate whenever a time entry in their period changes (see [cadence-billing.md](cadence-billing.md#draft-invoice-regeneration)). The regeneration flow already:
 
 1. Deletes system-generated line items.
 2. Unlinks attached time entries.
@@ -47,7 +47,7 @@ Draft invoices auto-regenerate whenever a time entry in their period changes (se
 
 No special handling is needed. A deferred entry that fit on last night's draft may be bumped to next month if someone adds a non-deferred entry that consumes the capacity. Conversely, a skipped deferred entry from last night can show up on the redrawn draft if capacity opens up. All of this happens automatically.
 
-Only **draft** invoices are redrawn. Bulk cadence generation skips any retainer cycle that already has an issued, paid, or **void** invoice (matched on `cycle_start` / `cycle_end`), so a voided cycle is never regenerated — voiding a cadence invoice waives it. See [billing.md](billing.md#regenerating-cadence-invoices).
+Only **draft** invoices are redrawn. Bulk cadence generation skips any retainer cycle that already has an issued, paid, or **void** invoice (matched on `cycle_start` / `cycle_end`), so a voided cycle is never regenerated — voiding a cadence invoice waives it. See [cadence-billing.md](cadence-billing.md#regenerating-cadence-invoices).
 
 ## UI
 
