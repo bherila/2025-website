@@ -878,6 +878,67 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    public function test_generate_all_refreshes_only_draft_semiannual_cadence_invoices(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-15'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2025-11-01'),
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 300,
+                'hourly_rate' => 150,
+                'rollover_months' => 0,
+            ]);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $invoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->orderBy('period_start')
+                ->get();
+
+            $this->assertCount(4, $invoices);
+
+            /** @var ClientInvoice $issuedInvoice */
+            $issuedInvoice = $invoices[0];
+            /** @var ClientInvoice $paidInvoice */
+            $paidInvoice = $invoices[1];
+            /** @var ClientInvoice $voidInvoice */
+            $voidInvoice = $invoices[2];
+            /** @var ClientInvoice $draftInvoice */
+            $draftInvoice = $invoices[3];
+
+            $issuedInvoice->issue();
+            $paidInvoice->markPaid('2026-05-15');
+            $voidInvoice->void();
+
+            $this->createTimeEntry('2026-12-10', 0.5);
+
+            $results = $this->invoicingService->generateAllInvoices($this->company);
+            $skippedStatuses = collect($results['skipped'])->pluck('status')->all();
+            $updatedIds = collect($results['updated'])->pluck('invoice_id')->all();
+
+            $this->assertEqualsCanonicalizing(['issued', 'paid', 'void'], $skippedStatuses);
+            $this->assertContains($draftInvoice->client_invoice_id, $updatedIds);
+            $this->assertNotContains($issuedInvoice->client_invoice_id, $updatedIds);
+            $this->assertNotContains($paidInvoice->client_invoice_id, $updatedIds);
+            $this->assertNotContains($voidInvoice->client_invoice_id, $updatedIds);
+
+            $draftInvoice->refresh();
+            $this->assertEquals(0.5, (float) $draftInvoice->hours_worked);
+            $this->assertSame('issued', $issuedInvoice->fresh()->status);
+            $this->assertSame('paid', $paidInvoice->fresh()->status);
+            $this->assertSame('void', $voidInvoice->fresh()->status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_interim_overage_invoices_are_generated_and_reconciled_on_final_cycle_invoice(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-15'));
