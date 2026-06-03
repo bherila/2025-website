@@ -163,12 +163,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth.git",
-                "reference": "a0d3a0b266f63f6759909c681544c97a3335d9a9"
+                "reference": "3dc093213e7a6adfbb45b0b29bbca59d8f37cf43"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth/zipball/a0d3a0b266f63f6759909c681544c97a3335d9a9",
-                "reference": "a0d3a0b266f63f6759909c681544c97a3335d9a9",
+                "url": "https://api.github.com/repos/bherila/auth/zipball/3dc093213e7a6adfbb45b0b29bbca59d8f37cf43",
+                "reference": "3dc093213e7a6adfbb45b0b29bbca59d8f37cf43",
                 "shasum": ""
             },
             "require": {
@@ -207,7 +207,7 @@
                 "source": "https://github.com/bherila/auth/tree/codex/shared-auth-harden",
                 "issues": "https://github.com/bherila/auth/issues"
             },
-            "time": "2026-06-03T11:02:47+00:00"
+            "time": "2026-06-03T11:19:14+00:00"
         },
         {
             "name": "bherila/genai-laravel",

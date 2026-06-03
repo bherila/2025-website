@@ -19,6 +19,11 @@ class PasskeyApiTest extends TestCase
             'name' => 'Test Passkey',
         ]);
 
+        $this->assertDatabaseHas('webauthn_credentials', [
+            'credential_id' => 'test-credential-id',
+            'credential_id_hash' => hash('sha256', 'test-credential-id'),
+        ]);
+
         $response = $this->actingAs($user)->get('/api/passkeys');
         $response->assertStatus(200);
         $response->assertJsonCount(1);
