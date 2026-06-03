@@ -1,6 +1,8 @@
-import React, { useEffect,useState } from 'react';
+import { PasskeySection } from 'bwh-auth';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { getAuthComponents, getCsrfToken } from './auth/shared-components';
 import { Alert, AlertDescription } from './components/ui/alert';
 import { Spinner } from './components/ui/spinner';
 import { AiConfigurationsSection } from './user/ai-configurations';
@@ -8,7 +10,6 @@ import { ApiKeySection } from './user/api-key';
 import { GenAiQuotaSection } from './user/genai-quota';
 import { LoginAuditSection } from './user/login-audit-section';
 import { McpApiKeySection } from './user/mcp-api-key';
-import { PasskeySection } from './user/passkey-section';
 import { UpdateEmailSection } from './user/update-email';
 import { UpdatePasswordSection } from './user/update-password';
 
@@ -76,6 +77,8 @@ const MyAccount: React.FC = () => {
       </div>
 
       <PasskeySection
+        components={getAuthComponents()}
+        endpoints={{ csrfToken: getCsrfToken() }}
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
       />

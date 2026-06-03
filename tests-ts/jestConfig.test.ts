@@ -28,7 +28,7 @@ describe('jest config', () => {
     const domIgnoreRegex = new RegExp(domIgnorePattern)
 
     expect(domIgnorePattern).toBe('\\.dom\\.test\\.ts$')
-    expect(domIgnoreRegex.test('tests-ts/webauthn-utils.dom.test.ts')).toBe(true)
+    expect(domIgnoreRegex.test('resources/js/components/markdown/__tests__/sanitizeSvg.dom.test.ts')).toBe(true)
     expect(domIgnoreRegex.test('tests-ts/freedom.test.ts')).toBe(false)
   })
 

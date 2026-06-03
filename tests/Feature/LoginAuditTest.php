@@ -124,7 +124,7 @@ class LoginAuditTest extends TestCase
             'method' => 'password',
         ]);
 
-        $response = $this->actingAs($user1)->post("/api/login-audit/{$entry->id}/suspicious");
+        $response = $this->actingAs($user1)->postJson("/api/login-audit/{$entry->id}/suspicious");
         $response->assertStatus(404);
     }
 
