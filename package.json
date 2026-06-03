@@ -64,7 +64,7 @@
         "@stripe/stripe-js": "^9.5.0",
         "@tanstack/react-virtual": "^3.13.24",
         "@toon-format/toon": "^2.2.0",
-        "bwh-auth": "https://github.com/bherila/auth/releases/download/bwh-auth-v0.2.0/bwh-auth-0.2.0.tgz",
+        "bwh-auth": "git+https://github.com/bherila/auth.git#codex/shared-auth-harden&path:ui",
         "cannon-es": "^0.20.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",

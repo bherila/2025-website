@@ -8,4 +8,5 @@ onlyBuiltDependencies:
 
 allowBuilds:
   '@swc/core': true
+  bwh-auth: true
   unrs-resolver: true
