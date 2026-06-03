@@ -40,3 +40,15 @@ php artisan client-management:create-time-entry acme-inc "Deferred implementatio
 ```
 
 If `--project` is omitted, the command uses the client's only project. When a client has zero or multiple projects, pass `--project=<id|slug|exact name>`. Defaults are billable `true`, deferred billing `false`, and category `Software Development`.
+
+## Migrate Legacy Cadence Invoices
+
+One-off, idempotent migration of legacy `period == cycle` cadence invoices to the prior-period layout. Dry-run by default; pass `--apply` to write.
+
+```bash
+php artisan client-management:migrate-legacy-cadence-invoices                       # preview all
+php artisan client-management:migrate-legacy-cadence-invoices --company=acme-inc     # scope to one client
+php artisan client-management:migrate-legacy-cadence-invoices --apply                # write changes
+```
+
+Issued/paid legacy rows are re-keyed so `period_start`/`period_end` point at the prior work cycle (`cycle_*` and the invoice number are left untouched); void legacy rows are soft-deleted, and any orphaned unbilled billable time entries in their window are marked non-billable. Re-running is a no-op once migrated. See [Cadence billing & regeneration › Regenerating Cadence Invoices](cadence-billing.md#regenerating-cadence-invoices) for why this is needed.

@@ -6,7 +6,10 @@ Admin-only feature for managing client companies, their users, agreements, time 
 
 - **[Overview](overview.md)** — architecture, schema, models, controllers, routes, and workflows.
 - **[Setup](setup.md)** — one-time bootstrap: migrations to run, how to mark the first admin, how to test the feature end-to-end.
-- **[Billing](billing.md)** — cadence-aware retainer / rollover logic, recurring items, interim overage invoices, invoice lifecycle, payments, milestones, catch-up rule.
+- **[Billing](billing.md)** — billing hub: prior-period model, cadence/cycle fields, rollover, minimum-availability (catch-up) rule, line items, balance fields, recurring items, agreement transitions.
+- **[Cadence billing & regeneration](cadence-billing.md)** — invoice period (`period_*` vs `cycle_*`), one-cycle offset, numbering, regeneration rules + legacy `period == cycle` migration, interim overage invoices.
+- **[Milestone billing](milestone-billing.md)** — flat-fee deliverable billing via `milestone_price`.
+- **[Payments](payments.md)** — payment methods, validation, status transitions, and the payments UI.
 - **[CLI](cli.md)** — admin Artisan commands for invoice listing, manual payments, and time-entry creation.
 - **[Stripe billing](stripe-billing.md)** — online invoice payments, saved payment methods, payment cap, and webhook behavior.
 - **[Deferred billing](deferred-billing.md)** — (new) per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists.

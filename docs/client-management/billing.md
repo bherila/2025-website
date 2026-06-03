@@ -1,5 +1,13 @@
 # Client Management - Billing & Invoicing System
 
+This is the billing hub: the prior-period model, cadence/cycle fields, rollover, the minimum-availability rule, line items, balance fields, recurring items, and agreement transitions. Cadence dating & regeneration, milestone billing, and payments live in focused docs.
+
+## Related billing topics
+
+- **[Cadence billing & regeneration](cadence-billing.md)** — invoice period (`period_*` vs `cycle_*`), the one-cycle offset, numbering, regeneration rules (including the legacy `period == cycle` caveat and the migration command), and interim overage invoices.
+- **[Milestone billing](milestone-billing.md)** — flat-fee deliverable billing via `milestone_price`.
+- **[Payments](payments.md)** — payment methods, validation, status transitions, and the payments UI.
+
 ## See also
 
 - **[Deferred billing](deferred-billing.md)** — per-entry flag that lets admins complete work now and bill for it only when retainer capacity exists. Deferred entries are never split and are force-billed at the hourly rate on the termination invoice.
@@ -92,20 +100,12 @@ Generated invoices contain the following line item types (in order):
 7. **Recurring Items** (`recurring_item`): Fixed-fee agreement charges generated from `client_agreement_recurring_items`. Each incidence links back to the recurring item that produced it.
 
 ## Invoice Period
-Cadence-period invoices use a prior-period model for every billing cadence:
 
-- **`period_start` / `period_end`** describe the work/reconciliation period being billed.
-- **`cycle_start` / `cycle_end`** describe the retainer period being billed in advance.
+Moved to **[Cadence billing & regeneration › Invoice Period](cadence-billing.md#invoice-period)**.
 
-Monthly agreements are the one-month version of this model: January work (`period_*`) appears on the February invoice, which bills February's retainer (`cycle_*`). Non-monthly agreements use the same one-cycle offset: work in a January-March quarterly cycle appears on the April-June invoice.
+### Regenerating Cadence Invoices
 
-The first retainer period is advance-only. Its `period_*` columns point at the prior cycle before the agreement starts, while the retainer line bills the first active cycle. Termination invoices reconcile the final worked period without billing a retainer after the termination date.
-
-The retainer fee line (dated at `cycle_start`) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
-
-The invoice **number** (`PREFIX-YYYYMM-NNN`) follows a single rule regardless of cadence length: it is keyed to the **first month of the retainer period billed in advance** — i.e. `period_end + 1 month`. A monthly retainer for June is issued June 1 after reconciling May work → `...-202606-...`; a quarterly invoice reconciling January-March work and billing April-June is numbered `...-202604-...`.
-
-For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent non-monthly work cycle that will be reconciled by the next cadence-period invoice.
+Moved to **[Cadence billing & regeneration › Regenerating Cadence Invoices](cadence-billing.md#regenerating-cadence-invoices)** (status-based skip rules, the legacy `period == cycle` caveat, and the `client-management:migrate-legacy-cadence-invoices` command).
 
 ## Invoice Balance Fields
 The invoice tracks several balance fields that reflect the state at different points in time:
@@ -142,19 +142,12 @@ To maintain the integrity of financial records, the system enforces the followin
 - **Block New Entries in Issued Periods**: Users cannot create new time entries for a date within an **Issued** or **Paid** invoice period.
 
 ### Automatic Draft Invoice Regeneration
-Draft invoices are automatically regenerated when time entries change:
-- **On Create**: When a new time entry is added for a date covered by a draft invoice, that invoice is regenerated.
-- **On Update**: When a time entry on a draft invoice is modified, the entry is unlinked and the invoice is regenerated.
-- **On Delete**: When a time entry on a draft invoice is deleted, the entry is unlinked and the invoice is regenerated.
 
-This ensures draft/upcoming invoices always reflect the current state of time entries.
+Moved to **[Cadence billing & regeneration › Automatic Draft Invoice Regeneration](cadence-billing.md#automatic-draft-invoice-regeneration)** (drafts auto-regenerate on time-entry create/update/delete).
 
 ## Draft Invoice Regeneration
-When regenerating a draft invoice (e.g., when new time entries are added):
-- All system-generated line items are deleted (retainer, prior_month_retainer, prior_month_billable, additional_hours, credit, expense, milestone, recurring_item, reconciliation)
-- All linked time entries, expenses, and milestone tasks are unlinked (their `client_invoice_line_id` set to null)
-- New line items are generated with updated calculations
-- Manual adjustments (line_type = 'adjustment') are preserved
+
+Moved to **[Cadence billing & regeneration › Draft Invoice Regeneration](cadence-billing.md#draft-invoice-regeneration)** (line-item rebuild rules; preserved manual adjustments).
 
 ## Recurring Items
 
@@ -173,22 +166,7 @@ Each item stores a description, amount, charge cadence, start/end dates, optiona
 
 ## Interim Overage Invoices
 
-Non-monthly agreements can set `bill_overage_interim = true`. When enabled, the invoicing service can emit `interim_overage` draft invoices at completed month boundaries inside the current non-monthly work cycle.
-
-Interim invoices:
-- Apply only to non-monthly agreements.
-- Use the parent cadence cycle in `cycle_start` / `cycle_end`.
-- Use a monthly slice in `period_start` / `period_end`.
-- Bill only immediate overage hours that have not already been billed by earlier interim invoices in the same cycle.
-- Are not generated after the cadence-period invoice for that cycle has been issued or paid.
-
-The full cadence-period invoice subtracts any interim-billed overage hours for the same cycle so the client is not double-billed.
-
-Admins can explicitly generate a completed month slice through the idempotent interim endpoint:
-
-```
-POST /api/client/mgmt/companies/{company}/invoices/generate-interim/{yyyymm}
-```
+Moved to **[Cadence billing & regeneration › Interim Overage Invoices](cadence-billing.md#interim-overage-invoices)**.
 
 ## Agreement Transitions
 
@@ -212,41 +190,7 @@ When an agreement has been terminated and a successor agreement exists for the s
 
 ## Milestone Billing
 
-### Overview
-Tasks can be designated as billable milestones by setting a non-zero `milestone_price` (currency, e.g., $500.00). This allows flat-fee billing for specific deliverables, independently of time entries.
-
-### How It Works
-1. An admin sets the `milestone_price` field on a task (minimum $0.00, rounded to nearest cent).
-2. When the task is marked **completed**, it becomes eligible for billing.
-3. During invoice generation, all unbilled completed tasks with `milestone_price > 0` whose `completed_at` date falls on or before the invoice's `period_end` are added as `milestone` line items.
-4. If a task was completed in a period where the corresponding invoice is already **Issued** or **Paid**, the task is automatically carried forward to the next available draft or new invoice.
-5. The task's `client_invoice_line_id` is set to reference the invoice line it was billed on.
-
-### Invoice Generation Workflow with Tasks
-
-When running "Generate Invoices" via the admin interface:
-
-1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period from the agreement start date through the current cadence window. Monthly agreements use monthly windows; non-monthly agreements use their configured cadence windows.
-2. **Task Collection**: For each invoice period, the system identifies all completed, unbilled tasks (`milestone_price > 0`, `client_invoice_line_id IS NULL`, `completed_at <= period_end`).
-3. **Draft Invoice Updates**: If a draft invoice already exists for the period, it is regenerated to include any newly completed tasks.
-4. **Carry-Forward Logic**: If a task's completion date falls within a period that already has an **Issued** or **Paid** invoice, the task is automatically added to the next available **Draft** invoice instead.
-5. **Immutability**: Non-draft invoices (Issued, Paid, Void) are **NEVER** modified. Their milestone line items remain locked and unchanged.
-
-The **upcoming period preview** feature ensures that current-period work (time entries, expenses, recurring items, and milestone tasks) appears in a draft invoice before the period closes, giving admins visibility into what will be billed at period end.
-
-### Visual Indicator
-Tasks with a non-zero `milestone_price` display a **green badge** showing the price (e.g., `$500.00`). Completed tasks that have been invoiced show a `✓` in the badge.
-
-### Invoice Deletion & Task Unlinking
-When an invoice is soft-deleted (or a draft is regenerated):
-- The `client_invoice_line_id` on associated tasks is automatically set to `null`.
-- This allows the tasks to be billed again on the next invoice.
-
-This behavior is implemented via Eloquent model events on `ClientInvoiceLine` (the `deleting` event unlinks tasks).
-
-### Milestone Price Editing
-Only admin users can set or modify the `milestone_price` field. Non-admin users cannot set this field via the API (it is silently ignored for non-admins).
-
+Moved to **[Milestone billing](milestone-billing.md)** — flat-fee deliverable billing via `milestone_price`, the task generation workflow, carry-forward, and the milestone badge.
 
 ## Time Entry Detail Display
 The invoice page includes a "Show Detail" toggle switch in the top-right corner (default: ON). When enabled, it displays the underlying time entry descriptions for each line item as an indented bullet list, showing the description, hours, and original date_worked for each entry.
@@ -265,59 +209,4 @@ The invoice page title includes the invoice number for easy identification (e.g.
 
 ## Payment Handling
 
-### Payment Methods
-Supported payment methods:
-- Credit Card
-- ACH
-- Wire
-- Check
-- Other
-
-### Payment Validation
-The system enforces strict payment validation to maintain data integrity:
-
-1. **Overpayment Prevention**: 
-   - When adding a new payment, the amount cannot exceed the invoice's remaining balance
-   - When updating an existing payment, the total payments cannot exceed the invoice total
-   - Both endpoints return HTTP 422 with a descriptive error message if validation fails
-
-2. **Payment Amount Rules**:
-   - Minimum payment amount: $0.01
-   - Payment amounts must be numeric
-   - Payment date is required and must be a valid date
-
-### Invoice Status Transitions
-
-The invoice status automatically updates based on payment activity:
-
-1. **Draft → Issued**: Manual action by admin (sets `issue_date`)
-2. **Issued → Paid**: Automatically triggered when `total_payments >= invoice_total`
-   - `paid_date` is set to the latest payment date
-   - Status changes from "issued" to "paid"
-3. **Paid → Issued**: Automatically triggered when a payment is deleted or updated, causing `remaining_balance > 0`
-   - `paid_date` is cleared
-   - Status reverts to "issued"
-
-### Partially Paid Status
-
-While the database status remains "issued", the UI displays a special "PARTIALLY PAID" badge (blue background) when:
-- Invoice status is "issued", AND
-- Total payments > 0, AND
-- Remaining balance > 0
-
-This provides clear visual feedback that payment has been received but is not yet complete.
-
-### Payment Table Display
-
-The payments table on the invoice detail page uses a compact style consistent with line items:
-- Rows are clickable to edit payments (admin only)
-- Edit icon appears on hover in the rightmost column
-- Each row shows: payment date, amount, method, and notes
-- When invoice is fully paid (status = 'paid'), the "Add Payment" button is hidden
-
-### Payment Workflow (Admin Only)
-
-1. **Add Payment**: Click "Add Payment" button → Modal opens with default amount = remaining balance
-2. **Edit Payment**: Click payment row or hover edit icon → Modal opens with current values
-3. **Delete Payment**: Open payment modal → Click "Delete" button
-4. **Validation**: System prevents overpayment at API level with user-friendly error messages
+Moved to **[Payments](payments.md)** — payment methods, validation, invoice status transitions, the partially-paid badge, and the payments UI/workflow.

@@ -239,6 +239,25 @@ class ClientInvoicingService
                 continue;
             }
 
+            // Guard against re-billing a retainer period that already has an invoice.
+            // Legacy invoices store the billed cycle in period_start/period_end
+            // ("period == cycle"), which the prior-cycle work lookup above does not
+            // match, so detect them by cycle_start/cycle_end. Issued and paid invoices
+            // must not be duplicated; void invoices are also honored so that deliberately
+            // voided (waived) cycles are not regenerated.
+            $existingForRetainer = $this->findExistingInvoiceForRetainerPeriod($company, $agreement, $retainerPeriod);
+            if ($existingForRetainer
+                && (! $existingInvoice || $existingInvoice->client_invoice_id !== $existingForRetainer->client_invoice_id)) {
+                $skipped[] = [
+                    'period' => $periodLabel,
+                    'invoice_id' => $existingForRetainer->client_invoice_id,
+                    'status' => $existingForRetainer->status,
+                    'reason' => 'Retainer period already has an invoice with status: '.$existingForRetainer->status,
+                ];
+
+                continue;
+            }
+
             try {
                 $invoice = $this->generateInvoiceForPeriod(
                     $company,
@@ -388,9 +407,11 @@ class ClientInvoicingService
             ->whereNotIn('status', ['void'])
             ->first();
 
-        // If invoice exists and is already issued, it cannot be changed.
-        if ($invoice && $invoice->isIssued()) {
-            throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
+        // If invoice exists and is already settled (issued/paid/void), it cannot be changed.
+        // Keyed on status, not isIssued(): a draft can be marked paid directly, leaving
+        // issue_date null, and such a paid invoice must never be silently rewritten to draft.
+        if ($invoice && $invoice->isImmutable()) {
+            throw new \Exception("A settled invoice (#{$invoice->invoice_number}) already exists for this period and cannot be modified.");
         }
 
         // Check for overlapping periods with other invoices for the same company.
@@ -922,8 +943,8 @@ class ClientInvoicingService
                 ->lockForUpdate()
                 ->first();
 
-            if ($invoice && $invoice->isIssued()) {
-                throw new \Exception("An issued invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
+            if ($invoice && $invoice->isImmutable()) {
+                throw new \Exception("A settled invoice (#{$invoice->invoice_number}) already exists for this cadence cycle and cannot be modified.");
             }
 
             $overlappingInvoice = ClientInvoice::query()
@@ -1242,6 +1263,27 @@ class ClientInvoicingService
             ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
             ->whereDate('period_start', $workCycle->start->toDateString())
             ->whereDate('period_end', $workCycle->end->toDateString())
+            ->first();
+    }
+
+    /**
+     * Find an invoice that already covers the supplied retainer period in an
+     * issued, paid, or void state. Matches on cycle_start / cycle_end so that legacy
+     * "period == cycle" invoices are recognized regardless of the period convention.
+     * Void is included so a deliberately voided (waived) cycle is not regenerated.
+     */
+    protected function findExistingInvoiceForRetainerPeriod(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        BillingCycle $retainerPeriod,
+    ): ?ClientInvoice {
+        return ClientInvoice::query()
+            ->where('client_company_id', $company->id)
+            ->where('client_agreement_id', $agreement->id)
+            ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+            ->whereDate('cycle_start', $retainerPeriod->start->toDateString())
+            ->whereDate('cycle_end', $retainerPeriod->end->toDateString())
+            ->whereIn('status', ['issued', 'paid', 'void'])
             ->first();
     }
 
