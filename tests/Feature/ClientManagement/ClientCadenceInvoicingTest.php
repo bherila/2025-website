@@ -65,22 +65,26 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $results = $this->invoicingService->generateAllInvoices($this->company);
 
-            $this->assertSame(1, $results['summary']['generated_count']);
-            $this->assertSame(1, $results['summary']['cadence_period_invoices_created']);
+            $this->assertSame(2, $results['summary']['generated_count']);
+            $this->assertSame(2, $results['summary']['cadence_period_invoices_created']);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->firstOrFail();
+            $advanceInvoice = $this->cadenceInvoiceForPeriod($agreement, '2025-10-01', '2025-12-31');
+            $this->assertEquals('2026-01-01', $advanceInvoice->cycle_start->toDateString());
+            $this->assertEquals('2026-03-31', $advanceInvoice->cycle_end->toDateString());
+            $this->assertEquals(30.0, (float) $advanceInvoice->retainer_hours_included);
+            $this->assertEquals(0.0, (float) $advanceInvoice->hours_worked);
+
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2026-01-01', '2026-03-31');
 
             $this->assertSame(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
             $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
             $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
-            $this->assertEquals('2026-01-01', $invoice->cycle_start->toDateString());
-            $this->assertEquals('2026-03-31', $invoice->cycle_end->toDateString());
+            $this->assertEquals('2026-04-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-06-30', $invoice->cycle_end->toDateString());
 
-            // Cadence retainers are billed in advance at the cycle start, so the number is
-            // keyed to the cycle's first/issue month (2026-01), not the month after cycle_end.
-            $this->assertSame('202601', explode('-', (string) $invoice->invoice_number)[1]);
+            // The invoice number is keyed to the issue month after the reconciled
+            // work period; Jan-Mar work bills the Apr-Jun retainer.
+            $this->assertSame('202604', explode('-', (string) $invoice->invoice_number)[1]);
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
             $this->assertEquals(9.0, (float) $invoice->hours_worked);
 
@@ -115,7 +119,8 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->createTimeEntry('2025-12-10', 0.5);
 
-            $this->invoicingService->generateAllInvoices($this->company);
+            $results = $this->invoicingService->generateAllInvoices($this->company);
+            $this->assertSame([], $results['skipped'], json_encode($results['skipped']));
 
             $invoice = ClientInvoice::query()
                 ->where('client_agreement_id', $agreement->id)
@@ -158,7 +163,8 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->createTimeEntry('2026-05-20', 1.5);
 
-            $this->invoicingService->generateAllInvoices($this->company);
+            $results = $this->invoicingService->generateAllInvoices($this->company);
+            $this->assertSame([], $results['skipped'], json_encode($results['skipped']));
 
             $invoice = ClientInvoice::query()
                 ->where('client_agreement_id', $agreement->id)
@@ -327,25 +333,13 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $cycleOneInvoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                ->whereDate('cycle_start', '2025-11-15')
-                ->whereDate('cycle_end', '2026-05-14')
-                ->with('lineItems')
-                ->firstOrFail();
+            $cycleOneInvoice = $this->cadenceInvoiceForPeriod($agreement, '2025-11-15', '2026-05-14');
 
             $this->assertEquals(1.5, (float) $cycleOneInvoice->hours_worked, 'Cycle 1 must only count hours within Nov 15 – May 14');
             $this->assertEquals(0.0, (float) $cycleOneInvoice->hours_billed_at_rate);
             $this->assertEquals(500.0, (float) $cycleOneInvoice->invoice_total);
 
-            $cycleTwoInvoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                ->whereDate('cycle_start', '2026-05-15')
-                ->whereDate('cycle_end', '2026-11-14')
-                ->with('lineItems')
-                ->firstOrFail();
+            $cycleTwoInvoice = $this->cadenceInvoiceForPeriod($agreement, '2026-05-15', '2026-11-14');
 
             $this->assertEquals(0.7, (float) $cycleTwoInvoice->hours_worked, 'Cycle 2 must only count hours within May 15 – Nov 14');
             $this->assertEquals(0.0, (float) $cycleTwoInvoice->hours_billed_at_rate);
@@ -379,18 +373,21 @@ class ClientCadenceInvoicingTest extends TestCase
                 'catch_up_threshold_hours' => 1,
             ]);
 
-            $this->invoicingService->generateAllInvoices($this->company);
+            $results = $this->invoicingService->generateAllInvoices($this->company);
+            $this->assertSame([], $results['skipped'], json_encode($results['skipped']));
 
             $invoice = ClientInvoice::query()
                 ->where('client_agreement_id', $agreement->id)
                 ->with('lineItems')
                 ->firstOrFail();
 
-            $this->assertEquals('2026-06-01', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-11-30', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-12-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-05-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-06-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-11-30', $invoice->cycle_end->toDateString());
             $this->assertEquals(262.50, (float) $invoice->invoice_total);
             $this->assertEquals(1.0, (float) $invoice->retainer_hours_included);
-            $this->assertEquals(1.0, (float) $invoice->unused_hours_balance);
+            $this->assertEquals(0.0, (float) $invoice->unused_hours_balance);
         } finally {
             Carbon::setTestNow();
         }
@@ -414,10 +411,7 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2026-01-01', '2026-03-31');
 
             $this->assertEquals(19.0, (float) $invoice->hours_worked);
             $this->assertEquals(4.0, (float) $invoice->rollover_hours_used);
@@ -446,10 +440,7 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2026-01-01', '2026-12-31');
 
             $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
             $this->assertEquals('2026-12-31', $invoice->period_end->toDateString());
@@ -484,13 +475,12 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2025-11-01', '2026-01-31');
 
-            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-11-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-01-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-02-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->cycle_end->toDateString());
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
@@ -517,13 +507,12 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2025-11-01', '2026-01-31');
 
-            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-11-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-01-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-02-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->cycle_end->toDateString());
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
@@ -549,13 +538,12 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2025-11-01', '2026-01-31');
 
-            $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-11-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2026-01-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-02-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-04-30', $invoice->cycle_end->toDateString());
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
@@ -597,10 +585,58 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->orderBy('cycle_start')
                 ->get();
 
-            $this->assertCount(2, $cycleInvoices);
+            $this->assertCount(3, $cycleInvoices);
             $this->assertEquals(3.0, (float) $cycleInvoices->sum('hours_worked'));
-            $this->assertEquals(0.8, (float) $cycleInvoices[1]->hours_worked);
+            $this->assertEquals(2.2, (float) $cycleInvoices[1]->hours_worked);
+            $this->assertEquals(0.8, (float) $cycleInvoices[2]->hours_worked);
             $this->assertEquals(60.0, (float) $cycleInvoices[1]->retainer_hours_included);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_mid_month_monthly_retainer_truncated_boundary_cycle_keeps_final_month_ledger(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2025-06-01'));
+
+        try {
+            $agreement = $this->createAgreement([
+                'billing_cadence' => BillingCadence::Quarterly->value,
+                'active_date' => Carbon::parse('2025-02-15'),
+                'termination_date' => Carbon::parse('2025-05-20'),
+                'monthly_retainer_hours' => 10,
+                'monthly_retainer_fee' => 1000,
+                'retainer_hours' => null,
+                'retainer_fee' => null,
+                'rollover_months' => 0,
+                'bill_overage_interim' => false,
+            ]);
+
+            $this->createTimeEntry('2025-02-20', 1.0);
+            $this->createTimeEntry('2025-05-19', 0.7);
+
+            $this->invoicingService->generateAllInvoices($this->company);
+
+            $cycleInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->orderBy('cycle_start')
+                ->get();
+
+            $this->assertCount(3, $cycleInvoices);
+            $this->assertEquals('2025-02-15', $cycleInvoices[0]->cycle_start->toDateString());
+            $this->assertEquals('2025-05-14', $cycleInvoices[0]->cycle_end->toDateString());
+            $this->assertEquals('2025-05-15', $cycleInvoices[1]->cycle_start->toDateString());
+            $this->assertEquals('2025-08-14', $cycleInvoices[1]->cycle_end->toDateString());
+            $this->assertEquals('2025-08-15', $cycleInvoices[2]->cycle_start->toDateString());
+            $this->assertEquals('2025-11-14', $cycleInvoices[2]->cycle_end->toDateString());
+            $this->assertEquals(0.0, (float) $cycleInvoices[0]->hours_worked);
+            $this->assertEquals(1.0, (float) $cycleInvoices[1]->hours_worked);
+            $this->assertEquals(0.7, (float) $cycleInvoices[2]->hours_worked);
+            $this->assertEquals(1.7, (float) $cycleInvoices->sum('hours_worked'));
+            $this->assertEqualsWithDelta(6.452, (float) $cycleInvoices[1]->retainer_hours_included, 0.0001);
+            $this->assertEquals(0.0, (float) $cycleInvoices[2]->retainer_hours_included);
+            $this->assertEquals(0.0, (float) $cycleInvoices[2]->hours_billed_at_rate);
         } finally {
             Carbon::setTestNow();
         }
@@ -625,10 +661,7 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2026-02-01', '2026-04-30');
 
             $this->assertEquals('2026-02-01', $invoice->period_start->toDateString());
             $this->assertEquals('2026-04-30', $invoice->period_end->toDateString());
@@ -662,13 +695,12 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2025-10-01', '2025-12-31');
 
-            $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
-            $this->assertEquals('2026-02-15', $invoice->period_end->toDateString());
+            $this->assertEquals('2025-10-01', $invoice->period_start->toDateString());
+            $this->assertEquals('2025-12-31', $invoice->period_end->toDateString());
+            $this->assertEquals('2026-01-01', $invoice->cycle_start->toDateString());
+            $this->assertEquals('2026-03-31', $invoice->cycle_end->toDateString());
             $this->assertEquals(15.357, (float) $invoice->retainer_hours_included);
 
             $retainerLine = $invoice->lineItems->firstWhere('line_type', InvoiceLineType::Retainer->value);
@@ -706,12 +738,8 @@ class ClientCadenceInvoicingTest extends TestCase
 
             $this->invoicingService->generateAllInvoices($this->company);
 
-            $outgoingInvoice = ClientInvoice::query()
-                ->where('client_agreement_id', $outgoing->id)
-                ->firstOrFail();
-            $successorInvoice = ClientInvoice::query()
-                ->where('client_agreement_id', $successor->id)
-                ->firstOrFail();
+            $outgoingInvoice = $this->cadenceInvoiceForPeriod($outgoing, '2026-01-01', '2026-03-31');
+            $successorInvoice = $this->cadenceInvoiceForPeriod($successor, '2026-04-01', '2026-06-30');
 
             $this->assertEquals('2026-01-01', $outgoingInvoice->period_start->toDateString());
             $this->assertEquals('2026-03-31', $outgoingInvoice->period_end->toDateString());
@@ -872,7 +900,7 @@ class ClientCadenceInvoicingTest extends TestCase
             $results = $this->invoicingService->generateAllInvoices($this->company);
 
             $this->assertSame(2, $results['summary']['interim_invoices_created']);
-            $this->assertSame(1, $results['summary']['cadence_period_invoices_created']);
+            $this->assertSame(2, $results['summary']['cadence_period_invoices_created']);
 
             $interimInvoices = ClientInvoice::query()
                 ->where('client_agreement_id', $agreement->id)
@@ -889,11 +917,7 @@ class ClientCadenceInvoicingTest extends TestCase
             $this->assertEquals(5.0, (float) $interimInvoices[1]->hours_billed_at_rate);
             $this->assertEquals(500.0, (float) $interimInvoices[1]->invoice_total);
 
-            $cycleInvoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                ->with('lineItems')
-                ->firstOrFail();
+            $cycleInvoice = $this->cadenceInvoiceForPeriod($agreement, '2026-01-01', '2026-12-31');
 
             $this->assertEquals(0.0, (float) $cycleInvoice->hours_billed_at_rate);
 
@@ -1048,10 +1072,7 @@ class ClientCadenceInvoicingTest extends TestCase
             $deferred->refresh();
             $this->assertNotNull($deferred->client_invoice_line_id);
 
-            $invoice = ClientInvoice::query()
-                ->where('client_agreement_id', $agreement->id)
-                ->with('lineItems')
-                ->firstOrFail();
+            $invoice = $this->cadenceInvoiceForPeriod($agreement, '2026-01-01', '2026-03-31');
 
             $deferredLine = $invoice->lineItems
                 ->first(fn ($line): bool => str_starts_with((string) $line->description, 'Deferred work items applied to retainer'));
@@ -1147,6 +1168,8 @@ class ClientCadenceInvoicingTest extends TestCase
         $this->assertSame(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
         $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
         $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+        $this->assertEquals('2026-04-01', $invoice->cycle_start->toDateString());
+        $this->assertEquals('2026-06-30', $invoice->cycle_end->toDateString());
     }
 
     public function test_invoice_store_accepts_exact_cycle_shorthand(): void
@@ -1168,8 +1191,10 @@ class ClientCadenceInvoicingTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame(InvoiceKind::CadencePeriod, $invoice->invoice_kind);
-        $this->assertEquals('2026-01-01', $invoice->cycle_start->toDateString());
-        $this->assertEquals('2026-03-31', $invoice->cycle_end->toDateString());
+        $this->assertEquals('2026-01-01', $invoice->period_start->toDateString());
+        $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
+        $this->assertEquals('2026-04-01', $invoice->cycle_start->toDateString());
+        $this->assertEquals('2026-06-30', $invoice->cycle_end->toDateString());
     }
 
     public function test_invoice_store_rejects_cycle_shorthand_that_does_not_match_cadence(): void
@@ -1306,6 +1331,17 @@ class ClientCadenceInvoicingTest extends TestCase
             'is_billable' => true,
             'is_deferred_billing' => false,
         ]);
+    }
+
+    private function cadenceInvoiceForPeriod(ClientAgreement $agreement, string $periodStart, string $periodEnd): ClientInvoice
+    {
+        return ClientInvoice::query()
+            ->where('client_agreement_id', $agreement->id)
+            ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+            ->whereDate('period_start', $periodStart)
+            ->whereDate('period_end', $periodEnd)
+            ->with('lineItems')
+            ->firstOrFail();
     }
 
     private function createPaidOverpaymentCredit(float $overpaidAmount): ClientInvoice
