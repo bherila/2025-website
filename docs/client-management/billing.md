@@ -7,7 +7,7 @@
 - **[Stripe billing](stripe-billing.md)** — online invoice payments for issued invoices up to the configured cap, saved payment methods, and webhook-driven payment state.
 
 ## Overview
-The billing and invoicing system handles automatic invoice generation with prior-period billing, retainer-based pricing, rollover hours, recurring fixed-fee items, reimbursable expense tracking, and agreement billing cadences. Agreements can bill on monthly, quarterly, or annual cadence cycles. Monthly agreements preserve the original prior-month behavior; non-monthly agreements generate one cadence-period invoice per cycle and may optionally generate interim overage invoices at completed month boundaries inside the cycle.
+The billing and invoicing system handles automatic invoice generation with prior-period billing, retainer-based pricing, rollover hours, recurring fixed-fee items, reimbursable expense tracking, and agreement billing cadences. Agreements can bill on monthly, quarterly, semiannual, or annual cadence cycles. Cadence-period invoices reconcile the prior work cycle while billing the next retainer cycle in advance; non-monthly agreements may optionally generate interim overage invoices at completed month boundaries inside a work cycle.
 
 ## Core Concepts
 
@@ -20,19 +20,20 @@ When a monthly invoice is generated for month M (e.g., February 2024):
 
 This model ensures work is billed after completion, while the retainer fee provides availability for the upcoming month.
 
-For quarterly and annual agreements, the same monthly ledger remains the source of truth for rollover, catch-up, and overage calculations. The cadence-period invoice spans the full cycle (`cycle_start` through `cycle_end`), with the retainer fee and included hours scaled by the number of covered months, including any first-cycle proration.
+For non-monthly agreements, the same monthly ledger remains the source of truth for rollover and overage calculations. The cadence-period invoice summarizes the prior work cycle and bills the next retainer cycle (`cycle_start` through `cycle_end`) in advance, with the retainer fee and included hours scaled by the number of covered months, including any first-cycle proration.
 
 ### Billing Cadence and Cycle Fields
 Agreement cadence is stored on `client_agreements.billing_cadence`:
 - **`monthly`**: One invoice per calendar month.
-- **`quarterly`**: One invoice per calendar quarter, aligned to Jan 1 / Apr 1 / Jul 1 / Oct 1.
-- **`annual`**: One invoice per calendar year, aligned to Jan 1.
+- **`quarterly`**: One invoice per three-month cycle, anchored to the agreement active date.
+- **`semi_annual`**: One invoice per six-month cycle, anchored to the agreement active date.
+- **`annual`**: One invoice per twelve-month cycle, anchored to the agreement active date.
 
 Invoices include cadence metadata:
-- **`invoice_kind = cadence_period`**: The primary monthly, quarterly, or annual cycle invoice.
+- **`invoice_kind = cadence_period`**: The primary monthly, quarterly, semiannual, or annual cycle invoice.
 - **`invoice_kind = interim_overage`**: A non-monthly overage invoice emitted before the full cycle invoice.
 - **`invoice_kind = terminal`**: Reserved for terminal/final invoice handling.
-- **`cycle_start` / `cycle_end`**: The full cadence cycle the invoice belongs to. For cadence-period invoices these match `period_start` / `period_end`; interim overage invoices keep a narrower monthly `period_start` / `period_end` while pointing at the full cycle.
+- **`cycle_start` / `cycle_end`**: The retainer cycle billed in advance on cadence-period invoices. Interim overage invoices keep a narrower monthly `period_start` / `period_end` while pointing at the full work cycle they belong to.
 
 First-cycle behavior is controlled by `first_cycle_proration`:
 - **`prorate_hours`**: Retainer hours and fee are prorated to the covered fraction of the cycle.
@@ -78,7 +79,7 @@ Generated invoices contain the following line item types (in order):
 1. **Prior-Month Work** (`prior_month_retainer`): Time entries from M-1. In the "give and take" model, these are generally included at $0, dated last day of M-1. Shows total hours in the description and links to time entries with their original dates. Quantity is blank/empty (hours are documented in the description).
    - Split Logic: If prior month work exceeds what was covered by M-1 retainer and M retainer, it is split into multiple line items (Covered by M-1, Covered by M, Carried Forward).
 
-2. **Retainer Fee** (`retainer`): Retainer fee for the invoice cycle. Monthly agreements bill one monthly fee; quarterly and annual agreements scale the monthly fee by the covered months/proration. Quantity is "1".
+2. **Retainer Fee** (`retainer`): Retainer fee for the invoice cycle. Monthly agreements bill one monthly fee; non-monthly agreements scale the fee by the covered months/proration. Quantity is "1".
 
 3. **Catch-up / Additional Hours** (`additional_hours`): Used for "Catch-up Billing" (Minimum Availability Rule) or manual overage. Billed at hourly rate.
 
@@ -91,20 +92,20 @@ Generated invoices contain the following line item types (in order):
 7. **Recurring Items** (`recurring_item`): Fixed-fee agreement charges generated from `client_agreement_recurring_items`. Each incidence links back to the recurring item that produced it.
 
 ## Invoice Period
-For monthly invoices, `period_start` and `period_end` represent the **work period** being billed (usually M-1):
-- **period_start**: The first day of the work month (e.g., 2024-01-01).
-- **period_end**: The last day of the work month (e.g., 2024-01-31).
+Cadence-period invoices use a prior-period model for every billing cadence:
 
-Unlike the previous implementation, the retainer fee line (dated the 1st of M) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
+- **`period_start` / `period_end`** describe the work/reconciliation period being billed.
+- **`cycle_start` / `cycle_end`** describe the retainer period being billed in advance.
 
-The invoice **number** (`PREFIX-YYYYMM-NNN`) follows a single rule regardless of cadence length: it is keyed to the **first month of the retainer period billed in advance** — i.e. the month the invoice is issued. A semiannual cycle covering May–October is issued May 1 → `…-202605-…`; a monthly retainer for June is issued June 1 → `…-202606-…`.
+Monthly agreements are the one-month version of this model: January work (`period_*`) appears on the February invoice, which bills February's retainer (`cycle_*`). Non-monthly agreements use the same one-cycle offset: work in a January-March quarterly cycle appears on the April-June invoice.
 
-The two code paths reach that month from different anchors only because they label the `period` columns differently:
+The first retainer period is advance-only. Its `period_*` columns point at the prior cycle before the agreement starts, while the retainer line bills the first active cycle. Termination invoices reconcile the final worked period without billing a retainer after the termination date.
 
-- **Non-monthly cadence** (quarterly, semiannual, annual) stores the coverage window itself in `period_start`/`period_end`, so the number uses `period_start` directly.
-- **Monthly** retains the legacy "prior-period" labeling — `period_start`/`period_end` hold the *prior work month (M-1)* while the retainer covers month M — so the number uses `period_end + 1 month` (the same month M) via `InvoiceNumberGenerator::generateForIssueMonth()`.
+The retainer fee line (dated at `cycle_start`) does **not** expand the invoice period. This prevents overlapping period errors when generating subsequent work invoices.
 
-For cadence-period invoices, `period_start` / `period_end` and `cycle_start` / `cycle_end` all describe the full cadence window. For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent quarterly or annual cadence window.
+The invoice **number** (`PREFIX-YYYYMM-NNN`) follows a single rule regardless of cadence length: it is keyed to the **first month of the retainer period billed in advance** — i.e. `period_end + 1 month`. A monthly retainer for June is issued June 1 after reconciling May work → `...-202606-...`; a quarterly invoice reconciling January-March work and billing April-June is numbered `...-202604-...`.
+
+For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent non-monthly work cycle that will be reconciled by the next cadence-period invoice.
 
 ## Invoice Balance Fields
 The invoice tracks several balance fields that reflect the state at different points in time:
@@ -168,11 +169,11 @@ DELETE /api/client/mgmt/companies/{company}/agreements/{agreement}/recurring-ite
 
 Each item stores a description, amount, charge cadence, start/end dates, optional anchor month/day, taxable flag, summarized flag, and notes. Supported charge cadences are `monthly`, `quarterly`, `semi_annual`, `annual`, and `one_time`.
 
-`RecurringItemBiller` computes incidences that fall inside the invoice cycle. For example, a monthly item on a quarterly invoice produces three invoice lines, one per month in the cycle. Quarterly, semi-annual, and annual items use their anchor month/day; one-time items bill once on `start_date`.
+`RecurringItemBiller` computes incidences that fall inside the invoice's retainer cycle. For example, a monthly item on a quarterly invoice produces three invoice lines, one per month in the retainer cycle. Quarterly, semiannual, and annual items use their anchor month/day; one-time items bill once on `start_date`.
 
 ## Interim Overage Invoices
 
-Non-monthly agreements can set `bill_overage_interim = true`. When enabled, the invoicing service can emit `interim_overage` draft invoices at completed month boundaries inside the current quarterly or annual cycle.
+Non-monthly agreements can set `bill_overage_interim = true`. When enabled, the invoicing service can emit `interim_overage` draft invoices at completed month boundaries inside the current non-monthly work cycle.
 
 Interim invoices:
 - Apply only to non-monthly agreements.
@@ -225,7 +226,7 @@ Tasks can be designated as billable milestones by setting a non-zero `milestone_
 
 When running "Generate Invoices" via the admin interface:
 
-1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period from the agreement start date through the current cadence window. Monthly agreements use monthly windows; quarterly and annual agreements use cadence windows.
+1. **Draft Invoice Detection**: The system finds or creates draft invoices for each billing period from the agreement start date through the current cadence window. Monthly agreements use monthly windows; non-monthly agreements use their configured cadence windows.
 2. **Task Collection**: For each invoice period, the system identifies all completed, unbilled tasks (`milestone_price > 0`, `client_invoice_line_id IS NULL`, `completed_at <= period_end`).
 3. **Draft Invoice Updates**: If a draft invoice already exists for the period, it is regenerated to include any newly completed tasks.
 4. **Carry-Forward Logic**: If a task's completion date falls within a period that already has an **Issued** or **Paid** invoice, the task is automatically added to the next available **Draft** invoice instead.

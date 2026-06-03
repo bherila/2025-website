@@ -1222,6 +1222,8 @@ class ClientInvoiceTest extends TestCase
         $parts = explode('-', $invoice->invoice_number);
         $this->assertCount(3, $parts, 'Invoice number should have format PREFIX-YYYYMM-NNN');
         $this->assertEquals('202502', $parts[1], 'Middle section should be 202502 (issue month after period_end)');
+        $this->assertEquals('2025-02-01', $invoice->cycle_start->toDateString());
+        $this->assertEquals('2025-02-28', $invoice->cycle_end->toDateString());
     }
 
     // ==========================================
