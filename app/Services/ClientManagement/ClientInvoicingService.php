@@ -239,20 +239,20 @@ class ClientInvoicingService
                 continue;
             }
 
-            // Guard against re-billing a retainer period the client has already been
-            // billed (issued) or has paid. Legacy invoices store the billed cycle in
-            // period_start/period_end ("period == cycle"), which the prior-cycle work
-            // lookup above does not match, so detect them by cycle_start/cycle_end.
-            // Void invoices are intentionally excluded so cancelled billing can be
-            // regenerated without dropping the underlying work.
-            $alreadyBilled = $this->findChargedInvoiceForRetainerPeriod($company, $agreement, $retainerPeriod);
-            if ($alreadyBilled
-                && (! $existingInvoice || $existingInvoice->client_invoice_id !== $alreadyBilled->client_invoice_id)) {
+            // Guard against re-billing a retainer period that already has an invoice.
+            // Legacy invoices store the billed cycle in period_start/period_end
+            // ("period == cycle"), which the prior-cycle work lookup above does not
+            // match, so detect them by cycle_start/cycle_end. Issued and paid invoices
+            // must not be duplicated; void invoices are also honored so that deliberately
+            // voided (waived) cycles are not regenerated.
+            $existingForRetainer = $this->findExistingInvoiceForRetainerPeriod($company, $agreement, $retainerPeriod);
+            if ($existingForRetainer
+                && (! $existingInvoice || $existingInvoice->client_invoice_id !== $existingForRetainer->client_invoice_id)) {
                 $skipped[] = [
                     'period' => $periodLabel,
-                    'invoice_id' => $alreadyBilled->client_invoice_id,
-                    'status' => $alreadyBilled->status,
-                    'reason' => 'Retainer period already billed by invoice with status: '.$alreadyBilled->status,
+                    'invoice_id' => $existingForRetainer->client_invoice_id,
+                    'status' => $existingForRetainer->status,
+                    'reason' => 'Retainer period already has an invoice with status: '.$existingForRetainer->status,
                 ];
 
                 continue;
@@ -1265,12 +1265,12 @@ class ClientInvoicingService
     }
 
     /**
-     * Find an invoice that already billed the supplied retainer period and has been
-     * issued or paid. Matches on cycle_start / cycle_end so that legacy
+     * Find an invoice that already covers the supplied retainer period in an
+     * issued, paid, or void state. Matches on cycle_start / cycle_end so that legacy
      * "period == cycle" invoices are recognized regardless of the period convention.
-     * Void invoices are excluded — cancelled billing should be regenerated.
+     * Void is included so a deliberately voided (waived) cycle is not regenerated.
      */
-    protected function findChargedInvoiceForRetainerPeriod(
+    protected function findExistingInvoiceForRetainerPeriod(
         ClientCompany $company,
         ClientAgreement $agreement,
         BillingCycle $retainerPeriod,
@@ -1281,7 +1281,7 @@ class ClientInvoicingService
             ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
             ->whereDate('cycle_start', $retainerPeriod->start->toDateString())
             ->whereDate('cycle_end', $retainerPeriod->end->toDateString())
-            ->whereIn('status', ['issued', 'paid'])
+            ->whereIn('status', ['issued', 'paid', 'void'])
             ->first();
     }
 

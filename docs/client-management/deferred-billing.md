@@ -47,6 +47,8 @@ Draft invoices auto-regenerate whenever a time entry in their period changes (se
 
 No special handling is needed. A deferred entry that fit on last night's draft may be bumped to next month if someone adds a non-deferred entry that consumes the capacity. Conversely, a skipped deferred entry from last night can show up on the redrawn draft if capacity opens up. All of this happens automatically.
 
+Only **draft** invoices are redrawn. Bulk cadence generation skips any retainer cycle that already has an issued, paid, or **void** invoice (matched on `cycle_start` / `cycle_end`), so a voided cycle is never regenerated — voiding a cadence invoice waives it. See [billing.md](billing.md#regenerating-cadence-invoices).
+
 ## UI
 
 - **New Time Entry / Edit Time Entry modal** (admin only): a "Defer billing" checkbox appears under "Billable". It is disabled and cleared when "Billable" is off.
@@ -56,7 +58,7 @@ No special handling is needed. A deferred entry that fit on last night's draft m
 
 ## Invariants & tests
 
-- Issued/Paid/Void invoices are never modified after the fact, even if new deferred entries are created in their period.
+- Issued/Paid/Void invoices are never modified after the fact, even if new deferred entries are created in their period. A voided cadence cycle is additionally never regenerated as a fresh invoice — voiding waives it.
 - Deferred entries are never split (hard invariant; covered by `DeferredBillingAllocatorTest::test_never_splits`).
 - Termination invoices include every outstanding deferred entry (`test_termination_force_bills_all_deferred`).
 

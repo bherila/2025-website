@@ -1021,12 +1021,12 @@ class ClientCadenceInvoicingTest extends TestCase
     }
 
     /**
-     * Counterpart to the paid-invoice guard: a VOID legacy cadence invoice represents
-     * cancelled (unpaid) billing, so its retainer period must remain eligible for
-     * regeneration. Excluding void from the "already charged" guard is what prevents
-     * the underlying work/retainer from being silently dropped.
+     * Counterpart to the paid-invoice guard: a VOID cadence invoice represents a
+     * deliberately waived retainer cycle, so regeneration must leave it alone rather
+     * than re-create a fresh invoice for the same cycle. This is what lets an admin
+     * void a retainer to waive it without it reappearing on the next generation run.
      */
-    public function test_generate_all_rebills_a_voided_legacy_period_equals_cycle_semiannual_invoice(): void
+    public function test_generate_all_does_not_regenerate_a_voided_semiannual_cycle(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-03'));
 
@@ -1052,7 +1052,7 @@ class ClientCadenceInvoicingTest extends TestCase
                 'first_cycle_proration' => 'prorate_hours',
             ]);
 
-            // Legacy first-cycle invoice: period == cycle == 2026-06-01..2026-11-30, voided.
+            // Legacy first-cycle invoice: period == cycle == 2026-06-01..2026-11-30, voided (waived).
             $voidInvoice = ClientInvoice::create([
                 'client_company_id' => $company->id,
                 'client_agreement_id' => $agreement->id,
@@ -1078,13 +1078,14 @@ class ClientCadenceInvoicingTest extends TestCase
                 ->whereDate('cycle_end', '2026-11-30')
                 ->get();
 
-            // The void row is left void, and a fresh (non-void) invoice re-bills the cycle.
-            $this->assertSame('void', $voidInvoice->fresh()->status);
-            $rebilled = $cycleInvoices->firstWhere(
-                fn (ClientInvoice $invoice): bool => $invoice->client_invoice_id !== $voidInvoice->client_invoice_id
+            // The voided cycle is honored: it stays void and nothing new is generated for it.
+            $this->assertCount(
+                1,
+                $cycleInvoices,
+                'A voided (waived) retainer cycle must not be regenerated.'
             );
-            $this->assertNotNull($rebilled, 'A voided retainer cycle must be regenerated, not skipped.');
-            $this->assertNotSame('void', $rebilled->status);
+            $this->assertSame($voidInvoice->client_invoice_id, $cycleInvoices->first()->client_invoice_id);
+            $this->assertSame('void', $cycleInvoices->first()->fresh()->status);
         } finally {
             Carbon::setTestNow();
         }

@@ -107,6 +107,18 @@ The invoice **number** (`PREFIX-YYYYMM-NNN`) follows a single rule regardless of
 
 For interim overage invoices, `period_start` / `period_end` describe the completed monthly slice being billed, while `cycle_start` / `cycle_end` identify the parent non-monthly work cycle that will be reconciled by the next cadence-period invoice.
 
+### Regenerating Cadence Invoices
+
+Bulk generation (the admin **Generate Invoices** action / `generateAllInvoices`) walks every retainer period for an agreement and is idempotent: re-running it refreshes drafts without disturbing a cycle that already has an invoice.
+
+A retainer period is recognized as already invoiced when a `cadence_period` invoice exists whose **retainer cycle** matches — keyed on `cycle_start` / `cycle_end`, not on the work period. This matters because invoices created before the prior-period model stored the billed cycle directly in `period_start` / `period_end` ("period == cycle"); matching on the cycle columns recognizes both the current and the legacy convention, so a legacy invoice is never duplicated under the new period layout.
+
+The existing invoice's status decides the outcome:
+
+- **Issued / Paid** — skipped. The client has already been billed or has paid; the engine never duplicates the charge.
+- **Void** — skipped. A voided cadence cycle is treated as deliberately waived and is **not** regenerated. To waive a retainer, **void** the invoice rather than deleting it — a deleted draft leaves no record and would be regenerated on the next run.
+- **Draft** — refreshed in place to reflect the current time entries, expenses, recurring items, and milestone tasks.
+
 ## Invoice Balance Fields
 The invoice tracks several balance fields that reflect the state at different points in time:
 
