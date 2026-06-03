@@ -939,6 +939,157 @@ class ClientCadenceInvoicingTest extends TestCase
         }
     }
 
+    /**
+     * Regression for the live semi_annual data conflict surfaced while unifying the
+     * invoice engine (#750). Anonymized stand-in for a real client whose first-cycle
+     * retainer was invoiced and PAID under the legacy "period == cycle" convention
+     * (period_start/period_end stored the billed cycle itself).
+     *
+     * The unified engine now stores period_start/period_end = the prior (work) cycle
+     * and the billed cycle in cycle_start/cycle_end, so the legacy paid row is not
+     * matched by the prior-cycle period lookup. Regenerating must still recognize that
+     * the Jun-Nov 2026 retainer is already paid and must NOT create a second invoice
+     * billing the same cycle.
+     */
+    public function test_generate_all_does_not_rebill_a_paid_legacy_period_equals_cycle_semiannual_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-03'));
+
+        try {
+            $company = ClientCompany::factory()->create([
+                'company_name' => 'Atlas Imaging',
+                'slug' => 'atlas-imaging',
+            ]);
+
+            $agreement = ClientAgreement::factory()->for($company)->create([
+                'agreement_text' => 'Semiannual retainer',
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2026-06-01'),
+                'termination_date' => null,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 250,
+                'hourly_rate' => 350,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => false,
+                'first_cycle_proration' => 'prorate_hours',
+            ]);
+
+            // Legacy first-cycle invoice: period == cycle == 2026-06-01..2026-11-30, already paid.
+            $paidInvoice = ClientInvoice::create([
+                'client_company_id' => $company->id,
+                'client_agreement_id' => $agreement->id,
+                'period_start' => Carbon::parse('2026-06-01'),
+                'period_end' => Carbon::parse('2026-11-30'),
+                'cycle_start' => Carbon::parse('2026-06-01'),
+                'cycle_end' => Carbon::parse('2026-11-30'),
+                'invoice_number' => 'ATLA-202611-001',
+                'invoice_total' => 250,
+                'retainer_hours_included' => 1,
+                'hours_worked' => 0,
+                'status' => 'issued',
+                'invoice_kind' => InvoiceKind::CadencePeriod->value,
+            ]);
+            $paidInvoice->payments()->create([
+                'amount' => 250,
+                'payment_date' => '2026-06-05',
+                'payment_method' => 'Wire',
+            ]);
+            $paidInvoice->markPaid('2026-06-05');
+
+            $this->invoicingService->generateAllInvoices($company);
+
+            $cycleInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-06-01')
+                ->whereDate('cycle_end', '2026-11-30')
+                ->get();
+
+            $this->assertCount(
+                1,
+                $cycleInvoices,
+                'The Jun-Nov 2026 retainer is already paid; regeneration must not create a second invoice billing the same cycle.'
+            );
+            $this->assertSame($paidInvoice->client_invoice_id, $cycleInvoices->first()->client_invoice_id);
+            $this->assertSame('paid', $cycleInvoices->first()->fresh()->status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /**
+     * Counterpart to the paid-invoice guard: a VOID legacy cadence invoice represents
+     * cancelled (unpaid) billing, so its retainer period must remain eligible for
+     * regeneration. Excluding void from the "already charged" guard is what prevents
+     * the underlying work/retainer from being silently dropped.
+     */
+    public function test_generate_all_rebills_a_voided_legacy_period_equals_cycle_semiannual_invoice(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-03'));
+
+        try {
+            $company = ClientCompany::factory()->create([
+                'company_name' => 'Beacon Labs',
+                'slug' => 'beacon-labs',
+            ]);
+
+            $agreement = ClientAgreement::factory()->for($company)->create([
+                'agreement_text' => 'Semiannual retainer',
+                'billing_cadence' => BillingCadence::SemiAnnual->value,
+                'active_date' => Carbon::parse('2026-06-01'),
+                'termination_date' => null,
+                'monthly_retainer_hours' => 0,
+                'monthly_retainer_fee' => 0,
+                'retainer_hours' => 1,
+                'retainer_fee' => 250,
+                'hourly_rate' => 350,
+                'rollover_months' => 0,
+                'catch_up_threshold_hours' => 1,
+                'bill_overage_interim' => false,
+                'first_cycle_proration' => 'prorate_hours',
+            ]);
+
+            // Legacy first-cycle invoice: period == cycle == 2026-06-01..2026-11-30, voided.
+            $voidInvoice = ClientInvoice::create([
+                'client_company_id' => $company->id,
+                'client_agreement_id' => $agreement->id,
+                'period_start' => Carbon::parse('2026-06-01'),
+                'period_end' => Carbon::parse('2026-11-30'),
+                'cycle_start' => Carbon::parse('2026-06-01'),
+                'cycle_end' => Carbon::parse('2026-11-30'),
+                'invoice_number' => 'BEAC-202611-001',
+                'invoice_total' => 250,
+                'retainer_hours_included' => 1,
+                'hours_worked' => 0,
+                'status' => 'issued',
+                'invoice_kind' => InvoiceKind::CadencePeriod->value,
+            ]);
+            $voidInvoice->void();
+
+            $this->invoicingService->generateAllInvoices($company);
+
+            $cycleInvoices = ClientInvoice::query()
+                ->where('client_agreement_id', $agreement->id)
+                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                ->whereDate('cycle_start', '2026-06-01')
+                ->whereDate('cycle_end', '2026-11-30')
+                ->get();
+
+            // The void row is left void, and a fresh (non-void) invoice re-bills the cycle.
+            $this->assertSame('void', $voidInvoice->fresh()->status);
+            $rebilled = $cycleInvoices->firstWhere(
+                fn (ClientInvoice $invoice): bool => $invoice->client_invoice_id !== $voidInvoice->client_invoice_id
+            );
+            $this->assertNotNull($rebilled, 'A voided retainer cycle must be regenerated, not skipped.');
+            $this->assertNotSame('void', $rebilled->status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_interim_overage_invoices_are_generated_and_reconciled_on_final_cycle_invoice(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-15'));

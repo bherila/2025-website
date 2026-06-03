@@ -239,6 +239,25 @@ class ClientInvoicingService
                 continue;
             }
 
+            // Guard against re-billing a retainer period the client has already been
+            // billed (issued) or has paid. Legacy invoices store the billed cycle in
+            // period_start/period_end ("period == cycle"), which the prior-cycle work
+            // lookup above does not match, so detect them by cycle_start/cycle_end.
+            // Void invoices are intentionally excluded so cancelled billing can be
+            // regenerated without dropping the underlying work.
+            $alreadyBilled = $this->findChargedInvoiceForRetainerPeriod($company, $agreement, $retainerPeriod);
+            if ($alreadyBilled
+                && (! $existingInvoice || $existingInvoice->client_invoice_id !== $alreadyBilled->client_invoice_id)) {
+                $skipped[] = [
+                    'period' => $periodLabel,
+                    'invoice_id' => $alreadyBilled->client_invoice_id,
+                    'status' => $alreadyBilled->status,
+                    'reason' => 'Retainer period already billed by invoice with status: '.$alreadyBilled->status,
+                ];
+
+                continue;
+            }
+
             try {
                 $invoice = $this->generateInvoiceForPeriod(
                     $company,
@@ -1242,6 +1261,27 @@ class ClientInvoicingService
             ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
             ->whereDate('period_start', $workCycle->start->toDateString())
             ->whereDate('period_end', $workCycle->end->toDateString())
+            ->first();
+    }
+
+    /**
+     * Find an invoice that already billed the supplied retainer period and has been
+     * issued or paid. Matches on cycle_start / cycle_end so that legacy
+     * "period == cycle" invoices are recognized regardless of the period convention.
+     * Void invoices are excluded — cancelled billing should be regenerated.
+     */
+    protected function findChargedInvoiceForRetainerPeriod(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        BillingCycle $retainerPeriod,
+    ): ?ClientInvoice {
+        return ClientInvoice::query()
+            ->where('client_company_id', $company->id)
+            ->where('client_agreement_id', $agreement->id)
+            ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+            ->whereDate('cycle_start', $retainerPeriod->start->toDateString())
+            ->whereDate('cycle_end', $retainerPeriod->end->toDateString())
+            ->whereIn('status', ['issued', 'paid'])
             ->first();
     }
 
