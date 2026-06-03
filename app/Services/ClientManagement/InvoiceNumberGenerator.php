@@ -27,6 +27,17 @@ class InvoiceNumberGenerator
         return sprintf('%s%s-%03d', $prefix, $yearMonth, $sequence);
     }
 
+    /**
+     * Number anchored to the issue month (the month after the work period).
+     * Prior-period invoices are issued on the 1st of the month following the
+     * work they reconcile, so the number reflects that issue month rather than
+     * the work month carried on period_start/period_end.
+     */
+    public function generateForIssueMonth(ClientCompany $company, Carbon $workPeriodEnd): string
+    {
+        return $this->generate($company, $workPeriodEnd->copy()->addDay()->startOfMonth());
+    }
+
     private function rawPrefix(ClientCompany $company): string
     {
         $alphanumericName = preg_replace('/[^a-zA-Z0-9]/', '', (string) $company->company_name) ?? '';

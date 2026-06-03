@@ -77,6 +77,10 @@ class ClientCadenceInvoicingTest extends TestCase
             $this->assertEquals('2026-03-31', $invoice->period_end->toDateString());
             $this->assertEquals('2026-01-01', $invoice->cycle_start->toDateString());
             $this->assertEquals('2026-03-31', $invoice->cycle_end->toDateString());
+
+            // Cadence retainers are billed in advance at the cycle start, so the number is
+            // keyed to the cycle's first/issue month (2026-01), not the month after cycle_end.
+            $this->assertSame('202601', explode('-', (string) $invoice->invoice_number)[1]);
             $this->assertEquals(30.0, (float) $invoice->retainer_hours_included);
             $this->assertEquals(9.0, (float) $invoice->hours_worked);
 
