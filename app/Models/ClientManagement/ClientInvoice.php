@@ -241,6 +241,16 @@ class ClientInvoice extends Model
     }
 
     /**
+     * Whether the invoice has been settled and must never be silently rewritten
+     * by generation. A draft can be marked paid directly (leaving issue_date null),
+     * so immutability is keyed on status rather than issue_date — never on isIssued().
+     */
+    public function isImmutable(): bool
+    {
+        return in_array($this->status, ['issued', 'paid', 'void'], true);
+    }
+
+    /**
      * Issue the invoice.
      */
     public function issue(): void

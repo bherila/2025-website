@@ -1194,7 +1194,7 @@ class ClientInvoiceTest extends TestCase
         $this->assertEquals('issued', $invoice->fresh()->status);
     }
 
-    public function test_invoice_number_uses_period_end_date()
+    public function test_invoice_number_uses_issue_month()
     {
         // Create a time entry in January 2025
         ClientTimeEntry::create([
@@ -1207,20 +1207,23 @@ class ClientInvoiceTest extends TestCase
             'is_billable' => true,
         ]);
 
-        // Generate invoice for January work period (period_end: 2025-01-31)
-        // Invoice number should use 202501 from period_end, not current date
+        // Generate invoice for the January work period (period_end: 2025-01-31).
+        // The invoice number is keyed to the issue month (M) — the month after the
+        // work period — so January work produces a 202502 number, not 202501.
         $periodStart = Carbon::parse('2025-01-01');
         $periodEnd = Carbon::parse('2025-01-31');
 
         $invoice = $this->invoicingService->generateInvoice($this->company, $periodStart, $periodEnd);
 
-        // Check that invoice number contains 202501 (YYYYMM of period_end)
-        $this->assertStringContainsString('202501', $invoice->invoice_number);
+        // Check that invoice number contains 202502 (the issue month after period_end)
+        $this->assertStringContainsString('202502', $invoice->invoice_number);
 
         // Check format: PREFIX-YYYYMM-NNN
         $parts = explode('-', $invoice->invoice_number);
         $this->assertCount(3, $parts, 'Invoice number should have format PREFIX-YYYYMM-NNN');
-        $this->assertEquals('202501', $parts[1], 'Middle section should be 202501 from period_end');
+        $this->assertEquals('202502', $parts[1], 'Middle section should be 202502 (issue month after period_end)');
+        $this->assertEquals('2025-02-01', $invoice->cycle_start->toDateString());
+        $this->assertEquals('2025-02-28', $invoice->cycle_end->toDateString());
     }
 
     // ==========================================

@@ -1345,12 +1345,6 @@ parameters:
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 
 		-
-			message: '#^Strict comparison using \!\=\= between Carbon\\Carbon and null will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
 			message: '#^Method App\\Services\\ClientManagement\\RolloverCalculator\:\:calculateMonthSummary\(\) has parameter \$previousMonthsUnused with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
