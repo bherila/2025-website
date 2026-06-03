@@ -163,12 +163,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth.git",
-                "reference": "69011c02e840ea1557efaf35949bb0621be2730a"
+                "reference": "a0d3a0b266f63f6759909c681544c97a3335d9a9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth/zipball/69011c02e840ea1557efaf35949bb0621be2730a",
-                "reference": "69011c02e840ea1557efaf35949bb0621be2730a",
+                "url": "https://api.github.com/repos/bherila/auth/zipball/a0d3a0b266f63f6759909c681544c97a3335d9a9",
+                "reference": "a0d3a0b266f63f6759909c681544c97a3335d9a9",
                 "shasum": ""
             },
             "require": {
@@ -204,10 +204,10 @@
             ],
             "description": "Shared Laravel authentication services for BWH applications.",
             "support": {
-                "source": "https://github.com/bherila/auth/tree/bwh-auth-v0.2.0",
+                "source": "https://github.com/bherila/auth/tree/codex/shared-auth-harden",
                 "issues": "https://github.com/bherila/auth/issues"
             },
-            "time": "2026-06-03T10:02:05+00:00"
+            "time": "2026-06-03T11:02:47+00:00"
         },
         {
             "name": "bherila/genai-laravel",
