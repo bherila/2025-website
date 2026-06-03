@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
+use App\Services\Auth\SharedAuthAuditLogger;
+use BWH\Auth\Contracts\AuthAuditLogger;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
@@ -21,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(AuthAuditLogger::class, SharedAuthAuditLogger::class);
     }
 
     /**

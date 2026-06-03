@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\WebAuthnCredential;
+use BWH\Auth\Models\PasskeyCredential;
 use Tests\TestCase;
 
 class PasskeyApiTest extends TestCase
@@ -11,12 +11,17 @@ class PasskeyApiTest extends TestCase
     {
         $user = $this->createUser();
 
-        WebAuthnCredential::create([
+        PasskeyCredential::create([
             'user_id' => $user->id,
             'credential_id' => 'test-credential-id',
             'public_key' => base64_encode('test-public-key'),
             'counter' => 0,
             'name' => 'Test Passkey',
+        ]);
+
+        $this->assertDatabaseHas('webauthn_credentials', [
+            'credential_id' => 'test-credential-id',
+            'credential_id_hash' => hash('sha256', 'test-credential-id'),
         ]);
 
         $response = $this->actingAs($user)->get('/api/passkeys');
@@ -51,7 +56,7 @@ class PasskeyApiTest extends TestCase
     {
         $user = $this->createUser();
 
-        $credential = WebAuthnCredential::create([
+        $credential = PasskeyCredential::create([
             'user_id' => $user->id,
             'credential_id' => 'test-credential-id',
             'public_key' => base64_encode('test-public-key'),
@@ -71,7 +76,7 @@ class PasskeyApiTest extends TestCase
         $user1 = $this->createUser(['email' => 'user1@example.com']);
         $user2 = $this->createUser(['email' => 'user2@example.com']);
 
-        $credential = WebAuthnCredential::create([
+        $credential = PasskeyCredential::create([
             'user_id' => $user2->id,
             'credential_id' => 'test-credential-id',
             'public_key' => base64_encode('test-public-key'),
@@ -79,7 +84,7 @@ class PasskeyApiTest extends TestCase
             'name' => 'Test Passkey',
         ]);
 
-        $response = $this->actingAs($user1)->delete("/api/passkeys/{$credential->id}");
+        $response = $this->actingAs($user1)->deleteJson("/api/passkeys/{$credential->id}");
         $response->assertStatus(404);
 
         $this->assertDatabaseHas('webauthn_credentials', ['id' => $credential->id]);
@@ -105,7 +110,7 @@ class PasskeyApiTest extends TestCase
         $user1 = $this->createUser(['email' => 'user1@example.com']);
         $user2 = $this->createUser(['email' => 'user2@example.com']);
 
-        WebAuthnCredential::create([
+        PasskeyCredential::create([
             'user_id' => $user1->id,
             'credential_id' => 'cred-1',
             'public_key' => base64_encode('key-1'),
@@ -113,7 +118,7 @@ class PasskeyApiTest extends TestCase
             'name' => 'User1 Passkey',
         ]);
 
-        WebAuthnCredential::create([
+        PasskeyCredential::create([
             'user_id' => $user2->id,
             'credential_id' => 'cred-2',
             'public_key' => base64_encode('key-2'),
