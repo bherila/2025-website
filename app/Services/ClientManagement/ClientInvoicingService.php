@@ -132,15 +132,7 @@ class ClientInvoicingService
 
         foreach ($agreements as $agreement) {
             $successorAgreement = $this->agreementSelector->successorAgreementForGeneration($agreements, $agreement);
-            $agreementResults = $agreement->effectiveBillingCadence() === BillingCadence::Monthly
-                ? $this->generateAllMonthlyInvoicesForAgreement(
-                    $company,
-                    $agreement,
-                    $successorAgreement
-                        ? Carbon::parse($successorAgreement->active_date)->startOfMonth()->subMonth()
-                        : null,
-                )
-                : $this->generateAllCadenceInvoices($company, $agreement);
+            $agreementResults = $this->generateAllInvoicesForAgreement($company, $agreement, $successorAgreement);
 
             $results = $this->mergeGenerationResults($results, $agreementResults);
         }
@@ -166,11 +158,15 @@ class ClientInvoicingService
             throw new \Exception('generateAllMonthlyInvoices only supports monthly agreements. Use generateAllInvoices for cadence-aware generation.');
         }
 
-        return $this->generateAllMonthlyInvoicesForAgreement($company, $agreement);
+        return $this->generateAllInvoicesForAgreement($company, $agreement);
     }
 
     /**
-     * Generate invoices for one monthly agreement segment.
+     * Generate invoices for one agreement segment by walking retainer periods.
+     *
+     * Monthly agreements are treated as one-month cadence periods: the invoice
+     * period reconciles the previous work month and the cycle fields identify
+     * the retainer month billed in advance.
      *
      * @return array{
      *     generated: list<array<string, mixed>>,
@@ -185,147 +181,91 @@ class ClientInvoicingService
      *     }
      * }
      */
-    protected function generateAllMonthlyInvoicesForAgreement(
+    protected function generateAllInvoicesForAgreement(
         ClientCompany $company,
         ClientAgreement $agreement,
-        ?Carbon $postTerminationCatchUpPeriodStartBefore = null,
+        ?ClientAgreement $successorAgreement = null,
     ): array {
         $generated = [];
         $updated = [];
         $skipped = [];
+        $through = $this->retainerGenerationThroughDate($agreement, $successorAgreement);
+        $billExcessImmediately = $agreement->effectiveBillingCadence() !== BillingCadence::Monthly
+            && (bool) $agreement->bill_overage_interim;
+        $ledger = $this->invoiceLedgerBuilder->buildAgreementLedgerThrough(
+            $company,
+            $agreement,
+            $through,
+            $billExcessImmediately,
+        );
+        $immediateLedger = $billExcessImmediately ? $ledger : null;
 
-        // Determine termination date (if any)
-        $terminationDate = $agreement->termination_date
-            ? Carbon::parse($agreement->termination_date)
-            : null;
-
-        // Start from the agreement's active date.
-        // Always run the loop up to one month ahead of now so that:
-        //   - the "upcoming draft" invoice for the current month is created, and
-        //   - post-termination periods with unbilled work/expenses are covered.
-        $currentDate = Carbon::parse($agreement->active_date)->startOfMonth();
-        $endDate = now()->startOfMonth()->addMonth();
-        if ($postTerminationCatchUpPeriodStartBefore !== null && $terminationDate !== null) {
-            $terminationSegmentEndDate = $terminationDate->copy()->startOfMonth()->addMonth();
-            $segmentEndDate = $postTerminationCatchUpPeriodStartBefore->gt($terminationSegmentEndDate)
-                ? $postTerminationCatchUpPeriodStartBefore->copy()
-                : $terminationSegmentEndDate;
-
-            if ($segmentEndDate->lt($endDate)) {
-                $endDate = $segmentEndDate;
-            }
-        }
-
-        // Precompute all post-termination Y-m periods with any unbilled work or expenses
-        // once, to avoid per-month DB queries inside the loop for long-terminated agreements.
         $monthsWithUnbilledPostTermination = null;
 
-        // Generate invoices for each calendar month
-        while ($currentDate->lte($endDate)) {
-            // Invoice period covers the PRIOR month's work (M-1)
-            // The invoice date (retainer renewal) is the first of month M
-            $priorMonth = $currentDate->copy()->subMonth();
-            $periodStart = $priorMonth->copy()->startOfMonth();
-            $periodEnd = $priorMonth->copy()->endOfMonth();
+        foreach ($this->retainerPeriodsThrough($agreement, $through) as $retainerPeriod) {
+            $workCycle = $this->previousBillingCycle($agreement, $retainerPeriod);
+            $existingInvoice = $this->findGeneratedInvoiceForWorkCycle($company, $agreement, $workCycle);
+            $periodLabel = $this->generationPeriodLabel($agreement, $workCycle, $retainerPeriod);
 
-            // Determine whether this period is entirely after the termination date.
-            // A period is "post-termination" when its START is after the termination date,
-            // meaning the entire work period falls beyond the agreement end.
-            // We use periodStart (not periodEnd) to avoid time-of-day comparison issues
-            // (endOfMonth returns 23:59:59 while termination_date is stored at 00:00:00).
-            $isPostTermination = $terminationDate !== null && $periodStart->gt($terminationDate);
+            if ($this->shouldSkipEmptyPostTerminationWorkCycle(
+                $company,
+                $agreement,
+                $workCycle,
+                $existingInvoice,
+                $monthsWithUnbilledPostTermination,
+            )) {
+                continue;
+            }
 
-            // Check if invoice already exists for this period.
-            // Use whereDate() since period_start/period_end are DATE columns in MySQL and
-            // Carbon's endOfMonth() returns 23:59:59 which won't match a DATE value.
-            $existingInvoice = ClientInvoice::where('client_company_id', $company->id)
-                ->whereDate('period_start', $periodStart->toDateString())
-                ->whereDate('period_end', $periodEnd->toDateString())
-                ->first();
-
-            // For post-termination periods with no existing invoice, only create a new
-            // one when there is actually something to bill (unbilled hours or expenses).
-            // The set of billable post-termination months is computed once (lazy) and reused.
-            $skipPostTermination = false;
-            if ($isPostTermination && ! $existingInvoice) {
-                if ($monthsWithUnbilledPostTermination === null) {
-                    $monthsWithUnbilledPostTermination = [];
-
-                    if ($terminationDate !== null) {
-                        $workMonths = ClientTimeEntry::where('client_company_id', $company->id)
-                            ->where('is_billable', true)
-                            ->whereNull('client_invoice_line_id')
-                            ->where('date_worked', '>', $terminationDate->toDateString())
-                            ->pluck('date_worked')
-                            ->map(fn ($date): string => substr((string) $date, 0, 7))
-                            ->all();
-
-                        $expenseMonths = ClientExpense::where('client_company_id', $company->id)
-                            ->where('is_reimbursable', true)
-                            ->whereNull('client_invoice_line_id')
-                            ->where('expense_date', '>', $terminationDate->toDateString())
-                            ->pluck('expense_date')
-                            ->map(fn ($date): string => substr((string) $date, 0, 7))
-                            ->all();
-
-                        $monthsWithUnbilledPostTermination = array_fill_keys(
-                            array_unique(array_merge($workMonths, $expenseMonths)),
-                            true
-                        );
-                    }
+            if ($agreement->effectiveBillingCadence() !== BillingCadence::Monthly
+                && $workCycle->end->gte(Carbon::parse($agreement->active_date)->startOfDay())) {
+                $interimResults = $this->ensureInterimOveragesForCycle($company, $agreement, $workCycle, $immediateLedger);
+                foreach ($interimResults['generated'] as $result) {
+                    $generated[] = $result;
                 }
-
-                if (! isset($monthsWithUnbilledPostTermination[$periodStart->format('Y-m')])) {
-                    $skipPostTermination = true;
+                foreach ($interimResults['updated'] as $result) {
+                    $updated[] = $result;
                 }
             }
 
-            if (! $skipPostTermination) {
+            if ($existingInvoice && in_array($existingInvoice->status, ['issued', 'paid', 'void'], true)) {
+                $skipped[] = [
+                    'period' => $periodLabel,
+                    'invoice_id' => $existingInvoice->client_invoice_id,
+                    'status' => $existingInvoice->status,
+                    'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
+                ];
+
+                continue;
+            }
+
+            try {
+                $invoice = $this->generateInvoiceForPeriod(
+                    $company,
+                    $agreement,
+                    $retainerPeriod,
+                    false,
+                    $ledger,
+                    $immediateLedger,
+                );
+                $result = [
+                    'period' => $periodLabel,
+                    'invoice_id' => $invoice->client_invoice_id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'invoice_kind' => $invoice->invoiceKindValue(),
+                ];
+
                 if ($existingInvoice) {
-                    // Skip if invoice is issued, paid, or voided
-                    if (in_array($existingInvoice->status, ['issued', 'paid', 'void'])) {
-                        $skipped[] = [
-                            'period' => $periodStart->format('Y-m'),
-                            'invoice_id' => $existingInvoice->client_invoice_id,
-                            'status' => $existingInvoice->status,
-                            'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
-                        ];
-                    } else {
-                        // Re-generate if draft
-                        try {
-                            $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
-                            $updated[] = [
-                                'period' => $periodStart->format('Y-m'),
-                                'invoice_id' => $invoice->client_invoice_id,
-                                'invoice_number' => $invoice->invoice_number,
-                            ];
-                        } catch (\Exception $e) {
-                            $skipped[] = [
-                                'period' => $periodStart->format('Y-m'),
-                                'error' => $e->getMessage(),
-                            ];
-                        }
-                    }
+                    $updated[] = $result;
                 } else {
-                    // Generate new invoice
-                    try {
-                        $invoice = $this->generateInvoice($company, $periodStart, $periodEnd, $agreement);
-                        $generated[] = [
-                            'period' => $periodStart->format('Y-m'),
-                            'invoice_id' => $invoice->client_invoice_id,
-                            'invoice_number' => $invoice->invoice_number,
-                        ];
-                    } catch (\Exception $e) {
-                        $skipped[] = [
-                            'period' => $periodStart->format('Y-m'),
-                            'error' => $e->getMessage(),
-                        ];
-                    }
+                    $generated[] = $result;
                 }
+            } catch (\Exception $e) {
+                $skipped[] = [
+                    'period' => $periodLabel,
+                    'error' => $e->getMessage(),
+                ];
             }
-
-            // Move to next month
-            $currentDate->addMonth();
         }
 
         return [
@@ -336,8 +276,12 @@ class ClientInvoicingService
                 'generated_count' => count($generated),
                 'updated_count' => count($updated),
                 'skipped_count' => count($skipped),
-                'cadence_period_invoices_created' => count($generated),
-                'interim_invoices_created' => 0,
+                'cadence_period_invoices_created' => collect($generated)
+                    ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+                    ->count(),
+                'interim_invoices_created' => collect($generated)
+                    ->where('invoice_kind', InvoiceKind::InterimOverage->value)
+                    ->count(),
             ],
         ];
     }
@@ -365,7 +309,6 @@ class ClientInvoicingService
         Carbon $periodEnd,
         ?ClientAgreement $agreement = null
     ): ClientInvoice {
-        // Get the active agreement if not provided
         if (! $agreement) {
             $agreement = $company->activeAgreement();
             if (! $agreement) {
@@ -373,22 +316,70 @@ class ClientInvoicingService
             }
         }
 
+        $workCycle = $this->billingCycleResolver->cycleContaining($agreement, $periodStart);
         if ($agreement->effectiveBillingCadence() !== BillingCadence::Monthly) {
-            $workCycle = $this->billingCycleResolver->cycleContaining($agreement, $periodStart);
             if (! $periodStart->isSameDay($workCycle->start) || ! $periodEnd->isSameDay($workCycle->end)) {
                 throw new \Exception(
                     'Manual invoices inside an active '.$agreement->effectiveBillingCadence()->value.
                     ' billing cycle are not supported. Generate the full cadence cycle instead.'
                 );
             }
+        } elseif (! $periodStart->isSameDay($workCycle->start) || ! $periodEnd->isSameDay($workCycle->end)) {
+            return $this->generateMonthlyInvoiceForWorkPeriod($company, $periodStart, $periodEnd, $agreement);
+        }
 
-            return $this->generateCadencePeriodInvoice(
+        return $this->generateInvoiceForPeriod(
+            $company,
+            $agreement,
+            $this->nextBillingCycle($agreement, $workCycle),
+        );
+    }
+
+    /**
+     * Generate or refresh the invoice that reconciles the period before
+     * `$retainerPeriod` and bills `$retainerPeriod` in advance.
+     *
+     * @param  array<int, MonthSummary>|null  $ledger
+     * @param  array<int, MonthSummary>|null  $immediateLedger
+     */
+    protected function generateInvoiceForPeriod(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        BillingCycle $retainerPeriod,
+        bool $generateMissingInterims = true,
+        ?array $ledger = null,
+        ?array $immediateLedger = null,
+    ): ClientInvoice {
+        $workCycle = $this->previousBillingCycle($agreement, $retainerPeriod);
+
+        if ($agreement->effectiveBillingCadence() === BillingCadence::Monthly) {
+            return $this->generateMonthlyInvoiceForWorkPeriod(
                 $company,
+                $workCycle->start->copy()->startOfDay(),
+                $workCycle->end->copy()->startOfDay(),
                 $agreement,
-                $this->nextBillingCycle($agreement, $workCycle),
             );
         }
 
+        return $this->generateNonMonthlyInvoiceForPeriod(
+            $company,
+            $agreement,
+            $retainerPeriod,
+            $generateMissingInterims,
+            $ledger,
+            $immediateLedger,
+        );
+    }
+
+    /**
+     * Generate a monthly cadence invoice for one work period.
+     */
+    protected function generateMonthlyInvoiceForWorkPeriod(
+        ClientCompany $company,
+        Carbon $periodStart,
+        Carbon $periodEnd,
+        ClientAgreement $agreement,
+    ): ClientInvoice {
         // Check for an existing invoice for this exact period
         $invoice = ClientInvoice::where('client_company_id', $company->id)
             ->where('client_agreement_id', $agreement->id)
@@ -882,111 +873,7 @@ class ClientInvoicingService
     }
 
     /**
-     * Generate cadence-period invoices for a non-monthly agreement.
-     *
-     * @return array{
-     *     generated: list<array<string, mixed>>,
-     *     updated: list<array<string, mixed>>,
-     *     skipped: list<array<string, mixed>>,
-     *     summary: array{
-     *         generated_count: int,
-     *         updated_count: int,
-     *         skipped_count: int,
-     *         cadence_period_invoices_created: int,
-     *         interim_invoices_created: int
-     *     }
-     * }
-     */
-    protected function generateAllCadenceInvoices(ClientCompany $company, ClientAgreement $agreement): array
-    {
-        $through = $this->cadenceRetainerGenerationThroughDate($agreement);
-        $billExcessImmediately = (bool) $agreement->bill_overage_interim;
-        $cycleLedger = $this->invoiceLedgerBuilder->buildAgreementLedgerThrough(
-            $company,
-            $agreement,
-            $through,
-            $billExcessImmediately,
-        );
-        $immediateLedger = $billExcessImmediately ? $cycleLedger : null;
-        $generated = [];
-        $updated = [];
-        $skipped = [];
-
-        foreach ($this->cadenceRetainerPeriodsThrough($agreement, $through) as $retainerPeriod) {
-            $workCycle = $this->previousBillingCycle($agreement, $retainerPeriod);
-            if ($workCycle->end->gte(Carbon::parse($agreement->active_date)->startOfDay())) {
-                $interimResults = $this->ensureInterimOveragesForCycle($company, $agreement, $workCycle, $immediateLedger);
-                foreach ($interimResults['generated'] as $result) {
-                    $generated[] = $result;
-                }
-                foreach ($interimResults['updated'] as $result) {
-                    $updated[] = $result;
-                }
-            }
-
-            $existingInvoice = ClientInvoice::query()
-                ->where('client_company_id', $company->id)
-                ->where('client_agreement_id', $agreement->id)
-                ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                ->whereDate('period_start', $workCycle->start->toDateString())
-                ->whereDate('period_end', $workCycle->end->toDateString())
-                ->first();
-
-            $periodLabel = $this->formatPeriodLabel($workCycle->start, $workCycle->end).
-                ' -> '.$this->formatPeriodLabel($retainerPeriod->start, $retainerPeriod->end);
-            if ($existingInvoice && in_array($existingInvoice->status, ['issued', 'paid', 'void'], true)) {
-                $skipped[] = [
-                    'period' => $periodLabel,
-                    'invoice_id' => $existingInvoice->client_invoice_id,
-                    'status' => $existingInvoice->status,
-                    'reason' => 'Invoice already exists with status: '.$existingInvoice->status,
-                ];
-
-                continue;
-            }
-
-            try {
-                $invoice = $this->generateCadencePeriodInvoice($company, $agreement, $retainerPeriod, false, $cycleLedger);
-                $result = [
-                    'period' => $periodLabel,
-                    'invoice_id' => $invoice->client_invoice_id,
-                    'invoice_number' => $invoice->invoice_number,
-                    'invoice_kind' => $invoice->invoiceKindValue(),
-                ];
-
-                if ($existingInvoice) {
-                    $updated[] = $result;
-                } else {
-                    $generated[] = $result;
-                }
-            } catch (\Exception $e) {
-                $skipped[] = [
-                    'period' => $periodLabel,
-                    'error' => $e->getMessage(),
-                ];
-            }
-        }
-
-        return [
-            'generated' => $generated,
-            'updated' => $updated,
-            'skipped' => $skipped,
-            'summary' => [
-                'generated_count' => count($generated),
-                'updated_count' => count($updated),
-                'skipped_count' => count($skipped),
-                'cadence_period_invoices_created' => collect($generated)
-                    ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
-                    ->count(),
-                'interim_invoices_created' => collect($generated)
-                    ->where('invoice_kind', InvoiceKind::InterimOverage->value)
-                    ->count(),
-            ],
-        ];
-    }
-
-    /**
-     * Generate or refresh one cadence-period invoice.
+     * Generate or refresh one non-monthly cadence-period invoice.
      *
      * The invoice reconciles the prior billing cycle while billing the supplied
      * retainer period in advance. `period_start` / `period_end` identify the
@@ -995,7 +882,7 @@ class ClientInvoicingService
      * @param  array<int, MonthSummary>|null  $ledger
      * @param  array<int, MonthSummary>|null  $immediateLedger
      */
-    protected function generateCadencePeriodInvoice(
+    protected function generateNonMonthlyInvoiceForPeriod(
         ClientCompany $company,
         ClientAgreement $agreement,
         BillingCycle $retainerPeriod,
@@ -1282,10 +1169,35 @@ class ClientInvoicingService
     }
 
     /**
-     * Resolve the last date invoice generation should cover for cadence-based agreements.
+     * Resolve the last retainer date invoice generation should cover.
      */
-    protected function cadenceRetainerGenerationThroughDate(ClientAgreement $agreement): Carbon
-    {
+    protected function retainerGenerationThroughDate(
+        ClientAgreement $agreement,
+        ?ClientAgreement $successorAgreement = null,
+    ): Carbon {
+        if ($agreement->effectiveBillingCadence() === BillingCadence::Monthly) {
+            $retainerPeriodStart = now()->startOfMonth()->addMonth();
+            $terminationDate = $agreement->termination_date
+                ? Carbon::parse($agreement->termination_date)->startOfDay()
+                : null;
+
+            if ($successorAgreement !== null && $terminationDate !== null) {
+                $successorCatchUpStart = Carbon::parse($successorAgreement->active_date)
+                    ->startOfMonth()
+                    ->subMonth();
+                $terminationSegmentEnd = $terminationDate->copy()->startOfMonth()->addMonth();
+                $segmentEnd = $successorCatchUpStart->gt($terminationSegmentEnd)
+                    ? $successorCatchUpStart
+                    : $terminationSegmentEnd;
+
+                if ($segmentEnd->lt($retainerPeriodStart)) {
+                    $retainerPeriodStart = $segmentEnd;
+                }
+            }
+
+            return $retainerPeriodStart->copy()->endOfMonth()->startOfDay();
+        }
+
         $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
         $referenceDate = now()->startOfDay();
 
@@ -1306,7 +1218,7 @@ class ClientInvoicingService
     /**
      * @return iterable<BillingCycle>
      */
-    protected function cadenceRetainerPeriodsThrough(ClientAgreement $agreement, Carbon $through): iterable
+    protected function retainerPeriodsThrough(ClientAgreement $agreement, Carbon $through): iterable
     {
         $cursor = $this->billingCycleResolver->cycleContaining(
             $agreement,
@@ -1317,6 +1229,76 @@ class ClientInvoicingService
             yield $cursor;
             $cursor = $this->nextBillingCycle($agreement, $cursor);
         }
+    }
+
+    protected function findGeneratedInvoiceForWorkCycle(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        BillingCycle $workCycle,
+    ): ?ClientInvoice {
+        return ClientInvoice::query()
+            ->where('client_company_id', $company->id)
+            ->where('client_agreement_id', $agreement->id)
+            ->where('invoice_kind', InvoiceKind::CadencePeriod->value)
+            ->whereDate('period_start', $workCycle->start->toDateString())
+            ->whereDate('period_end', $workCycle->end->toDateString())
+            ->first();
+    }
+
+    /**
+     * @param  array<string, true>|null  $monthsWithUnbilledPostTermination
+     */
+    protected function shouldSkipEmptyPostTerminationWorkCycle(
+        ClientCompany $company,
+        ClientAgreement $agreement,
+        BillingCycle $workCycle,
+        ?ClientInvoice $existingInvoice,
+        ?array &$monthsWithUnbilledPostTermination,
+    ): bool {
+        $terminationDate = $agreement->termination_date
+            ? Carbon::parse($agreement->termination_date)->startOfDay()
+            : null;
+
+        if ($terminationDate === null || $existingInvoice !== null || ! $workCycle->start->gt($terminationDate)) {
+            return false;
+        }
+
+        if ($monthsWithUnbilledPostTermination === null) {
+            $workMonths = ClientTimeEntry::query()
+                ->where('client_company_id', $company->id)
+                ->where('is_billable', true)
+                ->whereNull('client_invoice_line_id')
+                ->where('date_worked', '>', $terminationDate->toDateString())
+                ->pluck('date_worked')
+                ->map(fn ($date): string => substr((string) $date, 0, 7))
+                ->all();
+
+            $expenseMonths = ClientExpense::query()
+                ->where('client_company_id', $company->id)
+                ->where('is_reimbursable', true)
+                ->whereNull('client_invoice_line_id')
+                ->where('expense_date', '>', $terminationDate->toDateString())
+                ->pluck('expense_date')
+                ->map(fn ($date): string => substr((string) $date, 0, 7))
+                ->all();
+
+            $monthsWithUnbilledPostTermination = array_fill_keys(
+                array_unique(array_merge($workMonths, $expenseMonths)),
+                true,
+            );
+        }
+
+        $cursor = $workCycle->start->copy()->startOfMonth();
+        $endMonth = $workCycle->end->copy()->startOfMonth();
+        while ($cursor->lte($endMonth)) {
+            if (isset($monthsWithUnbilledPostTermination[$cursor->format('Y-m')])) {
+                return false;
+            }
+
+            $cursor->addMonth()->startOfMonth();
+        }
+
+        return true;
     }
 
     protected function nextBillingCycle(ClientAgreement $agreement, BillingCycle $cycle): BillingCycle
@@ -1480,6 +1462,20 @@ class ClientInvoicingService
         }
 
         return $periodStart->format('Y-m').'..'.$periodEnd->format('Y-m');
+    }
+
+    protected function generationPeriodLabel(
+        ClientAgreement $agreement,
+        BillingCycle $workCycle,
+        BillingCycle $retainerPeriod,
+    ): string {
+        $workLabel = $this->formatPeriodLabel($workCycle->start, $workCycle->end);
+
+        if ($agreement->effectiveBillingCadence() === BillingCadence::Monthly) {
+            return $workLabel;
+        }
+
+        return $workLabel.' -> '.$this->formatPeriodLabel($retainerPeriod->start, $retainerPeriod->end);
     }
 
     /**
