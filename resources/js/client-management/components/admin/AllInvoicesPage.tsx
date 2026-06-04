@@ -200,6 +200,7 @@ export default function AllInvoicesPage() {
 
       {sendInvoice && sendInvoice.company_id != null && (
         <SendInvoiceDialog
+          key={`${sendInvoice.company_id}-${sendInvoice.id}`}
           open={sendInvoice !== null}
           onOpenChange={(open) => {
             if (!open) {

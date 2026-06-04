@@ -39,7 +39,6 @@ export interface AdminInvoice {
   company_name?: string | null
   last_emailed_at?: string | null
   billing_email?: string | null
-  recipient_suggestions?: string[]
 }
 
 interface AdminInvoiceListProps {
@@ -337,6 +336,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
 
       {sendInvoice && (
         <SendInvoiceDialog
+          key={`${companyId}-${sendInvoice.id}`}
           open={sendInvoice !== null}
           onOpenChange={(open) => {
             if (!open) {

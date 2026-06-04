@@ -116,6 +116,37 @@ class SendClientInvoiceTest extends TestCase
         $this->assertEquals($originalBillingEmail, $this->company->fresh()->billing_email);
     }
 
+    public function test_admin_can_load_billing_recipients_for_company(): void
+    {
+        $this->company->update(['billing_email' => 'billing@example.com']);
+
+        $leadUser = User::factory()->create(['email' => 'lead@example.com']);
+        $billingUser = User::factory()->create(['email' => 'portal-billing@example.com']);
+        $this->company->users()->attach([$leadUser->id, $billingUser->id]);
+
+        $this->actingAs($this->admin)
+            ->getJson("/api/client/mgmt/companies/{$this->company->id}/billing-recipients")
+            ->assertStatus(200)
+            ->assertExactJson([
+                'billing_email' => 'billing@example.com',
+                'recipient_suggestions' => [
+                    'lead@example.com',
+                    'portal-billing@example.com',
+                ],
+            ]);
+    }
+
+    public function test_non_admin_cannot_load_billing_recipients_for_company(): void
+    {
+        $regularUser = User::factory()->create([
+            'user_role' => 'user',
+        ]);
+
+        $this->actingAs($regularUser)
+            ->getJson("/api/client/mgmt/companies/{$this->company->id}/billing-recipients")
+            ->assertStatus(403);
+    }
+
     public function test_cannot_email_a_draft_invoice(): void
     {
         $invoice = $this->invoicingService->generateInvoice(

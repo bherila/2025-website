@@ -60,6 +60,7 @@ class AllInvoicesIndexTest extends TestCase
     {
         [$companyA] = $this->makeCompanyWithInvoice('Alpha Co', 'alpha-co');
         [$companyB] = $this->makeCompanyWithInvoice('Beta Co', 'beta-co');
+        $companyA->update(['billing_email' => 'billing-alpha@example.com']);
 
         $response = $this->actingAs($this->admin)
             ->getJson('/api/client/mgmt/invoices');
@@ -77,6 +78,11 @@ class AllInvoicesIndexTest extends TestCase
         $response->assertJsonStructure([
             '*' => ['id', 'company_name', 'invoice_number', 'status', 'invoice_total'],
         ]);
+
+        $companyAInvoice = collect($data)->firstWhere('company_id', $companyA->id);
+        $this->assertIsArray($companyAInvoice);
+        $this->assertSame('billing-alpha@example.com', $companyAInvoice['billing_email']);
+        $this->assertArrayNotHasKey('recipient_suggestions', $companyAInvoice);
     }
 
     public function test_non_admin_cannot_list_all_invoices(): void

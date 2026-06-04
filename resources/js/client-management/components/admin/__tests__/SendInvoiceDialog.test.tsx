@@ -9,10 +9,12 @@ import type { NormalizedInvoice } from '../../shared/invoices/invoiceAdapters'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
+    get: jest.fn(),
     post: jest.fn(),
   },
 }))
 
+const mockGet = fetchWrapper.get as jest.Mock
 const mockPost = fetchWrapper.post as jest.Mock
 
 const invoice: NormalizedInvoice = {
@@ -32,31 +34,56 @@ const invoice: NormalizedInvoice = {
 
 describe('SendInvoiceDialog', () => {
   beforeEach(() => {
+    mockGet.mockReset()
     mockPost.mockReset()
+    mockGet.mockResolvedValue({ billing_email: 'billing@acme.test', recipient_suggestions: [] })
     mockPost.mockResolvedValue({ message: 'Invoice emailed successfully.', last_emailed_at: '2026-06-04T00:00:00Z' })
   })
 
-  it('pre-fills the To field with the company billing email', () => {
+  it('pre-fills the To field with the company billing email and loads recipients on open', async () => {
     render(
       <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={invoice} />,
     )
 
     const toField = screen.getByLabelText('To') as HTMLInputElement
     expect(toField.value).toBe('billing@acme.test')
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/api/client/mgmt/companies/7/billing-recipients')
+    })
   })
 
-  it('falls back to a recipient suggestion when billing_email is an empty string', () => {
+  it('renders loaded recipient suggestions as quick-add chips', async () => {
+    mockGet.mockResolvedValue({
+      billing_email: 'billing@acme.test',
+      recipient_suggestions: ['lead@acme.test', 'ops@acme.test'],
+    })
+
     render(
-      <SendInvoiceDialog
-        open
-        onOpenChange={jest.fn()}
-        companyId={7}
-        invoice={{ ...invoice, billing_email: '', recipient_suggestions: ['lead@acme.test'] }}
-      />,
+      <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={invoice} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /lead@acme\.test/ }))
+
+    const toField = screen.getByLabelText('To') as HTMLInputElement
+    expect(toField.value).toBe('billing@acme.test, lead@acme.test')
+  })
+
+  it('uses the loaded billing email when the summary does not have one', async () => {
+    mockGet.mockResolvedValue({
+      billing_email: 'fresh-billing@acme.test',
+      recipient_suggestions: ['lead@acme.test'],
+    })
+
+    render(
+      <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={{ ...invoice, billing_email: null }} />,
     )
 
     const toField = screen.getByLabelText('To') as HTMLInputElement
-    expect(toField.value).toBe('lead@acme.test')
+
+    await waitFor(() => {
+      expect(toField.value).toBe('fresh-billing@acme.test')
+    })
   })
 
   it('posts to the send endpoint with the recipients as an array when Send is clicked', async () => {
@@ -86,6 +113,8 @@ describe('SendInvoiceDialog', () => {
   })
 
   it('shows a validation error and does not post when To is empty', async () => {
+    mockGet.mockResolvedValue({ billing_email: null, recipient_suggestions: [] })
+
     render(
       <SendInvoiceDialog
         open
