@@ -8,10 +8,6 @@
             margin: 14mm;
         }
 
-        * {
-            box-sizing: border-box;
-        }
-
         body {
             color: #111827;
             font-family: "DejaVu Sans", sans-serif;

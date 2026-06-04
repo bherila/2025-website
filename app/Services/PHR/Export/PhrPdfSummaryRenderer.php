@@ -4,7 +4,6 @@ namespace App\Services\PHR\Export;
 
 use App\Models\PhrAllergy;
 use App\Models\PhrCondition;
-use App\Models\PhrDicomFile;
 use App\Models\PhrDicomStudy;
 use App\Models\PhrDocument;
 use App\Models\PhrImmunization;
@@ -35,7 +34,6 @@ class PhrPdfSummaryRenderer
      *     allergies: Collection<int, PhrAllergy>,
      *     office_visits: Collection<int, PhrOfficeVisit>,
      *     dicom_studies: Collection<int, PhrDicomStudy>,
-     *     dicom_files: Collection<int, PhrDicomFile>,
      *     documents: Collection<int, PhrDocument>
      * }  $data
      */
