@@ -8,6 +8,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private const LEGACY_LOGIN_EVENTS = [
+        'login_succeeded',
+        'login_failed',
+        'login_blocked',
+        'passkey_login_succeeded',
+        'passkey_login_failed',
+    ];
+
     public function up(): void
     {
         $auditTable = config('bherila-auth.audit.table', 'auth_audit_log');
@@ -109,7 +117,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained(table: 'users', indexName: 'login_audit_log_user_id_fk')->nullOnDelete();
             $table->string('email')->nullable();
-            $table->binary('ip_address')->nullable();
+            $table->binary('ip_address', 16)->nullable();
             $table->text('user_agent')->nullable();
             $table->boolean('success')->default(false);
             $table->string('method')->default('password');
@@ -154,7 +162,7 @@ return new class extends Migration
             'is_suspicious',
             'created_at',
             'updated_at',
-        ]);
+        ])->whereIn('event', self::LEGACY_LOGIN_EVENTS);
     }
 
     private function legacyEventExpression(): string
