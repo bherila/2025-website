@@ -15,6 +15,7 @@ import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import {
   getK1ActivityClassification,
   getK1CompletenessChecklist,
+  getK1SourceValueOverrides,
   getSbpElection,
   getUnroutedCodes,
 } from '@/lib/finance/k1Utils'
@@ -94,6 +95,45 @@ function amtCls(n: number | null): string {
 function renderAmt(n: number | null): string {
   if (n === null) return '—'
   return fmtAmt(n)
+}
+
+function renderOverrideValue(value: string | null | undefined): string {
+  const amount = parseFieldVal(value)
+  return amount === null ? (value ?? '—') : fmtAmt(amount)
+}
+
+function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.ReactElement | null {
+  const overrides = Object.entries(getK1SourceValueOverrides(data))
+  if (overrides.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <Badge variant="outline" className="border-warning/40 text-[9px] text-warning">Override</Badge>
+        <div className="text-xs font-semibold text-warning">All-in-One source value overrides</div>
+      </div>
+      <div className="space-y-1">
+        {overrides.map(([key, override]) => (
+          <div key={key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 text-xs">
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{override.label ?? key}</div>
+              <div className="truncate text-[10px] text-muted-foreground">{key}</div>
+            </div>
+            <div className="text-right">
+              <div className="font-currency tabular-nums text-warning">{renderOverrideValue(override.value)}</div>
+              {override.originalValue !== undefined && override.originalValue !== null ? (
+                <div className="font-currency text-[10px] tabular-nums text-muted-foreground line-through">
+                  {renderOverrideValue(override.originalValue)}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function renderBox11ItemsLine(box11Items: K1CodeItem[], onOpenCodes: (box: string) => void): ReactNode {
@@ -1534,6 +1574,8 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
 
       {/* Unrouted codes callout — shows before main content so it's not missed */}
       <UnroutedCodesCallout data={data} />
+
+      <SourceOverridesCallout data={data} />
 
       {/* Entity / Partner Info — collapsible */}
       <EntityInfoSection data={data} readOnly={readOnly} onUpdate={updateField} />

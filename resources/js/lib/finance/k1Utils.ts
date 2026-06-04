@@ -3,7 +3,7 @@ import currency from 'currency.js'
 import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
 import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import { parseMoney, parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
-import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
+import type { FK1StructuredData, K1CodeItem, K1SourceValueOverride, K1SourceValueOverrides } from '@/types/finance/k1-data'
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
 /**
@@ -23,7 +23,66 @@ export function getSbpElection(data: unknown): boolean {
   return data.k3Elections?.sourcedByPartnerAsUSSource !== false
 }
 
+export function k1FieldOverrideKey(box: string): string {
+  return `field:${box}`
+}
+
+export function k1CodeOverrideKey(box: string, code: string): string {
+  return `code:${box}:${normalizeK1Code(code)}`
+}
+
+export function k3ForeignTaxTotalOverrideKey(): string {
+  return 'k3:foreign-tax-total'
+}
+
+export function k3Part2OverrideKey(line: string, category: string): string {
+  return `k3:part2:${line}:${category}`
+}
+
+export function k3Part3OverrideKey(country: string): string {
+  return `k3:part3:${country}`
+}
+
+export function getK1SourceValueOverrides(data: FK1StructuredData): K1SourceValueOverrides {
+  return data.sourceValueOverrides ?? {}
+}
+
+export function getK1SourceValueOverride(data: FK1StructuredData, key: string): K1SourceValueOverride | null {
+  return getK1SourceValueOverrides(data)[key] ?? null
+}
+
+export function hasK1SourceValueOverride(data: FK1StructuredData, key: string): boolean {
+  return getK1SourceValueOverride(data, key) !== null
+}
+
+export function parseK1SourceValueOverride(data: FK1StructuredData, key: string): number | null {
+  const override = getK1SourceValueOverride(data, key)
+  return override ? parseMoney(override.value) : null
+}
+
+export function withK1SourceValueOverride(
+  data: FK1StructuredData,
+  key: string,
+  override: K1SourceValueOverride | null,
+): FK1StructuredData {
+  const overrides = { ...(data.sourceValueOverrides ?? {}) }
+  if (override) {
+    overrides[key] = override
+  } else {
+    delete overrides[key]
+  }
+
+  if (Object.keys(overrides).length === 0) {
+    const { sourceValueOverrides: _sourceValueOverrides, ...rest } = data
+    return rest
+  }
+
+  return { ...data, sourceValueOverrides: overrides }
+}
+
 export function parseK1Field(data: FK1StructuredData, box: string): number {
+  const override = parseK1SourceValueOverride(data, k1FieldOverrideKey(box))
+  if (override !== null) return override
   return parseMoneyOrZero(data.fields[box]?.value)
 }
 
@@ -48,10 +107,14 @@ export function getK1PartnerName(data: FK1StructuredData, fallback = 'Partnershi
 }
 
 export function sumK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  const override = parseK1SourceValueOverride(data, k1CodeOverrideKey(box, code))
+  if (override !== null) return override
   return sumMoneyValues(getK1CodeItems(data, box, code).map((item) => item.value))
 }
 
 export function sumAbsK1CodeItems(data: FK1StructuredData, box: string, code: string): number {
+  const override = parseK1SourceValueOverride(data, k1CodeOverrideKey(box, code))
+  if (override !== null) return Math.abs(override)
   // Box 13 deduction helpers intentionally treat reported values as positive magnitudes.
   return getK1CodeItems(data, box, code)
     .reduce((acc, item) => acc.add(Math.abs(parseMoneyOrZero(item.value))), currency(0)).value

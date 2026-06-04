@@ -253,7 +253,55 @@ abstract class TaxPreviewFactBuilder
      */
     protected function k1Field(array $data, string $box): float
     {
+        $override = $this->k1SourceOverrideValue($data, $this->k1FieldOverrideKey($box));
+        if ($override !== null) {
+            return $override;
+        }
+
         return $this->parseMoney($data['fields'][$box]['value'] ?? null) ?? 0.0;
+    }
+
+    protected function k1FieldOverrideKey(string $box): string
+    {
+        return "field:{$box}";
+    }
+
+    protected function k1CodeOverrideKey(string $box, string $code): string
+    {
+        return sprintf('code:%s:%s', $box, strtoupper(trim($code)));
+    }
+
+    protected function k3ForeignTaxTotalOverrideKey(): string
+    {
+        return 'k3:foreign-tax-total';
+    }
+
+    protected function k3Part2OverrideKey(string $line, string $category): string
+    {
+        return "k3:part2:{$line}:{$category}";
+    }
+
+    protected function k3Part3OverrideKey(string $country): string
+    {
+        return "k3:part3:{$country}";
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function k1SourceOverrideValue(array $data, string $key): ?float
+    {
+        $overrides = $data['sourceValueOverrides'] ?? null;
+        if (! is_array($overrides)) {
+            return null;
+        }
+
+        $override = $overrides[$key] ?? null;
+        if (! is_array($override)) {
+            return null;
+        }
+
+        return $this->parseMoney($override['value'] ?? null);
     }
 
     /**
@@ -262,6 +310,16 @@ abstract class TaxPreviewFactBuilder
      */
     protected function k1CodeItems(array $data, string $box, string $code): array
     {
+        $override = $this->k1SourceOverrideValue($data, $this->k1CodeOverrideKey($box, $code));
+        if ($override !== null) {
+            return [[
+                'code' => strtoupper(trim($code)),
+                'value' => (string) $override,
+                'manualOverride' => true,
+                'notes' => 'All-in-One source value override',
+            ]];
+        }
+
         $items = $data['codes'][$box] ?? [];
         if (! is_array($items)) {
             return [];

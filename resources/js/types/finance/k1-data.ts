@@ -56,6 +56,20 @@ export interface K1ExtractionInfo {
   source?: string
 }
 
+/** User override for a value shown from the All-in-One K-1/K-3 source grid. */
+export interface K1SourceValueOverride {
+  /** Replacement amount or text stored as a string so it mirrors extracted source values. */
+  value: string
+  /** Source value at the time the override was saved, for audit display. */
+  originalValue?: string | null
+  /** Human label of the overridden source line. */
+  label?: string | null
+  /** Client-side timestamp for display only. */
+  updatedAt?: string | null
+}
+
+export type K1SourceValueOverrides = Record<string, K1SourceValueOverride>
+
 /**
  * Section 199A Statement A — attached to Box 20 Code Z (TY 2023+).
  *
@@ -135,6 +149,8 @@ export interface FK1StructuredData {
     sections: K3Section[]
   }
   k3Elections?: K3Elections
+  /** User-entered source-value overrides keyed by stable source path. */
+  sourceValueOverrides?: K1SourceValueOverrides
   raw_text?: string | null
   warnings?: string[] | null
   extraction?: K1ExtractionInfo

@@ -44,6 +44,7 @@ describe('MillerColumnShell', () => {
           { ...COLUMN, key: 'default', id: 'default' },
           { ...COLUMN, key: 'wide', id: 'wide', size: 'wide' },
           { ...COLUMN, key: 'full', id: 'full', size: 'full' },
+          { ...COLUMN, key: 'viewport', id: 'viewport', size: 'viewport' },
         ]}
       />,
     )
@@ -53,6 +54,8 @@ describe('MillerColumnShell', () => {
     expectColumnClass('wide', 'md:w-[760px]')
     expectColumnClass('full', 'md:w-[1040px]')
     expectColumnClass('full', 'xl:w-[1200px]')
+    expectColumnClass('viewport', 'w-screen')
+    expectColumnClass('viewport', 'max-w-screen')
   })
 
   it('keeps deprecated wide columns compatible with the wide size', () => {
