@@ -96,7 +96,10 @@ export function feeStatusFromAmounts(
   tolerance: number
 ): FeeStatus | null {
   if (!hasExpectation) return null
-  if (expected === 0) return actual === 0 ? 'on_target' : 'over'
+  if (expected === 0) {
+    if (actual === 0) return 'on_target'
+    return actual < 0 ? 'under' : 'over'
+  }
 
   const toleranceAmount = currency(expected).multiply(tolerance).value
   if (actual < currency(expected).subtract(toleranceAmount).value) return 'under'

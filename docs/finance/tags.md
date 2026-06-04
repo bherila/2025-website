@@ -109,6 +109,15 @@ These characteristics do **not** require an employment entity link.
 | `qualified_dividend` | Qualified dividends (1099-DIV) |
 | `other_ordinary_income` | Other ordinary income |
 
+### Investment Management Fees
+
+These characteristics drive the Fees tab buckets and K-1 fee reconciliation. See [fees.md](fees.md) for the signed fee convention, net bucket math, and gross K-1 comparison behavior.
+
+| Value | Description |
+|-------|-------------|
+| `fee_irc67g` | Investment management fee treated as personal Section 67(g) fees |
+| `fee_schE` | Investment management fee treated as Schedule E fees |
+
 ---
 
 ## Employment Entity Linking

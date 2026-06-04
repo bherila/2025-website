@@ -20,6 +20,11 @@ class FeeAnalyticsService
 
     private const array FEE_CHARACTERISTICS = ['fee_schE', 'fee_irc67g'];
 
+    /**
+     * These transaction types store fee charges as negative t_amt and credits
+     * as positive t_amt, so signed fee cost is -t_amt. Other fee rows use
+     * the signed t_fee column directly, where charges are positive.
+     */
     private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
 
     // Keep in sync with resources/js/lib/finance/transactionTypes.ts.
@@ -164,8 +169,9 @@ class FeeAnalyticsService
     public function reconcileK1Fees(int $accountId, int $year, ?array $actual = null): array
     {
         $actual ??= $this->actualFeesForAccount($accountId, $year);
-        $statementSchE = $actual['by_characteristic']['fee_schE'];
-        $statementIrc67g = $actual['by_characteristic']['fee_irc67g'];
+        $grossStatementFees = $this->grossStatementFeeBucketsForAccount($accountId, $year, $actual);
+        $statementSchE = $grossStatementFees['fee_schE'];
+        $statementIrc67g = $grossStatementFees['fee_irc67g'];
 
         $documents = FileForTaxDocument::query()
             ->with(['accountLinks', 'employmentEntity'])
@@ -226,10 +232,10 @@ class FeeAnalyticsService
     public function feeAmountForLineItem(FinAccountLineItems $row): float
     {
         if ($this->isFeeType($row->t_type)) {
-            return MoneyMath::round(abs((float) ($row->t_amt ?? 0)));
+            return $this->signedFeeCostFromTransactionAmount($row->t_amt);
         }
 
-        return MoneyMath::round(abs((float) ($row->t_fee ?? 0)));
+        return $this->signedFeeCostFromFeeColumn($row->t_fee);
     }
 
     public function accountHasExpectedFees(FinAccounts $account): bool
@@ -246,7 +252,11 @@ class FeeAnalyticsService
         }
 
         if ($expected === 0.0) {
-            return $actual === 0.0 ? 'on_target' : 'over';
+            if ($actual === 0.0) {
+                return 'on_target';
+            }
+
+            return $actual < 0.0 ? 'under' : 'over';
         }
 
         $tolerance = abs($expected) * self::ON_TARGET_TOLERANCE;
@@ -363,12 +373,12 @@ class FeeAnalyticsService
      */
     private function actualFeesForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end, bool $includeLineItems): array
     {
-        $totals = ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0];
+        $totals = $this->emptyFeeBuckets();
         $lineItems = [];
 
         foreach ($this->feeLineItemsForPeriod($accountId, $start, $end) as $row) {
             $feeAmount = $this->feeAmountForLineItem($row);
-            if ($feeAmount <= 0.0) {
+            if ($feeAmount === 0.0) {
                 continue;
             }
 
@@ -451,6 +461,97 @@ class FeeAnalyticsService
     private function isFeeType(mixed $type): bool
     {
         return is_string($type) && in_array(strtolower(trim($type)), self::FEE_TRANSACTION_TYPES, true);
+    }
+
+    private function signedFeeCostFromTransactionAmount(mixed $transactionAmount): float
+    {
+        return MoneyMath::subtract(0, (float) ($transactionAmount ?? 0));
+    }
+
+    private function signedFeeCostFromFeeColumn(mixed $feeAmount): float
+    {
+        return MoneyMath::round((float) ($feeAmount ?? 0));
+    }
+
+    /**
+     * @param  array{total:float,by_characteristic:array{fee_schE:float,fee_irc67g:float,untagged:float},line_items:array<int, array<string, mixed>>}|null  $actual
+     * @return array{fee_schE:float,fee_irc67g:float,untagged:float}
+     */
+    private function grossStatementFeeBucketsForAccount(int $accountId, int $year, ?array $actual): array
+    {
+        $lineItems = $actual['line_items'] ?? [];
+        if ($lineItems !== []) {
+            return $this->grossStatementFeeBucketsFromPayload($lineItems);
+        }
+
+        $account = FinAccounts::query()->where('acct_id', $accountId)->first();
+        if ($account instanceof FinAccounts) {
+            $period = $this->accountPeriodForYear($account, $year);
+            if ($period === null) {
+                return $this->emptyFeeBuckets();
+            }
+
+            [$start, $end] = $period;
+
+            return $this->grossStatementFeeBucketsForPeriod($accountId, $start, $end);
+        }
+
+        [$start, $end] = $this->yearBounds($year);
+
+        return $this->grossStatementFeeBucketsForPeriod($accountId, $start, $end);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lineItems
+     * @return array{fee_schE:float,fee_irc67g:float,untagged:float}
+     */
+    private function grossStatementFeeBucketsFromPayload(array $lineItems): array
+    {
+        $totals = $this->emptyFeeBuckets();
+
+        foreach ($lineItems as $lineItem) {
+            $feeAmount = MoneyMath::round(abs((float) ($lineItem['fee_amount'] ?? 0)));
+            if ($feeAmount === 0.0) {
+                continue;
+            }
+
+            $bucket = $this->bucketForPayloadLineItem($lineItem);
+            $totals[$bucket] = MoneyMath::add($totals[$bucket], $feeAmount);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @return array{fee_schE:float,fee_irc67g:float,untagged:float}
+     */
+    private function grossStatementFeeBucketsForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $totals = $this->emptyFeeBuckets();
+
+        foreach ($this->feeLineItemsForPeriod($accountId, $start, $end) as $row) {
+            $feeAmount = MoneyMath::round(abs($this->feeAmountForLineItem($row)));
+            if ($feeAmount === 0.0) {
+                continue;
+            }
+
+            $bucket = $this->bucketForLineItem($row);
+            $totals[$bucket] = MoneyMath::add($totals[$bucket], $feeAmount);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @param  array<string, mixed>  $lineItem
+     */
+    private function bucketForPayloadLineItem(array $lineItem): string
+    {
+        $characteristic = $lineItem['tax_characteristic'] ?? null;
+
+        return is_string($characteristic) && in_array($characteristic, self::FEE_CHARACTERISTICS, true)
+            ? $characteristic
+            : 'untagged';
     }
 
     /**
@@ -781,8 +882,16 @@ class FeeAnalyticsService
     {
         return [
             'total' => 0.0,
-            'by_characteristic' => ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0],
+            'by_characteristic' => $this->emptyFeeBuckets(),
             'line_items' => [],
         ];
+    }
+
+    /**
+     * @return array{fee_schE:float,fee_irc67g:float,untagged:float}
+     */
+    private function emptyFeeBuckets(): array
+    {
+        return ['fee_schE' => 0.0, 'fee_irc67g' => 0.0, 'untagged' => 0.0];
     }
 }
