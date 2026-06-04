@@ -108,7 +108,7 @@ function fieldWithEnabledOverride(field: K1FieldValue | undefined): K1FieldValue
   return {
     ...current,
     originalValue: current.manualOverride === true
-      ? (current.originalValue ?? current.value)
+      ? (current.originalValue !== undefined ? current.originalValue : current.value)
       : current.value,
     manualOverride: true,
   }
@@ -126,7 +126,7 @@ function fieldWithUpdatedOverrideValue(field: K1FieldValue | undefined, value: s
 function fieldWithClearedOverride(field: K1FieldValue | undefined): K1FieldValue {
   const current = field ?? { value: null }
   const restoredValue = current.manualOverride === true
-    ? (current.originalValue ?? current.value)
+    ? (current.originalValue !== undefined ? current.originalValue : current.value)
     : current.value
   const restored = {
     ...current,

@@ -250,6 +250,37 @@ describe('K1ReviewPanel — clearable source overrides', () => {
     expect(screen.getByText('Source Partnership')).toBeInTheDocument()
   })
 
+  it('restores null source values when clearing field overrides', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: null },
+          },
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Entity \/ Partner Info/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+
+    const overrideInput = screen.getByRole('textbox')
+    fireEvent.change(overrideInput, {
+      target: { value: 'Manual Partnership' },
+    })
+
+    expect(readPanelData().fields.B).toMatchObject({
+      value: 'Manual Partnership',
+      originalValue: null,
+      manualOverride: true,
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+
+    expect(readPanelData().fields.B).toEqual({ value: null })
+    expect(screen.queryByDisplayValue('Manual Partnership')).not.toBeInTheDocument()
+  })
+
   it('saves code row overrides with a source snapshot and clears them after reload', () => {
     const sourceItems: K1CodeItem[] = [{
       code: 'S',
