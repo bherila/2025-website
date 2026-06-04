@@ -2,131 +2,153 @@
 
 namespace App\Services\PHR\Export;
 
+use App\Models\PhrAllergy;
+use App\Models\PhrCondition;
+use App\Models\PhrDicomFile;
+use App\Models\PhrDicomStudy;
+use App\Models\PhrDocument;
+use App\Models\PhrImmunization;
+use App\Models\PhrLabResult;
+use App\Models\PhrMedication;
+use App\Models\PhrOfficeVisit;
 use App\Models\PhrPatient;
-use TCPDF;
+use App\Models\PhrPatientVital;
+use App\Models\PhrProcedure;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Collection;
 
 class PhrPdfSummaryRenderer
 {
+    private const int ROW_LIMIT = 60;
+
+    private const string OVERFLOW_NOTE = 'Additional records are included in FHIR/CCDA exports.';
+
     /**
-     * @param  array<string, mixed>  $data
+     * @param  array{
+     *     patient: PhrPatient,
+     *     lab_results: Collection<int, PhrLabResult>,
+     *     vitals: Collection<int, PhrPatientVital>,
+     *     conditions: Collection<int, PhrCondition>,
+     *     medications: Collection<int, PhrMedication>,
+     *     procedures: Collection<int, PhrProcedure>,
+     *     immunizations: Collection<int, PhrImmunization>,
+     *     allergies: Collection<int, PhrAllergy>,
+     *     office_visits: Collection<int, PhrOfficeVisit>,
+     *     dicom_studies: Collection<int, PhrDicomStudy>,
+     *     dicom_files: Collection<int, PhrDicomFile>,
+     *     documents: Collection<int, PhrDocument>
+     * }  $data
      */
     public function render(array $data): string
     {
-        /** @var PhrPatient $patient */
         $patient = $data['patient'];
+        $appName = (string) config('app.name', 'PHR');
 
-        $pdf = new TCPDF('P', 'mm', 'LETTER', true, 'UTF-8', false);
-        $pdf->SetCreator(config('app.name', 'PHR'));
-        $pdf->SetAuthor(config('app.name', 'PHR'));
-        $pdf->SetTitle('PHR Summary');
-        $pdf->SetPrintHeader(false);
-        $pdf->SetPrintFooter(false);
-        $pdf->SetMargins(14, 14, 14);
-        $pdf->SetAutoPageBreak(true, 14);
-        $pdf->AddPage();
-        $pdf->SetFont('helvetica', 'B', 18);
-        $pdf->Cell(0, 8, 'Personal Health Record Summary', 0, 1);
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 6, 'Generated '.now()->toDateTimeString(), 0, 1);
-        $pdf->Ln(2);
-
-        $this->section($pdf, 'Patient', [
-            ['Name', $patient->display_name ?? 'Patient '.$patient->id],
-            ['Relationship', $patient->relationship],
-            ['Birth Date', $patient->birth_date?->toDateString()],
-            ['Sex at Birth', $patient->sex_at_birth],
-        ]);
-
-        $this->section($pdf, 'Labs', $data['lab_results']->map(fn ($lab): array => [
-            $lab->result_datetime?->toDateString() ?? $lab->collection_datetime?->toDateString(),
-            $lab->analyte ?? $lab->test_name,
-            trim((string) ($lab->value ?? $lab->value_numeric).' '.(string) $lab->unit),
-            $lab->abnormal_flag,
-        ])->all());
-        $this->section($pdf, 'Vitals', $data['vitals']->map(fn ($vital): array => [
-            $vital->observed_at?->toDateString() ?? $vital->vital_date?->toDateString(),
-            $vital->vital_name,
-            trim((string) ($vital->vital_value ?? $vital->value_numeric).' '.(string) $vital->unit),
-        ])->all());
-        $this->section($pdf, 'Conditions', $data['conditions']->map(fn ($condition): array => [
-            $condition->name,
-            $condition->icd10_code,
-            $condition->clinical_status,
-        ])->all());
-        $this->section($pdf, 'Medications', $data['medications']->map(fn ($medication): array => [
-            $medication->name,
-            trim(implode(' ', array_filter([$medication->dose, $medication->dose_unit, $medication->frequency]))),
-            $medication->status,
-        ])->all());
-        $this->section($pdf, 'Procedures', $data['procedures']->map(fn ($procedure): array => [
-            $procedure->performed_at?->toDateString() ?? $procedure->performed_on?->toDateString(),
-            $procedure->name,
-            $procedure->status,
-        ])->all());
-        $this->section($pdf, 'Immunizations', $data['immunizations']->map(fn ($immunization): array => [
-            $immunization->administered_on?->toDateString(),
-            $immunization->vaccine_name,
-            $immunization->lot_number,
-        ])->all());
-        $this->section($pdf, 'Allergies', $data['allergies']->map(fn ($allergy): array => [
-            $allergy->substance,
-            $allergy->reaction,
-            $allergy->severity,
-        ])->all());
-        $this->section($pdf, 'Office Visits', $data['office_visits']->map(fn ($visit): array => [
-            $visit->visit_started_at?->toDateString() ?? $visit->visit_date?->toDateString(),
-            $visit->provider_name,
-            $visit->chief_complaint,
-            $visit->assessment,
-        ])->all());
-        $this->section($pdf, 'Imaging', $data['dicom_studies']->map(fn ($study): array => [
-            $study->study_date?->toDateString(),
-            $study->description,
-            $study->modalities,
-        ])->all());
-        $this->section($pdf, 'Documents', $data['documents']->map(fn ($document): array => [
-            $document->title ?? $document->original_filename,
-            $document->document_type,
-            $document->summary,
-        ])->all());
-
-        return $pdf->Output('phr-summary.pdf', 'S');
+        return Pdf::loadView('phr.pdf.summary', [
+            'title' => 'Personal Health Record Summary',
+            'generated_at' => now()->toDateTimeString(),
+            'overflow_note' => self::OVERFLOW_NOTE,
+            'sections' => [
+                $this->section('Patient', [
+                    ['Name', $patient->display_name ?? 'Patient '.$patient->id],
+                    ['Relationship', $patient->relationship],
+                    ['Birth Date', $patient->birth_date?->toDateString()],
+                    ['Sex at Birth', $patient->sex_at_birth],
+                ]),
+                $this->section('Labs', $data['lab_results']->map(fn (PhrLabResult $lab): array => [
+                    $lab->result_datetime?->toDateString() ?? $lab->collection_datetime?->toDateString(),
+                    $lab->analyte ?? $lab->test_name,
+                    trim((string) ($lab->value ?? $lab->value_numeric).' '.(string) $lab->unit),
+                    $lab->abnormal_flag,
+                ])->all()),
+                $this->section('Vitals', $data['vitals']->map(fn (PhrPatientVital $vital): array => [
+                    $vital->observed_at?->toDateString() ?? $vital->vital_date?->toDateString(),
+                    $vital->vital_name,
+                    trim((string) ($vital->vital_value ?? $vital->value_numeric).' '.(string) $vital->unit),
+                ])->all()),
+                $this->section('Conditions', $data['conditions']->map(fn (PhrCondition $condition): array => [
+                    $condition->name,
+                    $condition->icd10_code,
+                    $condition->clinical_status,
+                ])->all()),
+                $this->section('Medications', $data['medications']->map(fn (PhrMedication $medication): array => [
+                    $medication->name,
+                    trim(implode(' ', array_filter([$medication->dose, $medication->dose_unit, $medication->frequency]))),
+                    $medication->status,
+                ])->all()),
+                $this->section('Procedures', $data['procedures']->map(fn (PhrProcedure $procedure): array => [
+                    $procedure->performed_at?->toDateString() ?? $procedure->performed_on?->toDateString(),
+                    $procedure->name,
+                    $procedure->status,
+                ])->all()),
+                $this->section('Immunizations', $data['immunizations']->map(fn (PhrImmunization $immunization): array => [
+                    $immunization->administered_on?->toDateString(),
+                    $immunization->vaccine_name,
+                    $immunization->lot_number,
+                ])->all()),
+                $this->section('Allergies', $data['allergies']->map(fn (PhrAllergy $allergy): array => [
+                    $allergy->substance,
+                    $allergy->reaction,
+                    $allergy->severity,
+                ])->all()),
+                $this->section('Office Visits', $data['office_visits']->map(fn (PhrOfficeVisit $visit): array => [
+                    $visit->visit_started_at?->toDateString() ?? $visit->visit_date?->toDateString(),
+                    $visit->provider_name,
+                    $visit->chief_complaint,
+                    $visit->assessment,
+                ])->all()),
+                $this->section('Imaging', $data['dicom_studies']->map(fn (PhrDicomStudy $study): array => [
+                    $study->study_date?->toDateString(),
+                    $study->description,
+                    $study->modalities,
+                ])->all()),
+                $this->section('Documents', $data['documents']->map(fn (PhrDocument $document): array => [
+                    $document->title ?? $document->original_filename,
+                    $document->document_type,
+                    $document->summary,
+                ])->all()),
+            ],
+        ])
+            ->setPaper('letter')
+            ->addInfo([
+                'Creator' => $appName,
+                'Author' => $appName,
+                'Title' => 'PHR Summary',
+            ])
+            ->output();
     }
 
     /**
      * @param  array<int, array<int, mixed>>  $rows
+     * @return array{title: string, rows: array<int, string>, is_empty: bool, has_more: bool}
      */
-    private function section(TCPDF $pdf, string $title, array $rows): void
+    private function section(string $title, array $rows): array
     {
-        $pdf->Ln(3);
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(0, 6, $title, 0, 1);
-        $pdf->SetFont('helvetica', '', 9);
+        $lines = [];
 
-        if ($rows === []) {
-            $pdf->SetTextColor(100, 100, 100);
-            $pdf->Cell(0, 5, 'No records.', 0, 1);
-            $pdf->SetTextColor(0, 0, 0);
-
-            return;
-        }
-
-        foreach (array_slice($rows, 0, 60) as $row) {
-            $line = implode(' | ', array_filter(array_map(
-                static fn (mixed $value): string => is_scalar($value) ? trim((string) $value) : '',
-                $row
-            )));
-            if ($line === '') {
-                continue;
+        foreach (array_slice($rows, 0, self::ROW_LIMIT) as $row) {
+            $line = $this->rowLine($row);
+            if ($line !== '') {
+                $lines[] = $line;
             }
-
-            $pdf->MultiCell(0, 5, $line, 0, 'L');
         }
 
-        if (count($rows) > 60) {
-            $pdf->SetTextColor(100, 100, 100);
-            $pdf->Cell(0, 5, 'Additional records are included in FHIR/CCDA exports.', 0, 1);
-            $pdf->SetTextColor(0, 0, 0);
-        }
+        return [
+            'title' => $title,
+            'rows' => $lines,
+            'is_empty' => $rows === [],
+            'has_more' => count($rows) > self::ROW_LIMIT,
+        ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $row
+     */
+    private function rowLine(array $row): string
+    {
+        return implode(' | ', array_filter(array_map(
+            static fn (mixed $value): string => is_scalar($value) ? trim((string) $value) : '',
+            $row
+        )));
     }
 }
