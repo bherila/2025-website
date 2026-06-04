@@ -103,6 +103,18 @@ describe('MillerRegistryShell', () => {
     expect(fullColumn!.className).toContain('xl:w-[1200px]')
   })
 
+  it('maps viewport registry entries to viewport width columns', () => {
+    registry['sch-1'] = { ...registry['sch-1'], size: 'viewport' }
+    window.location.hash = '#/sch-1'
+    render(<ShellHarness />)
+    const viewportColumn = document.querySelector<HTMLElement>('[data-miller-id="sch-1"]')
+
+    expect(viewportColumn).not.toBeNull()
+    expect(viewportColumn!.className).toContain('w-screen')
+    expect(viewportColumn!.className).toContain('max-w-screen')
+    registry['sch-1'] = { ...registry['sch-1'], size: 'full' }
+  })
+
   it('renders instance tabs for multi-instance columns', () => {
     window.location.hash = '#/form-1116:passive'
     render(<ShellHarness />)

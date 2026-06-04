@@ -39,6 +39,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 continue;
             }
 
+            $hasUserOverride = $hasUserOverride || ! empty($data['sourceValueOverrides']);
             $partnerName = $this->k1PartnerName($doc, $data);
             $totalK1Box5 = $this->sumMoney([$totalK1Box5, $this->k1Field($data, '5')]);
             $breakdown = $this->k3IncomeBreakdown($data);
@@ -178,7 +179,7 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         $section2 = $this->k3SectionData($data, 'part2_section2');
         $section1 = $this->k3SectionData($data, 'part2_section1');
 
-        $line24 = $this->k3Part2Line24($section1);
+        $line24 = $this->k3Part2Line24($data, $section1);
         if ($line24 !== null) {
             return $line24;
         }
@@ -187,9 +188,9 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
             $line55 = $this->sectionRow($section2, '55') ?? $this->canonicalLineRow($section2, 'line55_');
             if ($line55 !== null) {
                 return [
-                    'passiveIncome' => $this->rowColumn($line55, 'c'),
-                    'generalIncome' => $this->rowColumn($line55, 'd'),
-                    'sourcedByPartner' => $this->rowColumn($line55, 'f'),
+                    'passiveIncome' => $this->k3Part2Value($data, '55', 'passive', $this->rowColumn($line55, 'c')),
+                    'generalIncome' => $this->k3Part2Value($data, '55', 'general', $this->rowColumn($line55, 'd')),
+                    'sourcedByPartner' => $this->k3Part2Value($data, '55', 'sourcedByPartner', $this->rowColumn($line55, 'f')),
                     'sourcedByPartnerIsUsSource' => true,
                 ];
             }
@@ -220,10 +221,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @param  array<string, mixed>|null  $section1
      * @return array{passiveIncome:float,generalIncome:float,sourcedByPartner:float,sourcedByPartnerIsUsSource:bool}|null
      */
-    private function k3Part2Line24(?array $section1): ?array
+    private function k3Part2Line24(array $data, ?array $section1): ?array
     {
         if ($section1 === null) {
             return null;
@@ -237,9 +239,9 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         $totals = $line24['totals'] ?? null;
         if (is_array($totals)) {
             return [
-                'passiveIncome' => $this->rowColumn($totals, 'c'),
-                'generalIncome' => $this->rowColumn($totals, 'd'),
-                'sourcedByPartner' => $this->rowColumn($totals, 'f'),
+                'passiveIncome' => $this->k3Part2Value($data, '24', 'passive', $this->rowColumn($totals, 'c')),
+                'generalIncome' => $this->k3Part2Value($data, '24', 'general', $this->rowColumn($totals, 'd')),
+                'sourcedByPartner' => $this->k3Part2Value($data, '24', 'sourcedByPartner', $this->rowColumn($totals, 'f')),
                 'sourcedByPartnerIsUsSource' => true,
             ];
         }
@@ -258,11 +260,19 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         }
 
         return [
-            'passiveIncome' => $passive,
-            'generalIncome' => $general,
-            'sourcedByPartner' => $sourcedByPartner,
+            'passiveIncome' => $this->k3Part2Value($data, '24', 'passive', $passive),
+            'generalIncome' => $this->k3Part2Value($data, '24', 'general', $general),
+            'sourcedByPartner' => $this->k3Part2Value($data, '24', 'sourcedByPartner', $sourcedByPartner),
             'sourcedByPartnerIsUsSource' => true,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function k3Part2Value(array $data, string $line, string $category, float $amount): float
+    {
+        return $this->k1SourceOverrideValue($data, $this->k3Part2OverrideKey($line, $category)) ?? $amount;
     }
 
     /**
@@ -283,6 +293,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
      */
     private function k3ForeignTaxTotal(array $data): float
     {
+        $override = $this->k1SourceOverrideValue($data, $this->k3ForeignTaxTotalOverrideKey());
+        if ($override !== null) {
+            return $override;
+        }
+
         $section = $this->k3SectionData($data, 'part3_section4');
         if ($section === null) {
             return 0.0;
@@ -296,7 +311,11 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
         if (is_array($section['countries'] ?? null)) {
             return $this->sumMoney(array_map(
                 fn (mixed $country): float => is_array($country)
-                    ? ($this->parseMoney($country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null) ?? 0.0)
+                    ? $this->k3Part3Value(
+                        $data,
+                        (string) ($country['country'] ?? $country['code'] ?? '—'),
+                        $this->parseMoney($country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null) ?? 0.0,
+                    )
                     : 0.0,
                 $section['countries'],
             ));
@@ -312,10 +331,33 @@ class Form1116FactsBuilder extends TaxPreviewFactBuilder
                 if ($grand !== null && $grand !== 0.0) {
                     return $grand;
                 }
+
+                if (is_array($value['countries'] ?? null)) {
+                    return $this->sumMoney(array_map(
+                        fn (mixed $country): float => is_array($country)
+                            ? $this->k3Part3Value(
+                                $data,
+                                (string) ($country['country'] ?? $country['code'] ?? '—'),
+                                $this->parseMoney($country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null) ?? 0.0,
+                            )
+                            : 0.0,
+                        $value['countries'],
+                    ));
+                }
             }
         }
 
         return 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function k3Part3Value(array $data, string $country, float $amount): float
+    {
+        $key = trim($country) !== '' ? trim($country) : '—';
+
+        return $this->k1SourceOverrideValue($data, $this->k3Part3OverrideKey($key)) ?? $amount;
     }
 
     /**

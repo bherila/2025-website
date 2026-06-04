@@ -20,7 +20,14 @@
 
 import currency from 'currency.js'
 
-import { getSbpElection } from '@/lib/finance/k1Utils'
+import {
+  getSbpElection,
+  k3ForeignTaxTotalOverrideKey,
+  k3Part2OverrideKey,
+  k3Part3OverrideKey,
+  parseK1SourceValueOverride,
+} from '@/lib/finance/k1Utils'
+import { parseMoney } from '@/lib/finance/money'
 import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
 
 import type { F1116Category, ForeignTaxSummary } from './types'
@@ -29,9 +36,7 @@ import type { F1116Category, ForeignTaxSummary } from './types'
 
 /** Parse a possibly-string numeric value to a number (0 if unparseable). */
 function toNum(v: unknown): number {
-  if (v == null || v === '') return 0
-  const n = typeof v === 'number' ? v : parseFloat(String(v))
-  return isFinite(n) ? n : 0
+  return parseMoney(v) ?? 0
 }
 
 /** Extract the value for a given code from a coded box. */
@@ -68,6 +73,14 @@ function canonicalObjToColRow(v: unknown): ColRow | null {
   }
 }
 
+function overriddenPart2Amount(data: FK1StructuredData, line: string, category: 'passive' | 'general' | 'sourcedByPartner' | 'total', amount: number): number {
+  return parseK1SourceValueOverride(data, k3Part2OverrideKey(line, category)) ?? amount
+}
+
+function overriddenPart3Amount(data: FK1StructuredData, country: string, amount: number): number {
+  return parseK1SourceValueOverride(data, k3Part3OverrideKey(country)) ?? amount
+}
+
 // ── K-3 Part II income breakdown ──────────────────────────────────────────────
 
 export interface K3IncomeBreakdown {
@@ -102,14 +115,24 @@ export function extractK3IncomeBreakdown(data: FK1StructuredData): K3IncomeBreak
       const line55 = (d['rows'] as Array<Record<string, unknown>>).find(r => String(r['line']) === '55')
       if (line55) {
         const row = toolRowToColRow(line55)
-        return { passiveIncome: row.c, generalIncome: row.d, sourcedByPartner: row.f, isNetLine: true }
+        return {
+          passiveIncome: overriddenPart2Amount(data, '55', 'passive', row.c),
+          generalIncome: overriddenPart2Amount(data, '55', 'general', row.d),
+          sourcedByPartner: overriddenPart2Amount(data, '55', 'sourcedByPartner', row.f),
+          isNetLine: true,
+        }
       }
     } else {
       const line55Key = Object.keys(d).find(k => k.match(/^line55_/))
       if (line55Key) {
         const row = canonicalObjToColRow(d[line55Key])
         if (row) {
-          return { passiveIncome: row.c, generalIncome: row.d, sourcedByPartner: row.f, isNetLine: true }
+          return {
+            passiveIncome: overriddenPart2Amount(data, '55', 'passive', row.c),
+            generalIncome: overriddenPart2Amount(data, '55', 'general', row.d),
+            sourcedByPartner: overriddenPart2Amount(data, '55', 'sourcedByPartner', row.f),
+            isNetLine: true,
+          }
         }
       }
     }
@@ -127,9 +150,9 @@ export function extractK3IncomeBreakdown(data: FK1StructuredData): K3IncomeBreak
       for (const r of d['rows'] as Array<Record<string, unknown>>) {
         if (String(r['country'] ?? '') === 'US') continue
         const row = toolRowToColRow(r)
-        passiveIncome += row.c
-        generalIncome += row.d
-        sourcedByPartner += row.f
+        passiveIncome = currency(passiveIncome).add(row.c).value
+        generalIncome = currency(generalIncome).add(row.d).value
+        sourcedByPartner = currency(sourcedByPartner).add(row.f).value
       }
     } else {
       // Canonical format: each field has .rows with per-country data
@@ -141,7 +164,11 @@ export function extractK3IncomeBreakdown(data: FK1StructuredData): K3IncomeBreak
         for (const r of rows) {
           if (String(r['country'] ?? '') === 'US') continue
           const row = canonicalObjToColRow(r)
-          if (row) { passiveIncome += row.c; generalIncome += row.d; sourcedByPartner += row.f }
+          if (row) {
+            passiveIncome = currency(passiveIncome).add(row.c).value
+            generalIncome = currency(generalIncome).add(row.d).value
+            sourcedByPartner = currency(sourcedByPartner).add(row.f).value
+          }
         }
       }
       // Use line 24 totals if available (col c already excludes US source in Part II)
@@ -151,9 +178,9 @@ export function extractK3IncomeBreakdown(data: FK1StructuredData): K3IncomeBreak
           (d[line24Key] as Record<string, unknown>)?.['totals']
         )
         if (totals && (totals.c !== 0 || totals.d !== 0)) {
-          passiveIncome = totals.c
-          generalIncome = totals.d
-          sourcedByPartner = totals.f
+          passiveIncome = overriddenPart2Amount(data, '24', 'passive', totals.c)
+          generalIncome = overriddenPart2Amount(data, '24', 'general', totals.d)
+          sourcedByPartner = overriddenPart2Amount(data, '24', 'sourcedByPartner', totals.f)
         }
       }
     }
@@ -252,6 +279,9 @@ export function extractK3Line4bApportionment(data: FK1StructuredData): {
 
 /** Extract total foreign taxes from K-3 Part III Section 4. */
 export function extractK3ForeignTaxTotal(data: FK1StructuredData): number {
+  const totalOverride = parseK1SourceValueOverride(data, k3ForeignTaxTotalOverrideKey())
+  if (totalOverride !== null) return totalOverride
+
   const sec = (data.k3?.sections ?? []).find(s => s.sectionId === 'part3_section4')
   if (!sec) return 0
   const d = sec.data as Record<string, unknown>
@@ -266,7 +296,11 @@ export function extractK3ForeignTaxTotal(data: FK1StructuredData): number {
       // Sum countries array
       const countries = ftData['countries'] as Array<Record<string, unknown>> | undefined
       if (countries) {
-        return countries.reduce((acc, c) => acc + toNum(c['total'] ?? c['passiveForeign'] ?? c['amount_usd']), 0)
+        return countries.reduce((acc, c) => {
+          const country = String(c['country'] ?? c['code'] ?? '').trim() || '—'
+          const amount = overriddenPart3Amount(data, country, toNum(c['total'] ?? c['passiveForeign'] ?? c['amount_usd']))
+          return acc.add(amount)
+        }, currency(0)).value
       }
     }
   }
@@ -276,8 +310,13 @@ export function extractK3ForeignTaxTotal(data: FK1StructuredData): number {
     const grand = toNum(d['grandTotalUSD'])
     if (grand !== 0) return grand
     return (d['countries'] as Array<Record<string, unknown>>).reduce(
-      (acc, c) => acc + toNum(c['amount_usd'] ?? c['total']), 0
-    )
+      (acc, c) => {
+        const country = String(c['country'] ?? c['code'] ?? '').trim() || '—'
+        const amount = overriddenPart3Amount(data, country, toNum(c['amount_usd'] ?? c['total']))
+        return acc.add(amount)
+      },
+      currency(0),
+    ).value
   }
   return 0
 }

@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 
 export type MillerPresentation = 'column' | 'modal' | 'app'
-export type MillerColumnSize = 'narrow' | 'default' | 'wide' | 'full'
+export type MillerColumnSize = 'narrow' | 'default' | 'wide' | 'full' | 'viewport'
 
 export interface KeyAmount {
   label: string

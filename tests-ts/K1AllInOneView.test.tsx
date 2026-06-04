@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 import K1AllInOneView from '@/components/finance/K1AllInOneView'
 import type { FK1StructuredData, K1CodeItem, K1FieldValue } from '@/types/finance/k1-data'
@@ -73,10 +73,18 @@ const taxFacts = {
 function renderView(overrides: Partial<React.ComponentProps<typeof K1AllInOneView>> = {}) {
   const onReviewDoc = jest.fn()
   const onDrill = jest.fn()
+  const onSaveParsedData = jest.fn().mockResolvedValue(undefined)
   render(
-    <K1AllInOneView k1Docs={docs} taxFacts={taxFacts} onReviewDoc={onReviewDoc} onDrill={onDrill} {...overrides} />,
+    <K1AllInOneView
+      k1Docs={docs}
+      taxFacts={taxFacts}
+      onReviewDoc={onReviewDoc}
+      onDrill={onDrill}
+      onSaveParsedData={onSaveParsedData}
+      {...overrides}
+    />,
   )
-  return { onReviewDoc, onDrill }
+  return { onReviewDoc, onDrill, onSaveParsedData }
 }
 
 describe('K1AllInOneView', () => {
@@ -90,10 +98,29 @@ describe('K1AllInOneView', () => {
     expect(screen.getByText('$3,000')).toBeInTheDocument()
   })
 
-  it('opens the K-1 review modal when a fund value cell is clicked', () => {
+  it('opens the source popup first and can then open the K-1 review modal', () => {
     const { onReviewDoc } = renderView()
     fireEvent.click(screen.getByRole('button', { name: '$1,000' }))
+    expect(screen.getByText('Effective value')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
     expect(onReviewDoc).toHaveBeenCalledWith(101)
+  })
+
+  it('saves a source value override without opening the K-1 review modal first', async () => {
+    const { onReviewDoc, onSaveParsedData } = renderView()
+    fireEvent.click(screen.getByRole('button', { name: '$1,000' }))
+    fireEvent.change(screen.getByLabelText(/override source value/i), { target: { value: '1234' } })
+    fireEvent.click(screen.getByRole('button', { name: /save override/i }))
+
+    await waitFor(() => expect(onSaveParsedData).toHaveBeenCalledWith(
+      101,
+      expect.objectContaining({
+        sourceValueOverrides: expect.objectContaining({
+          'field:5': expect.objectContaining({ value: '1234', originalValue: '1000' }),
+        }),
+      }),
+    ))
+    expect(onReviewDoc).not.toHaveBeenCalled()
   })
 
   it('drills into the destination form when a destination chip is clicked', () => {

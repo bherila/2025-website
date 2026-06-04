@@ -11,6 +11,7 @@ const MILLER_COLUMN_SIZE_CLASSES: Record<MillerColumnSize, string> = {
   default: 'w-full md:w-[520px]',
   wide: 'w-full md:w-[760px]',
   full: 'w-full md:w-[1040px] xl:w-[1200px]',
+  viewport: 'w-screen max-w-screen',
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

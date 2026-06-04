@@ -34,8 +34,12 @@ import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { fetchWrapper } from '@/fetchWrapper'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
+import type { FK1StructuredData } from '@/types/finance/k1-data'
+import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { useDockActions } from './DockActions'
 import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps, getTaxFormMeta } from './formRegistry'
@@ -549,6 +553,32 @@ function CapitalGainsReconciliationAdapter({ state }: FormRenderProps): React.Re
   return <CapitalGainsReconciliationPanel selectedYear={state.year} />
 }
 
+interface TaxDocumentMutationResponse {
+  document?: TaxDocument
+  taxFacts?: TaxPreviewFacts
+}
+
+function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number, parsedData: FK1StructuredData) => Promise<void> {
+  return async (docId, parsedData) => {
+    const response = (await fetchWrapper.put(`/api/finance/tax-documents/${docId}?include_tax_facts=1`, {
+      parsed_data: parsedData,
+    })) as TaxDocumentMutationResponse
+
+    if (response.document) {
+      state.setAccountDocuments((docs) => docs.map((doc) => (doc.id === response.document!.id ? response.document! : doc)))
+    } else {
+      await state.refreshAll({ includeTaxFacts: true })
+      return
+    }
+
+    if (response.taxFacts) {
+      state.setTaxFacts(response.taxFacts)
+    } else {
+      await state.refreshAll({ includeTaxFacts: true })
+    }
+  }
+}
+
 function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
   return (
@@ -557,13 +587,14 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
       taxFacts={state.taxFacts ?? null}
       onReviewDoc={reviewK1Doc}
       onDrill={onDrill}
+      onSaveParsedData={saveParsedDataOverride(state)}
     />
   )
 }
 
 function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
-  return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} />
+  return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} onSaveParsedData={saveParsedDataOverride(state)} />
 }
 
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
@@ -981,7 +1012,7 @@ const rawFormRegistry: FormRegistry = {
     keywords: ['K-1', 'all in one', 'partnership', 'compare', 'unified', 'K-3', 'side by side'],
     category: 'App',
     presentation: 'column',
-    size: 'full',
+    size: 'viewport',
     component: K1AllInOneAdapter,
     hasData: (state) => state.reviewedK1Docs.length > 0,
   },
@@ -992,7 +1023,7 @@ const rawFormRegistry: FormRegistry = {
     keywords: ['K-3', 'foreign', 'foreign tax credit', 'partnership', 'compare', 'unified', 'basket', '1116'],
     category: 'App',
     presentation: 'column',
-    size: 'wide',
+    size: 'viewport',
     component: K3AllInOneAdapter,
     hasData: (state) => state.reviewedK1Docs.some((doc) => {
       const parsed = doc.parsed_data as unknown as { k3?: { sections?: unknown[] } } | null

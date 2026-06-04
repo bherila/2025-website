@@ -306,6 +306,27 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(35.0, $facts['scheduleB']['form4952Line5aTotal']);
     }
 
+    public function test_k1_source_value_override_replaces_schedule_b_box5_interest(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Fund', '5' => '3'],
+                sourceValueOverrides: [
+                    'field:5' => ['value' => '9', 'originalValue' => '3', 'label' => 'Box 5 interest income'],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleB');
+
+        $this->assertSame(9.0, $facts['scheduleB']['k1InterestTotal']);
+        $this->assertSame(9.0, $facts['scheduleB']['interestTotal']);
+        $this->assertSame(9.0, $facts['scheduleB']['interestSources'][0]['amount']);
+    }
+
     public function test_form4952_uses_schedule_b_direct_income_k1_20a_and_margin_interest(): void
     {
         $user = $this->createUser();
@@ -1421,6 +1442,47 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('credit', $facts['form1116']['recommendation']);
         $this->assertFalse($facts['form1116']['turboTaxAlert']);
         $this->assertFalse($facts['form1116']['hasUserOverride']);
+    }
+
+    public function test_form1116_uses_k3_source_value_overrides_in_tax_facts(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: ['B' => 'Foreign Fund'],
+                k3: [
+                    'sections' => [
+                        [
+                            'sectionId' => 'part2_section2',
+                            'data' => [
+                                'rows' => [
+                                    ['line' => '55', 'col_c_passive' => 100, 'col_f_sourced_by_partner' => 1000],
+                                ],
+                            ],
+                        ],
+                        [
+                            'sectionId' => 'part3_section4',
+                            'data' => ['countries' => [['country' => 'IE', 'amount_usd' => 12]]],
+                        ],
+                    ],
+                ],
+                k3Elections: ['sourcedByPartnerAsUSSource' => false],
+                sourceValueOverrides: [
+                    'k3:part2:55:sourcedByPartner' => ['value' => '2000', 'originalValue' => '1000', 'label' => 'Line 55 sourced by partner'],
+                    'k3:foreign-tax-total' => ['value' => '77', 'originalValue' => '12', 'label' => 'K-3 foreign tax total'],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form1116');
+
+        $this->assertSame(2100.0, $facts['form1116']['totalPassiveIncome']);
+        $this->assertSame(2000.0, $facts['form1116']['totalSourcedByPartnerIncome']);
+        $this->assertSame(77.0, $facts['form1116']['totalForeignTaxes']);
+        $this->assertTrue($facts['form1116']['hasUserOverride']);
+        $this->assertStringContainsString('Treaty / non-U.S.-partner', $facts['form1116']['sourcedByPartnerElectionSources'][0]['notes']);
     }
 
     public function test_form1116_1099div_box7_only_estimates_at_15_percent_default(): void
@@ -3510,9 +3572,10 @@ class TaxPreviewFactsServiceTest extends TestCase
      * @param  array<int, string>  $warnings
      * @param  array<string, mixed>|null  $k3
      * @param  array<string, mixed>  $k3Elections
+     * @param  array<string, array<string, mixed>>  $sourceValueOverrides
      * @return array<string, mixed>
      */
-    private function k1Data(array $fields = [], array $codes = [], array $warnings = [], ?array $k3 = null, array $k3Elections = []): array
+    private function k1Data(array $fields = [], array $codes = [], array $warnings = [], ?array $k3 = null, array $k3Elections = [], array $sourceValueOverrides = []): array
     {
         $data = [
             'schemaVersion' => '2026.1',
@@ -3528,6 +3591,10 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         if ($k3Elections !== []) {
             $data['k3Elections'] = $k3Elections;
+        }
+
+        if ($sourceValueOverrides !== []) {
+            $data['sourceValueOverrides'] = $sourceValueOverrides;
         }
 
         return $data;

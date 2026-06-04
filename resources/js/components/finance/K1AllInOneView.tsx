@@ -1,19 +1,33 @@
 'use client'
 
 import currency from 'currency.js'
-import { ArrowRight, SquareArrowOutUpRight } from 'lucide-react'
-import { useMemo } from 'react'
+import { AlertTriangle, ArrowRight, SquareArrowOutUpRight } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
 import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
 import { K1_SPEC } from '@/components/finance/k1/k1-spec'
 import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
+import K1K3SourceValueModal, { type K1K3SourceValue } from '@/components/finance/K1K3SourceValueModal'
 import type { DrillTarget } from '@/components/finance/tax-preview/formRegistry'
 import { AmountCell } from '@/components/finance/tax-preview-primitives'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import { buildK1RoutingIndex, k1CellKey, type K1CellRouting } from '@/lib/finance/k1RoutingIndex'
 import { K1_CODE_ROUTING_NOTES, K1_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
-import { getK1PartnerName, normalizeK1Code, parseK1Field, sumK1CodeItems } from '@/lib/finance/k1Utils'
+import {
+  getK1CodeItems,
+  getK1PartnerName,
+  getK1SourceValueOverride,
+  hasK1SourceValueOverride,
+  k1CodeOverrideKey,
+  k1FieldOverrideKey,
+  k3ForeignTaxTotalOverrideKey,
+  normalizeK1Code,
+  parseK1Field,
+  sumK1CodeItems,
+  withK1SourceValueOverride,
+} from '@/lib/finance/k1Utils'
+import { parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
@@ -23,12 +37,14 @@ interface K1AllInOneViewProps {
   taxFacts: TaxPreviewFacts | null
   onReviewDoc: (docId: number) => void
   onDrill: (target: DrillTarget) => void
+  onSaveParsedData: (docId: number, parsedData: FK1StructuredData) => Promise<void>
 }
 
 interface K1Column {
   doc: TaxDocument
   data: FK1StructuredData
-  partnerName: string
+  accountName: string
+  extractedName: string
   ein: string
 }
 
@@ -42,8 +58,11 @@ interface K1Row {
   kind: 'money' | 'text'
   routable: boolean
   fromHint?: string
+  overrideKey?: string
   /** Per-doc cell value. */
   value: (data: FK1StructuredData) => number | string | null
+  /** Extracted source value before an All-in-One source override is applied. */
+  sourceValue: (data: FK1StructuredData) => number | string | null
   /** Static destination override (e.g. K-3 foreign taxes always route to Form 1116). */
   staticDestinations?: K1CellRouting[]
 }
@@ -75,6 +94,46 @@ function firstLine(value: string | null | undefined): string | null {
   return value.split('\n')[0]?.trim() ?? null
 }
 
+function withoutSourceValueOverrides(data: FK1StructuredData): FK1StructuredData {
+  const { sourceValueOverrides: _sourceValueOverrides, ...rest } = data
+  return rest
+}
+
+function extractedK1Field(data: FK1StructuredData, box: string): number {
+  return parseMoneyOrZero(data.fields[box]?.value)
+}
+
+function extractedK1CodeTotal(data: FK1StructuredData, box: string, code: string): number {
+  return sumMoneyValues(getK1CodeItems(data, box, code).map((item) => item.value))
+}
+
+function sourceAccountName(doc: TaxDocument, data: FK1StructuredData): string {
+  const linkedAccount = (doc.account_links ?? []).find((link) => link.account?.acct_name)?.account?.acct_name
+  return doc.account?.acct_name
+    ?? linkedAccount
+    ?? getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership')
+}
+
+function moneyFillClass(value: number | null): string {
+  if (value === null || value === 0) {
+    return ''
+  }
+  return value > 0 ? 'bg-success/5' : 'bg-destructive/5'
+}
+
+function k3ForeignTaxSourceValues(data: FK1StructuredData): Array<{ label: string; value: number }> {
+  const section = data.k3?.sections?.find((entry) => entry.sectionId === 'part3_section4')
+  const sectionData = (section?.data ?? {}) as Record<string, unknown>
+  const nestedKey = Object.keys(sectionData).find((key) => key.includes('foreignTax') || key.includes('foreign_tax'))
+  const nested = nestedKey ? sectionData[nestedKey] as Record<string, unknown> | undefined : undefined
+  const countries = ((nested?.countries ?? sectionData.countries) as Array<Record<string, unknown>> | undefined) ?? []
+
+  return countries.map((entry) => ({
+    label: String(entry.country ?? entry.code ?? '—').trim() || '—',
+    value: parseMoneyOrZero(entry.amount_usd ?? entry.total ?? entry.passiveForeign),
+  }))
+}
+
 function buildSections(columns: K1Column[]): K1Section[] {
   const entityRows: K1Row[] = []
   const capitalRows: K1Row[] = []
@@ -87,6 +146,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       kind: 'text',
       routable: false,
       value: (data) => firstLine(data.fields[spec.box]?.value),
+      sourceValue: (data) => data.fields[spec.box]?.value ?? null,
     }
     if (ENTITY_BOXES.has(spec.box)) {
       entityRows.push(row)
@@ -117,7 +177,9 @@ function buildSections(columns: K1Column[]): K1Section[] {
           kind: 'money',
           routable: true,
           ...(hint ? { fromHint: hint } : {}),
+          overrideKey: k1CodeOverrideKey(spec.box, code),
           value: (data) => sumK1CodeItems(data, spec.box, code),
+          sourceValue: (data) => extractedK1CodeTotal(data, spec.box, code),
         })
       }
     } else {
@@ -130,7 +192,9 @@ function buildSections(columns: K1Column[]): K1Section[] {
         kind: 'money',
         routable: true,
         ...(hint ? { fromHint: hint } : {}),
+        overrideKey: k1FieldOverrideKey(spec.box),
         value: (data) => parseK1Field(data, spec.box),
+        sourceValue: (data) => extractedK1Field(data, spec.box),
       })
     }
   }
@@ -146,7 +210,9 @@ function buildSections(columns: K1Column[]): K1Section[] {
       kind: 'money',
       routable: true,
       ...(hint ? { fromHint: hint } : {}),
+      overrideKey: k1FieldOverrideKey('21'),
       value: (data) => parseK1Field(data, '21'),
+      sourceValue: (data) => extractedK1Field(data, '21'),
     })
   }
 
@@ -159,7 +225,9 @@ function buildSections(columns: K1Column[]): K1Section[] {
       kind: 'money',
       routable: true,
       fromHint: 'K-3 Part III, Section 4',
+      overrideKey: k3ForeignTaxTotalOverrideKey(),
       value: (data) => extractK3ForeignTaxTotal(data),
+      sourceValue: (data) => extractK3ForeignTaxTotal(withoutSourceValueOverrides(data)),
       staticDestinations: [
         { routing: 'k3_all_in_one', routingReason: 'Open the full K-3 foreign income & tax breakdown across all funds.', label: 'K-3 detail', formId: 'k3-all-in-one' },
         { routing: 'form_1116_line_8', routingReason: 'Foreign taxes paid feed the Form 1116 foreign tax credit.', label: 'Form 1116', formId: 'form-1116' },
@@ -263,7 +331,21 @@ function DestinationCell({
   )
 }
 
-export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill }: K1AllInOneViewProps): React.ReactElement {
+interface SourceValueContext {
+  column: K1Column
+  row: K1Row
+  modal: K1K3SourceValue
+}
+
+export default function K1AllInOneView({
+  k1Docs,
+  taxFacts,
+  onReviewDoc,
+  onDrill,
+  onSaveParsedData,
+}: K1AllInOneViewProps): React.ReactElement {
+  const [sourceValueContext, setSourceValueContext] = useState<SourceValueContext | null>(null)
+
   const columns = useMemo<K1Column[]>(() => {
     return k1Docs
       .map((doc) => {
@@ -274,7 +356,8 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
         return {
           doc,
           data,
-          partnerName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
+          accountName: sourceAccountName(doc, data),
+          extractedName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
           ein: data.fields['A']?.value ?? '—',
         }
       })
@@ -283,6 +366,34 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
 
   const routingIndex = useMemo(() => buildK1RoutingIndex(taxFacts), [taxFacts])
   const sections = useMemo(() => buildSections(columns), [columns])
+
+  async function saveSourceOverride(value: string | null): Promise<void> {
+    if (!sourceValueContext?.row.overrideKey) {
+      return
+    }
+
+    const { column, row } = sourceValueContext
+    const overrideKey = row.overrideKey
+    if (!overrideKey) {
+      return
+    }
+    const sourceValue = row.sourceValue(column.data)
+    const nextData = withK1SourceValueOverride(
+      column.data,
+      overrideKey,
+      value === null
+        ? null
+        : {
+            value,
+            originalValue: sourceValue === null ? null : String(sourceValue),
+            label: `${row.boxRef ? `${row.boxRef} ` : ''}${row.label}`,
+            updatedAt: new Date().toISOString(),
+          },
+    )
+
+    await onSaveParsedData(column.doc.id, nextData)
+    setSourceValueContext(null)
+  }
 
   if (columns.length === 0) {
     return (
@@ -293,29 +404,58 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
   }
 
   return (
-    <div className="space-y-2">
+    <>
+      <K1K3SourceValueModal
+        value={sourceValueContext?.modal ?? null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSourceValueContext(null)
+          }
+        }}
+        onGoToSource={() => {
+          if (!sourceValueContext) {
+            return
+          }
+          const docId = sourceValueContext.column.doc.id
+          setSourceValueContext(null)
+          onReviewDoc(docId)
+        }}
+        onSaveOverride={saveSourceOverride}
+      />
+
+      <div className="space-y-2">
       <div>
         <h2 className="text-lg font-semibold">All-in-One K-1</h2>
         <p className="text-xs text-muted-foreground">
-          Every K-1 line across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Click a value to open its
-          K-1 source; click a destination to open that form.
+          Every K-1 line across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Click a value to inspect
+          the source; click a destination to open that form.
         </p>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-border/60">
-        <table className="w-full border-collapse text-sm">
+        <table className="min-w-max table-fixed border-collapse text-sm">
           <thead>
             <tr className="border-b border-border/60 bg-muted/40 text-xs">
-              <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2 text-left font-semibold">Line</th>
+              <th className="sticky left-0 z-10 w-[260px] bg-muted/40 px-3 py-2 text-left font-semibold">Line</th>
               {columns.map((column) => (
-                <th key={column.doc.id} className="px-3 py-2 text-right font-semibold whitespace-nowrap">
-                  <div>{column.partnerName}</div>
+                <th key={column.doc.id} className="w-[180px] px-3 py-2 text-right font-semibold">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="ml-auto max-w-[156px] cursor-default truncate">{column.accountName}</div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <div className="space-y-1 text-xs">
+                        <div>Account: {column.accountName}</div>
+                        <div>Extracted K-1 name: {column.extractedName}</div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="font-normal text-[10px] text-muted-foreground">{column.ein}</div>
                 </th>
               ))}
-              <th className="border-l border-border/60 bg-primary/5 px-3 py-2 text-right font-semibold text-primary">Total</th>
-              <th className="px-3 py-2 text-left font-semibold">From</th>
-              <th className="px-3 py-2 text-left font-semibold">Destination</th>
+              <th className="w-[140px] border-l border-border/60 bg-primary/5 px-3 py-2 text-right font-semibold text-primary">Total</th>
+              <th className="w-[180px] px-3 py-2 text-left font-semibold">From</th>
+              <th className="w-[260px] px-3 py-2 text-left font-semibold">Destination</th>
             </tr>
           </thead>
           <tbody>
@@ -325,14 +465,15 @@ export default function K1AllInOneView({ k1Docs, taxFacts, onReviewDoc, onDrill 
                 section={section}
                 columns={columns}
                 routingIndex={routingIndex}
-                onReviewDoc={onReviewDoc}
                 onDrill={onDrill}
+                onOpenSourceValue={setSourceValueContext}
               />
             ))}
           </tbody>
         </table>
       </div>
     </div>
+    </>
   )
 }
 
@@ -340,14 +481,14 @@ function SectionRows({
   section,
   columns,
   routingIndex,
-  onReviewDoc,
   onDrill,
+  onOpenSourceValue,
 }: {
   section: K1Section
   columns: K1Column[]
   routingIndex: Map<string, K1CellRouting[]>
-  onReviewDoc: (docId: number) => void
   onDrill: (target: DrillTarget) => void
+  onOpenSourceValue: (context: SourceValueContext) => void
 }): React.ReactElement {
   const totalColspan = columns.length + 4
   return (
@@ -376,7 +517,7 @@ function SectionRows({
                 return []
               }
               const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
-              return [{ key: column.doc.id, label: column.partnerName, routings, needsReview: row.routable && routings.length === 0 }]
+              return [{ key: column.doc.id, label: column.accountName, routings, needsReview: row.routable && routings.length === 0 }]
             })
           : []
 
@@ -390,33 +531,71 @@ function SectionRows({
             </td>
             {columns.map((column, index) => {
               const value = row.value(column.data)
+              const sourceValue = row.sourceValue(column.data)
+              const override = row.overrideKey ? getK1SourceValueOverride(column.data, row.overrideKey) : null
               if (row.kind === 'text') {
                 return (
-                  <td key={column.doc.id} className="px-3 py-1.5 text-right text-[12px] text-muted-foreground align-top">
-                    {typeof value === 'string' && value !== '' ? value : '—'}
+                  <td key={column.doc.id} className="w-[180px] px-3 py-1.5 text-right text-[12px] text-muted-foreground align-top">
+                    {typeof value === 'string' && value !== '' ? (
+                      <button
+                        type="button"
+                        className="max-w-[156px] truncate text-right hover:text-foreground hover:underline"
+                        onClick={() => onOpenSourceValue({
+                          column,
+                          row,
+                          modal: {
+                            title: row.boxRef ? `K-1 ${row.boxRef}` : 'K-1 source value',
+                            subtitle: column.accountName,
+                            label: row.label,
+                            kind: 'text',
+                            sourceValue,
+                            effectiveValue: value,
+                            override,
+                          },
+                        })}
+                      >
+                        {value}
+                      </button>
+                    ) : '—'}
                   </td>
                 )
               }
               const numeric = moneyValues[index] ?? null
-              // Echo the spreadsheet's green/red conditional cell fills.
-              const fillClass = numeric === null || numeric === 0
-                ? ''
-                : numeric > 0
-                  ? 'bg-success/5'
-                  : 'bg-destructive/5'
+              const fillClass = moneyFillClass(numeric)
+              const hasOverride = row.overrideKey ? hasK1SourceValueOverride(column.data, row.overrideKey) : false
+              const shadowedValues = row.key === 'k3-foreign-tax' && hasOverride
+                ? k3ForeignTaxSourceValues(column.data)
+                : []
               return (
-                <td key={column.doc.id} className={`px-3 py-1.5 text-right align-top ${fillClass}`}>
+                <td key={column.doc.id} className={`w-[180px] px-3 py-1.5 text-right align-top ${fillClass}`}>
                   {numeric === null ? (
                     <AmountCell val={null} />
                   ) : (
                     <button
                       type="button"
-                      onClick={() => onReviewDoc(column.doc.id)}
+                      onClick={() => onOpenSourceValue({
+                        column,
+                        row,
+                        modal: {
+                          title: row.boxRef ? `K-1 ${row.boxRef}` : 'K-1 source value',
+                          subtitle: column.accountName,
+                          label: row.label,
+                          kind: 'money',
+                          sourceValue,
+                          effectiveValue: numeric,
+                          override,
+                          shadowedValues,
+                        },
+                      })}
                       className="group/cell inline-flex items-center gap-1 hover:underline"
-                      title="Open K-1 source"
+                      title="Inspect source value"
                     >
                       <AmountCell val={numeric} />
-                      <SquareArrowOutUpRight size={10} className="opacity-0 transition-opacity group-hover/cell:opacity-60" aria-hidden />
+                      {hasOverride ? (
+                        <AlertTriangle size={11} className="text-warning" aria-label="Overridden source value" />
+                      ) : (
+                        <SquareArrowOutUpRight size={10} className="opacity-0 transition-opacity group-hover/cell:opacity-60" aria-hidden />
+                      )}
                     </button>
                   )}
                 </td>
