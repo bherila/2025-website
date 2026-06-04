@@ -1,12 +1,12 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Shield } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { getCsrfToken } from '@/auth/shared-components';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { getCsrfToken } from './webauthn-utils';
 
 interface AuditEntry {
   id: number;

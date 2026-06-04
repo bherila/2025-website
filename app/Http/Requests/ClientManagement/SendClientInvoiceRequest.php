@@ -17,9 +17,9 @@ class SendClientInvoiceRequest extends FormRequest
     {
         return [
             'to' => ['required', 'array', 'min:1'],
-            'to.*' => ['email'],
+            'to.*' => ['required', 'email'],
             'cc' => ['nullable', 'array'],
-            'cc.*' => ['email'],
+            'cc.*' => ['required', 'email'],
             'note' => ['nullable', 'string', 'max:2000'],
             'save_as_billing_email' => ['nullable', 'boolean'],
         ];
@@ -30,7 +30,9 @@ class SendClientInvoiceRequest extends FormRequest
     {
         return [
             'to.required' => 'Add at least one recipient email address.',
+            'to.*.required' => 'Each recipient must be a valid email address.',
             'to.*.email' => 'Each recipient must be a valid email address.',
+            'cc.*.required' => 'Each CC must be a valid email address.',
             'cc.*.email' => 'Each CC must be a valid email address.',
         ];
     }

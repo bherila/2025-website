@@ -164,6 +164,35 @@ class SendClientInvoiceTest extends TestCase
         Mail::assertNothingQueued();
     }
 
+    public function test_send_rejects_empty_recipient_email_entries(): void
+    {
+        $invoice = $this->makeIssuedInvoice();
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/send", [
+                'to' => [''],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('to.0');
+
+        Mail::assertNothingQueued();
+    }
+
+    public function test_send_rejects_empty_cc_email_entries(): void
+    {
+        $invoice = $this->makeIssuedInvoice();
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/client/mgmt/companies/{$this->company->id}/invoices/{$invoice->client_invoice_id}/send", [
+                'to' => ['billing@example.com'],
+                'cc' => [''],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('cc.0');
+
+        Mail::assertNothingQueued();
+    }
+
     public function test_non_admin_cannot_email_an_invoice(): void
     {
         $invoice = $this->makeIssuedInvoice();

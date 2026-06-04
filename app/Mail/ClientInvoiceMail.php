@@ -35,14 +35,14 @@ class ClientInvoiceMail extends Mailable
         $this->invoice->loadMissing('clientCompany');
         $company = $this->invoice->clientCompany;
 
-        $portalUrl = $company?->slug
+        $portalUrl = $company->slug
             ? route('client-portal.invoice', ['slug' => $company->slug, 'invoiceId' => $this->invoice->client_invoice_id])
             : null;
 
         return new Content(
             markdown: 'emails.invoices.send',
             with: [
-                'companyName' => $company?->company_name ?? 'there',
+                'companyName' => $company->company_name,
                 'invoiceNumber' => $this->invoiceNumber(),
                 'invoiceTotal' => (float) $this->invoice->invoice_total,
                 'remainingBalance' => (float) $this->invoice->remaining_balance,

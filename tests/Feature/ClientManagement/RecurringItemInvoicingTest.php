@@ -82,10 +82,10 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             null,
             1,
-            ['2026-03-01'],
+            ['2026-04-01'],
         ];
 
-        yield 'annual item on monthly invoice in anchor month' => [
+        yield 'annual item on monthly invoice outside retainer anchor month' => [
             BillingCadence::Monthly,
             ChargeCadence::Annual,
             Carbon::parse('2026-03-01'),
@@ -93,7 +93,18 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             3,
             1,
-            ['2026-03-01'],
+            [],
+        ];
+
+        yield 'annual item on monthly invoice in retainer anchor month' => [
+            BillingCadence::Monthly,
+            ChargeCadence::Annual,
+            Carbon::parse('2026-03-01'),
+            Carbon::parse('2026-03-31'),
+            '2026-01-01',
+            4,
+            1,
+            ['2026-04-01'],
         ];
 
         yield 'monthly item on quarterly invoice' => [
@@ -104,7 +115,7 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             null,
             1,
-            ['2026-01-01', '2026-02-01', '2026-03-01'],
+            ['2026-04-01', '2026-05-01', '2026-06-01'],
         ];
 
         yield 'quarterly item on quarterly invoice' => [
@@ -115,7 +126,7 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             1,
             1,
-            ['2026-01-01'],
+            ['2026-04-01'],
         ];
 
         yield 'annual item on quarterly invoice in anchor quarter' => [
@@ -126,7 +137,7 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             3,
             1,
-            ['2026-03-01'],
+            [],
         ];
 
         yield 'monthly item on annual invoice' => [
@@ -138,18 +149,18 @@ class RecurringItemInvoicingTest extends TestCase
             null,
             1,
             [
-                '2026-01-01',
-                '2026-02-01',
-                '2026-03-01',
-                '2026-04-01',
-                '2026-05-01',
-                '2026-06-01',
-                '2026-07-01',
-                '2026-08-01',
-                '2026-09-01',
-                '2026-10-01',
-                '2026-11-01',
-                '2026-12-01',
+                '2027-01-01',
+                '2027-02-01',
+                '2027-03-01',
+                '2027-04-01',
+                '2027-05-01',
+                '2027-06-01',
+                '2027-07-01',
+                '2027-08-01',
+                '2027-09-01',
+                '2027-10-01',
+                '2027-11-01',
+                '2027-12-01',
             ],
         ];
 
@@ -161,7 +172,7 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             2,
             1,
-            ['2026-02-01', '2026-08-01'],
+            ['2027-02-01', '2027-08-01'],
         ];
 
         yield 'annual item outside quarterly agreement window produces no line' => [
@@ -172,7 +183,7 @@ class RecurringItemInvoicingTest extends TestCase
             '2026-01-01',
             3,
             1,
-            [],
+            ['2027-03-01'],
         ];
     }
 

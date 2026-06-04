@@ -231,7 +231,7 @@ class InvoiceLedgerBuilder
     public function summarizeLedgerForCycle(ClientAgreement $agreement, array $ledger, BillingCycle $cycle): array
     {
         $cycleMonthStart = $this->cycleMonthStartForLegacyMonthlyLedger($agreement, $cycle);
-        $cycleMonthEnd = $cycle->end->copy()->startOfMonth();
+        $cycleMonthEnd = $this->cycleMonthEndForLegacyMonthlyLedger($agreement, $cycle);
         $cycleStartKey = $cycle->start->format('Y-m-d');
         $cycleSummaries = collect($ledger)
             ->filter(function (MonthSummary $summary) use ($cycleMonthStart, $cycleMonthEnd, $cycleStartKey): bool {
@@ -302,18 +302,53 @@ class InvoiceLedgerBuilder
      * Return the first calendar-month row a legacy monthly ledger should count
      * for this cycle. Period-retainer ledgers carry cycle ownership directly;
      * legacy rows do not, so a shared mid-month boundary belongs to the cycle
-     * ending in that calendar month.
+     * ending in that calendar month unless the successor is a termination-
+     * clipped final cycle inside that same calendar month.
      */
     public function cycleMonthStartForLegacyMonthlyLedger(ClientAgreement $agreement, BillingCycle $cycle): Carbon
     {
         $cycleMonthStart = $cycle->start->copy()->startOfMonth();
         $activeDate = Carbon::parse($agreement->active_date)->startOfDay();
+        $terminationDate = $agreement->termination_date
+            ? Carbon::parse($agreement->termination_date)->startOfDay()
+            : null;
+        $isTerminationClippedInsideStartMonth = $terminationDate !== null
+            && $cycle->end->isSameDay($terminationDate)
+            && $cycle->start->isSameMonth($cycle->end);
 
-        if ($cycle->start->isSameDay($activeDate) || $cycle->start->isSameDay($cycleMonthStart)) {
+        if ($cycle->start->isSameDay($activeDate)
+            || $cycle->start->isSameDay($cycleMonthStart)
+            || $isTerminationClippedInsideStartMonth) {
             return $cycleMonthStart;
         }
 
         return $cycleMonthStart->addMonth()->startOfMonth();
+    }
+
+    /**
+     * Return the final calendar-month row a legacy monthly ledger should count
+     * for this cycle. When an agreement terminates inside the boundary month of
+     * the next anchored cycle, that month moves to the truncated final cycle so
+     * it is still counted exactly once.
+     */
+    public function cycleMonthEndForLegacyMonthlyLedger(ClientAgreement $agreement, BillingCycle $cycle, ?Carbon $through = null): Carbon
+    {
+        $cycleMonthEnd = ($through ?? $cycle->end)->copy()->startOfMonth();
+        $terminationDate = $agreement->termination_date
+            ? Carbon::parse($agreement->termination_date)->startOfDay()
+            : null;
+
+        if ($through !== null && $through->lt($cycle->end)) {
+            return $cycleMonthEnd;
+        }
+
+        if ($terminationDate !== null
+            && $terminationDate->gt($cycle->end)
+            && $terminationDate->isSameMonth($cycle->end)) {
+            return $cycleMonthEnd->subMonth()->startOfMonth();
+        }
+
+        return $cycleMonthEnd;
     }
 
     public function ledgerRowBelongsToCycleThrough(

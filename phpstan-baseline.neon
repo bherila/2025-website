@@ -1249,54 +1249,6 @@ parameters:
 			path: app/Models/UtilityBillTracker/UtilityBill.php
 
 		-
-			message: '#^Method App\\Models\\WebAuthnCredential\:\:user\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/WebAuthnCredential.php
-
-		-
-			message: '#^Constant App\\Services\\Auth\\WebAuthnService\:\:DEFAULT_APP_URL is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:generateAuthenticationOptions\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:generateRegistrationOptions\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:optionsToArray\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:requestOptionsToArray\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyAuthenticationResponse\(\) has parameter \$credentialData with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
-			message: '#^Method App\\Services\\Auth\\WebAuthnService\:\:verifyRegistrationResponse\(\) has parameter \$credentialData with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Auth/WebAuthnService.php
-
-		-
 			message: '#^Method App\\Services\\ClientManagement\\AllocationService\:\:canMergeEntries\(\) has parameter \$entries with generic class Illuminate\\Support\\Collection but does not specify its types\: TKey, TValue$#'
 			identifier: missingType.generics
 			count: 1
@@ -1341,12 +1293,6 @@ parameters:
 		-
 			message: '#^Method App\\Services\\ClientManagement\\ClientInvoicingService\:\:linkTimeEntriesToLine\(\) has parameter \$entries with no type specified\.$#'
 			identifier: missingType.parameter
-			count: 1
-			path: app/Services/ClientManagement/ClientInvoicingService.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between Carbon\\Carbon and null will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
 			count: 1
 			path: app/Services/ClientManagement/ClientInvoicingService.php
 

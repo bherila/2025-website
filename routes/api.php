@@ -62,7 +62,6 @@ use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
 use App\Http\Controllers\MD\MarkdownRendererController;
-use App\Http\Controllers\PasskeyController;
 use App\Http\Controllers\PHR\AllergyController as PHRAllergyController;
 use App\Http\Controllers\PHR\ConditionController as PHRConditionController;
 use App\Http\Controllers\PHR\DICOM\DicomFileController as PHRDicomFileController;
@@ -284,16 +283,6 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('/user/ai-prefs/{id}/activate', [UserAiConfigurationController::class, 'activate']);
     Route::post('/user/ai-prefs/models', [UserAiModelsController::class, 'fetch']);
 });
-
-// Passkey (WebAuthn) routes
-Route::middleware(['web', 'auth'])->get('/passkeys', [PasskeyController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/passkeys/register/options', [PasskeyController::class, 'registrationOptions']);
-Route::middleware(['web', 'auth'])->post('/passkeys/register', [PasskeyController::class, 'register']);
-Route::middleware(['web', 'auth'])->delete('/passkeys/{id}', [PasskeyController::class, 'destroy']);
-
-// Passkey login (unauthenticated)
-Route::middleware(['web'])->post('/passkeys/auth/options', [PasskeyController::class, 'authOptions']);
-Route::middleware(['web'])->post('/passkeys/auth', [PasskeyController::class, 'authenticate']);
 
 Route::middleware(['web', 'auth'])
     ->prefix('phr')
