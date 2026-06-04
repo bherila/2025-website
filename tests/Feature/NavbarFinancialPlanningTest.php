@@ -94,6 +94,7 @@ class NavbarFinancialPlanningTest extends TestCase
         $this->assertNotContains('GenAI Jobs', $navLabels);
         $this->assertNotContains('Tax Normalization Review', $navLabels);
         $this->assertNotContains('Client Management', $navLabels);
+        $this->assertNotContains('All Invoices', $navLabels);
 
         $this->assertSame([
             'User Settings',
@@ -102,12 +103,14 @@ class NavbarFinancialPlanningTest extends TestCase
             'GenAI Jobs',
             'Tax Normalization Review',
             'Client Management',
+            'All Invoices',
         ], array_column($payload['accountMenuItems'], 'label'));
 
         $this->assertContains('/admin/users', array_column($payload['accountMenuItems'], 'href'));
         $this->assertContains('/admin/genai-jobs', array_column($payload['accountMenuItems'], 'href'));
         $this->assertContains('/admin/tax-normalization-review', array_column($payload['accountMenuItems'], 'href'));
         $this->assertContains('/client/mgmt', array_column($payload['accountMenuItems'], 'href'));
+        $this->assertContains('/client/mgmt/invoices', array_column($payload['accountMenuItems'], 'href'));
     }
 
     /**
