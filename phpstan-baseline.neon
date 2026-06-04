@@ -1177,12 +1177,6 @@ parameters:
 			path: app/Models/FinanceTool/FinStatement.php
 
 		-
-			message: '#^Method App\\Models\\LoginAuditLog\:\:user\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/LoginAuditLog.php
-
-		-
 			message: '#^Method App\\Models\\TimeSeriesDatapoint\:\:series\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
 			identifier: missingType.generics
 			count: 1
