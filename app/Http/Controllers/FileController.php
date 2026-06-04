@@ -17,7 +17,6 @@ use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatement;
 use App\Services\FileStorageService;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -667,11 +666,7 @@ class FileController extends Controller
             ->where('acct_owner', $userId)
             ->firstOrFail();
 
-        $statement = FinStatement::query()
-            ->with(['document' => function (BelongsTo $query) use ($userId): void {
-                $query->where('user_id', $userId);
-            }])
-            ->where('statement_id', $statementId)
+        $statement = FinStatement::where('statement_id', $statementId)
             ->where('acct_id', $account->acct_id)
             ->first();
 
@@ -702,7 +697,7 @@ class FileController extends Controller
         }
 
         // Second try: statement linked to a usable GenAI job.
-        if ($statement && $statement->genai_job_id) {
+        if ($statement->genai_job_id) {
             $genaiJob = GenAiImportJob::where('id', $statement->genai_job_id)
                 ->where('user_id', $userId)
                 ->first();
@@ -726,7 +721,11 @@ class FileController extends Controller
         }
 
         // Third try: canonical finance document linked to the statement.
-        $document = $statement->document;
+        $document = $statement->document_id
+            ? FinDocument::whereKey($statement->document_id)
+                ->where('user_id', $userId)
+                ->first()
+            : null;
         if ($document instanceof FinDocument && $document->s3_path) {
             $filename = $document->original_filename
                 ?? $document->stored_filename

@@ -225,7 +225,12 @@ describe('FinanceAccountStatementsPage', () => {
     render(<FinanceAccountStatementsPage id={32} />);
 
     const attachButtons = await screen.findAllByRole('button', { name: 'Attach PDF' });
-    fireEvent.click(attachButtons[1]);
+    const secondAttachButton = attachButtons[1];
+    if (!secondAttachButton) {
+      throw new Error('Expected a second statement attach button');
+    }
+
+    fireEvent.click(secondAttachButton);
 
     await waitFor(() => {
       expect(fetchWrapper.post).toHaveBeenCalledWith('/api/finance/32/files', expect.any(FormData));
