@@ -124,6 +124,10 @@ Tax-preview source navigation is intentionally form-level today:
 
 When adding source navigation, keep older `onTabChange(tab)` component callbacks translated through `tabToDrill(onDrill)` in the dock adapter.
 
+### All-in-One K-1 / K-3 comparison tables
+
+The All-in-One K-1 and K-3 apps are viewport-sized dock columns. Their comparison tables own a bounded `overflow-auto` viewport so horizontal and vertical table scrolling happen in the same container. Keep column headers sticky to that table viewport with `top-0`; keep first-column row labels and section-title cells sticky with `left-0` and the same right-edge shadow used by statement/transaction tables.
+
 ---
 
 ## URL hash format

@@ -77,6 +77,30 @@ describe('K3AllInOneView', () => {
     expect(onReviewDoc).toHaveBeenCalledWith(201)
   })
 
+  it('keeps table headers, first-column cells, and section labels sticky inside each table viewport', () => {
+    renderView()
+
+    const table = screen.getAllByRole('table')[0]!
+    expect(table.parentElement).toHaveClass('overflow-auto')
+    expect(table.parentElement?.className).toContain('max-h-[calc(100vh-14rem)]')
+
+    const corner = within(table).getByRole('columnheader', { name: 'Line / Country' })
+    expect(corner).toHaveClass('sticky', 'top-0', 'left-0', 'z-30')
+    expect(corner.className).toContain('shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]')
+    expect(corner.closest('tr')).toHaveClass('sticky', 'top-0', 'z-20')
+
+    const fundHeader = within(table).getByText('Alpha Fund LP').closest('th')
+    expect(fundHeader).toHaveClass('sticky', 'top-0', 'z-20')
+
+    const firstColumnCell = within(table).getByText('Interest').closest('td')
+    expect(firstColumnCell).toHaveClass('sticky', 'left-0', 'z-10')
+    expect(firstColumnCell?.className).toContain('shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]')
+
+    const sectionCell = within(table).getByText('K-3 Part II — Foreign Income').closest('th')
+    expect(sectionCell).toHaveClass('sticky', 'left-0', 'z-10')
+    expect(sectionCell).not.toHaveAttribute('colspan')
+  })
+
   it('renders an empty state when no K-1 has K-3 data', () => {
     renderView({ k1Docs: [] })
     expect(screen.getByText(/No K-3 .* data found/)).toBeInTheDocument()
