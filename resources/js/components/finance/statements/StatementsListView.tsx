@@ -71,21 +71,19 @@ export default function StatementsListView({
   const [costBasisAmount, setCostBasisAmount] = useState('')
   const [costBasisError, setCostBasisError] = useState('')
 
-  // Memoize file management options to prevent object identity changes each render
-  const fileManagerOptions = useMemo(() => ({
-    listUrl: `/api/finance/${accountId}/files`,
+  const orphanFileManagerOptions = useMemo(() => ({
+    listUrl: `/api/finance/${accountId}/files?unlinked=1`,
     uploadUrl: `/api/finance/${accountId}/files`,
     downloadUrlPattern: (fileId: number) => `/api/finance/${accountId}/files/${fileId}/download`,
     deleteUrlPattern: (fileId: number) => `/api/finance/${accountId}/files/${fileId}`,
   }), [accountId])
 
-  const fileManager = useFileManagement(fileManagerOptions)
+  const orphanFileManager = useFileManagement(orphanFileManagerOptions)
+  const { fetchFiles: fetchOrphanFiles } = orphanFileManager
 
-  // Fetch files on mount
   useEffect(() => {
-    fileManager.fetchFiles()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void fetchOrphanFiles()
+  }, [fetchOrphanFiles])
 
   // Memoize chart data
   const balanceHistory = useMemo(
@@ -164,6 +162,21 @@ export default function StatementsListView({
     }
   }
 
+  const handleStatementFileUpload = useCallback(async (statementId: number, file: File): Promise<null> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('statement_id', String(statementId))
+
+    try {
+      await fetchWrapper.post(`/api/finance/${accountId}/files`, formData)
+      onRefresh()
+    } catch (error) {
+      console.error('Error attaching statement file:', error)
+    }
+
+    return null
+  }, [accountId, onRefresh])
+
   const handleFormSubmit = async () => {
     const parsedBalance = currency(currentBalance)
     if (!currentDate || !currentBalance || isNaN(parsedBalance.value) || isSubmitting) return
@@ -212,6 +225,10 @@ export default function StatementsListView({
     a.click()
     URL.revokeObjectURL(url)
   }, [accountId, statementHistory])
+
+  const shouldShowOrphanFiles = orphanFileManager.loading
+    || orphanFileManager.error !== null
+    || orphanFileManager.files.length > 0
 
   return (
     <TooltipProvider>
@@ -318,6 +335,16 @@ export default function StatementsListView({
                         hasPdf={row.hasPdf}
                         iconOnly 
                       />
+                      {!row.hasPdf && (
+                        <FileUploadButton
+                          onUpload={(file) => handleStatementFileUpload(row.statement_id, file)}
+                          variant="outline"
+                          iconOnly
+                          label="Attach PDF"
+                          title="Attach PDF"
+                          accept="application/pdf,.pdf"
+                        />
+                      )}
 
                       <AlertDialog>
                         <Tooltip>
@@ -363,6 +390,26 @@ export default function StatementsListView({
               </TableRow>
             </TableBody>
           </Table>
+          {shouldShowOrphanFiles && (
+            <FileList
+              className="mt-8"
+              files={orphanFileManager.files}
+              loading={orphanFileManager.loading}
+              error={orphanFileManager.error}
+              onDownload={orphanFileManager.downloadFile}
+              onDelete={orphanFileManager.handleDeleteRequest}
+              title="Unlinked statement files"
+            />
+          )}
+
+          <DeleteFileModal
+            file={orphanFileManager.deleteFile}
+            isOpen={orphanFileManager.deleteModalOpen}
+            isDeleting={orphanFileManager.isDeleting}
+            onClose={orphanFileManager.closeDeleteModal}
+            onConfirm={orphanFileManager.handleDeleteConfirm}
+          />
+
           <Dialog open={modalOpen} onOpenChange={setModalOpen}>
             <DialogContent>
               <DialogTitle>{selectedStatement ? 'Edit' : 'Add New'} Balance Snapshot</DialogTitle>
@@ -442,26 +489,6 @@ export default function StatementsListView({
               </div>
             </DialogContent>
           </Dialog>
-
-          {/* Account Files Section */}
-          <FileList
-            className="mt-8"
-            files={fileManager.files}
-            loading={fileManager.loading}
-            error={fileManager.error}
-            onDownload={fileManager.downloadFile}
-            onDelete={fileManager.handleDeleteRequest}
-            title="Statement Files"
-            actions={<FileUploadButton onUpload={fileManager.uploadFile} />}
-          />
-
-          <DeleteFileModal
-            file={fileManager.deleteFile}
-            isOpen={fileManager.deleteModalOpen}
-            isDeleting={fileManager.isDeleting}
-            onClose={fileManager.closeDeleteModal}
-            onConfirm={fileManager.handleDeleteConfirm}
-          />
         </div>
       </div>
     </TooltipProvider>

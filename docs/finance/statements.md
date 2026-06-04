@@ -23,8 +23,13 @@ experience:
   use preloaded information when possible and only fetch details if necessary.
   This avoids unnecessary network requests when switching between statements.
 
-- The **Statement Files** card is hidden when viewing a statement detail; it's
-  only shown on the list page.
+- Statement files are attached from the statement list row they belong to. Rows
+  without a PDF show an **Attach PDF** control, and rows with an available file
+  show the PDF view affordance.
+
+- Account files without a `statement_id` are still shown in a minimal
+  **Unlinked statement files** section so orphan uploads can be downloaded or
+  deleted. The section is hidden when there are no orphan files.
 
 - A new API endpoint (`GET /finance/{accountId}/statements/{statementId}/pdf`)
   returns signed URLs for viewing or downloading the original PDF if one is
@@ -48,10 +53,19 @@ experience:
   (used by the statement detail view to show the original PDF).
 
 - `FileController::viewStatementPdf` returns signed view/download URLs. It now
-  supports two file sources (in priority order):
+  supports three file sources (in priority order):
   1. A file in `files_for_fin_accounts` linked to the statement via `statement_id`.
   2. A GenAI import job linked to the statement via `genai_job_id` (see below).
+  3. The canonical `fin_documents` row linked from `fin_statements.document_id`.
   If neither is present, the endpoint returns 404.
+
+- The statements list marks a row as having a PDF when any of those sources is
+  available: a linked `files_for_fin_accounts` row, a linked GenAI job, or a
+  linked `fin_documents.s3_path`.
+
+- `GET /api/finance/{accountId}/files?unlinked=1` limits the file list to
+  `files_for_fin_accounts` rows where `statement_id IS NULL`; the statements
+  page uses that filter for the orphan-only affordance.
 
 - **Duplicate File Prevention**: `FileController` uses SHA-256 hashes to prevent
   re-saving the same file multiple times for an account. The hash is stored in

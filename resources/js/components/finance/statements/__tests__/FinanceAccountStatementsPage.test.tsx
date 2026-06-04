@@ -68,7 +68,16 @@ jest.mock('@/components/ui/alert-dialog', () => ({
 jest.mock('@/components/shared/FileManager', () => ({
   DeleteFileModal: () => null,
   FileList: () => <div data-testid="file-list" />,
-  FileUploadButton: () => <button>Upload</button>,
+  FileUploadButton: ({ onUpload, label = 'Upload File' }: MockFileUploadButtonProps) => (
+    <button
+      aria-label={label}
+      onClick={() => {
+        void onUpload(new File(['statement'], 'statement.pdf', { type: 'application/pdf' }));
+      }}
+    >
+      {label}
+    </button>
+  ),
   useFileManagement: () => ({
     files: [],
     loading: false,
@@ -84,6 +93,11 @@ jest.mock('@/components/shared/FileManager', () => ({
     closeDeleteModal: jest.fn(),
   }),
 }));
+
+interface MockFileUploadButtonProps {
+  onUpload: (file: File) => Promise<unknown>
+  label?: string
+}
 
 jest.mock('../../StatementDetailsModal', () => ({
   StatementDetailsModal: () => <div data-testid="statement-details-modal" />,
@@ -184,7 +198,7 @@ describe('FinanceAccountStatementsPage', () => {
     expect(balanceCalls).toHaveLength(1);
   });
 
-  it('renders toolbar buttons and file list, chart hidden by default', async () => {
+  it('renders toolbar buttons and per-row attach buttons, chart hidden by default', async () => {
     (fetchWrapper.get as jest.Mock).mockResolvedValueOnce(SAMPLE_STATEMENTS);
 
     render(<FinanceAccountStatementsPage id={32} />);
@@ -200,7 +214,26 @@ describe('FinanceAccountStatementsPage', () => {
     expect(screen.getByText('Show Chart')).toBeInTheDocument();
 
     expect(screen.getByText('Download CSV')).toBeInTheDocument();
-    expect(screen.getByTestId('file-list')).toBeInTheDocument();
+    expect(screen.queryByTestId('file-list')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Attach PDF' })).toHaveLength(SAMPLE_STATEMENTS.length);
+  });
+
+  it('uploads statement files with the row statement_id', async () => {
+    (fetchWrapper.get as jest.Mock).mockResolvedValue(SAMPLE_STATEMENTS);
+    (fetchWrapper.post as jest.Mock).mockResolvedValue({});
+
+    render(<FinanceAccountStatementsPage id={32} />);
+
+    const attachButtons = await screen.findAllByRole('button', { name: 'Attach PDF' });
+    fireEvent.click(attachButtons[1]);
+
+    await waitFor(() => {
+      expect(fetchWrapper.post).toHaveBeenCalledWith('/api/finance/32/files', expect.any(FormData));
+    });
+
+    const formData = (fetchWrapper.post as jest.Mock).mock.calls[0][1] as FormData;
+    expect(formData.get('statement_id')).toBe('2');
+    expect(formData.get('file')).toBeInstanceOf(File);
   });
 
   it('shows chart when Show Chart toggle is enabled', async () => {

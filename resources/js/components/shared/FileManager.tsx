@@ -186,9 +186,22 @@ interface FileUploadButtonProps {
   disabled?: boolean
   className?: string
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
+  label?: string
+  iconOnly?: boolean
+  accept?: string
+  title?: string
 }
 
-export function FileUploadButton({ onUpload, disabled, className, variant = 'default' }: FileUploadButtonProps) {
+export function FileUploadButton({
+  onUpload,
+  disabled,
+  className,
+  variant = 'default',
+  label = 'Upload File',
+  iconOnly = false,
+  accept,
+  title,
+}: FileUploadButtonProps) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -235,13 +248,17 @@ export function FileUploadButton({ onUpload, disabled, className, variant = 'def
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
+        accept={accept}
         className="hidden"
       />
       <Button
         onClick={handleClick}
         disabled={disabled || uploading}
         variant={variant}
+        size={iconOnly ? 'icon-sm' : 'default'}
         className={`relative overflow-hidden ${className || ''}`}
+        title={title ?? label}
+        aria-label={label}
       >
         {uploading && (
           <div 
@@ -251,11 +268,15 @@ export function FileUploadButton({ onUpload, disabled, className, variant = 'def
         )}
         <span className="relative flex items-center">
           {uploading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 className={`h-4 w-4 animate-spin ${iconOnly ? '' : 'mr-2'}`} />
           ) : (
-            <Upload className="h-4 w-4 mr-2" />
+            <Upload className={`h-4 w-4 ${iconOnly ? '' : 'mr-2'}`} />
           )}
-          {uploading ? `Uploading... ${Math.round(progress)}%` : 'Upload File'}
+          {iconOnly ? (
+            <span className="sr-only">{uploading ? `Uploading... ${Math.round(progress)}%` : label}</span>
+          ) : (
+            uploading ? `Uploading... ${Math.round(progress)}%` : label
+          )}
         </span>
       </Button>
     </>
