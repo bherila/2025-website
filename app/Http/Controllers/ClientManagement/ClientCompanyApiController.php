@@ -453,6 +453,27 @@ class ClientCompanyApiController extends Controller
     }
 
     /**
+     * Billing recipient candidates for the Send Invoice dialog.
+     */
+    public function billingRecipients(ClientCompany $company): JsonResponse
+    {
+        /** @var list<string> $recipientSuggestions */
+        $recipientSuggestions = $company->users()
+            ->whereNotNull('users.email')
+            ->orderBy('users.email')
+            ->pluck('users.email')
+            ->filter(fn (mixed $email): bool => is_string($email) && $email !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        return response()->json([
+            'billing_email' => $company->billing_email ?: null,
+            'recipient_suggestions' => $recipientSuggestions,
+        ]);
+    }
+
+    /**
      * Update a client company.
      */
     public function update(UpdateClientCompanyRequest $request, int $id): JsonResponse

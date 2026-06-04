@@ -518,6 +518,28 @@ class ClientInvoiceTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_invoice_index_keeps_billing_email_without_recipient_suggestions(): void
+    {
+        $this->company->update(['billing_email' => 'billing@example.com']);
+        $portalUser = User::factory()->create(['email' => 'portal-user@example.com']);
+        $this->company->users()->attach($portalUser->id);
+
+        $this->invoicingService->generateInvoice(
+            $this->company,
+            Carbon::create(2024, 2, 1),
+            Carbon::create(2024, 2, 29)
+        );
+
+        $response = $this->actingAs($this->admin)
+            ->getJson("/api/client/mgmt/companies/{$this->company->id}/invoices")
+            ->assertStatus(200);
+
+        $invoiceSummary = $response->json('0');
+        $this->assertIsArray($invoiceSummary);
+        $this->assertSame('billing@example.com', $invoiceSummary['billing_email']);
+        $this->assertArrayNotHasKey('recipient_suggestions', $invoiceSummary);
+    }
+
     public function test_invoice_api_void_rejects_invoice_with_payments(): void
     {
         $this->withoutMiddleware();

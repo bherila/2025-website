@@ -20,6 +20,11 @@ interface SendInvoiceDialogProps {
   onSent?: () => void
 }
 
+interface BillingRecipientsResponse {
+  billing_email: string | null
+  recipient_suggestions: string[]
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message
@@ -32,6 +37,30 @@ function getErrorMessage(error: unknown): string {
   return 'Failed to send the invoice.'
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function parseBillingRecipientsResponse(value: unknown): BillingRecipientsResponse {
+  if (!isRecord(value)) {
+    return { billing_email: null, recipient_suggestions: [] }
+  }
+
+  const billingEmail = typeof value.billing_email === 'string' && value.billing_email.trim()
+    ? value.billing_email
+    : null
+  const recipientSuggestions = Array.isArray(value.recipient_suggestions)
+    ? value.recipient_suggestions.filter(
+      (email): email is string => typeof email === 'string' && email.trim().length > 0,
+    )
+    : []
+
+  return {
+    billing_email: billingEmail,
+    recipient_suggestions: recipientSuggestions,
+  }
+}
+
 function parseEmails(value: string): string[] {
   return value
     .split(/[\s,]+/)
@@ -40,22 +69,53 @@ function parseEmails(value: string): string[] {
 }
 
 export default function SendInvoiceDialog({ open, onOpenChange, companyId, invoice, onSent }: SendInvoiceDialogProps) {
-  const [to, setTo] = useState('')
+  const [to, setTo] = useState(invoice.billing_email || '')
   const [cc, setCc] = useState('')
   const [note, setNote] = useState('')
   const [saveAsBillingEmail, setSaveAsBillingEmail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recipientSuggestions, setRecipientSuggestions] = useState<string[]>([])
 
   useEffect(() => {
-    if (open) {
-      setTo(invoice.billing_email || invoice.recipient_suggestions?.[0] || '')
-      setCc('')
-      setNote('')
-      setSaveAsBillingEmail(false)
-      setError(null)
+    if (!open) {
+      return
     }
-  }, [open, invoice.billing_email, invoice.recipient_suggestions])
+
+    const initialTo = invoice.billing_email || ''
+
+    let isCurrent = true
+
+    const loadBillingRecipients = async () => {
+      try {
+        const data = parseBillingRecipientsResponse(
+          await fetchWrapper.get(`/api/client/mgmt/companies/${companyId}/billing-recipients`),
+        )
+
+        if (!isCurrent) {
+          return
+        }
+
+        setRecipientSuggestions(data.recipient_suggestions)
+
+        const billingEmail = data.billing_email
+
+        if (billingEmail && billingEmail !== initialTo) {
+          setTo((current) => (current.trim() === initialTo.trim() ? billingEmail : current))
+        }
+      } catch {
+        if (isCurrent) {
+          setRecipientSuggestions([])
+        }
+      }
+    }
+
+    void loadBillingRecipients()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [companyId, invoice.billing_email, invoice.id, open])
 
   const addRecipient = (email: string) => {
     setTo((current) => {
@@ -94,8 +154,6 @@ export default function SendInvoiceDialog({ open, onOpenChange, companyId, invoi
     }
   }
 
-  const suggestions = invoice.recipient_suggestions ?? []
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -121,9 +179,9 @@ export default function SendInvoiceDialog({ open, onOpenChange, companyId, invoi
               onChange={(event) => setTo(event.target.value)}
               placeholder="billing@example.com"
             />
-            {suggestions.length > 0 && (
+            {recipientSuggestions.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {suggestions.map((email) => (
+                {recipientSuggestions.map((email) => (
                   <Button
                     key={email}
                     type="button"

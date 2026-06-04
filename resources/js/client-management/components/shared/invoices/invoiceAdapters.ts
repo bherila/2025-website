@@ -32,7 +32,6 @@ export interface NormalizedInvoice {
   company_name?: string | null
   last_emailed_at?: string | null
   billing_email?: string | null
-  recipient_suggestions?: string[]
 }
 
 export function fromAdminInvoice(invoice: AdminInvoice): NormalizedInvoice {
@@ -57,7 +56,6 @@ export function fromAdminInvoice(invoice: AdminInvoice): NormalizedInvoice {
     company_name: invoice.company_name ?? null,
     last_emailed_at: invoice.last_emailed_at ?? null,
     billing_email: invoice.billing_email ?? null,
-    recipient_suggestions: invoice.recipient_suggestions ?? [],
   }
 }
 

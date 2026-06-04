@@ -374,6 +374,7 @@ Route::middleware(['web', 'auth', 'can:Admin'])
     ->group(function (): void {
         Route::get('/companies', [ClientCompanyApiController::class, 'index']);
         Route::get('/company-options', [ClientCompanyApiController::class, 'options']);
+        Route::get('/companies/{company}/billing-recipients', [ClientCompanyApiController::class, 'billingRecipients']);
         Route::get('/companies/{id}', [ClientCompanyApiController::class, 'show']);
         Route::put('/companies/{id}', [ClientCompanyApiController::class, 'update']);
         Route::get('/users', [ClientCompanyApiController::class, 'getUsers']);
