@@ -86,6 +86,14 @@ const mockRegistry: FormRegistry = {
     presentation: 'app',
     ...sharedDefaults,
   },
+  'source-overrides': {
+    id: 'source-overrides',
+    label: 'K-1/K-3 Source Value Overrides',
+    shortLabel: 'Source Overrides',
+    category: 'App',
+    presentation: 'column',
+    ...sharedDefaults,
+  },
   'k1-all-in-one': {
     id: 'k1-all-in-one',
     label: 'All-in-One K-1',
