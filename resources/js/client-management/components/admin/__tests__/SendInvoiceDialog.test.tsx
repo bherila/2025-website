@@ -56,8 +56,12 @@ describe('SendInvoiceDialog', () => {
     await waitFor(() => {
       expect(mockGet).toHaveBeenCalledWith('/api/client/mgmt/companies/7/billing-recipients')
     })
+
     expect(await screen.findByRole('button', { name: /server-billing@acme\.test/ })).toBeInTheDocument()
-    expect(toField.value).toBe('server-billing@acme.test')
+
+    await waitFor(() => {
+      expect(toField.value).toBe('server-billing@acme.test')
+    })
   })
 
   it('renders loaded recipient suggestions as quick-add chips without duplicates', async () => {

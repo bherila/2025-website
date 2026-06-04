@@ -120,9 +120,9 @@ class SendClientInvoiceTest extends TestCase
     {
         $this->company->update(['billing_email' => 'billing@example.com']);
 
-        $leadUser = User::factory()->create(['email' => 'lead@example.com']);
-        $billingUser = User::factory()->create(['email' => 'portal-billing@example.com']);
-        $this->company->users()->attach([$billingUser->id, $leadUser->id]);
+        $alphaUser = User::factory()->create(['email' => 'alpha@example.com']);
+        $zetaUser = User::factory()->create(['email' => 'zeta@example.com']);
+        $this->company->users()->attach([$zetaUser->id, $alphaUser->id]);
 
         $this->actingAs($this->admin)
             ->getJson("/api/client/mgmt/companies/{$this->company->id}/billing-recipients")
@@ -130,8 +130,8 @@ class SendClientInvoiceTest extends TestCase
             ->assertExactJson([
                 'billing_email' => 'billing@example.com',
                 'recipient_suggestions' => [
-                    'lead@example.com',
-                    'portal-billing@example.com',
+                    'alpha@example.com',
+                    'zeta@example.com',
                 ],
             ]);
     }
