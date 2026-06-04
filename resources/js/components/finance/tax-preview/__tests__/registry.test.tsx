@@ -1,4 +1,6 @@
+import { ALL_FORM_IDS } from '../formRegistry'
 import { formRegistry } from '../registry'
+import { FORM_IDS } from '../taxRoute'
 
 describe('formRegistry', () => {
   it('registers entries with matching id field', () => {
@@ -38,5 +40,21 @@ describe('formRegistry', () => {
   it('renders Estimate at the same wide column width as Documents', () => {
     expect(formRegistry.estimate!.wide).toBe(true)
     expect(formRegistry.documents!.wide).toBe(true)
+  })
+
+  it('every registered form id is in the route allowlist so it can be navigated to', () => {
+    // The Miller router round-trips routes through the URL hash, dropping any
+    // column whose id is not allowlisted in FORM_IDS. A registry id missing
+    // from the allowlist therefore renders as a no-op click (it snaps back to
+    // Home). This guards against that drift — see All-in-One K-1 (#745).
+    for (const id of Object.keys(formRegistry)) {
+      expect(FORM_IDS.has(id)).toBe(true)
+    }
+  })
+
+  it('the route allowlist contains no ids without a registry entry', () => {
+    for (const id of ALL_FORM_IDS) {
+      expect(formRegistry[id]).toBeDefined()
+    }
   })
 })

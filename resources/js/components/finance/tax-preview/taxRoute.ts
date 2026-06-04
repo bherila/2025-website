@@ -9,37 +9,9 @@ import {
   truncateTo as truncateMillerTo,
 } from '@/components/ui/miller'
 
-import type { FormId } from './formRegistry'
+import { ALL_FORM_IDS, type FormId } from './formRegistry'
 
-export const FORM_IDS: ReadonlySet<string> = new Set<FormId>([
-  'home',
-  'estimate',
-  'action-items',
-  'documents',
-  'w2-summary',
-  'tax-lot-reconciliation',
-  'form-1040',
-  'sch-1',
-  'sch-2',
-  'sch-3',
-  'sch-a',
-  'sch-b',
-  'sch-c',
-  'sch-d',
-  'sch-e',
-  'sch-se',
-  'form-1116',
-  'form-4797',
-  'form-4952',
-  'form-6251',
-  'form-8582',
-  'form-8606',
-  'form-8949',
-  'form-8995',
-  'wks-se-401k',
-  'wks-amt-exemption',
-  'wks-taxable-ss',
-])
+export const FORM_IDS: ReadonlySet<string> = new Set<FormId>(ALL_FORM_IDS)
 
 export interface ColumnSpec {
   form: FormId
