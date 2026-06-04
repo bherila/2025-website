@@ -14,6 +14,7 @@ export type FormId =
   | 'w2-summary'
   | 'tax-lot-reconciliation'
   | 'capital-gains-reconciliation'
+  | 'source-overrides'
   | 'k1-all-in-one'
   | 'k3-all-in-one'
   | 'form-1040'
@@ -56,6 +57,7 @@ export const ALL_FORM_IDS = [
   'w2-summary',
   'tax-lot-reconciliation',
   'capital-gains-reconciliation',
+  'source-overrides',
   'k1-all-in-one',
   'k3-all-in-one',
   'form-1040',

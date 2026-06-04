@@ -99,6 +99,16 @@ describe('DockHomeView', () => {
     expect(screen.getByText('1099-B Reconcile')).toBeInTheDocument()
   })
 
+  it('includes source override review in App cards for discoverability', () => {
+    render(
+      <Wrapper>
+        <DockHomeView />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText('Source Overrides')).toBeInTheDocument()
+  })
+
   it('Clear button empties the Recent list for the active year', () => {
     window.localStorage.setItem(
       STORAGE_KEY,

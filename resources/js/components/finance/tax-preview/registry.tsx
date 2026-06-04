@@ -26,6 +26,7 @@ import ScheduleDPreview from '@/components/finance/ScheduleDPreview'
 import ScheduleEPreview from '@/components/finance/ScheduleEPreview'
 import ScheduleFPreview from '@/components/finance/ScheduleFPreview'
 import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
+import SourceValueOverridesView from '@/components/finance/SourceValueOverridesView'
 import { ReadinessCards } from '@/components/finance/tax-preview/ReadinessCards'
 import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
 import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliationPanel'
@@ -597,6 +598,18 @@ function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
   return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} onSaveParsedData={saveParsedDataOverride(state)} />
 }
 
+function SourceValueOverridesAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  return (
+    <SourceValueOverridesView
+      k1Docs={state.reviewedK1Docs}
+      onReviewDoc={reviewK1Doc}
+      onOpenAllK1={() => onDrill({ id: 'k1-all-in-one' })}
+      onOpenAllK3={() => onDrill({ id: 'k3-all-in-one' })}
+    />
+  )
+}
+
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
   const entries = Object.entries(registry) as [FormId, FormRegistryEntry][]
   return Object.fromEntries(
@@ -1004,6 +1017,20 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'app',
     component: CapitalGainsReconciliationAdapter,
     wide: true,
+  },
+  'source-overrides': {
+    id: 'source-overrides',
+    label: 'K-1/K-3 Source Value Overrides',
+    shortLabel: 'Source Overrides',
+    keywords: ['K-1', 'K-3', 'source overrides', 'overrides', 'review', 'foreign tax', 'all in one'],
+    category: 'App',
+    presentation: 'column',
+    size: 'full',
+    component: SourceValueOverridesAdapter,
+    hasData: (state) => state.reviewedK1Docs.some((doc) => {
+      const parsed = doc.parsed_data as unknown as { sourceValueOverrides?: Record<string, unknown> } | null
+      return Object.keys(parsed?.sourceValueOverrides ?? {}).length > 0
+    }),
   },
   'k1-all-in-one': {
     id: 'k1-all-in-one',
