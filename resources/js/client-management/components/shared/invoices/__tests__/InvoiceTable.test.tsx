@@ -68,6 +68,7 @@ describe('InvoiceTable — admin mode', () => {
     expect(screen.getByText('Hours')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
     expect(screen.getByText('Stripe Failure')).toBeInTheDocument()
+    expect(screen.getByText('Emailed')).toBeInTheDocument()
     expect(screen.getByText('Actions')).toBeInTheDocument()
   })
 

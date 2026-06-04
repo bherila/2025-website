@@ -125,6 +125,8 @@ Route::middleware('auth')->group(function () {
     // Client Management Routes
     Route::get('/client/mgmt', [ClientCompanyController::class, 'index'])->name('client-management.index');
     Route::get('/client/mgmt/new', [ClientCompanyController::class, 'create'])->name('client-management.create');
+    // Must be declared before the `/client/mgmt/{id}` catch-all so "invoices" isn't treated as a company id.
+    Route::get('/client/mgmt/invoices', [ClientCompanyController::class, 'invoicesIndex'])->name('client-management.invoices');
     Route::post('/client/mgmt', [ClientCompanyController::class, 'store'])->name('client-management.store');
     Route::get('/client/mgmt/{id}', [ClientCompanyController::class, 'show'])->name('client-management.show');
     Route::delete('/client/mgmt/{id}', [ClientCompanyController::class, 'destroy'])->name('client-management.destroy');

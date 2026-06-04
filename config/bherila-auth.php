@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+
 return [
     'routes' => [
         'enabled' => true,
@@ -45,7 +47,7 @@ return [
     ],
 
     'users' => [
-        'model' => config('auth.providers.users.model', App\Models\User::class),
+        'model' => config('auth.providers.users.model', User::class),
         'name_attribute' => 'name',
         'email_attribute' => 'email',
         'force_change_password_attribute' => null,

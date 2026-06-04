@@ -33,6 +33,16 @@ class ClientCompanyController extends Controller
     }
 
     /**
+     * Display the merged all-companies invoice list.
+     */
+    public function invoicesIndex(): View
+    {
+        Gate::authorize('Admin');
+
+        return view('client-management.invoices');
+    }
+
+    /**
      * Store a newly created client company in storage.
      */
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -97,6 +107,7 @@ class ClientCompanyController extends Controller
             'address' => 'nullable|string',
             'website' => 'nullable|string|max:255',
             'phone_number' => 'nullable|string|max:255',
+            'billing_email' => 'nullable|email|max:255',
             'default_hourly_rate' => 'nullable|numeric|min:0',
             'additional_notes' => 'nullable|string',
             'is_active' => 'boolean',

@@ -18,9 +18,10 @@ interface AdminInvoiceTableRowProps {
   selected: boolean
   onToggleSelected: (id: number) => void
   renderActions: (invoice: NormalizedInvoice) => ReactNode
+  showCompany?: boolean
 }
 
-export function AdminInvoiceTableRow({ invoice, selected, onToggleSelected, renderActions }: AdminInvoiceTableRowProps) {
+export function AdminInvoiceTableRow({ invoice, selected, onToggleSelected, renderActions, showCompany = false }: AdminInvoiceTableRowProps) {
   return (
     <TableRow>
       <TableCell>
@@ -29,6 +30,11 @@ export function AdminInvoiceTableRow({ invoice, selected, onToggleSelected, rend
           onCheckedChange={() => onToggleSelected(invoice.id)}
         />
       </TableCell>
+      {showCompany && (
+        <TableCell className="font-medium">
+          {invoice.company_name ?? '—'}
+        </TableCell>
+      )}
       <TableCell className="font-medium">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
@@ -61,6 +67,9 @@ export function AdminInvoiceTableRow({ invoice, selected, onToggleSelected, rend
         ) : (
           <span>—</span>
         )}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+        {invoice.last_emailed_at ? new Date(invoice.last_emailed_at).toLocaleDateString() : '—'}
       </TableCell>
       <TableCell>
         <div className="flex justify-end gap-2">
