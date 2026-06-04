@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\LoginAuditLog;
 use App\Models\User;
+use BWH\Auth\Concerns\LogsAuthEvents;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class LoginController extends Controller
 {
+    use LogsAuthEvents;
+
     public function login(Request $request)
     {
         $email = $request->input('email', '');
@@ -22,7 +24,7 @@ class LoginController extends Controller
             if ($user && $user->canLogin()) {
                 Auth::login($user, $remember);
                 $request->session()->regenerate();
-                $this->logAudit($request, $user, $email, true, 'password');
+                $this->auditLoginSucceeded($request, $user, 'password');
 
                 return redirect()->intended('/');
             }
@@ -35,18 +37,18 @@ class LoginController extends Controller
             if (! $user->canLogin()) {
                 Auth::logout();
                 $request->session()->invalidate();
-                $this->logAudit($request, $user, $email, false, 'password');
+                $this->auditLoginFailed($request, $user, $email, 'Account disabled', 'password');
 
                 return back()->withErrors(['email' => 'Your account is disabled. Please contact an administrator.']);
             }
 
             $request->session()->regenerate();
-            $this->logAudit($request, $user, $email, true, 'password');
+            $this->auditLoginSucceeded($request, $user, 'password');
 
             return redirect()->intended('/');
         }
 
-        $this->logAudit($request, null, $email, false, 'password');
+        $this->auditLoginFailed($request, null, $email, 'Invalid credentials', 'password');
 
         return back()->withErrors(['email' => 'Invalid credentials']);
     }
@@ -70,14 +72,14 @@ class LoginController extends Controller
         $user = User::where('email', $email)->first();
 
         if (! $user) {
-            $this->logAudit($request, null, $email, false, 'dev');
+            $this->auditLoginFailed($request, null, $email, 'User not found', 'dev');
 
             return back()->withErrors(['email' => 'User not found']);
         }
 
         // Check if user has valid role to login
         if (! $user->canLogin()) {
-            $this->logAudit($request, $user, $email, false, 'dev');
+            $this->auditLoginFailed($request, $user, $email, 'Account disabled', 'dev');
 
             return back()->withErrors(['email' => 'Your account is disabled. Please contact an administrator.']);
         }
@@ -87,7 +89,7 @@ class LoginController extends Controller
 
         // Update last login date
         $user->update(['last_login_date' => now()]);
-        $this->logAudit($request, $user, $email, true, 'dev');
+        $this->auditLoginSucceeded($request, $user, 'dev');
 
         return redirect()->intended('/');
     }
@@ -119,21 +121,9 @@ class LoginController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
         $user->update(['last_login_date' => now()]);
-        $this->logAudit($request, $user, $user->email, true, 'dev');
+        $this->auditLoginSucceeded($request, $user, 'dev');
 
         return redirect()->intended('/');
-    }
-
-    private function logAudit(Request $request, ?User $user, string $email, bool $success, string $method): void
-    {
-        LoginAuditLog::create([
-            'user_id' => $user?->id,
-            'email' => $email,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'success' => $success,
-            'method' => $method,
-        ]);
     }
 
     /**

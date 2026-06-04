@@ -17,6 +17,14 @@ return [
         'drop_tables_on_rollback' => false,
     ],
 
+    'audit' => [
+        'driver' => env('BHERILA_AUTH_AUDIT_DRIVER', 'database'),
+        'table' => 'auth_audit_log',
+        'routes_enabled' => env('BHERILA_AUTH_AUDIT_ROUTES', false),
+        'retention_days' => env('BHERILA_AUTH_AUDIT_RETENTION_DAYS'),
+        'admin_ability' => env('BHERILA_AUTH_AUDIT_ADMIN_ABILITY'),
+    ],
+
     'password_resets' => [
         'reset_url' => env('BHERILA_AUTH_PASSWORD_RESET_URL', env('APP_URL', '').'/reset-password/{token}?email={email}'),
         'request_url' => env('BHERILA_AUTH_PASSWORD_REQUEST_URL', '/forgot-password'),

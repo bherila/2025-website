@@ -2,12 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Models\LoginAuditLog;
 use App\Models\User;
+use BWH\Auth\Contracts\AuthAuditLogger;
+use BWH\Auth\Models\AuthAuditLog;
+use BWH\Auth\Services\DatabaseAuthAuditLogger;
 use Tests\TestCase;
 
 class LoginAuditTest extends TestCase
 {
+    public function test_package_database_audit_logger_is_bound(): void
+    {
+        $this->assertInstanceOf(DatabaseAuthAuditLogger::class, app(AuthAuditLogger::class));
+    }
+
     public function test_login_success_is_logged(): void
     {
         $user = User::factory()->create([
@@ -21,10 +28,11 @@ class LoginAuditTest extends TestCase
             'password' => 'password123',
         ]);
 
-        $this->assertDatabaseHas('login_audit_log', [
+        $this->assertDatabaseHas('auth_audit_log', [
             'email' => 'audit@example.com',
-            'success' => true,
-            'method' => 'password',
+            'event' => AuthAuditLog::EVENT_LOGIN_SUCCEEDED,
+            'succeeded' => true,
+            'auth_method' => 'password',
         ]);
     }
 
@@ -41,10 +49,12 @@ class LoginAuditTest extends TestCase
             'password' => 'wrongpassword',
         ]);
 
-        $this->assertDatabaseHas('login_audit_log', [
+        $this->assertDatabaseHas('auth_audit_log', [
             'email' => 'audit@example.com',
-            'success' => false,
-            'method' => 'password',
+            'event' => AuthAuditLog::EVENT_LOGIN_FAILED,
+            'succeeded' => false,
+            'auth_method' => 'password',
+            'reason' => 'Invalid credentials',
         ]);
     }
 
@@ -52,18 +62,52 @@ class LoginAuditTest extends TestCase
     {
         $user = $this->createUser();
 
-        LoginAuditLog::create([
+        AuthAuditLog::create([
             'user_id' => $user->id,
             'email' => $user->email,
+            'event' => AuthAuditLog::EVENT_LOGIN_SUCCEEDED,
+            'auth_method' => 'password',
+            'succeeded' => true,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Test',
-            'success' => true,
-            'method' => 'password',
         ]);
 
         $response = $this->actingAs($user)->get('/api/login-audit');
         $response->assertStatus(200);
         $response->assertJsonStructure(['data', 'current_page', 'total']);
+        $response->assertJsonPath('data.0.success', true);
+        $response->assertJsonPath('data.0.method', 'password');
+    }
+
+    public function test_audit_log_endpoint_excludes_non_login_auth_events(): void
+    {
+        $user = $this->createUser();
+
+        AuthAuditLog::create([
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'event' => AuthAuditLog::EVENT_PASSKEY_REGISTERED,
+            'auth_method' => 'passkey',
+            'succeeded' => true,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Test',
+        ]);
+
+        AuthAuditLog::create([
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'event' => AuthAuditLog::EVENT_PASSKEY_LOGIN_SUCCEEDED,
+            'auth_method' => 'passkey',
+            'succeeded' => true,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Test',
+        ]);
+
+        $response = $this->actingAs($user)->get('/api/login-audit');
+
+        $response->assertStatus(200);
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.method', 'passkey');
     }
 
     public function test_user_cannot_view_other_users_audit_log(): void
@@ -71,13 +115,14 @@ class LoginAuditTest extends TestCase
         $user1 = $this->createUser(['email' => 'user1@example.com']);
         $user2 = $this->createUser(['email' => 'user2@example.com']);
 
-        LoginAuditLog::create([
+        AuthAuditLog::create([
             'user_id' => $user2->id,
             'email' => $user2->email,
+            'event' => AuthAuditLog::EVENT_LOGIN_SUCCEEDED,
+            'auth_method' => 'password',
+            'succeeded' => true,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Test',
-            'success' => true,
-            'method' => 'password',
         ]);
 
         $response = $this->actingAs($user1)->get('/api/login-audit');
@@ -90,13 +135,14 @@ class LoginAuditTest extends TestCase
     {
         $user = $this->createUser();
 
-        $entry = LoginAuditLog::create([
+        $entry = AuthAuditLog::create([
             'user_id' => $user->id,
             'email' => $user->email,
+            'event' => AuthAuditLog::EVENT_LOGIN_SUCCEEDED,
+            'auth_method' => 'password',
+            'succeeded' => true,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Test',
-            'success' => true,
-            'method' => 'password',
             'is_suspicious' => false,
         ]);
 
@@ -104,7 +150,7 @@ class LoginAuditTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['success' => true, 'is_suspicious' => true]);
 
-        $this->assertDatabaseHas('login_audit_log', [
+        $this->assertDatabaseHas('auth_audit_log', [
             'id' => $entry->id,
             'is_suspicious' => true,
         ]);
@@ -115,16 +161,36 @@ class LoginAuditTest extends TestCase
         $user1 = $this->createUser(['email' => 'user1@example.com']);
         $user2 = $this->createUser(['email' => 'user2@example.com']);
 
-        $entry = LoginAuditLog::create([
+        $entry = AuthAuditLog::create([
             'user_id' => $user2->id,
             'email' => $user2->email,
+            'event' => AuthAuditLog::EVENT_LOGIN_SUCCEEDED,
+            'auth_method' => 'password',
+            'succeeded' => true,
             'ip_address' => '127.0.0.1',
             'user_agent' => 'Test',
-            'success' => true,
-            'method' => 'password',
         ]);
 
         $response = $this->actingAs($user1)->postJson("/api/login-audit/{$entry->id}/suspicious");
+        $response->assertStatus(404);
+    }
+
+    public function test_user_cannot_mark_non_login_auth_event_as_suspicious_through_login_audit_route(): void
+    {
+        $user = $this->createUser();
+
+        $entry = AuthAuditLog::create([
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'event' => AuthAuditLog::EVENT_PASSKEY_REGISTERED,
+            'auth_method' => 'passkey',
+            'succeeded' => true,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Test',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/login-audit/{$entry->id}/suspicious");
+
         $response->assertStatus(404);
     }
 
