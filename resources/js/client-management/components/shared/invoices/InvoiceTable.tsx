@@ -21,6 +21,8 @@ interface AdminInvoiceTableProps {
   selected: number[]
   onToggleSelected: (id: number) => void
   renderActions: (invoice: NormalizedInvoice) => ReactNode
+  /** Show a Company column — used by the cross-company merged invoice view. */
+  showCompany?: boolean
 }
 
 // ── Portal mode props ─────────────────────────────────────────────────────────
@@ -48,13 +50,16 @@ export function InvoiceTable(props: InvoiceTableProps) {
   return <PortalInvoiceTable {...props} />
 }
 
-function AdminInvoiceTable({ invoices, selected, onToggleSelected, renderActions }: AdminInvoiceTableProps) {
+function AdminInvoiceTable({ invoices, selected, onToggleSelected, renderActions, showCompany = false }: AdminInvoiceTableProps) {
+  const colSpan = showCompany ? 11 : 10
+
   return (
     <div className="overflow-x-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-10" />
+            {showCompany && <TableHead>Company</TableHead>}
             <TableHead>Invoice</TableHead>
             <TableHead>Cycle</TableHead>
             <TableHead>Kind</TableHead>
@@ -62,6 +67,7 @@ function AdminInvoiceTable({ invoices, selected, onToggleSelected, renderActions
             <TableHead>Total</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Stripe Failure</TableHead>
+            <TableHead>Emailed</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -73,10 +79,11 @@ function AdminInvoiceTable({ invoices, selected, onToggleSelected, renderActions
               selected={selected.includes(invoice.id)}
               onToggleSelected={onToggleSelected}
               renderActions={renderActions}
+              showCompany={showCompany}
             />
           ))}
           {invoices.length === 0 && (
-            <InvoiceEmptyState mode="admin" colSpan={9} />
+            <InvoiceEmptyState mode="admin" colSpan={colSpan} />
           )}
         </TableBody>
       </Table>

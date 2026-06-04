@@ -1,7 +1,8 @@
-import { RefreshCw, RotateCcw } from 'lucide-react'
+import { Download, Mail, RefreshCw, RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import DateRangeFilter from '@/client-management/components/admin/DateRangeFilter'
+import SendInvoiceDialog from '@/client-management/components/admin/SendInvoiceDialog'
 import type { BillingCadence } from '@/client-management/types/client-agreement'
 import type { Agreement } from '@/client-management/types/common'
 import { formatBillingCadence } from '@/client-management/utils/formatBillingCadence'
@@ -26,6 +27,7 @@ export interface AdminInvoice {
   cycle_start?: string | null
   cycle_end?: string | null
   invoice_total: string | number
+  remaining_balance?: string | number | null
   status: string
   invoice_kind?: string
   hours_worked?: string | number
@@ -33,6 +35,11 @@ export interface AdminInvoice {
   hours_billed_at_rate?: string | number
   stripe_payment_status?: string | null
   stripe_failure_reason?: string | null
+  company_id?: number | null
+  company_name?: string | null
+  last_emailed_at?: string | null
+  billing_email?: string | null
+  recipient_suggestions?: string[]
 }
 
 interface AdminInvoiceListProps {
@@ -68,6 +75,7 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sendInvoice, setSendInvoice] = useState<NormalizedInvoice | null>(null)
 
   const loadInvoices = useCallback(async () => {
     setLoading(true)
@@ -218,6 +226,26 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
           <RotateCcw className="h-4 w-4" />
         </Button>
       )}
+      {invoice.status !== 'draft' && (
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label="Download PDF"
+          onClick={() => window.open(`/api/client/mgmt/companies/${companyId}/invoices/${invoice.id}/pdf`, '_blank')}
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+      )}
+      {(invoice.status === 'issued' || invoice.status === 'paid') && (
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={invoice.last_emailed_at ? 'Resend' : 'Send'}
+          onClick={() => setSendInvoice(invoice)}
+        >
+          <Mail className="h-4 w-4" />
+        </Button>
+      )}
     </>
   )
 
@@ -306,6 +334,20 @@ export default function AdminInvoiceList({ companyId, agreements = [] }: AdminIn
         onToggleSelected={toggleSelected}
         renderActions={renderActions}
       />
+
+      {sendInvoice && (
+        <SendInvoiceDialog
+          open={sendInvoice !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSendInvoice(null)
+            }
+          }}
+          companyId={companyId}
+          invoice={sendInvoice}
+          onSent={() => void loadInvoices()}
+        />
+      )}
     </div>
   )
 }

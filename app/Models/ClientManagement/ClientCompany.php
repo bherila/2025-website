@@ -24,6 +24,7 @@ class ClientCompany extends Model
         'address',
         'website',
         'phone_number',
+        'billing_email',
         'default_hourly_rate',
         'additional_notes',
         'is_active',

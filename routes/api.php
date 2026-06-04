@@ -416,8 +416,11 @@ Route::middleware(['web', 'auth', 'can:Admin'])
         Route::get('/proposals/{id}/preview', [ClientProposalApiController::class, 'preview']);
 
         // Client Invoice API routes
+        Route::get('/invoices', [ClientInvoiceApiController::class, 'indexAll']);
         Route::get('/companies/{company}/invoices', [ClientInvoiceApiController::class, 'index']);
         Route::get('/companies/{company}/invoices/{invoice}', [ClientInvoiceApiController::class, 'show']);
+        Route::post('/companies/{company}/invoices/{invoice}/send', [ClientInvoiceApiController::class, 'send']);
+        Route::get('/companies/{company}/invoices/{invoice}/pdf', [ClientInvoiceApiController::class, 'downloadPdf']);
         Route::post('/companies/{company}/invoices/generate-all', [ClientInvoiceApiController::class, 'generateAll']);
         Route::post('/companies/{company}/invoices/generate-interim/{yyyymm}', [ClientInvoiceApiController::class, 'generateInterim'])->where('yyyymm', '[0-9]{6}');
         Route::post('/companies/{company}/invoices', [ClientInvoiceApiController::class, 'store']);

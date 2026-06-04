@@ -14,7 +14,7 @@ interface InvoiceEmptyStateProps {
  * Empty state for the invoice table.
  * Admin mode renders a table row; portal mode renders a Card.
  */
-export function InvoiceEmptyState({ mode, colSpan = 9, message }: InvoiceEmptyStateProps) {
+export function InvoiceEmptyState({ mode, colSpan = 10, message }: InvoiceEmptyStateProps) {
   if (mode === 'portal') {
     return (
       <Card>

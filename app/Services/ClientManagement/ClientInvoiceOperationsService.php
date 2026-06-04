@@ -22,7 +22,7 @@ class ClientInvoiceOperationsService
     public function listInvoices(?ClientCompany $company = null, array $statuses = []): EloquentCollection
     {
         return ClientInvoice::query()
-            ->with(['agreement', 'clientCompany', 'lineItems', 'payments', 'stripePayments'])
+            ->with(['agreement', 'clientCompany', 'clientCompany.users:id,email', 'lineItems', 'payments', 'stripePayments'])
             ->when($company, fn (Builder $query): Builder => $query->where('client_company_id', $company->id))
             ->when($statuses !== [], fn (Builder $query): Builder => $query->whereIn('status', $statuses))
             ->orderByDesc('period_start')
@@ -59,6 +59,11 @@ class ClientInvoiceOperationsService
             'issue_date' => $invoice->issue_date?->toDateString(),
             'due_date' => $invoice->due_date?->toDateString(),
             'paid_date' => $invoice->paid_date?->toDateString(),
+            'last_emailed_at' => $invoice->last_emailed_at?->toIso8601String(),
+            'billing_email' => $invoice->clientCompany?->billing_email ?: null,
+            'recipient_suggestions' => $invoice->clientCompany
+                ? $invoice->clientCompany->users->pluck('email')->filter()->unique()->values()->all()
+                : [],
             'hours_worked' => (float) $invoice->hours_worked,
             'retainer_hours_included' => (float) $invoice->retainer_hours_included,
             'unused_hours_balance' => (float) $invoice->unused_hours_balance,

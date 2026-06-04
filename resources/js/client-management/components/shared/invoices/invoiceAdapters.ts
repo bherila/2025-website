@@ -27,6 +27,12 @@ export interface NormalizedInvoice {
   stripe_payment_status?: string | null
   stripe_failure_reason?: string | null
   client_agreement_id?: number | null
+  // Cross-company merged-view fields
+  company_id?: number | null
+  company_name?: string | null
+  last_emailed_at?: string | null
+  billing_email?: string | null
+  recipient_suggestions?: string[]
 }
 
 export function fromAdminInvoice(invoice: AdminInvoice): NormalizedInvoice {
@@ -47,6 +53,11 @@ export function fromAdminInvoice(invoice: AdminInvoice): NormalizedInvoice {
     stripe_payment_status: invoice.stripe_payment_status ?? null,
     stripe_failure_reason: invoice.stripe_failure_reason ?? null,
     client_agreement_id: invoice.client_agreement_id ?? invoice.agreement_id ?? null,
+    company_id: invoice.company_id ?? null,
+    company_name: invoice.company_name ?? null,
+    last_emailed_at: invoice.last_emailed_at ?? null,
+    billing_email: invoice.billing_email ?? null,
+    recipient_suggestions: invoice.recipient_suggestions ?? [],
   }
 }
 

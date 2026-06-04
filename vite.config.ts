@@ -57,6 +57,7 @@ export default defineConfig({
         'resources/js/license-manager.tsx',
         'resources/js/class-action-tracker.tsx',
         'resources/js/client-management/admin/agreement.tsx',
+        'resources/js/client-management/admin/all-invoices.tsx',
         'resources/js/client-management/admin/create.tsx',
         'resources/js/client-management/admin/index.tsx',
         'resources/js/client-management/admin/proposal.tsx',

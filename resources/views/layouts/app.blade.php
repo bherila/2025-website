@@ -57,6 +57,7 @@
         $__isAdmin ? ['type' => 'link', 'label' => 'GenAI Jobs', 'href' => '/admin/genai-jobs'] : null,
         $__isAdmin ? ['type' => 'link', 'label' => 'Tax Normalization Review', 'href' => '/admin/tax-normalization-review'] : null,
         $__isAdmin ? ['type' => 'link', 'label' => 'Client Management', 'href' => '/client/mgmt'] : null,
+        $__isAdmin ? ['type' => 'link', 'label' => 'All Invoices', 'href' => '/client/mgmt/invoices'] : null,
       ])) : [];
 
       // Build Client Portal submenu (only when user has companies)

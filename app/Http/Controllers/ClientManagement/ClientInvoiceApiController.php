@@ -4,16 +4,21 @@ namespace App\Http\Controllers\ClientManagement;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ClientManagement\GenerateInterimOverageInvoiceRequest;
+use App\Http\Requests\ClientManagement\SendClientInvoiceRequest;
 use App\Http\Requests\ClientManagement\StoreClientInvoiceRequest;
+use App\Mail\ClientInvoiceMail;
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\ClientManagement\ClientCompanyActivity;
 use App\Models\ClientManagement\ClientInvoice;
 use App\Models\ClientManagement\ClientInvoicePayment;
 use App\Services\ClientManagement\ClientInvoiceOperationsService;
 use App\Services\ClientManagement\ClientInvoicingService;
+use App\Services\ClientManagement\InvoicePdfRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class ClientInvoiceApiController extends Controller
 {
@@ -64,6 +69,79 @@ class ClientInvoiceApiController extends Controller
 
         // Use the model's canonical serializer so admin and portal controllers stay consistent
         return response()->json($invoice->toDetailedArray());
+    }
+
+    /**
+     * List every invoice across all companies for the merged management view.
+     * Rows carry the company name; the frontend filters/searches client-side.
+     */
+    public function indexAll(): JsonResponse
+    {
+        $invoices = $this->invoiceOperationsService->summarizeInvoices(
+            $this->invoiceOperationsService->listInvoices()
+        );
+
+        return response()->json($invoices);
+    }
+
+    /**
+     * Email (or re-email) an issued/paid invoice with the rendered PDF attached.
+     */
+    public function send(SendClientInvoiceRequest $request, ClientCompany $company, ClientInvoice $invoice): JsonResponse
+    {
+        if ($invoice->client_company_id != $company->id) {
+            return response()->json(['error' => 'Invoice does not belong to this company'], 404);
+        }
+
+        if (! in_array($invoice->status, ['issued', 'paid'], true)) {
+            return response()->json(['error' => 'Only issued or paid invoices can be emailed.'], 422);
+        }
+
+        $recipients = $request->recipients();
+        $cc = $request->ccRecipients();
+
+        Mail::to($recipients)
+            ->cc($cc)
+            ->queue(new ClientInvoiceMail($invoice, $request->note()));
+
+        $invoice->update(['last_emailed_at' => now()]);
+
+        if ($request->shouldSaveBillingEmail() && $company->billing_email !== $recipients[0]) {
+            $company->update(['billing_email' => $recipients[0]]);
+        }
+
+        ClientCompanyActivity::record($company, 'invoice.emailed', $invoice, [
+            'invoice_number' => $invoice->invoice_number,
+            'invoice_kind' => $invoice->invoiceKindValue(),
+            'recipients' => $recipients,
+            'cc' => $cc,
+        ]);
+
+        return response()->json([
+            'message' => 'Invoice emailed successfully.',
+            'last_emailed_at' => $invoice->last_emailed_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Stream the invoice as a PDF rendered from the Blade template.
+     */
+    public function downloadPdf(ClientCompany $company, ClientInvoice $invoice, InvoicePdfRenderer $renderer): Response
+    {
+        if ($invoice->client_company_id != $company->id) {
+            abort(404);
+        }
+
+        if ($invoice->status === 'draft') {
+            abort(422, 'Draft invoices cannot be downloaded as a PDF.');
+        }
+
+        $filename = 'Invoice-'.($invoice->invoice_number ?? $invoice->client_invoice_id).'.pdf';
+
+        return response($renderer->render($invoice), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+        ]);
     }
 
     /**
