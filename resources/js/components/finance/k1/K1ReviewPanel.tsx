@@ -23,7 +23,7 @@ import {
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES, BOX14_CODES, BOX17_CODES } from './k1-codes'
 import { K1_SPEC } from './k1-spec'
-import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K3Section, StatementA } from './k1-types'
+import type { FK1StructuredData, K1CodeItem, K1FieldSpec, K1FieldValue, K3Section, StatementA } from './k1-types'
 import K1CodesModal from './K1CodesModal'
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
@@ -100,6 +100,43 @@ function renderAmt(n: number | null): string {
 function renderOverrideValue(value: string | null | undefined): string {
   const amount = parseFieldVal(value)
   return amount === null ? (value ?? '—') : fmtAmt(amount)
+}
+
+function fieldWithEnabledOverride(field: K1FieldValue | undefined): K1FieldValue {
+  const current = field ?? { value: null }
+
+  return {
+    ...current,
+    originalValue: current.manualOverride === true
+      ? (current.originalValue ?? current.value)
+      : current.value,
+    manualOverride: true,
+  }
+}
+
+function fieldWithUpdatedOverrideValue(field: K1FieldValue | undefined, value: string | null): K1FieldValue {
+  const current = fieldWithEnabledOverride(field)
+
+  return {
+    ...current,
+    value,
+  }
+}
+
+function fieldWithClearedOverride(field: K1FieldValue | undefined): K1FieldValue {
+  const current = field ?? { value: null }
+  const restoredValue = current.manualOverride === true
+    ? (current.originalValue ?? current.value)
+    : current.value
+  const restored = {
+    ...current,
+    value: restoredValue,
+  }
+
+  delete restored.manualOverride
+  delete restored.originalValue
+
+  return restored
 }
 
 function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.ReactElement | null {
@@ -231,77 +268,122 @@ function renderBox20ItemsLine(box20Items: K1CodeItem[], onOpenCodes: (box: strin
 
 function K1Field({
   spec,
-  value,
+  fieldValue,
   readOnly,
   onChangeValue,
+  onOverrideChange,
 }: {
   spec: K1FieldSpec
-  value: string | null | undefined
+  fieldValue: K1FieldValue | undefined
   readOnly: boolean
   onChangeValue: (val: string | null) => void
+  onOverrideChange: (enabled: boolean) => void
 }) {
-  const stringVal = value ?? ''
-  const inputClass = readOnly
-    ? 'h-7 text-xs font-mono bg-muted/30 border-transparent text-muted-foreground cursor-default focus-visible:ring-0'
-    : 'h-7 text-xs font-mono bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'
+  const stringVal = fieldValue?.value ?? ''
+  const isManualOverride = fieldValue?.manualOverride === true
+  const canEditValue = !readOnly && isManualOverride
+  const inputClass = 'h-7 text-xs font-mono bg-background border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40'
+  const displayClass = 'flex min-h-7 w-full items-center rounded-md border border-transparent bg-muted/30 px-3 py-1 text-xs font-mono text-muted-foreground'
 
-  if (spec.fieldType === 'check') {
-    const checked = stringVal === 'true'
+  const readOnlyValue = () => {
+    if (spec.fieldType === 'check') {
+      return (
+        <div className={displayClass}>
+          {stringVal === 'true' ? 'Yes' : 'No'}
+        </div>
+      )
+    }
+
+    if (spec.fieldType === 'multiLineText') {
+      return (
+        <div className={`${displayClass} min-h-[56px] whitespace-pre-wrap leading-relaxed`}>
+          {stringVal || '—'}
+        </div>
+      )
+    }
+
     return (
-      <div className="flex items-center h-7 gap-2">
-        <Checkbox
-          id={`k1-field-${spec.box}`}
-          checked={checked}
-          onCheckedChange={readOnly ? () => {} : (c) => onChangeValue(c ? 'true' : 'false')}
-          disabled={readOnly}
-        />
-        <Label htmlFor={`k1-field-${spec.box}`} className="text-xs cursor-pointer">
-          {checked ? 'Yes' : 'No'}
-        </Label>
+      <div className={displayClass}>
+        <span className="truncate">{stringVal || '—'}</span>
       </div>
     )
   }
 
-  if (spec.fieldType === 'dropdown') {
-    const items = spec.dropdownItems ?? []
-    if (readOnly) {
-      return <span className="text-xs font-mono text-muted-foreground">{stringVal || '—'}</span>
+  const editableValue = () => {
+    if (spec.fieldType === 'check') {
+      const checked = stringVal === 'true'
+      return (
+        <div className="flex h-7 items-center gap-2">
+          <Checkbox
+            id={`k1-field-value-${spec.box}`}
+            checked={checked}
+            onCheckedChange={(c) => onChangeValue(c === true ? 'true' : 'false')}
+          />
+          <Label htmlFor={`k1-field-value-${spec.box}`} className="text-xs cursor-pointer">
+            {checked ? 'Yes' : 'No'}
+          </Label>
+        </div>
+      )
     }
-    return (
-      <Select value={stringVal} onValueChange={(v) => onChangeValue(v || null)}>
-        <SelectTrigger className={inputClass}>
-          <SelectValue placeholder="Select…" />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item} value={item}>
-              {item}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    )
-  }
 
-  if (spec.fieldType === 'multiLineText') {
+    if (spec.fieldType === 'dropdown') {
+      const items = spec.dropdownItems ?? []
+      return (
+        <Select value={stringVal} onValueChange={(v) => onChangeValue(v || null)}>
+          <SelectTrigger className={inputClass}>
+            <SelectValue placeholder="Select…" />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map((item) => (
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
+
+    if (spec.fieldType === 'multiLineText') {
+      return (
+        <Textarea
+          className="text-xs font-mono resize-none min-h-[56px]"
+          value={stringVal}
+          onChange={(e) => onChangeValue(e.target.value || null)}
+          rows={3}
+        />
+      )
+    }
+
     return (
-      <Textarea
-        className={`text-xs font-mono resize-none min-h-[56px] ${readOnly ? 'bg-muted/30 border-transparent text-muted-foreground cursor-default' : ''}`}
+      <Input
+        className={inputClass}
         value={stringVal}
         onChange={(e) => onChangeValue(e.target.value || null)}
-        readOnly={readOnly}
-        rows={3}
       />
     )
   }
 
   return (
-    <Input
-      className={inputClass}
-      value={stringVal}
-      onChange={(e) => onChangeValue(e.target.value || null)}
-      readOnly={readOnly}
-    />
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        {canEditValue ? editableValue() : readOnlyValue()}
+      </div>
+      {!readOnly && (
+        <label
+          htmlFor={`k1-field-override-${spec.box}`}
+          className="flex h-7 shrink-0 items-center gap-1.5 text-[10px] text-muted-foreground"
+        >
+          <Checkbox
+            id={`k1-field-override-${spec.box}`}
+            aria-label={`Override ${spec.box}`}
+            checked={isManualOverride}
+            onCheckedChange={(checked) => onOverrideChange(checked === true)}
+          />
+          <span>Override</span>
+        </label>
+      )}
+    </div>
   )
 }
 
@@ -309,10 +391,12 @@ function EntityInfoSection({
   data,
   readOnly,
   onUpdate,
+  onOverrideChange,
 }: {
   data: FK1StructuredData
   readOnly: boolean
   onUpdate: (box: string, value: string | null) => void
+  onOverrideChange: (box: string, enabled: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
   const leftSpec = K1_SPEC.filter((s) => s.side === 'left').sort((a, b) => (a.uiOrder ?? 99) - (b.uiOrder ?? 99))
@@ -357,7 +441,13 @@ function EntityInfoSection({
                   <label className={`text-[10px] leading-tight block mb-0.5 truncate ${lowConfidence ? 'text-amber-800 font-medium' : 'text-muted-foreground'}`}>
                     {spec.concise}
                   </label>
-                  <K1Field spec={spec} value={fieldValue?.value} readOnly={readOnly} onChangeValue={(v) => onUpdate(spec.box, v)} />
+                  <K1Field
+                    spec={spec}
+                    fieldValue={fieldValue}
+                    readOnly={readOnly}
+                    onChangeValue={(v) => onUpdate(spec.box, v)}
+                    onOverrideChange={(enabled) => onOverrideChange(spec.box, enabled)}
+                  />
                 </div>
               </div>
             )
@@ -1539,7 +1629,19 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       ...data,
       fields: {
         ...data.fields,
-        [box]: { ...(data.fields[box] ?? {}), value, manualOverride: true },
+        [box]: fieldWithUpdatedOverrideValue(data.fields[box], value),
+      },
+    })
+  }
+
+  const setFieldOverride = (box: string, enabled: boolean) => {
+    onChange({
+      ...data,
+      fields: {
+        ...data.fields,
+        [box]: enabled
+          ? fieldWithEnabledOverride(data.fields[box])
+          : fieldWithClearedOverride(data.fields[box]),
       },
     })
   }
@@ -1578,7 +1680,7 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       <SourceOverridesCallout data={data} />
 
       {/* Entity / Partner Info — collapsible */}
-      <EntityInfoSection data={data} readOnly={readOnly} onUpdate={updateField} />
+      <EntityInfoSection data={data} readOnly={readOnly} onUpdate={updateField} onOverrideChange={setFieldOverride} />
 
       {/* Income + Deduction blocks side-by-side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

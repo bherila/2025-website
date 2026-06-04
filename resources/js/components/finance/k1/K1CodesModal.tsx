@@ -4,7 +4,9 @@ import currency from 'currency.js'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -13,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { normalizeK1Code, resolve11SCharacter } from '@/lib/finance/k1Utils'
 
 import { fmtAmt, InfoTooltip, parseFieldVal } from '../tax-preview-primitives'
-import type { K1CodeItem } from './k1-types'
+import type { K1CodeItem, K1CodeItemSourceSnapshot } from './k1-types'
 
 interface K1CodesModalProps {
   open: boolean
@@ -47,6 +49,55 @@ function isCharacterEligible(box: string | undefined, code: string): boolean {
   return CHARACTER_ELIGIBLE[box]?.has(normalizeK1Code(code)) ?? false
 }
 
+function snapshotCodeItem(item: K1CodeItem): K1CodeItemSourceSnapshot {
+  return {
+    code: item.code,
+    value: item.value,
+    ...(item.notes !== undefined ? { notes: item.notes } : {}),
+    ...(item.character !== undefined ? { character: item.character } : {}),
+  }
+}
+
+function itemWithEnabledOverride(item: K1CodeItem): K1CodeItem {
+  return {
+    ...item,
+    sourceItem: item.sourceItem ?? snapshotCodeItem(item),
+    manualOverride: true,
+  }
+}
+
+function itemWithClearedOverride(item: K1CodeItem): K1CodeItem {
+  const sourceItem = item.sourceItem
+  const restored: K1CodeItem = {
+    ...item,
+    ...(sourceItem
+      ? {
+          code: sourceItem.code,
+          value: sourceItem.value,
+        }
+      : {}),
+  }
+
+  if (sourceItem) {
+    if (sourceItem.notes !== undefined) {
+      restored.notes = sourceItem.notes
+    } else {
+      delete restored.notes
+    }
+
+    if (sourceItem.character !== undefined) {
+      restored.character = sourceItem.character
+    } else {
+      delete restored.character
+    }
+  }
+
+  delete restored.manualOverride
+  delete restored.sourceItem
+
+  return restored
+}
+
 /** Sub-modal for viewing / editing coded items on a single K-1 box (e.g. Box 11, Box 13). */
 export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, items, readOnly = false, onClose, onChange }: K1CodesModalProps) {
   const [localItems, setLocalItems] = useState<K1CodeItem[]>(items)
@@ -60,25 +111,36 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
   }
 
   const updateItem = (index: number, patch: Partial<K1CodeItem>) => {
-    setLocalItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch, manualOverride: true } : item)))
+    setLocalItems((prev) => prev.map((item, i) => (i === index ? { ...itemWithEnabledOverride(item), ...patch } : item)))
+  }
+
+  const setItemOverride = (index: number, enabled: boolean) => {
+    setLocalItems((prev) => prev.map((item, i) => {
+      if (i !== index) {
+        return item
+      }
+
+      return enabled ? itemWithEnabledOverride(item) : itemWithClearedOverride(item)
+    }))
   }
 
   const setItemCharacter = (index: number, character: 'short' | 'long' | null) => {
     setLocalItems((prev) =>
       prev.map((item, i) => {
         if (i !== index) return item
+        const nextItem = itemWithEnabledOverride(item)
         if (character === null) {
-          const next = { ...item, manualOverride: true }
+          const next = { ...nextItem }
           delete next.character
           return next
         }
-        return { ...item, character, manualOverride: true }
+        return { ...nextItem, character }
       }),
     )
   }
 
   const addItem = () => {
-    setLocalItems((prev) => [...prev, { code: '', value: '', notes: '', manualOverride: true }])
+    setLocalItems((prev) => [...prev, { code: '', value: '', notes: '', sourceItem: { code: '', value: '', notes: '' }, manualOverride: true }])
   }
 
   const removeItem = (index: number) => {
@@ -100,6 +162,7 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
   }, currency(0)).value
 
   const showCharacterColumn = localItems.some((item) => isCharacterEligible(box, item.code))
+  const showOverrideColumn = !readOnly || localItems.some((item) => item.manualOverride === true)
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -116,6 +179,7 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-72">Code</TableHead>
+                  {showOverrideColumn && <TableHead className="w-28">Override</TableHead>}
                   <TableHead className="w-32 text-right">Amount</TableHead>
                   {showCharacterColumn && (
                     <TableHead className="w-32">
@@ -133,86 +197,125 @@ export default function K1CodesModal({ open, boxLabel, box, codeDefinitions, ite
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {localItems.map((item, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="py-2 align-top">
-                      {readOnly ? (
-                        <span className="font-mono text-base font-semibold">{item.code}</span>
-                      ) : (
-                        <Select value={item.code} onValueChange={(val) => updateItem(idx, { code: val })}>
-                          <SelectTrigger className="h-9 text-sm font-mono font-semibold">
-                            <SelectValue placeholder="Select code" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCodes.map((code) => (
-                              <SelectItem key={code} value={code}>
-                                <span className="font-mono font-semibold">{code}</span>
-                                <span className="text-muted-foreground ml-2 text-xs">{codeDefinitions[code]}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-2 align-top">
-                      <Input
-                        className="h-9 text-sm font-mono text-right min-w-[100px]"
-                        value={item.value}
-                        onChange={(e) => updateItem(idx, { value: e.target.value })}
-                        readOnly={readOnly}
-                        placeholder="0.00"
-                      />
-                    </TableCell>
-                    {showCharacterColumn && (
+                {localItems.map((item, idx) => {
+                  const isManualOverride = item.manualOverride === true
+                  const canEditItem = !readOnly && isManualOverride
+                  const resolvedCharacter = resolve11SCharacter(item)
+
+                  return (
+                    <TableRow key={idx}>
                       <TableCell className="py-2 align-top">
-                        {isCharacterEligible(box, item.code) ? (
-                          readOnly ? (
-                            <span className="text-sm text-muted-foreground">
-                              {resolve11SCharacter(item) === 'short'
-                                ? 'Short-term'
-                                : resolve11SCharacter(item) === 'long'
-                                  ? 'Long-term'
-                                  : 'Needs review'}
-                            </span>
+                        {canEditItem ? (
+                          <Select value={item.code} onValueChange={(val) => updateItem(idx, { code: val })}>
+                            <SelectTrigger className="h-9 text-sm font-mono font-semibold">
+                              <SelectValue placeholder="Select code" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableCodes.map((code) => (
+                                <SelectItem key={code} value={code}>
+                                  <span className="font-mono font-semibold">{code}</span>
+                                  <span className="text-muted-foreground ml-2 text-xs">{codeDefinitions[code]}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="flex h-9 items-center rounded-md border border-transparent bg-muted/30 px-3 text-sm text-muted-foreground">
+                            <span className="font-mono text-base font-semibold">{item.code || '—'}</span>
+                          </div>
+                        )}
+                      </TableCell>
+                      {showOverrideColumn && (
+                        <TableCell className="py-2 align-top">
+                          {readOnly ? (
+                            isManualOverride ? <Badge variant="outline" className="h-5 border-amber-400 px-1 text-[9px] text-amber-600">M</Badge> : null
                           ) : (
-                            <Select
-                              value={item.character ?? 'auto'}
-                              onValueChange={(val) =>
-                                setItemCharacter(idx, val === 'auto' ? null : (val as 'short' | 'long'))
-                              }
+                            <label
+                              htmlFor={`k1-code-override-${idx}`}
+                              className="flex h-9 items-center gap-1.5 text-[10px] text-muted-foreground"
                             >
-                              <SelectTrigger className="h-9 text-sm">
-                                <SelectValue placeholder="Auto (notes)" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="auto">Auto (from notes)</SelectItem>
-                                <SelectItem value="short">Short-term</SelectItem>
-                                <SelectItem value="long">Long-term</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )
-                        ) : null}
-                      </TableCell>
-                    )}
-                    <TableCell className="py-2 align-top">
-                      <Textarea
-                        className="min-h-[72px] text-sm resize-y"
-                        value={item.notes ?? ''}
-                        onChange={(e) => updateItem(idx, { notes: e.target.value })}
-                        readOnly={readOnly}
-                        placeholder="Optional notes"
-                        rows={3}
-                      />
-                    </TableCell>
-                    {!readOnly && (
+                              <Checkbox
+                                id={`k1-code-override-${idx}`}
+                                aria-label={`Override code row ${idx + 1}`}
+                                checked={isManualOverride}
+                                onCheckedChange={(checked) => setItemOverride(idx, checked === true)}
+                              />
+                              <span>Override</span>
+                              {isManualOverride && <Badge variant="outline" className="h-4 border-amber-400 px-1 py-0 text-[8px] text-amber-600">M</Badge>}
+                            </label>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="py-2 align-top">
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canEditItem ? (
+                          <Input
+                            className="h-9 min-w-[100px] text-right text-sm font-mono"
+                            value={item.value}
+                            onChange={(e) => updateItem(idx, { value: e.target.value })}
+                            placeholder="0.00"
+                          />
+                        ) : (
+                          <div className="flex h-9 min-w-[100px] items-center justify-end rounded-md border border-transparent bg-muted/30 px-3 text-sm font-mono text-muted-foreground">
+                            {item.value || '—'}
+                          </div>
+                        )}
                       </TableCell>
-                    )}
-                  </TableRow>
-                ))}
+                      {showCharacterColumn && (
+                        <TableCell className="py-2 align-top">
+                          {isCharacterEligible(box, item.code) ? (
+                            canEditItem ? (
+                              <Select
+                                value={item.character ?? 'auto'}
+                                onValueChange={(val) =>
+                                  setItemCharacter(idx, val === 'auto' ? null : (val as 'short' | 'long'))
+                                }
+                              >
+                                <SelectTrigger className="h-9 text-sm">
+                                  <SelectValue placeholder="Auto (notes)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">Auto (from notes)</SelectItem>
+                                  <SelectItem value="short">Short-term</SelectItem>
+                                  <SelectItem value="long">Long-term</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="flex h-9 items-center rounded-md border border-transparent bg-muted/30 px-3 text-sm text-muted-foreground">
+                                {resolvedCharacter === 'short'
+                                  ? 'Short-term'
+                                  : resolvedCharacter === 'long'
+                                    ? 'Long-term'
+                                    : 'Needs review'}
+                              </div>
+                            )
+                          ) : null}
+                        </TableCell>
+                      )}
+                      <TableCell className="py-2 align-top">
+                        {canEditItem ? (
+                          <Textarea
+                            className="min-h-[72px] text-sm resize-y"
+                            value={item.notes ?? ''}
+                            onChange={(e) => updateItem(idx, { notes: e.target.value })}
+                            placeholder="Optional notes"
+                            rows={3}
+                          />
+                        ) : (
+                          <div className="min-h-[72px] rounded-md border border-transparent bg-muted/30 px-3 py-2 text-sm text-muted-foreground whitespace-pre-wrap">
+                            {item.notes || '—'}
+                          </div>
+                        )}
+                      </TableCell>
+                      {!readOnly && (
+                        <TableCell className="py-2 align-top">
+                          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => removeItem(idx)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}

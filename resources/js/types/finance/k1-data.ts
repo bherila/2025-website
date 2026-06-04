@@ -11,6 +11,8 @@
 export interface K1FieldValue {
   /** Raw extracted value (string for all types; parse by fieldType in spec). */
   value: string | null
+  /** Original extracted value retained while a manual override is active so it can be restored. */
+  originalValue?: string | null
   /** AI confidence 0–1 (omitted for user entries). */
   confidence?: number
   /** When true, re-extraction will not overwrite this field. */
@@ -27,6 +29,8 @@ export interface K1CodeItem {
   notes?: string
   confidence?: number
   manualOverride?: boolean
+  /** Original extracted row retained while a manual override is active so it can be restored. */
+  sourceItem?: K1CodeItemSourceSnapshot
   /**
    * Capital-gain character override.
    *
@@ -36,6 +40,13 @@ export interface K1CodeItem {
    * the notes, the user can pin it here so Schedule D routes to line 5 (ST) vs
    * line 12 (LT) deterministically.
    */
+  character?: 'short' | 'long'
+}
+
+export interface K1CodeItemSourceSnapshot {
+  code: string
+  value: string
+  notes?: string
   character?: 'short' | 'long'
 }
 
