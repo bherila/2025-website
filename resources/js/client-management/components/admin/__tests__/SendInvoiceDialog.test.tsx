@@ -41,6 +41,11 @@ describe('SendInvoiceDialog', () => {
   })
 
   it('pre-fills the To field with the company billing email and loads recipients on open', async () => {
+    mockGet.mockResolvedValue({
+      billing_email: 'server-billing@acme.test',
+      recipient_suggestions: ['server-billing@acme.test'],
+    })
+
     render(
       <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={invoice} />,
     )
@@ -51,9 +56,11 @@ describe('SendInvoiceDialog', () => {
     await waitFor(() => {
       expect(mockGet).toHaveBeenCalledWith('/api/client/mgmt/companies/7/billing-recipients')
     })
+    expect(await screen.findByRole('button', { name: /server-billing@acme\.test/ })).toBeInTheDocument()
+    expect(toField.value).toBe('server-billing@acme.test')
   })
 
-  it('renders loaded recipient suggestions as quick-add chips', async () => {
+  it('renders loaded recipient suggestions as quick-add chips without duplicates', async () => {
     mockGet.mockResolvedValue({
       billing_email: 'billing@acme.test',
       recipient_suggestions: ['lead@acme.test', 'ops@acme.test'],
@@ -63,7 +70,9 @@ describe('SendInvoiceDialog', () => {
       <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={invoice} />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /lead@acme\.test/ }))
+    const leadChip = await screen.findByRole('button', { name: /lead@acme\.test/ })
+    fireEvent.click(leadChip)
+    fireEvent.click(leadChip)
 
     const toField = screen.getByLabelText('To') as HTMLInputElement
     expect(toField.value).toBe('billing@acme.test, lead@acme.test')
@@ -84,6 +93,24 @@ describe('SendInvoiceDialog', () => {
     await waitFor(() => {
       expect(toField.value).toBe('fresh-billing@acme.test')
     })
+  })
+
+  it('keeps the default To value and renders no chips when loading recipients fails', async () => {
+    mockGet.mockRejectedValue(new Error('Unable to load recipients'))
+
+    render(
+      <SendInvoiceDialog open onOpenChange={jest.fn()} companyId={7} invoice={invoice} />,
+    )
+
+    const toField = screen.getByLabelText('To') as HTMLInputElement
+    expect(toField.value).toBe('billing@acme.test')
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/api/client/mgmt/companies/7/billing-recipients')
+    })
+
+    expect(screen.queryByRole('button', { name: /@acme\.test/ })).not.toBeInTheDocument()
+    expect(toField.value).toBe('billing@acme.test')
   })
 
   it('posts to the send endpoint with the recipients as an array when Send is clicked', async () => {

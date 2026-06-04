@@ -5,6 +5,7 @@ namespace Tests\Unit\Services\PHR;
 use App\Models\PhrAllergy;
 use App\Models\PhrCondition;
 use App\Models\PhrDicomStudy;
+use App\Models\PhrDocument;
 use App\Models\PhrImmunization;
 use App\Models\PhrLabResult;
 use App\Models\PhrMedication;
@@ -123,6 +124,32 @@ class PhrPdfSummaryRendererTest extends TestCase
         }
     }
 
+    public function test_render_maps_document_rows_with_title_and_filename_fallback(): void
+    {
+        $data = $this->baseExportData();
+        $data['documents'] = collect([
+            new PhrDocument([
+                'title' => 'Résumé | Pathology',
+                'document_type' => 'lab_report',
+                'original_filename' => 'ignored-title.pdf',
+                'summary' => 'Café result | stable',
+            ]),
+            new PhrDocument([
+                'title' => null,
+                'document_type' => 'other',
+                'original_filename' => 'fallback-report.pdf',
+                'summary' => 'Original filename fallback',
+            ]),
+        ]);
+
+        $pdf = (new PhrPdfSummaryRenderer)->render($data);
+        $text = $this->extractPdfText($pdf);
+
+        $this->assertStringContainsString('Résumé | Pathology | lab_report | Café result | stable', $text);
+        $this->assertStringContainsString('fallback-report.pdf | other | Original filename fallback', $text);
+        $this->assertStringNotContainsString('ignored-title.pdf', $text);
+    }
+
     public function test_render_caps_each_section_at_sixty_rows_and_includes_overflow_note(): void
     {
         $data = $this->baseExportData();
@@ -165,7 +192,6 @@ class PhrPdfSummaryRendererTest extends TestCase
             'allergies' => collect(),
             'office_visits' => collect(),
             'dicom_studies' => collect(),
-            'dicom_files' => collect(),
             'documents' => collect(),
         ];
     }

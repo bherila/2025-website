@@ -122,7 +122,7 @@ class SendClientInvoiceTest extends TestCase
 
         $leadUser = User::factory()->create(['email' => 'lead@example.com']);
         $billingUser = User::factory()->create(['email' => 'portal-billing@example.com']);
-        $this->company->users()->attach([$leadUser->id, $billingUser->id]);
+        $this->company->users()->attach([$billingUser->id, $leadUser->id]);
 
         $this->actingAs($this->admin)
             ->getJson("/api/client/mgmt/companies/{$this->company->id}/billing-recipients")
@@ -133,6 +133,17 @@ class SendClientInvoiceTest extends TestCase
                     'lead@example.com',
                     'portal-billing@example.com',
                 ],
+            ]);
+    }
+
+    public function test_admin_can_load_empty_billing_recipients_for_company_with_no_users(): void
+    {
+        $this->actingAs($this->admin)
+            ->getJson("/api/client/mgmt/companies/{$this->company->id}/billing-recipients")
+            ->assertStatus(200)
+            ->assertExactJson([
+                'billing_email' => null,
+                'recipient_suggestions' => [],
             ]);
     }
 
