@@ -40,6 +40,55 @@ export type FormId =
   | 'wks-taxable-ss'
   | 'wks-1116-apportionment'
 
+/**
+ * Canonical list of every {@link FormId}. This is the single source of truth
+ * for the route allowlist (see `FORM_IDS` in `taxRoute.ts`): the Miller router
+ * silently drops any column whose id isn't allowlisted, so an id missing here
+ * makes its form un-navigable (clicking it snaps straight back to Home with no
+ * error). The `satisfies` clause rejects stray ids and the `AssertExhaustive`
+ * check below makes omitting a `FormId` a compile error, so the two can't drift.
+ */
+export const ALL_FORM_IDS = [
+  'home',
+  'estimate',
+  'action-items',
+  'documents',
+  'w2-summary',
+  'tax-lot-reconciliation',
+  'capital-gains-reconciliation',
+  'k1-all-in-one',
+  'k3-all-in-one',
+  'form-1040',
+  'sch-1',
+  'sch-2',
+  'sch-3',
+  'sch-a',
+  'sch-b',
+  'sch-c',
+  'sch-d',
+  'sch-e',
+  'sch-f',
+  'sch-se',
+  'form-1116',
+  'form-4797',
+  'form-4952',
+  'form-6251',
+  'form-8582',
+  'form-8606',
+  'form-8949',
+  'form-8995',
+  'wks-se-401k',
+  'wks-amt-exemption',
+  'wks-taxable-ss',
+  'wks-1116-apportionment',
+] as const satisfies readonly FormId[]
+
+type AssertExhaustive = Exclude<FormId, (typeof ALL_FORM_IDS)[number]> extends never
+  ? true
+  : ['Missing FormId(s) in ALL_FORM_IDS:', Exclude<FormId, (typeof ALL_FORM_IDS)[number]>]
+const _assertAllFormIdsListed: AssertExhaustive = true
+void _assertAllFormIdsListed
+
 export type Presentation = 'column' | 'modal' | 'app'
 
 export type FormCategory = 'Schedule' | 'Form' | 'Worksheet' | 'App'
