@@ -152,6 +152,30 @@ describe('K1AllInOneView', () => {
     expect(within(stGain).getByText(/needs review — depends on K-1 footnotes/)).toBeInTheDocument()
   })
 
+  it('keeps table headers, first-column cells, and section labels sticky inside the table viewport', () => {
+    renderView()
+
+    const table = screen.getByRole('table')
+    expect(table.parentElement).toHaveClass('overflow-auto')
+    expect(table.parentElement?.className).toContain('max-h-[calc(100vh-14rem)]')
+
+    const corner = screen.getByRole('columnheader', { name: 'Line' })
+    expect(corner).toHaveClass('sticky', 'top-0', 'left-0', 'z-30')
+    expect(corner.className).toContain('shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]')
+    expect(corner.closest('tr')).toHaveClass('sticky', 'top-0', 'z-20')
+
+    const totalHeader = screen.getByRole('columnheader', { name: 'Total' })
+    expect(totalHeader).toHaveClass('sticky', 'top-0', 'z-20')
+
+    const firstColumnCell = screen.getByText('Royalties').closest('td')
+    expect(firstColumnCell).toHaveClass('sticky', 'left-0', 'z-10')
+    expect(firstColumnCell?.className).toContain('shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]')
+
+    const sectionCell = screen.getByText('Income, Deductions & Other (Boxes 1–21)').closest('th')
+    expect(sectionCell).toHaveClass('sticky', 'left-0', 'z-10')
+    expect(sectionCell).not.toHaveAttribute('colspan')
+  })
+
   it('renders an empty state when there are no parsed K-1s', () => {
     renderView({ k1Docs: [] })
     expect(screen.getByText(/No reviewed K-1s for this year yet/)).toBeInTheDocument()

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
 import K1K3SourceValueModal, { type K1K3SourceValue } from '@/components/finance/K1K3SourceValueModal'
+import { stickyComparisonTableClasses } from '@/components/finance/k1K3StickyComparisonTable'
 import { AmountCell, parseFieldVal } from '@/components/finance/tax-preview-primitives'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
@@ -333,17 +334,14 @@ function PivotTable({
   }
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-info">{title}</h3>
-        {topAccessory}
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-border/60">
-        <table className="min-w-max table-fixed border-collapse text-sm">
+      {topAccessory ? <div className="flex justify-end">{topAccessory}</div> : null}
+      <div className={stickyComparisonTableClasses.scrollContainer}>
+        <table className={stickyComparisonTableClasses.table}>
           <thead>
-            <tr className="border-b border-border/60 bg-muted/40 text-xs">
-              <th className="sticky left-0 z-10 w-[260px] bg-muted/40 px-3 py-2 text-left font-semibold">Line / Country</th>
+            <tr className={stickyComparisonTableClasses.headerRow}>
+              <th className={stickyComparisonTableClasses.cornerHeaderCell}>Line / Country</th>
               {columns.map((column) => (
-                <th key={column.doc.id} className="w-[180px] px-3 py-2 text-right font-semibold">
+                <th key={column.doc.id} className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-right`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="ml-auto max-w-[156px] cursor-default truncate">{column.accountName}</div>
@@ -357,16 +355,22 @@ function PivotTable({
                   </Tooltip>
                 </th>
               ))}
-              <th className="w-[140px] border-l border-border/60 bg-primary/5 px-3 py-2 text-right font-semibold text-primary">Total</th>
+              <th className={stickyComparisonTableClasses.totalHeaderCell}>Total</th>
             </tr>
           </thead>
           <tbody>
+            <tr className="bg-info/10">
+              <th scope="rowgroup" className={stickyComparisonTableClasses.sectionFirstColumnCell}>
+                {title}
+              </th>
+              <td colSpan={columns.length + 1} className={stickyComparisonTableClasses.sectionFillCell} aria-hidden="true" />
+            </tr>
             {rows.map((row) => {
               const cells = columns.map((column) => row.cell(column))
               const total = cells.reduce((acc, cell) => acc.add(cell.shadowed ? 0 : (cell.value ?? 0)), currency(0)).value
               return (
                 <tr key={row.key} className="border-b border-dashed border-border/50 hover:bg-muted/10">
-                  <td className="sticky left-0 z-10 w-[260px] bg-background px-3 py-1.5 text-[13px] align-top">
+                  <td className={`${stickyComparisonTableClasses.firstColumnCell} text-[13px] align-top`}>
                     <div className="max-w-[236px] truncate">{row.label}</div>
                   </td>
                   {columns.map((column, index) => (

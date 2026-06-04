@@ -8,6 +8,7 @@ import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
 import { K1_SPEC } from '@/components/finance/k1/k1-spec'
 import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
 import K1K3SourceValueModal, { type K1K3SourceValue } from '@/components/finance/K1K3SourceValueModal'
+import { stickyComparisonTableClasses } from '@/components/finance/k1K3StickyComparisonTable'
 import type { DrillTarget } from '@/components/finance/tax-preview/formRegistry'
 import { AmountCell } from '@/components/finance/tax-preview-primitives'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -432,13 +433,13 @@ export default function K1AllInOneView({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border/60">
-        <table className="min-w-max table-fixed border-collapse text-sm">
+      <div className={stickyComparisonTableClasses.scrollContainer}>
+        <table className={stickyComparisonTableClasses.table}>
           <thead>
-            <tr className="border-b border-border/60 bg-muted/40 text-xs">
-              <th className="sticky left-0 z-10 w-[260px] bg-muted/40 px-3 py-2 text-left font-semibold">Line</th>
+            <tr className={stickyComparisonTableClasses.headerRow}>
+              <th className={stickyComparisonTableClasses.cornerHeaderCell}>Line</th>
               {columns.map((column) => (
-                <th key={column.doc.id} className="w-[180px] px-3 py-2 text-right font-semibold">
+                <th key={column.doc.id} className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-right`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="ml-auto max-w-[156px] cursor-default truncate">{column.accountName}</div>
@@ -453,9 +454,9 @@ export default function K1AllInOneView({
                   <div className="font-normal text-[10px] text-muted-foreground">{column.ein}</div>
                 </th>
               ))}
-              <th className="w-[140px] border-l border-border/60 bg-primary/5 px-3 py-2 text-right font-semibold text-primary">Total</th>
-              <th className="w-[180px] px-3 py-2 text-left font-semibold">From</th>
-              <th className="w-[260px] px-3 py-2 text-left font-semibold">Destination</th>
+              <th className={stickyComparisonTableClasses.totalHeaderCell}>Total</th>
+              <th className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-left`}>From</th>
+              <th className={`${stickyComparisonTableClasses.headerCell} w-[260px] text-left`}>Destination</th>
             </tr>
           </thead>
           <tbody>
@@ -490,13 +491,14 @@ function SectionRows({
   onDrill: (target: DrillTarget) => void
   onOpenSourceValue: (context: SourceValueContext) => void
 }): React.ReactElement {
-  const totalColspan = columns.length + 4
+  const sectionFillColspan = columns.length + 3
   return (
     <>
       <tr className="bg-info/10">
-        <td colSpan={totalColspan} className="sticky left-0 border-l-2 border-info/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-info">
+        <th scope="rowgroup" className={stickyComparisonTableClasses.sectionFirstColumnCell}>
           {section.title}
-        </td>
+        </th>
+        <td colSpan={sectionFillColspan} className={stickyComparisonTableClasses.sectionFillCell} aria-hidden="true" />
       </tr>
       {section.rows.map((row) => {
         const moneyValues = row.kind === 'money'
@@ -523,7 +525,7 @@ function SectionRows({
 
         return (
           <tr key={row.key} className="border-b border-dashed border-border/50 hover:bg-muted/10">
-            <td className="sticky left-0 z-10 bg-background px-3 py-1.5 align-top">
+            <td className={`${stickyComparisonTableClasses.firstColumnCell} align-top`}>
               <div className="flex items-baseline gap-2">
                 {row.boxRef && <span className="w-12 shrink-0 text-[10px] text-muted-foreground">{row.boxRef}</span>}
                 <span className="text-[13px]">{row.label}</span>
