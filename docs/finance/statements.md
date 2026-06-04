@@ -34,6 +34,12 @@ experience:
 - Browser back/forward buttons work seamlessly due to `pushState`/`popstate`
   handling, and the detail view logic is entirely client-side.
 
+- The **All Statements Comparison** view includes a **Download CSV** action.
+  The browser exports the already-loaded comparison grid with `Section`,
+  `Line Item`, each statement period column, and `Last YTD`, using the same
+  displayed currency and percentage precision as the table. Filenames use the
+  non-confidential `statements-comparison-{accountId}-{YYYYMMDD}.csv` format.
+
 ---
 
 ## API & Backend Changes
