@@ -7,6 +7,7 @@ use App\Models\Files\FileForFinAccount;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
 use App\Models\FinanceTool\FinStatementDetail;
@@ -16,6 +17,16 @@ use Illuminate\Validation\ValidationException;
 
 class DocumentIngestionService
 {
+    private const string SYNTHETIC_FEE_SOURCE = 'stmt_fee_synth';
+
+    private const string MANAGEMENT_FEE_LABEL = 'Management Fee';
+
+    private const string INCENTIVE_ALLOCATION_LABEL = 'Incentive Allocation';
+
+    private const string TOTAL_FEES_LABEL = 'Total Fees';
+
+    private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
+
     public function __construct(
         private readonly TransactionImportService $transactionImportService,
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
@@ -238,6 +249,14 @@ class DocumentIngestionService
         $this->insertStatementDetails($statementId, $statementDetails);
 
         $transactionsCount = $this->importTransactions($userId, (int) $account->acct_id, $statementId, $transactions);
+        $feeTransactionsCount = $this->synthesizeFeeTransactions(
+            userId: $userId,
+            accountId: (int) $account->acct_id,
+            statementId: $statementId,
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+            statementDetails: $statementDetails,
+        );
         $lotsCount = $this->insertLots(
             documentId: (int) $document->id,
             accountId: (int) $account->acct_id,
@@ -259,7 +278,8 @@ class DocumentIngestionService
         return [
             'acct_id' => (int) $account->acct_id,
             'statement_id' => $statementId,
-            'transactions_count' => $transactionsCount,
+            'transactions_count' => $transactionsCount + $feeTransactionsCount,
+            'fee_transactions_count' => $feeTransactionsCount,
             'lots_count' => $lotsCount,
             'details_count' => count($statementDetails),
         ];
@@ -333,6 +353,246 @@ class DocumentIngestionService
         }
 
         return $result->inserted;
+    }
+
+    /**
+     * @param  array<int, mixed>  $statementDetails
+     */
+    private function synthesizeFeeTransactions(
+        int $userId,
+        int $accountId,
+        int $statementId,
+        ?string $periodStart,
+        string $periodEnd,
+        array $statementDetails,
+    ): int {
+        DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->where('t_account', $accountId)
+            ->where('t_source', self::SYNTHETIC_FEE_SOURCE)
+            ->delete();
+
+        if ($statementDetails === []) {
+            return 0;
+        }
+
+        $count = 0;
+
+        foreach ($statementDetails as $detail) {
+            if (! is_array($detail)) {
+                continue;
+            }
+
+            $feeDetail = $this->feeDetailFromStatementDetail($detail);
+            if ($feeDetail === null) {
+                continue;
+            }
+
+            $tag = $this->feeTagForCharacteristic($userId, $feeDetail['tax_characteristic']);
+            $matchingTransactionIds = $this->matchingImportedFeeTransactionIds(
+                accountId: $accountId,
+                statementId: $statementId,
+                periodStart: $periodStart,
+                periodEnd: $periodEnd,
+                feeDetail: $feeDetail,
+            );
+
+            if ($matchingTransactionIds !== []) {
+                $this->attachFeeTagToTransactions($matchingTransactionIds, (int) $tag->tag_id);
+
+                continue;
+            }
+
+            $now = now();
+            $transactionId = DB::table('fin_account_line_items')->insertGetId([
+                't_account' => $accountId,
+                'statement_id' => $statementId,
+                't_date' => $periodEnd,
+                't_type' => 'Fee',
+                't_amt' => $feeDetail['amount'],
+                't_qty' => 0,
+                't_price' => 0,
+                't_commission' => 0,
+                't_fee' => 0,
+                't_source' => self::SYNTHETIC_FEE_SOURCE,
+                't_origin' => 'import',
+                'opt_strike' => 0,
+                't_description' => $feeDetail['line_item'],
+                't_comment' => 'Synthesized from statement detail.',
+                'when_added' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('fin_account_line_item_tag_map')->insertOrIgnore([
+                't_id' => $transactionId,
+                'tag_id' => (int) $tag->tag_id,
+            ]);
+
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  array<string, mixed>  $detail
+     * @return array{line_item: string, match: string, amount: float, tax_characteristic: string}|null
+     */
+    private function feeDetailFromStatementDetail(array $detail): ?array
+    {
+        if ((bool) ($detail['is_percentage'] ?? false)) {
+            return null;
+        }
+
+        $rawLineItem = $detail['line_item'] ?? '';
+        $rawSection = $detail['section'] ?? '';
+        $lineItem = is_string($rawLineItem) ? trim($rawLineItem) : '';
+        $section = is_string($rawSection) ? trim($rawSection) : '';
+        $normalizedLineItem = $this->normalizeStatementDetailText($lineItem);
+
+        if ($normalizedLineItem === $this->normalizeStatementDetailText(self::TOTAL_FEES_LABEL)) {
+            return null;
+        }
+
+        $feeKind = $this->feeKindForLineItem($normalizedLineItem);
+        if ($feeKind === null) {
+            return null;
+        }
+
+        $normalizedSection = $this->normalizeStatementDetailText($section);
+        $isFeesSection = str_contains($normalizedSection, 'fees') || str_contains($normalizedSection, 'fee');
+        $isLineItemFallback = str_contains($normalizedLineItem, $feeKind['match']);
+        if (! $isFeesSection && ! $isLineItemFallback) {
+            return null;
+        }
+
+        $value = $this->numericStatementDetailValue($detail['statement_period_value'] ?? null);
+        if ($value === null || $value === 0.0) {
+            return null;
+        }
+
+        $isCredit = $value < 0 || preg_match('/\b(credit|rebate|reversal)\b/', $normalizedLineItem) === 1;
+
+        return [
+            'line_item' => $lineItem !== '' ? substr($lineItem, 0, 255) : $feeKind['label'],
+            'match' => $feeKind['match'],
+            'amount' => $isCredit ? abs($value) : -abs($value),
+            'tax_characteristic' => $feeKind['tax_characteristic'],
+        ];
+    }
+
+    /**
+     * @return array{label: string, match: string, tax_characteristic: string}|null
+     */
+    private function feeKindForLineItem(string $normalizedLineItem): ?array
+    {
+        $managementFee = $this->normalizeStatementDetailText(self::MANAGEMENT_FEE_LABEL);
+        if (str_contains($normalizedLineItem, $managementFee)) {
+            return [
+                'label' => self::MANAGEMENT_FEE_LABEL,
+                'match' => $managementFee,
+                'tax_characteristic' => 'fee_irc67g',
+            ];
+        }
+
+        $incentiveAllocation = $this->normalizeStatementDetailText(self::INCENTIVE_ALLOCATION_LABEL);
+        if (str_contains($normalizedLineItem, $incentiveAllocation)) {
+            return [
+                'label' => self::INCENTIVE_ALLOCATION_LABEL,
+                'match' => $incentiveAllocation,
+                'tax_characteristic' => 'fee_schE',
+            ];
+        }
+
+        return null;
+    }
+
+    private function normalizeStatementDetailText(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        $normalized = preg_replace('/\s+/', ' ', $normalized);
+
+        return $normalized ?? '';
+    }
+
+    private function numericStatementDetailValue(mixed $value): ?float
+    {
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = str_replace([',', '$'], '', trim($value));
+        if (! is_numeric($normalized)) {
+            return null;
+        }
+
+        return (float) $normalized;
+    }
+
+    private function feeTagForCharacteristic(int $userId, string $taxCharacteristic): FinAccountTag
+    {
+        return FinAccountTag::query()->firstOrCreate([
+            'tag_userid' => (string) $userId,
+            'tax_characteristic' => $taxCharacteristic,
+        ], [
+            'tag_label' => FinAccountTag::labelFor($taxCharacteristic),
+            'tag_color' => '#2563eb',
+        ]);
+    }
+
+    /**
+     * @param  array{line_item: string, match: string, amount: float, tax_characteristic: string}  $feeDetail
+     * @return array<int, int>
+     */
+    private function matchingImportedFeeTransactionIds(
+        int $accountId,
+        int $statementId,
+        ?string $periodStart,
+        string $periodEnd,
+        array $feeDetail,
+    ): array {
+        $dateBounds = [$periodStart ?? $periodEnd, $periodEnd];
+        sort($dateBounds);
+
+        return DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->where('t_account', $accountId)
+            ->where(function ($query): void {
+                $query->whereNull('t_source')
+                    ->orWhere('t_source', '!=', self::SYNTHETIC_FEE_SOURCE);
+            })
+            ->whereBetween('t_date', $dateBounds)
+            ->whereRaw('ABS(ABS(COALESCE(t_amt, 0)) - ?) < 0.0001', [abs($feeDetail['amount'])])
+            ->where(function ($query) use ($feeDetail): void {
+                $query->whereRaw(
+                    "LOWER(COALESCE(t_type, '')) IN (?, ?, ?)",
+                    self::FEE_TRANSACTION_TYPES,
+                )->orWhereRaw(
+                    "LOWER(COALESCE(t_description, '')) LIKE ?",
+                    ['%'.$feeDetail['match'].'%'],
+                );
+            })
+            ->pluck('t_id')
+            ->map(static fn (mixed $transactionId): int => (int) $transactionId)
+            ->all();
+    }
+
+    /**
+     * @param  array<int, int>  $transactionIds
+     */
+    private function attachFeeTagToTransactions(array $transactionIds, int $tagId): void
+    {
+        foreach ($transactionIds as $transactionId) {
+            DB::table('fin_account_line_item_tag_map')->insertOrIgnore([
+                't_id' => $transactionId,
+                'tag_id' => $tagId,
+            ]);
+        }
     }
 
     /**
@@ -489,12 +749,18 @@ class DocumentIngestionService
     {
         return $document->statements()
             ->withCount(['details', 'transactions', 'lots'])
+            ->withCount([
+                'transactions as fee_transactions_count' => static function ($query): void {
+                    $query->where('t_source', self::SYNTHETIC_FEE_SOURCE);
+                },
+            ])
             ->orderBy('statement_id')
             ->get()
             ->map(static fn ($statement): array => [
                 'acct_id' => (int) $statement->acct_id,
                 'statement_id' => (int) $statement->statement_id,
                 'transactions_count' => (int) $statement->transactions_count,
+                'fee_transactions_count' => (int) $statement->getAttribute('fee_transactions_count'),
                 'lots_count' => (int) $statement->lots_count,
                 'details_count' => (int) $statement->details_count,
             ])
