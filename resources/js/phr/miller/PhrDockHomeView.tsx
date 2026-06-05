@@ -1,8 +1,6 @@
-import { ArrowRight, FileText, Pin } from 'lucide-react'
-import type { ReactElement, ReactNode } from 'react'
+import type { ReactElement } from 'react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { KeyAmount, MillerColumnSpec, MillerDrillTarget } from '@/components/ui/miller'
+import { type KeyAmount, type MillerColumnSpec, MillerDockSection,type MillerDockTileEntry, type MillerDrillTarget } from '@/components/ui/miller'
 
 import {
   getPhrModuleMeta,
@@ -61,47 +59,36 @@ export function PhrDockHomeView({ patientId, replaceFrom, onDrill }: PhrDockHome
       </header>
 
       {pinnedEntries.length > 0 && (
-        <ModuleSection
+        <MillerDockSection
           title="Pinned"
-          entries={pinnedEntries}
-          state={state}
-          isPinned={isPinned}
+          entries={sortEntries(pinnedEntries, state).map((entry) => toModuleTile(entry, state))}
           onOpen={openModule}
+          isPinned={isPinned}
           onTogglePin={togglePin}
           className="border-primary/25 bg-accent/20"
         />
       )}
 
       {recentEntries.length > 0 && (
-        <ModuleSection
+        <MillerDockSection
           title="Recent"
-          entries={recentEntries}
-          state={state}
-          isPinned={isPinned}
+          entries={sortEntries(recentEntries, state).map((entry) => toModuleTile(entry, state))}
           onOpen={openModule}
+          isPinned={isPinned}
           onTogglePin={togglePin}
           className="border-info/25 bg-info/5"
           titleClassName="text-info"
-          action={(
-            <button
-              type="button"
-              onClick={clearRecent}
-              className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Clear
-            </button>
-          )}
+          action={<ClearRecentButton onClear={clearRecent} />}
         />
       )}
 
       {groups.map((group) => (
-        <ModuleSection
+        <MillerDockSection
           key={group.category}
           title={group.category}
-          entries={group.entries}
-          state={state}
-          isPinned={isPinned}
+          entries={sortEntries(group.entries, state).map((entry) => toModuleTile(entry, state))}
           onOpen={openModule}
+          isPinned={isPinned}
           onTogglePin={togglePin}
         />
       ))}
@@ -130,30 +117,8 @@ function moduleHasData(entry: PhrRegistryEntry, state: PhrShellState): boolean {
   return true
 }
 
-interface ModuleSectionProps {
-  title: string
-  entries: PhrRegistryEntry[]
-  state: PhrShellState
-  isPinned: (id: PhrModuleId) => boolean
-  onOpen: (id: PhrModuleId) => void
-  onTogglePin: (id: PhrModuleId) => void
-  action?: ReactNode
-  className?: string
-  titleClassName?: string
-}
-
-function ModuleSection({
-  title,
-  entries,
-  state,
-  isPinned,
-  onOpen,
-  onTogglePin,
-  action,
-  className,
-  titleClassName,
-}: ModuleSectionProps): ReactElement {
-  const sorted = [...entries].sort((a, b) => {
+function sortEntries(entries: PhrRegistryEntry[], state: PhrShellState): PhrRegistryEntry[] {
+  return [...entries].sort((a, b) => {
     const aActive = moduleHasData(a, state)
     const bActive = moduleHasData(b, state)
 
@@ -163,82 +128,33 @@ function ModuleSection({
 
     return aActive ? -1 : 1
   })
-
-  return (
-    <Card className={className}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className={`text-sm font-semibold ${titleClassName ?? ''}`}>{title}</CardTitle>
-        {action}
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {sorted.map((entry) => (
-            <ModuleButton
-              key={entry.id}
-              entry={entry}
-              state={state}
-              inactive={!moduleHasData(entry, state)}
-              pinned={isPinned(entry.id)}
-              onOpen={onOpen}
-              onTogglePin={() => onTogglePin(entry.id)}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
-interface ModuleButtonProps {
-  entry: PhrRegistryEntry
-  state: PhrShellState
-  inactive: boolean
-  pinned: boolean
-  onOpen: (id: PhrModuleId) => void
-  onTogglePin: () => void
-}
-
-function ModuleButton({ entry, state, inactive, pinned, onOpen, onTogglePin }: ModuleButtonProps): ReactElement {
+function toModuleTile(entry: PhrRegistryEntry, state: PhrShellState): MillerDockTileEntry<PhrModuleId> {
   const keyAmounts = getPhrModuleMeta(entry).keyAmounts?.(state) ?? null
 
+  return {
+    id: entry.id,
+    label: entry.label,
+    shortLabel: entry.shortLabel,
+    amounts: keyAmounts?.map((keyAmount) => ({
+      label: keyAmount.label,
+      value: formatKeyAmount(keyAmount),
+    })) ?? null,
+    inactive: !moduleHasData(entry, state),
+    pinLabel: entry.label,
+  }
+}
+
+function ClearRecentButton({ onClear }: { onClear: () => void }): ReactElement {
   return (
-    <div className={`group relative flex min-h-[4.75rem] items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary/40 hover:bg-accent/30 ${inactive ? 'opacity-50' : ''}`}>
-      <button
-        type="button"
-        onClick={() => onOpen(entry.id)}
-        className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      >
-        <FileText className="h-4 w-4 shrink-0 pt-0.5 text-info" aria-hidden="true" />
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-sm font-medium text-foreground">{entry.shortLabel}</span>
-          <span className="truncate text-xs text-muted-foreground">{entry.label}</span>
-          {keyAmounts && keyAmounts.length > 0 && (
-            <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {keyAmounts.map((keyAmount) => (
-                <span key={keyAmount.label} className="inline-flex items-baseline gap-1 text-[10px] tabular-nums">
-                  <span className="text-muted-foreground">{keyAmount.label}</span>
-                  <span className="font-medium text-foreground">{formatKeyAmount(keyAmount)}</span>
-                </span>
-              ))}
-            </span>
-          )}
-        </span>
-      </button>
-      <span className="flex shrink-0 items-center gap-2 pr-3">
-        <button
-          type="button"
-          onClick={onTogglePin}
-          aria-label={pinned ? `Unpin ${entry.label}` : `Pin ${entry.label}`}
-          aria-pressed={pinned}
-          className={`rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            pinned ? 'opacity-100 text-foreground' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-          }`}
-        >
-          <Pin className={`h-3.5 w-3.5 ${pinned ? 'fill-current' : ''}`} aria-hidden="true" />
-        </button>
-        <ArrowRight className="mt-1 h-4 w-4 shrink-0 self-start text-muted-foreground" aria-hidden="true" />
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={onClear}
+      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      Clear
+    </button>
   )
 }
 

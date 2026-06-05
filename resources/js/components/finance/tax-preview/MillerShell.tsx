@@ -19,7 +19,7 @@ export function MillerShell({ registry, homeView }: MillerShellProps): ReactElem
   const state = useTaxPreview()
   const { openWorksheet, paletteOpen, setPaletteOpen } = useDockActions()
   const { addRecent } = useTaxPreviewPrefs(state.year)
-  useCommandPaletteShortcut(setPaletteOpen)
+  useCommandPaletteShortcut(paletteOpen, setPaletteOpen)
 
   const rightmostForm = route.columns.length > 0 ? route.columns[route.columns.length - 1]!.form : null
 

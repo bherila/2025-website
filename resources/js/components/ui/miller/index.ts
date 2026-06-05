@@ -1,5 +1,9 @@
 export type { MillerColumnShellColumn } from './MillerColumnShell'
 export { MillerColumnShell } from './MillerColumnShell'
+export type { MillerCommandPaletteRow } from './MillerCommandPalette'
+export { MillerCommandPalette, useMillerCommandPaletteShortcut } from './MillerCommandPalette'
+export type { MillerDockSectionProps,MillerDockTileAmount, MillerDockTileEntry } from './MillerDockHome'
+export { MillerDockSection, MillerDockTileGrid } from './MillerDockHome'
 export { MillerInstanceTabs } from './MillerInstanceTabs'
 export type {
   KeyAmount,
@@ -20,5 +24,7 @@ export {
   serializeRoute,
   truncateTo,
 } from './millerRoute'
+export type { MillerDockPrefsSnapshot, UseMillerDockPrefsResult } from './useMillerDockPrefs'
+export { useMillerDockPrefs } from './useMillerDockPrefs'
 export type { UseMillerRouteResult } from './useMillerRoute'
 export { useMillerRoute } from './useMillerRoute'
