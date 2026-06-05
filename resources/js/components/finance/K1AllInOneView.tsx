@@ -12,6 +12,7 @@ import { stickyComparisonTableClasses } from '@/components/finance/k1K3StickyCom
 import type { DrillTarget } from '@/components/finance/tax-preview/formRegistry'
 import { AmountCell } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import { buildK1RoutingIndex, k1CellKey, type K1CellRouting } from '@/lib/finance/k1RoutingIndex'
@@ -35,10 +36,12 @@ import {
   k1FieldSourceFieldId,
   k3ForeignTaxTotalSourceFieldId,
 } from '@/lib/finance/taxSourceFieldIds'
-import type { FK1StructuredData } from '@/types/finance/k1-data'
+import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { type TaxPreviewXlsxExporter, XLSX_GRID_MAX_COLUMNS, type XlsxGridCellValue, type XlsxGridColumn, type XlsxGridSheet } from '@/types/finance/xlsx-export'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
+
+import K1CodesModal from './k1/K1CodesModal'
 
 interface K1AllInOneViewProps {
   k1Docs: TaxDocument[]
@@ -279,8 +282,16 @@ function buildSections(columns: K1Column[]): K1Section[] {
   ].filter((section) => section.rows.length > 0)
 }
 
-function NeedsReviewMarker() {
-  return <span className="text-[11px] italic text-warning">needs review — depends on K-1 footnotes</span>
+function NeedsReviewMarker({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center rounded border border-warning/30 bg-warning/5 px-1.5 py-0.5 text-[11px] italic text-warning hover:bg-warning/10 focus:outline-none focus:ring-2 focus:ring-warning/30"
+      onClick={onClick}
+    >
+      needs review — depends on K-1 footnotes
+    </button>
+  )
 }
 
 function DestinationChips({ routings, onDrill }: { routings: K1CellRouting[]; onDrill: (target: DrillTarget) => void }) {
@@ -322,8 +333,35 @@ function DestinationChips({ routings, onDrill }: { routings: K1CellRouting[]; on
 interface DestinationGroup {
   key: number
   label: string
+  column: K1Column
   routings: K1CellRouting[]
   needsReview: boolean
+}
+
+interface NeedsReviewContext {
+  row: K1Row
+  groups: DestinationGroup[]
+}
+
+interface K1CodesModalContext {
+  column: K1Column
+  box: string
+}
+
+interface NeedsReviewContributor {
+  key: string
+  column: K1Column
+  sourceFieldId: string | undefined
+  boxLabel: string
+  amount: number | null
+  noteItems: NeedsReviewNoteItem[]
+}
+
+interface NeedsReviewNoteItem {
+  key: string
+  label: string
+  amount: string | null
+  notes: string | null
 }
 
 function destinationGroupsForRow(
@@ -342,12 +380,15 @@ function destinationGroupsForRow(
       return []
     }
     const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
+    const hasNeedsReviewRouting = routings.some((routing) => routing.routing.startsWith('needs_review_'))
+    const resolvedRoutings = routings.filter((routing) => !routing.routing.startsWith('needs_review_'))
 
     return [{
       key: column.doc.id,
       label: column.accountName,
-      routings,
-      needsReview: row.routable && routings.length === 0,
+      column,
+      routings: resolvedRoutings,
+      needsReview: row.routable && (routings.length === 0 || hasNeedsReviewRouting),
     }]
   })
 }
@@ -360,6 +401,15 @@ function routingLabels(routings: K1CellRouting[]): string {
   return routings.map((routing) => routing.label).join(', ')
 }
 
+function destinationGroupText(group: DestinationGroup): string {
+  if (group.needsReview) {
+    const reviewText = 'needs review — depends on K-1 footnotes'
+    return group.routings.length > 0 ? `${routingLabels(group.routings)}; ${reviewText}` : reviewText
+  }
+
+  return routingLabels(group.routings)
+}
+
 function destinationText(row: K1Row, groups: DestinationGroup[]): string | null {
   if (row.staticDestinations) {
     return routingLabels(row.staticDestinations)
@@ -370,12 +420,69 @@ function destinationText(row: K1Row, groups: DestinationGroup[]): string | null 
 
   const allAgree = groups.every((group) => destinationSignature(group) === destinationSignature(groups[0]!))
   if (allAgree) {
-    return groups[0]!.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(groups[0]!.routings)
+    return destinationGroupText(groups[0]!)
   }
 
   return groups
-    .map((group) => `${group.label}: ${group.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(group.routings)}`)
+    .map((group) => `${group.label}: ${destinationGroupText(group)}`)
     .join('; ')
+}
+
+function codeBoxLabel(row: K1Row): string {
+  return row.code ? `Box ${row.box}${row.code}` : `Box ${row.box ?? '—'}`
+}
+
+function noteText(notes: string | null | undefined): string | null {
+  const trimmed = notes?.trim()
+  return trimmed ? trimmed : null
+}
+
+function needsReviewSourceFieldId(row: K1Row): string | undefined {
+  if (row.sourceFieldId) {
+    return row.sourceFieldId
+  }
+  if (!row.box) {
+    return undefined
+  }
+  return row.code ? k1CodeSourceFieldId(row.box, row.code) : k1FieldSourceFieldId(row.box)
+}
+
+function needsReviewNoteItems(row: K1Row, column: K1Column): NeedsReviewNoteItem[] {
+  if (!row.box) {
+    return []
+  }
+
+  if (row.code) {
+    return getK1CodeItems(column.data, row.box, row.code).map((item, index) => ({
+      key: `${column.doc.id}-${row.box}-${row.code}-${index}`,
+      label: codeBoxLabel(row),
+      amount: item.value || null,
+      notes: noteText(item.notes),
+    }))
+  }
+
+  const field = column.data.fields[row.box]
+  return [{
+    key: `${column.doc.id}-${row.box}`,
+    label: codeBoxLabel(row),
+    amount: field?.value ?? null,
+    notes: noteText(field?.notes),
+  }]
+}
+
+function needsReviewContributors(context: NeedsReviewContext): NeedsReviewContributor[] {
+  return context.groups.map((group) => {
+    const rawAmount = context.row.kind === 'money' ? context.row.value(group.column.data) : null
+
+    return {
+      key: `${group.column.doc.id}-${context.row.key}`,
+      column: group.column,
+      sourceFieldId: needsReviewSourceFieldId(context.row),
+      boxLabel: codeBoxLabel(context.row),
+      amount: typeof rawAmount === 'number' ? rawAmount : null,
+      noteItems: needsReviewNoteItems(context.row, group.column),
+    }
+  })
 }
 
 function k1GridColumnKey(column: K1Column): string {
@@ -512,10 +619,12 @@ function DestinationCell({
   row,
   groups,
   onDrill,
+  onOpenNeedsReview,
 }: {
   row: K1Row
   groups: DestinationGroup[]
   onDrill: (target: DrillTarget) => void
+  onOpenNeedsReview: (context: NeedsReviewContext) => void
 }) {
   if (row.staticDestinations) {
     return <DestinationChips routings={row.staticDestinations} onDrill={onDrill} />
@@ -525,9 +634,23 @@ function DestinationCell({
   }
   const signature = (group: DestinationGroup): string =>
     destinationSignature(group)
+  const content = (group: DestinationGroup): React.ReactElement => (
+    <div className="flex flex-wrap items-center gap-1">
+      {group.routings.length > 0 ? <DestinationChips routings={group.routings} onDrill={onDrill} /> : null}
+      {group.needsReview ? <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups: [group] })} /> : null}
+    </div>
+  )
   const allAgree = groups.every((group) => signature(group) === signature(groups[0]!))
   if (allAgree) {
-    return groups[0]!.needsReview ? <NeedsReviewMarker /> : <DestinationChips routings={groups[0]!.routings} onDrill={onDrill} />
+    const group = groups[0]!
+    return group.needsReview ? (
+      <div className="flex flex-wrap items-center gap-1">
+        {group.routings.length > 0 ? <DestinationChips routings={group.routings} onDrill={onDrill} /> : null}
+        <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups })} />
+      </div>
+    ) : (
+      <DestinationChips routings={group.routings} onDrill={onDrill} />
+    )
   }
   return (
     <div className="space-y-1">
@@ -536,7 +659,7 @@ function DestinationCell({
           <span className="max-w-[84px] truncate text-[9px] uppercase tracking-wide text-muted-foreground" title={group.label}>
             {group.label}
           </span>
-          {group.needsReview ? <NeedsReviewMarker /> : <DestinationChips routings={group.routings} onDrill={onDrill} />}
+          {content(group)}
         </div>
       ))}
     </div>
@@ -560,6 +683,8 @@ export default function K1AllInOneView({
   isExportingXlsx = false,
 }: K1AllInOneViewProps): React.ReactElement {
   const [sourceValueContext, setSourceValueContext] = useState<SourceValueContext | null>(null)
+  const [needsReviewContext, setNeedsReviewContext] = useState<NeedsReviewContext | null>(null)
+  const [codesModalContext, setCodesModalContext] = useState<K1CodesModalContext | null>(null)
 
   const columns = useMemo<K1Column[]>(() => {
     return k1ColumnsFromDocs(k1Docs)
@@ -597,6 +722,21 @@ export default function K1AllInOneView({
     setSourceValueContext(null)
   }
 
+  async function saveCodesOverride(items: K1CodeItem[]): Promise<void> {
+    if (!codesModalContext) {
+      return
+    }
+
+    await onSaveParsedData(codesModalContext.column.doc.id, {
+      ...codesModalContext.column.data,
+      codes: {
+        ...codesModalContext.column.data.codes,
+        [codesModalContext.box]: items,
+      },
+    })
+    setCodesModalContext(null)
+  }
+
   if (columns.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
@@ -625,6 +765,33 @@ export default function K1AllInOneView({
         }}
         onSaveOverride={saveSourceOverride}
       />
+
+      <NeedsReviewDialog
+        context={needsReviewContext}
+        onClose={() => setNeedsReviewContext(null)}
+        onOpenReviewDoc={(docId, sourceFieldId) => {
+          setNeedsReviewContext(null)
+          onReviewDoc(docId, sourceFieldId)
+        }}
+        onOpenCodes={(column, box) => {
+          setNeedsReviewContext(null)
+          setCodesModalContext({ column, box })
+        }}
+      />
+
+      {codesModalContext ? (
+        <K1CodesModal
+          open
+          boxLabel={`Box ${codesModalContext.box}: ${K1_SPEC.find((spec) => spec.box === codesModalContext.box)?.label ?? 'Code Details'}`}
+          box={codesModalContext.box}
+          codeDefinitions={ALL_K1_CODES[codesModalContext.box] ?? {}}
+          items={codesModalContext.column.data.codes[codesModalContext.box] ?? []}
+          onClose={() => setCodesModalContext(null)}
+          onChange={(items) => {
+            void saveCodesOverride(items)
+          }}
+        />
+      ) : null}
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -687,6 +854,7 @@ export default function K1AllInOneView({
                   routingIndex={routingIndex}
                   onDrill={onDrill}
                   onOpenSourceValue={setSourceValueContext}
+                  onOpenNeedsReview={setNeedsReviewContext}
                 />
               ))}
             </tbody>
@@ -703,12 +871,14 @@ function SectionRows({
   routingIndex,
   onDrill,
   onOpenSourceValue,
+  onOpenNeedsReview,
 }: {
   section: K1Section
   columns: K1Column[]
   routingIndex: Map<string, K1CellRouting[]>
   onDrill: (target: DrillTarget) => void
   onOpenSourceValue: (context: SourceValueContext) => void
+  onOpenNeedsReview: (context: NeedsReviewContext) => void
 }): React.ReactElement {
   const sectionFillColspan = columns.length + 3
   return (
@@ -822,11 +992,107 @@ function SectionRows({
               {row.fromHint ?? '—'}
             </td>
             <td className="px-3 py-1.5 text-left align-top">
-              <DestinationCell row={row} groups={destinationGroups} onDrill={onDrill} />
+              <DestinationCell row={row} groups={destinationGroups} onDrill={onDrill} onOpenNeedsReview={onOpenNeedsReview} />
             </td>
           </tr>
         )
       })}
     </>
+  )
+}
+
+function NeedsReviewDialog({
+  context,
+  onClose,
+  onOpenReviewDoc,
+  onOpenCodes,
+}: {
+  context: NeedsReviewContext | null
+  onClose: () => void
+  onOpenReviewDoc: (docId: number, sourceFieldId?: string) => void
+  onOpenCodes: (column: K1Column, box: string) => void
+}): React.ReactElement {
+  const contributors = context ? needsReviewContributors(context) : []
+  const row = context?.row ?? null
+  const codeDefinitions = row?.box ? ALL_K1_CODES[row.box] ?? {} : {}
+  const canResolveInCodeDetails = Boolean(row?.box && row.code && Object.keys(codeDefinitions).length > 0)
+
+  return (
+    <Dialog
+      open={context !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose()
+        }
+      }}
+    >
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>K-1 footnotes need review</DialogTitle>
+          <DialogDescription>
+            {row ? `${codeBoxLabel(row)} ${row.label}` : 'Review the contributing K-1 source line.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          {contributors.map((contributor) => (
+            <div key={contributor.key} className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="truncate text-xs font-semibold text-foreground">{contributor.column.accountName}</div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>{contributor.boxLabel}</span>
+                    {contributor.amount !== null ? <AmountCell val={contributor.amount} /> : null}
+                  </div>
+                </div>
+                {canResolveInCodeDetails && row?.box ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      if (row.box) {
+                        onOpenCodes(contributor.column, row.box)
+                      }
+                    }}
+                  >
+                    Resolve in code details
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onOpenReviewDoc(contributor.column.doc.id, contributor.sourceFieldId)}
+                  >
+                    Open K-1 review
+                  </Button>
+                )}
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {contributor.noteItems.length > 0 ? contributor.noteItems.map((item) => (
+                  <div key={item.key} className="rounded border border-border/70 bg-background/70 px-2.5 py-2">
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>{item.label}</span>
+                      {item.amount ? <span className="font-mono normal-case tracking-normal">{item.amount}</span> : null}
+                    </div>
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
+                      {item.notes ?? 'No footnote text captured — classify manually.'}
+                    </p>
+                  </div>
+                )) : (
+                  <div className="rounded border border-border/70 bg-background/70 px-2.5 py-2 text-xs text-muted-foreground">
+                    No footnote text captured — classify manually.
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
