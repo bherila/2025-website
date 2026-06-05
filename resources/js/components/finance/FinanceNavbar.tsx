@@ -37,6 +37,7 @@ export type FinanceSection =
   | 'documents'
   | 'tax-preview'
   | 'tags'
+  | 'calculators'
   | 'config'
 
 /** Right-side nav items */
@@ -46,6 +47,7 @@ const RIGHT_SECTIONS: { value: FinanceSection; label: string; href: string }[] =
   { value: 'rsu', label: 'RSU', href: '/finance/rsu' },
   { value: 'payslips', label: 'Payslips', href: '/finance/payslips' },
   { value: 'tags', label: 'Tags', href: '/finance/tags' },
+  { value: 'calculators', label: 'Calculators', href: '/financial-planning' },
   { value: 'accounts', label: 'Accounts', href: '/finance/accounts' },
 ]
 
