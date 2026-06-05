@@ -5,6 +5,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleCFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleFFacts;
@@ -20,7 +21,7 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null, ?Form4797Facts $form4797 = null): Schedule1Facts
+    public function build(array $k1Docs, array $docs1099, ?ScheduleCFacts $scheduleC = null, ?ScheduleSEFacts $scheduleSE = null, ?ScheduleFFacts $scheduleF = null, ?Form4797Facts $form4797 = null, ?Form4952Facts $form4952 = null): Schedule1Facts
     {
         $line1aSources = $this->form1099GSources(
             $docs1099,
@@ -78,6 +79,21 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
                 isReviewed: $this->sourceIsReviewed($doc),
                 reviewStatus: $this->reviewStatus($doc),
                 reviewAction: $this->reviewAction($doc),
+            );
+        }
+
+        if ($form4952 instanceof Form4952Facts && $form4952->deductibleScheduleEAboveLine > 0.0) {
+            // §163(d)(5)(A)(ii) trader-fund investment interest allowed on Form 4952 is deducted
+            // above-the-line on Schedule E, Part II, line 28, which lowers the Schedule E net that
+            // flows to Schedule 1 line 5. ScheduleEFactsBuilder already reflects this in its totals;
+            // mirror it here so Schedule 1 line 5 → Form 1040 line 8 → AGI pick up the deduction.
+            $line5Sources[] = new TaxFactSource(
+                id: 'form4952-schedule1-line5-investment-interest',
+                label: 'Investment interest — trader fund (Form 4952 allowed, above-the-line)',
+                amount: $this->roundMoney(-$form4952->deductibleScheduleEAboveLine),
+                sourceType: TaxFactSourceType::Form4952ScheduleEInvestmentInterest,
+                routing: TaxFactRouting::Schedule1Line5,
+                routingReason: 'Allowed §163(d)(5)(A)(ii) trader-fund investment interest is deducted above-the-line on Schedule E, Part II, line 28 (§62(a)(1); Rev. Rul. 2008-12 & 2008-38; Announcement 2008-65), reducing the Schedule E net carried to Schedule 1 line 5.',
             );
         }
 
