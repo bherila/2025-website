@@ -43,6 +43,11 @@ readonly class Form4952Facts
     public array $carryDestinations;
 
     /**
+     * @var Form4952TracingSplit[]
+     */
+    public array $tracingSplitSources;
+
+    /**
      * @param  TaxFactSource[]  $investmentInterestSources
      * @param  TaxFactSource[]  $investmentExpenseSources
      * @param  TaxFactSource[]  $excludedInvestmentExpenseSources
@@ -50,6 +55,7 @@ readonly class Form4952Facts
      * @param  TaxFactSource[]  $grossInvestmentIncomeFromK1Sources
      * @param  TaxFactSource[]  $qualifiedDividendSources
      * @param  Form4952CarryDestination[]  $carryDestinations
+     * @param  Form4952TracingSplit[]  $tracingSplitSources
      */
     public function __construct(
         array $investmentInterestSources,
@@ -75,6 +81,9 @@ readonly class Form4952Facts
         public float $carryforwardScheduleE,
         public float $carryforwardScheduleA,
         array $carryDestinations,
+        public string $allocationMethod = 'pro_rata',
+        public string $allocationMethodDescription = 'Pro-rata allocation under Rev. Rul. 2008-38.',
+        array $tracingSplitSources = [],
     ) {
         $this->investmentInterestSources = $investmentInterestSources;
         $this->investmentExpenseSources = $investmentExpenseSources;
@@ -83,10 +92,11 @@ readonly class Form4952Facts
         $this->grossInvestmentIncomeFromK1Sources = $grossInvestmentIncomeFromK1Sources;
         $this->qualifiedDividendSources = $qualifiedDividendSources;
         $this->carryDestinations = $carryDestinations;
+        $this->tracingSplitSources = $tracingSplitSources;
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,materialParticipationScheduleEInterestSources:array<int,array<string,mixed>>,totalMaterialParticipationScheduleEInterest:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>}
+     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,materialParticipationScheduleEInterestSources:array<int,array<string,mixed>>,totalMaterialParticipationScheduleEInterest:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>,allocationMethod:string,allocationMethodDescription:string,tracingSplitSources:array<int,array<string,mixed>>}
      */
     public function toArray(): array
     {
@@ -114,6 +124,9 @@ readonly class Form4952Facts
             'carryforwardScheduleE' => $this->carryforwardScheduleE,
             'carryforwardScheduleA' => $this->carryforwardScheduleA,
             'carryDestinations' => array_map(static fn (Form4952CarryDestination $destination): array => $destination->toArray(), $this->carryDestinations),
+            'allocationMethod' => $this->allocationMethod,
+            'allocationMethodDescription' => $this->allocationMethodDescription,
+            'tracingSplitSources' => array_map(static fn (Form4952TracingSplit $source): array => $source->toArray(), $this->tracingSplitSources),
         ];
     }
 }

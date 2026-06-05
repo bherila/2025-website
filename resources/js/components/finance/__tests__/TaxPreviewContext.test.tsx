@@ -289,6 +289,9 @@ function makeTaxFacts(): TaxPreviewFacts {
       carryforwardScheduleE: 0,
       carryforwardScheduleA: 0,
       carryDestinations: [],
+      allocationMethod: 'pro_rata',
+      allocationMethodDescription: 'Pro-rata allocation under Rev. Rul. 2008-38.',
+      tracingSplitSources: [],
     },
     scheduleA: {
       stateIncomeTaxSources: [],

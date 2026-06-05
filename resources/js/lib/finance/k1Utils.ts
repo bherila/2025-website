@@ -7,6 +7,12 @@ import type { FK1StructuredData, K1CodeItem, K1SourceValueOverride, K1SourceValu
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
 const K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY = 'k1:material-participation'
+const FORM_4952_TRACING_SPLIT_PREFIX = 'form4952:tracing:code'
+
+export interface Form4952TracingSplitOverride {
+  scheduleA: number
+  scheduleE: number
+}
 
 /**
  * Returns whether the K-3 "Sourced by Partner" column (f) amounts are being treated
@@ -43,6 +49,14 @@ export function k1MaterialParticipationOverrideKey(): string {
 
 export function isK1MaterialParticipationOverrideKey(key: string): boolean {
   return key === K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY
+}
+
+export function form4952TracingSplitOverrideKey(box: string, code: string): string {
+  return `${FORM_4952_TRACING_SPLIT_PREFIX}:${box}:${normalizeK1Code(code)}`
+}
+
+export function isForm4952TracingSplitOverrideKey(key: string): boolean {
+  return key.startsWith(`${FORM_4952_TRACING_SPLIT_PREFIX}:`)
 }
 
 export function k3Part2OverrideKey(line: string, category: string): string {
@@ -115,6 +129,80 @@ export function withK1MaterialParticipationOverride(data: FK1StructuredData, par
         }
       : null,
   )
+}
+
+function moneyLikeNumber(value: unknown): number | null {
+  const parsed = parseMoney(value)
+  return parsed === null ? null : Math.abs(parsed)
+}
+
+export function parseForm4952TracingSplitOverrideValue(value: unknown): Form4952TracingSplitOverride | null {
+  let payload = value
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload) as unknown
+    } catch {
+      return null
+    }
+  }
+
+  if (!payload || typeof payload !== 'object') return null
+  const record = payload as Record<string, unknown>
+  const scheduleA = moneyLikeNumber(record.scheduleA ?? record.schedule_a ?? record.schA)
+  const scheduleE = moneyLikeNumber(record.scheduleE ?? record.schedule_e ?? record.schE)
+  if (scheduleA === null || scheduleE === null) return null
+  if (scheduleA === 0 && scheduleE === 0) return null
+
+  return { scheduleA, scheduleE }
+}
+
+export function getForm4952TracingSplitOverride(
+  data: unknown,
+  box: string,
+  code: string,
+): Form4952TracingSplitOverride | null {
+  if (!isFK1StructuredData(data)) return null
+  return parseForm4952TracingSplitOverrideValue(
+    getK1SourceValueOverride(data, form4952TracingSplitOverrideKey(box, code))?.value,
+  )
+}
+
+export function withForm4952TracingSplitOverride(
+  data: FK1StructuredData,
+  box: string,
+  code: string,
+  split: Form4952TracingSplitOverride | null,
+): FK1StructuredData {
+  const key = form4952TracingSplitOverrideKey(box, code)
+  return withK1SourceValueOverride(
+    data,
+    key,
+    split === null
+      ? null
+      : {
+          value: JSON.stringify({
+            scheduleA: Math.abs(split.scheduleA),
+            scheduleE: Math.abs(split.scheduleE),
+          }),
+          originalValue: null,
+          label: `Form 4952 tracing split — Box ${box}${normalizeK1Code(code)}`,
+          updatedAt: new Date().toISOString(),
+        },
+  )
+}
+
+export function getForm4952TracingSplitSignature(data: unknown): string {
+  if (!isFK1StructuredData(data)) return ''
+
+  return Object.entries(data.sourceValueOverrides ?? {})
+    .filter(([key, override]) => isForm4952TracingSplitOverrideKey(key) && parseForm4952TracingSplitOverrideValue(override.value) !== null)
+    .map(([key, override]) => {
+      const split = parseForm4952TracingSplitOverrideValue(override.value)
+      return split === null ? '' : `${key}:${split.scheduleA}:${split.scheduleE}`
+    })
+    .filter(Boolean)
+    .sort()
+    .join('|')
 }
 
 export function parseK1Field(data: FK1StructuredData, box: string): number {

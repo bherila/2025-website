@@ -120,6 +120,8 @@ export default function Form4952Preview({
   const scenC_qdElected = Math.min(totalQualDiv, gapToFill)
   const scenC_nii = currency(niiBefore).add(scenC_qdElected).value
   const scenC_deductible = Math.min(totalInvIntExpense, scenC_nii)
+  const hasTracingAllocation = form4952Facts.allocationMethod === 'tracing'
+    && form4952Facts.tracingSplitSources.length > 0
 
   // Route a source's "go to source" click to the K-1/1099 review modal (with a focus
   // field for K-1 boxes) or fall back to the Schedule B column for dividend sources.
@@ -306,6 +308,7 @@ export default function Form4952Preview({
         <FormBlock title="Where the deductible carries">
           {form4952Facts.carryDestinations.map((destination) => {
             const drill = drillForDestination(destination.destination)
+            const allocationLabel = hasTracingAllocation ? 'Tracing-based' : 'Pro-rata'
             return (
               <div key={destination.destination}>
                 <FormLine
@@ -315,16 +318,33 @@ export default function Form4952Preview({
                 />
                 {showCarryProration && (
                   <FormSubLine
-                    text={`Pro-rata: ${fmtAmt(form4952Facts.deductibleInvestmentInterestExpense)} allowed × ${(destination.share * 100).toFixed(1)}% (${fmtAmt(destination.grossInterest)} of ${fmtAmt(totalInvIntExpense)} gross) = ${fmtAmt(destination.allowedDeduction)}${destination.carryforward > 0 ? `; carryforward ${fmtAmt(destination.carryforward)}` : ''}`}
+                    text={`${allocationLabel}: ${fmtAmt(form4952Facts.deductibleInvestmentInterestExpense)} allowed × ${(destination.share * 100).toFixed(1)}% (${fmtAmt(destination.grossInterest)} of ${fmtAmt(totalInvIntExpense)} gross) = ${fmtAmt(destination.allowedDeduction)}${destination.carryforward > 0 ? `; carryforward ${fmtAmt(destination.carryforward)}` : ''}`}
                   />
                 )}
               </div>
             )
           })}
+          {hasTracingAllocation && form4952Facts.tracingSplitSources.map((source) => (
+            <div key={source.sourceId} className="px-3 py-2">
+              <div className="mb-1 text-[11px] font-medium text-foreground">{source.label}</div>
+              <div className="grid gap-1 text-[11px] sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-2 py-1">
+                  <span>Schedule A traced gross</span>
+                  <span className="font-currency tabular-nums">{fmtAmt(source.scheduleAInterest)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-2 py-1">
+                  <span>Schedule E traced gross</span>
+                  <span className="font-currency tabular-nums">{fmtAmt(source.scheduleEInterest)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
           {showCarryProration && (
             <FormLine
               label="Allocation method"
-              raw="Pro-rata (Rev. Rul. 2008-38)"
+              raw={hasTracingAllocation
+                ? `${form4952Facts.allocationMethodDescription} Treas. Reg. §1.163-8T traces debt proceeds to the expenditure use; collateral securing the debt does not control.`
+                : form4952Facts.allocationMethodDescription}
               note
             />
           )}

@@ -345,6 +345,11 @@ abstract class TaxPreviewFactBuilder
         return 'k1:material-participation';
     }
 
+    protected function k1Form4952TracingSplitOverrideKey(string $box, string $code): string
+    {
+        return sprintf('form4952:tracing:code:%s:%s', $box, strtoupper(trim($code)));
+    }
+
     protected function k3Part2OverrideKey(string $line, string $category): string
     {
         return "k3:part2:{$line}:{$category}";
@@ -402,6 +407,50 @@ abstract class TaxPreviewFactBuilder
         }
 
         return in_array(strtolower(trim($value)), ['true', '1', 'yes', 'y'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{scheduleA:float,scheduleE:float}|null
+     */
+    protected function k1Form4952TracingSplitOverrideValue(array $data, string $box, string $code): ?array
+    {
+        $overrides = $data['sourceValueOverrides'] ?? null;
+        if (! is_array($overrides)) {
+            return null;
+        }
+
+        $override = $overrides[$this->k1Form4952TracingSplitOverrideKey($box, $code)] ?? null;
+        if (! is_array($override)) {
+            return null;
+        }
+
+        $value = $override['value'] ?? null;
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : null;
+        }
+
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $scheduleA = $this->parseMoney($value['scheduleA'] ?? $value['schedule_a'] ?? $value['schA'] ?? null);
+        $scheduleE = $this->parseMoney($value['scheduleE'] ?? $value['schedule_e'] ?? $value['schE'] ?? null);
+        if ($scheduleA === null || $scheduleE === null) {
+            return null;
+        }
+
+        $scheduleA = max(0.0, abs($scheduleA));
+        $scheduleE = max(0.0, abs($scheduleE));
+        if ($scheduleA === 0.0 && $scheduleE === 0.0) {
+            return null;
+        }
+
+        return [
+            'scheduleA' => $scheduleA,
+            'scheduleE' => $scheduleE,
+        ];
     }
 
     /**

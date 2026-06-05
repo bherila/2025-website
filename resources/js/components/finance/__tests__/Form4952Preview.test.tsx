@@ -67,6 +67,9 @@ function makeFacts(overrides: Partial<Form4952Facts> = {}): Form4952Facts {
     deductibleScheduleAItemized: 0,
     carryforwardScheduleE: 0,
     carryforwardScheduleA: 0,
+    allocationMethod: 'pro_rata',
+    allocationMethodDescription: 'Pro-rata allocation under Rev. Rul. 2008-38.',
+    tracingSplitSources: [],
     ...overrides,
   }
 }
@@ -218,6 +221,57 @@ describe('Form4952Preview', () => {
 
     fireEvent.click(screen.getByText(/Schedule E, Part II, line 28/))
     expect(onOpenScheduleE).toHaveBeenCalled()
+  })
+
+  it('renders tracing split inputs and method note when tracing allocation is present', () => {
+    render(
+      <Form4952Preview
+        form4952Facts={makeFacts({
+          totalInvestmentInterestExpense: 200,
+          deductibleInvestmentInterestExpense: 100,
+          disallowedCarryforward: 100,
+          deductibleScheduleEAboveLine: 60,
+          deductibleScheduleAItemized: 40,
+          carryforwardScheduleE: 60,
+          carryforwardScheduleA: 40,
+          netInvestmentIncomeBeforeQualifiedDividendElection: 100,
+          allocationMethod: 'tracing',
+          allocationMethodDescription: 'Tracing inputs under Treas. Reg. §1.163-8T set the category gross amounts.',
+          tracingSplitSources: [{
+            sourceId: 'k1-1-13H-0',
+            label: 'Trader Fund — Box 13H',
+            grossInterest: 200,
+            scheduleAInterest: 80,
+            scheduleEInterest: 120,
+            scheduleAShare: 0.4,
+            scheduleEShare: 0.6,
+            taxDocumentId: 1,
+            formType: 'k1',
+            box: '13',
+            code: 'H',
+          }],
+          carryDestinations: [
+            makeDestination({ destination: 'sch-a', grossInterest: 80, allowedDeduction: 40, carryforward: 40, share: 0.4 }),
+            makeDestination({
+              destination: 'sch-e',
+              label: 'Schedule E, Part II, line 28 — above-the-line (trader fund)',
+              formLine: 'Schedule E, Part II, line 28',
+              grossInterest: 120,
+              allowedDeduction: 60,
+              carryforward: 60,
+              share: 0.6,
+              citation: 'IRC §163(d)(5)(A)(ii); Rev. Rul. 2008-38',
+            }),
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getAllByText(/Tracing-based:/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Trader Fund — Box 13H')).toBeInTheDocument()
+    expect(screen.getByText('Schedule A traced gross')).toBeInTheDocument()
+    expect(screen.getByText('Schedule E traced gross')).toBeInTheDocument()
+    expect(screen.getByText(/collateral securing the debt does not control/i)).toBeInTheDocument()
   })
 
   it('renders info tooltips with citations on the key lines', () => {

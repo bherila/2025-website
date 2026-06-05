@@ -13,7 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
-import { getK1PartnerName, isK1MaterialParticipationOverrideKey, k3ForeignTaxTotalOverrideKey } from '@/lib/finance/k1Utils'
+import {
+  getK1PartnerName,
+  isForm4952TracingSplitOverrideKey,
+  isK1MaterialParticipationOverrideKey,
+  k3ForeignTaxTotalOverrideKey,
+  parseForm4952TracingSplitOverrideValue,
+} from '@/lib/finance/k1Utils'
 import { parseMoney, parseMoneyOrZero } from '@/lib/finance/money'
 import type { FK1StructuredData, K1SourceValueOverride } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -62,6 +68,14 @@ function formatDisplayValue(value: string | number | null | undefined): React.Re
   if (value === null || value === undefined || value === '') {
     return <span className="text-muted-foreground">-</span>
   }
+  const tracingSplit = parseForm4952TracingSplitOverrideValue(value)
+  if (tracingSplit !== null) {
+    return (
+      <span className="whitespace-pre-wrap break-words">
+        Sch A {currency(tracingSplit.scheduleA).format()} / Sch E {currency(tracingSplit.scheduleE).format()}
+      </span>
+    )
+  }
   const parsed = parseMoney(value)
   if (parsed !== null) {
     return <AmountCell val={parsed} />
@@ -95,6 +109,16 @@ function part2Label(line: string, category: string): string {
 }
 
 function describeOverrideKey(sourceKey: string, fallbackLabel?: string | null): { label: string; sourceType: 'K-1' | 'K-3'; impact: string; aggregate: boolean } {
+  const form4952TracingMatch = sourceKey.match(/^form4952:tracing:code:([^:]+):(.+)$/)
+  if (form4952TracingMatch?.[1] && form4952TracingMatch[2]) {
+    return {
+      label: fallbackLabel ?? `Form 4952 tracing split: ${codeLabel(form4952TracingMatch[1], form4952TracingMatch[2])}`,
+      sourceType: 'K-1',
+      impact: 'Form 4952 §1.163-8T interest tracing split',
+      aggregate: false,
+    }
+  }
+
   const fieldMatch = sourceKey.match(/^field:(.+)$/)
   if (fieldMatch?.[1]) {
     return {
@@ -208,7 +232,7 @@ function buildOverrideRows(k1Docs: TaxDocument[]): OverrideRow[] {
         originalValue: override.originalValue ?? null,
         overrideValue: override.value,
         delta,
-        calculationImpacting: parseMoney(override.value) !== null,
+        calculationImpacting: parseMoney(override.value) !== null || isForm4952TracingSplitOverrideKey(sourceKey),
         aggregate: descriptor.aggregate,
         shadowedValues: descriptor.aggregate ? part3CountrySourceValues(data) : [],
       })
