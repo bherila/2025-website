@@ -29,7 +29,7 @@ export function LiquidityOverTimeChart({ projection, mode = 'preTax' }: Liquidit
         <CardTitle>{isAfterTax ? 'After-tax expected liquidity value over time' : 'Expected liquidity value over time'}</CardTitle>
         <CardDescription>
           {isAfterTax
-            ? 'Cumulative realizable equity value net of cumulative federal regular tax and AMT from the backend after-tax projection.'
+            ? 'Cumulative after-tax cash flow plus realizable equity value, using the backend federal regular tax and AMT projection.'
             : 'Low, medium, and high bands use dotted, solid, and dashed lines in addition to color.'}
         </CardDescription>
       </CardHeader>

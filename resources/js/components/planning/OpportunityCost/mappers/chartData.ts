@@ -109,6 +109,16 @@ function annualForYear(job: JobProjection, year: number): EquityCompensationAfte
   return job.afterTax?.annual.find((annual) => annual.year === year)
 }
 
+function cumulativeAfterTaxCashFlowBase(job: JobProjection, year: number): number {
+  return (job.afterTax?.annual ?? [])
+    .filter((annual) => annual.year <= year)
+    .reduce((total, annual) => {
+      const afterTaxCashFlowExcludingEquityProceeds = currency(annual.freeCashFlow).subtract(annual.equitySaleProceeds).value
+
+      return currency(total).add(afterTaxCashFlowExcludingEquityProceeds).value
+    }, 0)
+}
+
 function sumSourcesByType(sources: readonly TaxFactSource[] | undefined, sourceType: string): number {
   return (sources ?? []).reduce(
     (total, source) => (source.sourceType === sourceType ? currency(total).add(source.amount).value : total),
@@ -149,13 +159,11 @@ export function mapAfterTaxLiquidityChartData(projection: OpportunityCostProject
     const row: LiquidityChartRow = { year }
 
     projection.jobs.forEach((job) => {
-      const cumulativeTax = (job.afterTax?.annual ?? [])
-        .filter((annual) => annual.year <= year)
-        .reduce((total, annual) => currency(total).add(annual.totalEstimatedTax).value, 0)
+      const cashFlowBase = cumulativeAfterTaxCashFlowBase(job, year)
 
       ;(['low', 'medium', 'high'] as ProjectionBand[]).forEach((band) => {
         const point = job.liquidity[band].find((entry) => entry.year === year)
-        row[seriesKey(job, band)] = currency(point?.cumulativeValue ?? 0).subtract(cumulativeTax).value
+        row[seriesKey(job, band)] = currency(cashFlowBase).add(point?.cumulativeValue ?? 0).value
       })
     })
 
