@@ -116,8 +116,79 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         }
 
         $line2a = $this->line2aTaxesOrStandardDeduction($scheduleA, $isMarried);
+
+        return $this->buildFromLineItems(
+            taxableIncome: $taxableIncome,
+            line2aTaxesOrStandardDeduction: $line2a['amount'],
+            line2aSource: $line2a['source'],
+            line2dDepletion: $line2dDepletion,
+            line2kDispositionOfProperty: $line2kDispositionOfProperty,
+            line2lPost1986Depreciation: $line2lPost1986Depreciation,
+            line2mPassiveActivities: $line2mPassiveActivities,
+            line2nLossLimitations: $line2nLossLimitations,
+            line2tIntangibleDrillingCosts: $line2tIntangibleDrillingCosts,
+            line3OtherAdjustments: $line3OtherAdjustments,
+            regularForeignTaxCredit: $regularForeignTaxCredit,
+            year: $year,
+            isMarried: $isMarried,
+            regularTax: $regularTax,
+            sourceEntries: $sourceEntries,
+            requiresStatementReview: $manualReviewReasons !== [],
+            manualReviewReasons: array_values($manualReviewReasons),
+        );
+    }
+
+    /**
+     * @param  Form6251SourceEntryFact[]  $sourceEntries
+     */
+    public function buildFromOtherAdjustments(float $taxableIncome, float $line3OtherAdjustments, int $year, bool $isMarried, ?float $regularTax = null, array $sourceEntries = []): Form6251Facts
+    {
+        return $this->buildFromLineItems(
+            taxableIncome: $taxableIncome,
+            line2aTaxesOrStandardDeduction: 0.0,
+            line2aSource: 'none',
+            line2dDepletion: 0.0,
+            line2kDispositionOfProperty: 0.0,
+            line2lPost1986Depreciation: 0.0,
+            line2mPassiveActivities: 0.0,
+            line2nLossLimitations: 0.0,
+            line2tIntangibleDrillingCosts: 0.0,
+            line3OtherAdjustments: $line3OtherAdjustments,
+            regularForeignTaxCredit: 0.0,
+            year: $year,
+            isMarried: $isMarried,
+            regularTax: $regularTax,
+            sourceEntries: $sourceEntries,
+            requiresStatementReview: false,
+            manualReviewReasons: [],
+        );
+    }
+
+    /**
+     * @param  Form6251SourceEntryFact[]  $sourceEntries
+     * @param  string[]  $manualReviewReasons
+     */
+    private function buildFromLineItems(
+        float $taxableIncome,
+        float $line2aTaxesOrStandardDeduction,
+        string $line2aSource,
+        float $line2dDepletion,
+        float $line2kDispositionOfProperty,
+        float $line2lPost1986Depreciation,
+        float $line2mPassiveActivities,
+        float $line2nLossLimitations,
+        float $line2tIntangibleDrillingCosts,
+        float $line3OtherAdjustments,
+        float $regularForeignTaxCredit,
+        int $year,
+        bool $isMarried,
+        ?float $regularTax,
+        array $sourceEntries,
+        bool $requiresStatementReview,
+        array $manualReviewReasons,
+    ): Form6251Facts {
         $adjustmentTotal = $this->sumMoney([
-            $line2a['amount'],
+            $line2aTaxesOrStandardDeduction,
             $line2dDepletion,
             $line2kDispositionOfProperty,
             $line2lPost1986Depreciation,
@@ -144,8 +215,8 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
 
         return new Form6251Facts(
             line1TaxableIncome: $taxableIncome,
-            line2aTaxesOrStandardDeduction: $line2a['amount'],
-            line2aSource: $line2a['source'],
+            line2aTaxesOrStandardDeduction: $line2aTaxesOrStandardDeduction,
+            line2aSource: $line2aSource,
             line2cInvestmentInterest: 0.0,
             line2dDepletion: $line2dDepletion,
             line2kDispositionOfProperty: $line2kDispositionOfProperty,
@@ -171,8 +242,8 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             amt: $amt,
             filingStatus: $isMarried ? 'mfj' : 'single',
             sourceEntries: $sourceEntries,
-            requiresStatementReview: $manualReviewReasons !== [],
-            manualReviewReasons: array_values($manualReviewReasons),
+            requiresStatementReview: $requiresStatementReview,
+            manualReviewReasons: $manualReviewReasons,
         );
     }
 

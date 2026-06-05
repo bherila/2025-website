@@ -93,6 +93,23 @@ class OpportunityCostCalculatorTest extends TestCase
         $this->assertSame(1166.0, $valuation['totals']['medium']);
     }
 
+    public function test_private_share_price_rounding_is_stable_at_half_cent_boundaries(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'private-rounding-job',
+            'name' => 'Private rounding job',
+            'company' => [
+                'type' => 'private',
+                'fourNineA' => 10,
+                'annualDilutionPct' => 3,
+            ],
+            'growthBands' => ['lowPct' => 0, 'mediumPct' => 15, 'highPct' => 30],
+        ], false);
+
+        $this->assertInstanceOf(JobSpec::class, $job);
+        $this->assertSame(12.45, (new EquityValuationService)->sharePrice($job, 2, 'medium'));
+    }
+
     public function test_calculator_emits_warning_triggers_and_negative_fcf(): void
     {
         $inputs = $this->fixedInputs();
