@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
-import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import K1AllInOneView, { buildK1AllInOneXlsxGrids } from '@/components/finance/K1AllInOneView'
 import { k1CodeSourceFieldId, k1FieldSourceFieldId } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K1CodeItem, K1FieldValue } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -162,6 +162,32 @@ describe('K1AllInOneView', () => {
         total: 300,
       }),
     }))
+  })
+
+  it('splits wide K-1 XLSX grids to stay within the API column limit', () => {
+    const manyDocs = Array.from({ length: 62 }, (_, index) => {
+      const sequence = index + 1
+
+      return k1Doc(1000 + index, {
+        A: field(`10-${String(sequence).padStart(7, '0')}`),
+        B: field(`Fund ${sequence}`),
+        '5': field(String(sequence)),
+      })
+    })
+
+    const grids = buildK1AllInOneXlsxGrids(manyDocs, null)
+
+    expect(grids).toHaveLength(2)
+    expect(grids.map((grid) => grid.name)).toEqual(['All K-1s', 'All K-1s 2'])
+    expect(grids.map((grid) => grid.columns.length)).toEqual([64, 4])
+    expect(grids.every((grid) => grid.columns.length <= 64)).toBe(true)
+
+    const secondInterestRow = grids[1]!.rows.find((row) => row.label === '5 Interest income')
+    expect(secondInterestRow?.cells).toEqual(expect.objectContaining({
+      doc_1061: 62,
+      total: 1953,
+    }))
+    expect(secondInterestRow?.cells ?? {}).not.toHaveProperty('doc_1000')
   })
 
   it('saves a source value override without opening the K-1 review modal first', async () => {
