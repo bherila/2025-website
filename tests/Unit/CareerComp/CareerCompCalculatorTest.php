@@ -216,7 +216,90 @@ class CareerCompCalculatorTest extends TestCase
 
         $this->assertSame(0.0, $valuation['liquidity']['medium'][0]['cumulativeValue']);
         $this->assertSame(2332.0, $valuation['liquidity']['medium'][2]['cumulativeValue']);
-        $this->assertSame(1166.0, $valuation['totals']['medium']);
+        $this->assertSame(2332.0, $valuation['annualEquity'][2028]);
+        $this->assertSame(2332.0, $valuation['totals']['medium']);
+    }
+
+    public function test_equity_valuation_preserves_fractional_share_precision(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'fractional-rsu-job',
+            'name' => 'Fractional RSU job',
+            'company' => [
+                'type' => 'public',
+                'currentSharePrice' => 100,
+            ],
+            'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+        ], false);
+
+        $valuation = (new EquityValuationService)->value($job, [
+            ['grantId' => 'rsu', 'type' => 'rsu', 'year' => 2026, 'vestedShares' => 0.004, 'exercisableShares' => 0],
+        ], 2026, 1);
+
+        $this->assertSame(0.4, $valuation['annualEquity'][2026]);
+        $this->assertSame(0.4, $valuation['totals']['medium']);
+    }
+
+    public function test_iso_limit_warning_accounts_for_fractional_shares(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'fractional-iso-job',
+            'name' => 'Fractional ISO job',
+            'optionGrants' => [[
+                'id' => 'iso-1',
+                'kind' => 'hire',
+                'type' => 'iso',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 1000.004,
+                'strike' => 100,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'earlyExercise83b' => true,
+            ]],
+        ], false);
+
+        $result = (new OptionsVestingService)->expand($job, 2026, 1);
+
+        $this->assertSame('iso', $result['rows'][0]['type']);
+        $this->assertSame(1000.0, $result['rows'][0]['exercisableShares']);
+        $this->assertSame('nso', $result['rows'][1]['type']);
+        $this->assertSame(0.004, $result['rows'][1]['exercisableShares']);
+        $this->assertNotEmpty($result['warnings']);
+    }
+
+    public function test_calculator_preserves_fractional_option_exercise_outlay(): void
+    {
+        $inputs = $this->fixedInputs();
+        $inputs['currentJob'] = null;
+        $inputs['horizonYears'] = 1;
+        $inputs['hypotheticalJobs'] = [[
+            'id' => 'fractional-option-job',
+            'name' => 'Fractional option job',
+            'company' => [
+                'type' => 'public',
+                'currentSharePrice' => 100,
+            ],
+            'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+            'optionGrants' => [[
+                'id' => 'nso-1',
+                'kind' => 'hire',
+                'type' => 'nso',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 0.004,
+                'strike' => 40,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'earlyExercise83b' => true,
+            ]],
+            'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+        ]];
+
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray($inputs))->toArray();
+        $annual = $projection['jobs'][0]['annual'][0];
+
+        $this->assertSame(0.4, $annual['vestedLiquidEquity']);
+        $this->assertSame(0.16, $annual['exerciseOutlay']);
+        $this->assertSame(0.24, $annual['freeCashFlow']);
     }
 
     public function test_private_share_price_rounding_is_stable_at_half_cent_boundaries(): void

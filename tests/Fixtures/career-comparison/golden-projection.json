@@ -21,10 +21,10 @@
                     "year": 2027,
                     "salary": 185000.0,
                     "bonus": 25000.0,
-                    "vestedLiquidEquity": 40250.28,
-                    "shareSaleProceeds": 40250.28,
+                    "vestedLiquidEquity": 40250.0,
+                    "shareSaleProceeds": 40250.0,
                     "exerciseOutlay": 0.0,
-                    "freeCashFlow": 250250.28
+                    "freeCashFlow": 250250.0
                 },
                 {
                     "year": 2028,
@@ -48,10 +48,10 @@
                     "year": 2030,
                     "salary": 185000.0,
                     "bonus": 25000.0,
-                    "vestedLiquidEquity": 2025.51,
-                    "shareSaleProceeds": 2025.51,
+                    "vestedLiquidEquity": 2025.83,
+                    "shareSaleProceeds": 2025.83,
                     "exerciseOutlay": 0.0,
-                    "freeCashFlow": 212025.51
+                    "freeCashFlow": 212025.83
                 },
                 {
                     "year": 2031,
@@ -107,15 +107,15 @@
                     },
                     {
                         "year": 2027,
-                        "cumulativeValue": 38333.6
+                        "cumulativeValue": 38333.34
                     },
                     {
                         "year": 2028,
-                        "cumulativeValue": 58333.6
+                        "cumulativeValue": 58333.34
                     },
                     {
                         "year": 2029,
-                        "cumulativeValue": 78333.6
+                        "cumulativeValue": 78333.34
                     },
                     {
                         "year": 2030,
@@ -149,15 +149,15 @@
                     },
                     {
                         "year": 2027,
-                        "cumulativeValue": 40250.28
+                        "cumulativeValue": 40250.0
                     },
                     {
                         "year": 2028,
-                        "cumulativeValue": 64312.79
+                        "cumulativeValue": 64312.5
                     },
                     {
                         "year": 2029,
-                        "cumulativeValue": 90680.93
+                        "cumulativeValue": 90680.63
                     },
                     {
                         "year": 2030,
@@ -191,15 +191,15 @@
                     },
                     {
                         "year": 2027,
-                        "cumulativeValue": 42166.96
+                        "cumulativeValue": 42166.67
                     },
                     {
                         "year": 2028,
-                        "cumulativeValue": 70583.66
+                        "cumulativeValue": 70583.34
                     },
                     {
                         "year": 2029,
-                        "cumulativeValue": 104262.02
+                        "cumulativeValue": 104261.67
                     },
                     {
                         "year": 2030,
@@ -261,13 +261,13 @@
                 "totalCashComp": 2100000.0,
                 "totalEquityValue": {
                     "low": 80000.0,
-                    "medium": 87478.29,
-                    "high": 95426.78
+                    "medium": 87478.33,
+                    "high": 95426.87
                 },
                 "totalValue": {
                     "low": 2180000.0,
-                    "medium": 2187478.29,
-                    "high": 2195426.78
+                    "medium": 2187478.33,
+                    "high": 2195426.87
                 }
             },
             "afterTax": {
@@ -289,11 +289,11 @@
                         "taxableCompIncome": 210000.0,
                         "nsoOrdinaryIncome": 0.0,
                         "isoAmtPreference": 0.0,
-                        "equitySaleProceeds": 40250.28,
+                        "equitySaleProceeds": 40250.0,
                         "estimatedRegularTax": 43656.0,
                         "estimatedAmt": 0.0,
                         "totalEstimatedTax": 43656.0,
-                        "freeCashFlow": 206594.28,
+                        "freeCashFlow": 206594.0,
                         "sourceIds": [
                             "cc-current-2027-equity-sale-equity-comp-sale-proceeds"
                         ]
@@ -331,11 +331,11 @@
                         "taxableCompIncome": 210000.0,
                         "nsoOrdinaryIncome": 0.0,
                         "isoAmtPreference": 0.0,
-                        "equitySaleProceeds": 2025.51,
+                        "equitySaleProceeds": 2025.83,
                         "estimatedRegularTax": 43656.0,
                         "estimatedAmt": 0.0,
                         "totalEstimatedTax": 43656.0,
-                        "freeCashFlow": 168369.51,
+                        "freeCashFlow": 168369.83,
                         "sourceIds": [
                             "cc-current-2030-equity-sale-equity-comp-sale-proceeds"
                         ]
@@ -405,22 +405,22 @@
                     "taxableCompIncome": 2100000.0,
                     "nsoOrdinaryIncome": 0.0,
                     "isoAmtPreference": 0.0,
-                    "equitySaleProceeds": 87478.29,
+                    "equitySaleProceeds": 87478.33,
                     "estimatedRegularTax": 436560.0,
                     "estimatedAmt": 0.0,
                     "totalEstimatedTax": 436560.0,
-                    "freeCashFlow": 1750918.29,
+                    "freeCashFlow": 1750918.33,
                     "totalValue": {
                         "low": 1743440.0,
-                        "medium": 1750918.29,
-                        "high": 1758866.78
+                        "medium": 1750918.33,
+                        "high": 1758866.87
                     }
                 },
                 "sources": [
                     {
                         "id": "cc-current-2027-equity-sale-equity-comp-sale-proceeds",
                         "label": "Current role equity sale proceeds",
-                        "amount": 40250.28,
+                        "amount": 40250.0,
                         "sourceType": "equity_comp_sale_proceeds",
                         "taxDocumentId": null,
                         "taxDocumentAccountId": null,
@@ -474,7 +474,7 @@
                     {
                         "id": "cc-current-2030-equity-sale-equity-comp-sale-proceeds",
                         "label": "Current role equity sale proceeds",
-                        "amount": 2025.51,
+                        "amount": 2025.83,
                         "sourceType": "equity_comp_sale_proceeds",
                         "taxDocumentId": null,
                         "taxDocumentAccountId": null,
@@ -513,8 +513,8 @@
                     "bonus": 20000.0,
                     "vestedLiquidEquity": 0.0,
                     "shareSaleProceeds": 0.0,
-                    "exerciseOutlay": 38333.34,
-                    "freeCashFlow": 156666.66
+                    "exerciseOutlay": 38333.33,
+                    "freeCashFlow": 156666.67
                 },
                 {
                     "year": 2028,
@@ -538,10 +538,10 @@
                     "year": 2030,
                     "salary": 175000.0,
                     "bonus": 20000.0,
-                    "vestedLiquidEquity": 12899.95,
-                    "shareSaleProceeds": 12899.95,
-                    "exerciseOutlay": 1666.66,
-                    "freeCashFlow": 206233.29
+                    "vestedLiquidEquity": 619200.0,
+                    "shareSaleProceeds": 619200.0,
+                    "exerciseOutlay": 1666.67,
+                    "freeCashFlow": 812533.33
                 },
                 {
                     "year": 2031,
@@ -750,14 +750,14 @@
             "lifetime": {
                 "totalCashComp": 1950000.0,
                 "totalEquityValue": {
-                    "low": 6016.64,
-                    "medium": 12899.95,
-                    "high": 21066.58
+                    "low": 288800.0,
+                    "medium": 619200.0,
+                    "high": 1011200.0
                 },
                 "totalValue": {
-                    "low": 1956016.64,
-                    "medium": 1962899.95,
-                    "high": 1971066.58
+                    "low": 2238800.0,
+                    "medium": 2569200.0,
+                    "high": 2961200.0
                 }
             },
             "afterTax": {
@@ -778,12 +778,12 @@
                         "year": 2027,
                         "taxableCompIncome": 195000.0,
                         "nsoOrdinaryIncome": 0.0,
-                        "isoAmtPreference": 175566.7,
+                        "isoAmtPreference": 175566.67,
                         "equitySaleProceeds": 0.0,
                         "estimatedRegularTax": 39398.0,
-                        "estimatedAmt": 34910.68,
-                        "totalEstimatedTax": 74308.68,
-                        "freeCashFlow": 82357.98,
+                        "estimatedAmt": 34910.67,
+                        "totalEstimatedTax": 74308.67,
+                        "freeCashFlow": 82358.0,
                         "sourceIds": [
                             "cc-hyp-1-2027-hyp-1-iso-hire-equity-comp-iso-bargain-element"
                         ]
@@ -820,12 +820,12 @@
                         "year": 2030,
                         "taxableCompIncome": 195000.0,
                         "nsoOrdinaryIncome": 0.0,
-                        "isoAmtPreference": 11233.29,
-                        "equitySaleProceeds": 12899.95,
+                        "isoAmtPreference": 11233.33,
+                        "equitySaleProceeds": 619200.0,
                         "estimatedRegularTax": 39398.0,
                         "estimatedAmt": 0.0,
                         "totalEstimatedTax": 39398.0,
-                        "freeCashFlow": 166835.29,
+                        "freeCashFlow": 773135.33,
                         "sourceIds": [
                             "cc-hyp-1-2030-hyp-1-iso-hire-equity-comp-iso-bargain-element",
                             "cc-hyp-1-2030-equity-sale-equity-comp-sale-proceeds"
@@ -895,23 +895,23 @@
                 "lifetime": {
                     "taxableCompIncome": 1950000.0,
                     "nsoOrdinaryIncome": 0.0,
-                    "isoAmtPreference": 410099.99,
-                    "equitySaleProceeds": 12899.95,
+                    "isoAmtPreference": 410100.0,
+                    "equitySaleProceeds": 619200.0,
                     "estimatedRegularTax": 393980.0,
-                    "estimatedAmt": 69760.68,
-                    "totalEstimatedTax": 463740.68,
-                    "freeCashFlow": 1419159.27,
+                    "estimatedAmt": 69760.67,
+                    "totalEstimatedTax": 463740.67,
+                    "freeCashFlow": 2025459.33,
                     "totalValue": {
-                        "low": 1492275.96,
-                        "medium": 1499159.27,
-                        "high": 1507325.9
+                        "low": 1775059.33,
+                        "medium": 2105459.33,
+                        "high": 2497459.33
                     }
                 },
                 "sources": [
                     {
                         "id": "cc-hyp-1-2027-hyp-1-iso-hire-equity-comp-iso-bargain-element",
                         "label": "Private offer hyp-1-iso-hire iso equity compensation",
-                        "amount": 175566.7,
+                        "amount": 175566.67,
                         "sourceType": "equity_comp_iso_bargain_element",
                         "taxDocumentId": null,
                         "taxDocumentAccountId": null,
@@ -965,7 +965,7 @@
                     {
                         "id": "cc-hyp-1-2030-hyp-1-iso-hire-equity-comp-iso-bargain-element",
                         "label": "Private offer hyp-1-iso-hire iso equity compensation",
-                        "amount": 11233.29,
+                        "amount": 11233.33,
                         "sourceType": "equity_comp_iso_bargain_element",
                         "taxDocumentId": null,
                         "taxDocumentAccountId": null,
@@ -983,7 +983,7 @@
                     {
                         "id": "cc-hyp-1-2030-equity-sale-equity-comp-sale-proceeds",
                         "label": "Private offer equity sale proceeds",
-                        "amount": 12899.95,
+                        "amount": 619200.0,
                         "sourceType": "equity_comp_sale_proceeds",
                         "taxDocumentId": null,
                         "taxDocumentAccountId": null,
@@ -1013,29 +1013,29 @@
                             "line2mPassiveActivities": 0.0,
                             "line2nLossLimitations": 0.0,
                             "line2tIntangibleDrillingCosts": 0.0,
-                            "line3OtherAdjustments": 175566.7,
-                            "adjustmentTotal": 175566.7,
-                            "amti": 370566.7,
+                            "line3OtherAdjustments": 175566.67,
+                            "adjustmentTotal": 175566.67,
+                            "amti": 370566.67,
                             "exemption": 88100.0,
                             "exemptionBase": 88100.0,
                             "exemptionReduction": 0.0,
                             "exemptionPhaseoutThreshold": 626350.0,
-                            "amtTaxBase": 282466.7,
+                            "amtTaxBase": 282466.67,
                             "amtRateSplitThreshold": 239100.0,
-                            "amtBeforeForeignCredit": 74308.68,
+                            "amtBeforeForeignCredit": 74308.67,
                             "line8AmtForeignTaxCredit": 0.0,
-                            "tentativeMinTax": 74308.68,
+                            "tentativeMinTax": 74308.67,
                             "regularTax": 39398.0,
                             "regularForeignTaxCredit": 0.0,
                             "regularTaxAfterCredits": 39398.0,
-                            "amt": 34910.68,
+                            "amt": 34910.67,
                             "filingStatus": "single",
                             "sourceEntries": [
                                 {
                                     "label": "Private offer hyp-1-iso-hire iso equity compensation",
                                     "code": "ISO",
                                     "line": "3",
-                                    "amount": 175566.7,
+                                    "amount": 175566.67,
                                     "description": "ISO bargain element from career-comparison option exercise",
                                     "requiresStatementReview": false
                                 }
@@ -1145,18 +1145,18 @@
                             "line2mPassiveActivities": 0.0,
                             "line2nLossLimitations": 0.0,
                             "line2tIntangibleDrillingCosts": 0.0,
-                            "line3OtherAdjustments": 11233.29,
-                            "adjustmentTotal": 11233.29,
-                            "amti": 206233.29,
+                            "line3OtherAdjustments": 11233.33,
+                            "adjustmentTotal": 11233.33,
+                            "amti": 206233.33,
                             "exemption": 88100.0,
                             "exemptionBase": 88100.0,
                             "exemptionReduction": 0.0,
                             "exemptionPhaseoutThreshold": 626350.0,
-                            "amtTaxBase": 118133.29,
+                            "amtTaxBase": 118133.33,
                             "amtRateSplitThreshold": 239100.0,
-                            "amtBeforeForeignCredit": 30714.66,
+                            "amtBeforeForeignCredit": 30714.67,
                             "line8AmtForeignTaxCredit": 0.0,
-                            "tentativeMinTax": 30714.66,
+                            "tentativeMinTax": 30714.67,
                             "regularTax": 39398.0,
                             "regularForeignTaxCredit": 0.0,
                             "regularTaxAfterCredits": 39398.0,
@@ -1167,7 +1167,7 @@
                                     "label": "Private offer hyp-1-iso-hire iso equity compensation",
                                     "code": "ISO",
                                     "line": "3",
-                                    "amount": 11233.29,
+                                    "amount": 11233.33,
                                     "description": "ISO bargain element from career-comparison option exercise",
                                     "requiresStatementReview": false
                                 }
@@ -1186,9 +1186,9 @@
             "name": "Private offer",
             "cashCompDelta": -150000.0,
             "totalValueDelta": {
-                "low": -223983.36,
-                "medium": -224578.34,
-                "high": -224360.2
+                "low": 58800.0,
+                "medium": 381721.67,
+                "high": 765773.13
             }
         }
     ],

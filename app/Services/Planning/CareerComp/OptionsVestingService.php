@@ -49,10 +49,10 @@ final class OptionsVestingService
             $shares = (float) $rawRow['shares'];
             $alreadyUsed = $usedIsoValueByYear[$year] ?? 0.0;
             $remainingIsoValue = max(0.0, MoneyMath::subtract(100000.0, $alreadyUsed));
-            $requestedValue = MoneyMath::multiply($shares, $strike);
+            $requestedValue = MoneyMath::multiply($strike, $shares);
             $isoShares = $strike > 0.0 ? min($shares, MoneyMath::divide($remainingIsoValue, $strike)) : 0.0;
             $nsoShares = max(0.0, $shares - $isoShares);
-            $usedIsoValueByYear[$year] = MoneyMath::add($alreadyUsed, MoneyMath::multiply($isoShares, $strike));
+            $usedIsoValueByYear[$year] = MoneyMath::add($alreadyUsed, MoneyMath::multiply($strike, $isoShares));
 
             if ($isoShares > 0.0) {
                 $rows[] = $this->row($rawRow, 'iso', $isoShares);

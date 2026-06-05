@@ -17,17 +17,28 @@ final class EquityValuationService
         $liquidity = ['low' => [], 'medium' => [], 'high' => []];
         $totals = ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0];
         $cumulativeShares = [];
+        $privateSharesAwaitingLiquidity = 0.0;
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
             $vestedSharesThisYear = $this->vestedSharesForYear($vestingRows, $year);
-            $annualEquity[$year] = $this->liquidValueForShares($job, $vestedSharesThisYear, $offset, $year, 'medium');
+            $realizedSharesThisYear = $vestedSharesThisYear;
+            if ($job->isPrivate()) {
+                $privateSharesAwaitingLiquidity += $vestedSharesThisYear;
+                $realizedSharesThisYear = 0.0;
+                if ($this->isLiquid($job, $year)) {
+                    $realizedSharesThisYear = $privateSharesAwaitingLiquidity;
+                    $privateSharesAwaitingLiquidity = 0.0;
+                }
+            }
+
+            $annualEquity[$year] = $this->liquidValueForShares($job, $realizedSharesThisYear, $offset, $year, 'medium');
 
             foreach (['low', 'medium', 'high'] as $band) {
                 $cumulativeShares[$band] = ($cumulativeShares[$band] ?? 0.0) + $vestedSharesThisYear;
                 $cumulativeValue = $this->liquidValueForShares($job, $cumulativeShares[$band], $offset, $year, $band);
                 $liquidity[$band][] = ['year' => $year, 'cumulativeValue' => $cumulativeValue];
-                $totals[$band] = MoneyMath::add($totals[$band], $this->liquidValueForShares($job, $vestedSharesThisYear, $offset, $year, $band));
+                $totals[$band] = MoneyMath::add($totals[$band], $this->liquidValueForShares($job, $realizedSharesThisYear, $offset, $year, $band));
             }
         }
 
@@ -61,7 +72,7 @@ final class EquityValuationService
 
         $price = $this->sharePrice($job, $yearOffset, $band);
 
-        return MoneyMath::multiply($shares, $price);
+        return MoneyMath::multiply($price, $shares);
     }
 
     public function sharePrice(JobSpec $job, int $yearOffset, string $band): float
