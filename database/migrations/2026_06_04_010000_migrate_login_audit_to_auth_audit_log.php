@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -23,7 +24,7 @@ return new class extends Migration
         $this->createAuthAuditLogTable($auditTable);
         $this->backfillFromLegacyLoginAuditLog($auditTable);
 
-        Schema::dropIfExists('login_audit_log');
+        $this->dropLegacyLoginAuditLog();
     }
 
     public function down(): void
@@ -88,23 +89,39 @@ return new class extends Migration
                 'created_at',
                 'updated_at',
             ],
-            DB::table('login_audit_log')->select([
-                'user_id',
+            $this->legacyRowsMissingFromAuthAuditLog($auditTable)->select([
+                'legacy.user_id',
                 DB::raw('NULL as acting_user_id'),
-                'email',
-                DB::raw($this->legacyEventExpression().' as event'),
-                'method as auth_method',
-                'success as succeeded',
+                'legacy.email',
+                DB::raw($this->legacyEventExpression('legacy').' as event'),
+                'legacy.method as auth_method',
+                'legacy.success as succeeded',
                 DB::raw('NULL as reason'),
-                'ip_address',
-                'user_agent',
+                'legacy.ip_address',
+                'legacy.user_agent',
                 DB::raw('NULL as session_id'),
-                'is_suspicious',
+                'legacy.is_suspicious',
                 DB::raw('NULL as metadata'),
-                'created_at',
-                'updated_at',
+                'legacy.created_at',
+                'legacy.updated_at',
             ])
         );
+    }
+
+    private function dropLegacyLoginAuditLog(): void
+    {
+        if (! Schema::hasTable('login_audit_log')) {
+            return;
+        }
+
+        try {
+            Schema::drop('login_audit_log');
+        } catch (QueryException) {
+            // Some hosted MySQL accounts withhold the DROP privilege from the
+            // application user. The table is no longer read or written after the
+            // cutover, so leaving it orphaned is safe; a privileged operator can
+            // drop it manually later.
+        }
     }
 
     private function createLegacyLoginAuditLogTable(): void
@@ -150,41 +167,86 @@ return new class extends Migration
         );
     }
 
-    private function legacyBackfillQuery(string $auditTable): Builder
+    private function legacyRowsMissingFromAuthAuditLog(string $auditTable): Builder
     {
-        return DB::table($auditTable)->select([
-            'user_id',
-            'email',
-            'ip_address',
-            'user_agent',
-            'succeeded as success',
-            DB::raw($this->legacyMethodExpression().' as method'),
-            'is_suspicious',
-            'created_at',
-            'updated_at',
-        ])->whereIn('event', self::LEGACY_LOGIN_EVENTS);
+        return DB::table('login_audit_log as legacy')
+            ->whereNotExists(function (Builder $query) use ($auditTable): void {
+                $query->selectRaw('1')
+                    ->from($auditTable.' as existing')
+                    ->whereRaw($this->nullableColumnsEqual('existing.user_id', 'legacy.user_id'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.email', 'legacy.email'))
+                    ->whereRaw('existing.event = '.$this->legacyEventExpression('legacy'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.auth_method', 'legacy.method'))
+                    ->whereColumn('existing.succeeded', 'legacy.success')
+                    ->whereRaw($this->nullableColumnsEqual('existing.ip_address', 'legacy.ip_address'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.user_agent', 'legacy.user_agent'))
+                    ->whereColumn('existing.is_suspicious', 'legacy.is_suspicious')
+                    ->whereColumn('existing.created_at', 'legacy.created_at')
+                    ->whereColumn('existing.updated_at', 'legacy.updated_at');
+            });
     }
 
-    private function legacyEventExpression(): string
+    private function legacyBackfillQuery(string $auditTable): Builder
     {
-        return <<<'SQL'
+        return DB::table($auditTable.' as audit')
+            ->whereIn('audit.event', self::LEGACY_LOGIN_EVENTS)
+            ->whereNotExists(function (Builder $query): void {
+                $query->selectRaw('1')
+                    ->from('login_audit_log as existing')
+                    ->whereRaw($this->nullableColumnsEqual('existing.user_id', 'audit.user_id'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.email', 'audit.email'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.ip_address', 'audit.ip_address'))
+                    ->whereRaw($this->nullableColumnsEqual('existing.user_agent', 'audit.user_agent'))
+                    ->whereColumn('existing.success', 'audit.succeeded')
+                    ->whereRaw('existing.method = '.$this->legacyMethodExpression('audit'))
+                    ->whereColumn('existing.is_suspicious', 'audit.is_suspicious')
+                    ->whereColumn('existing.created_at', 'audit.created_at')
+                    ->whereColumn('existing.updated_at', 'audit.updated_at');
+            })
+            ->select([
+                'audit.user_id',
+                'audit.email',
+                'audit.ip_address',
+                'audit.user_agent',
+                'audit.succeeded as success',
+                DB::raw($this->legacyMethodExpression('audit').' as method'),
+                'audit.is_suspicious',
+                'audit.created_at',
+                'audit.updated_at',
+            ]);
+    }
+
+    private function legacyEventExpression(string $tableAlias): string
+    {
+        $successColumn = $tableAlias.'.success';
+        $methodColumn = $tableAlias.'.method';
+
+        return <<<SQL
             CASE
-                WHEN success = 1 AND method = 'passkey' THEN 'passkey_login_succeeded'
-                WHEN success = 0 AND method = 'passkey' THEN 'passkey_login_failed'
-                WHEN success = 1 THEN 'login_succeeded'
+                WHEN {$successColumn} = 1 AND {$methodColumn} = 'passkey' THEN 'passkey_login_succeeded'
+                WHEN {$successColumn} = 0 AND {$methodColumn} = 'passkey' THEN 'passkey_login_failed'
+                WHEN {$successColumn} = 1 THEN 'login_succeeded'
                 ELSE 'login_failed'
             END
         SQL;
     }
 
-    private function legacyMethodExpression(): string
+    private function legacyMethodExpression(string $tableAlias): string
     {
-        return <<<'SQL'
+        $authMethodColumn = $tableAlias.'.auth_method';
+        $eventColumn = $tableAlias.'.event';
+
+        return <<<SQL
             CASE
-                WHEN auth_method IS NOT NULL THEN auth_method
-                WHEN event LIKE 'passkey_%' THEN 'passkey'
+                WHEN {$authMethodColumn} IS NOT NULL THEN {$authMethodColumn}
+                WHEN {$eventColumn} LIKE 'passkey_%' THEN 'passkey'
                 ELSE 'password'
             END
         SQL;
+    }
+
+    private function nullableColumnsEqual(string $leftColumn, string $rightColumn): string
+    {
+        return "({$leftColumn} = {$rightColumn} OR ({$leftColumn} IS NULL AND {$rightColumn} IS NULL))";
     }
 };
