@@ -3,6 +3,7 @@
 namespace App\Services\Planning\OpportunityCost;
 
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Builders\EquityCompensationFactsBuilder;
 use DateTimeImmutable;
 
 final class OpportunityCostCalculator
@@ -11,6 +12,7 @@ final class OpportunityCostCalculator
         private RsuVestingExpander $rsuVestingExpander = new RsuVestingExpander,
         private OptionsVestingService $optionsVestingService = new OptionsVestingService,
         private EquityValuationService $equityValuationService = new EquityValuationService,
+        private EquityCompensationFactsBuilder $equityCompensationFactsBuilder = new EquityCompensationFactsBuilder,
     ) {}
 
     public function project(OpportunityCostInputs $inputs): OpportunityCostProjection
@@ -97,6 +99,7 @@ final class OpportunityCostCalculator
                 'high' => MoneyMath::add($totalCashComp, $valuation['totals']['high']),
             ],
         ];
+        $afterTax = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
 
         return [
             'job' => [
@@ -107,6 +110,7 @@ final class OpportunityCostCalculator
                 'liquidity' => $valuation['liquidity'],
                 'vesting' => $vestingRows,
                 'lifetime' => $lifetime,
+                'afterTax' => $afterTax,
             ],
             'warnings' => $warnings,
         ];

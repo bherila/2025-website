@@ -269,6 +269,228 @@
                     "medium": 2187478.29,
                     "high": 2195426.78
                 }
+            },
+            "afterTax": {
+                "annual": [
+                    {
+                        "year": 2026,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2027,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 40250.28,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 206594.28,
+                        "sourceIds": [
+                            "oc-current-2027-equity-sale-equity-comp-sale-proceeds"
+                        ]
+                    },
+                    {
+                        "year": 2028,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 22050.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 188394.0,
+                        "sourceIds": [
+                            "oc-current-2028-equity-sale-equity-comp-sale-proceeds"
+                        ]
+                    },
+                    {
+                        "year": 2029,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 23152.5,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 189496.5,
+                        "sourceIds": [
+                            "oc-current-2029-equity-sale-equity-comp-sale-proceeds"
+                        ]
+                    },
+                    {
+                        "year": 2030,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 2025.51,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 168369.51,
+                        "sourceIds": [
+                            "oc-current-2030-equity-sale-equity-comp-sale-proceeds"
+                        ]
+                    },
+                    {
+                        "year": 2031,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2032,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2033,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2034,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2035,
+                        "taxableCompIncome": 210000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 43656.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 43656.0,
+                        "freeCashFlow": 166344.0,
+                        "sourceIds": []
+                    }
+                ],
+                "lifetime": {
+                    "taxableCompIncome": 2100000.0,
+                    "nsoOrdinaryIncome": 0.0,
+                    "isoAmtPreference": 0.0,
+                    "equitySaleProceeds": 87478.29,
+                    "estimatedRegularTax": 436560.0,
+                    "estimatedAmt": 0.0,
+                    "totalEstimatedTax": 436560.0,
+                    "freeCashFlow": 1750918.29,
+                    "totalValue": {
+                        "low": 1743440.0,
+                        "medium": 1750918.29,
+                        "high": 1758866.78
+                    }
+                },
+                "sources": [
+                    {
+                        "id": "oc-current-2027-equity-sale-equity-comp-sale-proceeds",
+                        "label": "Current role equity sale proceeds",
+                        "amount": 40250.28,
+                        "sourceType": "equity_comp_sale_proceeds",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "schedule_d_equity_sale_proceeds",
+                        "routingReason": "Opportunity-cost liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.",
+                        "notes": "Projection records gross proceeds only; cost basis and holding period remain outside this model.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-current-2028-equity-sale-equity-comp-sale-proceeds",
+                        "label": "Current role equity sale proceeds",
+                        "amount": 22050.0,
+                        "sourceType": "equity_comp_sale_proceeds",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "schedule_d_equity_sale_proceeds",
+                        "routingReason": "Opportunity-cost liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.",
+                        "notes": "Projection records gross proceeds only; cost basis and holding period remain outside this model.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-current-2029-equity-sale-equity-comp-sale-proceeds",
+                        "label": "Current role equity sale proceeds",
+                        "amount": 23152.5,
+                        "sourceType": "equity_comp_sale_proceeds",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "schedule_d_equity_sale_proceeds",
+                        "routingReason": "Opportunity-cost liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.",
+                        "notes": "Projection records gross proceeds only; cost basis and holding period remain outside this model.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-current-2030-equity-sale-equity-comp-sale-proceeds",
+                        "label": "Current role equity sale proceeds",
+                        "amount": 2025.51,
+                        "sourceType": "equity_comp_sale_proceeds",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "schedule_d_equity_sale_proceeds",
+                        "routingReason": "Opportunity-cost liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.",
+                        "notes": "Projection records gross proceeds only; cost basis and holding period remain outside this model.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    }
+                ],
+                "form6251": []
             }
         },
         {
@@ -537,6 +759,424 @@
                     "medium": 1962899.95,
                     "high": 1971066.58
                 }
+            },
+            "afterTax": {
+                "annual": [
+                    {
+                        "year": 2026,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2027,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 175566.7,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 34910.68,
+                        "totalEstimatedTax": 74308.68,
+                        "freeCashFlow": 82357.98,
+                        "sourceIds": [
+                            "oc-hyp-1-2027-hyp-1-iso-hire-equity-comp-iso-bargain-element"
+                        ]
+                    },
+                    {
+                        "year": 2028,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 104400.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 15540.0,
+                        "totalEstimatedTax": 54938.0,
+                        "freeCashFlow": 120062.0,
+                        "sourceIds": [
+                            "oc-hyp-1-2028-hyp-1-iso-hire-equity-comp-iso-bargain-element"
+                        ]
+                    },
+                    {
+                        "year": 2029,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 118800.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 19284.0,
+                        "totalEstimatedTax": 58682.0,
+                        "freeCashFlow": 116318.0,
+                        "sourceIds": [
+                            "oc-hyp-1-2029-hyp-1-iso-hire-equity-comp-iso-bargain-element"
+                        ]
+                    },
+                    {
+                        "year": 2030,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 11233.29,
+                        "equitySaleProceeds": 12899.95,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 166835.29,
+                        "sourceIds": [
+                            "oc-hyp-1-2030-hyp-1-iso-hire-equity-comp-iso-bargain-element",
+                            "oc-hyp-1-2030-equity-sale-equity-comp-sale-proceeds"
+                        ]
+                    },
+                    {
+                        "year": 2031,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2032,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2033,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2034,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    },
+                    {
+                        "year": 2035,
+                        "taxableCompIncome": 195000.0,
+                        "nsoOrdinaryIncome": 0.0,
+                        "isoAmtPreference": 0.0,
+                        "equitySaleProceeds": 0.0,
+                        "estimatedRegularTax": 39398.0,
+                        "estimatedAmt": 0.0,
+                        "totalEstimatedTax": 39398.0,
+                        "freeCashFlow": 155602.0,
+                        "sourceIds": []
+                    }
+                ],
+                "lifetime": {
+                    "taxableCompIncome": 1950000.0,
+                    "nsoOrdinaryIncome": 0.0,
+                    "isoAmtPreference": 409999.99,
+                    "equitySaleProceeds": 12899.95,
+                    "estimatedRegularTax": 393980.0,
+                    "estimatedAmt": 69734.68,
+                    "totalEstimatedTax": 463714.68,
+                    "freeCashFlow": 1419185.27,
+                    "totalValue": {
+                        "low": 1492301.96,
+                        "medium": 1499185.27,
+                        "high": 1507351.9
+                    }
+                },
+                "sources": [
+                    {
+                        "id": "oc-hyp-1-2027-hyp-1-iso-hire-equity-comp-iso-bargain-element",
+                        "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                        "amount": 175566.7,
+                        "sourceType": "equity_comp_iso_bargain_element",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "form_6251_iso_bargain_element",
+                        "routingReason": "ISO bargain element is an AMT adjustment routed to Form 6251 line 3 for the opportunity-cost projection.",
+                        "notes": "Generated by the opportunity-cost equity-compensation tax facts builder.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-hyp-1-2028-hyp-1-iso-hire-equity-comp-iso-bargain-element",
+                        "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                        "amount": 104400.0,
+                        "sourceType": "equity_comp_iso_bargain_element",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "form_6251_iso_bargain_element",
+                        "routingReason": "ISO bargain element is an AMT adjustment routed to Form 6251 line 3 for the opportunity-cost projection.",
+                        "notes": "Generated by the opportunity-cost equity-compensation tax facts builder.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-hyp-1-2029-hyp-1-iso-hire-equity-comp-iso-bargain-element",
+                        "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                        "amount": 118800.0,
+                        "sourceType": "equity_comp_iso_bargain_element",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "form_6251_iso_bargain_element",
+                        "routingReason": "ISO bargain element is an AMT adjustment routed to Form 6251 line 3 for the opportunity-cost projection.",
+                        "notes": "Generated by the opportunity-cost equity-compensation tax facts builder.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-hyp-1-2030-hyp-1-iso-hire-equity-comp-iso-bargain-element",
+                        "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                        "amount": 11233.29,
+                        "sourceType": "equity_comp_iso_bargain_element",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "form_6251_iso_bargain_element",
+                        "routingReason": "ISO bargain element is an AMT adjustment routed to Form 6251 line 3 for the opportunity-cost projection.",
+                        "notes": "Generated by the opportunity-cost equity-compensation tax facts builder.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    },
+                    {
+                        "id": "oc-hyp-1-2030-equity-sale-equity-comp-sale-proceeds",
+                        "label": "Private offer equity sale proceeds",
+                        "amount": 12899.95,
+                        "sourceType": "equity_comp_sale_proceeds",
+                        "taxDocumentId": null,
+                        "taxDocumentAccountId": null,
+                        "accountId": null,
+                        "formType": "opportunity_cost_projection",
+                        "box": null,
+                        "code": null,
+                        "routing": "schedule_d_equity_sale_proceeds",
+                        "routingReason": "Opportunity-cost liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.",
+                        "notes": "Projection records gross proceeds only; cost basis and holding period remain outside this model.",
+                        "isReviewed": true,
+                        "reviewStatus": "reviewed",
+                        "reviewAction": null
+                    }
+                ],
+                "form6251": [
+                    {
+                        "year": 2027,
+                        "facts": {
+                            "line1TaxableIncome": 195000.0,
+                            "line2aTaxesOrStandardDeduction": 0.0,
+                            "line2aSource": "none",
+                            "line2cInvestmentInterest": 0.0,
+                            "line2dDepletion": 0.0,
+                            "line2kDispositionOfProperty": 0.0,
+                            "line2lPost1986Depreciation": 0.0,
+                            "line2mPassiveActivities": 0.0,
+                            "line2nLossLimitations": 0.0,
+                            "line2tIntangibleDrillingCosts": 0.0,
+                            "line3OtherAdjustments": 175566.7,
+                            "adjustmentTotal": 175566.7,
+                            "amti": 370566.7,
+                            "exemption": 88100.0,
+                            "exemptionBase": 88100.0,
+                            "exemptionReduction": 0.0,
+                            "exemptionPhaseoutThreshold": 626350.0,
+                            "amtTaxBase": 282466.7,
+                            "amtRateSplitThreshold": 239100.0,
+                            "amtBeforeForeignCredit": 74308.68,
+                            "line8AmtForeignTaxCredit": 0.0,
+                            "tentativeMinTax": 74308.68,
+                            "regularTax": 39398.0,
+                            "regularForeignTaxCredit": 0.0,
+                            "regularTaxAfterCredits": 39398.0,
+                            "amt": 34910.68,
+                            "filingStatus": "single",
+                            "sourceEntries": [
+                                {
+                                    "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                                    "code": "ISO",
+                                    "line": "3",
+                                    "amount": 175566.7,
+                                    "description": "ISO bargain element from opportunity-cost option exercise",
+                                    "requiresStatementReview": false
+                                }
+                            ],
+                            "requiresStatementReview": false,
+                            "manualReviewReasons": []
+                        }
+                    },
+                    {
+                        "year": 2028,
+                        "facts": {
+                            "line1TaxableIncome": 195000.0,
+                            "line2aTaxesOrStandardDeduction": 0.0,
+                            "line2aSource": "none",
+                            "line2cInvestmentInterest": 0.0,
+                            "line2dDepletion": 0.0,
+                            "line2kDispositionOfProperty": 0.0,
+                            "line2lPost1986Depreciation": 0.0,
+                            "line2mPassiveActivities": 0.0,
+                            "line2nLossLimitations": 0.0,
+                            "line2tIntangibleDrillingCosts": 0.0,
+                            "line3OtherAdjustments": 104400.0,
+                            "adjustmentTotal": 104400.0,
+                            "amti": 299400.0,
+                            "exemption": 88100.0,
+                            "exemptionBase": 88100.0,
+                            "exemptionReduction": 0.0,
+                            "exemptionPhaseoutThreshold": 626350.0,
+                            "amtTaxBase": 211300.0,
+                            "amtRateSplitThreshold": 239100.0,
+                            "amtBeforeForeignCredit": 54938.0,
+                            "line8AmtForeignTaxCredit": 0.0,
+                            "tentativeMinTax": 54938.0,
+                            "regularTax": 39398.0,
+                            "regularForeignTaxCredit": 0.0,
+                            "regularTaxAfterCredits": 39398.0,
+                            "amt": 15540.0,
+                            "filingStatus": "single",
+                            "sourceEntries": [
+                                {
+                                    "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                                    "code": "ISO",
+                                    "line": "3",
+                                    "amount": 104400.0,
+                                    "description": "ISO bargain element from opportunity-cost option exercise",
+                                    "requiresStatementReview": false
+                                }
+                            ],
+                            "requiresStatementReview": false,
+                            "manualReviewReasons": []
+                        }
+                    },
+                    {
+                        "year": 2029,
+                        "facts": {
+                            "line1TaxableIncome": 195000.0,
+                            "line2aTaxesOrStandardDeduction": 0.0,
+                            "line2aSource": "none",
+                            "line2cInvestmentInterest": 0.0,
+                            "line2dDepletion": 0.0,
+                            "line2kDispositionOfProperty": 0.0,
+                            "line2lPost1986Depreciation": 0.0,
+                            "line2mPassiveActivities": 0.0,
+                            "line2nLossLimitations": 0.0,
+                            "line2tIntangibleDrillingCosts": 0.0,
+                            "line3OtherAdjustments": 118800.0,
+                            "adjustmentTotal": 118800.0,
+                            "amti": 313800.0,
+                            "exemption": 88100.0,
+                            "exemptionBase": 88100.0,
+                            "exemptionReduction": 0.0,
+                            "exemptionPhaseoutThreshold": 626350.0,
+                            "amtTaxBase": 225700.0,
+                            "amtRateSplitThreshold": 239100.0,
+                            "amtBeforeForeignCredit": 58682.0,
+                            "line8AmtForeignTaxCredit": 0.0,
+                            "tentativeMinTax": 58682.0,
+                            "regularTax": 39398.0,
+                            "regularForeignTaxCredit": 0.0,
+                            "regularTaxAfterCredits": 39398.0,
+                            "amt": 19284.0,
+                            "filingStatus": "single",
+                            "sourceEntries": [
+                                {
+                                    "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                                    "code": "ISO",
+                                    "line": "3",
+                                    "amount": 118800.0,
+                                    "description": "ISO bargain element from opportunity-cost option exercise",
+                                    "requiresStatementReview": false
+                                }
+                            ],
+                            "requiresStatementReview": false,
+                            "manualReviewReasons": []
+                        }
+                    },
+                    {
+                        "year": 2030,
+                        "facts": {
+                            "line1TaxableIncome": 195000.0,
+                            "line2aTaxesOrStandardDeduction": 0.0,
+                            "line2aSource": "none",
+                            "line2cInvestmentInterest": 0.0,
+                            "line2dDepletion": 0.0,
+                            "line2kDispositionOfProperty": 0.0,
+                            "line2lPost1986Depreciation": 0.0,
+                            "line2mPassiveActivities": 0.0,
+                            "line2nLossLimitations": 0.0,
+                            "line2tIntangibleDrillingCosts": 0.0,
+                            "line3OtherAdjustments": 11233.29,
+                            "adjustmentTotal": 11233.29,
+                            "amti": 206233.29,
+                            "exemption": 88100.0,
+                            "exemptionBase": 88100.0,
+                            "exemptionReduction": 0.0,
+                            "exemptionPhaseoutThreshold": 626350.0,
+                            "amtTaxBase": 118133.29,
+                            "amtRateSplitThreshold": 239100.0,
+                            "amtBeforeForeignCredit": 30714.66,
+                            "line8AmtForeignTaxCredit": 0.0,
+                            "tentativeMinTax": 30714.66,
+                            "regularTax": 39398.0,
+                            "regularForeignTaxCredit": 0.0,
+                            "regularTaxAfterCredits": 39398.0,
+                            "amt": 0.0,
+                            "filingStatus": "single",
+                            "sourceEntries": [
+                                {
+                                    "label": "Private offer hyp-1-iso-hire iso equity compensation",
+                                    "code": "ISO",
+                                    "line": "3",
+                                    "amount": 11233.29,
+                                    "description": "ISO bargain element from opportunity-cost option exercise",
+                                    "requiresStatementReview": false
+                                }
+                            ],
+                            "requiresStatementReview": false,
+                            "manualReviewReasons": []
+                        }
+                    }
+                ]
             }
         }
     ],
