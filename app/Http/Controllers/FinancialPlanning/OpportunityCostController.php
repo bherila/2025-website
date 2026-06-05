@@ -169,7 +169,7 @@ class OpportunityCostController extends Controller
     {
         $ids = $comparison->current_job_id !== null ? [(int) $comparison->current_job_id] : [];
 
-        foreach ($comparison->hypothetical_job_ids ?? [] as $id) {
+        foreach ($comparison->hypothetical_job_ids as $id) {
             $ids[] = (int) $id;
         }
 

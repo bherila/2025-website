@@ -8,6 +8,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int|null $user_id
+ * @property int|null $current_job_id
+ * @property list<int> $hypothetical_job_ids
+ * @property string $short_code
+ * @property bool $share_includes_current
+ * @property array<string, mixed>|null $computed_json
+ */
 class OpportunityCostComparison extends Model
 {
     /** @use HasFactory<OpportunityCostComparisonFactory> */
