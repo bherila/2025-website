@@ -58,6 +58,7 @@ use App\Http\Controllers\FinanceTool\TaxDocumentLotsRebuildController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
 use App\Http\Controllers\FinanceTool\TaxYearLotsMatchController;
+use App\Http\Controllers\FinancialPlanning\OpportunityCostController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
@@ -91,6 +92,7 @@ Route::post('/webhooks/stripe', StripeWebhookController::class);
 Route::post('/webhooks/brevo/inbound', [BrevoInboundController::class, 'handle']);
 
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conversion/compute', [RothConversionController::class, 'compute']);
+Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/compute', [OpportunityCostController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
 
