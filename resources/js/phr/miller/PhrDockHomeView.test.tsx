@@ -129,6 +129,7 @@ describe('PhrDockHomeView', () => {
     const clinicalCard = cardFor('Clinical')
     expect(within(clinicalCard).getByText('Records')).toBeInTheDocument()
     expect(within(clinicalCard).getByText('123')).toBeInTheDocument()
+    expect(within(clinicalCard).getByText('Records').parentElement).not.toHaveClass('font-currency')
   })
 
   it('renders an empty state and no dock sections when patientId is undefined', () => {

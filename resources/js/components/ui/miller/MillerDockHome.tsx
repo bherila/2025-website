@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 export interface MillerDockTileAmount {
   label: string
   value: string
+  className?: string
   valueClassName?: string
 }
 
@@ -30,6 +31,23 @@ export interface MillerDockSectionProps<Id extends string> {
   titleClassName?: string
   isPinned?: (id: Id) => boolean
   onTogglePin?: (id: Id) => void
+}
+
+export interface MillerDockClearButtonProps {
+  onClear: () => void
+  label?: string
+}
+
+export function MillerDockClearButton({ onClear, label = 'Clear' }: MillerDockClearButtonProps): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {label}
+    </button>
+  )
 }
 
 export function MillerDockSection<Id extends string>({
@@ -123,7 +141,10 @@ function MillerDockTile<Id extends string>({
           {entry.amounts && entry.amounts.length > 0 && (
             <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
               {entry.amounts.map((amount) => (
-                <span key={amount.label} className="inline-flex items-baseline gap-1 font-currency text-[10px] tabular-nums">
+                <span
+                  key={amount.label}
+                  className={cn('inline-flex items-baseline gap-1 text-[10px] tabular-nums', amount.className)}
+                >
                   <span className="text-muted-foreground">{amount.label}</span>
                   <span className={cn('font-medium text-foreground', amount.valueClassName)}>{amount.value}</span>
                 </span>

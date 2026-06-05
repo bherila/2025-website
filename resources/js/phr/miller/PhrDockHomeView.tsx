@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react'
 
-import { type KeyAmount, type MillerColumnSpec, MillerDockSection,type MillerDockTileEntry, type MillerDrillTarget } from '@/components/ui/miller'
+import {
+  type KeyAmount,
+  type MillerColumnSpec,
+  MillerDockClearButton,
+  MillerDockSection,
+  type MillerDockTileEntry,
+  type MillerDrillTarget,
+} from '@/components/ui/miller'
 
 import {
   getPhrModuleMeta,
@@ -78,7 +85,7 @@ export function PhrDockHomeView({ patientId, replaceFrom, onDrill }: PhrDockHome
           onTogglePin={togglePin}
           className="border-info/25 bg-info/5"
           titleClassName="text-info"
-          action={<ClearRecentButton onClear={clearRecent} />}
+          action={<MillerDockClearButton onClear={clearRecent} />}
         />
       )}
 
@@ -144,18 +151,6 @@ function toModuleTile(entry: PhrRegistryEntry, state: PhrShellState): MillerDock
     inactive: !moduleHasData(entry, state),
     pinLabel: entry.label,
   }
-}
-
-function ClearRecentButton({ onClear }: { onClear: () => void }): ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClear}
-      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      Clear
-    </button>
-  )
 }
 
 function formatKeyAmount(keyAmount: KeyAmount): string {
