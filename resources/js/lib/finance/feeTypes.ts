@@ -3,6 +3,10 @@ import type { AccountLineItem } from '@/data/finance/AccountLineItem'
 export type FeeStatus = 'under' | 'on_target' | 'over'
 export type ReconciliationStatus = 'match' | 'mismatch' | 'unclassified'
 
+/**
+ * Net signed fee cost by tax characteristic. Charges are positive costs;
+ * credits and reversals are negative costs.
+ */
 export interface FeeBreakdown {
   fee_schE: number
   fee_irc67g: number
@@ -13,10 +17,12 @@ export interface MonthlyFeeDragPoint {
   month: string
   gross_return: number
   net_return: number
+  /** Net signed fees for the month. May be negative when credits exceed charges. */
   fees: number
 }
 
 export interface FeeLineItem extends AccountLineItem {
+  /** Net signed fee cost for this row. May be negative for credits/reversals. */
   fee_amount: number
   tax_characteristic: string | null
 }

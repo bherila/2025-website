@@ -114,6 +114,23 @@ describe('FeesTab', () => {
     expect(screen.getByText('Over')).toBeInTheDocument()
   })
 
+  it('renders negative net fee buckets and delta', () => {
+    render(<FeesTab accountId={1} initialData={makeFeesData({
+      actual: {
+        total: -15,
+        by_characteristic: { fee_schE: -12, fee_irc67g: 5, untagged: -8 },
+        line_items: [],
+      },
+      expected: { total: 10, has_expectation: true },
+    })} />)
+
+    expect(screen.getByText('-$15.00')).toBeInTheDocument()
+    expect(screen.getByText('-$12.00')).toBeInTheDocument()
+    expect(screen.getByText('-$8.00')).toBeInTheDocument()
+    expect(screen.getByTestId('fee-delta-row')).toHaveTextContent('-$25.00')
+    expect(screen.getByText('Under')).toBeInTheDocument()
+  })
+
   it('surfaces a review call-to-action for 13ZZ-unclassified reconciliation rows', () => {
     render(<FeesTab accountId={1} initialData={makeFeesData({
       reconciliation: [{

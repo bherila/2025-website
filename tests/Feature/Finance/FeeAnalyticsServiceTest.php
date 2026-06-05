@@ -31,17 +31,29 @@ class FeeAnalyticsServiceTest extends TestCase
             't_fee' => 12,
         ]);
         $feeRow->tags()->attach($tag->tag_id);
+        $feeCreditRow = $this->createLineItem($account, [
+            't_type' => 'Management Fee',
+            't_amt' => 30,
+            't_fee' => 99,
+        ]);
         $commissionRow = $this->createLineItem($account, [
             't_type' => 'Buy',
             't_amt' => -1000,
             't_fee' => 7.5,
         ]);
         $commissionRow->tags()->attach($tag->tag_id);
+        $commissionCreditRow = $this->createLineItem($account, [
+            't_type' => 'Buy',
+            't_amt' => 1000,
+            't_fee' => -2.5,
+        ]);
 
         $service = app(FeeAnalyticsService::class);
 
         $this->assertSame(50.0, $service->feeAmountForLineItem($feeRow->fresh('tags')));
+        $this->assertSame(-30.0, $service->feeAmountForLineItem($feeCreditRow->fresh('tags')));
         $this->assertSame(7.5, $service->feeAmountForLineItem($commissionRow->fresh('tags')));
+        $this->assertSame(-2.5, $service->feeAmountForLineItem($commissionCreditRow->fresh('tags')));
     }
 
     public function test_actual_fees_for_account_buckets_tagged_untagged_and_embedded_fees(): void
@@ -53,17 +65,42 @@ class FeeAnalyticsServiceTest extends TestCase
         $irc67gTag = $this->createFeeTag($user, 'fee_irc67g', 'Personal Fees');
 
         $this->createLineItem($account, ['t_type' => 'Debit', 't_amt' => -200, 't_fee' => 20])->tags()->attach($schETag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Debit', 't_amt' => 200, 't_fee' => -4])->tags()->attach($schETag->tag_id);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -30])->tags()->attach($irc67gTag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Advisory Fee', 't_amt' => 10])->tags()->attach($irc67gTag->tag_id);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -40]);
         $this->createLineItem($account, ['t_type' => 'Buy', 't_amt' => -1000, 't_fee' => 5]);
+        $this->createLineItem($account, ['t_type' => 'Buy', 't_amt' => 1000, 't_fee' => -5]);
 
         $actual = app(FeeAnalyticsService::class)->actualFeesForAccount((int) $account->acct_id, 2025);
 
-        $this->assertSame(95.0, $actual['total']);
+        $this->assertSame(76.0, $actual['total']);
+        $this->assertSame(16.0, $actual['by_characteristic']['fee_schE']);
+        $this->assertSame(20.0, $actual['by_characteristic']['fee_irc67g']);
+        $this->assertSame(40.0, $actual['by_characteristic']['untagged']);
+        $this->assertCount(7, $actual['line_items']);
+    }
+
+    public function test_actual_fees_nets_fee_credits_against_charges(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $schETag = $this->createFeeTag($user, 'fee_schE', 'Schedule E Fees');
+
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -50])->tags()->attach($schETag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => 30])->tags()->attach($schETag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => 0])->tags()->attach($schETag->tag_id);
+
+        $actual = app(FeeAnalyticsService::class)->actualFeesForAccount((int) $account->acct_id, 2025);
+
+        $this->assertSame(20.0, $actual['total']);
         $this->assertSame(20.0, $actual['by_characteristic']['fee_schE']);
-        $this->assertSame(30.0, $actual['by_characteristic']['fee_irc67g']);
-        $this->assertSame(45.0, $actual['by_characteristic']['untagged']);
-        $this->assertCount(4, $actual['line_items']);
+        $this->assertSame(0.0, $actual['by_characteristic']['fee_irc67g']);
+        $this->assertSame(0.0, $actual['by_characteristic']['untagged']);
+        $this->assertSame($actual['total'], MoneyMath::sum(array_values($actual['by_characteristic'])));
+        $this->assertCount(2, $actual['line_items']);
+        $this->assertContains(-30.0, array_column($actual['line_items'], 'fee_amount'));
     }
 
     public function test_expected_fees_for_account_prorates_for_mid_year_opened_accounts(): void
@@ -113,10 +150,12 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->createStatement($account, '2025-02-28', 1125);
         $this->createLineItem($account, ['t_date' => '2025-01-10', 't_type' => 'Deposit', 't_amt' => 100]);
         $this->createLineItem($account, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -10]);
+        $this->createLineItem($account, ['t_date' => '2025-01-20', 't_type' => 'Fee', 't_amt' => 4]);
 
         $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
 
         $this->assertCount(12, $series);
+        $this->assertSame(6.0, $series[0]['fees']);
         foreach ($series as $row) {
             $this->assertEqualsWithDelta($row['gross_return'], MoneyMath::add($row['net_return'], $row['fees']), 0.001);
         }
@@ -206,6 +245,31 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertSame('match', $rows[0]['status']);
     }
 
+    public function test_reconcile_k1_fees_uses_gross_statement_fees_against_gross_k1(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $schETag = $this->createFeeTag($user, 'fee_schE');
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -100])
+            ->tags()
+            ->attach($schETag->tag_id);
+        $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => 30])
+            ->tags()
+            ->attach($schETag->tag_id);
+        $document = $this->createK1Document($user, ['13' => [['code' => 'L', 'value' => '130']]]);
+        TaxDocumentAccount::createLink($document->id, $account->acct_id, 'k1', 2025, isReviewed: true);
+
+        $service = app(FeeAnalyticsService::class);
+        $actual = $service->actualFeesForAccount((int) $account->acct_id, 2025);
+        $rows = $service->reconcileK1Fees((int) $account->acct_id, 2025, $actual);
+
+        $this->assertSame(70.0, $actual['total']);
+        $this->assertSame('match', $rows[0]['status']);
+        $this->assertSame(130.0, $rows[0]['statement_fees_schE']);
+        $this->assertSame(0.0, $rows[0]['delta_schE']);
+    }
+
     public function test_reconcile_k1_fees_compares_multiple_linked_k1s_in_aggregate(): void
     {
         $user = User::factory()->create();
@@ -226,6 +290,15 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertSame('match', $rows[0]['status']);
         $this->assertSame(150.0, $rows[0]['k1_fees_schE']);
         $this->assertSame(150.0, $rows[0]['statement_fees_schE']);
+    }
+
+    public function test_delta_status_treats_negative_actual_as_under_when_expected_is_zero(): void
+    {
+        $service = app(FeeAnalyticsService::class);
+
+        $this->assertSame('on_target', $service->deltaStatus(0.0, 0.0, true));
+        $this->assertSame('under', $service->deltaStatus(-0.01, 0.0, true));
+        $this->assertSame('over', $service->deltaStatus(0.01, 0.0, true));
     }
 
     public function test_fee_api_endpoints_return_shape_require_auth_and_scope_accounts(): void
