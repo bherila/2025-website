@@ -71,6 +71,9 @@ class OpportunityCostShareLeakageTest extends TestCase
         $inputs = OpportunityCostInputs::defaults();
         $inputs['currentJob']['name'] = self::CURRENT_NAME;
         $inputs['currentJob']['comp']['baseSalary'] = (float) self::CURRENT_SALARY;
+        // Decreasing growth bands force a calculator warning that embeds the current job name,
+        // so the leakage assertions exercise warning redaction, not just job/series removal.
+        $inputs['currentJob']['growthBands'] = ['lowPct' => 10.0, 'mediumPct' => 5.0, 'highPct' => 0.0];
         $inputs['hypotheticalJobs'][0]['name'] = 'Public Offer';
         $inputs['hypotheticalJobs'][0]['comp']['baseSalary'] = 191919.0;
 
