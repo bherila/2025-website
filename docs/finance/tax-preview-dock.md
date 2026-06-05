@@ -128,6 +128,25 @@ When adding source navigation, keep older `onTabChange(tab)` component callbacks
 
 The All-in-One K-1 and K-3 apps are viewport-sized dock columns. Their comparison tables own a bounded `overflow-auto` viewport so horizontal and vertical table scrolling happen in the same container. Keep column headers sticky to that table viewport with `top-0`; keep first-column row labels and section-title cells sticky with `left-0` and the same right-edge shadow used by statement/transaction tables.
 
+The XLSX export endpoint accepts normalized comparison-grid sheets from the frontend at `POST /api/finance/tax-preview/export-xlsx`. The default `scope` is `full`, which preserves the backend fact workbook and appends any supplied grids. Scoped exports use `scope: "k1-all-in-one"` or `scope: "k3-all-in-one"` and include only matching grid sheets from the request.
+
+Normalized grid sheet contract:
+
+```ts
+{
+  name: string
+  scope?: 'k1-all-in-one' | 'k3-all-in-one'
+  columns: Array<{ key: string; label: string; width?: number }>
+  rows: Array<{
+    kind: 'title' | 'section' | 'header' | 'data' | 'total'
+    label?: string
+    cells?: Record<string, string | number | null>
+  }>
+}
+```
+
+Use explicit `scope` on each grid sheet when both K-1 and K-3 grids are posted together. If omitted, scoped backend exports infer K-1/K-3 matching from the sheet name, but explicit scope is the stable contract. Column keys must be alphanumeric with `_` or `-` only, and `cells` keys must match declared column keys.
+
 ### K-1 / K-3 source-value overrides
 
 K-1 and K-3 source detail fields are read-only by default. Users must explicitly check the row's override control before editing a value. While an override is active, field rows retain the extracted source value in `originalValue`, and coded K-1 rows retain their extracted source row in `sourceItem`. Clearing the override removes the manual marker and restores the retained source value so a saved review can be reloaded and reverted cleanly.

@@ -6,9 +6,13 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
 class TaxPreviewExportControllerTest extends TestCase
@@ -69,10 +73,7 @@ class TaxPreviewExportControllerTest extends TestCase
         $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $this->assertNotEmpty($response->getContent());
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'tax-preview-test');
-        file_put_contents($tempPath, $response->getContent());
-        $spreadsheet = IOFactory::load($tempPath);
-        @unlink($tempPath);
+        $spreadsheet = $this->spreadsheetFromResponse($response);
 
         $sheet = $spreadsheet->getSheet(0);
         $this->assertSame('Overview', $sheet->getTitle());
@@ -108,6 +109,70 @@ class TaxPreviewExportControllerTest extends TestCase
         $this->assertLessThan($miscOneRow, $line8zSourcesHeaderRow);
     }
 
+    public function test_scoped_k1_grid_export_returns_only_matching_grid_sheet(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-preview/export-xlsx', [
+            'year' => 2025,
+            'filename' => 'k1-grid.xlsx',
+            'scope' => 'k1-all-in-one',
+            'grids' => [
+                $this->comparisonGrid('K-1 All-in-One Comparison', 'k1-all-in-one'),
+                $this->comparisonGrid('K-3 All-in-One Comparison', 'k3-all-in-one'),
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $spreadsheet = $this->spreadsheetFromResponse($response);
+        $this->assertSame(1, $spreadsheet->getSheetCount());
+
+        $sheet = $spreadsheet->getSheet(0);
+        $this->assertSame('K-1 All-in-One Comparison', $sheet->getTitle());
+        $this->assertSame('B2', $sheet->getFreezePane());
+        $this->assertSame('Label', $sheet->getCell('A1')->getValue());
+        $this->assertSame('Source A', $sheet->getCell('B1')->getValue());
+        $this->assertSame('Source B', $sheet->getCell('C1')->getValue());
+        $this->assertSame('K-1 comparison', $sheet->getCell('A2')->getValue());
+        $this->assertTrue($sheet->getStyle('A2')->getFont()->getBold());
+        $this->assertSame('Line', $sheet->getCell('A4')->getValue());
+        $this->assertSame('Current value', $sheet->getCell('B4')->getValue());
+        $this->assertSame('Ordinary business income', $sheet->getCell('A5')->getValue());
+        $this->assertSame(1234.56, (float) $sheet->getCell('B5')->getCalculatedValue());
+        $this->assertNull($sheet->getCell('C5')->getValue());
+        $this->assertSame(NumberFormat::FORMAT_CURRENCY_USD, $sheet->getStyle('B5')->getNumberFormat()->getFormatCode());
+        $this->assertSame('Total ordinary income', $sheet->getCell('A6')->getValue());
+        $this->assertTrue($sheet->getStyle('B6')->getFont()->getBold());
+        $this->assertSame(Border::BORDER_THIN, $sheet->getStyle('B6')->getBorders()->getTop()->getBorderStyle());
+        $this->assertNull($spreadsheet->getSheetByName('K-3 All-in-One Comparison'));
+    }
+
+    public function test_full_export_appends_supplied_normalized_grid_sheets(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-preview/export-xlsx', [
+            'year' => 2025,
+            'filename' => 'tax-preview-2025.xlsx',
+            'grids' => [
+                $this->comparisonGrid('K-1 All-in-One Comparison', 'k1-all-in-one'),
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $spreadsheet = $this->spreadsheetFromResponse($response);
+        $this->assertInstanceOf(Worksheet::class, $spreadsheet->getSheetByName('Overview'));
+
+        $gridSheet = $spreadsheet->getSheetByName('K-1 All-in-One Comparison');
+        $this->assertInstanceOf(Worksheet::class, $gridSheet);
+        $this->assertSame('B2', $gridSheet->getFreezePane());
+        $this->assertSame('Source A', $gridSheet->getCell('B1')->getValue());
+        $this->assertSame(1234.56, (float) $gridSheet->getCell('B5')->getCalculatedValue());
+    }
+
     /**
      * @param  array<string, mixed>  $parsedData
      */
@@ -127,6 +192,41 @@ class TaxPreviewExportControllerTest extends TestCase
             'is_reviewed' => true,
             'parsed_data' => $parsedData,
         ]);
+    }
+
+    /**
+     * @param  TestResponse<Response>  $response
+     */
+    private function spreadsheetFromResponse(TestResponse $response): Spreadsheet
+    {
+        $tempPath = tempnam(sys_get_temp_dir(), 'tax-preview-test');
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        @unlink($tempPath);
+
+        return $spreadsheet;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function comparisonGrid(string $name, string $scope): array
+    {
+        return [
+            'name' => $name,
+            'scope' => $scope,
+            'columns' => [
+                ['key' => 'source_a', 'label' => 'Source A', 'width' => 18],
+                ['key' => 'source_b', 'label' => 'Source B'],
+            ],
+            'rows' => [
+                ['kind' => 'title', 'label' => str_starts_with($name, 'K-3') ? 'K-3 comparison' : 'K-1 comparison'],
+                ['kind' => 'section', 'label' => 'Box 1'],
+                ['kind' => 'header', 'label' => 'Line', 'cells' => ['source_a' => 'Current value', 'source_b' => 'Prior value']],
+                ['kind' => 'data', 'label' => 'Ordinary business income', 'cells' => ['source_a' => 1234.56, 'source_b' => null]],
+                ['kind' => 'total', 'label' => 'Total ordinary income', 'cells' => ['source_a' => 1234.56, 'source_b' => 100]],
+            ],
+        ];
     }
 
     private function rowNumberContaining(Worksheet $sheet, string $column, string $needle): int
