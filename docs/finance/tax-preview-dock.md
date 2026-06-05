@@ -139,6 +139,8 @@ When adding source navigation, keep older `onTabChange(tab)` component callbacks
 
 The All-in-One K-1 and K-3 apps are viewport-sized dock columns. Their comparison tables own a bounded `overflow-auto` viewport so horizontal and vertical table scrolling happen in the same container. Keep column headers sticky to that table viewport with `top-0`; keep first-column row labels and section-title cells sticky with `left-0` and the same right-edge shadow used by statement/transaction tables.
 
+In All-in-One K-1, destination cells that cannot route because the box/code needs footnote review render an actionable **needs review** control. Opening it shows each contributing K-1 source, the underlying box/code, captured statement notes, and an explicit empty-note message when no footnote text was extracted. Coded rows can open the existing `K1CodesModal` so the user can set the same manual code/character overrides used by `K1ReviewPanel`; non-coded rows fall back to `reviewK1Doc(docId, focusFieldId)`. Saving through that path requests refreshed tax facts, so the marker is replaced by the routed destination chip when classification is complete.
+
 The XLSX export endpoint accepts normalized comparison-grid sheets from the frontend at `POST /api/finance/tax-preview/export-xlsx`. The dock **Export XLSX** action posts both All K-1s and All K-3s normalized grids with the full workbook payload when reviewed K-1/K-3 data exists. The default `scope` is `full`, which preserves the backend fact workbook and appends any supplied grids. The per-view **Download XLSX** buttons on All-in-One K-1 and All-in-One K-3 call the same endpoint with `scope: "k1-all-in-one"` or `scope: "k3-all-in-one"` and include only the matching grid sheet.
 
 Normalized grid sheet contract:

@@ -75,7 +75,7 @@ function renderView(overrides: Partial<React.ComponentProps<typeof K1AllInOneVie
   const onReviewDoc = jest.fn()
   const onDrill = jest.fn()
   const onSaveParsedData = jest.fn().mockResolvedValue(undefined)
-  render(
+  const rendered = render(
     <K1AllInOneView
       k1Docs={docs}
       taxFacts={taxFacts}
@@ -85,8 +85,42 @@ function renderView(overrides: Partial<React.ComponentProps<typeof K1AllInOneVie
       {...overrides}
     />,
   )
-  return { onReviewDoc, onDrill, onSaveParsedData }
+  return { onReviewDoc, onDrill, onSaveParsedData, ...rendered }
 }
+
+const needsReviewDocs: TaxDocument[] = [
+  k1Doc(201, { A: field('33-3333333'), B: field('Statement Fund One') }, {
+    '11': [{
+      code: 'S',
+      value: '42',
+      notes: 'Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.',
+    }],
+  }),
+  k1Doc(202, { A: field('44-4444444'), B: field('Statement Fund Two') }, {
+    '11': [{ code: 'S', value: '58', notes: '' }],
+  }),
+]
+
+const resolvedNeedsReviewFacts = {
+  scheduleD: {
+    line5Sources: [
+      source({
+        taxDocumentId: 201,
+        box: '11',
+        code: 'S',
+        routing: 'schedule_d_line_5',
+        routingReason: 'Manual short-term character routes Box 11S to Schedule D line 5.',
+      }),
+      source({
+        taxDocumentId: 202,
+        box: '11',
+        code: 'S',
+        routing: 'schedule_d_line_5',
+        routingReason: 'Manual short-term character routes Box 11S to Schedule D line 5.',
+      }),
+    ],
+  },
+} as unknown as TaxPreviewFacts
 
 describe('K1AllInOneView', () => {
   it('renders one column per fund plus a Total column with cross-fund sums', () => {
@@ -234,6 +268,63 @@ describe('K1AllInOneView', () => {
     // Box 8 (ST capital gain) has a value but no source routing it anywhere.
     const stGain = screen.getByText('ST capital gain').closest('tr')!
     expect(within(stGain).getByText(/needs review — depends on K-1 footnotes/)).toBeInTheDocument()
+  })
+
+  it('shows needs-review K-1 footnotes across contributing funds', () => {
+    renderView({ k1Docs: needsReviewDocs, taxFacts: null })
+
+    fireEvent.click(screen.getByRole('button', { name: /needs review — depends on K-1 footnotes/i }))
+
+    expect(screen.getByRole('heading', { name: 'K-1 footnotes need review' })).toBeInTheDocument()
+    expect(screen.getByText(/Box 11S Passive income/)).toBeInTheDocument()
+    expect(screen.getAllByText('Statement Fund One').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Statement Fund Two').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.')).toBeInTheDocument()
+    expect(screen.getByText('No footnote text captured — classify manually.')).toBeInTheDocument()
+  })
+
+  it('opens the existing K-1 code details resolution path from a needs-review marker', async () => {
+    const { onSaveParsedData } = renderView({ k1Docs: needsReviewDocs, taxFacts: null })
+
+    fireEvent.click(screen.getByRole('button', { name: /needs review — depends on K-1 footnotes/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /resolve in code details/i })[0]!)
+
+    expect(screen.getByText('Box 11: Other income (loss) — Code Details')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSaveParsedData).toHaveBeenCalledWith(
+      201,
+      expect.objectContaining({
+        codes: expect.objectContaining({
+          '11': expect.arrayContaining([
+            expect.objectContaining({
+              code: 'S',
+              notes: 'Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.',
+            }),
+          ]),
+        }),
+      }),
+    ))
+  })
+
+  it('replaces the needs-review marker with the routed destination after routing facts refresh', () => {
+    const { rerender, onReviewDoc, onDrill, onSaveParsedData } = renderView({ k1Docs: needsReviewDocs, taxFacts: null })
+
+    expect(screen.getByRole('button', { name: /needs review — depends on K-1 footnotes/i })).toBeInTheDocument()
+
+    rerender(
+      <K1AllInOneView
+        k1Docs={needsReviewDocs}
+        taxFacts={resolvedNeedsReviewFacts}
+        onReviewDoc={onReviewDoc}
+        onDrill={onDrill}
+        onSaveParsedData={onSaveParsedData}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /needs review — depends on K-1 footnotes/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sch D line 5' })).toBeInTheDocument()
   })
 
   it('keeps table headers, first-column cells, and section labels sticky inside the table viewport', () => {

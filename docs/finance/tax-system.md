@@ -222,6 +222,7 @@ For tax year 2025 trader-fund K-1s, the preview treats attached statement detail
 
 - Box 11 code S is non-portfolio capital gain/loss. Each sub-line routes to Schedule D line 5 when classified short-term and line 12 when classified long-term.
 - Box 11S lines with missing or mixed ST/LT wording are not routed by default. They surface as unclassified Schedule D rows and require the K-1 review modal's Short-term / Long-term setting before inclusion.
+- All-in-One K-1 destination cells expose those unclassified rows as an actionable footnote review control. The control aggregates contributing source boxes/codes and captured notes across K-1s, opens `K1CodesModal` for coded-row classification, and shows the routed destination after refreshed tax facts include the resolved source.
 - Box 11 code ZZ trader-fund items such as Section 988 FX, swap income/loss, and PFIC mark-to-market are ordinary income/loss on Schedule E Part II nonpassive, not Schedule D.
 - Box 13 code H investment interest runs through Form 4952 first. For trader-fund supporting-statement footnotes that direct Schedule E treatment, only the Form 4952-allowed portion reduces Schedule E Part II nonpassive income; any disallowed amount remains a Form 4952 carryforward.
 - Box 13 code ZZ trader, management, administrative, and similar statement deductions reduce Schedule E Part II nonpassive income.
