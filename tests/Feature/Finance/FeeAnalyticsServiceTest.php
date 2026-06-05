@@ -212,14 +212,38 @@ class FeeAnalyticsServiceTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
         $account = $this->createAccount($user);
-        $this->createStatement($account, '2025-01-31', 1000);
+        // January grows 1000 → 1100 (a 10%/month, 120% annualized actual return); the latest
+        // statement closes 2025-01-31, so February onward is projected.
+        $this->createStatement($account, '2024-12-31', 1000);
+        $this->createStatement($account, '2025-01-31', 1100);
 
         $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
 
         $this->assertFalse($series[0]['is_projected']);
+        $this->assertEqualsWithDelta(120.0, $series[0]['net_return_pct'], 0.0001);
+
+        // Projected months have no in-month statement, so they carry January's annualized return
+        // forward as a flat dotted projection rather than dropping to null.
         $this->assertTrue($series[1]['is_projected']);
-        $this->assertNull($series[1]['net_return_pct']);
-        $this->assertNull($series[1]['gross_return_pct']);
+        $this->assertEqualsWithDelta(120.0, $series[1]['net_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(120.0, $series[1]['gross_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(120.0, $series[11]['net_return_pct'], 0.0001);
+    }
+
+    public function test_monthly_fee_drag_projection_stays_null_without_a_prior_actual_return(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        // No statement basis at all: every month is projected but there is no actual return to
+        // carry forward, so the percentages remain null gaps.
+        $this->createLineItem($account, ['t_date' => '2025-03-15', 't_type' => 'Fee', 't_amt' => -10]);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
+
+        $this->assertTrue($series[0]['is_projected']);
+        $this->assertNull($series[0]['net_return_pct']);
+        $this->assertNull($series[11]['gross_return_pct']);
     }
 
     public function test_reconcile_k1_fees_flags_unclassified_when_13zz_has_no_fee_subtotal(): void

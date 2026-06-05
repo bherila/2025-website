@@ -6,7 +6,7 @@ import React from 'react'
 import { fetchWrapper } from '@/fetchWrapper'
 
 import type { FeesTabData } from '../FeesTab'
-import FeesTab, { FeeDragLineChart } from '../FeesTab'
+import FeesTab, { feeDragChartData, FeeDragLineChart } from '../FeesTab'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
@@ -184,14 +184,14 @@ describe('FeesTab', () => {
       {
         month: '2025-01',
         gross_return_pct: 7.2,
-        net_return_pct: 0,
+        net_return_pct: 6,
         fees: 6,
         is_projected: false,
       },
       {
         month: '2025-02',
-        gross_return_pct: null,
-        net_return_pct: null,
+        gross_return_pct: 7.2,
+        net_return_pct: 6,
         fees: 0,
         is_projected: true,
       },
@@ -204,6 +204,23 @@ describe('FeesTab', () => {
     expect(screen.getByTestId('line-grossReturnPctProjected')).toHaveAttribute('data-stroke-dasharray', '4 4')
     expect(screen.getByTestId('line-netReturnPctProjected')).toHaveAttribute('data-stroke-dasharray', '4 4')
     expect(screen.getByTestId('line-grossReturnPctActual')).toHaveAttribute('data-connect-nulls', 'false')
+  })
+
+  it('anchors the projected series so a carried-forward projection renders a real segment', () => {
+    const chartData = feeDragChartData([
+      { month: '2025-01', gross_return_pct: 7.2, net_return_pct: 6, fees: 6, is_projected: false },
+      { month: '2025-02', gross_return_pct: 7.2, net_return_pct: 6, fees: 0, is_projected: true },
+      { month: '2025-03', gross_return_pct: 7.2, net_return_pct: 6, fees: 0, is_projected: true },
+    ])
+
+    // Solid line covers only the actual month, then stops (null) over the projected months.
+    expect(chartData.map((point) => point.grossReturnPctActual)).toEqual([7.2, null, null])
+
+    // Dotted projection is anchored to the last actual point so it has >= 2 non-null points and
+    // actually draws (rather than a single isolated point that renders nothing).
+    const projected = chartData.map((point) => point.grossReturnPctProjected)
+    expect(projected).toEqual([7.2, 7.2, 7.2])
+    expect(projected.filter((value) => value !== null).length).toBeGreaterThanOrEqual(2)
   })
 
   it('saves expected fees only from the save button', async () => {

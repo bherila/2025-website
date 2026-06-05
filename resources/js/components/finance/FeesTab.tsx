@@ -137,7 +137,7 @@ function formatReturnPct(value: number): string {
   return `${value.toFixed(2)}%`
 }
 
-function feeDragChartData(series: MonthlyFeeDragPoint[]): FeeDragChartPoint[] {
+export function feeDragChartData(series: MonthlyFeeDragPoint[]): FeeDragChartPoint[] {
   const firstProjectedIndex = series.findIndex((point) => point.is_projected)
 
   return series.map((point, index) => {

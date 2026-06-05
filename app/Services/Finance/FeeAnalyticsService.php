@@ -105,7 +105,7 @@ class FeeAnalyticsService
             ];
         }
 
-        return $series;
+        return $this->withProjectedReturns($series);
     }
 
     /**
@@ -176,6 +176,45 @@ class FeeAnalyticsService
                 'fees' => $fees,
                 'is_projected' => $this->monthIsProjected($start, $latestStatementClose),
             ];
+        }
+
+        return $this->withProjectedReturns($series);
+    }
+
+    /**
+     * Projected months (after the latest statement close) have no in-month statement, so their
+     * percentages come back null. Carry the most recent actual annualized return forward into them
+     * as a flat dotted projection, so the chart draws a continued line instead of stopping dead.
+     * Non-projected gaps (early months with no statement basis yet) are intentionally left null.
+     *
+     * @param  array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>  $series
+     * @return array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>
+     */
+    private function withProjectedReturns(array $series): array
+    {
+        $lastActualGrossPct = null;
+        $lastActualNetPct = null;
+
+        foreach ($series as $index => $row) {
+            if (! $row['is_projected']) {
+                if ($row['gross_return_pct'] !== null) {
+                    $lastActualGrossPct = $row['gross_return_pct'];
+                }
+
+                if ($row['net_return_pct'] !== null) {
+                    $lastActualNetPct = $row['net_return_pct'];
+                }
+
+                continue;
+            }
+
+            if ($row['gross_return_pct'] === null && $lastActualGrossPct !== null) {
+                $series[$index]['gross_return_pct'] = $lastActualGrossPct;
+            }
+
+            if ($row['net_return_pct'] === null && $lastActualNetPct !== null) {
+                $series[$index]['net_return_pct'] = $lastActualNetPct;
+            }
         }
 
         return $series;
