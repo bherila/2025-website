@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\CareerJob;
-use App\Services\Planning\OpportunityCost\JobSpec;
+use App\Services\Planning\CareerComp\JobSpec;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

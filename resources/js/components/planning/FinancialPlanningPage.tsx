@@ -31,9 +31,9 @@ const CALCULATORS: CalculatorCard[] = [
     shipped: true,
   },
   {
-    title: 'Opportunity Cost Planner',
+    title: 'Career Comparison',
     description: 'Compare current-job and offer compensation, equity liquidity, annual free cash flow, and vesting over time.',
-    href: '/financial-planning/opportunity-cost',
+    href: '/financial-planning/career-comparison',
     shipped: true,
   },
 ]
