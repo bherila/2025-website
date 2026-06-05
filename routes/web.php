@@ -206,6 +206,8 @@ Route::get('/financial-planning/career-comparison', [CareerCompController::class
     ->name('financial-planning.career-comparison');
 Route::get('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'showByCode'])
     ->name('financial-planning.career-comparison.shared');
+Route::redirect('/financial-planning/opportunity-cost', '/financial-planning/career-comparison', 301);
+Route::get('/financial-planning/opportunity-cost/s/{code}', fn (string $code) => redirect("/financial-planning/career-comparison/s/{$code}", 301));
 
 Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');
