@@ -30,12 +30,14 @@ jest.mock('../CarsScene', () => {
       const movableCar = state.cars.find((car) => car.status === 'field' && engine.canMoveCar(state, car.id))
       const blockedCar = state.cars.find((car) => car.status === 'field' && !engine.canMoveCar(state, car.id))
       const boardablePassenger = state.passengerQueue.find((passenger) => engine.canBoardPassengerAtParkingGate(state, passenger.id))
+      const boardablePassengers = state.passengerQueue.filter((passenger) => engine.canBoardPassengerAtParkingGate(state, passenger.id))
 
       return (
-        <div data-testid="cars-scene" data-vip-selection={vipSelectionActive ? 'active' : 'inactive'}>
+        <div data-queue-length={state.passengerQueue.length} data-testid="cars-scene" data-vip-selection={vipSelectionActive ? 'active' : 'inactive'}>
           <button disabled={!movableCar} type="button" onClick={() => movableCar && onCarClick(movableCar.id)}>Move mock car</button>
           <button disabled={!blockedCar} type="button" onClick={() => blockedCar && onCarClick(blockedCar.id)}>Blocked mock car</button>
           <button disabled={!boardablePassenger} type="button" onClick={() => boardablePassenger && onPassengerGate(boardablePassenger.id)}>Board mock passenger</button>
+          <button disabled={boardablePassengers.length === 0} type="button" onClick={() => boardablePassengers.forEach((passenger) => onPassengerGate(passenger.id))}>Board all mock passengers</button>
         </div>
       )
     },
@@ -201,6 +203,29 @@ describe('CarsGame', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Blocked mock car' }))
 
     expect(playSfx).toHaveBeenCalledWith('car-blocked')
+  })
+
+  it('applies synchronous passenger boarding notifications cumulatively', async () => {
+    saveAudioTestSnapshot(makeAudioTestState({
+      cars: [makeAudioTestCar({ id: 'red-car', status: 'parked', parkingSlotId: 'slot-1' })],
+      parkingSlots: makeAudioTestParkingSlots().map((slot) => (
+        slot.id === 'slot-1' ? { ...slot, occupiedCarId: 'red-car' } : slot
+      )),
+      passengerQueue: [
+        { id: 'p1', color: 'red' },
+        { id: 'p2', color: 'red' },
+      ],
+    }))
+
+    render(<CarsGame />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Board all mock passengers' }))
+
+    await waitFor(() => expect(screen.getByTestId('cars-scene')).toHaveAttribute('data-queue-length', '0'))
+    expect((playSfx as jest.Mock).mock.calls.filter(([name]) => name === 'passenger-board')).toEqual([
+      ['passenger-board'],
+      ['passenger-board'],
+    ])
   })
 })
 

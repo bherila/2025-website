@@ -71,7 +71,17 @@ export function CarsGame(): ReactElement {
 
     return loadColorblindMode()
   })
+  const stateRef = useRef(state)
   const completedLevelSoundKeyRef = useRef(completedLevelSoundKey(state.completedLevel))
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  const commitState = useCallback((next: GameState): void => {
+    stateRef.current = next
+    setState(next)
+  }, [])
 
   useEffect(() => {
     if (visualTestOptions.enabled) {
@@ -112,22 +122,24 @@ export function CarsGame(): ReactElement {
   }, [state])
 
   const handleCarClick = useCallback((carId: string): void => {
-    if (state.failedLevel) {
+    const current = stateRef.current
+
+    if (current.failedLevel) {
       setVipSelectionActive(false)
 
       return
     }
 
     if (vipSelectionActive) {
-      setState(applyVipPowerUp(state, carId))
+      commitState(applyVipPowerUp(current, carId))
       setVipSelectionActive(false)
 
       return
     }
 
-    const clickedCar = state.cars.find((car) => car.id === carId)
-    const blocked = clickedCar?.status === 'field' && !canMoveCar(state, carId)
-    const next = moveCarToParking(state, carId)
+    const clickedCar = current.cars.find((car) => car.id === carId)
+    const blocked = clickedCar?.status === 'field' && !canMoveCar(current, carId)
+    const next = moveCarToParking(current, carId)
     const parkedCar = next.cars.find((car) => car.id === carId)
 
     if (blocked) {
@@ -139,23 +151,23 @@ export function CarsGame(): ReactElement {
       playSfx('car-park-success')
     }
 
-    setState(next)
+    commitState(next)
     setVipSelectionActive(false)
-  }, [state, vipSelectionActive])
+  }, [commitState, vipSelectionActive])
 
   const handleShuffle = useCallback((): void => {
     setVipSelectionActive(false)
-    setState((current) => applyShufflePowerUp(current))
-  }, [])
+    commitState(applyShufflePowerUp(stateRef.current))
+  }, [commitState])
 
   const handleFill = useCallback((): void => {
     setVipSelectionActive(false)
-    setState((current) => applyFillPowerUp(current))
-  }, [])
+    commitState(applyFillPowerUp(stateRef.current))
+  }, [commitState])
 
   const handleOpenSlot = useCallback((): void => {
-    setState((current) => openParkingSlot(current))
-  }, [])
+    commitState(openParkingSlot(stateRef.current))
+  }, [commitState])
 
   const handleColorblindModeChange = useCallback((enabled: boolean): void => {
     setColorblindMode(enabled)
@@ -165,29 +177,30 @@ export function CarsGame(): ReactElement {
   }, [visualTestOptions.enabled])
 
   const handlePassengerGate = useCallback((passengerId: string): void => {
-    const next = processBoardingAtParkingGate(state, passengerId)
-    if (next !== state && next.passengerQueue.length < state.passengerQueue.length) {
+    const current = stateRef.current
+    const next = processBoardingAtParkingGate(current, passengerId)
+    if (next !== current && next.passengerQueue.length < current.passengerQueue.length) {
       playSfx('passenger-board')
     }
 
-    setState(next)
-  }, [state])
+    commitState(next)
+  }, [commitState])
 
   const handleNextLevel = useCallback((): void => {
     setVipSelectionActive(false)
     if (!visualTestOptions.enabled) {
       clearLevelSnapshot()
     }
-    setState((current) => advanceToNextLevel(current))
-  }, [visualTestOptions.enabled])
+    commitState(advanceToNextLevel(stateRef.current))
+  }, [commitState, visualTestOptions.enabled])
 
   const handleReset = useCallback((): void => {
     setVipSelectionActive(false)
     if (!visualTestOptions.enabled) {
       clearLevelSnapshot()
     }
-    setState((current) => restartLevel(current))
-  }, [visualTestOptions.enabled])
+    commitState(restartLevel(stateRef.current))
+  }, [commitState, visualTestOptions.enabled])
 
   return (
     <div className="bg-sky-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
