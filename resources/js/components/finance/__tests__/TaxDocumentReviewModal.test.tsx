@@ -38,6 +38,24 @@ jest.mock('@/components/finance/k1', () => ({
       >
         Toggle SBP
       </button>
+      <button
+        data-testid="toggle-material-participation"
+        onClick={() =>
+          onChange({
+            ...data,
+            sourceValueOverrides: {
+              ...((data.sourceValueOverrides as Record<string, unknown> | undefined) ?? {}),
+              'k1:material-participation': {
+                value: 'true',
+                originalValue: null,
+                label: 'Material participation in securities-trading activity',
+              },
+            },
+          })
+        }
+      >
+        Toggle material participation
+      </button>
     </div>
   ),
 }))
@@ -440,6 +458,42 @@ describe('TaxDocumentReviewModal — SBP election save-while-reviewed', () => {
       (payload.parsed_data as Record<string, unknown> & { k3Elections: { sourcedByPartnerAsUSSource: boolean } })
         ?.k3Elections?.sourcedByPartnerAsUSSource,
     ).toBe(false)
+  })
+})
+
+describe('TaxDocumentReviewModal — material participation save-while-reviewed', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('shows Save Election after toggling material participation on a confirmed K-1', () => {
+    render(<TaxDocumentReviewModal {...(baseProps() as any)} />)
+
+    expect(screen.queryByText('Material participation has unsaved changes')).toBeNull()
+    expect(screen.queryByText('Save Election')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('toggle-material-participation'))
+
+    expect(screen.getByText('Material participation has unsaved changes')).toBeTruthy()
+    expect(screen.getByText('Save Election')).toBeTruthy()
+  })
+
+  it('PUTs the material-participation override without is_reviewed for a confirmed K-1', async () => {
+    ;(fetchWrapper.put as jest.Mock).mockResolvedValue({})
+
+    render(<TaxDocumentReviewModal {...(baseProps() as any)} />)
+
+    fireEvent.click(screen.getByTestId('toggle-material-participation'))
+    fireEvent.click(screen.getByText('Save Election'))
+
+    await waitFor(() => expect(fetchWrapper.put).toHaveBeenCalledTimes(1))
+
+    const [url, payload] = (fetchWrapper.put as jest.Mock).mock.calls[0] as [string, Record<string, unknown>]
+    const parsedData = payload.parsed_data as Record<string, unknown> & {
+      sourceValueOverrides?: Record<string, { value: string }>
+    }
+
+    expect(url).toBe('/api/finance/tax-documents/1?include_tax_facts=1')
+    expect(payload).not.toHaveProperty('is_reviewed')
+    expect(parsedData.sourceValueOverrides?.['k1:material-participation']?.value).toBe('true')
   })
 })
 

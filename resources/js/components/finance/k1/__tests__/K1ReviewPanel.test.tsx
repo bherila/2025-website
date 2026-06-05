@@ -496,3 +496,70 @@ describe('K1ReviewPanel — clearable source overrides', () => {
     }])
   })
 })
+
+describe('K1ReviewPanel — trader material participation override', () => {
+  it('shows the default non-material participation regime for trader K-1s', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('checkbox', { name: /Materially participated in the securities-trading activity/i })).not.toBeChecked()
+    expect(screen.getByText(/Default: Form 4952 §163\(d\) limit/i)).toBeInTheDocument()
+  })
+
+  it('persists material participation in sourceValueOverrides and clears back to default', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Materially participated in the securities-trading activity/i }))
+
+    expect(readPanelData().sourceValueOverrides?.['k1:material-participation']).toMatchObject({
+      value: 'true',
+      originalValue: null,
+      label: 'Material participation in securities-trading activity',
+    })
+    expect(screen.getByText(/Off Form 4952; fully deductible on Schedule E Part II line 28/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Materially participated in the securities-trading activity/i }))
+
+    expect(readPanelData().sourceValueOverrides).toBeUndefined()
+    expect(screen.getByText(/Default: Form 4952 §163\(d\) limit/i)).toBeInTheDocument()
+  })
+
+  it('does not render material participation control for non-trader K-1s', () => {
+    render(
+      <K1ReviewPanel
+        data={makeData({
+          fields: {
+            B: { value: 'Investment Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'false' },
+          },
+        })}
+        onChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('checkbox', { name: /Materially participated in the securities-trading activity/i })).not.toBeInTheDocument()
+  })
+})

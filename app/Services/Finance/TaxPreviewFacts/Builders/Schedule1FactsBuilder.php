@@ -97,6 +97,16 @@ class Schedule1FactsBuilder extends TaxPreviewFactBuilder
             );
         }
 
+        if ($form4952 instanceof Form4952Facts && $form4952->totalMaterialParticipationScheduleEInterest > 0.0) {
+            foreach ($form4952->materialParticipationScheduleEInterestSources as $source) {
+                $line5Sources[] = $this->cloneSource(
+                    $source,
+                    TaxFactRouting::Schedule1Line5,
+                    'Materially participating trader interest is fully deductible on Schedule E, Part II, line 28 (§62(a)(1); Pub. 550), reducing the Schedule E net carried to Schedule 1 line 5.',
+                );
+            }
+        }
+
         $line8Sources = $this->schedule1Line8Sources($docs1099);
         $line8bSources = $this->schedule1Line8SourcesFor($line8Sources, '8b');
         $line8hSources = $this->schedule1Line8SourcesFor($line8Sources, '8h');

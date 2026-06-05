@@ -6,6 +6,8 @@ import { parseMoney, parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/mone
 import type { FK1StructuredData, K1CodeItem, K1SourceValueOverride, K1SourceValueOverrides } from '@/types/finance/k1-data'
 import { isFK1StructuredData } from '@/types/finance/k1-data'
 
+const K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY = 'k1:material-participation'
+
 /**
  * Returns whether the K-3 "Sourced by Partner" column (f) amounts are being treated
  * as U.S.-source for this K-1. U.S.-source is the default for valid K-1 data (typical
@@ -33,6 +35,14 @@ export function k1CodeOverrideKey(box: string, code: string): string {
 
 export function k3ForeignTaxTotalOverrideKey(): string {
   return 'k3:foreign-tax-total'
+}
+
+export function k1MaterialParticipationOverrideKey(): string {
+  return K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY
+}
+
+export function isK1MaterialParticipationOverrideKey(key: string): boolean {
+  return key === K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY
 }
 
 export function k3Part2OverrideKey(line: string, category: string): string {
@@ -78,6 +88,33 @@ export function withK1SourceValueOverride(
   }
 
   return { ...data, sourceValueOverrides: overrides }
+}
+
+function parseBooleanOverrideValue(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value !== 'string') return false
+  return ['true', '1', 'yes', 'y'].includes(value.trim().toLowerCase())
+}
+
+export function getK1MaterialParticipationOverride(data: unknown): boolean {
+  if (!isFK1StructuredData(data)) return false
+  return parseBooleanOverrideValue(getK1SourceValueOverride(data, K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY)?.value)
+}
+
+export function withK1MaterialParticipationOverride(data: FK1StructuredData, participates: boolean): FK1StructuredData {
+  return withK1SourceValueOverride(
+    data,
+    K1_MATERIAL_PARTICIPATION_OVERRIDE_KEY,
+    participates
+      ? {
+          value: 'true',
+          originalValue: null,
+          label: 'Material participation in securities-trading activity',
+          updatedAt: new Date().toISOString(),
+        }
+      : null,
+  )
 }
 
 export function parseK1Field(data: FK1StructuredData, box: string): number {

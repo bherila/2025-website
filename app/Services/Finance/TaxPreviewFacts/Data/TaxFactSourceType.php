@@ -14,6 +14,7 @@ enum TaxFactSourceType: string
     case K1ForeignTaxPassiveIncome = 'k1_foreign_tax_passive_income';
     case K1InterestIncome = 'k1_interest_income';
     case K1InvestmentInterest = 'k1_investment_interest';
+    case K1MaterialParticipationTraderInterest = 'k1_material_participation_trader_interest';
     case K1Form4952GrossInvestmentIncome = 'k1_form_4952_gross_investment_income';
     case K1LongTermCapitalGain = 'k1_long_term_capital_gain';
     case K1NonportfolioLongTermCapitalGain = 'k1_nonportfolio_long_term_capital_gain';

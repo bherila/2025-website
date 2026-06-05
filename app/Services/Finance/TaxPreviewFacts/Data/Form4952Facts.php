@@ -25,6 +25,11 @@ readonly class Form4952Facts
     /**
      * @var TaxFactSource[]
      */
+    public array $materialParticipationScheduleEInterestSources;
+
+    /**
+     * @var TaxFactSource[]
+     */
     public array $grossInvestmentIncomeFromK1Sources;
 
     /**
@@ -41,6 +46,7 @@ readonly class Form4952Facts
      * @param  TaxFactSource[]  $investmentInterestSources
      * @param  TaxFactSource[]  $investmentExpenseSources
      * @param  TaxFactSource[]  $excludedInvestmentExpenseSources
+     * @param  TaxFactSource[]  $materialParticipationScheduleEInterestSources
      * @param  TaxFactSource[]  $grossInvestmentIncomeFromK1Sources
      * @param  TaxFactSource[]  $qualifiedDividendSources
      * @param  Form4952CarryDestination[]  $carryDestinations
@@ -52,6 +58,8 @@ readonly class Form4952Facts
         public float $totalInvestmentExpenses,
         array $excludedInvestmentExpenseSources,
         public float $totalExcludedInvestmentExpenses,
+        array $materialParticipationScheduleEInterestSources,
+        public float $totalMaterialParticipationScheduleEInterest,
         public float $grossInvestmentIncomeFromScheduleB,
         public float $grossInvestmentIncomeFromK1,
         public float $grossInvestmentIncomeTotal,
@@ -71,13 +79,14 @@ readonly class Form4952Facts
         $this->investmentInterestSources = $investmentInterestSources;
         $this->investmentExpenseSources = $investmentExpenseSources;
         $this->excludedInvestmentExpenseSources = $excludedInvestmentExpenseSources;
+        $this->materialParticipationScheduleEInterestSources = $materialParticipationScheduleEInterestSources;
         $this->grossInvestmentIncomeFromK1Sources = $grossInvestmentIncomeFromK1Sources;
         $this->qualifiedDividendSources = $qualifiedDividendSources;
         $this->carryDestinations = $carryDestinations;
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>}
+     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,materialParticipationScheduleEInterestSources:array<int,array<string,mixed>>,totalMaterialParticipationScheduleEInterest:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>}
      */
     public function toArray(): array
     {
@@ -88,6 +97,8 @@ readonly class Form4952Facts
             'totalInvestmentExpenses' => $this->totalInvestmentExpenses,
             'excludedInvestmentExpenseSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->excludedInvestmentExpenseSources),
             'totalExcludedInvestmentExpenses' => $this->totalExcludedInvestmentExpenses,
+            'materialParticipationScheduleEInterestSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->materialParticipationScheduleEInterestSources),
+            'totalMaterialParticipationScheduleEInterest' => $this->totalMaterialParticipationScheduleEInterest,
             'grossInvestmentIncomeFromScheduleB' => $this->grossInvestmentIncomeFromScheduleB,
             'grossInvestmentIncomeFromK1' => $this->grossInvestmentIncomeFromK1,
             'grossInvestmentIncomeTotal' => $this->grossInvestmentIncomeTotal,

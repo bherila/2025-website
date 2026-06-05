@@ -98,8 +98,15 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             );
         }
 
+        $materialParticipationTraderInterestSources = $form4952->materialParticipationScheduleEInterestSources;
+        $totalMaterialParticipationTraderInterest = $form4952->totalMaterialParticipationScheduleEInterest;
+
         $totalNonpassiveIncome = $this->roundMoney($totalNonpassiveIncome);
-        $totalNonpassiveLoss = $this->roundMoney($this->sumMoney([$totalNonpassiveLoss, -$totalForm4952InvestmentInterest]));
+        $totalNonpassiveLoss = $this->roundMoney($this->sumMoney([
+            $totalNonpassiveLoss,
+            -$totalForm4952InvestmentInterest,
+            -$totalMaterialParticipationTraderInterest,
+        ]));
         $totalNonpassive = $this->sumMoney([$totalNonpassiveIncome, $totalNonpassiveLoss]);
         $miscIncomeTotal = $this->sumSources($miscIncomeSources);
 
@@ -123,6 +130,8 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             totalTraderNii: $this->sumSources($traderNiiSources),
             form4952InvestmentInterestSources: $form4952InvestmentInterestSources,
             totalForm4952InvestmentInterest: $this->roundMoney($totalForm4952InvestmentInterest),
+            materialParticipationTraderInterestSources: $materialParticipationTraderInterestSources,
+            totalMaterialParticipationTraderInterest: $this->roundMoney($totalMaterialParticipationTraderInterest),
             totalPassive: $totalPassive,
             totalNonpassive: $totalNonpassive,
             totalNonpassiveIncome: $totalNonpassiveIncome,
