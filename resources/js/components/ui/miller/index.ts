@@ -2,8 +2,13 @@ export type { MillerColumnShellColumn } from './MillerColumnShell'
 export { MillerColumnShell } from './MillerColumnShell'
 export type { MillerCommandPaletteRow } from './MillerCommandPalette'
 export { MillerCommandPalette, useMillerCommandPaletteShortcut } from './MillerCommandPalette'
-export type { MillerDockSectionProps,MillerDockTileAmount, MillerDockTileEntry } from './MillerDockHome'
-export { MillerDockSection, MillerDockTileGrid } from './MillerDockHome'
+export type {
+  MillerDockClearButtonProps,
+  MillerDockSectionProps,
+  MillerDockTileAmount,
+  MillerDockTileEntry,
+} from './MillerDockHome'
+export { MillerDockClearButton, MillerDockSection, MillerDockTileGrid } from './MillerDockHome'
 export { MillerInstanceTabs } from './MillerInstanceTabs'
 export type {
   KeyAmount,

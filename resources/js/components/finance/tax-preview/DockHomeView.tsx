@@ -4,7 +4,13 @@ import { computeActionItemSeverityCounts } from '@/components/finance/actionItem
 import LotReconciliationHealthWidget from '@/components/finance/LotReconciliationHealthWidget'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { MillerDockSection, type MillerDockTileAmount, type MillerDockTileEntry, MillerDockTileGrid } from '@/components/ui/miller'
+import {
+  MillerDockClearButton,
+  MillerDockSection,
+  type MillerDockTileAmount,
+  type MillerDockTileEntry,
+  MillerDockTileGrid,
+} from '@/components/ui/miller'
 import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 import { useTaxPreview } from '../TaxPreviewContext'
@@ -91,7 +97,7 @@ export function DockHomeView(): React.ReactElement {
           onOpen={openForm}
           className="border-info/25 bg-info/5"
           titleClassName="finance-card-heading text-info"
-          action={<ClearRecentButton onClear={clearRecent} />}
+          action={<MillerDockClearButton onClear={clearRecent} />}
           isPinned={isPinned}
           onTogglePin={(id) => {
             if (isPinnable(formRegistry[id])) {
@@ -239,6 +245,7 @@ function formatTileAmount(keyAmount: KeyAmount): MillerDockTileAmount {
   const amount: MillerDockTileAmount = {
     label: keyAmount.label,
     value: formatKeyValue(keyAmount.value),
+    className: 'font-currency',
   }
 
   if (keyAmount.value < 0) {
@@ -246,18 +253,6 @@ function formatTileAmount(keyAmount: KeyAmount): MillerDockTileAmount {
   }
 
   return amount
-}
-
-function ClearRecentButton({ onClear }: { onClear: () => void }): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClear}
-      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      Clear
-    </button>
-  )
 }
 
 // CategoryNote was used to flag worksheets as deferred; now they're rendered
