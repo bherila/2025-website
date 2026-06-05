@@ -536,12 +536,42 @@ class DocumentIngestionService
 
     private function feeTagForCharacteristic(int $userId, string $taxCharacteristic): FinAccountTag
     {
-        return FinAccountTag::query()->firstOrCreate([
-            'tag_userid' => (string) $userId,
-            'tax_characteristic' => $taxCharacteristic,
-        ], [
-            'tag_label' => FinAccountTag::labelFor($taxCharacteristic),
+        $tagUserId = (string) $userId;
+        $label = FinAccountTag::labelFor($taxCharacteristic);
+
+        $tag = FinAccountTag::query()
+            ->where('tag_userid', $tagUserId)
+            ->where('tag_label', $label)
+            ->first();
+
+        if ($tag instanceof FinAccountTag) {
+            if ($tag->tax_characteristic !== $taxCharacteristic) {
+                $tag->tax_characteristic = $taxCharacteristic;
+                $tag->save();
+            }
+
+            return $tag;
+        }
+
+        $tag = FinAccountTag::query()
+            ->where('tag_userid', $tagUserId)
+            ->where('tax_characteristic', $taxCharacteristic)
+            ->first();
+
+        if ($tag instanceof FinAccountTag) {
+            if ($tag->tag_label !== $label) {
+                $tag->tag_label = $label;
+                $tag->save();
+            }
+
+            return $tag;
+        }
+
+        return FinAccountTag::query()->create([
+            'tag_userid' => $tagUserId,
+            'tag_label' => $label,
             'tag_color' => '#2563eb',
+            'tax_characteristic' => $taxCharacteristic,
         ]);
     }
 
@@ -556,18 +586,22 @@ class DocumentIngestionService
         string $periodEnd,
         array $feeDetail,
     ): array {
-        $dateBounds = [$periodStart ?? $periodEnd, $periodEnd];
-        sort($dateBounds);
-
-        return DB::table('fin_account_line_items')
+        $query = DB::table('fin_account_line_items')
             ->where('statement_id', $statementId)
             ->where('t_account', $accountId)
             ->where(function ($query): void {
                 $query->whereNull('t_source')
                     ->orWhere('t_source', '!=', self::SYNTHETIC_FEE_SOURCE);
-            })
-            ->whereBetween('t_date', $dateBounds)
-            ->whereRaw('ABS(ABS(COALESCE(t_amt, 0)) - ?) < 0.0001', [abs($feeDetail['amount'])])
+            });
+
+        if ($periodStart !== null) {
+            $dateBounds = [$periodStart, $periodEnd];
+            sort($dateBounds);
+            $query->whereBetween('t_date', $dateBounds);
+        }
+
+        return $query
+            ->whereRaw('ABS(COALESCE(t_amt, 0) - ?) < 0.0001', [$feeDetail['amount']])
             ->where(function ($query) use ($feeDetail): void {
                 $query->whereRaw(
                     "LOWER(COALESCE(t_type, '')) IN (?, ?, ?)",

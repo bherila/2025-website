@@ -7,6 +7,7 @@ use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Jobs\LotsMatchJob;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinAccountTag;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
 use App\Models\User;
@@ -295,6 +296,163 @@ class DocumentIngestionServiceTest extends TestCase
         $lineItem = $lineItems->first();
         $this->assertSame('import', $lineItem->t_source);
         $this->assertSame('fee_irc67g', $this->taxCharacteristicForTransaction((int) $lineItem->t_id));
+    }
+
+    public function test_statement_fee_synthesis_matches_imported_fee_when_period_start_is_omitted(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-10-31', 'closingBalance' => 1000],
+                'statementDetails' => [
+                    ['section' => 'Fees', 'line_item' => 'Management Fee', 'statement_period_value' => 18.00, 'ytd_value' => 18.00, 'is_percentage' => false],
+                ],
+                'transactions' => [[
+                    't_date' => '2025-10-15',
+                    't_type' => 'Fee',
+                    't_amt' => -18.00,
+                    't_description' => 'Management Fee',
+                ]],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('accounts.0.transactions_count', 1)
+            ->assertJsonPath('accounts.0.fee_transactions_count', 0);
+
+        $statementId = (int) $response->json('accounts.0.statement_id');
+        $lineItem = DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->first();
+
+        $this->assertNotNull($lineItem);
+        $this->assertSame(1, DB::table('fin_account_line_items')->where('statement_id', $statementId)->count());
+        $this->assertSame('import', $lineItem->t_source);
+        $this->assertSame('fee_irc67g', $this->taxCharacteristicForTransaction((int) $lineItem->t_id));
+    }
+
+    public function test_statement_fee_synthesis_does_not_match_opposite_signed_imported_fee(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodStart' => '2025-11-01', 'periodEnd' => '2025-11-30', 'closingBalance' => 1000],
+                'statementDetails' => [
+                    ['section' => 'Fees', 'line_item' => 'Management Fee', 'statement_period_value' => 25.00, 'ytd_value' => 25.00, 'is_percentage' => false],
+                ],
+                'transactions' => [[
+                    't_date' => '2025-11-15',
+                    't_type' => 'Fee',
+                    't_amt' => 25.00,
+                    't_description' => 'Management Fee',
+                ]],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('accounts.0.transactions_count', 2)
+            ->assertJsonPath('accounts.0.fee_transactions_count', 1);
+
+        $statementId = (int) $response->json('accounts.0.statement_id');
+        $lineItems = DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->orderBy('t_source')
+            ->get();
+
+        $this->assertCount(2, $lineItems);
+
+        $imported = $lineItems->firstWhere('t_source', 'import');
+        $this->assertNotNull($imported);
+        $this->assertEqualsWithDelta(25.00, (float) $imported->t_amt, 0.0001);
+        $this->assertNull($this->taxCharacteristicForTransaction((int) $imported->t_id));
+
+        $synthetic = $lineItems->firstWhere('t_source', 'stmt_fee_synth');
+        $this->assertNotNull($synthetic);
+        $this->assertEqualsWithDelta(-25.00, (float) $synthetic->t_amt, 0.0001);
+        $this->assertSame('fee_irc67g', $this->taxCharacteristicForTransaction((int) $synthetic->t_id));
+    }
+
+    public function test_statement_fee_synthesis_reuses_existing_fee_label_tags(): void
+    {
+        Queue::fake();
+
+        $user = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+        $managementLabel = FinAccountTag::labelFor('fee_irc67g');
+        $incentiveLabel = FinAccountTag::labelFor('fee_schE');
+        $managementTagId = (int) DB::table('fin_account_tag')->insertGetId([
+            'tag_userid' => (string) $user->id,
+            'tag_color' => '#111111',
+            'tag_label' => $managementLabel,
+            'tax_characteristic' => null,
+        ]);
+        $incentiveTagId = (int) DB::table('fin_account_tag')->insertGetId([
+            'tag_userid' => (string) $user->id,
+            'tag_color' => '#222222',
+            'tag_label' => $incentiveLabel,
+            'tax_characteristic' => 'interest',
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-12-31', 'closingBalance' => 1000],
+                'statementDetails' => [
+                    ['section' => 'Fees', 'line_item' => 'Management Fee', 'statement_period_value' => 31.00, 'ytd_value' => 31.00, 'is_percentage' => false],
+                    ['section' => 'Fees', 'line_item' => 'Incentive Allocation', 'statement_period_value' => 41.00, 'ytd_value' => 41.00, 'is_percentage' => false],
+                ],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('accounts.0.fee_transactions_count', 2);
+
+        $this->assertSame(1, DB::table('fin_account_tag')
+            ->where('tag_userid', (string) $user->id)
+            ->where('tag_label', $managementLabel)
+            ->count());
+        $this->assertDatabaseHas('fin_account_tag', [
+            'tag_id' => $managementTagId,
+            'tag_userid' => (string) $user->id,
+            'tag_label' => $managementLabel,
+            'tax_characteristic' => 'fee_irc67g',
+        ]);
+        $this->assertDatabaseHas('fin_account_tag', [
+            'tag_id' => $incentiveTagId,
+            'tag_userid' => (string) $user->id,
+            'tag_label' => $incentiveLabel,
+            'tax_characteristic' => 'fee_schE',
+        ]);
+
+        $statementId = (int) $response->json('accounts.0.statement_id');
+        $managementTransactionId = (int) DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->where('t_description', 'Management Fee')
+            ->value('t_id');
+        $incentiveTransactionId = (int) DB::table('fin_account_line_items')
+            ->where('statement_id', $statementId)
+            ->where('t_description', 'Incentive Allocation')
+            ->value('t_id');
+
+        $this->assertSame($managementTagId, $this->tagIdForTransaction($managementTransactionId));
+        $this->assertSame($incentiveTagId, $this->tagIdForTransaction($incentiveTransactionId));
     }
 
     public function test_multi_account_statement_synthesizes_fee_transactions_per_account_block(): void
@@ -1007,5 +1165,14 @@ class DocumentIngestionServiceTest extends TestCase
             ->join('fin_account_tag as tag', 'tag.tag_id', '=', 'map.tag_id')
             ->where('map.t_id', $transactionId)
             ->value('tag.tax_characteristic');
+    }
+
+    private function tagIdForTransaction(int $transactionId): ?int
+    {
+        $tagId = DB::table('fin_account_line_item_tag_map')
+            ->where('t_id', $transactionId)
+            ->value('tag_id');
+
+        return $tagId === null ? null : (int) $tagId;
     }
 }
