@@ -122,6 +122,27 @@ const resolvedNeedsReviewFacts = {
   },
 } as unknown as TaxPreviewFacts
 
+const ambiguousNeedsReviewFacts = {
+  scheduleD: {
+    scheduleDAmbiguous11SSources: [
+      source({
+        taxDocumentId: 201,
+        box: '11',
+        code: 'S',
+        routing: 'needs_review_schedule_d_line_5_or_12',
+        routingReason: 'K-1 Box 11S needs short-term or long-term character before Schedule D routing.',
+      }),
+      source({
+        taxDocumentId: 202,
+        box: '11',
+        code: 'S',
+        routing: 'needs_review_schedule_d_line_5_or_12',
+        routingReason: 'K-1 Box 11S needs short-term or long-term character before Schedule D routing.',
+      }),
+    ],
+  },
+} as unknown as TaxPreviewFacts
+
 describe('K1AllInOneView', () => {
   it('renders one column per fund plus a Total column with cross-fund sums', () => {
     renderView()
@@ -281,6 +302,19 @@ describe('K1AllInOneView', () => {
     expect(screen.getAllByText('Statement Fund Two').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.')).toBeInTheDocument()
     expect(screen.getByText('No footnote text captured — classify manually.')).toBeInTheDocument()
+  })
+
+  it('treats real needs-review tax fact routings as actionable footnote markers', () => {
+    renderView({ k1Docs: needsReviewDocs, taxFacts: ambiguousNeedsReviewFacts })
+
+    const box11S = screen.getByText('Passive income (loss) — multi-activity supplemental statement').closest('tr')!
+    expect(within(box11S).getByRole('button', { name: /needs review — depends on K-1 footnotes/i })).toBeInTheDocument()
+    expect(within(box11S).queryByRole('button', { name: /Sch D line 5 or 12/i })).not.toBeInTheDocument()
+
+    fireEvent.click(within(box11S).getByRole('button', { name: /needs review — depends on K-1 footnotes/i }))
+
+    expect(screen.getByRole('heading', { name: 'K-1 footnotes need review' })).toBeInTheDocument()
+    expect(screen.getByText('Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.')).toBeInTheDocument()
   })
 
   it('opens the existing K-1 code details resolution path from a needs-review marker', async () => {

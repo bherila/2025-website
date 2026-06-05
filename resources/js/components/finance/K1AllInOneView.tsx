@@ -380,13 +380,14 @@ function destinationGroupsForRow(
       return []
     }
     const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
+    const hasNeedsReviewRouting = routings.some((routing) => routing.routing.startsWith('needs_review_'))
 
     return [{
       key: column.doc.id,
       label: column.accountName,
       column,
-      routings,
-      needsReview: row.routable && routings.length === 0,
+      routings: hasNeedsReviewRouting ? [] : routings,
+      needsReview: row.routable && (routings.length === 0 || hasNeedsReviewRouting),
     }]
   })
 }
