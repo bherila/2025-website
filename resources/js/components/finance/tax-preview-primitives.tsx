@@ -222,7 +222,7 @@ export function FormTotalLine({
   onClick,
   isReviewed,
 }: {
-  label: string
+  label: React.ReactNode
   value: number | null
   double?: boolean
   boxRef?: string

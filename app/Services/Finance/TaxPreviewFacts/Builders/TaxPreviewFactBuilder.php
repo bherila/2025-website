@@ -249,6 +249,70 @@ abstract class TaxPreviewFactBuilder
     }
 
     /**
+     * Whether this K-1 represents an interest in a partnership engaged in the
+     * trade or business of trading securities for its own account.
+     *
+     * Used to classify the partner's Box 13 investment-interest expense:
+     * trader-fund interest is §163(d)(5)(A)(ii) "property held for investment"
+     * for a non-materially-participating partner (Rev. Rul. 2008-12 / 2008-38),
+     * so the allowed deduction is reported above-the-line on Schedule E Part II;
+     * ordinary investor interest is §163(d)(5)(A)(i) and goes to Schedule A line 9.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function isTraderFundK1(array $data): bool
+    {
+        $structuredTraderStatus = $data['fields']['partnershipPosition_traderInSecurities']['value'] ?? null;
+        if ($structuredTraderStatus === 'true') {
+            return true;
+        }
+
+        if ($structuredTraderStatus === 'false') {
+            return false;
+        }
+
+        $warnings = is_array($data['warnings'] ?? null) ? $data['warnings'] : [];
+        $notes = [];
+        foreach ($data['codes'] ?? [] as $items) {
+            if (! is_array($items)) {
+                continue;
+            }
+
+            foreach ($items as $item) {
+                if (is_array($item) && is_string($item['notes'] ?? null)) {
+                    $notes[] = $item['notes'];
+                }
+            }
+        }
+
+        $haystack = strtolower(implode(' ', array_filter([
+            is_string($data['raw_text'] ?? null) ? $data['raw_text'] : null,
+            ...array_filter($warnings, 'is_string'),
+            ...$notes,
+        ])));
+
+        // Some K-1 packages deny entity-level trader status while still reporting
+        // trader-style deductions that belong in the Form 8960 NII audit trail.
+        if (preg_match('/\b(?:not|isn\'t|is not|was not|no)\s+(?:a\s+)?trader in securities\b/i', $haystack)) {
+            foreach (['trader deductions', 'trading activities', 'trading in financial instruments', 'trading in financial instruments/commodities'] as $needle) {
+                if (str_contains($haystack, $needle)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        foreach (['trader in securities', 'trader deductions', 'trading activities', 'trading in financial instruments', 'trading in financial instruments/commodities'] as $needle) {
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     protected function k1Field(array $data, string $box): float

@@ -3,7 +3,7 @@
 import currency from 'currency.js'
 import { useState } from 'react'
 
-import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
 import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
 import type { ScheduleAFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
@@ -118,7 +118,7 @@ export default function ScheduleAPreview({
           />
           <FormLine
             boxRef="9"
-            label="Investment interest expense (from Form 4952)"
+            label={<>Investment interest expense (from Form 4952) <InfoTooltip>Only the ordinary §163(d)(5)(A)(i) portion of Form 4952&apos;s allowed investment interest is itemized here. Any portion attributable to a trader-fund K-1 (§163(d)(5)(A)(ii)) is deducted above-the-line on Schedule E, Part II, line 28 instead. Rev. Rul. 2008-38; Announcement 2008-65.</InfoTooltip></>}
             value={scheduleAFacts.investmentInterestTotal > 0 ? scheduleAFacts.investmentInterestTotal : null}
             {...(scheduleAFacts.investmentInterestTotal === 0 ? { raw: '—' } : {})}
             isReviewed={investmentInterestNeedsReview ? false : undefined}

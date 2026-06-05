@@ -46,6 +46,8 @@ function makeFacts(overrides: Partial<ScheduleEFacts> = {}): ScheduleEFacts {
     totalBox11ZZ: 0,
     totalBox13ZZ: 0,
     totalTraderNii: 0,
+    form4952InvestmentInterestSources: [],
+    totalForm4952InvestmentInterest: 0,
     totalPassive: 0,
     totalNonpassive: 0,
     totalNonpassiveIncome: 0,

@@ -1,28 +1,55 @@
 'use client'
 
 import currency from 'currency.js'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
+import Form4952SourceDetailModal from '@/components/finance/Form4952SourceDetailModal'
 import { ShortDividendSummaryCard } from '@/components/finance/ShortDividendDetailModal'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
+import { k1CodeSourceFieldId, k1FieldSourceFieldId } from '@/lib/finance/taxSourceFieldIds'
 import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
-import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine } from './tax-preview-primitives'
+import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip } from './tax-preview-primitives'
 
 interface Form4952PreviewProps {
   form4952Facts?: Form4952Facts | null
   shortDividendSummary?: ShortDividendSummary | null
   onLoadShortDividendSummary?: () => void
+  /** Open the source document review modal (K-1 or 1099) at an optional focus field. */
+  onReviewDoc?: (docId: number, focusFieldId?: string) => void
+  /** Drill to the Schedule B / A / E Miller columns. */
+  onOpenScheduleB?: () => void
+  onOpenScheduleA?: () => void
+  onOpenScheduleE?: () => void
+}
+
+function focusFieldIdFor(source: TaxFactSource): string | undefined {
+  if (source.box && source.code) {
+    return k1CodeSourceFieldId(source.box, source.code)
+  }
+  if (source.box) {
+    return k1FieldSourceFieldId(source.box)
+  }
+  return undefined
+}
+
+interface DetailModalState {
+  title: string
+  description?: string
+  sources: TaxFactSource[]
+  amountMode: 'signed' | 'absolute' | 'expense'
 }
 
 function SourceRows({
   sources,
   emptyLabel,
   amountMode = 'signed',
+  onGoToSource,
 }: {
   sources: TaxFactSource[]
   emptyLabel: string
-  amountMode?: 'signed' | 'absolute'
+  amountMode?: 'signed' | 'absolute' | 'expense'
+  onGoToSource?: (source: TaxFactSource) => void
 }) {
   if (sources.length === 0) {
     return <FormLine label={emptyLabel} raw="—" />
@@ -30,19 +57,28 @@ function SourceRows({
 
   return (
     <>
-      {sources.map((source, index) => (
-        <div key={source.id}>
-          <FormLine
-            {...(index === 0 ? { boxRef: '1a' } : {})}
-            label={source.label}
-            value={amountMode === 'absolute' ? Math.abs(source.amount) : source.amount}
-            isReviewed={source.isReviewed === false ? false : undefined}
-          />
-          {source.notes && (
-            <FormLine label="Note" raw={source.notes} note />
-          )}
-        </div>
-      ))}
+      {sources.map((source, index) => {
+        const value = amountMode === 'absolute'
+          ? Math.abs(source.amount)
+          : amountMode === 'expense'
+            ? -Math.abs(source.amount)
+            : source.amount
+        const canGoToSource = onGoToSource && source.taxDocumentId != null
+        return (
+          <div key={source.id}>
+            <FormLine
+              {...(index === 0 ? { boxRef: '1a' } : {})}
+              label={source.label}
+              value={value}
+              isReviewed={source.isReviewed === false ? false : undefined}
+              {...(canGoToSource ? { onDetails: () => onGoToSource(source), detailsLabel: 'Go to source', detailsTooltip: 'Open the source document' } : {})}
+            />
+            {source.notes && (
+              <FormLine label="Note" raw={source.notes} note />
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -51,7 +87,13 @@ export default function Form4952Preview({
   form4952Facts,
   shortDividendSummary,
   onLoadShortDividendSummary,
+  onReviewDoc,
+  onOpenScheduleB,
+  onOpenScheduleA,
+  onOpenScheduleE,
 }: Form4952PreviewProps) {
+  const [detailModal, setDetailModal] = useState<DetailModalState | null>(null)
+
   useEffect(() => {
     onLoadShortDividendSummary?.()
   }, [onLoadShortDividendSummary])
@@ -78,6 +120,28 @@ export default function Form4952Preview({
   const scenC_qdElected = Math.min(totalQualDiv, gapToFill)
   const scenC_nii = currency(niiBefore).add(scenC_qdElected).value
   const scenC_deductible = Math.min(totalInvIntExpense, scenC_nii)
+
+  // Route a source's "go to source" click to the K-1/1099 review modal (with a focus
+  // field for K-1 boxes) or fall back to the Schedule B column for dividend sources.
+  const handleGoToSource = (source: TaxFactSource) => {
+    if (source.taxDocumentId != null && onReviewDoc) {
+      onReviewDoc(source.taxDocumentId, focusFieldIdFor(source))
+      return
+    }
+    onOpenScheduleB?.()
+  }
+
+  const drillForDestination = (destination: string): (() => void) | undefined => {
+    if (destination === 'sch-a') {
+      return onOpenScheduleA
+    }
+    if (destination === 'sch-e') {
+      return onOpenScheduleE
+    }
+    return undefined
+  }
+
+  const showCarryProration = form4952Facts.carryDestinations.length > 1
 
   return (
     <div className="space-y-5">
@@ -120,32 +184,90 @@ export default function Form4952Preview({
           <SourceRows
             sources={form4952Facts.investmentInterestSources}
             emptyLabel="No investment interest sources found"
+            amountMode="expense"
+            onGoToSource={handleGoToSource}
           />
           <FormLine boxRef="2" label="Prior-year disallowed carryforward" raw="Check prior return" />
           <FormTotalLine boxRef="3" label="Total investment interest" value={-totalInvIntExpense} />
         </FormBlock>
 
         <FormBlock title="Part II — Net Investment Income">
-          <FormLine boxRef="4a" label="Gross investment income from Schedule B" value={form4952Facts.grossInvestmentIncomeFromScheduleB} />
-          <FormLine boxRef="4a" label="Gross investment income from K-1s" value={form4952Facts.grossInvestmentIncomeFromK1} />
-          <FormTotalLine boxRef="4a" label="Gross investment income" value={form4952Facts.grossInvestmentIncomeTotal} />
+          <FormLine
+            boxRef="4a"
+            label="Gross investment income from Schedule B"
+            value={form4952Facts.grossInvestmentIncomeFromScheduleB}
+            {...(onOpenScheduleB && form4952Facts.grossInvestmentIncomeFromScheduleB !== 0 ? { onClick: onOpenScheduleB } : {})}
+          />
+          <FormLine
+            boxRef="4a"
+            label="Gross investment income from K-1s"
+            value={form4952Facts.grossInvestmentIncomeFromK1}
+            {...(form4952Facts.grossInvestmentIncomeFromK1Sources.length > 0
+              ? {
+                onDetails: () => setDetailModal({
+                  title: 'Gross investment income from K-1s (line 4a)',
+                  description: 'Each partnership’s share of investment income that feeds Form 4952 line 4a. Net capital gain is excluded.',
+                  sources: form4952Facts.grossInvestmentIncomeFromK1Sources,
+                  amountMode: 'signed',
+                }),
+                detailsLabel: 'Sources',
+                detailsTooltip: 'List each K-1 and go to its source',
+              }
+              : {})}
+          />
+          <FormTotalLine
+            boxRef="4a"
+            label={<>Gross investment income <InfoTooltip>Form 4952 line 4a: gross income from property held for investment — interest, ordinary dividends, royalties, and K-1 investment income. <strong>Excludes</strong> net capital gain (including net long-term capital gains) and qualified dividends unless elected on lines 4d/4e/4g (which forfeits the preferential rate). IRC §163(d)(4)(B); 2025 Form 4952 line 4a instructions.</InfoTooltip></>}
+            value={form4952Facts.grossInvestmentIncomeTotal}
+          />
           {totalQualDiv > 0 && (
-            <FormLine boxRef="4b" label="Qualified dividends excluded before election" value={-totalQualDiv} />
+            <FormLine
+              boxRef="4b"
+              label={<>Qualified dividends excluded before election <InfoTooltip>Qualified dividends are included in line 4a ordinary dividends but excluded from investment income unless you elect to include them (line 4g). Electing forfeits the preferential qualified-dividend rate on the elected amount. Flush language of IRC §163(d)(4)(B); §1(h)(11)(D)(i).</InfoTooltip></>}
+              value={-totalQualDiv}
+              {...(form4952Facts.qualifiedDividendSources.length > 0
+                ? {
+                  onDetails: () => setDetailModal({
+                    title: 'Qualified dividends included on line 4a (line 4b)',
+                    description: 'These qualified dividends are subtracted on line 4b. Go to each source to verify.',
+                    sources: form4952Facts.qualifiedDividendSources,
+                    amountMode: 'signed',
+                  }),
+                  detailsLabel: 'Sources',
+                  detailsTooltip: 'List each qualified-dividend source',
+                }
+                : {})}
+            />
           )}
           <FormLine boxRef="4c" label="Net investment income after qualified dividends" value={form4952Facts.line4cNetInvestmentIncomeAfterQualifiedDividends} />
           <SourceRows
             sources={form4952Facts.investmentExpenseSources}
             emptyLabel="No investment expenses reducing NII"
+            onGoToSource={handleGoToSource}
           />
-          <FormTotalLine boxRef="6" label="Net investment income (no QD election)" value={niiBefore} />
+          <FormTotalLine
+            boxRef="6"
+            label={<>Net investment income (no QD election) <InfoTooltip>Form 4952 line 6 (net investment income) = investment income (line 4h) − investment expenses (line 5). Investment interest is deductible only up to this amount; the excess carries forward. IRC §163(d)(1), §163(d)(4)(A).</InfoTooltip></>}
+            value={niiBefore}
+          />
         </FormBlock>
       </div>
+
+      <Callout kind="info" title="What counts as gross investment income (line 4a)">
+        <p>
+          Included: interest, ordinary dividends, royalties, and K-1 investment income.{' '}
+          <strong>Not included:</strong> net capital gain — including net long-term capital gains — and qualified
+          dividends, unless you elect to include them on lines 4d/4e/4g (which gives up the preferential
+          capital-gains / qualified-dividend rate on the elected amount). IRC §163(d)(4)(B).
+        </p>
+      </Callout>
 
       {form4952Facts.excludedInvestmentExpenseSources.length > 0 && (
         <FormBlock title="Tracked but Excluded Investment Expenses">
           <SourceRows
             sources={form4952Facts.excludedInvestmentExpenseSources}
             emptyLabel="No excluded investment expenses"
+            onGoToSource={handleGoToSource}
           />
           <FormTotalLine label="Total excluded investment expenses" value={form4952Facts.totalExcludedInvestmentExpenses} />
         </FormBlock>
@@ -179,6 +301,47 @@ export default function Form4952Preview({
         <FormLine boxRef="7" label="Deductible investment interest expense" value={form4952Facts.deductibleInvestmentInterestExpense} />
         <FormTotalLine boxRef="8" label="Disallowed carryforward" value={form4952Facts.disallowedCarryforward} double />
       </FormBlock>
+
+      {form4952Facts.carryDestinations.length > 0 && (
+        <FormBlock title="Where the deductible carries">
+          {form4952Facts.carryDestinations.map((destination) => {
+            const drill = drillForDestination(destination.destination)
+            return (
+              <div key={destination.destination}>
+                <FormLine
+                  label={<>{destination.label} <InfoTooltip>{destination.citation}</InfoTooltip></>}
+                  value={destination.allowedDeduction}
+                  {...(drill ? { onClick: drill } : {})}
+                />
+                {showCarryProration && (
+                  <FormSubLine
+                    text={`Pro-rata: ${fmtAmt(form4952Facts.deductibleInvestmentInterestExpense)} allowed × ${(destination.share * 100).toFixed(1)}% (${fmtAmt(destination.grossInterest)} of ${fmtAmt(totalInvIntExpense)} gross) = ${fmtAmt(destination.allowedDeduction)}${destination.carryforward > 0 ? `; carryforward ${fmtAmt(destination.carryforward)}` : ''}`}
+                  />
+                )}
+              </div>
+            )
+          })}
+          {showCarryProration && (
+            <FormLine
+              label="Allocation method"
+              raw="Pro-rata (Rev. Rul. 2008-38)"
+              note
+            />
+          )}
+        </FormBlock>
+      )}
+
+      {detailModal && (
+        <Form4952SourceDetailModal
+          open
+          title={detailModal.title}
+          {...(detailModal.description ? { description: detailModal.description } : {})}
+          sources={detailModal.sources}
+          amountMode={detailModal.amountMode}
+          onGoToSource={handleGoToSource}
+          onClose={() => setDetailModal(null)}
+        />
+      )}
     </div>
   )
 }

@@ -55,6 +55,8 @@ class Form8960FactsBuilderTest extends TestCase
             totalBox13ZZ: 0.0,
             traderNiiSources: [],
             totalTraderNii: $trader,
+            form4952InvestmentInterestSources: [],
+            totalForm4952InvestmentInterest: 0.0,
             totalPassive: $passive,
             totalNonpassive: 0.0,
             totalNonpassiveIncome: 0.0,
@@ -121,6 +123,13 @@ class Form8960FactsBuilderTest extends TestCase
             totalQualifiedDividends: 0.0,
             deductibleInvestmentInterestExpense: $deductibleInvestmentInterestExpense,
             disallowedCarryforward: 0.0,
+            grossInvestmentIncomeFromK1Sources: [],
+            qualifiedDividendSources: [],
+            deductibleScheduleEAboveLine: 0.0,
+            deductibleScheduleAItemized: $deductibleInvestmentInterestExpense,
+            carryforwardScheduleE: 0.0,
+            carryforwardScheduleA: 0.0,
+            carryDestinations: [],
         );
     }
 

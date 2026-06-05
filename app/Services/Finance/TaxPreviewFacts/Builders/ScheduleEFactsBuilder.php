@@ -4,6 +4,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleEFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -15,7 +16,7 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      */
-    public function build(array $k1Docs, array $docs1099): ScheduleEFacts
+    public function build(array $k1Docs, array $docs1099, Form4952Facts $form4952): ScheduleEFacts
     {
         $miscIncomeSources = $this->miscIncomeSources($docs1099);
         $box1Sources = [];
@@ -81,8 +82,24 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
         $totalBox11ZZ = $this->sumSources($box11ZZSources);
         $totalBox13ZZ = $this->sumAbsoluteSources($box13ZZSources);
         $totalPassive = $this->sumMoney([$totalBox2, $totalBox3]);
+        // §163(d)(5)(A)(ii) trader-fund investment interest allowed on Form 4952 is deducted
+        // above-the-line on Schedule E, Part II, line 28 (Rev. Rul. 2008-38; Announcement 2008-65).
+        $form4952InvestmentInterestSources = [];
+        $totalForm4952InvestmentInterest = 0.0;
+        if ($form4952->deductibleScheduleEAboveLine > 0.0) {
+            $totalForm4952InvestmentInterest = $form4952->deductibleScheduleEAboveLine;
+            $form4952InvestmentInterestSources[] = new TaxFactSource(
+                id: 'form4952-schedule-e-investment-interest',
+                label: 'Investment interest — trader fund (Form 4952 allowed, above-the-line)',
+                amount: $this->roundMoney(-$totalForm4952InvestmentInterest),
+                sourceType: TaxFactSourceType::Form4952ScheduleEInvestmentInterest,
+                routing: TaxFactRouting::ScheduleELine28,
+                routingReason: 'Allowed §163(d)(5)(A)(ii) trader-fund investment interest is deducted above-the-line on Schedule E, Part II, line 28 (§62(a)(1); Rev. Rul. 2008-12 & 2008-38; Announcement 2008-65).',
+            );
+        }
+
         $totalNonpassiveIncome = $this->roundMoney($totalNonpassiveIncome);
-        $totalNonpassiveLoss = $this->roundMoney($totalNonpassiveLoss);
+        $totalNonpassiveLoss = $this->roundMoney($this->sumMoney([$totalNonpassiveLoss, -$totalForm4952InvestmentInterest]));
         $totalNonpassive = $this->sumMoney([$totalNonpassiveIncome, $totalNonpassiveLoss]);
         $miscIncomeTotal = $this->sumSources($miscIncomeSources);
 
@@ -104,6 +121,8 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
             totalBox13ZZ: $totalBox13ZZ,
             traderNiiSources: $traderNiiSources,
             totalTraderNii: $this->sumSources($traderNiiSources),
+            form4952InvestmentInterestSources: $form4952InvestmentInterestSources,
+            totalForm4952InvestmentInterest: $this->roundMoney($totalForm4952InvestmentInterest),
             totalPassive: $totalPassive,
             totalNonpassive: $totalNonpassive,
             totalNonpassiveIncome: $totalNonpassiveIncome,
@@ -251,60 +270,5 @@ class ScheduleEFactsBuilder extends TaxPreviewFactBuilder
         }
 
         return $sources;
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function isTraderFundK1(array $data): bool
-    {
-        $structuredTraderStatus = $data['fields']['partnershipPosition_traderInSecurities']['value'] ?? null;
-        if ($structuredTraderStatus === 'true') {
-            return true;
-        }
-
-        if ($structuredTraderStatus === 'false') {
-            return false;
-        }
-
-        $warnings = is_array($data['warnings'] ?? null) ? $data['warnings'] : [];
-        $notes = [];
-        foreach ($data['codes'] ?? [] as $items) {
-            if (! is_array($items)) {
-                continue;
-            }
-
-            foreach ($items as $item) {
-                if (is_array($item) && is_string($item['notes'] ?? null)) {
-                    $notes[] = $item['notes'];
-                }
-            }
-        }
-
-        $haystack = strtolower(implode(' ', array_filter([
-            is_string($data['raw_text'] ?? null) ? $data['raw_text'] : null,
-            ...array_filter($warnings, 'is_string'),
-            ...$notes,
-        ])));
-
-        // Some K-1 packages deny entity-level trader status while still reporting
-        // trader-style deductions that belong in the Form 8960 NII audit trail.
-        if (preg_match('/\b(?:not|isn\'t|is not|was not|no)\s+(?:a\s+)?trader in securities\b/i', $haystack)) {
-            foreach (['trader deductions', 'trading activities', 'trading in financial instruments', 'trading in financial instruments/commodities'] as $needle) {
-                if (str_contains($haystack, $needle)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        foreach (['trader in securities', 'trader deductions', 'trading activities', 'trading in financial instruments', 'trading in financial instruments/commodities'] as $needle) {
-            if (str_contains($haystack, $needle)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

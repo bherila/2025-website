@@ -48,6 +48,11 @@ readonly class ScheduleEFacts
     public array $traderNiiSources;
 
     /**
+     * @var TaxFactSource[]
+     */
+    public array $form4952InvestmentInterestSources;
+
+    /**
      * @param  TaxFactSource[]  $miscIncomeSources
      * @param  TaxFactSource[]  $box1Sources
      * @param  TaxFactSource[]  $box2Sources
@@ -56,6 +61,7 @@ readonly class ScheduleEFacts
      * @param  TaxFactSource[]  $box11ZZSources
      * @param  TaxFactSource[]  $box13ZZSources
      * @param  TaxFactSource[]  $traderNiiSources
+     * @param  TaxFactSource[]  $form4952InvestmentInterestSources
      */
     public function __construct(
         array $miscIncomeSources,
@@ -75,6 +81,8 @@ readonly class ScheduleEFacts
         public float $totalBox13ZZ,
         array $traderNiiSources,
         public float $totalTraderNii,
+        array $form4952InvestmentInterestSources,
+        public float $totalForm4952InvestmentInterest,
         public float $totalPassive,
         public float $totalNonpassive,
         public float $totalNonpassiveIncome,
@@ -89,6 +97,7 @@ readonly class ScheduleEFacts
         $this->box11ZZSources = $box11ZZSources;
         $this->box13ZZSources = $box13ZZSources;
         $this->traderNiiSources = $traderNiiSources;
+        $this->form4952InvestmentInterestSources = $form4952InvestmentInterestSources;
     }
 
     /**
@@ -114,6 +123,8 @@ readonly class ScheduleEFacts
             'totalBox13ZZ' => $this->totalBox13ZZ,
             'traderNiiSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->traderNiiSources),
             'totalTraderNii' => $this->totalTraderNii,
+            'form4952InvestmentInterestSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->form4952InvestmentInterestSources),
+            'totalForm4952InvestmentInterest' => $this->totalForm4952InvestmentInterest,
             'totalPassive' => $this->totalPassive,
             'totalNonpassive' => $this->totalNonpassive,
             'totalNonpassiveIncome' => $this->totalNonpassiveIncome,

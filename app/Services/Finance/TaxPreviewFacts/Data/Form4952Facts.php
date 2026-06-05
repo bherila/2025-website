@@ -23,9 +23,27 @@ readonly class Form4952Facts
     public array $excludedInvestmentExpenseSources;
 
     /**
+     * @var TaxFactSource[]
+     */
+    public array $grossInvestmentIncomeFromK1Sources;
+
+    /**
+     * @var TaxFactSource[]
+     */
+    public array $qualifiedDividendSources;
+
+    /**
+     * @var Form4952CarryDestination[]
+     */
+    public array $carryDestinations;
+
+    /**
      * @param  TaxFactSource[]  $investmentInterestSources
      * @param  TaxFactSource[]  $investmentExpenseSources
      * @param  TaxFactSource[]  $excludedInvestmentExpenseSources
+     * @param  TaxFactSource[]  $grossInvestmentIncomeFromK1Sources
+     * @param  TaxFactSource[]  $qualifiedDividendSources
+     * @param  Form4952CarryDestination[]  $carryDestinations
      */
     public function __construct(
         array $investmentInterestSources,
@@ -42,14 +60,24 @@ readonly class Form4952Facts
         public float $totalQualifiedDividends,
         public float $deductibleInvestmentInterestExpense,
         public float $disallowedCarryforward,
+        array $grossInvestmentIncomeFromK1Sources,
+        array $qualifiedDividendSources,
+        public float $deductibleScheduleEAboveLine,
+        public float $deductibleScheduleAItemized,
+        public float $carryforwardScheduleE,
+        public float $carryforwardScheduleA,
+        array $carryDestinations,
     ) {
         $this->investmentInterestSources = $investmentInterestSources;
         $this->investmentExpenseSources = $investmentExpenseSources;
         $this->excludedInvestmentExpenseSources = $excludedInvestmentExpenseSources;
+        $this->grossInvestmentIncomeFromK1Sources = $grossInvestmentIncomeFromK1Sources;
+        $this->qualifiedDividendSources = $qualifiedDividendSources;
+        $this->carryDestinations = $carryDestinations;
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float}
+     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>}
      */
     public function toArray(): array
     {
@@ -68,6 +96,13 @@ readonly class Form4952Facts
             'totalQualifiedDividends' => $this->totalQualifiedDividends,
             'deductibleInvestmentInterestExpense' => $this->deductibleInvestmentInterestExpense,
             'disallowedCarryforward' => $this->disallowedCarryforward,
+            'grossInvestmentIncomeFromK1Sources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->grossInvestmentIncomeFromK1Sources),
+            'qualifiedDividendSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->qualifiedDividendSources),
+            'deductibleScheduleEAboveLine' => $this->deductibleScheduleEAboveLine,
+            'deductibleScheduleAItemized' => $this->deductibleScheduleAItemized,
+            'carryforwardScheduleE' => $this->carryforwardScheduleE,
+            'carryforwardScheduleA' => $this->carryforwardScheduleA,
+            'carryDestinations' => array_map(static fn (Form4952CarryDestination $destination): array => $destination->toArray(), $this->carryDestinations),
         ];
     }
 }

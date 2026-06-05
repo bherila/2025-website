@@ -151,6 +151,13 @@ class ScheduleAFactsBuilderTest extends TestCase
             totalQualifiedDividends: 0.0,
             deductibleInvestmentInterestExpense: 0.0,
             disallowedCarryforward: 0.0,
+            grossInvestmentIncomeFromK1Sources: [],
+            qualifiedDividendSources: [],
+            deductibleScheduleEAboveLine: 0.0,
+            deductibleScheduleAItemized: 0.0,
+            carryforwardScheduleE: 0.0,
+            carryforwardScheduleA: 0.0,
+            carryDestinations: [],
         );
     }
 }
