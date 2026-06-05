@@ -74,11 +74,12 @@ class FeeAnalyticsService
     }
 
     /**
-     * @return array<int, array{month:string,gross_return:float,net_return:float,fees:float}>
+     * @return array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>
      */
     public function monthlyFeeDragSeries(int $accountId, int $year): array
     {
         $series = [];
+        $latestStatementClose = $this->latestStatementCloseForAccount($accountId, CarbonImmutable::create($year, 12, 31)->startOfDay());
 
         for ($month = 1; $month <= 12; $month++) {
             $start = CarbonImmutable::create($year, $month, 1)->startOfDay();
@@ -86,33 +87,44 @@ class FeeAnalyticsService
             $fees = $this->actualFeesForPeriod($accountId, $start, $end, false)['total'];
             $cashFlows = $this->cashFlowsForPeriod($accountId, $start, $end);
             $startingBalance = $this->balanceAtPeriodStart($accountId, $start);
-            $endingBalance = $this->balanceAtPeriodEnd($accountId, $end) ?? $startingBalance;
-            $netReturn = $this->netReturn($startingBalance, $endingBalance, $cashFlows['deposits'], $cashFlows['withdrawals']);
+            $endingBalance = $this->balanceAtPeriodEnd($accountId, $start, $end);
+            $returnMetrics = $this->periodReturnMetrics(
+                $startingBalance,
+                $endingBalance,
+                $cashFlows['deposits'],
+                $cashFlows['withdrawals'],
+                $fees,
+            );
 
             $series[] = [
                 'month' => $start->format('Y-m'),
-                'gross_return' => MoneyMath::add($netReturn, $fees),
-                'net_return' => $netReturn,
+                'gross_return_pct' => $returnMetrics['gross_return_pct'],
+                'net_return_pct' => $returnMetrics['net_return_pct'],
                 'fees' => $fees,
+                'is_projected' => $this->monthIsProjected($start, $latestStatementClose),
             ];
         }
 
-        return $series;
+        return $this->withProjectedReturns($series);
     }
 
     /**
      * @param  array<int, int>  $accountIds
-     * @return array<int, array{month:string,gross_return:float,net_return:float,fees:float}>
+     * @return array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>
      */
     public function monthlyFeeDragSeriesForAccounts(array $accountIds, int $year): array
     {
         $accountIds = array_values(array_unique(array_map(static fn (mixed $accountId): int => (int) $accountId, $accountIds)));
         [$yearStart, $yearEnd] = $this->yearBounds($year);
 
-        $feeTotalsByMonth = [];
+        $feeTotalsByAccountMonth = [];
         foreach ($this->feeLineItemsForAccountsForPeriod($accountIds, $yearStart, $yearEnd) as $row) {
+            $feeAccountId = (int) $row->t_account;
             $month = CarbonImmutable::parse((string) $row->t_date)->format('Y-m');
-            $feeTotalsByMonth[$month] = MoneyMath::add($feeTotalsByMonth[$month] ?? 0.0, $this->feeAmountForLineItem($row));
+            $feeTotalsByAccountMonth[$feeAccountId][$month] = MoneyMath::add(
+                $feeTotalsByAccountMonth[$feeAccountId][$month] ?? 0.0,
+                $this->feeAmountForLineItem($row),
+            );
         }
 
         $cashFlows = $this->cashFlowsForAccountsForPeriod($accountIds, $yearStart, $yearEnd);
@@ -124,42 +136,125 @@ class FeeAnalyticsService
             ->orderBy('statement_id')
             ->get(['acct_id', 'balance', 'statement_closing_date', 'statement_id']);
         $statementsByAccount = $this->groupStatementsByAccount($statements);
-        $lastBalances = FinAccounts::query()
-            ->whereIn('acct_id', $accountIds)
-            ->pluck('acct_last_balance', 'acct_id')
-            ->map(static fn (mixed $balance): float => (float) $balance);
+        $latestStatementClose = $this->latestStatementCloseFromGroupedStatements($statementsByAccount);
 
         $series = [];
         for ($month = 1; $month <= 12; $month++) {
             $start = CarbonImmutable::create($year, $month, 1)->startOfDay();
             $end = $start->endOfMonth();
             $monthKey = $start->format('Y-m');
-            $netReturn = 0.0;
+            $startingBalanceTotal = 0.0;
+            $endingBalanceTotal = 0.0;
+            $depositsTotal = 0.0;
+            $withdrawalsTotal = 0.0;
+            $fees = 0.0;
 
             foreach ($accountIds as $accountId) {
                 $accountStatements = $statementsByAccount[$accountId] ?? [];
                 $startingBalance = $this->balanceOnOrBefore($accountStatements, $start->subDay())
-                    ?? $this->balanceOnOrAfter($accountStatements, $start)
-                    ?? (float) ($lastBalances[$accountId] ?? 0.0);
-                $endingBalance = $this->balanceOnOrBefore($accountStatements, $end)
-                    ?? $startingBalance;
+                    ?? $this->balanceOnOrAfter($accountStatements, $start);
+                $endingBalance = $this->balanceBetween($accountStatements, $start, $end);
+                if ($startingBalance === null || $endingBalance === null) {
+                    continue;
+                }
+
                 $accountCashFlows = $cashFlows[$accountId][$monthKey] ?? ['deposits' => 0.0, 'withdrawals' => 0.0];
-                $netReturn = MoneyMath::add(
-                    $netReturn,
-                    $this->netReturn($startingBalance, $endingBalance, $accountCashFlows['deposits'], $accountCashFlows['withdrawals']),
-                );
+                $startingBalanceTotal = MoneyMath::add($startingBalanceTotal, $startingBalance);
+                $endingBalanceTotal = MoneyMath::add($endingBalanceTotal, $endingBalance);
+                $depositsTotal = MoneyMath::add($depositsTotal, $accountCashFlows['deposits']);
+                $withdrawalsTotal = MoneyMath::add($withdrawalsTotal, $accountCashFlows['withdrawals']);
+                // Only count fees from accounts whose balances are in the denominator, so the
+                // blended gross_return_pct stays over a single consistent account set.
+                $fees = MoneyMath::add($fees, $feeTotalsByAccountMonth[$accountId][$monthKey] ?? 0.0);
             }
 
-            $fees = $feeTotalsByMonth[$monthKey] ?? 0.0;
+            $returnMetrics = $this->periodReturnMetrics(
+                $startingBalanceTotal,
+                $endingBalanceTotal,
+                $depositsTotal,
+                $withdrawalsTotal,
+                $fees,
+            );
+
             $series[] = [
                 'month' => $monthKey,
-                'gross_return' => MoneyMath::add($netReturn, $fees),
-                'net_return' => $netReturn,
+                'gross_return_pct' => $returnMetrics['gross_return_pct'],
+                'net_return_pct' => $returnMetrics['net_return_pct'],
                 'fees' => $fees,
+                'is_projected' => $this->monthIsProjected($start, $latestStatementClose),
             ];
         }
 
+        return $this->withProjectedReturns($series);
+    }
+
+    /**
+     * Projected months (after the latest statement close) have no in-month statement, so their
+     * percentages come back null. Carry the most recent actual annualized return forward into them
+     * as a flat dotted projection, so the chart draws a continued line instead of stopping dead.
+     * Non-projected gaps (early months with no statement basis yet) are intentionally left null.
+     *
+     * @param  array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>  $series
+     * @return array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>
+     */
+    private function withProjectedReturns(array $series): array
+    {
+        $lastActualGrossPct = null;
+        $lastActualNetPct = null;
+
+        foreach ($series as $index => $row) {
+            if (! $row['is_projected']) {
+                if ($row['gross_return_pct'] !== null) {
+                    $lastActualGrossPct = $row['gross_return_pct'];
+                }
+
+                if ($row['net_return_pct'] !== null) {
+                    $lastActualNetPct = $row['net_return_pct'];
+                }
+
+                continue;
+            }
+
+            if ($row['gross_return_pct'] === null && $lastActualGrossPct !== null) {
+                $series[$index]['gross_return_pct'] = $lastActualGrossPct;
+            }
+
+            if ($row['net_return_pct'] === null && $lastActualNetPct !== null) {
+                $series[$index]['net_return_pct'] = $lastActualNetPct;
+            }
+        }
+
         return $series;
+    }
+
+    /**
+     * @return array{net_return:float|null,gross_return:float|null,net_return_pct:float|null,gross_return_pct:float|null}
+     */
+    public function periodReturnMetrics(
+        ?float $startingBalance,
+        ?float $endingBalance,
+        float $deposits,
+        float $withdrawals,
+        float $fees,
+    ): array {
+        if ($startingBalance === null || $endingBalance === null || $startingBalance === 0.0) {
+            return [
+                'net_return' => null,
+                'gross_return' => null,
+                'net_return_pct' => null,
+                'gross_return_pct' => null,
+            ];
+        }
+
+        $netReturn = $this->netReturn($startingBalance, $endingBalance, $deposits, $withdrawals);
+        $grossReturn = MoneyMath::add($netReturn, $fees);
+
+        return [
+            'net_return' => $netReturn,
+            'gross_return' => $grossReturn,
+            'net_return_pct' => $this->annualizedReturnPct($netReturn, $startingBalance),
+            'gross_return_pct' => $this->annualizedReturnPct($grossReturn, $startingBalance),
+        ];
     }
 
     /**
@@ -630,16 +725,29 @@ class FeeAnalyticsService
         );
     }
 
-    private function balanceAtPeriodStart(int $accountId, CarbonImmutable $start): float
+    private function annualizedReturnPct(float $periodReturn, float $startingBalance): float
     {
-        return $this->statementBalanceOnOrBefore($accountId, $start->subDay())
-            ?? $this->statementBalanceOnOrAfter($accountId, $start)
-            ?? $this->accountLastBalance($accountId);
+        return round(($periodReturn / $startingBalance) * 12 * 100, 4);
     }
 
-    private function balanceAtPeriodEnd(int $accountId, CarbonImmutable $end): ?float
+    private function balanceAtPeriodStart(int $accountId, CarbonImmutable $start): ?float
     {
-        return $this->statementBalanceOnOrBefore($accountId, $end);
+        return $this->statementBalanceOnOrBefore($accountId, $start->subDay())
+            ?? $this->statementBalanceOnOrAfter($accountId, $start);
+    }
+
+    private function balanceAtPeriodEnd(int $accountId, CarbonImmutable $start, CarbonImmutable $end): ?float
+    {
+        $statement = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereNotNull('statement_closing_date')
+            ->whereDate('statement_closing_date', '>=', $start->toDateString())
+            ->whereDate('statement_closing_date', '<=', $end->toDateString())
+            ->orderByDesc('statement_closing_date')
+            ->orderByDesc('statement_id')
+            ->first(['balance']);
+
+        return $statement instanceof FinStatement ? (float) $statement->balance : null;
     }
 
     private function statementBalanceOnOrBefore(int $accountId, CarbonImmutable $date): ?float
@@ -647,7 +755,7 @@ class FeeAnalyticsService
         $statement = FinStatement::query()
             ->where('acct_id', $accountId)
             ->whereNotNull('statement_closing_date')
-            ->where('statement_closing_date', '<=', $date->toDateString())
+            ->whereDate('statement_closing_date', '<=', $date->toDateString())
             ->orderByDesc('statement_closing_date')
             ->orderByDesc('statement_id')
             ->first(['balance']);
@@ -660,7 +768,7 @@ class FeeAnalyticsService
         $statement = FinStatement::query()
             ->where('acct_id', $accountId)
             ->whereNotNull('statement_closing_date')
-            ->where('statement_closing_date', '>=', $date->toDateString())
+            ->whereDate('statement_closing_date', '>=', $date->toDateString())
             ->orderBy('statement_closing_date')
             ->orderBy('statement_id')
             ->first(['balance']);
@@ -715,6 +823,26 @@ class FeeAnalyticsService
     /**
      * @param  array<int, array{date:CarbonImmutable,balance:float}>  $statements
      */
+    private function balanceBetween(array $statements, CarbonImmutable $start, CarbonImmutable $end): ?float
+    {
+        $balance = null;
+
+        foreach ($statements as $statement) {
+            if ($statement['date']->greaterThan($end)) {
+                break;
+            }
+
+            if ($statement['date']->greaterThanOrEqualTo($start)) {
+                $balance = $statement['balance'];
+            }
+        }
+
+        return $balance;
+    }
+
+    /**
+     * @param  array<int, array{date:CarbonImmutable,balance:float}>  $statements
+     */
     private function balanceOnOrAfter(array $statements, CarbonImmutable $date): ?float
     {
         foreach ($statements as $statement) {
@@ -731,6 +859,40 @@ class FeeAnalyticsService
         $account = FinAccounts::query()->where('acct_id', $accountId)->first(['acct_last_balance']);
 
         return $account instanceof FinAccounts ? (float) $account->acct_last_balance : 0.0;
+    }
+
+    private function latestStatementCloseForAccount(int $accountId, CarbonImmutable $yearEnd): ?CarbonImmutable
+    {
+        $closingDate = FinStatement::query()
+            ->where('acct_id', $accountId)
+            ->whereNotNull('statement_closing_date')
+            ->where('statement_closing_date', '<=', $yearEnd->toDateString())
+            ->max('statement_closing_date');
+
+        return $closingDate !== null ? CarbonImmutable::parse((string) $closingDate)->startOfDay() : null;
+    }
+
+    /**
+     * @param  array<int, array<int, array{date:CarbonImmutable,balance:float}>>  $statementsByAccount
+     */
+    private function latestStatementCloseFromGroupedStatements(array $statementsByAccount): ?CarbonImmutable
+    {
+        $latest = null;
+
+        foreach ($statementsByAccount as $accountStatements) {
+            foreach ($accountStatements as $statement) {
+                if (! $latest instanceof CarbonImmutable || $statement['date']->greaterThan($latest)) {
+                    $latest = $statement['date'];
+                }
+            }
+        }
+
+        return $latest;
+    }
+
+    private function monthIsProjected(CarbonImmutable $monthStart, ?CarbonImmutable $latestStatementClose): bool
+    {
+        return ! $latestStatementClose instanceof CarbonImmutable || $monthStart->greaterThan($latestStatementClose);
     }
 
     /**
