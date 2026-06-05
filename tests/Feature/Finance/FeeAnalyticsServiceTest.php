@@ -12,7 +12,9 @@ use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\FeeAnalyticsService;
 use App\Services\Finance\MoneyMath;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class FeeAnalyticsServiceTest extends TestCase
@@ -373,6 +375,59 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertSame('match', $rows[0]['status']);
         $this->assertSame(150.0, $rows[0]['k1_fees_schE']);
         $this->assertSame(150.0, $rows[0]['statement_fees_schE']);
+    }
+
+    public function test_statement_return_metrics_batches_line_item_lookups(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $this->createStatement($account, '2024-12-31', 1000);
+        $januaryStatement = null;
+        $februaryStatement = null;
+
+        for ($index = 1; $index <= 24; $index++) {
+            $closingDate = CarbonImmutable::create(2025, 1, 1)
+                ->addMonths($index - 1)
+                ->endOfMonth()
+                ->toDateString();
+            $statement = $this->createStatement($account, $closingDate, 1000 + ($index * 100));
+
+            if ($index === 1) {
+                $januaryStatement = $statement;
+            } elseif ($index === 2) {
+                $februaryStatement = $statement;
+            }
+        }
+
+        $this->assertInstanceOf(FinStatement::class, $januaryStatement);
+        $this->assertInstanceOf(FinStatement::class, $februaryStatement);
+
+        $this->createLineItem($account, ['t_date' => '2025-01-10', 't_type' => 'Deposit', 't_amt' => 50]);
+        $this->createLineItem($account, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -5]);
+
+        $statements = DB::table('fin_statements')
+            ->where('acct_id', $account->acct_id)
+            ->orderBy('statement_closing_date')
+            ->orderBy('statement_id')
+            ->get(['statement_id', 'statement_closing_date', 'balance']);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $metrics = app(FeeAnalyticsService::class)->statementReturnMetrics((int) $account->acct_id, $statements);
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertEqualsWithDelta(5.5, $metrics[(int) $januaryStatement->statement_id]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(5.5, $metrics[(int) $januaryStatement->statement_id]['ytd_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(9.0909, $metrics[(int) $februaryStatement->statement_id]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(15.5, $metrics[(int) $februaryStatement->statement_id]['ytd_return_pct'], 0.0001);
+        $this->assertLessThanOrEqual(
+            4,
+            $queryCount,
+            "Statement return metrics should batch cash-flow and fee lookups; got {$queryCount} queries",
+        );
     }
 
     public function test_delta_status_treats_negative_actual_as_under_when_expected_is_zero(): void
