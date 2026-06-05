@@ -56,4 +56,4 @@ If there is no usable starting balance or no statement closing in the month, bot
 
 K-1 fee buckets are parsed as gross absolute values. To avoid false mismatches after actual statement fees became net signed values, K-1 reconciliation compares those K-1 buckets against gross statement buckets only for reconciliation.
 
-Gross statement buckets are computed by summing `abs(fee_amount)` by characteristic. The account Summary card and all-accounts totals remain net signed values.
+Gross statement buckets are computed by summing `abs(fee_amount)` by characteristic. The account Summary tab's `total_fee` and all-accounts totals remain net signed values. The Summary tab reuses `FeeAnalyticsService` for account totals and defines its `year=all` behavior in the [Finance Module Overview](overview.md#summary-tab).
