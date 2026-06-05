@@ -1,0 +1,556 @@
+{
+    "startYear": 2026,
+    "horizonYears": 10,
+    "currentJobId": "current",
+    "jobs": [
+        {
+            "id": "current",
+            "name": "Current role",
+            "isCurrent": true,
+            "annual": [
+                {
+                    "year": 2026,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                },
+                {
+                    "year": 2027,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 40250.28,
+                    "shareSaleProceeds": 40250.28,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 250250.28
+                },
+                {
+                    "year": 2028,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 22050.0,
+                    "shareSaleProceeds": 22050.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 232050.0
+                },
+                {
+                    "year": 2029,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 23152.5,
+                    "shareSaleProceeds": 23152.5,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 233152.5
+                },
+                {
+                    "year": 2030,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 2025.51,
+                    "shareSaleProceeds": 2025.51,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 212025.51
+                },
+                {
+                    "year": 2031,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                },
+                {
+                    "year": 2032,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                },
+                {
+                    "year": 2033,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                },
+                {
+                    "year": 2034,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                },
+                {
+                    "year": 2035,
+                    "salary": 185000.0,
+                    "bonus": 25000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 210000.0
+                }
+            ],
+            "liquidity": {
+                "low": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 38333.6
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 58333.6
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 78333.6
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 80000.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 80000.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 80000.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 80000.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 80000.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 80000.0
+                    }
+                ],
+                "medium": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 40250.28
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 64312.79
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 90680.93
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 97240.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 102100.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 107210.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 112570.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 118200.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 124110.0
+                    }
+                ],
+                "high": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 42166.96
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 70583.66
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 104262.02
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 117130.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 128840.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 141720.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 155900.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 171490.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 188640.0
+                    }
+                ]
+            },
+            "vesting": [
+                {
+                    "grantId": "current-rsu-hire",
+                    "type": "rsu",
+                    "year": 2027,
+                    "vestedShares": 479.1667,
+                    "exercisableShares": 0.0
+                },
+                {
+                    "grantId": "current-rsu-hire",
+                    "type": "rsu",
+                    "year": 2028,
+                    "vestedShares": 250.0,
+                    "exercisableShares": 0.0
+                },
+                {
+                    "grantId": "current-rsu-hire",
+                    "type": "rsu",
+                    "year": 2029,
+                    "vestedShares": 250.0,
+                    "exercisableShares": 0.0
+                },
+                {
+                    "grantId": "current-rsu-hire",
+                    "type": "rsu",
+                    "year": 2030,
+                    "vestedShares": 20.8333,
+                    "exercisableShares": 0.0
+                }
+            ],
+            "lifetime": {
+                "totalCashComp": 2100000.0,
+                "totalEquityValue": {
+                    "low": 80000.0,
+                    "medium": 87478.29,
+                    "high": 95426.78
+                },
+                "totalValue": {
+                    "low": 2180000.0,
+                    "medium": 2187478.29,
+                    "high": 2195426.78
+                }
+            }
+        },
+        {
+            "id": "hyp-1",
+            "name": "Private offer",
+            "isCurrent": false,
+            "annual": [
+                {
+                    "year": 2026,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                },
+                {
+                    "year": 2027,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 38333.34,
+                    "freeCashFlow": 156666.66
+                },
+                {
+                    "year": 2028,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 20000.0,
+                    "freeCashFlow": 175000.0
+                },
+                {
+                    "year": 2029,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 20000.0,
+                    "freeCashFlow": 175000.0
+                },
+                {
+                    "year": 2030,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 12899.95,
+                    "shareSaleProceeds": 12899.95,
+                    "exerciseOutlay": 1666.66,
+                    "freeCashFlow": 206233.29
+                },
+                {
+                    "year": 2031,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                },
+                {
+                    "year": 2032,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                },
+                {
+                    "year": 2033,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                },
+                {
+                    "year": 2034,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                },
+                {
+                    "year": 2035,
+                    "salary": 175000.0,
+                    "bonus": 20000.0,
+                    "vestedLiquidEquity": 0.0,
+                    "shareSaleProceeds": 0.0,
+                    "exerciseOutlay": 0.0,
+                    "freeCashFlow": 195000.0
+                }
+            ],
+            "liquidity": {
+                "low": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 288800.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 266000.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 244800.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 225600.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 208000.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 191600.0
+                    }
+                ],
+                "medium": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 619200.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 690800.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 770800.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 859600.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 958800.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 1069600.0
+                    }
+                ],
+                "high": [
+                    {
+                        "year": 2026,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2027,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2028,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2029,
+                        "cumulativeValue": 0.0
+                    },
+                    {
+                        "year": 2030,
+                        "cumulativeValue": 1011200.0
+                    },
+                    {
+                        "year": 2031,
+                        "cumulativeValue": 1275200.0
+                    },
+                    {
+                        "year": 2032,
+                        "cumulativeValue": 1608400.0
+                    },
+                    {
+                        "year": 2033,
+                        "cumulativeValue": 2028000.0
+                    },
+                    {
+                        "year": 2034,
+                        "cumulativeValue": 2557200.0
+                    },
+                    {
+                        "year": 2035,
+                        "cumulativeValue": 3224400.0
+                    }
+                ]
+            },
+            "vesting": [
+                {
+                    "grantId": "hyp-1-iso-hire",
+                    "type": "iso",
+                    "year": 2027,
+                    "vestedShares": 19166.6667,
+                    "exercisableShares": 19166.6667
+                },
+                {
+                    "grantId": "hyp-1-iso-hire",
+                    "type": "iso",
+                    "year": 2028,
+                    "vestedShares": 10000.0,
+                    "exercisableShares": 10000.0
+                },
+                {
+                    "grantId": "hyp-1-iso-hire",
+                    "type": "iso",
+                    "year": 2029,
+                    "vestedShares": 10000.0,
+                    "exercisableShares": 10000.0
+                },
+                {
+                    "grantId": "hyp-1-iso-hire",
+                    "type": "iso",
+                    "year": 2030,
+                    "vestedShares": 833.3333,
+                    "exercisableShares": 833.3333
+                }
+            ],
+            "lifetime": {
+                "totalCashComp": 1950000.0,
+                "totalEquityValue": {
+                    "low": 6016.64,
+                    "medium": 12899.95,
+                    "high": 21066.58
+                },
+                "totalValue": {
+                    "low": 1956016.64,
+                    "medium": 1962899.95,
+                    "high": 1971066.58
+                }
+            }
+        }
+    ],
+    "deltasVsCurrent": [
+        {
+            "jobId": "hyp-1",
+            "name": "Private offer",
+            "cashCompDelta": -150000.0,
+            "totalValueDelta": {
+                "low": -223983.36,
+                "medium": -224578.34,
+                "high": -224360.2
+            }
+        }
+    ],
+    "warnings": []
+}

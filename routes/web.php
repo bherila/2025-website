@@ -15,6 +15,7 @@ use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
+use App\Http\Controllers\FinancialPlanning\OpportunityCostController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MD\MarkdownRendererController;
@@ -201,6 +202,10 @@ Route::get('/financial-planning/roth-conversion', [RothConversionController::cla
     ->name('financial-planning.roth-conversion');
 Route::get('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'showByCode'])
     ->name('financial-planning.roth-conversion.shared');
+Route::get('/financial-planning/opportunity-cost', [OpportunityCostController::class, 'show'])
+    ->name('financial-planning.opportunity-cost');
+Route::get('/financial-planning/opportunity-cost/s/{code}', [OpportunityCostController::class, 'showByCode'])
+    ->name('financial-planning.opportunity-cost.shared');
 
 Route::get('/recipes', [RecipeController::class, 'index'])->name('recipes.index');
 Route::get('/recipes/{slug}', [RecipeController::class, 'show'])->name('recipes.show');
