@@ -89,6 +89,43 @@ class FinanceStatementControllerTest extends TestCase
         $this->assertEquals(250.0, $data[5]['cost_basis']);   // Feb 12: Withdrawal 50 -> 250
     }
 
+    public function test_balance_timeseries_includes_statement_return_percentages_excluding_cash_flows(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Return Test Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        DB::table('fin_account_line_items')->insert([
+            ['t_account' => $acctId, 't_date' => '2025-01-15', 't_type' => 'Deposit', 't_amt' => 500, 't_description' => 'Contribution'],
+            ['t_account' => $acctId, 't_date' => '2025-02-15', 't_type' => 'Fee', 't_amt' => -10, 't_description' => 'Management fee'],
+            ['t_account' => $acctId, 't_date' => '2025-03-10', 't_type' => 'Withdrawal', 't_amt' => -100, 't_description' => 'Distribution'],
+        ]);
+
+        DB::table('fin_statements')->insert([
+            ['acct_id' => $acctId, 'balance' => '1000', 'statement_closing_date' => '2024-12-31', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '1500', 'statement_closing_date' => '2025-01-31', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '1640', 'statement_closing_date' => '2025-02-28', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+            ['acct_id' => $acctId, 'balance' => '1740', 'statement_closing_date' => '2025-03-31', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/balance-timeseries");
+        $response->assertOk();
+
+        $data = $response->json();
+        $this->assertCount(4, $data);
+        $this->assertNull($data[0]['return_pct']);
+        $this->assertNull($data[0]['ytd_return_pct']);
+        $this->assertEqualsWithDelta(0.0, $data[1]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(0.0, $data[1]['ytd_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(10.0, $data[2]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(15.0, $data[2]['ytd_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(12.1951, $data[3]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(35.0, $data[3]['ytd_return_pct'], 0.0001);
+    }
+
     public function test_update_statement_persists_cost_basis_override(): void
     {
         $user = $this->createUser();

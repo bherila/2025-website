@@ -38,6 +38,8 @@ export interface StatementSnapshot {
   is_cost_basis_override: boolean
   lineItemCount: number
   hasPdf?: boolean
+  return_pct: number | null
+  ytd_return_pct: number | null
 }
 
 interface StatementsListViewProps {
@@ -46,6 +48,14 @@ interface StatementsListViewProps {
   onRefresh: () => void
   onViewDetail: (statementId: number) => void
   onViewAll: () => void
+}
+
+function formatReturnPct(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return '—'
+  }
+
+  return `${value.toFixed(2)}%`
 }
 
 export default function StatementsListView({
@@ -125,6 +135,8 @@ export default function StatementsListView({
         is_cost_basis_override: statement.is_cost_basis_override,
         change,
         percentChange,
+        return_pct: statement.return_pct,
+        ytd_return_pct: statement.ytd_return_pct,
         lineItemCount: statement.lineItemCount,
         hasPdf: !!statement.hasPdf,
         original: statement,
@@ -216,7 +228,7 @@ export default function StatementsListView({
   }
 
   const handleDownloadCSV = useCallback(() => {
-    const csvContent = 'Date,Balance,Cost Basis\n' + statementHistory.map(row => `${row.date?.toISOString().split('T')[0] ?? ''},${row.balance},${row.cost_basis}`).join('\n')
+    const csvContent = 'Date,Balance,Cost Basis,Change,Balance %,Return %,YTD Return %\n' + statementHistory.map(row => `${row.date?.toISOString().split('T')[0] ?? ''},${row.balance},${row.cost_basis},${row.change},${row.percentChange},${row.return_pct ?? ''},${row.ytd_return_pct ?? ''}`).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -265,7 +277,9 @@ export default function StatementsListView({
                 <TableCell className="text-right">Balance</TableCell>
                 <TableCell className="text-right">Cost Basis</TableCell>
                 <TableCell className="text-right">Change</TableCell>
-                <TableCell className="text-right">% Change</TableCell>
+                <TableCell className="text-right">Balance %</TableCell>
+                <TableCell className="text-right">Return %</TableCell>
+                <TableCell className="text-right">YTD Return %</TableCell>
                 <TableCell className="text-center">Actions</TableCell>
               </TableRow>
             </TableHeader>
@@ -300,6 +314,12 @@ export default function StatementsListView({
                   </TableCell>
                   <TableCell className="text-right" style={{ color: row.percentChange < 0 ? 'red' : undefined }}>
                     {row.percentChange.toFixed(2)}%
+                  </TableCell>
+                  <TableCell className="text-right" style={{ color: (row.return_pct ?? 0) < 0 ? 'red' : undefined }}>
+                    {formatReturnPct(row.return_pct)}
+                  </TableCell>
+                  <TableCell className="text-right" style={{ color: (row.ytd_return_pct ?? 0) < 0 ? 'red' : undefined }}>
+                    {formatReturnPct(row.ytd_return_pct)}
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex items-center justify-center gap-1">
@@ -379,7 +399,7 @@ export default function StatementsListView({
                 </TableRow>
               ))}
               <TableRow>
-                <TableCell colSpan={5} className="text-center font-semibold">
+                <TableCell colSpan={7} className="text-center font-semibold">
                   Add New Snapshot
                 </TableCell>
                 <TableCell className="text-center">

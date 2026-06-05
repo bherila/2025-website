@@ -31,6 +31,20 @@ experience:
   **Unlinked statement files** section so orphan uploads can be downloaded or
   deleted. The section is hidden when there are no orphan files.
 
+- The statements table distinguishes raw balance movement from performance:
+  **Change** and **Balance %** compare statement balances directly and therefore
+  include deposits, withdrawals, and transfers. **Return %** excludes those cash
+  flows for the period since the previous statement and uses the same gross
+  return definition as the monthly fee-drag chart, including signed fee addback.
+  A pure contribution period displays near 0% instead of a large positive jump.
+  The first statement, or any row without a prior statement basis, displays `—`.
+
+- **YTD Return %** uses the same cash-flow-excluding return calculation from the
+  prior year-end statement basis through the current statement. It remains `—`
+  when no prior-year statement basis is available. Statement return percentages
+  are period/YTD percentages, not the annualized values shown by the monthly fee
+  drag projection.
+
 - A new API endpoint (`GET /finance/{accountId}/statements/{statementId}/pdf`)
   returns signed URLs for viewing or downloading the original PDF if one is
   attached to the statement. The detail view shows **View Original PDF** and
@@ -62,6 +76,12 @@ experience:
 - The statements list marks a row as having a PDF when any of those sources is
   available: a linked `files_for_fin_accounts` row, a linked GenAI job, or a
   linked `fin_documents.s3_path`.
+
+- `GET /api/finance/{accountId}/balance-timeseries` includes nullable
+  `return_pct` and `ytd_return_pct` fields on each statement row. Both values use
+  the shared `FeeAnalyticsService::periodReturnMetrics()` return math with
+  deposits, withdrawals, and transfers removed from the numerator and signed
+  fees included through the helper's gross return calculation.
 
 - `GET /api/finance/{accountId}/files?unlinked=1` limits the file list to
   `files_for_fin_accounts` rows where `statement_id IS NULL`; the statements

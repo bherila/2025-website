@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Files\FileForFinAccount;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\FeeAnalyticsService;
 use App\Services\Finance\TransactionDeletionTombstoneService;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 
 class FinanceApiController extends Controller
 {
+    public function __construct(private FeeAnalyticsService $feeAnalyticsService) {}
+
     public function accounts(Request $request): JsonResponse
     {
         $uid = Auth::id();
@@ -207,7 +210,8 @@ class FinanceApiController extends Controller
             ->select('t_date', 't_type', 't_amt')
             ->get();
 
-        $result = $this->computeCostBasisForStatements($balances, $transactions);
+        $returnMetrics = $this->feeAnalyticsService->statementReturnMetrics((int) $account->acct_id, $balances);
+        $result = $this->computeCostBasisForStatements($balances, $transactions, $returnMetrics);
 
         return response()->json($result);
     }
@@ -224,9 +228,10 @@ class FinanceApiController extends Controller
      *
      * @param  Collection<int, \stdClass>  $balances
      * @param  Collection<int, \stdClass>  $transactions
+     * @param  array<int, array{return_pct:float|null,ytd_return_pct:float|null}>  $returnMetrics
      * @return array<int, array<string, mixed>>
      */
-    private function computeCostBasisForStatements(Collection $balances, Collection $transactions): array
+    private function computeCostBasisForStatements(Collection $balances, Collection $transactions, array $returnMetrics): array
     {
         $txList = $transactions->values()->all();
         $txCount = count($txList);
@@ -236,6 +241,10 @@ class FinanceApiController extends Controller
 
         foreach ($balances as $statement) {
             $stmtDate = $statement->statement_closing_date;
+            $statementReturnMetrics = $returnMetrics[(int) $statement->statement_id] ?? [
+                'return_pct' => null,
+                'ytd_return_pct' => null,
+            ];
 
             if (! $stmtDate) {
                 $result[] = [
@@ -247,6 +256,8 @@ class FinanceApiController extends Controller
                     'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
                     'lineItemCount' => (int) $statement->lineItemCount,
                     'hasPdf' => (bool) $statement->hasPdf,
+                    'return_pct' => $statementReturnMetrics['return_pct'],
+                    'ytd_return_pct' => $statementReturnMetrics['ytd_return_pct'],
                 ];
 
                 continue;
@@ -283,6 +294,8 @@ class FinanceApiController extends Controller
                 'is_cost_basis_override' => (bool) $statement->is_cost_basis_override,
                 'lineItemCount' => (int) $statement->lineItemCount,
                 'hasPdf' => (bool) $statement->hasPdf,
+                'return_pct' => $statementReturnMetrics['return_pct'],
+                'ytd_return_pct' => $statementReturnMetrics['ytd_return_pct'],
             ];
         }
 

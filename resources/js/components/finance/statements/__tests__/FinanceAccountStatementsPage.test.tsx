@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
@@ -124,10 +124,10 @@ jest.mock('../PdfViewer', () => {
 // --- Helpers ---------------------------------------------------------------
 
 const SAMPLE_STATEMENTS = [
-  { statement_id: 1, statement_opening_date: null, statement_closing_date: '2025-01-31', balance: '100000.00', cost_basis: 90000, is_cost_basis_override: false, lineItemCount: 0 },
-  { statement_id: 2, statement_opening_date: null, statement_closing_date: '2025-02-28', balance: '110000.00', cost_basis: 95000, is_cost_basis_override: false, lineItemCount: 3 },
+  { statement_id: 1, statement_opening_date: null, statement_closing_date: '2025-01-31', balance: '100000.00', cost_basis: 90000, is_cost_basis_override: false, lineItemCount: 0, return_pct: null, ytd_return_pct: null },
+  { statement_id: 2, statement_opening_date: null, statement_closing_date: '2025-02-28', balance: '110000.00', cost_basis: 95000, is_cost_basis_override: false, lineItemCount: 3, return_pct: 0, ytd_return_pct: 2.3456 },
   // entry with missing closing date - should display '-' instead of date
-  { statement_id: 3, statement_opening_date: null, statement_closing_date: null, balance: '120000.00', cost_basis: 100000, is_cost_basis_override: true, lineItemCount: 1 },
+  { statement_id: 3, statement_opening_date: null, statement_closing_date: null, balance: '120000.00', cost_basis: 100000, is_cost_basis_override: true, lineItemCount: 1, return_pct: null, ytd_return_pct: null },
 ];
 
 // --- Tests -----------------------------------------------------------------
@@ -166,6 +166,31 @@ describe('FinanceAccountStatementsPage', () => {
     if (row) {
       expect(row.textContent).toMatch(/-/);
     }
+  });
+
+  it('renders true return columns with formatted percentages and em dashes for nulls', async () => {
+    (fetchWrapper.get as jest.Mock).mockResolvedValueOnce(SAMPLE_STATEMENTS);
+
+    render(<FinanceAccountStatementsPage id={32} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Return %')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('YTD Return %')).toBeInTheDocument();
+    expect(screen.getByText('Balance %')).toBeInTheDocument();
+
+    const firstBalance = screen.getAllByText('100000.00')[0];
+    const secondBalance = screen.getAllByText('110000.00')[0];
+    const firstRow = firstBalance?.closest('tr');
+    const secondRow = secondBalance?.closest('tr');
+    if (!firstRow || !secondRow) {
+      throw new Error('Expected statement rows to render');
+    }
+
+    expect(within(firstRow).getAllByText('—')).toHaveLength(2);
+    expect(within(secondRow).getByText('0.00%')).toBeInTheDocument();
+    expect(within(secondRow).getByText('2.35%')).toBeInTheDocument();
   });
 
   it('shows empty state when no statements', async () => {
