@@ -1,8 +1,9 @@
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { PortraitGameShell } from '../PortraitGameShell'
+import { playSfx } from './audio/audioManager'
 import { CarsScene } from './CarsScene'
 import {
   BottomControls,
@@ -70,6 +71,7 @@ export function CarsGame(): ReactElement {
 
     return loadColorblindMode()
   })
+  const completedLevelSoundKeyRef = useRef(completedLevelSoundKey(state.completedLevel))
 
   useEffect(() => {
     if (visualTestOptions.enabled) {
@@ -84,6 +86,15 @@ export function CarsGame(): ReactElement {
 
     saveLevelSnapshot(state)
   }, [state, visualTestOptions.enabled])
+
+  useEffect(() => {
+    const completedKey = completedLevelSoundKey(state.completedLevel)
+    if (completedKey && completedKey !== completedLevelSoundKeyRef.current) {
+      playSfx('level-complete')
+    }
+
+    completedLevelSoundKeyRef.current = completedKey
+  }, [state.completedLevel])
 
   const stats = useMemo<GameStats>(() => {
     const departedCars = state.cars.filter((car) => car.status === 'departed').length
@@ -113,9 +124,16 @@ export function CarsGame(): ReactElement {
       const clickedCar = current.cars.find((car) => car.id === carId)
       if (clickedCar?.status === 'field' && !canMoveCar(current, carId)) {
         setBlockedCarAttempt({ carId, nonce: Date.now() })
+        playSfx('car-blocked')
       }
 
-      return moveCarToParking(current, carId)
+      const next = moveCarToParking(current, carId)
+      const parkedCar = next.cars.find((car) => car.id === carId)
+      if (clickedCar?.status === 'field' && parkedCar?.status === 'parked') {
+        playSfx('car-park-success')
+      }
+
+      return next
     })
     setVipSelectionActive(false)
   }, [vipSelectionActive])
@@ -142,7 +160,14 @@ export function CarsGame(): ReactElement {
   }, [visualTestOptions.enabled])
 
   const handlePassengerGate = useCallback((passengerId: string): void => {
-    setState((current) => processBoardingAtParkingGate(current, passengerId))
+    setState((current) => {
+      const next = processBoardingAtParkingGate(current, passengerId)
+      if (next !== current && next.passengerQueue.length < current.passengerQueue.length) {
+        playSfx('passenger-board')
+      }
+
+      return next
+    })
   }, [])
 
   const handleNextLevel = useCallback((): void => {
@@ -273,4 +298,12 @@ function saveColorblindMode(enabled: boolean): void {
   }
 
   window.localStorage.setItem(COLORBLIND_MODE_STORAGE_KEY, enabled ? '1' : '0')
+}
+
+function completedLevelSoundKey(completedLevel: GameState['completedLevel']): string | null {
+  if (!completedLevel) {
+    return null
+  }
+
+  return `${completedLevel.level}:${completedLevel.score}:${completedLevel.awardedPowerUp}`
 }
