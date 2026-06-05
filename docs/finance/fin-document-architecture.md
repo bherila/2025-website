@@ -94,6 +94,19 @@
    linked document's `user_id`; per-statement uploads create
    `files_for_fin_accounts` rows with the row's `statement_id`.
 
+7. **Statement fee details produce tagged transactions.** During statement
+   ingestion, normalized detail rows named `Management Fee` and `Incentive
+   Allocation` create `fin_account_line_items` rows dated at
+   `statement_closing_date`, linked by `statement_id`, and marked with
+   `t_source = stmt_fee_synth`. `Management Fee` rows are tagged
+   `fee_irc67g`; `Incentive Allocation` rows are tagged `fee_schE`. `Total
+   Fees` is a subtotal and is not imported as a transaction. Re-running
+   synthesis for a statement deletes existing `stmt_fee_synth` rows for that
+   `statement_id` before inserting the current fee details. When the parsed
+   transaction payload already has a same-signed fee row in the statement
+   period whose description or type identifies the same fee detail, ingestion
+   tags that existing row instead of adding a duplicate synthetic transaction.
+
 ## API Endpoints
 
 | Method | Path | Purpose |

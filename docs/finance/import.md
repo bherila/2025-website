@@ -44,6 +44,26 @@ After selecting/dropping a PDF, the file is uploaded to S3 and an import job is 
 
 Checkbox states are persisted globally in `localStorage`.
 
+When a statement is attached, the backend also synthesizes fee transactions from
+parsed statement detail rows. `Management Fee` becomes a dated `Fee` line item
+at statement close with a negative `t_amt` and a `fee_irc67g` tag; `Incentive
+Allocation` becomes a negative `Fee` line item tagged `fee_schE`. `Total Fees`
+is treated as a subtotal and ignored. Rows with explicit credit, rebate, or
+reversal wording are imported as positive `t_amt` values so the signed fee math
+nets them out; negative fee values without credit wording are still treated as
+fee costs. See [tags.md](tags.md#investment-management-fees) for the fee tag
+characteristics.
+
+Synthetic fee transactions use `t_source = stmt_fee_synth` and the imported
+`statement_id` as their idempotency marker. Re-importing the same statement
+returns the existing statement rows; if synthesis is rerun for a statement, old
+synthetic fee rows for that `statement_id` are removed before the current fee
+details are inserted. If the parsed `transactions[]` payload already contains a
+same-signed fee transaction for the same statement period whose description or
+type identifies the specific fee detail, import keeps that broker row and
+attaches the fee tax-characteristic tag instead of inserting a duplicate
+synthetic line item.
+
 ---
 
 ## Multi-Account PDF Import

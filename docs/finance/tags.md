@@ -112,6 +112,9 @@ These characteristics do **not** require an employment entity link.
 ### Investment Management Fees
 
 These characteristics drive the Fees tab buckets and K-1 fee reconciliation. See [fees.md](fees.md) for the signed fee convention, net bucket math, and gross K-1 comparison behavior.
+Statement import creates these tags per user as needed when synthesizing fee
+transactions from `Management Fee` and `Incentive Allocation` statement detail
+rows; see [import.md](import.md#pdf-import-genai).
 
 | Value | Description |
 |-------|-------------|
