@@ -20,6 +20,12 @@ export const cashCompSchema = z.object({
   cashBonus: z.number(),
 })
 
+export const VESTING_FREQUENCIES = ['monthly', 'quarterly', 'annual'] as const
+
+// Optional with a 'monthly' default so older shared links / saved comparisons that predate the
+// field decode to the historical monthly cadence rather than failing validation.
+export const vestingFrequencySchema = z.enum(VESTING_FREQUENCIES).default('monthly')
+
 export const rsuGrantSchema = z.object({
   id: z.string(),
   kind: z.enum(['hire', 'refresher']),
@@ -29,6 +35,7 @@ export const rsuGrantSchema = z.object({
   grantPrice: z.number().nullish(),
   cliffMonths: z.number(),
   vestingYears: z.number(),
+  vestingFrequency: vestingFrequencySchema,
 })
 
 export const optionGrantSchema = z.object({
@@ -40,6 +47,7 @@ export const optionGrantSchema = z.object({
   strike: z.number(),
   cliffMonths: z.number(),
   vestingYears: z.number(),
+  vestingFrequency: vestingFrequencySchema,
   earlyExercise83b: z.boolean().default(false),
 })
 
@@ -233,6 +241,7 @@ export interface CareerCompInitialData {
 export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
 export type CompanySpec = z.infer<typeof companySpecSchema>
 export type CashComp = z.infer<typeof cashCompSchema>
+export type VestingFrequency = z.infer<typeof vestingFrequencySchema>
 export type RsuGrant = z.infer<typeof rsuGrantSchema>
 export type OptionGrant = z.infer<typeof optionGrantSchema>
 export type JobSpec = z.infer<typeof jobSpecSchema>

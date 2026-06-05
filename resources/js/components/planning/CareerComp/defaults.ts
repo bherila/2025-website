@@ -10,6 +10,7 @@ export function buildDefaultRsuGrant(jobId: string, ordinal: number): RsuGrant {
     shareCount: 1000,
     cliffMonths: 12,
     vestingYears: 4,
+    vestingFrequency: 'monthly',
   }
 }
 
@@ -23,6 +24,7 @@ export function buildDefaultOptionGrant(jobId: string, ordinal: number): OptionG
     strike: 5,
     cliffMonths: 12,
     vestingYears: 4,
+    vestingFrequency: 'monthly',
     earlyExercise83b: false,
   }
 }

@@ -99,25 +99,13 @@ final class OptionsVestingService
             return [(int) $grantDate->format('Y') => $shareCount];
         }
 
-        $vestingMonths = max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12));
-        $cliffMonths = max(0, (int) round((float) ($grant['cliffMonths'] ?? 0)));
-        if ($vestingMonths <= 0 || $cliffMonths > $vestingMonths) {
-            return [];
-        }
-
-        $sharesByYear = [];
-        $monthlyShares = $shareCount / $vestingMonths;
-        for ($month = 1; $month <= $vestingMonths; $month++) {
-            if ($month < $cliffMonths) {
-                continue;
-            }
-
-            $vestedShares = $month === $cliffMonths ? $monthlyShares * $cliffMonths : $monthlyShares;
-            $year = (int) $grantDate->modify('+'.$month.' months')->format('Y');
-            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $vestedShares;
-        }
-
-        return $sharesByYear;
+        return VestingSchedule::sharesByYear(
+            $shareCount,
+            $grantDate,
+            max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12)),
+            max(0, (int) round((float) ($grant['cliffMonths'] ?? 0))),
+            VestingSchedule::normalizeFrequency($grant['vestingFrequency'] ?? null),
+        );
     }
 
     private function date(string $date): ?DateTimeImmutable

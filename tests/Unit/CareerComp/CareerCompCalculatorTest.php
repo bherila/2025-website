@@ -2,10 +2,10 @@
 
 namespace Tests\Unit\CareerComp;
 
-use App\Services\Planning\CareerComp\EquityValuationService;
-use App\Services\Planning\CareerComp\JobSpec;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
 use App\Services\Planning\CareerComp\CareerCompInputs;
+use App\Services\Planning\CareerComp\EquityValuationService;
+use App\Services\Planning\CareerComp\JobSpec;
 use App\Services\Planning\CareerComp\OptionsVestingService;
 use App\Services\Planning\CareerComp\RsuVestingExpander;
 use PHPUnit\Framework\TestCase;
@@ -42,6 +42,82 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(120.0, $rows[1]['vestedShares']);
     }
 
+    public function test_rsu_quarterly_vesting_shifts_year_buckets_vs_monthly(): void
+    {
+        $grant = [
+            'id' => 'rsu-1',
+            'kind' => 'hire',
+            'grantDate' => '2026-01-01',
+            'shareCount' => 1200,
+            'cliffMonths' => 0,
+            'vestingYears' => 1,
+        ];
+
+        $monthly = (new RsuVestingExpander)->expand(
+            JobSpec::nullableFromArray(['id' => 'm', 'name' => 'Monthly', 'rsuGrants' => [['vestingFrequency' => 'monthly'] + $grant]], false),
+            2026,
+            3,
+        );
+        $quarterly = (new RsuVestingExpander)->expand(
+            JobSpec::nullableFromArray(['id' => 'q', 'name' => 'Quarterly', 'rsuGrants' => [['vestingFrequency' => 'quarterly'] + $grant]], false),
+            2026,
+            3,
+        );
+
+        // Monthly releases each month, so only the final (Jan 2027) month lands in 2027.
+        $this->assertSame([2026 => 1100.0, 2027 => 100.0], $this->sharesByYear($monthly));
+        // Quarterly releases every 3 months, pushing the fourth tranche into 2027.
+        $this->assertSame([2026 => 900.0, 2027 => 300.0], $this->sharesByYear($quarterly));
+    }
+
+    public function test_rsu_annual_vesting_lands_in_a_single_year(): void
+    {
+        $rows = (new RsuVestingExpander)->expand(
+            JobSpec::nullableFromArray([
+                'id' => 'a',
+                'name' => 'Annual',
+                'rsuGrants' => [[
+                    'id' => 'rsu-1',
+                    'kind' => 'hire',
+                    'grantDate' => '2026-01-01',
+                    'shareCount' => 1200,
+                    'cliffMonths' => 0,
+                    'vestingYears' => 1,
+                    'vestingFrequency' => 'annual',
+                ]],
+            ], false),
+            2026,
+            3,
+        );
+
+        $this->assertSame([2027 => 1200.0], $this->sharesByYear($rows));
+    }
+
+    public function test_rsu_missing_vesting_frequency_defaults_to_monthly(): void
+    {
+        $grant = [
+            'id' => 'rsu-1',
+            'kind' => 'hire',
+            'grantDate' => '2026-04-01',
+            'shareCount' => 1200,
+            'cliffMonths' => 6,
+            'vestingYears' => 2,
+        ];
+
+        $withoutFrequency = (new RsuVestingExpander)->expand(
+            JobSpec::nullableFromArray(['id' => 'x', 'name' => 'X', 'rsuGrants' => [$grant]], false),
+            2026,
+            5,
+        );
+        $explicitMonthly = (new RsuVestingExpander)->expand(
+            JobSpec::nullableFromArray(['id' => 'y', 'name' => 'Y', 'rsuGrants' => [['vestingFrequency' => 'monthly'] + $grant]], false),
+            2026,
+            5,
+        );
+
+        $this->assertSame($this->sharesByYear($withoutFrequency), $this->sharesByYear($explicitMonthly));
+    }
+
     public function test_options_partition_iso_limit_and_nso_spillover(): void
     {
         $job = JobSpec::nullableFromArray([
@@ -66,6 +142,56 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(50000.0, $result['rows'][0]['exercisableShares']);
         $this->assertSame('nso', $result['rows'][1]['type']);
         $this->assertSame(10000.0, $result['rows'][1]['exercisableShares']);
+        $this->assertNotEmpty($result['warnings']);
+    }
+
+    public function test_multiple_rsu_grants_aggregate_vested_shares_per_year(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'multi-rsu',
+            'name' => 'Multi RSU',
+            'rsuGrants' => [
+                ['id' => 'r-a', 'kind' => 'hire', 'grantDate' => '2026-01-01', 'shareCount' => 1200, 'cliffMonths' => 0, 'vestingYears' => 1, 'vestingFrequency' => 'annual'],
+                ['id' => 'r-b', 'kind' => 'refresher', 'grantDate' => '2026-01-01', 'shareCount' => 600, 'cliffMonths' => 0, 'vestingYears' => 1, 'vestingFrequency' => 'annual'],
+            ],
+        ], false);
+
+        $rows = (new RsuVestingExpander)->expand($job, 2026, 3);
+
+        // Both annual grants release their full amount at the one-year mark and aggregate into 2027.
+        $this->assertSame([2027 => 1800.0], $this->sharesByYear($rows));
+    }
+
+    public function test_multiple_option_grants_pool_iso_100k_limit_within_a_year(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'multi-iso',
+            'name' => 'Multi ISO',
+            'optionGrants' => [
+                ['id' => 'iso-a', 'kind' => 'hire', 'type' => 'iso', 'grantDate' => '2026-01-01', 'shareCount' => 30000, 'strike' => 2, 'cliffMonths' => 12, 'vestingYears' => 1, 'earlyExercise83b' => false],
+                ['id' => 'iso-b', 'kind' => 'refresher', 'type' => 'iso', 'grantDate' => '2026-01-01', 'shareCount' => 30000, 'strike' => 2, 'cliffMonths' => 12, 'vestingYears' => 1, 'earlyExercise83b' => false],
+            ],
+        ], false);
+
+        $result = (new OptionsVestingService)->expand($job, 2026, 3);
+
+        $isoShares = 0.0;
+        $nsoShares = 0.0;
+        foreach ($result['rows'] as $row) {
+            if ($row['year'] !== 2027) {
+                continue;
+            }
+            if ($row['type'] === 'iso') {
+                $isoShares += $row['vestedShares'];
+            }
+            if ($row['type'] === 'nso') {
+                $nsoShares += $row['vestedShares'];
+            }
+        }
+
+        // $100k / $2 strike = 50,000 ISO shares pooled across both grants; the rest spills to NSO.
+        $this->assertSame(50000.0, $isoShares);
+        $this->assertSame(10000.0, $nsoShares);
         $this->assertNotEmpty($result['warnings']);
     }
 
@@ -151,6 +277,20 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame([], $projection['deltasVsCurrent']);
         $this->assertCount(4, $projection['warnings']);
         $this->assertSame(-10000.0, $projection['jobs'][0]['annual'][0]['freeCashFlow']);
+    }
+
+    /**
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>  $rows
+     * @return array<int, float>
+     */
+    private function sharesByYear(array $rows): array
+    {
+        $byYear = [];
+        foreach ($rows as $row) {
+            $byYear[$row['year']] = ($byYear[$row['year']] ?? 0.0) + $row['vestedShares'];
+        }
+
+        return $byYear;
     }
 
     /** @return array<string, mixed> */

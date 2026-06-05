@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\FinancialPlanning;
 
+use App\Services\Planning\CareerComp\VestingSchedule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -66,6 +67,7 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.rsuGrants.*.grantPrice" => ['nullable', 'numeric', 'min:0'],
             "{$prefix}.rsuGrants.*.cliffMonths" => ['required', 'integer', 'min:0', 'max:120'],
             "{$prefix}.rsuGrants.*.vestingYears" => ['required', 'numeric', 'min:0.25', 'max:10'],
+            "{$prefix}.rsuGrants.*.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
             "{$prefix}.optionGrants" => ['nullable', 'array', 'max:50'],
             "{$prefix}.optionGrants.*.id" => ['required', 'string', 'max:120'],
             "{$prefix}.optionGrants.*.kind" => ['required', Rule::in(['hire', 'refresher'])],
@@ -75,6 +77,7 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.optionGrants.*.strike" => ['required', 'numeric', 'min:0'],
             "{$prefix}.optionGrants.*.cliffMonths" => ['required', 'integer', 'min:0', 'max:120'],
             "{$prefix}.optionGrants.*.vestingYears" => ['required', 'numeric', 'min:0.25', 'max:10'],
+            "{$prefix}.optionGrants.*.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
             "{$prefix}.optionGrants.*.earlyExercise83b" => ['required', 'boolean'],
             "{$prefix}.growthBands" => [$required, 'array'],
             "{$prefix}.growthBands.lowPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],

@@ -64,6 +64,7 @@ final class CareerCompInputs
                     'grantPrice' => 80.0,
                     'cliffMonths' => 12,
                     'vestingYears' => 4,
+                    'vestingFrequency' => 'monthly',
                 ]],
                 'optionGrants' => [],
                 'growthBands' => [
@@ -97,6 +98,7 @@ final class CareerCompInputs
                     'strike' => 2.0,
                     'cliffMonths' => 12,
                     'vestingYears' => 4,
+                    'vestingFrequency' => 'monthly',
                     'earlyExercise83b' => false,
                 ]],
                 'growthBands' => [
