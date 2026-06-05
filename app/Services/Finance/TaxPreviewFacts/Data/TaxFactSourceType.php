@@ -127,4 +127,8 @@ enum TaxFactSourceType: string
     case W2Wages = 'w2_wages';
     case W2FederalWithholding = 'w2_federal_withholding';
     case ShortDividendInvestmentInterest = 'short_dividend_investment_interest';
+    case EquityCompIsoBargainElement = 'equity_comp_iso_bargain_element';
+    case EquityCompNsoOrdinaryIncome = 'equity_comp_nso_ordinary_income';
+    case EquityComp83bElection = 'equity_comp_83b_election';
+    case EquityCompSaleProceeds = 'equity_comp_sale_proceeds';
 }

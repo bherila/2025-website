@@ -70,6 +70,89 @@ export const annualProjectionSchema = z.object({
   freeCashFlow: z.number(),
 })
 
+export const taxFactSourceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  amount: z.number(),
+  sourceType: z.string(),
+  taxDocumentId: z.number().nullable(),
+  taxDocumentAccountId: z.number().nullable(),
+  accountId: z.number().nullable(),
+  formType: z.string().nullable(),
+  box: z.string().nullable(),
+  code: z.string().nullable(),
+  routing: z.string().nullable(),
+  routingReason: z.string().nullable(),
+  notes: z.string().nullable(),
+  isReviewed: z.boolean(),
+  reviewStatus: z.string(),
+  reviewAction: z.string().nullable(),
+})
+
+export const form6251SourceEntrySchema = z.object({
+  label: z.string(),
+  code: z.string(),
+  line: z.string(),
+  amount: z.number(),
+  description: z.string(),
+  requiresStatementReview: z.boolean(),
+})
+
+export const form6251FactsSchema = z
+  .object({
+    line1TaxableIncome: z.number(),
+    line3OtherAdjustments: z.number(),
+    adjustmentTotal: z.number(),
+    amti: z.number(),
+    tentativeMinTax: z.number(),
+    regularTax: z.number(),
+    amt: z.number(),
+    filingStatus: z.string(),
+    sourceEntries: z.array(form6251SourceEntrySchema),
+    requiresStatementReview: z.boolean(),
+    manualReviewReasons: z.array(z.string()),
+  })
+  .passthrough()
+
+export const equityCompensationAfterTaxAnnualSchema = z.object({
+  year: z.number(),
+  taxableCompIncome: z.number(),
+  nsoOrdinaryIncome: z.number(),
+  isoAmtPreference: z.number(),
+  equitySaleProceeds: z.number(),
+  estimatedRegularTax: z.number(),
+  estimatedAmt: z.number(),
+  totalEstimatedTax: z.number(),
+  freeCashFlow: z.number(),
+  sourceIds: z.array(z.string()),
+})
+
+export const equityCompensationAfterTaxSchema = z.object({
+  annual: z.array(equityCompensationAfterTaxAnnualSchema),
+  lifetime: z.object({
+    taxableCompIncome: z.number(),
+    nsoOrdinaryIncome: z.number(),
+    isoAmtPreference: z.number(),
+    equitySaleProceeds: z.number(),
+    estimatedRegularTax: z.number(),
+    estimatedAmt: z.number(),
+    totalEstimatedTax: z.number(),
+    freeCashFlow: z.number(),
+    totalValue: z.object({
+      low: z.number(),
+      medium: z.number(),
+      high: z.number(),
+    }),
+  }),
+  sources: z.array(taxFactSourceSchema),
+  form6251: z.array(
+    z.object({
+      year: z.number(),
+      facts: form6251FactsSchema,
+    }),
+  ),
+})
+
 export const liquidityPointSchema = z.object({
   year: z.number(),
   cumulativeValue: z.number(),
@@ -105,6 +188,7 @@ export const jobProjectionSchema = z.object({
     totalEquityValue: bandedMoneySchema,
     totalValue: bandedMoneySchema,
   }),
+  afterTax: equityCompensationAfterTaxSchema.optional(),
 })
 
 export const deltaVsCurrentSchema = z.object({
@@ -154,6 +238,11 @@ export type OptionGrant = z.infer<typeof optionGrantSchema>
 export type JobSpec = z.infer<typeof jobSpecSchema>
 export type OpportunityCostInputs = z.infer<typeof opportunityCostInputsSchema>
 export type AnnualProjection = z.infer<typeof annualProjectionSchema>
+export type TaxFactSource = z.infer<typeof taxFactSourceSchema>
+export type Form6251SourceEntry = z.infer<typeof form6251SourceEntrySchema>
+export type Form6251Facts = z.infer<typeof form6251FactsSchema>
+export type EquityCompensationAfterTaxAnnual = z.infer<typeof equityCompensationAfterTaxAnnualSchema>
+export type EquityCompensationAfterTax = z.infer<typeof equityCompensationAfterTaxSchema>
 export type LiquidityPoint = z.infer<typeof liquidityPointSchema>
 export type BandedMoney = z.infer<typeof bandedMoneySchema>
 export type VestingProjection = z.infer<typeof vestingProjectionSchema>
