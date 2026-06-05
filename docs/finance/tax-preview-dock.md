@@ -139,7 +139,7 @@ When adding source navigation, keep older `onTabChange(tab)` component callbacks
 
 The All-in-One K-1 and K-3 apps are viewport-sized dock columns. Their comparison tables own a bounded `overflow-auto` viewport so horizontal and vertical table scrolling happen in the same container. Keep column headers sticky to that table viewport with `top-0`; keep first-column row labels and section-title cells sticky with `left-0` and the same right-edge shadow used by statement/transaction tables.
 
-The XLSX export endpoint accepts normalized comparison-grid sheets from the frontend at `POST /api/finance/tax-preview/export-xlsx`. The default `scope` is `full`, which preserves the backend fact workbook and appends any supplied grids. Scoped exports use `scope: "k1-all-in-one"` or `scope: "k3-all-in-one"` and include only matching grid sheets from the request.
+The XLSX export endpoint accepts normalized comparison-grid sheets from the frontend at `POST /api/finance/tax-preview/export-xlsx`. The dock **Export XLSX** action posts both All K-1s and All K-3s normalized grids with the full workbook payload when reviewed K-1/K-3 data exists. The default `scope` is `full`, which preserves the backend fact workbook and appends any supplied grids. The per-view **Download XLSX** buttons on All-in-One K-1 and All-in-One K-3 call the same endpoint with `scope: "k1-all-in-one"` or `scope: "k3-all-in-one"` and include only the matching grid sheet.
 
 Normalized grid sheet contract:
 
@@ -147,7 +147,7 @@ Normalized grid sheet contract:
 {
   name: string
   scope?: 'k1-all-in-one' | 'k3-all-in-one'
-  columns: Array<{ key: string; label: string; width?: number }>
+  columns: Array<{ key: string; label: string; width?: number; format?: 'currency' | 'number' | 'percent' | 'text' }>
   rows: Array<{
     kind: 'title' | 'section' | 'header' | 'data' | 'total'
     label?: string
@@ -156,7 +156,7 @@ Normalized grid sheet contract:
 }
 ```
 
-Use explicit `scope` on each grid sheet when both K-1 and K-3 grids are posted together. If omitted, scoped backend exports infer K-1/K-3 matching from the sheet name, but explicit scope is the stable contract. Column keys must be alphanumeric with `_` or `-` only, and `cells` keys must match declared column keys.
+Use explicit `scope` on each grid sheet when both K-1 and K-3 grids are posted together. If omitted, scoped backend exports infer K-1/K-3 matching from the sheet name, but explicit scope is the stable contract. Column keys must be alphanumeric with `_` or `-` only, and `cells` keys must match declared column keys. Numeric cells default to currency formatting unless the column supplies a `format` hint.
 
 ### K-1 / K-3 source-value overrides
 

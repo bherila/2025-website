@@ -13,6 +13,14 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TaxPreviewXlsxWriter
 {
+    private const string GRID_FORMAT_CURRENCY = 'currency';
+
+    private const string GRID_FORMAT_NUMBER = 'number';
+
+    private const string GRID_FORMAT_PERCENT = 'percent';
+
+    private const string GRID_FORMAT_TEXT = 'text';
+
     /**
      * @param  array<int, array{name: string, rows: array<int, array<string, mixed>>}>  $factSheets
      * @param  array<int, array<string, mixed>>  $gridSheets
@@ -132,8 +140,14 @@ class TaxPreviewXlsxWriter
 
                 $cellCoordinate = [$columnIndex + 2, $excelRow];
                 if (is_int($value) || is_float($value)) {
+                    if ($column['format'] === self::GRID_FORMAT_TEXT) {
+                        $sheet->setCellValueExplicit($cellCoordinate, (string) $value, DataType::TYPE_STRING);
+
+                        continue;
+                    }
+
                     $sheet->setCellValue($cellCoordinate, $value);
-                    $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_CURRENCY_USD);
+                    $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode($this->gridNumberFormatCode($column['format']));
 
                     continue;
                 }
@@ -193,7 +207,7 @@ class TaxPreviewXlsxWriter
 
     /**
      * @param  array<string, mixed>  $gridSheet
-     * @return array<int, array{key: string, label: string, width: float|null}>
+     * @return array<int, array{key: string, label: string, width: float|null, format: string}>
      */
     private function gridColumns(array $gridSheet): array
     {
@@ -213,10 +227,34 @@ class TaxPreviewXlsxWriter
                 'key' => (string) ($column['key'] ?? ''),
                 'label' => (string) ($column['label'] ?? ''),
                 'width' => isset($column['width']) && is_numeric($column['width']) ? (float) $column['width'] : null,
+                'format' => $this->gridColumnFormat($column['format'] ?? null),
             ];
         }
 
         return $columns;
+    }
+
+    private function gridColumnFormat(mixed $format): string
+    {
+        if (! is_string($format)) {
+            return self::GRID_FORMAT_CURRENCY;
+        }
+
+        return match ($format) {
+            self::GRID_FORMAT_NUMBER,
+            self::GRID_FORMAT_PERCENT,
+            self::GRID_FORMAT_TEXT => $format,
+            default => self::GRID_FORMAT_CURRENCY,
+        };
+    }
+
+    private function gridNumberFormatCode(string $format): string
+    {
+        return match ($format) {
+            self::GRID_FORMAT_NUMBER => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+            self::GRID_FORMAT_PERCENT => NumberFormat::FORMAT_PERCENTAGE_00,
+            default => NumberFormat::FORMAT_CURRENCY_USD,
+        };
     }
 
     /**
@@ -278,7 +316,7 @@ class TaxPreviewXlsxWriter
     }
 
     /**
-     * @param  array<int, array{key: string, label: string, width: float|null}>  $columns
+     * @param  array<int, array{key: string, label: string, width: float|null, format: string}>  $columns
      */
     private function applyGridColumnWidths(Worksheet $sheet, array $columns): void
     {

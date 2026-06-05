@@ -21,6 +21,7 @@ function renderHeader(overrides: Partial<ComponentProps<typeof DockHeaderBar>> =
   const props = {
     selectedYear: 2025,
     availableYears: [2025, 2024],
+    isExportXlsxDisabled: false,
     isLoadingYears: false,
     pendingReviewCount: 0,
     onYearChange: jest.fn(),
@@ -48,6 +49,7 @@ describe('DockHeaderBar', () => {
     expect(exportButton).toBeInTheDocument()
     fireEvent.click(exportButton)
     expect(mockExportXlsx).toHaveBeenCalledTimes(1)
+    expect(mockExportXlsx).toHaveBeenCalledWith()
   })
 
   it('disables the XLSX export action while generating', () => {
@@ -56,6 +58,15 @@ describe('DockHeaderBar', () => {
     renderHeader()
 
     expect(screen.getByRole('button', { name: /generating/i })).toBeDisabled()
+  })
+
+  it('disables the XLSX export action while dock data loads', () => {
+    renderHeader({ isExportXlsxDisabled: true })
+
+    const exportButton = screen.getByRole('button', { name: /export xlsx/i })
+    expect(exportButton).toBeDisabled()
+    fireEvent.click(exportButton)
+    expect(mockExportXlsx).not.toHaveBeenCalled()
   })
 
   it('shows the selected year control', () => {

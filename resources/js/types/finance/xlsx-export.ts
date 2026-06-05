@@ -26,10 +26,13 @@ export type XlsxGridRowKind = 'title' | 'section' | 'header' | 'data' | 'total'
 
 export type XlsxGridCellValue = string | number | null
 
+export type XlsxGridColumnFormat = 'currency' | 'number' | 'percent' | 'text'
+
 export interface XlsxGridColumn {
   key: string
   label: string
   width?: number | undefined
+  format?: XlsxGridColumnFormat | undefined
 }
 
 export interface XlsxGridRow {
@@ -51,3 +54,11 @@ export interface TaxPreviewXlsxExportPayload {
   scope?: XlsxExportScope | undefined
   grids?: XlsxGridSheet[] | undefined
 }
+
+export interface TaxPreviewXlsxExportOptions {
+  filename?: string | undefined
+  scope?: XlsxExportScope | undefined
+  grids?: XlsxGridSheet[] | undefined
+}
+
+export type TaxPreviewXlsxExporter = (options?: TaxPreviewXlsxExportOptions) => void | Promise<void>

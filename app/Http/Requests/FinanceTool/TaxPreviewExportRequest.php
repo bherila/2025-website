@@ -26,6 +26,13 @@ class TaxPreviewExportRequest extends FormRequest
         self::SCOPE_K3_ALL_IN_ONE,
     ];
 
+    public const array GRID_COLUMN_FORMATS = [
+        'currency',
+        'number',
+        'percent',
+        'text',
+    ];
+
     public function authorize(): bool
     {
         return true;
@@ -47,6 +54,7 @@ class TaxPreviewExportRequest extends FormRequest
             'grids.*.columns.*.key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
             'grids.*.columns.*.label' => ['required', 'string', 'max:120'],
             'grids.*.columns.*.width' => ['nullable', 'numeric', 'min:6', 'max:80'],
+            'grids.*.columns.*.format' => ['nullable', 'string', Rule::in(self::GRID_COLUMN_FORMATS)],
             'grids.*.rows' => ['required', 'array', 'min:1', 'max:2000'],
             'grids.*.rows.*.kind' => ['required', 'string', Rule::in(['title', 'section', 'header', 'data', 'total'])],
             'grids.*.rows.*.label' => ['nullable', 'string', 'max:500'],
@@ -135,11 +143,11 @@ class TaxPreviewExportRequest extends FormRequest
             return false;
         }
 
-        $normalizedName = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name)) ?? '';
+        $name = (string) $name;
 
         return match ($scope) {
-            self::SCOPE_K1_ALL_IN_ONE => str_contains($normalizedName, 'k1'),
-            self::SCOPE_K3_ALL_IN_ONE => str_contains($normalizedName, 'k3'),
+            self::SCOPE_K1_ALL_IN_ONE => preg_match('/(^|[^a-z0-9])k[-_\s]?1s?([^a-z0-9]|$)/i', $name) === 1,
+            self::SCOPE_K3_ALL_IN_ONE => preg_match('/(^|[^a-z0-9])k[-_\s]?3s?([^a-z0-9]|$)/i', $name) === 1,
             default => false,
         };
     }

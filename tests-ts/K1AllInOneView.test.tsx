@@ -116,6 +116,54 @@ describe('K1AllInOneView', () => {
     expect(onReviewDoc).toHaveBeenCalledWith(101, k1CodeSourceFieldId('11', 'A'))
   })
 
+  it('downloads a scoped normalized K-1 XLSX grid', () => {
+    const onExportXlsx = jest.fn()
+    renderView({ onExportXlsx })
+
+    fireEvent.click(screen.getByRole('button', { name: /download xlsx/i }))
+
+    expect(onExportXlsx).toHaveBeenCalledTimes(1)
+    const payload = onExportXlsx.mock.calls[0]?.[0] as {
+      scope: string
+      grids: Array<{
+        name: string
+        scope: string
+        columns: Array<{ key: string; label: string; format?: string }>
+        rows: Array<{ kind: string; label?: string; cells?: Record<string, string | number | null> }>
+      }>
+    }
+    const grid = payload.grids[0]!
+    expect(payload.scope).toBe('k1-all-in-one')
+    expect(grid.name).toBe('All K-1s')
+    expect(grid.scope).toBe('k1-all-in-one')
+    expect(grid.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'doc_101', label: 'Alpha Fund LP (11-1111111)', format: 'currency' }),
+      expect.objectContaining({ key: 'doc_102', label: 'Trader Fund LP (22-2222222)', format: 'currency' }),
+      expect.objectContaining({ key: 'from', label: 'From', format: 'text' }),
+      expect.objectContaining({ key: 'destination', label: 'Destination', format: 'text' }),
+    ]))
+
+    const interestRow = grid.rows.find((row) => row.label === '5 Interest income')
+    expect(interestRow).toEqual(expect.objectContaining({
+      kind: 'data',
+      cells: expect.objectContaining({
+        doc_101: 1000,
+        doc_102: 2000,
+        total: 3000,
+        destination: 'Sch B line 1',
+      }),
+    }))
+
+    const codedRow = grid.rows.find((row) => row.label === '11A Other portfolio income (loss)')
+    expect(codedRow).toEqual(expect.objectContaining({
+      cells: expect.objectContaining({
+        doc_101: 100,
+        doc_102: 200,
+        total: 300,
+      }),
+    }))
+  })
+
   it('saves a source value override without opening the K-1 review modal first', async () => {
     const { onReviewDoc, onSaveParsedData } = renderView()
     fireEvent.click(screen.getByRole('button', { name: '$1,000' }))

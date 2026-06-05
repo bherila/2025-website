@@ -586,7 +586,7 @@ function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number
 }
 
 function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
-  const { reviewK1Doc } = useDockActions()
+  const { reviewK1Doc, exportXlsx, isExportingXlsx } = useDockActions()
   return (
     <K1AllInOneView
       k1Docs={state.reviewedK1Docs}
@@ -594,13 +594,23 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
       onReviewDoc={reviewK1Doc}
       onDrill={onDrill}
       onSaveParsedData={saveParsedDataOverride(state)}
+      onExportXlsx={exportXlsx}
+      isExportingXlsx={isExportingXlsx}
     />
   )
 }
 
 function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
-  const { reviewK1Doc } = useDockActions()
-  return <K3AllInOneView k1Docs={state.reviewedK1Docs} onReviewDoc={reviewK1Doc} onSaveParsedData={saveParsedDataOverride(state)} />
+  const { reviewK1Doc, exportXlsx, isExportingXlsx } = useDockActions()
+  return (
+    <K3AllInOneView
+      k1Docs={state.reviewedK1Docs}
+      onReviewDoc={reviewK1Doc}
+      onSaveParsedData={saveParsedDataOverride(state)}
+      onExportXlsx={exportXlsx}
+      isExportingXlsx={isExportingXlsx}
+    />
+  )
 }
 
 function SourceValueOverridesAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {

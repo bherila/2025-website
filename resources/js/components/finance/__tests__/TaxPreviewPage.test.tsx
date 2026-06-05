@@ -1,7 +1,57 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
+import { fetchWrapper } from '@/fetchWrapper'
+import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
+import type { TaxDocument } from '@/types/finance/tax-document'
+
 import TaxPreviewPage from '../TaxPreviewPage'
+
+jest.mock('@/fetchWrapper', () => ({
+  fetchWrapper: {
+    postRaw: jest.fn(),
+  },
+}))
+
+function k1Data(fields: FK1StructuredData['fields'], sections: K3Section[] = []): FK1StructuredData {
+  return {
+    schemaVersion: '2026.1',
+    formType: 'K-1-1065',
+    fields,
+    codes: {},
+    ...(sections.length > 0 ? { k3: { sections } } : {}),
+  }
+}
+
+const reviewedK1Docs = [
+  {
+    id: 401,
+    parsed_data: k1Data(
+      { A: { value: '11-1111111' }, B: { value: 'Alpha Fund LP' }, '5': { value: '1000' } },
+      [
+        {
+          sectionId: 'part2_section1',
+          title: 'Part II',
+          data: {
+            rows: [
+              { line: '1', description: 'Interest', col_c_passive: '500', col_g_total: '500' },
+            ],
+          },
+        },
+        {
+          sectionId: 'part3_section4',
+          title: 'Part III §4',
+          data: {
+            countries: [
+              { country: 'Ireland', amount_usd: 75 },
+            ],
+          },
+        },
+      ],
+    ),
+    employment_entity: null,
+  },
+] as unknown as TaxDocument[]
 
 const mockTaxPreview = {
   year: 2025,
@@ -10,7 +60,10 @@ const mockTaxPreview = {
   error: null,
   pendingReviewCount: 0,
   taxReturn: { year: 2025 },
+  reviewedK1Docs,
+  taxFacts: null,
 }
+let mockProvidedExportXlsx: (() => void | Promise<void>) | null = null
 
 jest.mock('../TaxPreviewContext', () => ({
   TaxPreviewProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -18,9 +71,17 @@ jest.mock('../TaxPreviewContext', () => ({
 }))
 
 jest.mock('../tax-preview/DockActions', () => ({
-  DockActionsProvider: ({ children }: { children: ReactNode }) => (
-    <div data-testid="dock-actions">{children}</div>
-  ),
+  DockActionsProvider: ({
+    children,
+    exportXlsx,
+  }: {
+    children: ReactNode
+    exportXlsx: () => void | Promise<void>
+  }) => {
+    mockProvidedExportXlsx = exportXlsx
+
+    return <div data-testid="dock-actions">{children}</div>
+  },
 }))
 
 jest.mock('../tax-preview/DockHeaderBar', () => ({
@@ -46,6 +107,33 @@ jest.mock('../tax-preview/TaxEstimateHeader', () => ({
 }))
 
 describe('TaxPreviewPage', () => {
+  const mockPostRaw = fetchWrapper.postRaw as jest.Mock
+  let clickSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    mockProvidedExportXlsx = null
+    mockTaxPreview.isLoading = false
+    mockPostRaw.mockResolvedValue({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['xlsx'])),
+      headers: { get: jest.fn(() => 'attachment; filename="tax-preview-2025.xlsx"') },
+    })
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: jest.fn(() => 'blob:tax-preview'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: jest.fn(),
+    })
+    clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    mockPostRaw.mockReset()
+    clickSpy.mockRestore()
+  })
+
   it('renders the dock UI by default without a dock query parameter', () => {
     window.history.pushState(null, '', '/finance/tax-preview?year=2025')
 
@@ -63,5 +151,49 @@ describe('TaxPreviewPage', () => {
 
     expect(screen.getByTestId('dock-actions')).toBeInTheDocument()
     expect(screen.getByTestId('miller-shell')).toBeInTheDocument()
+  })
+
+  it('posts All K-1s and All K-3s normalized grids with the full dock XLSX export', async () => {
+    window.history.pushState(null, '', '/finance/tax-preview?year=2025')
+
+    render(<TaxPreviewPage initialData={{ year: 2025, availableYears: [2025, 2024] }} />)
+
+    await act(async () => {
+      await mockProvidedExportXlsx?.()
+    })
+
+    await waitFor(() => expect(mockPostRaw).toHaveBeenCalledTimes(1))
+    const payload = mockPostRaw.mock.calls[0]?.[1] as {
+      year: number
+      filename: string
+      scope: string
+      grids: Array<{ name: string; scope: string; rows: Array<{ label?: string }> }>
+    }
+    expect(mockPostRaw).toHaveBeenCalledWith('/api/finance/tax-preview/export-xlsx', expect.objectContaining({
+      year: 2025,
+      filename: 'tax-preview-2025.xlsx',
+      scope: 'full',
+    }))
+    expect(payload.grids.map((grid) => grid.name)).toEqual(['All K-1s', 'All K-3s'])
+    expect(payload.grids.find((grid) => grid.name === 'All K-1s')?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '5 Interest income' }),
+    ]))
+    expect(payload.grids.find((grid) => grid.name === 'All K-3s')?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'K-3 Part II — Foreign Income — Total' }),
+      expect.objectContaining({ label: 'Foreign tax total (used)' }),
+    ]))
+  })
+
+  it('does not post the full dock XLSX export while tax preview data is loading', async () => {
+    mockTaxPreview.isLoading = true
+    window.history.pushState(null, '', '/finance/tax-preview?year=2025')
+
+    render(<TaxPreviewPage initialData={{ year: 2025, availableYears: [2025, 2024] }} />)
+
+    await act(async () => {
+      await mockProvidedExportXlsx?.()
+    })
+
+    expect(mockPostRaw).not.toHaveBeenCalled()
   })
 })

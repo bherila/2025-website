@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Http\Requests\FinanceTool\TaxPreviewExportRequest;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
@@ -157,7 +158,8 @@ class TaxPreviewExportControllerTest extends TestCase
             'year' => 2025,
             'filename' => 'tax-preview-2025.xlsx',
             'grids' => [
-                $this->comparisonGrid('K-1 All-in-One Comparison', 'k1-all-in-one'),
+                $this->comparisonGrid('All K-1s', 'k1-all-in-one'),
+                $this->comparisonGrid('All K-3s', 'k3-all-in-one'),
             ],
         ]);
 
@@ -166,11 +168,71 @@ class TaxPreviewExportControllerTest extends TestCase
         $spreadsheet = $this->spreadsheetFromResponse($response);
         $this->assertInstanceOf(Worksheet::class, $spreadsheet->getSheetByName('Overview'));
 
-        $gridSheet = $spreadsheet->getSheetByName('K-1 All-in-One Comparison');
-        $this->assertInstanceOf(Worksheet::class, $gridSheet);
-        $this->assertSame('B2', $gridSheet->getFreezePane());
-        $this->assertSame('Source A', $gridSheet->getCell('B1')->getValue());
-        $this->assertSame(1234.56, (float) $gridSheet->getCell('B5')->getCalculatedValue());
+        $k1GridSheet = $spreadsheet->getSheetByName('All K-1s');
+        $this->assertInstanceOf(Worksheet::class, $k1GridSheet);
+        $this->assertSame('B2', $k1GridSheet->getFreezePane());
+        $this->assertSame('Source A', $k1GridSheet->getCell('B1')->getValue());
+        $this->assertSame(1234.56, (float) $k1GridSheet->getCell('B5')->getCalculatedValue());
+
+        $k3GridSheet = $spreadsheet->getSheetByName('All K-3s');
+        $this->assertInstanceOf(Worksheet::class, $k3GridSheet);
+        $this->assertSame('B2', $k3GridSheet->getFreezePane());
+        $this->assertSame('Source A', $k3GridSheet->getCell('B1')->getValue());
+        $this->assertSame('K-3 comparison', $k3GridSheet->getCell('A2')->getValue());
+        $this->assertSame(1234.56, (float) $k3GridSheet->getCell('B5')->getCalculatedValue());
+    }
+
+    public function test_grid_export_respects_column_format_hints_and_name_scope_fallback(): void
+    {
+        $user = User::factory()->create();
+        $this->assertTrue(TaxPreviewExportRequest::gridMatchesScope(['name' => 'All K-1s'], TaxPreviewExportRequest::SCOPE_K1_ALL_IN_ONE));
+        $this->assertFalse(TaxPreviewExportRequest::gridMatchesScope(['name' => 'Risk1 Summary'], TaxPreviewExportRequest::SCOPE_K1_ALL_IN_ONE));
+
+        $response = $this->actingAs($user)->postJson('/api/finance/tax-preview/export-xlsx', [
+            'year' => 2025,
+            'filename' => 'k1-grid.xlsx',
+            'scope' => 'k1-all-in-one',
+            'grids' => [
+                [
+                    'name' => 'All K-1s',
+                    'columns' => [
+                        ['key' => 'money', 'label' => 'Money', 'format' => 'currency'],
+                        ['key' => 'count', 'label' => 'Count', 'format' => 'number'],
+                        ['key' => 'rate', 'label' => 'Rate', 'format' => 'percent'],
+                        ['key' => 'identifier', 'label' => 'Identifier', 'format' => 'text'],
+                    ],
+                    'rows' => [
+                        ['kind' => 'data', 'label' => 'Format check', 'cells' => [
+                            'money' => 12.34,
+                            'count' => 7,
+                            'rate' => 0.125,
+                            'identifier' => 12345,
+                        ]],
+                    ],
+                ],
+                [
+                    'name' => 'Risk1 Summary',
+                    'columns' => [
+                        ['key' => 'money', 'label' => 'Money'],
+                    ],
+                    'rows' => [
+                        ['kind' => 'data', 'label' => 'Should not export', 'cells' => ['money' => 99]],
+                    ],
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $spreadsheet = $this->spreadsheetFromResponse($response);
+        $this->assertSame(1, $spreadsheet->getSheetCount());
+
+        $sheet = $spreadsheet->getSheet(0);
+        $this->assertSame('All K-1s', $sheet->getTitle());
+        $this->assertSame(NumberFormat::FORMAT_CURRENCY_USD, $sheet->getStyle('B2')->getNumberFormat()->getFormatCode());
+        $this->assertSame(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1, $sheet->getStyle('C2')->getNumberFormat()->getFormatCode());
+        $this->assertSame(NumberFormat::FORMAT_PERCENTAGE_00, $sheet->getStyle('D2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('12345', $sheet->getCell('E2')->getValue());
     }
 
     /**
@@ -220,7 +282,7 @@ class TaxPreviewExportControllerTest extends TestCase
                 ['key' => 'source_b', 'label' => 'Source B'],
             ],
             'rows' => [
-                ['kind' => 'title', 'label' => str_starts_with($name, 'K-3') ? 'K-3 comparison' : 'K-1 comparison'],
+                ['kind' => 'title', 'label' => str_contains($name, 'K-3') ? 'K-3 comparison' : 'K-1 comparison'],
                 ['kind' => 'section', 'label' => 'Box 1'],
                 ['kind' => 'header', 'label' => 'Line', 'cells' => ['source_a' => 'Current value', 'source_b' => 'Prior value']],
                 ['kind' => 'data', 'label' => 'Ordinary business income', 'cells' => ['source_a' => 1234.56, 'source_b' => null]],
