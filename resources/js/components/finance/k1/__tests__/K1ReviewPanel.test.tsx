@@ -2,10 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
 import {
+  k1CodeSourceFieldId,
   k1FieldSourceFieldId,
   k3ForeignTaxTotalSourceFieldId,
-  k3Part2SourceFieldId,
+  k3Part2Section1SourceFieldId,
+  k3Part2Section2SourceFieldId,
   k3Part3CountrySourceFieldId,
+  k3Part3Section2SourceFieldId,
   taxSourceFieldSelector,
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
@@ -265,9 +268,89 @@ describe('K1ReviewPanel — source field targets', () => {
 
     expect(container.querySelector(taxSourceFieldSelector(k1FieldSourceFieldId('B')))).not.toBeNull()
     expect(container.querySelector(taxSourceFieldSelector(k1FieldSourceFieldId('5')))).not.toBeNull()
-    expect(container.querySelector(taxSourceFieldSelector(k3Part2SourceFieldId('55')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3Part2Section2SourceFieldId('55')))).not.toBeNull()
     expect(container.querySelector(taxSourceFieldSelector(k3Part3CountrySourceFieldId('Ireland')))).not.toBeNull()
     expect(container.querySelector(taxSourceFieldSelector(k3ForeignTaxTotalSourceFieldId()))).not.toBeNull()
+  })
+
+  it('marks per-code K-1 rows when coded boxes contain multiple codes', () => {
+    const data = makeData({
+      fields: {
+        B: { value: 'Source Partnership' },
+      },
+      codes: {
+        '11': [{ code: 'A', value: '100' }, { code: 'B', value: '200' }],
+        '13': [{ code: 'H', value: '300' }, { code: 'L', value: '400' }],
+        '14': [{ code: 'A', value: '500' }, { code: 'B', value: '600' }],
+        '17': [{ code: 'A', value: '700' }, { code: 'B', value: '800' }],
+        '20': [{ code: 'A', value: '900' }, { code: 'Z', value: 'STMT' }],
+      },
+    })
+
+    const { container } = render(
+      <K1ReviewPanel data={data} onChange={() => {}} readOnly />,
+    )
+
+    expect(container.querySelector(taxSourceFieldSelector(k1CodeSourceFieldId('11', 'A')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k1CodeSourceFieldId('13', 'H')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k1CodeSourceFieldId('14', 'A')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k1CodeSourceFieldId('17', 'B')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k1CodeSourceFieldId('20', 'Z')))).not.toBeNull()
+  })
+
+  it('uses distinct K-3 source targets for rows sharing a line number across sections', () => {
+    const data = makeData({
+      fields: { B: { value: 'Source Partnership' } },
+      k3: {
+        sections: [
+          {
+            sectionId: 'part2_section1',
+            title: 'K-3 Part II Section 1',
+            data: {
+              line24_totalGrossIncome: {
+                totals: { c: 100, f: 25, g: 125 },
+              },
+            },
+          },
+          {
+            sectionId: 'part2_section2',
+            title: 'K-3 Part II Section 2',
+            data: {
+              rows: [
+                {
+                  line: '24',
+                  col_c_passive: 200,
+                  col_f_sourced_by_partner: 50,
+                  col_g_total: 250,
+                },
+              ],
+            },
+          },
+          {
+            sectionId: 'part3_section2',
+            title: 'K-3 Part III Section 2',
+            data: {
+              rows: [
+                {
+                  line: '24',
+                  col_c_passive: 300,
+                  col_f_sourced_by_partner: 75,
+                  col_g_total: 375,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    })
+
+    const { container } = render(
+      <K1ReviewPanel data={data} onChange={() => {}} readOnly />,
+    )
+
+    expect(container.querySelector(taxSourceFieldSelector(k3Part2Section1SourceFieldId('24')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3Part2Section2SourceFieldId('24')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3Part3Section2SourceFieldId('24')))).not.toBeNull()
   })
 })
 

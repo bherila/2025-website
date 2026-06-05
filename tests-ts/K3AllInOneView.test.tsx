@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import K3AllInOneView from '@/components/finance/K3AllInOneView'
-import { k3Part3CountrySourceFieldId } from '@/lib/finance/taxSourceFieldIds'
+import {
+  k3ForeignTaxTotalSourceFieldId,
+  k3Part2Section1SourceFieldId,
+  k3Part2Section2SourceFieldId,
+  k3Part3CountrySourceFieldId,
+} from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -18,6 +23,10 @@ function k1WithK3(id: number, name: string, sections: K3Section[]): TaxDocument 
 
 function part2(rows: Array<Record<string, unknown>>): K3Section {
   return { sectionId: 'part2_section1', title: 'Part II', data: { rows } }
+}
+
+function part2Section2(rows: Array<Record<string, unknown>>): K3Section {
+  return { sectionId: 'part2_section2', title: 'Part II Section 2', data: { rows } }
 }
 
 function part3(countries: Array<Record<string, unknown>>): K3Section {
@@ -76,6 +85,39 @@ describe('K3AllInOneView', () => {
     expect(screen.getByText('Effective value')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
     expect(onReviewDoc).toHaveBeenCalledWith(201, k3Part3CountrySourceFieldId('Ireland'))
+  })
+
+  it('opens K-3 Part II section 1 line targets from source cells', () => {
+    const { onReviewDoc } = renderView()
+    const interest = screen.getByText('Interest').closest('tr')!
+
+    fireEvent.click(within(interest).getByRole('button', { name: '$8,010' }))
+    fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
+
+    expect(onReviewDoc).toHaveBeenCalledWith(201, k3Part2Section1SourceFieldId('1'))
+  })
+
+  it('opens K-3 Part II section 2 line targets from source cells', () => {
+    const doc = k1WithK3(306, 'Deduction Fund LP', [
+      part2Section2([{ line: '55', description: 'Net income', col_c_passive: '100', col_g_total: '100' }]),
+    ])
+    const onReviewDoc = jest.fn()
+
+    render(<K3AllInOneView k1Docs={[doc]} onReviewDoc={onReviewDoc} onSaveParsedData={jest.fn().mockResolvedValue(undefined)} />)
+    fireEvent.click(within(screen.getByText('Net income').closest('tr')!).getByRole('button', { name: '$100' }))
+    fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
+
+    expect(onReviewDoc).toHaveBeenCalledWith(306, k3Part2Section2SourceFieldId('55'))
+  })
+
+  it('opens the K-3 foreign tax total aggregate target from source cells', () => {
+    const { onReviewDoc } = renderView()
+    const totalRow = screen.getByText('Foreign tax total (used)').closest('tr')!
+
+    fireEvent.click(within(totalRow).getByRole('button', { name: '$1,201' }))
+    fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
+
+    expect(onReviewDoc).toHaveBeenCalledWith(201, k3ForeignTaxTotalSourceFieldId())
   })
 
   it('keeps table headers, first-column cells, and section labels sticky inside each table viewport', () => {
