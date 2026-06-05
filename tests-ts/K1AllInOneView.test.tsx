@@ -185,7 +185,7 @@ describe('K1AllInOneView', () => {
     const secondInterestRow = grids[1]!.rows.find((row) => row.label === '5 Interest income')
     expect(secondInterestRow?.cells).toEqual(expect.objectContaining({
       doc_1061: 62,
-      total: 1953,
+      total: 62,
     }))
     expect(secondInterestRow?.cells ?? {}).not.toHaveProperty('doc_1000')
   })

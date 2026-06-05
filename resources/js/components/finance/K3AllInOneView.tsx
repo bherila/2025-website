@@ -442,9 +442,9 @@ function k3GridSheetName(sheetIndex: number): string {
   return sheetIndex === 0 ? 'All K-3s' : `All K-3s ${sheetIndex + 1}`
 }
 
-function k3GridRow(row: K3PivotRow, visibleColumns: K3Column[], allColumns: K3Column[]): XlsxGridSheet['rows'][number] {
+function k3GridRow(row: K3PivotRow, visibleColumns: K3Column[]): XlsxGridSheet['rows'][number] {
   const cells: Record<string, XlsxGridCellValue> = {}
-  const total = allColumns.reduce((acc, column) => {
+  const total = visibleColumns.reduce((acc, column) => {
     const cell = row.cell(column)
 
     return cell.shadowed ? acc : acc.add(cell.value ?? 0)
@@ -489,11 +489,11 @@ function buildK3AllInOneXlsxGridForColumnSet(
 
   for (const category of CATEGORIES) {
     rows.push({ kind: 'section', label: `K-3 Part II — Foreign Income — ${category.label}` })
-    rows.push(...buildK3Part2Rows(model, category.key).map((row) => k3GridRow(row, visibleColumns, allColumns)))
+    rows.push(...buildK3Part2Rows(model, category.key).map((row) => k3GridRow(row, visibleColumns)))
   }
 
   rows.push({ kind: 'section', label: 'K-3 Part III §4 — Foreign Taxes (USD by country)' })
-  rows.push(...buildK3Part3Rows(model).map((row) => k3GridRow(row, visibleColumns, allColumns)))
+  rows.push(...buildK3Part3Rows(model).map((row) => k3GridRow(row, visibleColumns)))
 
   return {
     name: k3GridSheetName(sheetIndex),

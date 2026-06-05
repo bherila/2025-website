@@ -437,12 +437,6 @@ function buildK1AllInOneXlsxGridForColumnSet(
 
     for (const row of section.rows) {
       const cells: Record<string, XlsxGridCellValue> = {}
-      const moneyValues = row.kind === 'money'
-        ? allColumns.map((column) => {
-            const value = row.value(column.data)
-            return typeof value === 'number' ? value : null
-          })
-        : []
       const visibleMoneyValues = row.kind === 'money'
         ? visibleColumns.map((column) => {
             const value = row.value(column.data)
@@ -450,7 +444,7 @@ function buildK1AllInOneXlsxGridForColumnSet(
           })
         : []
       const total = row.kind === 'money'
-        ? moneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
+        ? visibleMoneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
         : null
 
       visibleColumns.forEach((column, index) => {
@@ -463,7 +457,7 @@ function buildK1AllInOneXlsxGridForColumnSet(
 
       cells.total = total
       cells.from = row.fromHint ?? null
-      cells.destination = destinationText(row, destinationGroupsForRow(row, allColumns, moneyValues, routingIndex))
+      cells.destination = destinationText(row, destinationGroupsForRow(row, visibleColumns, visibleMoneyValues, routingIndex))
 
       rows.push({
         kind: row.kind === 'money' ? 'data' : 'data',

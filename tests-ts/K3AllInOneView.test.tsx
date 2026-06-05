@@ -191,7 +191,7 @@ describe('K3AllInOneView', () => {
     const secondInterestRow = grids[1]!.rows.slice(totalSectionIndex + 1).find((row) => row.label === 'Interest')
     expect(secondInterestRow?.cells).toEqual(expect.objectContaining({
       doc_2063: 64,
-      total: 2080,
+      total: 64,
     }))
     expect(secondInterestRow?.cells ?? {}).not.toHaveProperty('doc_2000')
   })
