@@ -8,6 +8,7 @@ use App\Http\Requests\FinancialPlanning\StoreOpportunityCostComparisonRequest;
 use App\Http\Requests\FinancialPlanning\UpdateOpportunityCostComparisonRequest;
 use App\Models\CareerJob;
 use App\Models\OpportunityCostComparison;
+use App\Services\Planning\OpportunityCost\ComparisonShareRedactor;
 use App\Services\Planning\OpportunityCost\OpportunityCostCalculator;
 use App\Services\Planning\OpportunityCost\OpportunityCostInputs;
 use App\Support\ShortCode;
@@ -18,7 +19,10 @@ use Illuminate\View\View;
 
 class OpportunityCostController extends Controller
 {
-    public function __construct(private OpportunityCostCalculator $calculator) {}
+    public function __construct(
+        private OpportunityCostCalculator $calculator,
+        private ComparisonShareRedactor $shareRedactor,
+    ) {}
 
     public function show(): View
     {
@@ -37,10 +41,25 @@ class OpportunityCostController extends Controller
             ->where('short_code', $code)
             ->firstOrFail();
 
+        $canEdit = Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id;
+        $inputs = $this->inputsFromComparison($comparison)->toArray();
+        $projection = $comparison->computed_json;
+
+        // Confidential ("exclusive") share: redact the current job by identity for anyone who
+        // cannot edit the comparison, so no current-job dollar value reaches the page payload.
+        if (! $comparison->share_includes_current && ! $canEdit) {
+            $currentJobId = is_array($projection) && is_string($projection['currentJobId'] ?? null)
+                ? $projection['currentJobId']
+                : (is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null);
+            $redacted = $this->shareRedactor->redact($inputs, $projection, is_string($currentJobId) ? $currentJobId : null);
+            $inputs = $redacted['inputs'];
+            $projection = $redacted['projection'];
+        }
+
         return view('financial-planning.opportunity-cost', [
             'initialData' => [
-                'inputs' => $this->inputsFromComparison($comparison)->toArray(),
-                'projection' => $comparison->computed_json,
+                'inputs' => $inputs,
+                'projection' => $projection,
                 'authenticated' => Auth::check(),
                 'comparison' => [
                     'id' => $comparison->id,
@@ -49,7 +68,7 @@ class OpportunityCostController extends Controller
                     'ownerUserId' => $comparison->user_id,
                     'shareIncludesCurrent' => $comparison->share_includes_current,
                 ],
-                'canEdit' => Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id,
+                'canEdit' => $canEdit,
             ],
         ]);
     }
@@ -125,7 +144,7 @@ class OpportunityCostController extends Controller
                 'computed_json' => $projection,
             ]);
 
-            CareerJob::query()->whereIn('id', $staleJobIds)->delete();
+            $this->deleteOrphanedJobs($staleJobIds, $comparison->id);
         });
 
         return response()->json($this->comparisonResponse($comparison, $projection));
@@ -232,6 +251,39 @@ class OpportunityCostController extends Controller
         }
 
         return $ids;
+    }
+
+    /**
+     * Delete only the given job rows that no OTHER comparison still references, so a reusable
+     * CareerJob shared across comparisons is never silently removed.
+     *
+     * @param  list<int>  $jobIds
+     */
+    private function deleteOrphanedJobs(array $jobIds, int $keepComparisonId): void
+    {
+        if ($jobIds === []) {
+            return;
+        }
+
+        $referenced = [];
+        OpportunityCostComparison::query()
+            ->where('id', '!=', $keepComparisonId)
+            ->get(['current_job_id', 'hypothetical_job_ids'])
+            ->each(function (OpportunityCostComparison $other) use (&$referenced): void {
+                if ($other->current_job_id !== null) {
+                    $referenced[(int) $other->current_job_id] = true;
+                }
+
+                foreach ($other->hypothetical_job_ids as $id) {
+                    $referenced[(int) $id] = true;
+                }
+            });
+
+        $deletable = array_values(array_filter($jobIds, fn (int $id): bool => ! isset($referenced[$id])));
+
+        if ($deletable !== []) {
+            CareerJob::query()->whereIn('id', $deletable)->delete();
+        }
     }
 
     /**

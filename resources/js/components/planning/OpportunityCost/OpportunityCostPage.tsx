@@ -5,6 +5,7 @@ import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MillerColumnShell, type MillerColumnShellColumn, type MillerRegistryEntry } from '@/components/ui/miller'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 
 import { DEFAULT_OPPORTUNITY_COST_INPUTS } from './defaults'
@@ -156,13 +157,21 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
   const [status, setStatus] = useState<string | null>(null)
   const [savedComparison, setSavedComparison] = useState<OpportunityCostComparisonMeta | null>(initialData.comparison ?? null)
   const [canEdit, setCanEdit] = useState(initialData.canEdit ?? false)
+  const [shareIncludesCurrent, setShareIncludesCurrent] = useState(initialData.comparison?.shareIncludesCurrent ?? true)
   const [saving, setSaving] = useState(false)
   const [urlOnlyShareUrl, setUrlOnlyShareUrl] = useState(window.location.href)
   const [activeColumn, setActiveColumn] = useState<OpportunityCostColumnState | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
   const isSharedView = savedComparison !== null
-  const shareUrl = savedComparison?.shareUrl ?? urlOnlyShareUrl
+  // The exclusive link is built from URL state with the current job stripped, so it is leak-free
+  // regardless of save state; the inclusive link uses the canonical saved/URL-state share link.
+  const exclusiveShareUrl = useMemo(() => {
+    const queryString = serializeOpportunityCostUrlState(normalizedInputs, { excludeCurrent: true })
+    return `${window.location.origin}${urlStatePathname()}${queryString ? `?${queryString}` : ''}`
+  }, [normalizedInputs])
+  const canonicalShareUrl = savedComparison?.shareUrl ?? urlOnlyShareUrl
+  const shareUrl = shareIncludesCurrent ? canonicalShareUrl : exclusiveShareUrl
   const saveLabel = useMemo(() => {
     if (savedComparison && canEdit) {
       return 'Update'
@@ -250,14 +259,14 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
 
     try {
       const response = savedComparison && canEdit
-        ? await updateOpportunityCostComparison(savedComparison.shortCode, normalizedInputs, savedComparison.shareIncludesCurrent)
-        : await saveOpportunityCostComparison(normalizedInputs, savedComparison?.shareIncludesCurrent ?? true)
+        ? await updateOpportunityCostComparison(savedComparison.shortCode, normalizedInputs, shareIncludesCurrent)
+        : await saveOpportunityCostComparison(normalizedInputs, shareIncludesCurrent)
       const nextComparison: OpportunityCostComparisonMeta = {
         id: response.id,
         shortCode: response.shortCode,
         shareUrl: response.shareUrl,
         ownerUserId: null,
-        shareIncludesCurrent: savedComparison?.shareIncludesCurrent ?? true,
+        shareIncludesCurrent,
       }
       setSavedComparison(nextComparison)
       setCanEdit(true)
@@ -368,7 +377,15 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
             <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting} data-oc-action-slot="export">
               <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
             </Button>
-            <span data-oc-action-slot="share-mode" />
+            <Select value={shareIncludesCurrent ? 'inclusive' : 'exclusive'} onValueChange={(value) => setShareIncludesCurrent(value === 'inclusive')}>
+              <SelectTrigger aria-label="Share mode" data-oc-action-slot="share-mode" className="w-[12rem]">
+                <span className="truncate">{shareIncludesCurrent ? 'Share: include current' : 'Share: hide current'}</span>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+                <SelectItem value="inclusive">Include current job</SelectItem>
+                <SelectItem value="exclusive">Hide current job (confidential)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </section>
