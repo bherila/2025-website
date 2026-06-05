@@ -249,12 +249,15 @@ Use `php artisan finance:k1-codes --year=2025 --account=<acct_id> --box=11 --cod
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/finance/tax-preview-data?year=YYYY` | Consolidated mutable Tax Preview dataset for the React context |
+| `POST` | `/api/finance/tax-preview/export-xlsx` | Server-generated Tax Preview XLSX export. Defaults to the full backend fact workbook; accepts optional normalized K-1/K-3 grid sheets for append or scoped grid-only exports. |
 | `GET` | `/api/finance/schedule-c` | Tax data grouped by characteristic and year |
 | `GET` | `/api/payslips?year=YYYY` | Payslip records for the year (still available for other pages) |
 | `GET` | `/api/finance/tax-documents` | Tax documents with various filters (year, form_type, is_reviewed) |
 | `PUT` | `/api/finance/tax-documents/{id}?include_tax_facts=1` | Update a document and optionally return `{ document, taxFacts }` |
 | `PUT` | `/api/finance/tax-documents/{id}/mark-reviewed?include_tax_facts=1` | Mark reviewed and optionally return `{ document, taxFacts }` |
 | `PATCH` | `/api/finance/tax-documents/{id}/accounts/{linkId}?include_tax_facts=1` | Update an account-link routing/review state and optionally return `{ link, taxFacts }` |
+
+The XLSX export request accepts `scope: "full" | "k1-all-in-one" | "k3-all-in-one"` with `full` as the default. `full` exports the existing backend fact workbook and appends any supplied normalized `grids`; scoped K-1/K-3 exports skip fact sheets and include only matching normalized grid sheets. Grid sheets carry `name`, optional sheet `scope`, `columns` (`key`, `label`, optional `width`), and `rows` with `kind`, optional `label`, and `cells` keyed by column key. Cell values are limited to strings, numbers, or null so the backend can safely format numeric cells as currency.
 
 ---
 
