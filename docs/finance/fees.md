@@ -50,7 +50,9 @@ The chart payload reports annualized return percentages, not return dollars:
 
 Annualization is intentionally simple multiplication by 12, not compounding. The `fees` payload field stays in signed dollars for tooltip/context display.
 
-If there is no usable starting balance or no statement closing in the month, both percentage fields are `null`; the chart treats that as a gap rather than a 0% flatline. Months after the latest available statement close are flagged with `is_projected: true`, and the UI draws those projected segments with dotted lines. The all-accounts series computes a blended percentage using the sum of account starting balances as the denominator instead of averaging account-level percentages.
+If a historical month has no usable starting balance or no statement closing in the month, both percentage fields are `null`; the chart treats that as a gap rather than a 0% flatline. Months after the latest available statement close are flagged with `is_projected: true`. Once at least one actual monthly return percentage exists, projected months carry forward the latest known gross and net percentages so the UI can draw the projected segment with dotted lines. If there is no actual percentage to project from, projected months remain `null`.
+
+The all-accounts series computes a blended percentage using the sum of account starting balances as the denominator instead of averaging account-level percentages.
 
 ## K-1 Reconciliation
 

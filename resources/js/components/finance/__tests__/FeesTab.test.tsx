@@ -6,7 +6,7 @@ import React from 'react'
 import { fetchWrapper } from '@/fetchWrapper'
 
 import type { FeesTabData } from '../FeesTab'
-import FeesTab, { FeeDragLineChart } from '../FeesTab'
+import FeesTab, { feeDragChartData, FeeDragLineChart } from '../FeesTab'
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
@@ -108,6 +108,15 @@ function makeFeesData(overrides: Partial<FeesTabData> = {}): FeesTabData {
   }
 }
 
+function chartPointAt(points: ReturnType<typeof feeDragChartData>, index: number) {
+  const point = points[index]
+  if (!point) {
+    throw new Error(`Missing fee-drag chart point at index ${index}`)
+  }
+
+  return point
+}
+
 describe('FeesTab', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -179,8 +188,8 @@ describe('FeesTab', () => {
     expect(screen.getByText('Review this K-1 to classify the 13ZZ fee subtotal.')).toBeInTheDocument()
   })
 
-  it('draws projected fee-drag return percentages with dotted lines', () => {
-    render(<FeeDragLineChart series={[
+  it('builds drawable projected fee-drag segments while preserving historical gaps', () => {
+    const chartData = feeDragChartData([
       {
         month: '2025-01',
         gross_return_pct: 7.2,
@@ -192,6 +201,68 @@ describe('FeesTab', () => {
         month: '2025-02',
         gross_return_pct: null,
         net_return_pct: null,
+        fees: 0,
+        is_projected: false,
+      },
+      {
+        month: '2025-03',
+        gross_return_pct: 8,
+        net_return_pct: 2,
+        fees: 0,
+        is_projected: false,
+      },
+      {
+        month: '2025-04',
+        gross_return_pct: 8,
+        net_return_pct: 2,
+        fees: 0,
+        is_projected: true,
+      },
+      {
+        month: '2025-05',
+        gross_return_pct: 8,
+        net_return_pct: 2,
+        fees: 0,
+        is_projected: true,
+      },
+    ])
+
+    const historicalGap = chartPointAt(chartData, 1)
+    const projectionAnchor = chartPointAt(chartData, 2)
+    const firstProjected = chartPointAt(chartData, 3)
+    const secondProjected = chartPointAt(chartData, 4)
+
+    expect(historicalGap.grossReturnPctActual).toBeNull()
+    expect(historicalGap.grossReturnPctProjected).toBeNull()
+    expect(projectionAnchor.grossReturnPctProjected).toBe(8)
+    expect(firstProjected.grossReturnPctProjected).toBe(8)
+    expect(secondProjected.grossReturnPctProjected).toBe(8)
+    expect(firstProjected.netReturnPctProjected).toBe(2)
+    expect(secondProjected.netReturnPctProjected).toBe(2)
+    expect(firstProjected.grossReturnPctActual).toBeNull()
+    expect(secondProjected.grossReturnPctActual).toBeNull()
+  })
+
+  it('draws projected fee-drag return percentages with dotted lines', () => {
+    render(<FeeDragLineChart series={[
+      {
+        month: '2025-01',
+        gross_return_pct: 7.2,
+        net_return_pct: 0,
+        fees: 6,
+        is_projected: false,
+      },
+      {
+        month: '2025-02',
+        gross_return_pct: 7.2,
+        net_return_pct: 0,
+        fees: 0,
+        is_projected: true,
+      },
+      {
+        month: '2025-03',
+        gross_return_pct: 7.2,
+        net_return_pct: 0,
         fees: 0,
         is_projected: true,
       },

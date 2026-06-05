@@ -207,19 +207,47 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertNull($series[0]['gross_return_pct']);
     }
 
-    public function test_monthly_fee_drag_flags_future_months_as_projected(): void
+    public function test_monthly_fee_drag_projects_future_months_from_latest_actual_percentage(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
         $account = $this->createAccount($user);
-        $this->createStatement($account, '2025-01-31', 1000);
+        $this->createStatement($account, '2024-12-31', 1000);
+        $this->createStatement($account, '2025-01-31', 1100);
+        $this->createLineItem($account, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -10]);
 
         $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
 
         $this->assertFalse($series[0]['is_projected']);
+        $this->assertEqualsWithDelta(120.0, $series[0]['net_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(132.0, $series[0]['gross_return_pct'], 0.0001);
         $this->assertTrue($series[1]['is_projected']);
+        $this->assertTrue($series[2]['is_projected']);
+        $this->assertSame($series[0]['net_return_pct'], $series[1]['net_return_pct']);
+        $this->assertSame($series[1]['net_return_pct'], $series[2]['net_return_pct']);
+        $this->assertSame($series[0]['gross_return_pct'], $series[1]['gross_return_pct']);
+        $this->assertSame($series[1]['gross_return_pct'], $series[2]['gross_return_pct']);
+    }
+
+    public function test_monthly_fee_drag_preserves_historical_null_gaps_before_projection(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $this->createStatement($account, '2024-12-31', 1000);
+        $this->createStatement($account, '2025-01-31', 1000);
+        $this->createStatement($account, '2025-03-31', 1030);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
+
+        $this->assertFalse($series[1]['is_projected']);
         $this->assertNull($series[1]['net_return_pct']);
         $this->assertNull($series[1]['gross_return_pct']);
+        $this->assertFalse($series[2]['is_projected']);
+        $this->assertEqualsWithDelta(36.0, $series[2]['net_return_pct'], 0.0001);
+        $this->assertTrue($series[3]['is_projected']);
+        $this->assertSame($series[2]['net_return_pct'], $series[3]['net_return_pct']);
+        $this->assertSame($series[2]['gross_return_pct'], $series[3]['gross_return_pct']);
     }
 
     public function test_reconcile_k1_fees_flags_unclassified_when_13zz_has_no_fee_subtotal(): void

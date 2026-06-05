@@ -105,7 +105,7 @@ class FeeAnalyticsService
             ];
         }
 
-        return $series;
+        return $this->projectMonthlyFeeDragReturnPercentages($series);
     }
 
     /**
@@ -178,7 +178,7 @@ class FeeAnalyticsService
             ];
         }
 
-        return $series;
+        return $this->projectMonthlyFeeDragReturnPercentages($series);
     }
 
     /**
@@ -842,6 +842,33 @@ class FeeAnalyticsService
         }
 
         return $latest;
+    }
+
+    /**
+     * @param  array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>  $series
+     * @return array<int, array{month:string,gross_return_pct:float|null,net_return_pct:float|null,fees:float,is_projected:bool}>
+     */
+    private function projectMonthlyFeeDragReturnPercentages(array $series): array
+    {
+        $lastGrossReturnPct = null;
+        $lastNetReturnPct = null;
+
+        foreach ($series as $index => $row) {
+            if ($row['is_projected']) {
+                $series[$index]['gross_return_pct'] ??= $lastGrossReturnPct;
+                $series[$index]['net_return_pct'] ??= $lastNetReturnPct;
+            }
+
+            if ($series[$index]['gross_return_pct'] !== null) {
+                $lastGrossReturnPct = $series[$index]['gross_return_pct'];
+            }
+
+            if ($series[$index]['net_return_pct'] !== null) {
+                $lastNetReturnPct = $series[$index]['net_return_pct'];
+            }
+        }
+
+        return $series;
     }
 
     private function monthIsProjected(CarbonImmutable $monthStart, ?CarbonImmutable $latestStatementClose): bool
