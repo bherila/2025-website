@@ -1,10 +1,11 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, LineChart, type LucideIcon, Table2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, LineChart, type LucideIcon, Table2 } from 'lucide-react'
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MillerColumnShell, type MillerColumnShellColumn, type MillerRegistryEntry } from '@/components/ui/miller'
+import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 
 import { DEFAULT_OPPORTUNITY_COST_INPUTS } from './defaults'
 import { normalizeOpportunityCostInputs } from './inputUtils'
@@ -150,6 +151,7 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
   const [status, setStatus] = useState<string | null>(null)
   const [shareUrl, setShareUrl] = useState(window.location.href)
   const [activeColumn, setActiveColumn] = useState<OpportunityCostColumnState | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     setShareUrl(replaceUrlWithInputs(normalizedInputs))
@@ -187,6 +189,18 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
   async function copyShareUrl(): Promise<void> {
     await navigator.clipboard.writeText(shareUrl)
     setStatus('URL-state link copied.')
+  }
+
+  async function handleExportXlsx(): Promise<void> {
+    setIsExporting(true)
+    try {
+      await downloadFinanceExport('/api/financial-planning/opportunity-cost/export-xlsx', { inputs: normalizedInputs }, 'opportunity-cost-comparison.xlsx')
+      setStatus(null)
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   function openColumn(column: OpportunityCostColumnState): void {
@@ -263,7 +277,9 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
             <Button type="button" variant="secondary" onClick={copyShareUrl} data-oc-action-slot="copy-link">
               <Copy className="size-4" /> Copy URL state
             </Button>
-            <span data-oc-action-slot="export" />
+            <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting} data-oc-action-slot="export">
+              <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
+            </Button>
             <span data-oc-action-slot="share-mode" />
           </div>
         </div>

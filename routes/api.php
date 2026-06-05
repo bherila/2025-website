@@ -46,6 +46,7 @@ use App\Http\Controllers\FinanceTool\Form8829InputController;
 use App\Http\Controllers\FinanceTool\Form8949LotExportController;
 use App\Http\Controllers\FinanceTool\LotReconciliationLinkController;
 use App\Http\Controllers\FinanceTool\LotWorkspaceController;
+use App\Http\Controllers\FinanceTool\OpportunityCostXlsxExportController;
 use App\Http\Controllers\FinanceTool\ReconciliationSummaryController;
 use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
@@ -561,6 +562,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
+Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/export-xlsx', [OpportunityCostXlsxExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
