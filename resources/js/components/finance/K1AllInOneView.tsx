@@ -381,12 +381,13 @@ function destinationGroupsForRow(
     }
     const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
     const hasNeedsReviewRouting = routings.some((routing) => routing.routing.startsWith('needs_review_'))
+    const resolvedRoutings = routings.filter((routing) => !routing.routing.startsWith('needs_review_'))
 
     return [{
       key: column.doc.id,
       label: column.accountName,
       column,
-      routings: hasNeedsReviewRouting ? [] : routings,
+      routings: resolvedRoutings,
       needsReview: row.routable && (routings.length === 0 || hasNeedsReviewRouting),
     }]
   })
@@ -400,6 +401,15 @@ function routingLabels(routings: K1CellRouting[]): string {
   return routings.map((routing) => routing.label).join(', ')
 }
 
+function destinationGroupText(group: DestinationGroup): string {
+  if (group.needsReview) {
+    const reviewText = 'needs review — depends on K-1 footnotes'
+    return group.routings.length > 0 ? `${routingLabels(group.routings)}; ${reviewText}` : reviewText
+  }
+
+  return routingLabels(group.routings)
+}
+
 function destinationText(row: K1Row, groups: DestinationGroup[]): string | null {
   if (row.staticDestinations) {
     return routingLabels(row.staticDestinations)
@@ -410,11 +420,11 @@ function destinationText(row: K1Row, groups: DestinationGroup[]): string | null 
 
   const allAgree = groups.every((group) => destinationSignature(group) === destinationSignature(groups[0]!))
   if (allAgree) {
-    return groups[0]!.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(groups[0]!.routings)
+    return destinationGroupText(groups[0]!)
   }
 
   return groups
-    .map((group) => `${group.label}: ${group.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(group.routings)}`)
+    .map((group) => `${group.label}: ${destinationGroupText(group)}`)
     .join('; ')
 }
 
@@ -624,11 +634,23 @@ function DestinationCell({
   }
   const signature = (group: DestinationGroup): string =>
     destinationSignature(group)
+  const content = (group: DestinationGroup): React.ReactElement => (
+    <div className="flex flex-wrap items-center gap-1">
+      {group.routings.length > 0 ? <DestinationChips routings={group.routings} onDrill={onDrill} /> : null}
+      {group.needsReview ? <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups: [group] })} /> : null}
+    </div>
+  )
   const allAgree = groups.every((group) => signature(group) === signature(groups[0]!))
   if (allAgree) {
-    return groups[0]!.needsReview
-      ? <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups })} />
-      : <DestinationChips routings={groups[0]!.routings} onDrill={onDrill} />
+    const group = groups[0]!
+    return group.needsReview ? (
+      <div className="flex flex-wrap items-center gap-1">
+        {group.routings.length > 0 ? <DestinationChips routings={group.routings} onDrill={onDrill} /> : null}
+        <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups })} />
+      </div>
+    ) : (
+      <DestinationChips routings={group.routings} onDrill={onDrill} />
+    )
   }
   return (
     <div className="space-y-1">
@@ -637,9 +659,7 @@ function DestinationCell({
           <span className="max-w-[84px] truncate text-[9px] uppercase tracking-wide text-muted-foreground" title={group.label}>
             {group.label}
           </span>
-          {group.needsReview
-            ? <NeedsReviewMarker onClick={() => onOpenNeedsReview({ row, groups: [group] })} />
-            : <DestinationChips routings={group.routings} onDrill={onDrill} />}
+          {content(group)}
         </div>
       ))}
     </div>

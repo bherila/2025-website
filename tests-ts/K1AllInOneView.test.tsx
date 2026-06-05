@@ -143,6 +143,29 @@ const ambiguousNeedsReviewFacts = {
   },
 } as unknown as TaxPreviewFacts
 
+const mixedResolvedAndNeedsReviewFacts = {
+  scheduleD: {
+    line5Sources: [
+      source({
+        taxDocumentId: 201,
+        box: '11',
+        code: 'S',
+        routing: 'schedule_d_line_5',
+        routingReason: 'Short-term Box 11S item routes to Schedule D line 5.',
+      }),
+    ],
+    scheduleDAmbiguous11SSources: [
+      source({
+        taxDocumentId: 201,
+        box: '11',
+        code: 'S',
+        routing: 'needs_review_schedule_d_line_5_or_12',
+        routingReason: 'Another Box 11S statement row needs character review.',
+      }),
+    ],
+  },
+} as unknown as TaxPreviewFacts
+
 describe('K1AllInOneView', () => {
   it('renders one column per fund plus a Total column with cross-fund sums', () => {
     renderView()
@@ -315,6 +338,16 @@ describe('K1AllInOneView', () => {
 
     expect(screen.getByRole('heading', { name: 'K-1 footnotes need review' })).toBeInTheDocument()
     expect(screen.getByText('Supplemental statement lists nonportfolio capital gain but does not identify ST or LT character.')).toBeInTheDocument()
+  })
+
+  it('preserves resolved destinations when a K-1 code also has needs-review routings', () => {
+    renderView({ k1Docs: [needsReviewDocs[0]!], taxFacts: mixedResolvedAndNeedsReviewFacts })
+
+    const box11S = screen.getByText('Passive income (loss) — multi-activity supplemental statement').closest('tr')!
+
+    expect(within(box11S).getByRole('button', { name: 'Sch D line 5' })).toBeInTheDocument()
+    expect(within(box11S).getByRole('button', { name: /needs review — depends on K-1 footnotes/i })).toBeInTheDocument()
+    expect(within(box11S).queryByRole('button', { name: /Sch D line 5 or 12/i })).not.toBeInTheDocument()
   })
 
   it('opens the existing K-1 code details resolution path from a needs-review marker', async () => {
