@@ -72,14 +72,15 @@ final class EquityValuationService
             'high' => $job->number('growthBands.highPct'),
             default => $job->number('growthBands.mediumPct'),
         };
-        $growthPrice = MoneyMath::multiply($basePrice, (1.0 + ($growthPct / 100.0)) ** $yearOffset);
+        $growthFactor = round((1.0 + ($growthPct / 100.0)) ** $yearOffset, 8);
+        $growthPrice = MoneyMath::multiply($basePrice, $growthFactor);
 
         if (! $job->isPrivate()) {
             return $growthPrice;
         }
 
         $dilutionPct = max(0.0, $job->number('company.annualDilutionPct'));
-        $dilutionFactor = (1.0 - ($dilutionPct / 100.0)) ** $yearOffset;
+        $dilutionFactor = round((1.0 - ($dilutionPct / 100.0)) ** $yearOffset, 8);
 
         return MoneyMath::multiply($growthPrice, $dilutionFactor);
     }
