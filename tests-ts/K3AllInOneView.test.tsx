@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
-import K3AllInOneView from '@/components/finance/K3AllInOneView'
+import K3AllInOneView, { buildK3AllInOneXlsxGrids } from '@/components/finance/K3AllInOneView'
 import {
   k3ForeignTaxTotalSourceFieldId,
   k3Part2Section1SourceFieldId,
@@ -169,6 +169,31 @@ describe('K3AllInOneView', () => {
         total: 2043,
       }),
     }))
+  })
+
+  it('splits wide K-3 XLSX grids to stay within the API column limit', () => {
+    const manyDocs = Array.from({ length: 64 }, (_, index) => {
+      const sequence = index + 1
+
+      return k1WithK3(2000 + index, `Fund ${sequence}`, [
+        part2([{ line: '1', description: 'Interest', col_g_total: String(sequence) }]),
+      ])
+    })
+
+    const grids = buildK3AllInOneXlsxGrids(manyDocs)
+
+    expect(grids).toHaveLength(2)
+    expect(grids.map((grid) => grid.name)).toEqual(['All K-3s', 'All K-3s 2'])
+    expect(grids.map((grid) => grid.columns.length)).toEqual([64, 2])
+    expect(grids.every((grid) => grid.columns.length <= 64)).toBe(true)
+
+    const totalSectionIndex = grids[1]!.rows.findIndex((row) => row.label === 'K-3 Part II — Foreign Income — Total')
+    const secondInterestRow = grids[1]!.rows.slice(totalSectionIndex + 1).find((row) => row.label === 'Interest')
+    expect(secondInterestRow?.cells).toEqual(expect.objectContaining({
+      doc_2063: 64,
+      total: 2080,
+    }))
+    expect(secondInterestRow?.cells ?? {}).not.toHaveProperty('doc_2000')
   })
 
   it('keeps table headers, first-column cells, and section labels sticky inside each table viewport', () => {
