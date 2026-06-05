@@ -54,6 +54,50 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(20105.0, $facts['form4952']['totalInvestmentInterestExpense']);
     }
 
+    public function test_form4952_schedule_e_deduction_flows_through_schedule1_form1040_and_agi_without_changing_8960_nii_inputs(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'Test Trader Fund',
+                    '1' => '1000',
+                    '5' => '150',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                ],
+                codes: [
+                    '13' => [['code' => 'H', 'value' => '100']],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025);
+        $line5DeductionSource = collect($facts['schedule1']['line5Sources'])
+            ->firstWhere('id', 'form4952-schedule1-line5-investment-interest');
+
+        $this->assertSame(100.0, $facts['form4952']['deductibleScheduleEAboveLine']);
+        $this->assertSame(900.0, $facts['schedule1']['line5Total']);
+        $this->assertIsArray($line5DeductionSource);
+        $this->assertSame(-100.0, $line5DeductionSource['amount']);
+        $this->assertSame('form_4952_schedule_e_investment_interest', $line5DeductionSource['sourceType']);
+        $this->assertSame('schedule_1_line_5', $line5DeductionSource['routing']);
+
+        $this->assertSame(900.0, $facts['form1040']['line8']);
+        $this->assertContains('form4952-schedule1-line5-investment-interest', array_column($facts['form1040']['line8Sources'], 'id'));
+        $this->assertSame(1050.0, $facts['form1040']['line9']);
+        $this->assertSame(1050.0, $facts['form1040']['line11']);
+
+        $this->assertSame(150.0, $facts['form8960']['taxableInterest']);
+        $this->assertSame(0.0, $facts['form8960']['passiveIncome']);
+        $this->assertSame(0.0, $facts['form8960']['nonpassiveTradingIncome']);
+        $this->assertSame(100.0, $facts['form8960']['investmentInterestExpense']);
+        $this->assertSame(150.0, $facts['form8960']['grossNII']);
+        $this->assertSame(50.0, $facts['form8960']['netInvestmentIncome']);
+        $this->assertSame(1050.0, $facts['form8960']['magi']);
+    }
+
     public function test_unrouted_1099_misc_defaults_to_schedule1_line8z(): void
     {
         $user = $this->createUser();
