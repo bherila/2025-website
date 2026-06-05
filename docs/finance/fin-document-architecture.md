@@ -87,6 +87,13 @@
 
 5. **Capabilities are computed, not stored.** The `DocumentCapabilityService` derives per-document capabilities from document kind, processing state, file presence, and linked records. The API returns capabilities in every resource response.
 
+6. **Statement PDF viewing can resolve the canonical document.** The statement
+   list and PDF endpoint treat `fin_statements.document_id -> fin_documents.id`
+   as a valid source file when `fin_documents.s3_path` is present. The PDF
+   endpoint still scopes access through the current user's account and the
+   linked document's `user_id`; per-statement uploads create
+   `files_for_fin_accounts` rows with the row's `statement_id`.
+
 ## API Endpoints
 
 | Method | Path | Purpose |

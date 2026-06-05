@@ -13,8 +13,10 @@ use App\Models\Files\FileForFinAccount;
 use App\Models\Files\FileForProject;
 use App\Models\Files\FileForTask;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatement;
 use App\Services\FileStorageService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -525,14 +527,22 @@ class FileController extends Controller
     /**
      * List files for a financial account.
      */
-    public function listFinAccountFiles(int $accountId): JsonResponse
+    public function listFinAccountFiles(Request $request, int $accountId): JsonResponse
     {
         $userId = Auth::id();
         $account = FinAccounts::where('acct_id', $accountId)
             ->where('acct_owner', $userId)
             ->firstOrFail();
 
-        $files = FileForFinAccount::where('acct_id', $account->acct_id)
+        $validated = $request->validate([
+            'unlinked' => ['nullable', 'boolean'],
+        ]);
+
+        $files = FileForFinAccount::query()
+            ->where('acct_id', $account->acct_id)
+            ->when((bool) ($validated['unlinked'] ?? false), function (Builder $query): void {
+                $query->whereNull('statement_id');
+            })
             ->with('uploader:id,name')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -656,7 +666,15 @@ class FileController extends Controller
             ->where('acct_owner', $userId)
             ->firstOrFail();
 
-        // First try: file attached directly to statement
+        $statement = FinStatement::where('statement_id', $statementId)
+            ->where('acct_id', $account->acct_id)
+            ->first();
+
+        if (! $statement instanceof FinStatement) {
+            return response()->json(['error' => 'No file found for this statement.'], 404);
+        }
+
+        // First try: file attached directly to statement.
         $file = FileForFinAccount::where('acct_id', $account->acct_id)
             ->where('statement_id', $statementId)
             ->first();
@@ -678,17 +696,13 @@ class FileController extends Controller
             ]);
         }
 
-        // Second try: statement linked to a GenAI job
-        $statement = FinStatement::where('statement_id', $statementId)
-            ->where('acct_id', $account->acct_id)
-            ->first();
-
-        if ($statement && $statement->genai_job_id) {
+        // Second try: statement linked to a usable GenAI job.
+        if ($statement->genai_job_id) {
             $genaiJob = GenAiImportJob::where('id', $statement->genai_job_id)
                 ->where('user_id', $userId)
                 ->first();
 
-            if ($genaiJob) {
+            if ($genaiJob && $genaiJob->s3_path) {
                 $viewUrl = $this->fileService->getSignedViewUrl(
                     $genaiJob->s3_path,
                     $genaiJob->mime_type ?? 'application/pdf'
@@ -704,6 +718,33 @@ class FileController extends Controller
                     'filename' => $genaiJob->original_filename,
                 ]);
             }
+        }
+
+        // Third try: canonical finance document linked to the statement.
+        $document = $statement->document_id
+            ? FinDocument::whereKey($statement->document_id)
+                ->where('user_id', $userId)
+                ->first()
+            : null;
+        if ($document instanceof FinDocument && $document->s3_path) {
+            $filename = $document->original_filename
+                ?? $document->stored_filename
+                ?? basename($document->s3_path);
+
+            $viewUrl = $this->fileService->getSignedViewUrl(
+                $document->s3_path,
+                $document->mime_type ?? 'application/pdf'
+            );
+            $downloadUrl = $this->fileService->getSignedDownloadUrl(
+                $document->s3_path,
+                $filename
+            );
+
+            return response()->json([
+                'view_url' => $viewUrl,
+                'download_url' => $downloadUrl,
+                'filename' => $filename,
+            ]);
         }
 
         return response()->json(['error' => 'No file found for this statement.'], 404);

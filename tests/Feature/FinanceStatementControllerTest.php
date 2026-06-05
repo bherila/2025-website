@@ -2,7 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\FinanceTool\FinDocument;
+use App\Services\FileStorageService;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Mockery;
 use Tests\TestCase;
 
 class FinanceStatementControllerTest extends TestCase
@@ -352,6 +357,242 @@ class FinanceStatementControllerTest extends TestCase
         $assetAccounts = $response->json('assetAccounts');
         $this->assertNotEmpty($assetAccounts);
         $this->assertEquals('123456789012', $assetAccounts[0]['acct_number']);
+    }
+
+    public function test_balance_timeseries_marks_has_pdf_when_linked_fin_document_has_s3_path(): void
+    {
+        $user = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $document = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => 'statement.pdf',
+            's3_path' => "fin_documents/{$user->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/balance-timeseries");
+
+        $response->assertOk()
+            ->assertJsonPath('0.statement_id', $statementId)
+            ->assertJsonPath('0.hasPdf', true);
+    }
+
+    public function test_view_statement_pdf_resolves_linked_fin_document_for_user_account(): void
+    {
+        $user = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $document = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => 'statement.pdf',
+            's3_path' => "fin_documents/{$user->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock) use ($document): void {
+            $mock->shouldReceive('getSignedViewUrl')
+                ->once()
+                ->with($document->s3_path, 'application/pdf')
+                ->andReturn('https://signed.example/view');
+            $mock->shouldReceive('getSignedDownloadUrl')
+                ->once()
+                ->with($document->s3_path, 'statement.pdf')
+                ->andReturn('https://signed.example/download');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $response->assertOk()
+            ->assertJson([
+                'view_url' => 'https://signed.example/view',
+                'download_url' => 'https://signed.example/download',
+                'filename' => 'statement.pdf',
+            ]);
+    }
+
+    public function test_view_statement_pdf_does_not_resolve_linked_fin_document_for_another_user(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $document = FinDocument::create([
+            'user_id' => $otherUser->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => 'statement.pdf',
+            's3_path' => "fin_documents/{$otherUser->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldNotReceive('getSignedViewUrl');
+            $mock->shouldNotReceive('getSignedDownloadUrl');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $response->assertNotFound();
+    }
+
+    public function test_attach_file_to_statement_then_view_pdf(): void
+    {
+        $user = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock) use ($user): void {
+            $mock->shouldReceive('createFileRecord')
+                ->once()
+                ->andReturnUsing(function (Model $fileModel, UploadedFile $file): Model {
+                    $fileModel->save();
+
+                    return $fileModel;
+                });
+            $mock->shouldReceive('getSignedViewUrl')
+                ->once()
+                ->with(Mockery::on(fn (string $path): bool => str_starts_with($path, "fin_acct/{$user->id}/")), 'application/pdf')
+                ->andReturn('https://signed.example/view');
+            $mock->shouldReceive('getSignedDownloadUrl')
+                ->once()
+                ->with(Mockery::type('string'), 'statement.pdf')
+                ->andReturn('https://signed.example/download');
+        });
+
+        $uploadResponse = $this->actingAs($user)->post("/api/finance/{$acctId}/files", [
+            'statement_id' => $statementId,
+            'file' => UploadedFile::fake()->create('statement.pdf', 12, 'application/pdf'),
+        ]);
+
+        $uploadResponse->assertCreated();
+        $this->assertDatabaseHas('files_for_fin_accounts', [
+            'acct_id' => $acctId,
+            'statement_id' => $statementId,
+            'original_filename' => 'statement.pdf',
+        ]);
+
+        $viewResponse = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $viewResponse->assertOk()
+            ->assertJson([
+                'view_url' => 'https://signed.example/view',
+                'download_url' => 'https://signed.example/download',
+                'filename' => 'statement.pdf',
+            ]);
+    }
+
+    public function test_fin_account_files_can_be_filtered_to_unlinked_statement_files(): void
+    {
+        $user = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        DB::table('files_for_fin_accounts')->insert([
+            [
+                'acct_id' => $acctId,
+                'statement_id' => null,
+                'file_hash' => 'orphan-hash',
+                'original_filename' => 'orphan.pdf',
+                'stored_filename' => '2025.01.01 orphan.pdf',
+                's3_path' => "fin_acct/{$user->id}/2025.01.01 orphan.pdf",
+                'mime_type' => 'application/pdf',
+                'file_size_bytes' => 1024,
+                'uploaded_by_user_id' => $user->id,
+                'created_at' => now()->subMinute(),
+                'updated_at' => now()->subMinute(),
+            ],
+            [
+                'acct_id' => $acctId,
+                'statement_id' => $statementId,
+                'file_hash' => 'linked-hash',
+                'original_filename' => 'linked.pdf',
+                'stored_filename' => '2025.01.01 linked.pdf',
+                's3_path' => "fin_acct/{$user->id}/2025.01.01 linked.pdf",
+                'mime_type' => 'application/pdf',
+                'file_size_bytes' => 2048,
+                'uploaded_by_user_id' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/files?unlinked=1");
+
+        $response->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.original_filename', 'orphan.pdf')
+            ->assertJsonPath('0.statement_id', null);
     }
 
     public function test_document_statement_import_updates_file_record_statement_id_when_file_exists(): void

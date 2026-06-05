@@ -7,6 +7,7 @@ use App\Models\Files\FileForFinAccount;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Services\Finance\TransactionDeletionTombstoneService;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -176,6 +177,10 @@ class FinanceApiController extends Controller
         $balances = DB::table('fin_statements as fs')
             ->leftJoin('fin_statement_details as fsd', 'fs.statement_id', '=', 'fsd.statement_id')
             ->leftJoin('files_for_fin_accounts as ffa', 'fs.statement_id', '=', 'ffa.statement_id')
+            ->leftJoin('fin_documents as fd', function (JoinClause $join) use ($uid): void {
+                $join->on('fs.document_id', '=', 'fd.id')
+                    ->where('fd.user_id', '=', $uid);
+            })
             ->where('fs.acct_id', $account->acct_id)
             ->select(
                 'fs.statement_id',
@@ -185,10 +190,11 @@ class FinanceApiController extends Controller
                 'fs.cost_basis',
                 'fs.is_cost_basis_override',
                 'fs.genai_job_id',
+                'fd.s3_path as document_s3_path',
                 DB::raw('count(DISTINCT fsd.id) as lineItemCount'),
-                DB::raw('(count(DISTINCT ffa.id) > 0 OR fs.genai_job_id IS NOT NULL) as hasPdf')
+                DB::raw('(count(DISTINCT ffa.id) > 0 OR fs.genai_job_id IS NOT NULL OR fd.s3_path IS NOT NULL) as hasPdf')
             )
-            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override', 'fs.genai_job_id')
+            ->groupBy('fs.statement_id', 'fs.statement_opening_date', 'fs.statement_closing_date', 'fs.balance', 'fs.cost_basis', 'fs.is_cost_basis_override', 'fs.genai_job_id', 'fd.s3_path')
             ->orderBy('fs.statement_closing_date', 'asc')
             ->get();
 
