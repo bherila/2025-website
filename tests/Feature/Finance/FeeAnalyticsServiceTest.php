@@ -193,6 +193,31 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertFalse($series[0]['is_projected']);
     }
 
+    public function test_monthly_fee_drag_for_accounts_excludes_fees_from_accounts_without_statement_basis(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        // First account has a full January statement basis (1000 → 1100) and a $10 fee.
+        $withStatements = $this->createAccount($user);
+        $this->createStatement($withStatements, '2024-12-31', 1000);
+        $this->createStatement($withStatements, '2025-01-31', 1100);
+        $this->createLineItem($withStatements, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -10]);
+        // Second account has a fee but no statements, so it is excluded from the blended denominator.
+        // Its fee must not be counted either, or it would overstate gross_return_pct.
+        $withoutStatements = $this->createAccount($user);
+        $this->createLineItem($withoutStatements, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -20]);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeriesForAccounts([
+            (int) $withStatements->acct_id,
+            (int) $withoutStatements->acct_id,
+        ], 2025);
+
+        // Only the statemented account contributes: fees = 10 (not 30), denominator = 1000.
+        $this->assertSame(10.0, $series[0]['fees']);
+        $this->assertEqualsWithDelta(120.0, $series[0]['net_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(132.0, $series[0]['gross_return_pct'], 0.0001);
+    }
+
     public function test_monthly_fee_drag_returns_null_pct_when_no_starting_balance(): void
     {
         $user = User::factory()->create();

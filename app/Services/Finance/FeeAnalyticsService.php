@@ -117,10 +117,14 @@ class FeeAnalyticsService
         $accountIds = array_values(array_unique(array_map(static fn (mixed $accountId): int => (int) $accountId, $accountIds)));
         [$yearStart, $yearEnd] = $this->yearBounds($year);
 
-        $feeTotalsByMonth = [];
+        $feeTotalsByAccountMonth = [];
         foreach ($this->feeLineItemsForAccountsForPeriod($accountIds, $yearStart, $yearEnd) as $row) {
+            $feeAccountId = (int) $row->t_account;
             $month = CarbonImmutable::parse((string) $row->t_date)->format('Y-m');
-            $feeTotalsByMonth[$month] = MoneyMath::add($feeTotalsByMonth[$month] ?? 0.0, $this->feeAmountForLineItem($row));
+            $feeTotalsByAccountMonth[$feeAccountId][$month] = MoneyMath::add(
+                $feeTotalsByAccountMonth[$feeAccountId][$month] ?? 0.0,
+                $this->feeAmountForLineItem($row),
+            );
         }
 
         $cashFlows = $this->cashFlowsForAccountsForPeriod($accountIds, $yearStart, $yearEnd);
@@ -143,6 +147,7 @@ class FeeAnalyticsService
             $endingBalanceTotal = 0.0;
             $depositsTotal = 0.0;
             $withdrawalsTotal = 0.0;
+            $fees = 0.0;
 
             foreach ($accountIds as $accountId) {
                 $accountStatements = $statementsByAccount[$accountId] ?? [];
@@ -158,9 +163,11 @@ class FeeAnalyticsService
                 $endingBalanceTotal = MoneyMath::add($endingBalanceTotal, $endingBalance);
                 $depositsTotal = MoneyMath::add($depositsTotal, $accountCashFlows['deposits']);
                 $withdrawalsTotal = MoneyMath::add($withdrawalsTotal, $accountCashFlows['withdrawals']);
+                // Only count fees from accounts whose balances are in the denominator, so the
+                // blended gross_return_pct stays over a single consistent account set.
+                $fees = MoneyMath::add($fees, $feeTotalsByAccountMonth[$accountId][$monthKey] ?? 0.0);
             }
 
-            $fees = $feeTotalsByMonth[$monthKey] ?? 0.0;
             $returnMetrics = $this->periodReturnMetrics(
                 $startingBalanceTotal,
                 $endingBalanceTotal,
