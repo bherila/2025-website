@@ -37,7 +37,7 @@ import {
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { TaxPreviewXlsxExporter, XlsxGridCellValue, XlsxGridColumn, XlsxGridSheet } from '@/types/finance/xlsx-export'
+import { type TaxPreviewXlsxExporter, XLSX_GRID_MAX_COLUMNS, type XlsxGridCellValue, type XlsxGridColumn, type XlsxGridSheet } from '@/types/finance/xlsx-export'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 interface K1AllInOneViewProps {
@@ -84,6 +84,8 @@ interface K1Section {
 }
 
 const ENTITY_BOXES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H1', 'H2', 'I1', 'I2', 'I3'])
+const K1_GRID_FIXED_COLUMN_COUNT = 3
+const K1_GRID_MAX_DOCUMENT_COLUMNS = XLSX_GRID_MAX_COLUMNS - K1_GRID_FIXED_COLUMN_COUNT
 
 /** Extracts the "<< source" half of a routing note for the From column. */
 function fromHint(box: string, code: string | null | undefined): string | undefined {
@@ -390,17 +392,29 @@ function k1GridRowLabel(row: K1Row): string {
   return row.boxRef ? `${row.boxRef} ${row.label}` : row.label
 }
 
-function buildK1AllInOneXlsxGridForModel(
-  columns: K1Column[],
-  sections: K1Section[],
-  routingIndex: Map<string, K1CellRouting[]>,
-): XlsxGridSheet | null {
-  if (columns.length === 0) {
-    return null
+function splitK1GridColumns(columns: K1Column[]): K1Column[][] {
+  const chunks: K1Column[][] = []
+  for (let index = 0; index < columns.length; index += K1_GRID_MAX_DOCUMENT_COLUMNS) {
+    chunks.push(columns.slice(index, index + K1_GRID_MAX_DOCUMENT_COLUMNS))
   }
 
+  return chunks
+}
+
+function k1GridSheetName(sheetIndex: number): string {
+  return sheetIndex === 0 ? 'All K-1s' : `All K-1s ${sheetIndex + 1}`
+}
+
+function buildK1AllInOneXlsxGridForColumnSet(
+  visibleColumns: K1Column[],
+  allColumns: K1Column[],
+  sections: K1Section[],
+  routingIndex: Map<string, K1CellRouting[]>,
+  sheetIndex: number,
+  sheetCount: number,
+): XlsxGridSheet {
   const gridColumns: XlsxGridColumn[] = [
-    ...columns.map((column) => ({
+    ...visibleColumns.map((column) => ({
       key: k1GridColumnKey(column),
       label: k1GridColumnLabel(column),
       width: 22,
@@ -412,7 +426,10 @@ function buildK1AllInOneXlsxGridForModel(
   ]
 
   const rows: XlsxGridSheet['rows'] = [
-    { kind: 'title', label: `All-in-One K-1 (${columns.length} partnership${columns.length === 1 ? '' : 's'})` },
+    {
+      kind: 'title',
+      label: `All-in-One K-1 (${allColumns.length} partnership${allColumns.length === 1 ? '' : 's'}${sheetCount > 1 ? `, sheet ${sheetIndex + 1} of ${sheetCount}` : ''})`,
+    },
   ]
 
   for (const section of sections) {
@@ -420,27 +437,27 @@ function buildK1AllInOneXlsxGridForModel(
 
     for (const row of section.rows) {
       const cells: Record<string, XlsxGridCellValue> = {}
-      const moneyValues = row.kind === 'money'
-        ? columns.map((column) => {
+      const visibleMoneyValues = row.kind === 'money'
+        ? visibleColumns.map((column) => {
             const value = row.value(column.data)
             return typeof value === 'number' ? value : null
           })
         : []
       const total = row.kind === 'money'
-        ? moneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
+        ? visibleMoneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
         : null
 
-      columns.forEach((column, index) => {
+      visibleColumns.forEach((column, index) => {
         const value = row.value(column.data)
         cells[k1GridColumnKey(column)] = value === '' ? null : value
-        if (row.kind === 'money' && moneyValues[index] === null) {
+        if (row.kind === 'money' && visibleMoneyValues[index] === null) {
           cells[k1GridColumnKey(column)] = null
         }
       })
 
       cells.total = total
       cells.from = row.fromHint ?? null
-      cells.destination = destinationText(row, destinationGroupsForRow(row, columns, moneyValues, routingIndex))
+      cells.destination = destinationText(row, destinationGroupsForRow(row, visibleColumns, visibleMoneyValues, routingIndex))
 
       rows.push({
         kind: row.kind === 'money' ? 'data' : 'data',
@@ -451,17 +468,38 @@ function buildK1AllInOneXlsxGridForModel(
   }
 
   return {
-    name: 'All K-1s',
+    name: k1GridSheetName(sheetIndex),
     scope: 'k1-all-in-one',
     columns: gridColumns,
     rows,
   }
 }
 
-export function buildK1AllInOneXlsxGrid(k1Docs: TaxDocument[], taxFacts: TaxPreviewFacts | null): XlsxGridSheet | null {
+function buildK1AllInOneXlsxGridsForModel(
+  columns: K1Column[],
+  sections: K1Section[],
+  routingIndex: Map<string, K1CellRouting[]>,
+): XlsxGridSheet[] {
+  if (columns.length === 0) {
+    return []
+  }
+
+  const chunks = splitK1GridColumns(columns)
+
+  return chunks.map((visibleColumns, index) => buildK1AllInOneXlsxGridForColumnSet(
+    visibleColumns,
+    columns,
+    sections,
+    routingIndex,
+    index,
+    chunks.length,
+  ))
+}
+
+export function buildK1AllInOneXlsxGrids(k1Docs: TaxDocument[], taxFacts: TaxPreviewFacts | null): XlsxGridSheet[] {
   const columns = k1ColumnsFromDocs(k1Docs)
 
-  return buildK1AllInOneXlsxGridForModel(columns, buildSections(columns), buildK1RoutingIndex(taxFacts))
+  return buildK1AllInOneXlsxGridsForModel(columns, buildSections(columns), buildK1RoutingIndex(taxFacts))
 }
 
 /**
@@ -529,7 +567,7 @@ export default function K1AllInOneView({
 
   const routingIndex = useMemo(() => buildK1RoutingIndex(taxFacts), [taxFacts])
   const sections = useMemo(() => buildSections(columns), [columns])
-  const xlsxGrid = useMemo(() => buildK1AllInOneXlsxGridForModel(columns, sections, routingIndex), [columns, sections, routingIndex])
+  const xlsxGrids = useMemo(() => buildK1AllInOneXlsxGridsForModel(columns, sections, routingIndex), [columns, sections, routingIndex])
 
   async function saveSourceOverride(value: string | null): Promise<void> {
     if (!sourceValueContext?.row.overrideKey) {
@@ -597,7 +635,7 @@ export default function K1AllInOneView({
               the source; click a destination to open that form.
             </p>
           </div>
-          {onExportXlsx && xlsxGrid ? (
+          {onExportXlsx && xlsxGrids.length > 0 ? (
             <Button
               type="button"
               variant="outline"
@@ -605,7 +643,7 @@ export default function K1AllInOneView({
               className="h-8 gap-1.5 px-2.5 text-xs"
               disabled={isExportingXlsx}
               onClick={() => {
-                void onExportXlsx({ scope: 'k1-all-in-one', grids: [xlsxGrid] })
+                void onExportXlsx({ scope: 'k1-all-in-one', grids: xlsxGrids })
               }}
             >
               <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />

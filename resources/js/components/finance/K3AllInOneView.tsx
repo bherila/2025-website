@@ -29,7 +29,7 @@ import {
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { TaxPreviewXlsxExporter, XlsxGridCellValue, XlsxGridColumn, XlsxGridSheet } from '@/types/finance/xlsx-export'
+import { type TaxPreviewXlsxExporter, XLSX_GRID_MAX_COLUMNS, type XlsxGridCellValue, type XlsxGridColumn, type XlsxGridSheet } from '@/types/finance/xlsx-export'
 
 interface K3AllInOneViewProps {
   k1Docs: TaxDocument[]
@@ -56,6 +56,8 @@ const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'general', label: 'General' },
   { key: 'total', label: 'Total' },
 ]
+const K3_GRID_FIXED_COLUMN_COUNT = 1
+const K3_GRID_MAX_DOCUMENT_COLUMNS = XLSX_GRID_MAX_COLUMNS - K3_GRID_FIXED_COLUMN_COUNT
 
 interface Part2Agg {
   line: string
@@ -427,14 +429,31 @@ function k3GridColumnKey(column: K3Column): string {
   return `doc_${column.doc.id}`
 }
 
-function k3GridRow(row: K3PivotRow, columns: K3Column[]): XlsxGridSheet['rows'][number] {
+function splitK3GridColumns(columns: K3Column[]): K3Column[][] {
+  const chunks: K3Column[][] = []
+  for (let index = 0; index < columns.length; index += K3_GRID_MAX_DOCUMENT_COLUMNS) {
+    chunks.push(columns.slice(index, index + K3_GRID_MAX_DOCUMENT_COLUMNS))
+  }
+
+  return chunks
+}
+
+function k3GridSheetName(sheetIndex: number): string {
+  return sheetIndex === 0 ? 'All K-3s' : `All K-3s ${sheetIndex + 1}`
+}
+
+function k3GridRow(row: K3PivotRow, visibleColumns: K3Column[]): XlsxGridSheet['rows'][number] {
   const cells: Record<string, XlsxGridCellValue> = {}
-  const total = columns.reduce((acc, column) => {
+  const total = visibleColumns.reduce((acc, column) => {
     const cell = row.cell(column)
-    cells[k3GridColumnKey(column)] = cell.value
 
     return cell.shadowed ? acc : acc.add(cell.value ?? 0)
   }, currency(0)).value
+
+  for (const column of visibleColumns) {
+    const cell = row.cell(column)
+    cells[k3GridColumnKey(column)] = cell.value
+  }
 
   cells.total = total
 
@@ -445,13 +464,15 @@ function k3GridRow(row: K3PivotRow, columns: K3Column[]): XlsxGridSheet['rows'][
   }
 }
 
-function buildK3AllInOneXlsxGridForModel(columns: K3Column[], model: K3PivotModel): XlsxGridSheet | null {
-  if (columns.length === 0) {
-    return null
-  }
-
+function buildK3AllInOneXlsxGridForColumnSet(
+  visibleColumns: K3Column[],
+  allColumns: K3Column[],
+  model: K3PivotModel,
+  sheetIndex: number,
+  sheetCount: number,
+): XlsxGridSheet {
   const gridColumns: XlsxGridColumn[] = [
-    ...columns.map((column) => ({
+    ...visibleColumns.map((column) => ({
       key: k3GridColumnKey(column),
       label: column.accountName,
       width: 22,
@@ -460,29 +481,48 @@ function buildK3AllInOneXlsxGridForModel(columns: K3Column[], model: K3PivotMode
     { key: 'total', label: 'Total', width: 14, format: 'currency' },
   ]
   const rows: XlsxGridSheet['rows'] = [
-    { kind: 'title', label: `All-in-One K-3 (${columns.length} partnership${columns.length === 1 ? '' : 's'})` },
+    {
+      kind: 'title',
+      label: `All-in-One K-3 (${allColumns.length} partnership${allColumns.length === 1 ? '' : 's'}${sheetCount > 1 ? `, sheet ${sheetIndex + 1} of ${sheetCount}` : ''})`,
+    },
   ]
 
   for (const category of CATEGORIES) {
     rows.push({ kind: 'section', label: `K-3 Part II — Foreign Income — ${category.label}` })
-    rows.push(...buildK3Part2Rows(model, category.key).map((row) => k3GridRow(row, columns)))
+    rows.push(...buildK3Part2Rows(model, category.key).map((row) => k3GridRow(row, visibleColumns)))
   }
 
   rows.push({ kind: 'section', label: 'K-3 Part III §4 — Foreign Taxes (USD by country)' })
-  rows.push(...buildK3Part3Rows(model).map((row) => k3GridRow(row, columns)))
+  rows.push(...buildK3Part3Rows(model).map((row) => k3GridRow(row, visibleColumns)))
 
   return {
-    name: 'All K-3s',
+    name: k3GridSheetName(sheetIndex),
     scope: 'k3-all-in-one',
     columns: gridColumns,
     rows,
   }
 }
 
-export function buildK3AllInOneXlsxGrid(k1Docs: TaxDocument[]): XlsxGridSheet | null {
+function buildK3AllInOneXlsxGridsForModel(columns: K3Column[], model: K3PivotModel): XlsxGridSheet[] {
+  if (columns.length === 0) {
+    return []
+  }
+
+  const chunks = splitK3GridColumns(columns)
+
+  return chunks.map((visibleColumns, index) => buildK3AllInOneXlsxGridForColumnSet(
+    visibleColumns,
+    columns,
+    model,
+    index,
+    chunks.length,
+  ))
+}
+
+export function buildK3AllInOneXlsxGrids(k1Docs: TaxDocument[]): XlsxGridSheet[] {
   const columns = k3ColumnsFromDocs(k1Docs)
 
-  return buildK3AllInOneXlsxGridForModel(columns, buildK3PivotModel(columns))
+  return buildK3AllInOneXlsxGridsForModel(columns, buildK3PivotModel(columns))
 }
 
 function fillClass(value: number | null): string {
@@ -646,7 +686,7 @@ export default function K3AllInOneView({
   const pivotModel = useMemo(() => buildK3PivotModel(columns), [columns])
   const part2Rows = useMemo(() => buildK3Part2Rows(pivotModel, category), [pivotModel, category])
   const part3Rows = useMemo(() => buildK3Part3Rows(pivotModel), [pivotModel])
-  const xlsxGrid = useMemo(() => buildK3AllInOneXlsxGridForModel(columns, pivotModel), [columns, pivotModel])
+  const xlsxGrids = useMemo(() => buildK3AllInOneXlsxGridsForModel(columns, pivotModel), [columns, pivotModel])
 
   async function saveSourceOverride(value: string | null): Promise<void> {
     if (!sourceValueContext) {
@@ -728,7 +768,7 @@ export default function K3AllInOneView({
               the category tabs to switch the Part II basket; click a value to inspect the source.
             </p>
           </div>
-          {onExportXlsx && xlsxGrid ? (
+          {onExportXlsx && xlsxGrids.length > 0 ? (
             <Button
               type="button"
               variant="outline"
@@ -736,7 +776,7 @@ export default function K3AllInOneView({
               className="h-8 gap-1.5 px-2.5 text-xs"
               disabled={isExportingXlsx}
               onClick={() => {
-                void onExportXlsx({ scope: 'k3-all-in-one', grids: [xlsxGrid] })
+                void onExportXlsx({ scope: 'k3-all-in-one', grids: xlsxGrids })
               }}
             >
               <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />

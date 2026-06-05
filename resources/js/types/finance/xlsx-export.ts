@@ -22,6 +22,8 @@ export type XlsxExportScope = 'full' | 'k1-all-in-one' | 'k3-all-in-one'
 
 export type XlsxGridSheetScope = Exclude<XlsxExportScope, 'full'>
 
+export const XLSX_GRID_MAX_COLUMNS = 64
+
 export type XlsxGridRowKind = 'title' | 'section' | 'header' | 'data' | 'total'
 
 export type XlsxGridCellValue = string | number | null
