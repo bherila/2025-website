@@ -30,6 +30,12 @@ const CALCULATORS: CalculatorCard[] = [
     href: '/financial-planning/roth-conversion',
     shipped: true,
   },
+  {
+    title: 'Opportunity Cost Planner',
+    description: 'Compare current-job and offer compensation, equity liquidity, annual free cash flow, and vesting over time.',
+    href: '/financial-planning/opportunity-cost',
+    shipped: true,
+  },
 ]
 
 export default function FinancialPlanningPage(): ReactElement {

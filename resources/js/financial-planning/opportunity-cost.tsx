@@ -1,7 +1,29 @@
-import '../app';
+import React from 'react'
+import { createRoot } from 'react-dom/client'
 
-const root = document.getElementById('app');
+import { OpportunityCostPage } from '@/components/planning/OpportunityCost'
+import { DEFAULT_OPPORTUNITY_COST_INPUTS } from '@/components/planning/OpportunityCost/defaults'
+import type { OpportunityCostInitialData } from '@/components/planning/OpportunityCost/types'
 
-if (root) {
-  root.innerHTML = '<main class="mx-auto max-w-5xl p-6"><h1 class="text-2xl font-semibold">Opportunity Cost Planner</h1><p class="mt-2 text-sm text-gray-600">The backend calculation API is ready; the interactive planner UI will mount here.</p></main>';
+function readInitialData(): OpportunityCostInitialData {
+  const element = document.getElementById('opportunity-cost-initial-data')
+  if (!element?.textContent) {
+    return {
+      inputs: DEFAULT_OPPORTUNITY_COST_INPUTS,
+      projection: null,
+      authenticated: false,
+    }
+  }
+
+  return JSON.parse(element.textContent) as OpportunityCostInitialData
+}
+
+const app = document.getElementById('app')
+
+if (app) {
+  createRoot(app).render(
+    <React.StrictMode>
+      <OpportunityCostPage initialData={readInitialData()} />
+    </React.StrictMode>,
+  )
 }
