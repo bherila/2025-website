@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, LineChart, type LucideIcon, Table2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, GitFork, LineChart, type LucideIcon, Save, Table2 } from 'lucide-react'
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
@@ -9,7 +9,7 @@ import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 
 import { DEFAULT_OPPORTUNITY_COST_INPUTS } from './defaults'
 import { normalizeOpportunityCostInputs } from './inputUtils'
-import { computeOpportunityCost } from './opportunityCostApi'
+import { claimOpportunityCostComparison, computeOpportunityCost, saveOpportunityCostComparison, updateOpportunityCostComparison } from './opportunityCostApi'
 import {
   notRenderedViaMillerShell,
   OPPORTUNITY_COST_FORM_SECTIONS,
@@ -18,7 +18,8 @@ import {
 } from './OpportunityCostForm'
 import { ProjectionAnnualFreeCashFlow, ProjectionLifetimeValue, ProjectionLiquidity, ProjectionVestingBreakdown } from './OpportunityCostResultViews'
 import { parseOpportunityCostUrlState, serializeOpportunityCostUrlState } from './opportunityCostUrlState'
-import type { OpportunityCostInitialData, OpportunityCostInputs, OpportunityCostProjection } from './types'
+import { SavedJobPicker } from './SavedJobPicker'
+import type { OpportunityCostComparisonMeta, OpportunityCostInitialData, OpportunityCostInputs, OpportunityCostProjection } from './types'
 
 interface OpportunityCostPageProps {
   initialData: OpportunityCostInitialData
@@ -96,9 +97,13 @@ function initialInputs(initialData: OpportunityCostInitialData): OpportunityCost
   return window.location.search ? parseOpportunityCostUrlState(window.location.search, base) : normalizeOpportunityCostInputs(base)
 }
 
-function replaceUrlWithInputs(inputs: OpportunityCostInputs): string {
+function urlStatePathname(): string {
+  return window.location.pathname.replace(/\/s\/[^/]+$/, '')
+}
+
+function replaceUrlWithInputs(inputs: OpportunityCostInputs, pathname = window.location.pathname): string {
   const queryString = serializeOpportunityCostUrlState(inputs)
-  const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`
+  const nextUrl = `${pathname}${queryString ? `?${queryString}` : ''}`
 
   if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
     window.history.replaceState(null, '', nextUrl)
@@ -149,13 +154,53 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
   const [projection, setProjection] = useState<OpportunityCostProjection | null>(initialData.projection)
   const [loading, setLoading] = useState(initialData.projection === null)
   const [status, setStatus] = useState<string | null>(null)
-  const [shareUrl, setShareUrl] = useState(window.location.href)
+  const [savedComparison, setSavedComparison] = useState<OpportunityCostComparisonMeta | null>(initialData.comparison ?? null)
+  const [canEdit, setCanEdit] = useState(initialData.canEdit ?? false)
+  const [saving, setSaving] = useState(false)
+  const [urlOnlyShareUrl, setUrlOnlyShareUrl] = useState(window.location.href)
   const [activeColumn, setActiveColumn] = useState<OpportunityCostColumnState | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
+  const isSharedView = savedComparison !== null
+  const shareUrl = savedComparison?.shareUrl ?? urlOnlyShareUrl
+  const saveLabel = useMemo(() => {
+    if (savedComparison && canEdit) {
+      return 'Update'
+    }
+    if (savedComparison && !canEdit) {
+      return 'Fork'
+    }
+    return 'Save'
+  }, [canEdit, savedComparison])
+
   useEffect(() => {
-    setShareUrl(replaceUrlWithInputs(normalizedInputs))
-  }, [normalizedInputs])
+    if (!isSharedView || !canEdit) {
+      setUrlOnlyShareUrl(replaceUrlWithInputs(normalizedInputs))
+    }
+  }, [canEdit, isSharedView, normalizedInputs])
+
+  useEffect(() => {
+    if (!initialData.authenticated || !savedComparison || canEdit || savedComparison.ownerUserId !== null) {
+      return
+    }
+
+    let active = true
+    claimOpportunityCostComparison(savedComparison.shortCode)
+      .then((response) => {
+        if (active) {
+          setCanEdit(true)
+          setSavedComparison((current) => (current ? { ...current, shareUrl: response.shareUrl } : current))
+          setStatus('Saved comparison is now linked to your account.')
+        }
+      })
+      .catch(() => {
+        // Leave the comparison as a read-only fork target if the claim is rejected.
+      })
+
+    return () => {
+      active = false
+    }
+  }, [canEdit, initialData.authenticated, savedComparison])
 
   useEffect(() => {
     let active = true
@@ -186,9 +231,49 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
     }
   }, [normalizedInputs])
 
+  async function handleSave(): Promise<void> {
+    if (!initialData.authenticated) {
+      if (savedComparison && !canEdit) {
+        setSavedComparison(null)
+        setCanEdit(false)
+        setUrlOnlyShareUrl(replaceUrlWithInputs(normalizedInputs, urlStatePathname()))
+        setStatus('Forked to URL state. Edits update this link.')
+        return
+      }
+
+      setStatus('Log in to save a share link.')
+      return
+    }
+
+    setSaving(true)
+    setStatus(null)
+
+    try {
+      const response = savedComparison && canEdit
+        ? await updateOpportunityCostComparison(savedComparison.shortCode, normalizedInputs, savedComparison.shareIncludesCurrent)
+        : await saveOpportunityCostComparison(normalizedInputs, savedComparison?.shareIncludesCurrent ?? true)
+      const nextComparison: OpportunityCostComparisonMeta = {
+        id: response.id,
+        shortCode: response.shortCode,
+        shareUrl: response.shareUrl,
+        ownerUserId: null,
+        shareIncludesCurrent: savedComparison?.shareIncludesCurrent ?? true,
+      }
+      setSavedComparison(nextComparison)
+      setCanEdit(true)
+      setProjection(response.projection)
+      window.history.replaceState(null, '', response.shareUrl)
+      setStatus(savedComparison && canEdit ? 'Updated.' : 'Saved.')
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function copyShareUrl(): Promise<void> {
     await navigator.clipboard.writeText(shareUrl)
-    setStatus('URL-state link copied.')
+    setStatus('Share link copied.')
   }
 
   async function handleExportXlsx(): Promise<void> {
@@ -270,12 +355,15 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-foreground">Scenario actions</h2>
-            <p className="text-sm text-muted-foreground">Reserved action slots for later Save/Fork, Copy-link, Export, and confidential share-mode work.</p>
+            <p className="text-sm text-muted-foreground">Save or fork this comparison, copy a single canonical share link, or export to XLSX.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2" data-oc-action-bar>
-            <span data-oc-action-slot="save-fork" />
+            <Button type="button" onClick={handleSave} disabled={saving} data-oc-action-slot="save-fork">
+              {savedComparison && !canEdit ? <GitFork className="size-4" /> : <Save className="size-4" />}
+              {saving ? 'Saving…' : saveLabel}
+            </Button>
             <Button type="button" variant="secondary" onClick={copyShareUrl} data-oc-action-slot="copy-link">
-              <Copy className="size-4" /> Copy URL state
+              <Copy className="size-4" /> Copy link
             </Button>
             <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting} data-oc-action-slot="export">
               <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
@@ -284,6 +372,8 @@ export function OpportunityCostPage({ initialData }: OpportunityCostPageProps): 
           </div>
         </div>
       </section>
+
+      <SavedJobPicker inputs={inputs} authenticated={initialData.authenticated} onApply={setInputs} />
 
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Inputs</h2>

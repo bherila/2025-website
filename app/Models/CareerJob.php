@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int|null $user_id
+ * @property string $kind
+ * @property string $name
+ * @property array<string, mixed> $spec_json
+ */
 class CareerJob extends Model
 {
     /** @use HasFactory<CareerJobFactory> */

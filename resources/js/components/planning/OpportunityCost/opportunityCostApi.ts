@@ -1,6 +1,6 @@
 import { fetchWrapper } from '@/fetchWrapper'
 
-import type { OpportunityCostInputs, OpportunityCostProjection } from './types'
+import type { OpportunityCostInputs, OpportunityCostProjection, SavedCareerJob } from './types'
 
 interface SaveOpportunityCostResponse {
   id: number
@@ -13,10 +13,18 @@ export function computeOpportunityCost(inputs: OpportunityCostInputs): Promise<O
   return fetchWrapper.post('/api/financial-planning/opportunity-cost/compute', { inputs }) as Promise<OpportunityCostProjection>
 }
 
-export function saveOpportunityCostScenario(title: string, inputs: OpportunityCostInputs): Promise<SaveOpportunityCostResponse> {
-  return fetchWrapper.post('/api/financial-planning/opportunity-cost/save', { title, inputs }) as Promise<SaveOpportunityCostResponse>
+export function saveOpportunityCostComparison(inputs: OpportunityCostInputs, shareIncludesCurrent = true): Promise<SaveOpportunityCostResponse> {
+  return fetchWrapper.post('/api/financial-planning/opportunity-cost/save', { inputs, shareIncludesCurrent }) as Promise<SaveOpportunityCostResponse>
 }
 
-export function updateOpportunityCostScenario(shortCode: string, title: string, inputs: OpportunityCostInputs): Promise<SaveOpportunityCostResponse> {
-  return fetchWrapper.patch(`/api/financial-planning/opportunity-cost/s/${shortCode}`, { title, inputs }) as Promise<SaveOpportunityCostResponse>
+export function updateOpportunityCostComparison(shortCode: string, inputs: OpportunityCostInputs, shareIncludesCurrent = true): Promise<SaveOpportunityCostResponse> {
+  return fetchWrapper.patch(`/api/financial-planning/opportunity-cost/s/${shortCode}`, { inputs, shareIncludesCurrent }) as Promise<SaveOpportunityCostResponse>
+}
+
+export function claimOpportunityCostComparison(shortCode: string): Promise<SaveOpportunityCostResponse> {
+  return fetchWrapper.post(`/api/financial-planning/opportunity-cost/s/${shortCode}/claim`, {}) as Promise<SaveOpportunityCostResponse>
+}
+
+export function listSavedCareerJobs(): Promise<{ jobs: SavedCareerJob[] }> {
+  return fetchWrapper.get('/api/financial-planning/opportunity-cost/saved-jobs') as Promise<{ jobs: SavedCareerJob[] }>
 }

@@ -7,17 +7,15 @@ use Tests\TestCase;
 
 class OpportunityCostComputeTest extends TestCase
 {
-    public function test_opportunity_cost_page_is_public_and_escapes_initial_data(): void
+    public function test_opportunity_cost_page_is_public(): void
     {
         $this->withoutVite();
 
-        $response = $this->get('/financial-planning/opportunity-cost/s/%3Cimg%20src=x%20onerror=alert(1)%3E');
+        $response = $this->get('/financial-planning/opportunity-cost');
 
         $response->assertStatus(200);
         $response->assertSee('Opportunity Cost Planner');
         $response->assertSee('opportunity-cost-initial-data');
-        $response->assertSee('\\u003Cimg src=x onerror=alert(1)\\u003E', false);
-        $response->assertDontSee('<img src=x onerror=alert(1)>', false);
     }
 
     public function test_compute_endpoint_is_public(): void

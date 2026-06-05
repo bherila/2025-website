@@ -123,10 +123,27 @@ export const opportunityCostProjectionSchema = z.object({
   warnings: z.array(z.string()),
 })
 
+export interface OpportunityCostComparisonMeta {
+  id: number
+  shortCode: string
+  shareUrl: string
+  ownerUserId: number | null
+  shareIncludesCurrent: boolean
+}
+
+export interface SavedCareerJob {
+  id: number
+  kind: 'current' | 'hypothetical'
+  name: string
+  spec: JobSpec
+}
+
 export interface OpportunityCostInitialData {
   inputs: OpportunityCostInputs
   projection: OpportunityCostProjection | null
   authenticated: boolean
+  comparison?: OpportunityCostComparisonMeta | null
+  canEdit?: boolean
 }
 
 export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>

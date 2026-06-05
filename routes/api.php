@@ -96,6 +96,7 @@ Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conv
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/compute', [OpportunityCostController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
+Route::middleware(['web', 'auth'])->get('/financial-planning/opportunity-cost/saved-jobs', [OpportunityCostController::class, 'savedJobs']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/save', [OpportunityCostController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/opportunity-cost/s/{code}', [OpportunityCostController::class, 'update']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/s/{code}/claim', [OpportunityCostController::class, 'claim']);
