@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,14 +14,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { K3_HANDLED_SECTION_IDS, renderK3SectionRows } from '@/finance/1116/k3-row-renderer'
 import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import {
+  getForm4952TracingSplitOverride,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
   getK1MaterialParticipationOverride,
   getK1SourceValueOverrides,
   getSbpElection,
   getUnroutedCodes,
+  isForm4952TracingSplitOverrideKey,
   isK1MaterialParticipationOverrideKey,
   isTraderFundK1,
+  sumAbsK1CodeItems,
+  withForm4952TracingSplitOverride,
   withK1MaterialParticipationOverride,
 } from '@/lib/finance/k1Utils'
 import {
@@ -44,6 +49,8 @@ import K1CodesModal from './K1CodesModal'
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
 type BadgeInfo = { label: string; className: string }
+
+const FORM_4952_TRACING_CODES = ['H', 'G', 'AC', 'AD'] as const
 
 /**
  * Parses notes text for known tax treatment keywords and returns badge metadata.
@@ -157,6 +164,7 @@ function fieldWithClearedOverride(field: K1FieldValue | undefined): K1FieldValue
 function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.ReactElement | null {
   const overrides = Object.entries(getK1SourceValueOverrides(data))
     .filter(([key]) => !isK1MaterialParticipationOverrideKey(key))
+    .filter(([key]) => !isForm4952TracingSplitOverrideKey(key))
   if (overrides.length === 0) {
     return null
   }
@@ -184,6 +192,125 @@ function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.Re
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function Form4952TracingSplitSection({
+  data,
+  onChange,
+  readOnly,
+}: {
+  data: FK1StructuredData
+  onChange: (updated: FK1StructuredData) => void
+  readOnly: boolean
+}): React.ReactElement | null {
+  if (!isTraderFundK1(data) || getK1MaterialParticipationOverride(data)) {
+    return null
+  }
+
+  const rows = FORM_4952_TRACING_CODES
+    .map((code) => ({
+      code,
+      grossInterest: sumAbsK1CodeItems(data, '13', code),
+      override: getForm4952TracingSplitOverride(data, '13', code),
+    }))
+    .filter((row) => row.grossInterest > 0)
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  const updateSplit = (code: string, grossInterest: number, field: 'scheduleA' | 'scheduleE', value: string): void => {
+    const current = getForm4952TracingSplitOverride(data, '13', code) ?? { scheduleA: 0, scheduleE: grossInterest }
+    const parsed = parseFieldVal(value)
+    const next = {
+      ...current,
+      [field]: parsed === null ? 0 : Math.abs(parsed),
+    }
+    const isDefault = next.scheduleA === 0 && next.scheduleE === grossInterest
+    onChange(withForm4952TracingSplitOverride(data, '13', code, isDefault ? null : next))
+  }
+
+  const clearSplit = (code: string): void => {
+    onChange(withForm4952TracingSplitOverride(data, '13', code, null))
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/10 px-3 py-2.5">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div className="space-y-0.5">
+          <div className="text-xs font-medium text-foreground">Form 4952 interest tracing split</div>
+          <div className="text-[10px] leading-relaxed text-muted-foreground">
+            Use only when debt proceeds are traceable to mixed investment and trader-partnership uses. Treas. Reg. §1.163-8T follows use of proceeds, not collateral.
+          </div>
+        </div>
+        <Badge variant="outline" className="text-[9px]">§1.163-8T</Badge>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const split = row.override ?? { scheduleA: 0, scheduleE: row.grossInterest }
+          const enteredTotal = currency(split.scheduleA).add(split.scheduleE).value
+          const hasOverride = row.override !== null
+          const totalDiffers = hasOverride && enteredTotal !== row.grossInterest
+
+          return (
+            <div key={row.code} className="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="font-medium text-foreground">Box 13{row.code} interest</div>
+                <div className="font-currency tabular-nums text-muted-foreground">Gross {fmtAmt(row.grossInterest)}</div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <div className="space-y-1">
+                  <Label htmlFor={`form4952-tracing-${row.code}-schedule-a`} className="text-[10px]">
+                    Schedule A line 9
+                  </Label>
+                  <Input
+                    id={`form4952-tracing-${row.code}-schedule-a`}
+                    aria-label={`Box 13${row.code} Schedule A traced interest`}
+                    inputMode="decimal"
+                    disabled={readOnly}
+                    value={split.scheduleA === 0 ? '' : String(split.scheduleA)}
+                    onChange={(event) => updateSplit(row.code, row.grossInterest, 'scheduleA', event.target.value)}
+                    className="h-8 text-right font-currency text-xs tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`form4952-tracing-${row.code}-schedule-e`} className="text-[10px]">
+                    Schedule E line 28
+                  </Label>
+                  <Input
+                    id={`form4952-tracing-${row.code}-schedule-e`}
+                    aria-label={`Box 13${row.code} Schedule E traced interest`}
+                    inputMode="decimal"
+                    disabled={readOnly}
+                    value={split.scheduleE === 0 ? '' : String(split.scheduleE)}
+                    onChange={(event) => updateSplit(row.code, row.grossInterest, 'scheduleE', event.target.value)}
+                    className="h-8 text-right font-currency text-xs tabular-nums"
+                  />
+                </div>
+                <div className="flex items-end justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={readOnly || !hasOverride}
+                    onClick={() => clearSplit(row.code)}
+                    className="h-8 text-[10px]"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              {totalDiffers ? (
+                <div className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                  Entered total {fmtAmt(enteredTotal)} will be normalized to the {fmtAmt(row.grossInterest)} source gross amount.
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -1847,6 +1974,7 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false, focusF
       />
 
       <TraderMaterialParticipationSection data={data} onChange={onChange} />
+      <Form4952TracingSplitSection data={data} onChange={onChange} readOnly={readOnly} />
 
       {/* Income + Deduction blocks side-by-side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

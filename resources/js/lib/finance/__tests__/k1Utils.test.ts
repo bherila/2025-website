@@ -3,6 +3,9 @@ import type { FK1StructuredData } from '@/types/finance/k1-data'
 import {
   classify11SCharacter,
   extractK1Form461Disclosure,
+  form4952TracingSplitOverrideKey,
+  getForm4952TracingSplitOverride,
+  getForm4952TracingSplitSignature,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
   getK1MaterialParticipationOverride,
@@ -16,6 +19,7 @@ import {
   parseK1Field,
   resolve11SCharacter,
   sumAbsK1CodeItems,
+  withForm4952TracingSplitOverride,
   withK1MaterialParticipationOverride,
 } from '../k1Utils'
 
@@ -226,6 +230,30 @@ describe('trader fund helpers', () => {
     const data = withK1MaterialParticipationOverride(makeData(), true)
 
     expect(withK1MaterialParticipationOverride(data, false).sourceValueOverrides).toBeUndefined()
+  })
+
+  it('stores Form 4952 tracing splits as source overrides and builds a stable signature', () => {
+    const data = makeData({
+      codes: {
+        '13': [{ code: 'H', value: '200' }],
+      },
+    })
+
+    const updated = withForm4952TracingSplitOverride(data, '13', 'h', { scheduleA: 80, scheduleE: 120 })
+
+    expect(form4952TracingSplitOverrideKey('13', 'h')).toBe('form4952:tracing:code:13:H')
+    expect(getForm4952TracingSplitOverride(updated, '13', 'H')).toEqual({ scheduleA: 80, scheduleE: 120 })
+    expect(updated.sourceValueOverrides?.['form4952:tracing:code:13:H']).toMatchObject({
+      originalValue: null,
+      label: 'Form 4952 tracing split — Box 13H',
+    })
+    expect(getForm4952TracingSplitSignature(updated)).toBe('form4952:tracing:code:13:H:80:120')
+  })
+
+  it('clears Form 4952 tracing split overrides', () => {
+    const data = withForm4952TracingSplitOverride(makeData(), '13', 'H', { scheduleA: 1, scheduleE: 3 })
+
+    expect(withForm4952TracingSplitOverride(data, '13', 'H', null).sourceValueOverrides).toBeUndefined()
   })
 
   it('extracts Box 20AJ Form 461 support disclosure', () => {

@@ -38,7 +38,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { broker1099TransactionsToLots } from '@/lib/finance/form8949Extraction'
-import { getK1MaterialParticipationOverride, getSbpElection } from '@/lib/finance/k1Utils'
+import { getForm4952TracingSplitSignature, getK1MaterialParticipationOverride, getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { extractBrokerEntriesFromManualInput } from '@/lib/finance/taxDocumentManualInput'
 import { extractLinkParsedData, hasLegacyFlatBrokerParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
@@ -751,7 +751,10 @@ export default function TaxDocumentReviewModal({
   const savedMaterialParticipation = effectiveFormType === 'k1' ? getK1MaterialParticipationOverride(activeDoc?.parsed_data) : false
   const currentMaterialParticipation = effectiveFormType === 'k1' ? getK1MaterialParticipationOverride(editData) : false
   const hasUnsavedMaterialParticipationChange = Boolean(savedMaterialParticipation) !== Boolean(currentMaterialParticipation)
-  const hasUnsavedK1ElectionChange = hasUnsavedSbpElectionChange || hasUnsavedMaterialParticipationChange
+  const savedForm4952TracingSignature = effectiveFormType === 'k1' ? getForm4952TracingSplitSignature(activeDoc?.parsed_data) : ''
+  const currentForm4952TracingSignature = effectiveFormType === 'k1' ? getForm4952TracingSplitSignature(editData) : ''
+  const hasUnsavedForm4952TracingChange = savedForm4952TracingSignature !== currentForm4952TracingSignature
+  const hasUnsavedK1ElectionChange = hasUnsavedSbpElectionChange || hasUnsavedMaterialParticipationChange || hasUnsavedForm4952TracingChange
 
   const fetchPending = useCallback(async () => {
     if (!open) return
@@ -1448,7 +1451,9 @@ export default function TaxDocumentReviewModal({
                               ? 'K-1 elections have unsaved changes'
                               : hasUnsavedSbpElectionChange
                                 ? 'SBP election has unsaved changes'
-                                : 'Material participation has unsaved changes'}
+                                : hasUnsavedMaterialParticipationChange
+                                  ? 'Material participation has unsaved changes'
+                                  : 'Form 4952 tracing split has unsaved changes'}
                           </span>
                         )}
                         <Button

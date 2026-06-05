@@ -7,6 +7,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952CarryDestination;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952TracingSplit;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
@@ -26,6 +27,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $excludedInvestmentExpenseSources = [];
         $materialParticipationScheduleEInterestSources = [];
         $scheduleESourceIds = [];
+        $tracingSplitsBySourceId = [];
 
         if ($shortDividendDeduction > 0.0) {
             $investmentInterestSources[] = new TaxFactSource(
@@ -60,6 +62,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     }
 
                     $sourceId = "k1-{$doc->id}-13{$code}-{$index}";
+                    $tracingSplit = $this->k1Form4952TracingSplitOverrideValue($data, '13', $code);
                     if ($isMaterialParticipationTrader) {
                         $materialParticipationScheduleEInterestSources[] = new TaxFactSource(
                             id: "{$sourceId}-material-participation",
@@ -101,6 +104,9 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     );
                     if ($isTraderFund) {
                         $scheduleESourceIds[] = $sourceId;
+                    }
+                    if ($isTraderFund && $tracingSplit !== null) {
+                        $tracingSplitsBySourceId[$sourceId] = $tracingSplit;
                     }
                 }
             }
@@ -174,19 +180,17 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $deductible = min($totalInvestmentInterestExpense, $niiBefore);
         $carryforward = max(0.0, $this->subtractMoney($totalInvestmentInterestExpense, $deductible));
 
-        // Partition Part I investment interest into the two §163(d)(5)(A) categories.
-        // §(ii) = trader-fund K-1 Box 13 (above-the-line on Schedule E); §(i) = everything
-        // else (margin, short dividends, 1099-INT Box 5, investor-fund K-1) → Schedule A.
-        $scheduleESources = array_values(array_filter(
+        $allocation = $this->allocateInvestmentInterestSources(
             $investmentInterestSources,
-            static fn (TaxFactSource $source): bool => in_array($source->id, $scheduleESourceIds, true),
-        ));
-        $scheduleASources = array_values(array_filter(
-            $investmentInterestSources,
-            static fn (TaxFactSource $source): bool => ! in_array($source->id, $scheduleESourceIds, true),
-        ));
-        $grossScheduleE = $this->sumAbsoluteSources($scheduleESources);
-        $grossScheduleA = $this->sumAbsoluteSources($scheduleASources);
+            $scheduleESourceIds,
+            $tracingSplitsBySourceId,
+        );
+        $scheduleASources = $allocation['scheduleASources'];
+        $scheduleESources = $allocation['scheduleESources'];
+        $grossScheduleA = $allocation['grossScheduleA'];
+        $grossScheduleE = $allocation['grossScheduleE'];
+        $tracingSplitSources = $allocation['tracingSplitSources'];
+        $hasTracingSplits = $allocation['hasTracingSplits'];
 
         // The §163(d)(1) limit applies to the aggregate; the allowed deduction and the
         // carryforward are split pro rata between the two categories (Rev. Rul. 2008-38).
@@ -258,6 +262,123 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             carryforwardScheduleE: $carryforwardScheduleE,
             carryforwardScheduleA: $carryforwardScheduleA,
             carryDestinations: $carryDestinations,
+            allocationMethod: $hasTracingSplits ? 'tracing' : 'pro_rata',
+            allocationMethodDescription: $hasTracingSplits
+                ? 'Tracing inputs under Treas. Reg. §1.163-8T set the §163(d)(5)(A) category gross amounts by use of debt proceeds; the Form 4952 allowed deduction and carryforward still reconcile to the aggregate §163(d) limit.'
+                : 'Pro-rata allocation under Rev. Rul. 2008-38 using each category share of gross Form 4952 line-1 investment interest.',
+            tracingSplitSources: $tracingSplitSources,
+        );
+    }
+
+    /**
+     * @param  TaxFactSource[]  $investmentInterestSources
+     * @param  string[]  $scheduleESourceIds
+     * @param  array<string, array{scheduleA:float,scheduleE:float}>  $tracingSplitsBySourceId
+     * @return array{scheduleASources:TaxFactSource[],scheduleESources:TaxFactSource[],grossScheduleA:float,grossScheduleE:float,tracingSplitSources:Form4952TracingSplit[],hasTracingSplits:bool}
+     */
+    private function allocateInvestmentInterestSources(array $investmentInterestSources, array $scheduleESourceIds, array $tracingSplitsBySourceId): array
+    {
+        $scheduleASources = [];
+        $scheduleESources = [];
+        $tracingSplitSources = [];
+        $grossScheduleA = 0.0;
+        $grossScheduleE = 0.0;
+        $hasTracingSplits = false;
+
+        foreach ($investmentInterestSources as $source) {
+            $grossInterest = abs($source->amount);
+            if ($grossInterest === 0.0) {
+                continue;
+            }
+
+            $tracingSplit = $tracingSplitsBySourceId[$source->id] ?? null;
+            if ($tracingSplit !== null) {
+                $hasTracingSplits = true;
+                $inputTotal = $this->sumMoney([$tracingSplit['scheduleA'], $tracingSplit['scheduleE']]);
+                $inputTotalCents = MoneyMath::toCents($inputTotal);
+                $scheduleAInputCents = MoneyMath::toCents($tracingSplit['scheduleA']);
+                if ($inputTotalCents > 0) {
+                    $split = MoneyMath::allocateRatio($grossInterest, $scheduleAInputCents, $inputTotalCents);
+                    $scheduleAGross = $split['allocated'];
+                    $scheduleEGross = $split['remainder'];
+                } else {
+                    $scheduleAGross = 0.0;
+                    $scheduleEGross = 0.0;
+                }
+
+                $tracingSplitSources[] = new Form4952TracingSplit(
+                    sourceId: $source->id,
+                    label: $source->label,
+                    grossInterest: $this->roundMoney($grossInterest),
+                    scheduleAInterest: $this->roundMoney($scheduleAGross),
+                    scheduleEInterest: $this->roundMoney($scheduleEGross),
+                    scheduleAShare: $grossInterest > 0.0 ? round($scheduleAGross / $grossInterest, 6) : 0.0,
+                    scheduleEShare: $grossInterest > 0.0 ? round($scheduleEGross / $grossInterest, 6) : 0.0,
+                    taxDocumentId: $source->taxDocumentId,
+                    formType: $source->formType,
+                    box: $source->box,
+                    code: $source->code,
+                );
+            } elseif (in_array($source->id, $scheduleESourceIds, true)) {
+                $scheduleAGross = 0.0;
+                $scheduleEGross = $grossInterest;
+            } else {
+                $scheduleAGross = $grossInterest;
+                $scheduleEGross = 0.0;
+            }
+
+            if ($scheduleAGross > 0.0) {
+                $grossScheduleA = $this->sumMoney([$grossScheduleA, $scheduleAGross]);
+                $scheduleASources[] = $this->sourceSlice(
+                    $source,
+                    'schedule-a',
+                    $scheduleAGross,
+                    TaxFactRouting::ScheduleALine9,
+                    'This source or traced slice is §163(d)(5)(A)(i) investment interest; the allowed amount is itemized on Schedule A line 9.',
+                );
+            }
+
+            if ($scheduleEGross > 0.0) {
+                $grossScheduleE = $this->sumMoney([$grossScheduleE, $scheduleEGross]);
+                $scheduleESources[] = $this->sourceSlice(
+                    $source,
+                    'schedule-e',
+                    $scheduleEGross,
+                    TaxFactRouting::ScheduleELine28,
+                    'This source or traced slice is §163(d)(5)(A)(ii) non-materially-participating trader-partnership interest; the allowed amount is deducted above the line on Schedule E Part II line 28.',
+                );
+            }
+        }
+
+        return [
+            'scheduleASources' => $scheduleASources,
+            'scheduleESources' => $scheduleESources,
+            'grossScheduleA' => $this->roundMoney($grossScheduleA),
+            'grossScheduleE' => $this->roundMoney($grossScheduleE),
+            'tracingSplitSources' => $tracingSplitSources,
+            'hasTracingSplits' => $hasTracingSplits,
+        ];
+    }
+
+    private function sourceSlice(TaxFactSource $source, string $suffix, float $grossInterest, TaxFactRouting $routing, string $routingReason): TaxFactSource
+    {
+        return new TaxFactSource(
+            id: "{$source->id}-{$suffix}",
+            label: $source->label,
+            amount: $this->roundMoney(-abs($grossInterest)),
+            sourceType: TaxFactSourceType::from($source->sourceType),
+            taxDocumentId: $source->taxDocumentId,
+            taxDocumentAccountId: $source->taxDocumentAccountId,
+            accountId: $source->accountId,
+            formType: $source->formType,
+            box: $source->box,
+            code: $source->code,
+            routing: $routing,
+            routingReason: $routingReason,
+            notes: $source->notes,
+            isReviewed: $source->isReviewed,
+            reviewStatus: $source->reviewStatus,
+            reviewAction: $source->reviewAction,
         );
     }
 

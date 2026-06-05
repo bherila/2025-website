@@ -82,6 +82,71 @@ class Form4952FactsBuilderTest extends TestCase
         $this->assertSame(100.0, $destinations['sch-a']->grossInterest);
     }
 
+    public function test_mixed_use_source_is_split_by_tracing_override(): void
+    {
+        $traderFund = $this->traderFundK1(
+            'Trader Fund',
+            interestIncome: '100',
+            box13HInterest: '200',
+            tracingSplit: ['scheduleA' => 80.0, 'scheduleE' => 120.0],
+        );
+
+        $facts = $this->build([$traderFund]);
+
+        $this->assertSame(200.0, $facts->totalInvestmentInterestExpense);
+        $this->assertSame(100.0, $facts->deductibleInvestmentInterestExpense);
+        $this->assertSame(100.0, $facts->disallowedCarryforward);
+        $this->assertSame('tracing', $facts->allocationMethod);
+
+        $this->assertSame(40.0, $facts->deductibleScheduleAItemized);
+        $this->assertSame(60.0, $facts->deductibleScheduleEAboveLine);
+        $this->assertSame(40.0, $facts->carryforwardScheduleA);
+        $this->assertSame(60.0, $facts->carryforwardScheduleE);
+
+        $destinations = collect($facts->carryDestinations)->keyBy('destination');
+        $this->assertSame(80.0, $destinations['sch-a']->grossInterest);
+        $this->assertSame(120.0, $destinations['sch-e']->grossInterest);
+
+        $this->assertCount(1, $facts->tracingSplitSources);
+        $split = $facts->tracingSplitSources[0];
+        $this->assertSame(200.0, $split->grossInterest);
+        $this->assertSame(80.0, $split->scheduleAInterest);
+        $this->assertSame(120.0, $split->scheduleEInterest);
+        $this->assertSame(0.4, $split->scheduleAShare);
+        $this->assertSame(0.6, $split->scheduleEShare);
+
+        $this->assertSame(
+            $facts->deductibleInvestmentInterestExpense,
+            $facts->deductibleScheduleEAboveLine + $facts->deductibleScheduleAItemized,
+        );
+        $this->assertSame(
+            $facts->disallowedCarryforward,
+            $facts->carryforwardScheduleE + $facts->carryforwardScheduleA,
+        );
+    }
+
+    public function test_stale_tracing_override_is_ignored_for_non_trader_k1(): void
+    {
+        $investorFund = $this->investorFundK1(
+            'Investor Fund',
+            interestIncome: '500',
+            box13HInterest: '200',
+            tracingSplit: ['scheduleA' => 80.0, 'scheduleE' => 120.0],
+        );
+
+        $facts = $this->build([$investorFund]);
+
+        $this->assertSame(200.0, $facts->totalInvestmentInterestExpense);
+        $this->assertSame('pro_rata', $facts->allocationMethod);
+        $this->assertSame([], $facts->tracingSplitSources);
+        $this->assertSame(200.0, $facts->deductibleScheduleAItemized);
+        $this->assertSame(0.0, $facts->deductibleScheduleEAboveLine);
+
+        $destinations = collect($facts->carryDestinations)->keyBy('destination');
+        $this->assertSame(200.0, $destinations['sch-a']->grossInterest);
+        $this->assertFalse($destinations->has('sch-e'));
+    }
+
     public function test_investor_only_interest_carries_entirely_to_schedule_a(): void
     {
         // An ordinary investor fund (not a trader) → §163(d)(5)(A)(i) → Schedule A line 9.
@@ -144,32 +209,57 @@ class Form4952FactsBuilderTest extends TestCase
         return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, $marginInterestSources);
     }
 
-    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false): FileForTaxDocument
+    /**
+     * @param  array{scheduleA:float,scheduleE:float}|null  $tracingSplit
+     */
+    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false, ?array $tracingSplit = null): FileForTaxDocument
     {
+        $sourceValueOverrides = [];
+        if ($materialParticipation) {
+            $sourceValueOverrides['k1:material-participation'] = [
+                'value' => 'true',
+                'originalValue' => null,
+                'label' => 'Material participation in securities-trading activity',
+            ];
+        }
+        if ($tracingSplit !== null) {
+            $sourceValueOverrides['form4952:tracing:code:13:H'] = [
+                'value' => json_encode($tracingSplit, JSON_THROW_ON_ERROR),
+                'originalValue' => null,
+                'label' => 'Form 4952 tracing split — Box 13H',
+            ];
+        }
+
         return $this->createK1([
             'B' => $name,
             'partnershipPosition_traderInSecurities' => 'true',
             '5' => $interestIncome,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ], $materialParticipation ? [
-            'k1:material-participation' => [
-                'value' => 'true',
-                'originalValue' => null,
-                'label' => 'Material participation in securities-trading activity',
-            ],
-        ] : []);
+        ], $sourceValueOverrides);
     }
 
-    private function investorFundK1(string $name, string $interestIncome, string $box13HInterest): FileForTaxDocument
+    /**
+     * @param  array{scheduleA:float,scheduleE:float}|null  $tracingSplit
+     */
+    private function investorFundK1(string $name, string $interestIncome, string $box13HInterest, ?array $tracingSplit = null): FileForTaxDocument
     {
+        $sourceValueOverrides = [];
+        if ($tracingSplit !== null) {
+            $sourceValueOverrides['form4952:tracing:code:13:H'] = [
+                'value' => json_encode($tracingSplit, JSON_THROW_ON_ERROR),
+                'originalValue' => null,
+                'label' => 'Form 4952 tracing split — Box 13H',
+            ];
+        }
+
         return $this->createK1([
             'B' => $name,
             'partnershipPosition_traderInSecurities' => 'false',
             '5' => $interestIncome,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ]);
+        ], $sourceValueOverrides);
     }
 
     /**

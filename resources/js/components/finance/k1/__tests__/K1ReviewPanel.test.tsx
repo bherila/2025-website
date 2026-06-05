@@ -563,3 +563,113 @@ describe('K1ReviewPanel — trader material participation override', () => {
     expect(screen.queryByRole('checkbox', { name: /Materially participated in the securities-trading activity/i })).not.toBeInTheDocument()
   })
 })
+
+describe('K1ReviewPanel — Form 4952 tracing split override', () => {
+  it('shows the default Schedule E split for non-materially-participating trader K-1 interest', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByText('Form 4952 interest tracing split')).toBeInTheDocument()
+    expect(screen.getByLabelText('Box 13H Schedule A traced interest')).toHaveValue('')
+    expect(screen.getByLabelText('Box 13H Schedule E traced interest')).toHaveValue('200')
+  })
+
+  it('disables tracing split controls in read-only mode', () => {
+    render(
+      <K1ReviewPanel
+        data={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+          sourceValueOverrides: {
+            'form4952:tracing:code:13:H': {
+              value: JSON.stringify({ scheduleA: 80, scheduleE: 120 }),
+              originalValue: null,
+              label: 'Form 4952 tracing split — Box 13H',
+            },
+          },
+        })}
+        onChange={() => {}}
+        readOnly
+      />,
+    )
+
+    expect(screen.getByLabelText('Box 13H Schedule A traced interest')).toBeDisabled()
+    expect(screen.getByLabelText('Box 13H Schedule E traced interest')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+  })
+
+  it('persists and clears the tracing split source override', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+        })}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Box 13H Schedule A traced interest'), {
+      target: { value: '80' },
+    })
+    fireEvent.change(screen.getByLabelText('Box 13H Schedule E traced interest'), {
+      target: { value: '120' },
+    })
+
+    const override = readPanelData().sourceValueOverrides?.['form4952:tracing:code:13:H']
+    expect(override).toMatchObject({
+      originalValue: null,
+      label: 'Form 4952 tracing split — Box 13H',
+    })
+    expect(JSON.parse(override?.value ?? '{}')).toEqual({ scheduleA: 80, scheduleE: 120 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(readPanelData().sourceValueOverrides).toBeUndefined()
+  })
+
+  it('hides tracing split controls when material participation takes trader interest off Form 4952', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Trading Partnership' },
+            partnershipPosition_traderInSecurities: { value: 'true' },
+          },
+          codes: {
+            '13': [{ code: 'H', value: '200' }],
+          },
+          sourceValueOverrides: {
+            'k1:material-participation': {
+              value: 'true',
+              originalValue: null,
+              label: 'Material participation in securities-trading activity',
+            },
+          },
+        })}
+      />,
+    )
+
+    expect(screen.queryByText('Form 4952 interest tracing split')).not.toBeInTheDocument()
+  })
+})
