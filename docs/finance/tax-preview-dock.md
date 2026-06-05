@@ -11,10 +11,11 @@ TaxPreviewPage
 ├── DockActionsProvider                        // ⌘K palette + worksheet dialog dispatch
 │   ├── DockHeaderBar                          // title + year selector + review/export actions + "Jump to form…" button
 │   ├── TaxEstimateHeader                      // persistent 3-tier (slim / expanded / full modal)
-│   └── MillerShell
-│       ├── CommandPalette                     // ⌘K palette
-│       ├── <section> per route column         // hidden on narrow; shown side-by-side on md+
-│       │   └── FormRegistryEntry.component    // adapter → preview component
+│   └── MillerShell                            // Tax adapter around shared Miller primitives
+│       ├── CommandPalette                     // Tax row builder + shared MillerCommandPalette
+│       ├── MillerRegistryShell                // shared registry-to-column renderer
+│       │   └── MillerColumnShell              // shared responsive Miller columns
+│       │       └── FormRegistryEntry.component
 │       └── WorksheetDialog                    // modal-presentation entries open here
 ```
 
@@ -23,16 +24,26 @@ TaxPreviewPage
 | File | Role |
 |------|------|
 | `resources/js/components/finance/TaxPreviewPage.tsx` | Dock-only page shell; wires year navigation, XLSX export, `TaxEstimateHeader`, and `MillerShell` |
-| `resources/js/components/finance/tax-preview/MillerShell.tsx` | Renders the route as a horizontal stack of columns. Handles Escape-to-truncate, overflow-x-auto container, narrow-screen fallback (show only the last column). |
+| `resources/js/components/ui/miller/*` | Shared Miller primitives used by Tax Preview and PHR: column shell, registry shell, instance tabs, route helpers, home tiles, command palette, and pinned/recent preference mutation. |
+| `resources/js/components/finance/tax-preview/MillerShell.tsx` | Tax adapter for the shared registry shell. Converts Tax route ids to shared `{ id, instance? }` columns, records recent forms, and routes unhandled modal drills to worksheets. |
 | `resources/js/components/finance/tax-preview/useTaxRoute.ts` | Parses URL hash (`#/form-1040/sch-1/form-1116:general`) → `{ columns: [{form, instance?}] }`; mutations push to `window.history`. |
-| `resources/js/components/finance/tax-preview/DockHomeView.tsx` | Landing view (zero-column route). Cards: Recent, Pinned, App, Forms, Worksheets. |
+| `resources/js/components/finance/tax-preview/DockHomeView.tsx` | Tax landing adapter (zero-column route). Builds Tax tile entries for shared `MillerDockSection`, `MillerDockTileGrid`, and `MillerDockClearButton`. |
 | `resources/js/components/finance/tax-preview/DockHeaderBar.tsx` | Persistent top bar (title, ⌘K button, year selector, review queue, XLSX export). |
 | `resources/js/components/finance/tax-preview/TaxEstimateHeader.tsx` | 3-tier estimate (slim one-liner / expanded KPI cards / full modal with brackets + safe-harbor). Exports `summarizeTaxEstimate` + `TaxEstimateFullDetail`. |
 | `resources/js/components/finance/tax-preview/formRegistry.ts` | Registry *type* — `FormRegistry`, `FormId` union, `FormCategory`, `Presentation`, `FormRenderProps`, `DrillTarget`. |
 | `resources/js/components/finance/tax-preview/registry.tsx` | Registry *instance* — every form's adapter + entry (category, presentation, instances, xlsx contributor). |
-| `resources/js/components/finance/tax-preview/DockActions.tsx` | Context for the ⌘K palette open state + worksheet dialog dispatch. |
-| `resources/js/components/finance/tax-preview/CommandPalette.tsx` | ⌘K palette; searches registry by keywords/label. |
-| `resources/js/components/finance/tax-preview/InstanceTabs.tsx` | Per-column instance tabs (Form 1116 passive/general, etc.). |
+| `resources/js/components/finance/tax-preview/DockActions.tsx` | Tax context for the ⌘K palette open state and worksheet dialog dispatch. |
+| `resources/js/components/finance/tax-preview/CommandPalette.tsx` | Tax command-palette row builder. Shared rendering and shortcut behavior live in `resources/js/components/ui/miller/MillerCommandPalette.tsx`. |
+
+### Shared Miller scope
+
+The shared Miller layer is intentionally about shell mechanics, not domain chrome:
+
+- Shared: `MillerColumnShell`, `MillerRegistryShell`, `MillerInstanceTabs`, `MillerDockSection`, `MillerDockTileGrid`, `MillerDockClearButton`, `MillerCommandPalette`, `useMillerCommandPaletteShortcut`, `useMillerDockPrefs`, and route helper types/functions.
+- Tax-specific: `DockHeaderBar`, `DockActionsProvider`, worksheet dialog dispatch, year selector, review queue, XLSX export actions, `TaxEstimateHeader`, Tax command row construction, and Tax home tile construction.
+- PHR-specific: `PhrNavbar`, patient picker/route sync, no-patient empty state, PHR command row construction, and PHR home tile construction.
+
+`MillerDockHeader` / `MillerDockActions` are intentionally out of scope for the shared layer. Tax and PHR have different header controls, routing side effects, and action ownership, so extracting those names would add an empty abstraction rather than reduce duplication.
 
 ### Discoverability for 1099-B lot reconciliation
 
@@ -170,8 +181,8 @@ K-1 and K-3 source detail fields are read-only by default. Users must explicitly
 
 ## Keyboard + interaction rules
 
-- **⌘K / Ctrl+K** — open command palette (registered in `useCommandPaletteShortcut`).
-- **Escape** — truncate rightmost column. Ignored when an editable field (input/textarea/select/contenteditable) has focus, or when any Dialog with `data-state="open"` is present (so worksheets handle their own Escape).
+- **⌘K / Ctrl+K** — open command palette (registered in `useMillerCommandPaletteShortcut` through the Tax adapter).
+- **Escape** — truncate rightmost column. Ignored when an editable field (input/textarea/select/contenteditable) has focus, or when any Dialog with `data-open` is present (so worksheets handle their own Escape).
 - **Back/forward** — navigates the column stack (browser history).
 
 ---
