@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type AccountLineItem, AccountLineItemSchema } from '@/data/finance/AccountLineItem'
 import { fetchWrapper } from '@/fetchWrapper'
 import { importUrl } from '@/lib/financeRouteBuilder'
+import { useScrollAndHighlight } from '@/lib/useScrollAndHighlight'
 import { buildCacheKey, getCachedTransactions, syncCachedTransactions } from '@/services/transactionCache'
 
 import NewTransactionModal from './NewTransactionModal'
@@ -185,17 +186,11 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
     return undefined
   }, [])
 
-  useEffect(() => {
-    if (!data || data.length === 0 || !highlightTransactionId) return
-    setTimeout(() => {
-      const element = document.querySelector(`tr[data-transaction-id="${highlightTransactionId}"]`)
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        element.classList.add('highlight-transaction')
-        setTimeout(() => element.classList.remove('highlight-transaction'), 3000)
-      }
-    }, 200)
-  }, [data, highlightTransactionId])
+  useScrollAndHighlight({
+    selector: highlightTransactionId ? `tr[data-transaction-id="${highlightTransactionId}"]` : null,
+    triggerKey: `${highlightTransactionId ?? ''}:${data?.length ?? 0}`,
+    enabled: Boolean(data && data.length > 0 && highlightTransactionId),
+  })
 
   const handleDeleteTransaction = useCallback(
     async (t_id: string) => {

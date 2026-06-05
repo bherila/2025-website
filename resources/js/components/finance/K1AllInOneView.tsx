@@ -29,6 +29,11 @@ import {
   withK1SourceValueOverride,
 } from '@/lib/finance/k1Utils'
 import { parseMoneyOrZero, sumMoneyValues } from '@/lib/finance/money'
+import {
+  k1CodeSourceFieldId,
+  k1FieldSourceFieldId,
+  k3ForeignTaxTotalSourceFieldId,
+} from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
@@ -36,7 +41,7 @@ import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 interface K1AllInOneViewProps {
   k1Docs: TaxDocument[]
   taxFacts: TaxPreviewFacts | null
-  onReviewDoc: (docId: number) => void
+  onReviewDoc: (docId: number, focusFieldId?: string) => void
   onDrill: (target: DrillTarget) => void
   onSaveParsedData: (docId: number, parsedData: FK1StructuredData) => Promise<void>
 }
@@ -60,6 +65,7 @@ interface K1Row {
   routable: boolean
   fromHint?: string
   overrideKey?: string
+  sourceFieldId?: string
   /** Per-doc cell value. */
   value: (data: FK1StructuredData) => number | string | null
   /** Extracted source value before an All-in-One source override is applied. */
@@ -146,6 +152,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       boxRef: spec.box,
       kind: 'text',
       routable: false,
+      sourceFieldId: k1FieldSourceFieldId(spec.box),
       value: (data) => firstLine(data.fields[spec.box]?.value),
       sourceValue: (data) => data.fields[spec.box]?.value ?? null,
     }
@@ -179,6 +186,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
           routable: true,
           ...(hint ? { fromHint: hint } : {}),
           overrideKey: k1CodeOverrideKey(spec.box, code),
+          sourceFieldId: k1CodeSourceFieldId(spec.box, code),
           value: (data) => sumK1CodeItems(data, spec.box, code),
           sourceValue: (data) => extractedK1CodeTotal(data, spec.box, code),
         })
@@ -194,6 +202,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
         routable: true,
         ...(hint ? { fromHint: hint } : {}),
         overrideKey: k1FieldOverrideKey(spec.box),
+        sourceFieldId: k1FieldSourceFieldId(spec.box),
         value: (data) => parseK1Field(data, spec.box),
         sourceValue: (data) => extractedK1Field(data, spec.box),
       })
@@ -212,6 +221,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       routable: true,
       ...(hint ? { fromHint: hint } : {}),
       overrideKey: k1FieldOverrideKey('21'),
+      sourceFieldId: k1FieldSourceFieldId('21'),
       value: (data) => parseK1Field(data, '21'),
       sourceValue: (data) => extractedK1Field(data, '21'),
     })
@@ -227,6 +237,7 @@ function buildSections(columns: K1Column[]): K1Section[] {
       routable: true,
       fromHint: 'K-3 Part III, Section 4',
       overrideKey: k3ForeignTaxTotalOverrideKey(),
+      sourceFieldId: k3ForeignTaxTotalSourceFieldId(),
       value: (data) => extractK3ForeignTaxTotal(data),
       sourceValue: (data) => extractK3ForeignTaxTotal(withoutSourceValueOverrides(data)),
       staticDestinations: [
@@ -336,6 +347,7 @@ interface SourceValueContext {
   column: K1Column
   row: K1Row
   modal: K1K3SourceValue
+  sourceFieldId?: string
 }
 
 export default function K1AllInOneView({
@@ -418,8 +430,9 @@ export default function K1AllInOneView({
             return
           }
           const docId = sourceValueContext.column.doc.id
+          const { sourceFieldId } = sourceValueContext
           setSourceValueContext(null)
-          onReviewDoc(docId)
+          onReviewDoc(docId, sourceFieldId)
         }}
         onSaveOverride={saveSourceOverride}
       />
@@ -545,6 +558,7 @@ function SectionRows({
                         onClick={() => onOpenSourceValue({
                           column,
                           row,
+                          ...(row.sourceFieldId ? { sourceFieldId: row.sourceFieldId } : {}),
                           modal: {
                             title: row.boxRef ? `K-1 ${row.boxRef}` : 'K-1 source value',
                             subtitle: column.accountName,
@@ -578,6 +592,7 @@ function SectionRows({
                       onClick={() => onOpenSourceValue({
                         column,
                         row,
+                        ...(row.sourceFieldId ? { sourceFieldId: row.sourceFieldId } : {}),
                         modal: {
                           title: row.boxRef ? `K-1 ${row.boxRef}` : 'K-1 source value',
                           subtitle: column.accountName,

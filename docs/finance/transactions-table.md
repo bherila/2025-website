@@ -70,6 +70,7 @@ Most of the table internals live in `resources/js/components/finance/transaction
 - **useRowSelection**: `resources/js/components/finance/transactionTable/useRowSelection.ts` — Row selection with click, shift, ctrl/cmd logic
 - **useTransactionFilters**: `resources/js/components/finance/transactionTable/useTransactionFilters.ts` — 14 column filter states + memoized `filteredData`
 - **useColumnVisibility**: `resources/js/components/finance/transactionTable/useColumnVisibility.ts` — 16 column-empty checks as one memoized hook
+- **useScrollAndHighlight**: `resources/js/lib/useScrollAndHighlight.ts` — Shared delayed scroll + temporary highlight hook used by `highlightTransactionId` and tax-source deep links
 
 ### Extracted Utilities
 - **transactionExport**: `resources/js/components/finance/transactionTable/transactionExport.ts` — Pure CSV/JSON export functions
@@ -105,7 +106,7 @@ TransactionsTable supports client-side pagination to optimize DOM performance wi
 - **Controls**: Displayed at the top of the table (sticky)
 - **Page changes**: Do not trigger browser scrolling
 - **View All**: Dropdown option allows bypassing pagination for the current session
-- **Go to transaction**: When `highlightTransactionId` is set, the correct page is automatically selected
+- **Go to transaction**: When `highlightTransactionId` is set, the correct page is automatically selected and `useScrollAndHighlight` scrolls to the matching row after the page renders
 
 ### Pagination Controls
 

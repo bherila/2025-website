@@ -19,6 +19,14 @@ import {
   getSbpElection,
   getUnroutedCodes,
 } from '@/lib/finance/k1Utils'
+import {
+  k1CodeSourceFieldId,
+  k1FieldSourceFieldId,
+  k3ForeignTaxTotalSourceFieldId,
+  k3Part2SourceFieldId,
+  k3Part3CountrySourceFieldId,
+  taxSourceFieldDataAttribute,
+} from '@/lib/finance/taxSourceFieldIds'
 
 import { DetailsButton, fmtAmt, parseFieldVal } from '../tax-preview-primitives'
 import { BOX11_CODES, BOX13_CODES, BOX14_CODES, BOX17_CODES } from './k1-codes'
@@ -190,6 +198,7 @@ function renderBox11ItemsLine(box11Items: K1CodeItem[], onOpenCodes: (box: strin
       boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
       label={label}
       value={total}
+      sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('11', firstCode) : k1FieldSourceFieldId('11')}
       onDetails={() => onOpenCodes('11')}
     />
   )
@@ -221,6 +230,7 @@ function renderBox13ItemsLine(
         boxRef={uniqueCodes.length === 1 ? `Box 13${firstCode}` : 'Box 13'}
         label={label}
         value={total}
+        sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('13', firstCode) : k1FieldSourceFieldId('13')}
         onDetails={() => onOpenCodes('13')}
       />
       {hasCodeL && (
@@ -257,6 +267,7 @@ function renderBox20ItemsLine(box20Items: K1CodeItem[], onOpenCodes: (box: strin
         label={label}
         value={total}
         raw={allStmt ? 'STMT' : undefined}
+        sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('20', firstCode) : k1FieldSourceFieldId('20')}
         onDetails={() => onOpenCodes('20')}
       />
       {singleRouting && <SubLine text={singleRouting} />}
@@ -392,14 +403,18 @@ function EntityInfoSection({
   readOnly,
   onUpdate,
   onOverrideChange,
+  focusFieldId,
 }: {
   data: FK1StructuredData
   readOnly: boolean
   onUpdate: (box: string, value: string | null) => void
   onOverrideChange: (box: string, enabled: boolean) => void
+  focusFieldId?: string | undefined
 }) {
-  const [open, setOpen] = useState(false)
   const leftSpec = K1_SPEC.filter((s) => s.side === 'left').sort((a, b) => (a.uiOrder ?? 99) - (b.uiOrder ?? 99))
+  const hasFocusedEntityField = leftSpec.some((spec) => k1FieldSourceFieldId(spec.box) === focusFieldId)
+  const [manuallyOpen, setManuallyOpen] = useState(false)
+  const open = manuallyOpen || hasFocusedEntityField
 
   const partnerName = data.fields['F']?.value ?? data.fields['B']?.value ?? null
   const ein = data.fields['A']?.value ?? null
@@ -410,7 +425,7 @@ function EntityInfoSection({
       <button
         type="button"
         className="w-full flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border hover:bg-muted/50 transition-colors text-left"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setManuallyOpen((o) => !o)}
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
         <span className="text-xs font-semibold tracking-wide">Entity / Partner Info</span>
@@ -428,6 +443,7 @@ function EntityInfoSection({
               <div
                 key={spec.box}
                 className={`flex items-start gap-2 min-h-[28px] rounded-sm transition-colors ${lowConfidence ? 'bg-amber-50/50 ring-1 ring-amber-200/50 p-0.5 -m-0.5' : ''}`}
+                {...taxSourceFieldDataAttribute(k1FieldSourceFieldId(spec.box))}
               >
                 <div className="flex items-center gap-1 w-12 shrink-0 pt-0.5">
                   <span className={`text-[10px] font-mono font-semibold ${lowConfidence ? 'text-amber-700' : 'text-muted-foreground'}`}>
@@ -479,6 +495,7 @@ function LineItem({
   onClick,
   onNoteClick,
   onDetails,
+  sourceFieldId,
 }: {
   boxRef?: string | undefined
   label: string
@@ -488,12 +505,14 @@ function LineItem({
   onClick?: (() => void) | undefined
   onNoteClick?: (() => void) | undefined
   onDetails?: (() => void) | undefined
+  sourceFieldId?: string | undefined
 }) {
   const n = value ?? null
   return (
     <div
       className={`flex items-center gap-2 px-3 py-1 min-h-[24px] ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
       onClick={onClick}
+      {...(sourceFieldId ? taxSourceFieldDataAttribute(sourceFieldId) : {})}
     >
       <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0 select-none">{boxRef ?? ''}</span>
       <span className="flex items-center gap-1.5 flex-1 text-xs">
@@ -594,6 +613,7 @@ function IncomeItemsBlock({
                 label={spec?.concise ?? box}
                 value={val}
                 notes={notes}
+                sourceFieldId={k1FieldSourceFieldId(box)}
                 onNoteClick={notes ? () => setOpenNote(openNote === noteKey ? null : noteKey) : undefined}
               />
               {openNote === noteKey && notes && (
@@ -663,11 +683,11 @@ function DeductionItemsBlock({
       <div className="divide-y divide-dashed divide-border/50">
         {renderBox13ItemsLine(box13Items, data, onOpenCodes)}
         {box12Val !== null && box12Val !== 0 && (
-          <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} />
+          <LineItem boxRef="Box 12" label="Section 179 deduction" value={-Math.abs(box12Val)} sourceFieldId={k1FieldSourceFieldId('12')} />
         )}
         {box21Val !== null && box21Val !== 0 && (
           <>
-            <LineItem boxRef="Box 21" label="Foreign taxes paid/accrued → Form 1116" value={box21Val} />
+            <LineItem boxRef="Box 21" label="Foreign taxes paid/accrued → Form 1116" value={box21Val} sourceFieldId={k1FieldSourceFieldId('21')} />
             {data.k3?.sections.some(s => s.sectionId === 'part3_section4') && (
               <SubLine text="← K-3 Part III, Section 4 provides per-country/basket breakdown for Form 1116" />
             )}
@@ -710,6 +730,7 @@ function AdditionalCodedBoxesBlock({
           boxRef={uniqueCodes.length === 1 ? `Box ${box}${firstCode}` : `Box ${box}`}
           label={label}
           value={total}
+          sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId(box, firstCode) : k1FieldSourceFieldId(box)}
           onDetails={() => onOpenCodes(box)}
         />
         {routingNote && (
@@ -885,21 +906,22 @@ function StatementABlock({ sa }: { sa: StatementA }) {
       <SectionHeader title="§199A Statement A (Box 20 Code Z)" />
       <div className="divide-y divide-dashed divide-border/50">
         {sa.tradeName && (
-          <LineItem boxRef="20Z" label="Trade or business name" raw={sa.tradeName} />
+          <LineItem boxRef="20Z" label="Trade or business name" raw={sa.tradeName} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
         )}
-        <LineItem boxRef="20Z" label="Qualified business income" value={sa.qualifiedBusinessIncome} />
-        <LineItem boxRef="20Z" label="W-2 wages (Form 8995-A, Line 4)" value={sa.w2Wages} />
-        <LineItem boxRef="20Z" label="UBIA of qualified property" value={sa.ubia} />
+        <LineItem boxRef="20Z" label="Qualified business income" value={sa.qualifiedBusinessIncome} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
+        <LineItem boxRef="20Z" label="W-2 wages (Form 8995-A, Line 4)" value={sa.w2Wages} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
+        <LineItem boxRef="20Z" label="UBIA of qualified property" value={sa.ubia} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
         {sa.reitDividends !== 0 && (
-          <LineItem boxRef="20Z" label="§199A(e)(3) REIT dividends" value={sa.reitDividends} />
+          <LineItem boxRef="20Z" label="§199A(e)(3) REIT dividends" value={sa.reitDividends} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
         )}
         {sa.ptpIncome !== 0 && (
-          <LineItem boxRef="20Z" label="§199A(e)(5) qualified PTP income" value={sa.ptpIncome} />
+          <LineItem boxRef="20Z" label="§199A(e)(5) qualified PTP income" value={sa.ptpIncome} sourceFieldId={k1CodeSourceFieldId('20', 'Z')} />
         )}
         <LineItem
           boxRef="20Z"
           label="Specified Service Trade or Business (SSTB)"
           raw={sa.isSstb ? 'YES — deduction phases out above income threshold' : 'No'}
+          sourceFieldId={k1CodeSourceFieldId('20', 'Z')}
         />
         <SubLine text="→ Form 8995 / 8995-A — QBI deduction (Form 1040 Line 13)" />
       </div>
@@ -927,10 +949,11 @@ function CapitalAccountBlock({ data }: { data: FK1StructuredData }) {
             boxRef="L"
             label={`Ending capital account${capitalMethod ? ` (${capitalMethod.replace(/_/g, ' ').toLowerCase()})` : ''}`}
             value={endingCapital}
+            sourceFieldId={k1FieldSourceFieldId('L_ending_capital')}
           />
         )}
         {recourseEnding !== null && (
-          <LineItem boxRef="K1" label="Recourse liabilities (ending)" value={recourseEnding} />
+          <LineItem boxRef="K1" label="Recourse liabilities (ending)" value={recourseEnding} sourceFieldId={k1FieldSourceFieldId('K_recourse_ending')} />
         )}
       </div>
     </div>
@@ -1133,6 +1156,7 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
                     <div
                       className={`flex items-baseline ${row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''} ${isExpandable ? 'cursor-pointer hover:bg-muted/20' : ''}`}
                       onClick={isExpandable ? () => toggleExpand(idx) : undefined}
+                      {...taxSourceFieldDataAttribute(k3Part2SourceFieldId(row.line))}
                     >
                       <span className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground w-[60px] shrink-0">{row.line}</span>
                       <span className={`px-3 py-1.5 flex-1 flex items-center gap-1.5 ${row.isTotal ? 'text-xs font-semibold' : 'text-xs'}`}>
@@ -1183,6 +1207,7 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
 
 interface K3ForeignTaxCountry {
   code: string
+  sourceCountry: string
   usd: number
 }
 
@@ -1191,8 +1216,7 @@ function parseK3ForeignTaxes(sections: K3Section[]): { countries: K3ForeignTaxCo
   if (!sec) return null
 
   const d = sec.data as Record<string, unknown>
-  const taxData = d.line1_foreignTaxesPaid as Record<string, unknown> | undefined
-  if (!taxData) return null
+  const taxData = (d.line1_foreignTaxesPaid as Record<string, unknown> | undefined) ?? d
 
   const countries = (taxData.countries as Array<Record<string, unknown>> | undefined) ?? []
   if (countries.length === 0) return null
@@ -1200,7 +1224,8 @@ function parseK3ForeignTaxes(sections: K3Section[]): { countries: K3ForeignTaxCo
   const allPassive = (taxData.allPassiveCategory as boolean) ?? true
 
   const parsed = countries.map((c) => ({
-    code: String(c.code ?? ''),
+    code: String(c.code ?? c.country ?? ''),
+    sourceCountry: String(c.country ?? c.code ?? ''),
     usd: Number(c.total ?? c.passiveForeign ?? 0),
   }))
 
@@ -1264,7 +1289,7 @@ function K3ForeignTaxGrid({ sections }: { sections: K3Section[] }) {
                   }
                   return [
                     <td key={`${ci}-name`} className="px-2 py-1 font-mono">
-                      <span className="font-semibold">{entry.code}</span>
+                      <span className="font-semibold" {...taxSourceFieldDataAttribute(k3Part3CountrySourceFieldId(entry.sourceCountry))}>{entry.code}</span>
                       <span className="text-muted-foreground ml-1">({COUNTRY_NAMES[entry.code] ?? entry.code})</span>
                     </td>,
                     <td key={`${ci}-amt`} className="px-2 py-1 text-right font-mono tabular-nums">${entry.usd.toLocaleString()}</td>,
@@ -1272,7 +1297,7 @@ function K3ForeignTaxGrid({ sections }: { sections: K3Section[] }) {
                 })}
               </tr>
             ))}
-            <tr className="bg-muted/30 font-semibold border-t border-border">
+            <tr className="bg-muted/30 font-semibold border-t border-border" {...taxSourceFieldDataAttribute(k3ForeignTaxTotalSourceFieldId())}>
               <td colSpan={colCount * 2 - 1} className="px-2 py-1.5 text-xs">Total (equals Box 21)</td>
               <td className="px-2 py-1.5 text-right font-mono tabular-nums text-xs">${total.toLocaleString()}</td>
             </tr>
@@ -1371,7 +1396,11 @@ function K3MultiColTable({
           </thead>
           <tbody className="divide-y divide-dashed divide-border/50">
             {visibleRows.map((row, idx) => (
-              <tr key={idx} className={row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''}>
+              <tr
+                key={idx}
+                className={row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''}
+                {...taxSourceFieldDataAttribute(k3Part2SourceFieldId(row.line))}
+              >
                 <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{row.line}</td>
                 <td className="px-3 py-1.5">{row.description}</td>
                 <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${k3Cls(row.a)}`}>{fmtK3(row.a)}</td>
@@ -1501,7 +1530,7 @@ function K3FDIIPanel({ sections }: { sections: K3Section[] }) {
       <SectionHeader title="K-3 Part IV — FDII / Sec. 250 Deduction Information" />
       <div className="divide-y divide-dashed divide-border/50">
         {items.map((item, i) => (
-          <LineItem key={i} boxRef={`Line ${item.line}`} label={item.label} value={item.value} />
+          <LineItem key={i} boxRef={`Line ${item.line}`} label={item.label} value={item.value} sourceFieldId={k3Part2SourceFieldId(item.line)} />
         ))}
       </div>
     </div>
@@ -1619,9 +1648,10 @@ interface K1ReviewPanelProps {
   data: FK1StructuredData
   onChange: (updated: FK1StructuredData) => void
   readOnly?: boolean
+  focusFieldId?: string | undefined
 }
 
-export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1ReviewPanelProps) {
+export default function K1ReviewPanel({ data, onChange, readOnly = false, focusFieldId }: K1ReviewPanelProps) {
   const [codesModal, setCodesModal] = useState<{ box: string } | null>(null)
 
   const updateField = (box: string, value: string | null) => {
@@ -1680,7 +1710,13 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false }: K1Re
       <SourceOverridesCallout data={data} />
 
       {/* Entity / Partner Info — collapsible */}
-      <EntityInfoSection data={data} readOnly={readOnly} onUpdate={updateField} onOverrideChange={setFieldOverride} />
+      <EntityInfoSection
+        data={data}
+        readOnly={readOnly}
+        onUpdate={updateField}
+        onOverrideChange={setFieldOverride}
+        focusFieldId={focusFieldId}
+      />
 
       {/* Income + Deduction blocks side-by-side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

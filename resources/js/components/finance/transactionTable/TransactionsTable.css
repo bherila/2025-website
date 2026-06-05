@@ -1,16 +1,3 @@
-.highlight-transaction {
-  animation: highlight-fade 3s ease-out;
-}
-
-@keyframes highlight-fade {
-  0% {
-    background-color: #fef08a;
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-
 /* Prevent text selection when shift-clicking or dragging rows */
 .transactions-table-scroll tbody tr,
 .transactions-table-scroll tbody td,
