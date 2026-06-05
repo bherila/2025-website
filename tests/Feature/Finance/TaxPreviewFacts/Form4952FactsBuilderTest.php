@@ -125,6 +125,28 @@ class Form4952FactsBuilderTest extends TestCase
         );
     }
 
+    public function test_stale_tracing_override_is_ignored_for_non_trader_k1(): void
+    {
+        $investorFund = $this->investorFundK1(
+            'Investor Fund',
+            interestIncome: '500',
+            box13HInterest: '200',
+            tracingSplit: ['scheduleA' => 80.0, 'scheduleE' => 120.0],
+        );
+
+        $facts = $this->build([$investorFund]);
+
+        $this->assertSame(200.0, $facts->totalInvestmentInterestExpense);
+        $this->assertSame('pro_rata', $facts->allocationMethod);
+        $this->assertSame([], $facts->tracingSplitSources);
+        $this->assertSame(200.0, $facts->deductibleScheduleAItemized);
+        $this->assertSame(0.0, $facts->deductibleScheduleEAboveLine);
+
+        $destinations = collect($facts->carryDestinations)->keyBy('destination');
+        $this->assertSame(200.0, $destinations['sch-a']->grossInterest);
+        $this->assertFalse($destinations->has('sch-e'));
+    }
+
     public function test_investor_only_interest_carries_entirely_to_schedule_a(): void
     {
         // An ordinary investor fund (not a trader) → §163(d)(5)(A)(i) → Schedule A line 9.
@@ -217,15 +239,27 @@ class Form4952FactsBuilderTest extends TestCase
         ], $sourceValueOverrides);
     }
 
-    private function investorFundK1(string $name, string $interestIncome, string $box13HInterest): FileForTaxDocument
+    /**
+     * @param  array{scheduleA:float,scheduleE:float}|null  $tracingSplit
+     */
+    private function investorFundK1(string $name, string $interestIncome, string $box13HInterest, ?array $tracingSplit = null): FileForTaxDocument
     {
+        $sourceValueOverrides = [];
+        if ($tracingSplit !== null) {
+            $sourceValueOverrides['form4952:tracing:code:13:H'] = [
+                'value' => json_encode($tracingSplit, JSON_THROW_ON_ERROR),
+                'originalValue' => null,
+                'label' => 'Form 4952 tracing split — Box 13H',
+            ];
+        }
+
         return $this->createK1([
             'B' => $name,
             'partnershipPosition_traderInSecurities' => 'false',
             '5' => $interestIncome,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ]);
+        ], $sourceValueOverrides);
     }
 
     /**

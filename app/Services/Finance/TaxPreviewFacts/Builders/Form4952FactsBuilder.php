@@ -105,7 +105,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     if ($isTraderFund) {
                         $scheduleESourceIds[] = $sourceId;
                     }
-                    if ($tracingSplit !== null) {
+                    if ($isTraderFund && $tracingSplit !== null) {
                         $tracingSplitsBySourceId[$sourceId] = $tracingSplit;
                     }
                 }
