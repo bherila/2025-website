@@ -264,34 +264,32 @@ class FeeAnalyticsService
      */
     public function statementReturnMetrics(int $accountId, Collection $statements): array
     {
+        $statements = $this->statementReturnMetricStatements($statements);
+        $ranges = $this->statementReturnMetricRanges($statements);
+        $totalsByRange = $this->lineItemTotalsForDateRanges($accountId, $ranges);
         $metrics = [];
         /** @var array{date:CarbonImmutable,balance:float}|null $previousStatement */
         $previousStatement = null;
         /** @var array<int, array{date:CarbonImmutable,balance:float}> $ytdBasisByYear */
         $ytdBasisByYear = [];
 
-        foreach ($statements->values() as $statement) {
-            $statementId = (int) ($statement->statement_id ?? 0);
-            $statementDate = $this->carbonFromMixed($statement->statement_closing_date ?? null)?->startOfDay();
-            $statementBalance = $this->floatFromMixed($statement->balance ?? null);
+        foreach ($statements as $statement) {
+            $statementId = $statement['statement_id'];
+            $statementDate = $statement['date'];
+            $statementBalance = $statement['balance'];
             $returnPct = null;
             $ytdReturnPct = null;
 
             if ($statementDate instanceof CarbonImmutable && $statementBalance !== null) {
                 if (is_array($previousStatement)) {
                     $periodStart = $previousStatement['date']->addDay();
-                    $cashFlows = $this->cashFlowsForDateRange(
-                        $accountId,
-                        $periodStart,
-                        $statementDate,
-                    );
-                    $fees = $this->actualFeesForPeriod($accountId, $periodStart, $statementDate, false)['total'];
+                    $totals = $this->lineItemTotalsForDateRange($totalsByRange, $periodStart, $statementDate);
                     $returnPct = $this->periodReturnMetrics(
                         $previousStatement['balance'],
                         $statementBalance,
-                        $cashFlows['deposits'],
-                        $cashFlows['withdrawals'],
-                        $fees,
+                        $totals['deposits'],
+                        $totals['withdrawals'],
+                        $totals['fees'],
                         annualize: false,
                     )['gross_return_pct'];
                 }
@@ -299,18 +297,13 @@ class FeeAnalyticsService
                 $ytdBasis = $ytdBasisByYear[$statementDate->year] ?? null;
                 if (is_array($ytdBasis)) {
                     $ytdStart = $ytdBasis['date']->addDay();
-                    $ytdCashFlows = $this->cashFlowsForDateRange(
-                        $accountId,
-                        $ytdStart,
-                        $statementDate,
-                    );
-                    $ytdFees = $this->actualFeesForPeriod($accountId, $ytdStart, $statementDate, false)['total'];
+                    $ytdTotals = $this->lineItemTotalsForDateRange($totalsByRange, $ytdStart, $statementDate);
                     $ytdReturnPct = $this->periodReturnMetrics(
                         $ytdBasis['balance'],
                         $statementBalance,
-                        $ytdCashFlows['deposits'],
-                        $ytdCashFlows['withdrawals'],
-                        $ytdFees,
+                        $ytdTotals['deposits'],
+                        $ytdTotals['withdrawals'],
+                        $ytdTotals['fees'],
                         annualize: false,
                     )['gross_return_pct'];
                 }
@@ -331,6 +324,226 @@ class FeeAnalyticsService
         }
 
         return $metrics;
+    }
+
+    /**
+     * @param  Collection<int, \stdClass>  $statements
+     * @return array<int, array{statement_id:int,date:CarbonImmutable|null,balance:float|null}>
+     */
+    private function statementReturnMetricStatements(Collection $statements): array
+    {
+        $prepared = [];
+
+        foreach ($statements->values() as $statement) {
+            $prepared[] = [
+                'statement_id' => (int) ($statement->statement_id ?? 0),
+                'date' => $this->carbonFromMixed($statement->statement_closing_date ?? null)?->startOfDay(),
+                'balance' => $this->floatFromMixed($statement->balance ?? null),
+            ];
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * @param  array<int, array{statement_id:int,date:CarbonImmutable|null,balance:float|null}>  $statements
+     * @return array<string, array{start:CarbonImmutable,end:CarbonImmutable}>
+     */
+    private function statementReturnMetricRanges(array $statements): array
+    {
+        $ranges = [];
+        /** @var array{date:CarbonImmutable,balance:float}|null $previousStatement */
+        $previousStatement = null;
+        /** @var array<int, array{date:CarbonImmutable,balance:float}> $ytdBasisByYear */
+        $ytdBasisByYear = [];
+
+        foreach ($statements as $statement) {
+            $statementDate = $statement['date'];
+            $statementBalance = $statement['balance'];
+
+            if ($statementDate instanceof CarbonImmutable && $statementBalance !== null) {
+                if (is_array($previousStatement)) {
+                    $this->addStatementReturnMetricRange(
+                        $ranges,
+                        $previousStatement['date']->addDay(),
+                        $statementDate,
+                    );
+                }
+
+                $ytdBasis = $ytdBasisByYear[$statementDate->year] ?? null;
+                if (is_array($ytdBasis)) {
+                    $this->addStatementReturnMetricRange(
+                        $ranges,
+                        $ytdBasis['date']->addDay(),
+                        $statementDate,
+                    );
+                }
+
+                $previousStatement = [
+                    'date' => $statementDate,
+                    'balance' => $statementBalance,
+                ];
+                $ytdBasisByYear[$statementDate->year + 1] = $previousStatement;
+            }
+        }
+
+        return $ranges;
+    }
+
+    /**
+     * @param  array<string, array{start:CarbonImmutable,end:CarbonImmutable}>  $ranges
+     */
+    private function addStatementReturnMetricRange(array &$ranges, CarbonImmutable $start, CarbonImmutable $end): void
+    {
+        if ($end->lessThan($start)) {
+            return;
+        }
+
+        $ranges[$this->statementReturnMetricRangeKey($start, $end)] = [
+            'start' => $start,
+            'end' => $end,
+        ];
+    }
+
+    private function statementReturnMetricRangeKey(CarbonImmutable $start, CarbonImmutable $end): string
+    {
+        return $start->toDateString().'|'.$end->toDateString();
+    }
+
+    /**
+     * @param  array<string, array{start:CarbonImmutable,end:CarbonImmutable}>  $ranges
+     * @return array<string, array{deposits:float,withdrawals:float,fees:float}>
+     */
+    private function lineItemTotalsForDateRanges(int $accountId, array $ranges): array
+    {
+        $totalsByRange = [];
+
+        foreach (array_keys($ranges) as $rangeKey) {
+            $totalsByRange[$rangeKey] = $this->emptyReturnMetricLineItemTotals();
+        }
+
+        if ($ranges === []) {
+            return $totalsByRange;
+        }
+
+        $firstRange = array_values($ranges)[0];
+        $windowStart = $firstRange['start'];
+        $windowEnd = $firstRange['end'];
+        foreach ($ranges as $range) {
+            if ($range['start']->lessThan($windowStart)) {
+                $windowStart = $range['start'];
+            }
+
+            if ($range['end']->greaterThan($windowEnd)) {
+                $windowEnd = $range['end'];
+            }
+        }
+
+        $cashFlowsByDate = $this->cashFlowTotalsByDateForPeriod($accountId, $windowStart, $windowEnd);
+        $feesByDate = $this->feeTotalsByDateForPeriod($accountId, $windowStart, $windowEnd);
+
+        foreach ($ranges as $rangeKey => $range) {
+            $startDate = $range['start']->toDateString();
+            $endDate = $range['end']->toDateString();
+
+            foreach ($cashFlowsByDate as $date => $cashFlows) {
+                if ($date < $startDate || $date > $endDate) {
+                    continue;
+                }
+
+                $totalsByRange[$rangeKey]['deposits'] = MoneyMath::add(
+                    $totalsByRange[$rangeKey]['deposits'],
+                    $cashFlows['deposits'],
+                );
+                $totalsByRange[$rangeKey]['withdrawals'] = MoneyMath::add(
+                    $totalsByRange[$rangeKey]['withdrawals'],
+                    $cashFlows['withdrawals'],
+                );
+            }
+
+            foreach ($feesByDate as $date => $fees) {
+                if ($date < $startDate || $date > $endDate) {
+                    continue;
+                }
+
+                $totalsByRange[$rangeKey]['fees'] = MoneyMath::add($totalsByRange[$rangeKey]['fees'], $fees);
+            }
+        }
+
+        return $totalsByRange;
+    }
+
+    /**
+     * @return array<string, array{deposits:float,withdrawals:float}>
+     */
+    private function cashFlowTotalsByDateForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $totals = [];
+
+        $rows = FinAccountLineItems::query()
+            ->where('t_account', $accountId)
+            ->whereIn('t_type', self::CASH_FLOW_TRANSACTION_TYPES)
+            ->whereDate('t_date', '>=', $start->toDateString())
+            ->whereDate('t_date', '<=', $end->toDateString())
+            ->get(['t_date', 't_type', 't_amt']);
+
+        foreach ($rows as $row) {
+            $date = $this->carbonFromMixed($row->t_date)?->toDateString();
+            if ($date === null) {
+                continue;
+            }
+
+            $totals[$date] ??= ['deposits' => 0.0, 'withdrawals' => 0.0];
+            $this->addCashFlowAmount($totals[$date], $row->t_type, $row->t_amt);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function feeTotalsByDateForPeriod(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $totals = [];
+
+        foreach ($this->feeLineItemsForPeriod($accountId, $start, $end) as $row) {
+            $date = $this->carbonFromMixed($row->t_date)?->toDateString();
+            if ($date === null) {
+                continue;
+            }
+
+            $feeAmount = $this->feeAmountForLineItem($row);
+            if ($feeAmount === 0.0) {
+                continue;
+            }
+
+            $totals[$date] = MoneyMath::add($totals[$date] ?? 0.0, $feeAmount);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @param  array<string, array{deposits:float,withdrawals:float,fees:float}>  $totalsByRange
+     * @return array{deposits:float,withdrawals:float,fees:float}
+     */
+    private function lineItemTotalsForDateRange(array $totalsByRange, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        if ($end->lessThan($start)) {
+            return $this->emptyReturnMetricLineItemTotals();
+        }
+
+        return $totalsByRange[$this->statementReturnMetricRangeKey($start, $end)]
+            ?? $this->emptyReturnMetricLineItemTotals();
+    }
+
+    /**
+     * @return array{deposits:float,withdrawals:float,fees:float}
+     */
+    private function emptyReturnMetricLineItemTotals(): array
+    {
+        return ['deposits' => 0.0, 'withdrawals' => 0.0, 'fees' => 0.0];
     }
 
     /**
