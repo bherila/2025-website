@@ -33,17 +33,42 @@ class OpportunityCostController extends Controller
 
     public function showByCode(string $code): View
     {
+        $comparison = OpportunityCostComparison::query()
+            ->where('short_code', $code)
+            ->firstOrFail();
+
         return view('financial-planning.opportunity-cost', [
             'initialData' => [
-                'inputs' => OpportunityCostInputs::defaults(),
-                'projection' => null,
-                'authenticated' => auth()->check(),
-                'share' => [
-                    'code' => $code,
-                    'isStub' => true,
+                'inputs' => $this->inputsFromComparison($comparison)->toArray(),
+                'projection' => $comparison->computed_json,
+                'authenticated' => Auth::check(),
+                'comparison' => [
+                    'id' => $comparison->id,
+                    'shortCode' => $comparison->short_code,
+                    'shareUrl' => url("/financial-planning/opportunity-cost/s/{$comparison->short_code}"),
+                    'ownerUserId' => $comparison->user_id,
+                    'shareIncludesCurrent' => $comparison->share_includes_current,
                 ],
+                'canEdit' => Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id,
             ],
         ]);
+    }
+
+    public function savedJobs(): JsonResponse
+    {
+        $jobs = CareerJob::query()
+            ->where('user_id', Auth::id())
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (CareerJob $job): array => [
+                'id' => $job->id,
+                'kind' => $job->kind,
+                'name' => $job->name,
+                'spec' => $job->spec_json,
+            ]);
+
+        return response()->json(['jobs' => $jobs]);
     }
 
     public function compute(ComputeOpportunityCostRequest $request): JsonResponse
@@ -127,6 +152,39 @@ class OpportunityCostController extends Controller
         }
 
         return response()->json($this->comparisonResponse($comparison, $comparison->computed_json));
+    }
+
+    /**
+     * Rebuild the calculator inputs from a saved comparison's referenced jobs.
+     */
+    private function inputsFromComparison(OpportunityCostComparison $comparison): OpportunityCostInputs
+    {
+        $currentJob = $comparison->current_job_id !== null
+            ? CareerJob::query()->find($comparison->current_job_id)
+            : null;
+
+        $hypothetical = CareerJob::query()
+            ->whereIn('id', $comparison->hypothetical_job_ids)
+            ->get()
+            ->keyBy('id');
+
+        $computed = $comparison->computed_json ?? [];
+        $defaults = OpportunityCostInputs::defaults();
+
+        $hypotheticalSpecs = [];
+        foreach ($comparison->hypothetical_job_ids as $id) {
+            $job = $hypothetical->get($id);
+            if ($job instanceof CareerJob) {
+                $hypotheticalSpecs[] = $job->spec_json;
+            }
+        }
+
+        return OpportunityCostInputs::fromArray([
+            'startYear' => $computed['startYear'] ?? $defaults['startYear'],
+            'horizonYears' => $computed['horizonYears'] ?? $defaults['horizonYears'],
+            'currentJob' => $currentJob?->spec_json,
+            'hypotheticalJobs' => $hypotheticalSpecs,
+        ]);
     }
 
     /**
