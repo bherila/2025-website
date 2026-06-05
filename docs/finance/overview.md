@@ -99,6 +99,18 @@ The year selector uses URL query strings for shareable, bookmarkable links:
 
 **`YearSelectorWithNav` component** (`resources/js/components/finance/YearSelectorWithNav.tsx`) is the reusable year-selection widget. It renders a dropdown with −/+ navigation buttons to step through available years.
 
+### Summary Tab
+
+The Summary tab is mounted at `/finance/account/{id}/summary` and loads `GET /api/finance/{account_id}/summary`.
+
+Its totals keep their existing sources except for fees:
+
+- `total_volume` remains `SUM(ABS(t_amt))` for the selected account/year.
+- `total_commission` remains `SUM(t_commission)` for the selected account/year.
+- `total_fee` uses `FeeAnalyticsService::actualFeesForAccount()` so it matches the account Fees tab for the same concrete year. This includes both fee transaction rows where costs live in `t_amt` and embedded transaction fees where costs live in `t_fee`.
+
+For the Summary API, `year=all` and an omitted `year` both mean: gather every distinct transaction year for the account, compute that year's net signed actual fee total through `FeeAnalyticsService`, and sum those yearly totals. The Fees tab itself remains year-keyed; use the same concrete year on both tabs when comparing totals directly. See [Fee Analytics](fees.md) for the signed fee convention.
+
 ---
 
 ## URL Routes

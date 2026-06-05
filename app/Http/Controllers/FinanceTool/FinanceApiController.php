@@ -7,7 +7,9 @@ use App\Models\Files\FileForFinAccount;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Services\Finance\FeeAnalyticsService;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TransactionDeletionTombstoneService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,7 @@ use Illuminate\Support\Facades\DB;
 
 class FinanceApiController extends Controller
 {
-    public function __construct(private FeeAnalyticsService $feeAnalyticsService) {}
+    public function __construct(private readonly FeeAnalyticsService $feeAnalyticsService) {}
 
     public function accounts(Request $request): JsonResponse
     {
@@ -306,28 +308,25 @@ class FinanceApiController extends Controller
     {
         $uid = Auth::id();
         $account = FinAccounts::where('acct_id', $account_id)->where('acct_owner', $uid)->firstOrFail();
+        $year = $this->selectedSummaryYear($request);
 
-        $lineItemsQuery = FinAccountLineItems::where('t_account', $account_id);
-
-        // Filter by year if provided
-        if ($request->has('year') && $request->year !== 'all') {
-            $year = intval($request->year);
-            $lineItemsQuery->whereYear('t_date', $year);
-        }
+        $lineItemsQuery = $this->applySummaryYearFilter(
+            FinAccountLineItems::query()->where('t_account', $account_id),
+            $year,
+        );
 
         $totals = [
             'total_volume' => (clone $lineItemsQuery)->sum(DB::raw('ABS(t_amt)')),
             'total_commission' => (clone $lineItemsQuery)->sum('t_commission'),
-            'total_fee' => (clone $lineItemsQuery)->sum('t_fee'),
+            'total_fee' => $this->summaryFeeTotal($account, $year),
         ];
 
-        $symbolQuery = FinAccountLineItems::where('t_account', $account_id)
-            ->whereNotNull('t_symbol');
-
-        if ($request->has('year') && $request->year !== 'all') {
-            $year = intval($request->year);
-            $symbolQuery->whereYear('t_date', $year);
-        }
+        $symbolQuery = $this->applySummaryYearFilter(
+            FinAccountLineItems::query()
+                ->where('t_account', $account_id)
+                ->whereNotNull('t_symbol'),
+            $year,
+        );
 
         $symbolSummary = $symbolQuery
             ->select('t_symbol', DB::raw('SUM(t_amt) as total_amount'))
@@ -336,16 +335,15 @@ class FinanceApiController extends Controller
             ->get()
             ->toArray();
 
-        $monthQuery = FinAccountLineItems::where('t_account', $account_id);
-
-        if ($request->has('year') && $request->year !== 'all') {
-            $year = intval($request->year);
-            $monthQuery->whereYear('t_date', $year);
-        }
+        $monthQuery = $this->applySummaryYearFilter(
+            FinAccountLineItems::query()->where('t_account', $account_id),
+            $year,
+        );
+        $monthExpression = $this->summaryMonthExpression();
 
         $monthSummary = $monthQuery
-            ->select(DB::raw("DATE_FORMAT(t_date, '%Y-%m') as month"), DB::raw('SUM(t_amt) as total_amount'))
-            ->groupBy(DB::raw("DATE_FORMAT(t_date, '%Y-%m')"))
+            ->select(DB::raw("{$monthExpression} as month"), DB::raw('SUM(t_amt) as total_amount'))
+            ->groupBy(DB::raw($monthExpression))
             ->orderBy('month', 'desc')
             ->get()
             ->toArray();
@@ -355,6 +353,84 @@ class FinanceApiController extends Controller
             'symbolSummary' => $symbolSummary,
             'monthSummary' => $monthSummary,
         ]);
+    }
+
+    private function selectedSummaryYear(Request $request): ?int
+    {
+        $year = $request->query('year');
+        if ($year === null || ! is_scalar($year)) {
+            return null;
+        }
+
+        $yearString = trim((string) $year);
+        if ($yearString === '' || $yearString === 'all') {
+            return null;
+        }
+
+        return (int) $yearString;
+    }
+
+    /**
+     * @param  Builder<FinAccountLineItems>  $query
+     * @return Builder<FinAccountLineItems>
+     */
+    private function applySummaryYearFilter(Builder $query, ?int $year): Builder
+    {
+        if ($year !== null) {
+            $query->whereYear('t_date', $year);
+        }
+
+        return $query;
+    }
+
+    private function summaryFeeTotal(FinAccounts $account, ?int $year): float
+    {
+        if ($year !== null) {
+            return (float) $this->feeAnalyticsService->actualFeesForAccount($account, $year, false)['total'];
+        }
+
+        $total = 0.0;
+        foreach ($this->summaryActiveYears($account) as $activeYear) {
+            $actual = $this->feeAnalyticsService->actualFeesForAccount($account, $activeYear, false);
+            $total = MoneyMath::add($total, $actual['total']);
+        }
+
+        return $total;
+    }
+
+    /**
+     * `year=all` on the Summary tab means every distinct transaction year for
+     * the account, with each year's fee total still computed by FeeAnalyticsService.
+     *
+     * @return array<int, int>
+     */
+    private function summaryActiveYears(FinAccounts $account): array
+    {
+        return FinAccountLineItems::query()
+            ->where('t_account', $account->acct_id)
+            ->whereNotNull('t_date')
+            ->select(DB::raw($this->summaryYearExpression().' as transaction_year'))
+            ->distinct()
+            ->orderBy('transaction_year')
+            ->pluck('transaction_year')
+            ->map(static fn (mixed $year): int => (int) $year)
+            ->filter(static fn (int $year): bool => $year > 0)
+            ->values()
+            ->all();
+    }
+
+    private function summaryYearExpression(): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y', t_date)"
+            : 'YEAR(t_date)';
+    }
+
+    private function summaryMonthExpression(): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', t_date)"
+            : "DATE_FORMAT(t_date, '%Y-%m')";
     }
 
     public function deleteBalanceSnapshot(Request $request, int $account_id): JsonResponse
