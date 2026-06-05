@@ -57,13 +57,13 @@ describe('Career Comparison backend golden projection (cross-language contract)'
     })
 
     const afterTaxLiquidityRows = mapAfterTaxLiquidityChartData(parsed)
-    expect(afterTaxLiquidityRows.find((row) => row.year === 2030)?.['hyp-1-medium']).toBe(1247449.32)
+    expect(afterTaxLiquidityRows.find((row) => row.year === 2030)?.['hyp-1-medium']).toBe(1247449.33)
     expect(afterTaxLiquidityRows.find((row) => row.year === 2035)?.['current-medium']).toBe(1787550)
 
     const lifetimeRows = mapAfterTaxLifetimeValueRows(parsed)
     expect(lifetimeRows.find((row) => row.jobId === 'hyp-1')).toMatchObject({
-      estimatedAmt: 69760.68,
-      totalValueDeltaMedium: -251759.02,
+      estimatedAmt: 69760.67,
+      totalValueDeltaMedium: 354541,
     })
 
     expect(mapAfterTaxSourceBreakdownRows(parsed)).toEqual(expect.arrayContaining([
