@@ -20,12 +20,17 @@ import {
   parseK1SourceValueOverride,
   withK1SourceValueOverride,
 } from '@/lib/finance/k1Utils'
+import {
+  k3ForeignTaxTotalSourceFieldId,
+  k3Part2SourceFieldId,
+  k3Part3CountrySourceFieldId,
+} from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
 interface K3AllInOneViewProps {
   k1Docs: TaxDocument[]
-  onReviewDoc: (docId: number) => void
+  onReviewDoc: (docId: number, focusFieldId?: string) => void
   onSaveParsedData: (docId: number, parsedData: FK1StructuredData) => Promise<void>
 }
 
@@ -61,6 +66,7 @@ interface K3CellValue {
   value: number | null
   sourceValue: number | null
   overrideKey?: string
+  sourceFieldId?: string
   shadowed?: boolean
   shadowedValues?: Array<{ label: string; value: number | string | null }>
 }
@@ -283,6 +289,7 @@ function ValueCell({
           onClick={() => onOpenSourceValue({
             column,
             ...(cell.overrideKey ? { overrideKey: cell.overrideKey } : {}),
+            ...(cell.sourceFieldId ? { sourceFieldId: cell.sourceFieldId } : {}),
             modal: {
               title: 'K-3 source value',
               subtitle: column.accountName,
@@ -313,6 +320,7 @@ function ValueCell({
 interface SourceValueContext {
   column: K3Column
   overrideKey?: string
+  sourceFieldId?: string
   modal: K1K3SourceValue
 }
 
@@ -482,6 +490,7 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
           value: cell ? cell[category] : null,
           sourceValue: sourceCell ? sourceCell[category] : null,
           ...(overrideKey ? { overrideKey } : {}),
+          sourceFieldId: k3Part2SourceFieldId(line),
         }
       },
     }
@@ -498,6 +507,7 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
           value: extractK3ForeignTaxTotal(column.data),
           sourceValue: extractK3ForeignTaxTotal(withoutSourceValueOverrides(column.data)),
           overrideKey: k3ForeignTaxTotalOverrideKey(),
+          sourceFieldId: k3ForeignTaxTotalSourceFieldId(),
           shadowedValues: aggregateOverride ? part3CountrySourceValues(column.data) : [],
         }
       },
@@ -511,6 +521,7 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
           value: part3.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
           sourceValue: part3Source.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
           overrideKey: k3Part3OverrideKey(country),
+          sourceFieldId: k3Part3CountrySourceFieldId(country),
           shadowed: aggregateOverride,
         }
       },
@@ -546,8 +557,9 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
             return
           }
           const docId = sourceValueContext.column.doc.id
+          const { sourceFieldId } = sourceValueContext
           setSourceValueContext(null)
-          onReviewDoc(docId)
+          onReviewDoc(docId, sourceFieldId)
         }}
         onSaveOverride={saveSourceOverride}
       />

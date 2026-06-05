@@ -42,6 +42,8 @@ import { getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { extractBrokerEntriesFromManualInput } from '@/lib/finance/taxDocumentManualInput'
 import { extractLinkParsedData, hasLegacyFlatBrokerParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
+import { taxSourceFieldSelector } from '@/lib/finance/taxSourceFieldIds'
+import { useScrollAndHighlight } from '@/lib/useScrollAndHighlight'
 import type { MiscRouting, MultiAccountParsedEntry, TaxDocument, TaxDocumentAccountLink, TaxDocumentParsedData, W2ParsedData } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
@@ -61,6 +63,7 @@ interface TaxDocumentReviewModalProps {
   onDocumentSaved?: ((doc: TaxDocument) => void) | undefined
   onDocumentDeleted?: ((doc: TaxDocument) => void) | undefined
   onTaxFactsChange?: ((facts: TaxPreviewFacts) => void) | undefined
+  focusFieldId?: string | undefined
 }
 
 interface TaxDocumentMutationResponse {
@@ -700,6 +703,7 @@ export default function TaxDocumentReviewModal({
   onDocumentSaved,
   onDocumentDeleted,
   onTaxFactsChange,
+  focusFieldId,
 }: TaxDocumentReviewModalProps) {
   const [documents, setDocuments] = useState<TaxDocument[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -728,6 +732,15 @@ export default function TaxDocumentReviewModal({
     ? propAccountLink?.parsed_data_warnings ?? []
     : activeDoc?.parsed_data_warnings ?? []
   const legacyFlatBrokerData = hasLegacyFlatBrokerParsedData(activeDoc)
+  const k1FocusDataReady = isFK1StructuredData(editData)
+    ? `${Object.keys(editData.fields ?? {}).length}:${editData.k3?.sections?.length ?? 0}`
+    : 'pending'
+
+  useScrollAndHighlight({
+    selector: focusFieldId ? taxSourceFieldSelector(focusFieldId) : null,
+    triggerKey: `${open ? 'open' : 'closed'}:${activeDoc?.id ?? 'none'}:${effectiveFormType ?? 'none'}:${focusFieldId ?? 'none'}:${k1FocusDataReady}`,
+    enabled: open && effectiveFormType === 'k1' && Boolean(focusFieldId),
+  })
 
   // When a K-1 is already confirmed, every section is rendered read-only EXCEPT the K-3 SBP
   // election checkbox (it's a user tax-planning preference, not extracted data). Detect when
@@ -1360,6 +1373,7 @@ export default function TaxDocumentReviewModal({
                           data={editData}
                           onChange={(updated) => setEditData(updated)}
                           readOnly={effectiveReviewed}
+                          focusFieldId={focusFieldId}
                         />
                       ) : effectiveFormType === '1116' && isF1116Data(editData) ? (
                         <F1116ReviewPanel

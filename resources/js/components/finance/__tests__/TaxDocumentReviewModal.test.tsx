@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 jest.mock('@/fetchWrapper', () => ({
@@ -13,27 +13,32 @@ jest.mock('@/components/finance/k1', () => ({
   K1ReviewPanel: ({
     data,
     onChange,
+    focusFieldId,
   }: {
     data: Record<string, unknown>
     onChange: (d: Record<string, unknown>) => void
+    focusFieldId?: string
   }) => (
-    <button
-      data-testid="toggle-sbp"
-      onClick={() =>
-        onChange({
-          ...data,
-          k3Elections: {
-            ...(data.k3Elections as Record<string, unknown>),
-            sourcedByPartnerAsUSSource: !(
-              (data.k3Elections as Record<string, unknown> | undefined)
-                ?.sourcedByPartnerAsUSSource ?? false
-            ),
-          },
-        })
-      }
-    >
-      Toggle SBP
-    </button>
+    <div>
+      {focusFieldId ? <div data-testid="focused-source-target" data-tax-source-field-id={focusFieldId} /> : null}
+      <button
+        data-testid="toggle-sbp"
+        onClick={() =>
+          onChange({
+            ...data,
+            k3Elections: {
+              ...(data.k3Elections as Record<string, unknown>),
+              sourcedByPartnerAsUSSource: !(
+                (data.k3Elections as Record<string, unknown> | undefined)
+                  ?.sourcedByPartnerAsUSSource ?? false
+              ),
+            },
+          })
+        }
+      >
+        Toggle SBP
+      </button>
+    </div>
   ),
 }))
 
@@ -361,6 +366,44 @@ function baseProps(overrides: Record<string, unknown> = {}) {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('TaxDocumentReviewModal — source field focus', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers()
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  it('scrolls to and highlights the requested K-1 source field', () => {
+    const scrollIntoView = jest.fn()
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+
+    render(
+      <TaxDocumentReviewModal
+        {...(baseProps({ focusFieldId: 'k1-field-5' }) as unknown as React.ComponentProps<typeof TaxDocumentReviewModal>)}
+      />,
+    )
+
+    act(() => {
+      jest.advanceTimersByTime(200)
+    })
+
+    const target = screen.getByTestId('focused-source-target')
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+    expect(target).toHaveClass('scroll-highlight-flash')
+
+    act(() => {
+      jest.advanceTimersByTime(3000)
+    })
+
+    expect(target).not.toHaveClass('scroll-highlight-flash')
+  })
+})
 
 describe('TaxDocumentReviewModal — SBP election save-while-reviewed', () => {
   beforeEach(() => jest.clearAllMocks())

@@ -115,12 +115,12 @@ Adding a new line? Add the backend fact/source keys to `Form1040Facts`, map them
 
 `AdditionalTaxesPreview.SourceModal` accepts `goToTab` + `goToLabel` + `onTabChange`. The Schedule 2 adapter passes `onTabChange={tabToDrill(onDrill)}`, which makes the "Go to Schedule B / W-2 / Schedule E" buttons push the right column onto the Miller stack.
 
-Tax-preview source navigation is intentionally form-level today:
+Most tax-preview source navigation is form-level:
 
 - Form 1040 line drill uses `navTab` / `TAB_TO_FORM_ID`.
 - Action Items source buttons route to the form tab that owns the computation.
 - Schedule 2 data-source dialogs route to the contributing form via `goToTab`.
-- K-1 trader-fund routing rows surface source labels and inline tooltips. Exact K-1 code-row deep links remain a future improvement; use `finance:k1-codes` for a CLI audit trail when reviewing trader-fund rows.
+- K-1 / K-3 All-in-One source dialogs call `reviewK1Doc(docId, focusFieldId)`. The review modal opens the source K-1 and scrolls to the matching `[data-tax-source-field-id]` row with the shared `useScrollAndHighlight` hook.
 
 When adding source navigation, keep older `onTabChange(tab)` component callbacks translated through `tabToDrill(onDrill)` in the dock adapter.
 

@@ -12,6 +12,10 @@
   animation-name: animate-fade-in;
 }
 
+.scroll-highlight-flash {
+  animation: scroll-highlight-fade 3s ease-out;
+}
+
 @keyframes animate-fade-in {
   from {
     opacity: 0;
@@ -19,6 +23,16 @@
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes scroll-highlight-fade {
+  0% {
+    background-color: #fef08a;
+  }
+
+  100% {
+    background-color: transparent;
   }
 }
 

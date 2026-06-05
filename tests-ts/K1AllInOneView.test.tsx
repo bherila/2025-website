@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import { k1FieldSourceFieldId } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K1CodeItem, K1FieldValue } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
@@ -103,7 +104,7 @@ describe('K1AllInOneView', () => {
     fireEvent.click(screen.getByRole('button', { name: '$1,000' }))
     expect(screen.getByText('Effective value')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
-    expect(onReviewDoc).toHaveBeenCalledWith(101)
+    expect(onReviewDoc).toHaveBeenCalledWith(101, k1FieldSourceFieldId('5'))
   })
 
   it('saves a source value override without opening the K-1 review modal first', async () => {

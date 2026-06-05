@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import K3AllInOneView from '@/components/finance/K3AllInOneView'
+import { k3Part3CountrySourceFieldId } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K3Section } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
 
@@ -74,7 +75,7 @@ describe('K3AllInOneView', () => {
     fireEvent.click(within(ireland).getByRole('button', { name: '$1,201' }))
     expect(screen.getByText('Effective value')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /go to source/i }))
-    expect(onReviewDoc).toHaveBeenCalledWith(201)
+    expect(onReviewDoc).toHaveBeenCalledWith(201, k3Part3CountrySourceFieldId('Ireland'))
   })
 
   it('keeps table headers, first-column cells, and section labels sticky inside each table viewport', () => {

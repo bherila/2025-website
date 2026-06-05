@@ -1,6 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
+import {
+  k1FieldSourceFieldId,
+  k3ForeignTaxTotalSourceFieldId,
+  k3Part2SourceFieldId,
+  k3Part3CountrySourceFieldId,
+  taxSourceFieldSelector,
+} from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
 
 import K1CodesModal from '../K1CodesModal'
@@ -210,6 +217,57 @@ describe('K1ReviewPanel — sourced-by-partner default', () => {
 
     expect(container.textContent).not.toContain('Sourced by Partner → US (f)')
     expect(container.textContent).toContain('Sourced by Partner (f)')
+  })
+})
+
+describe('K1ReviewPanel — source field targets', () => {
+  it('opens a focused entity section and marks K-1/K-3 source rows', () => {
+    const data = makeData({
+      fields: {
+        B: { value: 'Source Partnership' },
+        '5': { value: '1000' },
+      },
+      k3: {
+        sections: [
+          {
+            sectionId: 'part2_section2',
+            title: 'K-3 Part II Section 2',
+            data: {
+              rows: [
+                {
+                  line: '55',
+                  col_c_passive: 100,
+                  col_f_sourced_by_partner: 25,
+                  col_g_total: 125,
+                },
+              ],
+            },
+          },
+          {
+            sectionId: 'part3_section4',
+            title: 'K-3 Part III Section 4',
+            data: {
+              countries: [{ country: 'Ireland', amount_usd: 42 }],
+            },
+          },
+        ],
+      },
+    })
+
+    const { container } = render(
+      <K1ReviewPanel
+        data={data}
+        onChange={() => {}}
+        readOnly
+        focusFieldId={k1FieldSourceFieldId('B')}
+      />,
+    )
+
+    expect(container.querySelector(taxSourceFieldSelector(k1FieldSourceFieldId('B')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k1FieldSourceFieldId('5')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3Part2SourceFieldId('55')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3Part3CountrySourceFieldId('Ireland')))).not.toBeNull()
+    expect(container.querySelector(taxSourceFieldSelector(k3ForeignTaxTotalSourceFieldId()))).not.toBeNull()
   })
 })
 

@@ -16,7 +16,7 @@ interface DockActionsValue {
   /** True while the current tax preview workbook is being generated. */
   isExportingXlsx: boolean
   /** Open the document review modal for a specific K-1 document by id. */
-  reviewK1Doc: (docId: number) => void
+  reviewK1Doc: (docId: number, focusFieldId?: string) => void
   /** Open the document review modal for any tax document by id. */
   openTaxDocumentDetail: (docId: number) => void
   /** Open the review modal in "select a document" mode (no specific doc). */
@@ -55,6 +55,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
   const { accountDocuments, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
+  const [reviewFocusFieldId, setReviewFocusFieldId] = useState<string | undefined>(undefined)
   const [worksheetId, setWorksheetId] = useState<FormId | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
@@ -72,20 +73,21 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
   }, [])
 
   const openReviewDoc = useCallback(
-    (docId: number) => {
+    (docId: number, focusFieldId?: string) => {
       const target = [...accountDocuments, ...w2Documents].find((doc) => doc.id === docId)
       if (!target) {
         return false
       }
       setReviewDoc(target)
+      setReviewFocusFieldId(focusFieldId)
       setReviewOpen(true)
       return true
     },
     [accountDocuments, w2Documents],
   )
 
-  const reviewK1Doc = useCallback((docId: number) => {
-    openReviewDoc(docId)
+  const reviewK1Doc = useCallback((docId: number, focusFieldId?: string) => {
+    openReviewDoc(docId, focusFieldId)
   }, [openReviewDoc])
 
   const openTaxDocumentDetail = useCallback((docId: number) => {
@@ -94,6 +96,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
 
   const openReviewQueue = useCallback(() => {
     setReviewDoc(undefined)
+    setReviewFocusFieldId(undefined)
     setReviewOpen(true)
   }, [])
 
@@ -174,13 +177,16 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
         open={reviewOpen}
         taxYear={selectedYear}
         {...(reviewDoc ? { document: reviewDoc } : {})}
+        focusFieldId={reviewFocusFieldId}
         onClose={() => {
           setReviewDoc(undefined)
+          setReviewFocusFieldId(undefined)
           setReviewOpen(false)
           removeReviewDocumentQueryParam()
         }}
         onDocumentReviewed={() => {
           setReviewDoc(undefined)
+          setReviewFocusFieldId(undefined)
           setReviewOpen(false)
           void refreshAll()
         }}
