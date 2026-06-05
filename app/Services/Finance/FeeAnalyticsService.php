@@ -236,6 +236,7 @@ class FeeAnalyticsService
         float $deposits,
         float $withdrawals,
         float $fees,
+        bool $annualize = true,
     ): array {
         if ($startingBalance === null || $endingBalance === null || $startingBalance === 0.0) {
             return [
@@ -252,9 +253,108 @@ class FeeAnalyticsService
         return [
             'net_return' => $netReturn,
             'gross_return' => $grossReturn,
-            'net_return_pct' => $this->annualizedReturnPct($netReturn, $startingBalance),
-            'gross_return_pct' => $this->annualizedReturnPct($grossReturn, $startingBalance),
+            'net_return_pct' => $this->returnPct($netReturn, $startingBalance, $annualize),
+            'gross_return_pct' => $this->returnPct($grossReturn, $startingBalance, $annualize),
         ];
+    }
+
+    /**
+     * @param  Collection<int, \stdClass>  $statements
+     * @return array<int, array{return_pct:float|null,ytd_return_pct:float|null}>
+     */
+    public function statementReturnMetrics(int $accountId, Collection $statements): array
+    {
+        $metrics = [];
+        /** @var array{date:CarbonImmutable,balance:float}|null $previousStatement */
+        $previousStatement = null;
+        /** @var array<int, array{date:CarbonImmutable,balance:float}> $ytdBasisByYear */
+        $ytdBasisByYear = [];
+
+        foreach ($statements->values() as $statement) {
+            $statementId = (int) ($statement->statement_id ?? 0);
+            $statementDate = $this->carbonFromMixed($statement->statement_closing_date ?? null)?->startOfDay();
+            $statementBalance = $this->floatFromMixed($statement->balance ?? null);
+            $returnPct = null;
+            $ytdReturnPct = null;
+
+            if ($statementDate instanceof CarbonImmutable && $statementBalance !== null) {
+                if (is_array($previousStatement)) {
+                    $periodStart = $previousStatement['date']->addDay();
+                    $cashFlows = $this->cashFlowsForDateRange(
+                        $accountId,
+                        $periodStart,
+                        $statementDate,
+                    );
+                    $fees = $this->actualFeesForPeriod($accountId, $periodStart, $statementDate, false)['total'];
+                    $returnPct = $this->periodReturnMetrics(
+                        $previousStatement['balance'],
+                        $statementBalance,
+                        $cashFlows['deposits'],
+                        $cashFlows['withdrawals'],
+                        $fees,
+                        annualize: false,
+                    )['gross_return_pct'];
+                }
+
+                $ytdBasis = $ytdBasisByYear[$statementDate->year] ?? null;
+                if (is_array($ytdBasis)) {
+                    $ytdStart = $ytdBasis['date']->addDay();
+                    $ytdCashFlows = $this->cashFlowsForDateRange(
+                        $accountId,
+                        $ytdStart,
+                        $statementDate,
+                    );
+                    $ytdFees = $this->actualFeesForPeriod($accountId, $ytdStart, $statementDate, false)['total'];
+                    $ytdReturnPct = $this->periodReturnMetrics(
+                        $ytdBasis['balance'],
+                        $statementBalance,
+                        $ytdCashFlows['deposits'],
+                        $ytdCashFlows['withdrawals'],
+                        $ytdFees,
+                        annualize: false,
+                    )['gross_return_pct'];
+                }
+            }
+
+            $metrics[$statementId] = [
+                'return_pct' => $returnPct,
+                'ytd_return_pct' => $ytdReturnPct,
+            ];
+
+            if ($statementDate instanceof CarbonImmutable && $statementBalance !== null) {
+                $previousStatement = [
+                    'date' => $statementDate,
+                    'balance' => $statementBalance,
+                ];
+                $ytdBasisByYear[$statementDate->year + 1] = $previousStatement;
+            }
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @return array{deposits:float,withdrawals:float}
+     */
+    public function cashFlowsForDateRange(int $accountId, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $cashFlows = ['deposits' => 0.0, 'withdrawals' => 0.0];
+        if ($end->lessThan($start)) {
+            return $cashFlows;
+        }
+
+        $rows = FinAccountLineItems::query()
+            ->where('t_account', $accountId)
+            ->whereIn('t_type', self::CASH_FLOW_TRANSACTION_TYPES)
+            ->whereDate('t_date', '>=', $start->toDateString())
+            ->whereDate('t_date', '<=', $end->toDateString())
+            ->get(['t_type', 't_amt']);
+
+        foreach ($rows as $row) {
+            $this->addCashFlowAmount($cashFlows, $row->t_type, $row->t_amt);
+        }
+
+        return $cashFlows;
     }
 
     /**
@@ -431,6 +531,19 @@ class FeeAnalyticsService
 
         if (is_string($value) && trim($value) !== '') {
             return CarbonImmutable::parse($value);
+        }
+
+        return null;
+    }
+
+    private function floatFromMixed(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            return (float) $value;
         }
 
         return null;
@@ -702,19 +815,27 @@ class FeeAnalyticsService
             $accountId = (int) $row->t_account;
             $month = CarbonImmutable::parse((string) $row->t_date)->format('Y-m');
             $cashFlows[$accountId][$month] ??= ['deposits' => 0.0, 'withdrawals' => 0.0];
-            $amount = (float) ($row->t_amt ?? 0);
-            if ($row->t_type === 'Deposit') {
-                $cashFlows[$accountId][$month]['deposits'] = MoneyMath::add($cashFlows[$accountId][$month]['deposits'], abs($amount));
-            } elseif ($row->t_type === 'Withdrawal') {
-                $cashFlows[$accountId][$month]['withdrawals'] = MoneyMath::add($cashFlows[$accountId][$month]['withdrawals'], abs($amount));
-            } elseif ($row->t_type === 'Transfer' && $amount >= 0) {
-                $cashFlows[$accountId][$month]['deposits'] = MoneyMath::add($cashFlows[$accountId][$month]['deposits'], $amount);
-            } elseif ($row->t_type === 'Transfer') {
-                $cashFlows[$accountId][$month]['withdrawals'] = MoneyMath::add($cashFlows[$accountId][$month]['withdrawals'], abs($amount));
-            }
+            $this->addCashFlowAmount($cashFlows[$accountId][$month], $row->t_type, $row->t_amt);
         }
 
         return $cashFlows;
+    }
+
+    /**
+     * @param  array{deposits:float,withdrawals:float}  $cashFlows
+     */
+    private function addCashFlowAmount(array &$cashFlows, mixed $type, mixed $amount): void
+    {
+        $amount = (float) ($amount ?? 0);
+        if ($type === 'Deposit') {
+            $cashFlows['deposits'] = MoneyMath::add($cashFlows['deposits'], abs($amount));
+        } elseif ($type === 'Withdrawal') {
+            $cashFlows['withdrawals'] = MoneyMath::add($cashFlows['withdrawals'], abs($amount));
+        } elseif ($type === 'Transfer' && $amount >= 0) {
+            $cashFlows['deposits'] = MoneyMath::add($cashFlows['deposits'], $amount);
+        } elseif ($type === 'Transfer') {
+            $cashFlows['withdrawals'] = MoneyMath::add($cashFlows['withdrawals'], abs($amount));
+        }
     }
 
     private function netReturn(float $startingBalance, float $endingBalance, float $deposits, float $withdrawals): float
@@ -725,9 +846,11 @@ class FeeAnalyticsService
         );
     }
 
-    private function annualizedReturnPct(float $periodReturn, float $startingBalance): float
+    private function returnPct(float $periodReturn, float $startingBalance, bool $annualize): float
     {
-        return round(($periodReturn / $startingBalance) * 12 * 100, 4);
+        $periodPct = ($periodReturn / $startingBalance) * 100;
+
+        return round($annualize ? $periodPct * 12 : $periodPct, 4);
     }
 
     private function balanceAtPeriodStart(int $accountId, CarbonImmutable $start): ?float
