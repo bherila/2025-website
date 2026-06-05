@@ -5,7 +5,8 @@ namespace App\Services\Planning\OpportunityCost;
 /**
  * Strips a confidential current job from an Opportunity Cost share by identity
  * (its job id), so an exclusive share never leaks current-job dollar values —
- * directly (its own series) or derivatively (the deltas-vs-current column).
+ * directly (its own series), derivatively (the deltas-vs-current column), or
+ * through unstructured calculator warning strings.
  *
  * Identity-based removal keeps future Phase-5 after-tax fields covered with no
  * changes here: anything keyed under the current job id disappears wholesale.
@@ -61,6 +62,7 @@ class ComparisonShareRedactor
         // so any survivor would let a viewer back out the redacted current-job dollar values.
         $projection['deltasVsCurrent'] = [];
         $projection['currentJobId'] = null;
+        $projection['warnings'] = [];
 
         return $projection;
     }

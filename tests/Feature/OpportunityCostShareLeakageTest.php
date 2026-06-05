@@ -17,6 +17,8 @@ class OpportunityCostShareLeakageTest extends TestCase
 
     private const string CURRENT_NAME = 'Confidential Current';
 
+    private const string CURRENT_WARNING = 'Confidential Current: private liquidity date is beyond the planning horizon; equity never realizes.';
+
     public function test_exclusive_share_html_omits_current_job_for_non_owner(): void
     {
         $this->withoutVite();
@@ -28,8 +30,10 @@ class OpportunityCostShareLeakageTest extends TestCase
         $content = (string) $response->getContent();
         $this->assertStringNotContainsString(self::CURRENT_SALARY, $content);
         $this->assertStringNotContainsString(self::CURRENT_NAME, $content);
+        $this->assertStringNotContainsString(self::CURRENT_WARNING, $content);
         $this->assertStringContainsString('"currentJob":null', $content);
         $this->assertStringContainsString('"currentJobId":null', $content);
+        $this->assertStringContainsString('"warnings":[]', $content);
         $this->assertStringContainsString('Public Offer', $content);
     }
 
@@ -70,6 +74,8 @@ class OpportunityCostShareLeakageTest extends TestCase
     {
         $inputs = OpportunityCostInputs::defaults();
         $inputs['currentJob']['name'] = self::CURRENT_NAME;
+        $inputs['currentJob']['company']['type'] = 'private';
+        $inputs['currentJob']['company']['liquidityDate'] = ((int) $inputs['startYear'] + (int) $inputs['horizonYears'] + 1).'-01-01';
         $inputs['currentJob']['comp']['baseSalary'] = (float) self::CURRENT_SALARY;
         $inputs['hypotheticalJobs'][0]['name'] = 'Public Offer';
         $inputs['hypotheticalJobs'][0]['comp']['baseSalary'] = 191919.0;

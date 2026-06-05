@@ -44,6 +44,19 @@ class ComparisonShareRedactorTest extends TestCase
         $this->assertContains('hyp-1', $jobIds);
     }
 
+    public function test_clears_unstructured_warnings_from_projection(): void
+    {
+        $projection = $this->goldenProjection();
+        $projection['warnings'] = [
+            'Current role: grant current-rsu-hire cliff is longer than total vesting.',
+            'Private offer: private liquidity date is beyond the planning horizon; equity never realizes.',
+        ];
+
+        $redacted = $this->redactor()->redactProjection($projection, 'current');
+
+        $this->assertSame([], $redacted['warnings']);
+    }
+
     public function test_inclusive_mode_is_handled_by_callers_redactor_only_removes_named_identity(): void
     {
         // The redactor is only invoked for exclusive shares; calling it with a non-present id is a no-op.
