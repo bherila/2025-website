@@ -35,6 +35,27 @@ describe('opportunityCostUrlState', () => {
     expect(parsed.currentJob).toBeNull()
   })
 
+  it('exclusive variant carries no current-job dollar values while inclusive does', () => {
+    const inputs: OpportunityCostInputs = {
+      ...DEFAULT_OPPORTUNITY_COST_INPUTS,
+      currentJob: {
+        ...cloneJobWithId(DEFAULT_OPPORTUNITY_COST_INPUTS.hypotheticalJobs[0]!, 'current', 'Confidential Current'),
+        comp: { baseSalary: 424242, cashBonus: 1234 },
+      },
+      hypotheticalJobs: [
+        { ...DEFAULT_OPPORTUNITY_COST_INPUTS.hypotheticalJobs[0]!, name: 'Public Offer', comp: { baseSalary: 191919, cashBonus: 4321 } },
+      ],
+    }
+
+    const exclusive = JSON.stringify(parseOpportunityCostUrlState(serializeOpportunityCostUrlState(inputs, { excludeCurrent: true })))
+    expect(exclusive).not.toContain('424242')
+    expect(exclusive).not.toContain('Confidential Current')
+    expect(exclusive).toContain('191919')
+
+    const inclusive = JSON.stringify(parseOpportunityCostUrlState(serializeOpportunityCostUrlState(inputs)))
+    expect(inclusive).toContain('424242')
+  })
+
   it('falls back to base inputs when payload parsing fails', () => {
     expect(parseOpportunityCostUrlState('?oc=not-valid', DEFAULT_OPPORTUNITY_COST_INPUTS)).toEqual(DEFAULT_OPPORTUNITY_COST_INPUTS)
   })
