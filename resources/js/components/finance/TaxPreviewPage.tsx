@@ -5,8 +5,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxPreviewXlsxExportOptions, TaxPreviewXlsxExportPayload, XlsxExportScope, XlsxGridSheet } from '@/types/finance/xlsx-export'
 
-import { buildK1AllInOneXlsxGrid } from './K1AllInOneView'
-import { buildK3AllInOneXlsxGrid } from './K3AllInOneView'
+import { buildK1AllInOneXlsxGrids } from './K1AllInOneView'
+import { buildK3AllInOneXlsxGrids } from './K3AllInOneView'
 import { DockActionsProvider } from './tax-preview/DockActions'
 import { DockHeaderBar } from './tax-preview/DockHeaderBar'
 import { DockHomeView } from './tax-preview/DockHomeView'
@@ -30,12 +30,10 @@ function TaxPreviewPageContent(): React.ReactElement {
   } = useTaxPreview()
   const [isExporting, setIsExporting] = useState(false)
   const fullExportGrids = useMemo<XlsxGridSheet[]>(() => {
-    const grids = [
-      buildK1AllInOneXlsxGrid(reviewedK1Docs, taxFacts),
-      buildK3AllInOneXlsxGrid(reviewedK1Docs),
+    return [
+      ...buildK1AllInOneXlsxGrids(reviewedK1Docs, taxFacts),
+      ...buildK3AllInOneXlsxGrids(reviewedK1Docs),
     ]
-
-    return grids.filter((grid): grid is XlsxGridSheet => grid !== null)
   }, [reviewedK1Docs, taxFacts])
 
   const handleYearChange = useCallback((year: number | 'all') => {
