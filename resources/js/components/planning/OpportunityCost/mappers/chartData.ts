@@ -109,10 +109,12 @@ function annualForYear(job: JobProjection, year: number): EquityCompensationAfte
   return job.afterTax?.annual.find((annual) => annual.year === year)
 }
 
-function cumulativeAfterTaxCashFlowBase(job: JobProjection, year: number): number {
+function cumulativeAfterTaxCashFlowExcludingMediumEquityProceeds(job: JobProjection, year: number): number {
   return (job.afterTax?.annual ?? [])
     .filter((annual) => annual.year <= year)
     .reduce((total, annual) => {
+      // Backend after-tax FCF already includes medium equity sale proceeds. Remove them
+      // before adding the selected liquidity band so equity is represented once.
       const afterTaxCashFlowExcludingEquityProceeds = currency(annual.freeCashFlow).subtract(annual.equitySaleProceeds).value
 
       return currency(total).add(afterTaxCashFlowExcludingEquityProceeds).value
@@ -159,7 +161,7 @@ export function mapAfterTaxLiquidityChartData(projection: OpportunityCostProject
     const row: LiquidityChartRow = { year }
 
     projection.jobs.forEach((job) => {
-      const cashFlowBase = cumulativeAfterTaxCashFlowBase(job, year)
+      const cashFlowBase = cumulativeAfterTaxCashFlowExcludingMediumEquityProceeds(job, year)
 
       ;(['low', 'medium', 'high'] as ProjectionBand[]).forEach((band) => {
         const point = job.liquidity[band].find((entry) => entry.year === year)
