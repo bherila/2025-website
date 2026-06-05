@@ -44,6 +44,30 @@ class ComparisonShareRedactorTest extends TestCase
         $this->assertContains('hyp-1', $jobIds);
     }
 
+    public function test_drops_current_job_warnings_but_keeps_hypothetical_ones(): void
+    {
+        $projection = [
+            'currentJobId' => 'current',
+            'jobs' => [
+                ['id' => 'current', 'name' => 'Confidential Current', 'vesting' => [['grantId' => 'current-iso-hire', 'type' => 'iso', 'year' => 2027]]],
+                ['id' => 'hyp-1', 'name' => 'Public Offer', 'vesting' => []],
+            ],
+            'deltasVsCurrent' => [],
+            'warnings' => [
+                'Confidential Current: growth bands should increase from Low to Medium to High.',
+                'Confidential Current: grant current-iso-hire cliff is longer than total vesting.',
+                'Public Offer: private liquidity date is beyond the planning horizon; equity never realizes.',
+            ],
+        ];
+
+        $redacted = $this->redactor()->redactProjection($projection, 'current');
+
+        $this->assertSame(
+            ['Public Offer: private liquidity date is beyond the planning horizon; equity never realizes.'],
+            $redacted['warnings'],
+        );
+    }
+
     public function test_inclusive_mode_is_handled_by_callers_redactor_only_removes_named_identity(): void
     {
         // The redactor is only invoked for exclusive shares; calling it with a non-present id is a no-op.
