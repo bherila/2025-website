@@ -23,8 +23,11 @@ import {
   k1CodeSourceFieldId,
   k1FieldSourceFieldId,
   k3ForeignTaxTotalSourceFieldId,
-  k3Part2SourceFieldId,
+  k3Part2Section1SourceFieldId,
+  k3Part2Section2SourceFieldId,
   k3Part3CountrySourceFieldId,
+  k3Part3Section2SourceFieldId,
+  k3Part4SourceFieldId,
   taxSourceFieldDataAttribute,
 } from '@/lib/finance/taxSourceFieldIds'
 
@@ -194,13 +197,30 @@ function renderBox11ItemsLine(box11Items: K1CodeItem[], onOpenCodes: (box: strin
     : `Other income (${uniqueCodes.length} codes)`
 
   return (
-    <LineItem
-      boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
-      label={label}
-      value={total}
-      sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('11', firstCode) : k1FieldSourceFieldId('11')}
-      onDetails={() => onOpenCodes('11')}
-    />
+    <>
+      <LineItem
+        boxRef={uniqueCodes.length === 1 ? `Box 11${firstCode}` : 'Box 11'}
+        label={label}
+        value={total}
+        sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('11', firstCode) : k1FieldSourceFieldId('11')}
+        onDetails={() => onOpenCodes('11')}
+      />
+      {uniqueCodes.length > 1 && uniqueCodes.map((code) => {
+        const codeTotal = box11Items
+          .filter((item) => item.code?.toUpperCase() === code.toUpperCase())
+          .reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+
+        return (
+          <LineItem
+            key={`box-11-${code}`}
+            boxRef={`Box 11${code}`}
+            label={BOX11_CODES[code] ?? `Code ${code}`}
+            value={codeTotal}
+            sourceFieldId={k1CodeSourceFieldId('11', code)}
+          />
+        )
+      })}
+    </>
   )
 }
 
@@ -233,6 +253,24 @@ function renderBox13ItemsLine(
         sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('13', firstCode) : k1FieldSourceFieldId('13')}
         onDetails={() => onOpenCodes('13')}
       />
+      {uniqueCodes.length > 1 && uniqueCodes.map((code) => {
+        const codeTotal = box13Items
+          .filter((item) => item.code?.toUpperCase() === code.toUpperCase())
+          .reduce((acc, item) => {
+            const value = parseFieldVal(item.value)
+            return value !== null ? acc.add(-Math.abs(value)) : acc
+          }, currency(0)).value
+
+        return (
+          <LineItem
+            key={`box-13-${code}`}
+            boxRef={`Box 13${code}`}
+            label={BOX13_CODES[code] ?? `Code ${code}`}
+            value={codeTotal}
+            sourceFieldId={k1CodeSourceFieldId('13', code)}
+          />
+        )
+      })}
       {hasCodeL && (
         <SubLine text="Box 13L → Form 4952, I, line 1 → Sch A line 16. Do NOT enter on Form 8582." />
       )}
@@ -270,6 +308,25 @@ function renderBox20ItemsLine(box20Items: K1CodeItem[], onOpenCodes: (box: strin
         sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId('20', firstCode) : k1FieldSourceFieldId('20')}
         onDetails={() => onOpenCodes('20')}
       />
+      {uniqueCodes.length > 1 && uniqueCodes.map((code) => {
+        const codeItems = box20Items.filter((item) => item.code?.toUpperCase() === code.toUpperCase())
+        const codeAllStmt = codeItems.every((item) => item.value === 'STMT')
+        const codeTotal = codeAllStmt ? null : codeItems.reduce((acc, item) => {
+          const value = item.value === 'STMT' ? null : parseFieldVal(item.value)
+          return value !== null ? acc.add(value) : acc
+        }, currency(0)).value
+
+        return (
+          <LineItem
+            key={`box-20-${code}`}
+            boxRef={`Box 20${code}`}
+            label={BOX20_LABELS[code] ?? `Code ${code}`}
+            value={codeTotal}
+            raw={codeAllStmt ? 'STMT' : undefined}
+            sourceFieldId={k1CodeSourceFieldId('20', code)}
+          />
+        )
+      })}
       {singleRouting && <SubLine text={singleRouting} />}
     </>
   )
@@ -733,6 +790,21 @@ function AdditionalCodedBoxesBlock({
           sourceFieldId={uniqueCodes.length === 1 ? k1CodeSourceFieldId(box, firstCode) : k1FieldSourceFieldId(box)}
           onDetails={() => onOpenCodes(box)}
         />
+        {uniqueCodes.length > 1 && uniqueCodes.map((code) => {
+          const codeTotal = items
+            .filter((item) => item.code?.toUpperCase() === code.toUpperCase())
+            .reduce((acc, item) => acc.add(parseFieldVal(item.value) ?? 0), currency(0)).value
+
+          return (
+            <LineItem
+              key={`box-${box}-${code}`}
+              boxRef={`Box ${box}${code}`}
+              label={labels[code] ?? `Code ${code}`}
+              value={codeTotal}
+              sourceFieldId={k1CodeSourceFieldId(box, code)}
+            />
+          )
+        })}
         {routingNote && (
           <SubLine text={<DestinationBadge routingNote={routingNote} />} />
         )}
@@ -1156,7 +1228,7 @@ function K3GrossIncomeTable({ sections }: { sections: K3Section[] }) {
                     <div
                       className={`flex items-baseline ${row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''} ${isExpandable ? 'cursor-pointer hover:bg-muted/20' : ''}`}
                       onClick={isExpandable ? () => toggleExpand(idx) : undefined}
-                      {...taxSourceFieldDataAttribute(k3Part2SourceFieldId(row.line))}
+                      {...taxSourceFieldDataAttribute(k3Part2Section1SourceFieldId(row.line))}
                     >
                       <span className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground w-[60px] shrink-0">{row.line}</span>
                       <span className={`px-3 py-1.5 flex-1 flex items-center gap-1.5 ${row.isTotal ? 'text-xs font-semibold' : 'text-xs'}`}>
@@ -1314,6 +1386,7 @@ interface K3MultiColRow {
   line: string
   description: string
   a: number; b: number; c: number; d: number; e: number; f: number; g: number
+  sourceFieldId?: string
   isTotal?: boolean
 }
 
@@ -1399,7 +1472,7 @@ function K3MultiColTable({
               <tr
                 key={idx}
                 className={row.isTotal ? 'bg-muted/30 font-semibold border-t border-border' : ''}
-                {...taxSourceFieldDataAttribute(k3Part2SourceFieldId(row.line))}
+                {...(row.sourceFieldId ? taxSourceFieldDataAttribute(row.sourceFieldId) : {})}
               >
                 <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{row.line}</td>
                 <td className="px-3 py-1.5">{row.description}</td>
@@ -1456,7 +1529,11 @@ function K3DeductionsTable({ sections, electionActive }: { sections: K3Section[]
   const sec = sections.find(s => s.sectionId === 'part2_section2')
   if (!sec) return null
   const rows = parseK3SectionRows(sec.data as Record<string, unknown>, PART2_DEDUCTION_DESC)
-  const marked = rows.map(r => ({ ...r, isTotal: r.line === '54' || r.line === '55' }))
+  const marked = rows.map(r => ({
+    ...r,
+    sourceFieldId: k3Part2Section2SourceFieldId(r.line),
+    isTotal: r.line === '54' || r.line === '55',
+  }))
   return <K3MultiColTable title="K-3 Part II Section 2 — Deductions" rows={marked} electionActive={electionActive} />
 }
 
@@ -1481,7 +1558,11 @@ function K3AssetApportionmentTable({ sections, electionActive }: { sections: K3S
   if (!sec) return null
   const d = sec.data as Record<string, unknown>
   const rows = parseK3SectionRows(d, PART3_ASSET_DESC)
-  const marked = rows.map(r => ({ ...r, isTotal: r.line === '6a' }))
+  const marked = rows.map(r => ({
+    ...r,
+    sourceFieldId: k3Part3Section2SourceFieldId(r.line),
+    isTotal: r.line === '6a',
+  }))
   const derivedRatio = typeof d['derivedPassiveAssetRatio'] === 'number' ? d['derivedPassiveAssetRatio'] : null
   return (
     <K3MultiColTable
@@ -1530,7 +1611,7 @@ function K3FDIIPanel({ sections }: { sections: K3Section[] }) {
       <SectionHeader title="K-3 Part IV — FDII / Sec. 250 Deduction Information" />
       <div className="divide-y divide-dashed divide-border/50">
         {items.map((item, i) => (
-          <LineItem key={i} boxRef={`Line ${item.line}`} label={item.label} value={item.value} sourceFieldId={k3Part2SourceFieldId(item.line)} />
+          <LineItem key={i} boxRef={`Line ${item.line}`} label={item.label} value={item.value} sourceFieldId={k3Part4SourceFieldId(item.line)} />
         ))}
       </div>
     </div>

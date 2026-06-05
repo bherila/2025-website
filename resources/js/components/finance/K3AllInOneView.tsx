@@ -22,7 +22,8 @@ import {
 } from '@/lib/finance/k1Utils'
 import {
   k3ForeignTaxTotalSourceFieldId,
-  k3Part2SourceFieldId,
+  k3Part2Section1SourceFieldId,
+  k3Part2Section2SourceFieldId,
   k3Part3CountrySourceFieldId,
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
@@ -53,7 +54,9 @@ const CATEGORIES: { key: Category; label: string }[] = [
 ]
 
 interface Part2Agg {
+  line: string
   description: string
+  sourceFieldId: string
   us: number
   foreign: number
   sourcedByPartner: number
@@ -61,6 +64,8 @@ interface Part2Agg {
   general: number
   total: number
 }
+
+type Part2SourceSection = 'section1' | 'section2'
 
 interface K3CellValue {
   value: number | null
@@ -142,8 +147,25 @@ function colRowFrom(row: Record<string, unknown>, kind: 'tool' | 'canonical'): C
   }
 }
 
-function addAgg(byLine: Map<string, Part2Agg>, line: string, description: string, cr: ColRow): void {
-  const prev = byLine.get(line)
+function part2SourceFieldId(section: Part2SourceSection, line: string): string {
+  return section === 'section1'
+    ? k3Part2Section1SourceFieldId(line)
+    : k3Part2Section2SourceFieldId(line)
+}
+
+function part2RowKey(section: Part2SourceSection, line: string): string {
+  return `${section}:${line}`
+}
+
+function addAgg(
+  byLine: Map<string, Part2Agg>,
+  key: string,
+  line: string,
+  description: string,
+  sourceFieldId: string,
+  cr: ColRow,
+): void {
+  const prev = byLine.get(key)
   if (prev) {
     prev.us = currency(prev.us).add(cr.us).value
     prev.foreign = currency(prev.foreign).add(cr.foreign).value
@@ -155,7 +177,7 @@ function addAgg(byLine: Map<string, Part2Agg>, line: string, description: string
       prev.description = description
     }
   } else {
-    byLine.set(line, { description, ...cr })
+    byLine.set(key, { line, description, sourceFieldId, ...cr })
   }
 }
 
@@ -170,12 +192,13 @@ function part2ByLine(data: FK1StructuredData): Map<string, Part2Agg> {
     if (section.sectionId !== 'part2_section1' && section.sectionId !== 'part2_section2') {
       continue
     }
+    const sourceSection: Part2SourceSection = section.sectionId === 'part2_section1' ? 'section1' : 'section2'
     const sectionData = (section.data ?? {}) as Record<string, unknown>
     if (Array.isArray(sectionData.rows)) {
       for (const row of sectionData.rows as Array<Record<string, unknown>>) {
         const description = String(row.description ?? row.line_description ?? '').trim()
         const line = String(row.line ?? description ?? '').trim() || '—'
-        addAgg(byLine, line, description, colRowFrom(row, 'tool'))
+        addAgg(byLine, part2RowKey(sourceSection, line), line, description, part2SourceFieldId(sourceSection, line), colRowFrom(row, 'tool'))
       }
       continue
     }
@@ -190,17 +213,17 @@ function part2ByLine(data: FK1StructuredData): Map<string, Part2Agg> {
       const rows = lineData.rows as Array<Record<string, unknown>> | undefined
       if (Array.isArray(rows)) {
         for (const row of rows) {
-          addAgg(byLine, line, description, colRowFrom(row, 'canonical'))
+          addAgg(byLine, part2RowKey(sourceSection, line), line, description, part2SourceFieldId(sourceSection, line), colRowFrom(row, 'canonical'))
         }
       } else {
         const fallback = (lineData.totals ?? lineData) as Record<string, unknown>
-        addAgg(byLine, line, description, colRowFrom(fallback, 'canonical'))
+        addAgg(byLine, part2RowKey(sourceSection, line), line, description, part2SourceFieldId(sourceSection, line), colRowFrom(fallback, 'canonical'))
       }
     }
   }
-  for (const [line, agg] of byLine) {
+  for (const agg of byLine.values()) {
     for (const category of CATEGORIES) {
-      const override = parseK1SourceValueOverride(data, k3Part2OverrideKey(line, category.key))
+      const override = parseK1SourceValueOverride(data, k3Part2OverrideKey(agg.line, category.key))
       if (override !== null) {
         agg[category.key] = override
       }
@@ -473,24 +496,31 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
     )
   }
 
-  const part2Lines = [...new Set(part2.flatMap(({ byLine }) => [...byLine.keys()]))].sort(compareLines)
-  const part2Rows = part2Lines.map((line) => {
-    const agg = part2.map(({ byLine }) => byLine.get(line)).find((value) => value !== undefined)
+  const part2AggForKey = (rowKey: string): Part2Agg | undefined =>
+    part2.map(({ byLine }) => byLine.get(rowKey)).find((value) => value !== undefined)
+  const part2RowKeys = [...new Set(part2.flatMap(({ byLine }) => [...byLine.keys()]))].sort((a, b) => {
+    const byLine = compareLines(part2AggForKey(a)?.line ?? a, part2AggForKey(b)?.line ?? b)
+    return byLine !== 0 ? byLine : a.localeCompare(b)
+  })
+  const part2Rows = part2RowKeys.map((rowKey) => {
+    const agg = part2AggForKey(rowKey)
+    const line = agg?.line ?? rowKey
     const label = agg?.description || `Line ${line}`
     return {
-      key: line,
+      key: rowKey,
       label,
       cell: (column: K3Column) => {
-        const cell = part2.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(line)
-        const sourceCell = part2Source.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(line)
+        const cell = part2.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
+        const sourceCell = part2Source.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
         const overrideKey = category === 'foreign' || category === 'total'
           ? undefined
           : k3Part2OverrideKey(line, category)
+        const sourceFieldId = cell?.sourceFieldId ?? agg?.sourceFieldId
         return {
           value: cell ? cell[category] : null,
           sourceValue: sourceCell ? sourceCell[category] : null,
           ...(overrideKey ? { overrideKey } : {}),
-          sourceFieldId: k3Part2SourceFieldId(line),
+          ...(sourceFieldId ? { sourceFieldId } : {}),
         }
       },
     }

@@ -20,8 +20,26 @@ export function k1CodeSourceFieldId(box: string, code: string): string {
   return `k1-code-${normalizeSegment(box)}-${normalizeSegment(code)}`
 }
 
-export function k3Part2SourceFieldId(line: string | number): string {
-  return `k3-part2-line-${normalizeSegment(String(line).replace(/^line\s+/i, ''))}`
+function normalizeK3Line(line: string | number): string {
+  return String(line)
+    .replace(/^lines?\s+/i, '')
+    .replace(/^(\d+)-\d+$/, '$1')
+}
+
+export function k3Part2Section1SourceFieldId(line: string | number): string {
+  return `k3-part2s1-line-${normalizeSegment(normalizeK3Line(line))}`
+}
+
+export function k3Part2Section2SourceFieldId(line: string | number): string {
+  return `k3-part2s2-line-${normalizeSegment(normalizeK3Line(line))}`
+}
+
+export function k3Part3Section2SourceFieldId(line: string | number): string {
+  return `k3-part3s2-line-${normalizeSegment(normalizeK3Line(line))}`
+}
+
+export function k3Part4SourceFieldId(line: string | number): string {
+  return `k3-part4-line-${normalizeSegment(normalizeK3Line(line))}`
 }
 
 export function k3Part3CountrySourceFieldId(country: string): string {
