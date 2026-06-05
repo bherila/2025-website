@@ -120,6 +120,57 @@ describe('K3AllInOneView', () => {
     expect(onReviewDoc).toHaveBeenCalledWith(201, k3ForeignTaxTotalSourceFieldId())
   })
 
+  it('downloads a scoped normalized K-3 XLSX grid', () => {
+    const onExportXlsx = jest.fn()
+    renderView({ onExportXlsx })
+
+    fireEvent.click(screen.getByRole('button', { name: /download xlsx/i }))
+
+    expect(onExportXlsx).toHaveBeenCalledTimes(1)
+    const payload = onExportXlsx.mock.calls[0]?.[0] as {
+      scope: string
+      grids: Array<{
+        name: string
+        scope: string
+        columns: Array<{ key: string; label: string; format?: string }>
+        rows: Array<{ kind: string; label?: string; cells?: Record<string, string | number | null> }>
+      }>
+    }
+    const grid = payload.grids[0]!
+    expect(payload.scope).toBe('k3-all-in-one')
+    expect(grid.name).toBe('All K-3s')
+    expect(grid.scope).toBe('k3-all-in-one')
+    expect(grid.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'doc_201', label: 'Alpha Fund LP', format: 'currency' }),
+      expect.objectContaining({ key: 'doc_202', label: 'Trader Fund LP', format: 'currency' }),
+      expect.objectContaining({ key: 'total', label: 'Total', format: 'currency' }),
+    ]))
+    expect(grid.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'section', label: 'K-3 Part II — Foreign Income — Total' }),
+      expect.objectContaining({ kind: 'section', label: 'K-3 Part III §4 — Foreign Taxes (USD by country)' }),
+    ]))
+
+    const totalSectionIndex = grid.rows.findIndex((row) => row.label === 'K-3 Part II — Foreign Income — Total')
+    const interestRow = grid.rows.slice(totalSectionIndex + 1).find((row) => row.label === 'Interest')
+    expect(interestRow).toEqual(expect.objectContaining({
+      kind: 'data',
+      cells: expect.objectContaining({
+        doc_201: 8010,
+        doc_202: null,
+        total: 8010,
+      }),
+    }))
+
+    const foreignTaxTotalRow = grid.rows.find((row) => row.label === 'Foreign tax total (used)')
+    expect(foreignTaxTotalRow).toEqual(expect.objectContaining({
+      cells: expect.objectContaining({
+        doc_201: 1201,
+        doc_202: 842,
+        total: 2043,
+      }),
+    }))
+  })
+
   it('keeps table headers, first-column cells, and section labels sticky inside each table viewport', () => {
     renderView()
 

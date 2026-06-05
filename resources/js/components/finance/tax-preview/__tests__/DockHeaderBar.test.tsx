@@ -48,6 +48,7 @@ describe('DockHeaderBar', () => {
     expect(exportButton).toBeInTheDocument()
     fireEvent.click(exportButton)
     expect(mockExportXlsx).toHaveBeenCalledTimes(1)
+    expect(mockExportXlsx).toHaveBeenCalledWith()
   })
 
   it('disables the XLSX export action while generating', () => {

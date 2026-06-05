@@ -1,13 +1,14 @@
 'use client'
 
 import currency from 'currency.js'
-import { AlertTriangle, SquareArrowOutUpRight } from 'lucide-react'
+import { AlertTriangle, FileSpreadsheet, SquareArrowOutUpRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { isFK1StructuredData } from '@/components/finance/k1/k1-types'
 import K1K3SourceValueModal, { type K1K3SourceValue } from '@/components/finance/K1K3SourceValueModal'
 import { stickyComparisonTableClasses } from '@/components/finance/k1K3StickyComparisonTable'
 import { AmountCell, parseFieldVal } from '@/components/finance/tax-preview-primitives'
+import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import {
@@ -28,11 +29,14 @@ import {
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxPreviewXlsxExporter, XlsxGridCellValue, XlsxGridColumn, XlsxGridSheet } from '@/types/finance/xlsx-export'
 
 interface K3AllInOneViewProps {
   k1Docs: TaxDocument[]
   onReviewDoc: (docId: number, focusFieldId?: string) => void
   onSaveParsedData: (docId: number, parsedData: FK1StructuredData) => Promise<void>
+  onExportXlsx?: TaxPreviewXlsxExporter
+  isExportingXlsx?: boolean
 }
 
 interface K3Column {
@@ -85,6 +89,31 @@ interface ColRow {
   total: number
 }
 
+interface K3PivotRow {
+  key: string
+  label: string
+  cell: (column: K3Column) => K3CellValue
+}
+
+interface K3Part2PivotEntry {
+  column: K3Column
+  byLine: Map<string, Part2Agg>
+}
+
+interface K3Part3PivotEntry {
+  column: K3Column
+  byCountry: Map<string, number>
+}
+
+interface K3PivotModel {
+  part2: K3Part2PivotEntry[]
+  part2Source: K3Part2PivotEntry[]
+  part3: K3Part3PivotEntry[]
+  part3Source: K3Part3PivotEntry[]
+  part2RowKeys: string[]
+  part3Countries: string[]
+}
+
 function num(value: unknown): number {
   if (typeof value === 'number') {
     return value
@@ -102,6 +131,26 @@ function sourceAccountName(doc: TaxDocument, data: FK1StructuredData): string {
   return doc.account?.acct_name
     ?? linkedAccount
     ?? getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership')
+}
+
+function k3ColumnsFromDocs(k1Docs: TaxDocument[]): K3Column[] {
+  return k1Docs
+    .map((doc) => {
+      if (!isFK1StructuredData(doc.parsed_data)) {
+        return null
+      }
+      const data = doc.parsed_data
+      if ((data.k3?.sections?.length ?? 0) === 0) {
+        return null
+      }
+      return {
+        doc,
+        data,
+        accountName: sourceAccountName(doc, data),
+        extractedName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
+      }
+    })
+    .filter((column): column is K3Column => column !== null)
 }
 
 /** Normalizes a K-3 Part II row to category amounts, summing all columns when no explicit total. */
@@ -282,6 +331,160 @@ function compareLines(a: string, b: string): number {
   return a.localeCompare(b)
 }
 
+function part2AggForEntries(entries: K3Part2PivotEntry[], rowKey: string): Part2Agg | undefined {
+  return entries.map(({ byLine }) => byLine.get(rowKey)).find((value) => value !== undefined)
+}
+
+function part2AggForKey(model: K3PivotModel, rowKey: string): Part2Agg | undefined {
+  return part2AggForEntries(model.part2, rowKey)
+}
+
+function buildK3PivotModel(columns: K3Column[]): K3PivotModel {
+  const part2 = columns.map((column) => ({ column, byLine: part2ByLine(column.data) }))
+  const part2Source = columns.map((column) => ({ column, byLine: part2ByLine(withoutSourceValueOverrides(column.data)) }))
+  const part3 = columns.map((column) => ({ column, byCountry: part3ByCountry(column.data) }))
+  const part3Source = columns.map((column) => ({ column, byCountry: part3ByCountry(withoutSourceValueOverrides(column.data)) }))
+  const part2RowKeys = [...new Set(part2.flatMap(({ byLine }) => [...byLine.keys()]))].sort((a, b) => {
+    const byLine = compareLines(part2AggForEntries(part2, a)?.line ?? a, part2AggForEntries(part2, b)?.line ?? b)
+    return byLine !== 0 ? byLine : a.localeCompare(b)
+  })
+  const part3Countries = [...new Set(part3.flatMap(({ byCountry }) => [...byCountry.keys()]))].sort((a, b) => a.localeCompare(b))
+
+  return {
+    part2,
+    part2Source,
+    part3,
+    part3Source,
+    part2RowKeys,
+    part3Countries,
+  }
+}
+
+function buildK3Part2Rows(model: K3PivotModel, category: Category): K3PivotRow[] {
+  return model.part2RowKeys.map((rowKey) => {
+    const agg = part2AggForKey(model, rowKey)
+    const line = agg?.line ?? rowKey
+    const label = agg?.description || `Line ${line}`
+
+    return {
+      key: rowKey,
+      label,
+      cell: (column: K3Column) => {
+        const cell = model.part2.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
+        const sourceCell = model.part2Source.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
+        const overrideKey = category === 'foreign' || category === 'total'
+          ? undefined
+          : k3Part2OverrideKey(line, category)
+        const sourceFieldId = cell?.sourceFieldId ?? agg?.sourceFieldId
+
+        return {
+          value: cell ? cell[category] : null,
+          sourceValue: sourceCell ? sourceCell[category] : null,
+          ...(overrideKey ? { overrideKey } : {}),
+          ...(sourceFieldId ? { sourceFieldId } : {}),
+        }
+      },
+    }
+  })
+}
+
+function buildK3Part3Rows(model: K3PivotModel): K3PivotRow[] {
+  return [
+    {
+      key: '__foreign_tax_total',
+      label: 'Foreign tax total (used)',
+      cell: (column: K3Column): K3CellValue => {
+        const aggregateOverride = hasK1SourceValueOverride(column.data, k3ForeignTaxTotalOverrideKey())
+
+        return {
+          value: extractK3ForeignTaxTotal(column.data),
+          sourceValue: extractK3ForeignTaxTotal(withoutSourceValueOverrides(column.data)),
+          overrideKey: k3ForeignTaxTotalOverrideKey(),
+          sourceFieldId: k3ForeignTaxTotalSourceFieldId(),
+          shadowedValues: aggregateOverride ? part3CountrySourceValues(column.data) : [],
+        }
+      },
+    },
+    ...model.part3Countries.map((country) => ({
+      key: country,
+      label: country,
+      cell: (column: K3Column): K3CellValue => {
+        const aggregateOverride = hasK1SourceValueOverride(column.data, k3ForeignTaxTotalOverrideKey())
+
+        return {
+          value: model.part3.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
+          sourceValue: model.part3Source.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
+          overrideKey: k3Part3OverrideKey(country),
+          sourceFieldId: k3Part3CountrySourceFieldId(country),
+          shadowed: aggregateOverride,
+        }
+      },
+    })),
+  ]
+}
+
+function k3GridColumnKey(column: K3Column): string {
+  return `doc_${column.doc.id}`
+}
+
+function k3GridRow(row: K3PivotRow, columns: K3Column[]): XlsxGridSheet['rows'][number] {
+  const cells: Record<string, XlsxGridCellValue> = {}
+  const total = columns.reduce((acc, column) => {
+    const cell = row.cell(column)
+    cells[k3GridColumnKey(column)] = cell.value
+
+    return cell.shadowed ? acc : acc.add(cell.value ?? 0)
+  }, currency(0)).value
+
+  cells.total = total
+
+  return {
+    kind: 'data',
+    label: row.label,
+    cells,
+  }
+}
+
+function buildK3AllInOneXlsxGridForModel(columns: K3Column[], model: K3PivotModel): XlsxGridSheet | null {
+  if (columns.length === 0) {
+    return null
+  }
+
+  const gridColumns: XlsxGridColumn[] = [
+    ...columns.map((column) => ({
+      key: k3GridColumnKey(column),
+      label: column.accountName,
+      width: 22,
+      format: 'currency' as const,
+    })),
+    { key: 'total', label: 'Total', width: 14, format: 'currency' },
+  ]
+  const rows: XlsxGridSheet['rows'] = [
+    { kind: 'title', label: `All-in-One K-3 (${columns.length} partnership${columns.length === 1 ? '' : 's'})` },
+  ]
+
+  for (const category of CATEGORIES) {
+    rows.push({ kind: 'section', label: `K-3 Part II — Foreign Income — ${category.label}` })
+    rows.push(...buildK3Part2Rows(model, category.key).map((row) => k3GridRow(row, columns)))
+  }
+
+  rows.push({ kind: 'section', label: 'K-3 Part III §4 — Foreign Taxes (USD by country)' })
+  rows.push(...buildK3Part3Rows(model).map((row) => k3GridRow(row, columns)))
+
+  return {
+    name: 'All K-3s',
+    scope: 'k3-all-in-one',
+    columns: gridColumns,
+    rows,
+  }
+}
+
+export function buildK3AllInOneXlsxGrid(k1Docs: TaxDocument[]): XlsxGridSheet | null {
+  const columns = k3ColumnsFromDocs(k1Docs)
+
+  return buildK3AllInOneXlsxGridForModel(columns, buildK3PivotModel(columns))
+}
+
 function fillClass(value: number | null): string {
   if (value === null || value === 0) {
     return ''
@@ -356,7 +559,7 @@ function PivotTable({
 }: {
   title: string
   columns: K3Column[]
-  rows: Array<{ key: string; label: string; cell: (column: K3Column) => K3CellValue }>
+  rows: K3PivotRow[]
   onOpenSourceValue: (context: SourceValueContext) => void
   topAccessory?: React.ReactNode
 }) {
@@ -426,40 +629,24 @@ function PivotTable({
   )
 }
 
-export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }: K3AllInOneViewProps): React.ReactElement {
+export default function K3AllInOneView({
+  k1Docs,
+  onReviewDoc,
+  onSaveParsedData,
+  onExportXlsx,
+  isExportingXlsx = false,
+}: K3AllInOneViewProps): React.ReactElement {
   const [category, setCategory] = useState<Category>('total')
   const [sourceValueContext, setSourceValueContext] = useState<SourceValueContext | null>(null)
 
   const columns = useMemo<K3Column[]>(() => {
-    return k1Docs
-      .map((doc) => {
-        if (!isFK1StructuredData(doc.parsed_data)) {
-          return null
-        }
-        const data = doc.parsed_data
-        if ((data.k3?.sections?.length ?? 0) === 0) {
-          return null
-        }
-        return {
-          doc,
-          data,
-          accountName: sourceAccountName(doc, data),
-          extractedName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
-        }
-      })
-      .filter((column): column is K3Column => column !== null)
+    return k3ColumnsFromDocs(k1Docs)
   }, [k1Docs])
 
-  const part2 = useMemo(() => columns.map((column) => ({ column, byLine: part2ByLine(column.data) })), [columns])
-  const part2Source = useMemo(
-    () => columns.map((column) => ({ column, byLine: part2ByLine(withoutSourceValueOverrides(column.data)) })),
-    [columns],
-  )
-  const part3 = useMemo(() => columns.map((column) => ({ column, byCountry: part3ByCountry(column.data) })), [columns])
-  const part3Source = useMemo(
-    () => columns.map((column) => ({ column, byCountry: part3ByCountry(withoutSourceValueOverrides(column.data)) })),
-    [columns],
-  )
+  const pivotModel = useMemo(() => buildK3PivotModel(columns), [columns])
+  const part2Rows = useMemo(() => buildK3Part2Rows(pivotModel, category), [pivotModel, category])
+  const part3Rows = useMemo(() => buildK3Part3Rows(pivotModel), [pivotModel])
+  const xlsxGrid = useMemo(() => buildK3AllInOneXlsxGridForModel(columns, pivotModel), [columns, pivotModel])
 
   async function saveSourceOverride(value: string | null): Promise<void> {
     if (!sourceValueContext) {
@@ -495,68 +682,6 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
       </div>
     )
   }
-
-  const part2AggForKey = (rowKey: string): Part2Agg | undefined =>
-    part2.map(({ byLine }) => byLine.get(rowKey)).find((value) => value !== undefined)
-  const part2RowKeys = [...new Set(part2.flatMap(({ byLine }) => [...byLine.keys()]))].sort((a, b) => {
-    const byLine = compareLines(part2AggForKey(a)?.line ?? a, part2AggForKey(b)?.line ?? b)
-    return byLine !== 0 ? byLine : a.localeCompare(b)
-  })
-  const part2Rows = part2RowKeys.map((rowKey) => {
-    const agg = part2AggForKey(rowKey)
-    const line = agg?.line ?? rowKey
-    const label = agg?.description || `Line ${line}`
-    return {
-      key: rowKey,
-      label,
-      cell: (column: K3Column) => {
-        const cell = part2.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
-        const sourceCell = part2Source.find((entry) => entry.column.doc.id === column.doc.id)?.byLine.get(rowKey)
-        const overrideKey = category === 'foreign' || category === 'total'
-          ? undefined
-          : k3Part2OverrideKey(line, category)
-        const sourceFieldId = cell?.sourceFieldId ?? agg?.sourceFieldId
-        return {
-          value: cell ? cell[category] : null,
-          sourceValue: sourceCell ? sourceCell[category] : null,
-          ...(overrideKey ? { overrideKey } : {}),
-          ...(sourceFieldId ? { sourceFieldId } : {}),
-        }
-      },
-    }
-  })
-
-  const part3Countries = [...new Set(part3.flatMap(({ byCountry }) => [...byCountry.keys()]))].sort((a, b) => a.localeCompare(b))
-  const part3Rows = [
-    {
-      key: '__foreign_tax_total',
-      label: 'Foreign tax total (used)',
-      cell: (column: K3Column): K3CellValue => {
-        const aggregateOverride = hasK1SourceValueOverride(column.data, k3ForeignTaxTotalOverrideKey())
-        return {
-          value: extractK3ForeignTaxTotal(column.data),
-          sourceValue: extractK3ForeignTaxTotal(withoutSourceValueOverrides(column.data)),
-          overrideKey: k3ForeignTaxTotalOverrideKey(),
-          sourceFieldId: k3ForeignTaxTotalSourceFieldId(),
-          shadowedValues: aggregateOverride ? part3CountrySourceValues(column.data) : [],
-        }
-      },
-    },
-    ...part3Countries.map((country) => ({
-      key: country,
-      label: country,
-      cell: (column: K3Column): K3CellValue => {
-        const aggregateOverride = hasK1SourceValueOverride(column.data, k3ForeignTaxTotalOverrideKey())
-        return {
-          value: part3.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
-          sourceValue: part3Source.find((entry) => entry.column.doc.id === column.doc.id)?.byCountry.get(country) ?? null,
-          overrideKey: k3Part3OverrideKey(country),
-          sourceFieldId: k3Part3CountrySourceFieldId(country),
-          shadowed: aggregateOverride,
-        }
-      },
-    })),
-  ]
 
   const categoryTabs = (
     <div className="inline-flex rounded-md border border-border/60 p-0.5 text-xs">
@@ -595,29 +720,46 @@ export default function K3AllInOneView({ k1Docs, onReviewDoc, onSaveParsedData }
       />
 
       <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">All-in-One K-3</h2>
-        <p className="text-xs text-muted-foreground">
-          Schedule K-3 foreign income and taxes across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Use
-          the category tabs to switch the Part II basket; click a value to inspect the source.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">All-in-One K-3</h2>
+            <p className="text-xs text-muted-foreground">
+              Schedule K-3 foreign income and taxes across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Use
+              the category tabs to switch the Part II basket; click a value to inspect the source.
+            </p>
+          </div>
+          {onExportXlsx && xlsxGrid ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5 text-xs"
+              disabled={isExportingXlsx}
+              onClick={() => {
+                void onExportXlsx({ scope: 'k3-all-in-one', grids: [xlsxGrid] })
+              }}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              {isExportingXlsx ? 'Generating...' : 'Download XLSX'}
+            </Button>
+          ) : null}
+        </div>
+
+        <PivotTable
+          title="K-3 Part II — Foreign Income"
+          columns={columns}
+          rows={part2Rows}
+          onOpenSourceValue={setSourceValueContext}
+          topAccessory={categoryTabs}
+        />
+
+        <PivotTable
+          title="K-3 Part III §4 — Foreign Taxes (USD by country)"
+          columns={columns}
+          rows={part3Rows}
+          onOpenSourceValue={setSourceValueContext}
+        />
       </div>
-
-      <PivotTable
-        title="K-3 Part II — Foreign Income"
-        columns={columns}
-        rows={part2Rows}
-        onOpenSourceValue={setSourceValueContext}
-        topAccessory={categoryTabs}
-      />
-
-      <PivotTable
-        title="K-3 Part III §4 — Foreign Taxes (USD by country)"
-        columns={columns}
-        rows={part3Rows}
-        onOpenSourceValue={setSourceValueContext}
-      />
-    </div>
     </>
   )
 }

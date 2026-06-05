@@ -66,7 +66,9 @@ export function DockHeaderBar({
           variant="outline"
           size="sm"
           className="h-7 gap-1.5 px-2.5 text-xs"
-          onClick={exportXlsx}
+          onClick={() => {
+            void exportXlsx()
+          }}
           disabled={isExportingXlsx}
         >
           <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />

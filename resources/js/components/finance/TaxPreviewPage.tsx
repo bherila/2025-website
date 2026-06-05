@@ -1,9 +1,12 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
+import type { TaxPreviewXlsxExportOptions, TaxPreviewXlsxExportPayload, XlsxExportScope, XlsxGridSheet } from '@/types/finance/xlsx-export'
 
+import { buildK1AllInOneXlsxGrid } from './K1AllInOneView'
+import { buildK3AllInOneXlsxGrid } from './K3AllInOneView'
 import { DockActionsProvider } from './tax-preview/DockActions'
 import { DockHeaderBar } from './tax-preview/DockHeaderBar'
 import { DockHomeView } from './tax-preview/DockHomeView'
@@ -22,8 +25,18 @@ function TaxPreviewPageContent(): React.ReactElement {
     isLoading,
     error,
     pendingReviewCount,
+    reviewedK1Docs,
+    taxFacts,
   } = useTaxPreview()
   const [isExporting, setIsExporting] = useState(false)
+  const fullExportGrids = useMemo<XlsxGridSheet[]>(() => {
+    const grids = [
+      buildK1AllInOneXlsxGrid(reviewedK1Docs, taxFacts),
+      buildK3AllInOneXlsxGrid(reviewedK1Docs),
+    ]
+
+    return grids.filter((grid): grid is XlsxGridSheet => grid !== null)
+  }, [reviewedK1Docs, taxFacts])
 
   const handleYearChange = useCallback((year: number | 'all') => {
     if (typeof year !== 'number') {
@@ -41,11 +54,23 @@ function TaxPreviewPageContent(): React.ReactElement {
     window.location.href = url.toString()
   }, [])
 
-  const handleExportXlsx = useCallback(async () => {
+  const handleExportXlsx = useCallback(async (options: TaxPreviewXlsxExportOptions = {}) => {
     setIsExporting(true)
     try {
-      const fallbackFilename = `tax-preview-${selectedYear}.xlsx`
-      const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', { year: selectedYear, filename: fallbackFilename })
+      const scope = options.scope ?? 'full'
+      const fallbackFilename = options.filename ?? defaultXlsxFilename(scope, selectedYear)
+      const grids = options.grids ?? (scope === 'full' ? fullExportGrids : [])
+      const payload: TaxPreviewXlsxExportPayload = {
+        year: selectedYear,
+        filename: fallbackFilename,
+        scope,
+      }
+
+      if (grids.length > 0) {
+        payload.grids = grids
+      }
+
+      const response = await fetchWrapper.postRaw('/api/finance/tax-preview/export-xlsx', payload)
       if (!response.ok) {
         throw new Error(`Export failed with status ${response.status}`)
       }
@@ -65,7 +90,7 @@ function TaxPreviewPageContent(): React.ReactElement {
     } finally {
       setIsExporting(false)
     }
-  }, [selectedYear])
+  }, [fullExportGrids, selectedYear])
 
   const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
 
@@ -87,6 +112,18 @@ function TaxPreviewPageContent(): React.ReactElement {
       </div>
     </DockActionsProvider>
   )
+}
+
+function defaultXlsxFilename(scope: XlsxExportScope, year: number): string {
+  if (scope === 'k1-all-in-one') {
+    return `tax-preview-${year}-all-k1s.xlsx`
+  }
+
+  if (scope === 'k3-all-in-one') {
+    return `tax-preview-${year}-all-k3s.xlsx`
+  }
+
+  return `tax-preview-${year}.xlsx`
 }
 
 export default function TaxPreviewPage({ initialData }: { initialData?: TaxPreviewPreload | null }): React.ReactElement {

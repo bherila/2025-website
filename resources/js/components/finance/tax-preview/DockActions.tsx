@@ -5,6 +5,7 @@ import { isFK1StructuredData } from '@/components/finance/k1'
 import TaxDocumentReviewModal from '@/components/finance/TaxDocumentReviewModal'
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxPreviewXlsxExporter } from '@/types/finance/xlsx-export'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import type { FormId } from './formRegistry'
@@ -12,7 +13,7 @@ import { WorksheetModal } from './WorksheetModal'
 
 interface DockActionsValue {
   /** Export the current tax preview workbook. */
-  exportXlsx: () => void
+  exportXlsx: TaxPreviewXlsxExporter
   /** True while the current tax preview workbook is being generated. */
   isExportingXlsx: boolean
   /** Open the document review modal for a specific K-1 document by id. */
@@ -39,7 +40,7 @@ const DockActionsContext = createContext<DockActionsValue | null>(null)
 
 interface DockActionsProviderProps {
   children: ReactNode
-  exportXlsx?: () => void
+  exportXlsx?: TaxPreviewXlsxExporter
   isExportingXlsx?: boolean
 }
 

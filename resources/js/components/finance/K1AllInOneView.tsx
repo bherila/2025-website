@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { AlertTriangle, ArrowRight, SquareArrowOutUpRight } from 'lucide-react'
+import { AlertTriangle, ArrowRight, FileSpreadsheet, SquareArrowOutUpRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ALL_K1_CODES } from '@/components/finance/k1/k1-codes'
@@ -11,6 +11,7 @@ import K1K3SourceValueModal, { type K1K3SourceValue } from '@/components/finance
 import { stickyComparisonTableClasses } from '@/components/finance/k1K3StickyComparisonTable'
 import type { DrillTarget } from '@/components/finance/tax-preview/formRegistry'
 import { AmountCell } from '@/components/finance/tax-preview-primitives'
+import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
 import { buildK1RoutingIndex, k1CellKey, type K1CellRouting } from '@/lib/finance/k1RoutingIndex'
@@ -36,6 +37,7 @@ import {
 } from '@/lib/finance/taxSourceFieldIds'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { TaxPreviewXlsxExporter, XlsxGridCellValue, XlsxGridColumn, XlsxGridSheet } from '@/types/finance/xlsx-export'
 import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 interface K1AllInOneViewProps {
@@ -44,6 +46,8 @@ interface K1AllInOneViewProps {
   onReviewDoc: (docId: number, focusFieldId?: string) => void
   onDrill: (target: DrillTarget) => void
   onSaveParsedData: (docId: number, parsedData: FK1StructuredData) => Promise<void>
+  onExportXlsx?: TaxPreviewXlsxExporter
+  isExportingXlsx?: boolean
 }
 
 interface K1Column {
@@ -119,6 +123,24 @@ function sourceAccountName(doc: TaxDocument, data: FK1StructuredData): string {
   return doc.account?.acct_name
     ?? linkedAccount
     ?? getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership')
+}
+
+function k1ColumnsFromDocs(k1Docs: TaxDocument[]): K1Column[] {
+  return k1Docs
+    .map((doc) => {
+      if (!isFK1StructuredData(doc.parsed_data)) {
+        return null
+      }
+      const data = doc.parsed_data
+      return {
+        doc,
+        data,
+        accountName: sourceAccountName(doc, data),
+        extractedName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
+        ein: data.fields['A']?.value ?? '—',
+      }
+    })
+    .filter((column): column is K1Column => column !== null)
 }
 
 function moneyFillClass(value: number | null): string {
@@ -302,6 +324,146 @@ interface DestinationGroup {
   needsReview: boolean
 }
 
+function destinationGroupsForRow(
+  row: K1Row,
+  columns: K1Column[],
+  moneyValues: Array<number | null>,
+  routingIndex: Map<string, K1CellRouting[]>,
+): DestinationGroup[] {
+  if (!row.box) {
+    return []
+  }
+
+  return columns.flatMap((column, index) => {
+    const numeric = moneyValues[index] ?? null
+    if (numeric === null || numeric === 0) {
+      return []
+    }
+    const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
+
+    return [{
+      key: column.doc.id,
+      label: column.accountName,
+      routings,
+      needsReview: row.routable && routings.length === 0,
+    }]
+  })
+}
+
+function destinationSignature(group: DestinationGroup): string {
+  return `${group.needsReview ? 'R' : ''}${group.routings.map((routing) => routing.routing).sort().join(',')}`
+}
+
+function routingLabels(routings: K1CellRouting[]): string {
+  return routings.map((routing) => routing.label).join(', ')
+}
+
+function destinationText(row: K1Row, groups: DestinationGroup[]): string | null {
+  if (row.staticDestinations) {
+    return routingLabels(row.staticDestinations)
+  }
+  if (groups.length === 0) {
+    return null
+  }
+
+  const allAgree = groups.every((group) => destinationSignature(group) === destinationSignature(groups[0]!))
+  if (allAgree) {
+    return groups[0]!.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(groups[0]!.routings)
+  }
+
+  return groups
+    .map((group) => `${group.label}: ${group.needsReview ? 'needs review — depends on K-1 footnotes' : routingLabels(group.routings)}`)
+    .join('; ')
+}
+
+function k1GridColumnKey(column: K1Column): string {
+  return `doc_${column.doc.id}`
+}
+
+function k1GridColumnLabel(column: K1Column): string {
+  return column.ein && column.ein !== '—'
+    ? `${column.accountName} (${firstLine(column.ein) ?? column.ein})`
+    : column.accountName
+}
+
+function k1GridRowLabel(row: K1Row): string {
+  return row.boxRef ? `${row.boxRef} ${row.label}` : row.label
+}
+
+function buildK1AllInOneXlsxGridForModel(
+  columns: K1Column[],
+  sections: K1Section[],
+  routingIndex: Map<string, K1CellRouting[]>,
+): XlsxGridSheet | null {
+  if (columns.length === 0) {
+    return null
+  }
+
+  const gridColumns: XlsxGridColumn[] = [
+    ...columns.map((column) => ({
+      key: k1GridColumnKey(column),
+      label: k1GridColumnLabel(column),
+      width: 22,
+      format: 'currency' as const,
+    })),
+    { key: 'total', label: 'Total', width: 14, format: 'currency' },
+    { key: 'from', label: 'From', width: 30, format: 'text' },
+    { key: 'destination', label: 'Destination', width: 36, format: 'text' },
+  ]
+
+  const rows: XlsxGridSheet['rows'] = [
+    { kind: 'title', label: `All-in-One K-1 (${columns.length} partnership${columns.length === 1 ? '' : 's'})` },
+  ]
+
+  for (const section of sections) {
+    rows.push({ kind: 'section', label: section.title })
+
+    for (const row of section.rows) {
+      const cells: Record<string, XlsxGridCellValue> = {}
+      const moneyValues = row.kind === 'money'
+        ? columns.map((column) => {
+            const value = row.value(column.data)
+            return typeof value === 'number' ? value : null
+          })
+        : []
+      const total = row.kind === 'money'
+        ? moneyValues.reduce((acc, value) => acc.add(value ?? 0), currency(0)).value
+        : null
+
+      columns.forEach((column, index) => {
+        const value = row.value(column.data)
+        cells[k1GridColumnKey(column)] = value === '' ? null : value
+        if (row.kind === 'money' && moneyValues[index] === null) {
+          cells[k1GridColumnKey(column)] = null
+        }
+      })
+
+      cells.total = total
+      cells.from = row.fromHint ?? null
+      cells.destination = destinationText(row, destinationGroupsForRow(row, columns, moneyValues, routingIndex))
+
+      rows.push({
+        kind: row.kind === 'money' ? 'data' : 'data',
+        label: k1GridRowLabel(row),
+        cells,
+      })
+    }
+  }
+
+  return {
+    name: 'All K-1s',
+    scope: 'k1-all-in-one',
+    columns: gridColumns,
+    rows,
+  }
+}
+
+export function buildK1AllInOneXlsxGrid(k1Docs: TaxDocument[], taxFacts: TaxPreviewFacts | null): XlsxGridSheet | null {
+  const columns = k1ColumnsFromDocs(k1Docs)
+
+  return buildK1AllInOneXlsxGridForModel(columns, buildSections(columns), buildK1RoutingIndex(taxFacts))
+}
+
 /**
  * Renders destinations per fund so a fund with a value but no computed routing
  * shows its own "needs review" marker instead of inheriting another fund's
@@ -324,7 +486,7 @@ function DestinationCell({
     return <span className="text-muted-foreground">—</span>
   }
   const signature = (group: DestinationGroup): string =>
-    `${group.needsReview ? 'R' : ''}${group.routings.map((r) => r.routing).sort().join(',')}`
+    destinationSignature(group)
   const allAgree = groups.every((group) => signature(group) === signature(groups[0]!))
   if (allAgree) {
     return groups[0]!.needsReview ? <NeedsReviewMarker /> : <DestinationChips routings={groups[0]!.routings} onDrill={onDrill} />
@@ -356,29 +518,18 @@ export default function K1AllInOneView({
   onReviewDoc,
   onDrill,
   onSaveParsedData,
+  onExportXlsx,
+  isExportingXlsx = false,
 }: K1AllInOneViewProps): React.ReactElement {
   const [sourceValueContext, setSourceValueContext] = useState<SourceValueContext | null>(null)
 
   const columns = useMemo<K1Column[]>(() => {
-    return k1Docs
-      .map((doc) => {
-        if (!isFK1StructuredData(doc.parsed_data)) {
-          return null
-        }
-        const data = doc.parsed_data
-        return {
-          doc,
-          data,
-          accountName: sourceAccountName(doc, data),
-          extractedName: getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership'),
-          ein: data.fields['A']?.value ?? '—',
-        }
-      })
-      .filter((column): column is K1Column => column !== null)
+    return k1ColumnsFromDocs(k1Docs)
   }, [k1Docs])
 
   const routingIndex = useMemo(() => buildK1RoutingIndex(taxFacts), [taxFacts])
   const sections = useMemo(() => buildSections(columns), [columns])
+  const xlsxGrid = useMemo(() => buildK1AllInOneXlsxGridForModel(columns, sections, routingIndex), [columns, sections, routingIndex])
 
   async function saveSourceOverride(value: string | null): Promise<void> {
     if (!sourceValueContext?.row.overrideKey) {
@@ -438,55 +589,72 @@ export default function K1AllInOneView({
       />
 
       <div className="space-y-2">
-      <div>
-        <h2 className="text-lg font-semibold">All-in-One K-1</h2>
-        <p className="text-xs text-muted-foreground">
-          Every K-1 line across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Click a value to inspect
-          the source; click a destination to open that form.
-        </p>
-      </div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">All-in-One K-1</h2>
+            <p className="text-xs text-muted-foreground">
+              Every K-1 line across {columns.length} partnership{columns.length === 1 ? '' : 's'}. Click a value to inspect
+              the source; click a destination to open that form.
+            </p>
+          </div>
+          {onExportXlsx && xlsxGrid ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5 text-xs"
+              disabled={isExportingXlsx}
+              onClick={() => {
+                void onExportXlsx({ scope: 'k1-all-in-one', grids: [xlsxGrid] })
+              }}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              {isExportingXlsx ? 'Generating...' : 'Download XLSX'}
+            </Button>
+          ) : null}
+        </div>
 
-      <div className={stickyComparisonTableClasses.scrollContainer}>
-        <table className={stickyComparisonTableClasses.table}>
-          <thead>
-            <tr className={stickyComparisonTableClasses.headerRow}>
-              <th className={stickyComparisonTableClasses.cornerHeaderCell}>Line</th>
-              {columns.map((column) => (
-                <th key={column.doc.id} className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-right`}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="ml-auto max-w-[156px] cursor-default truncate">{column.accountName}</div>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <div className="space-y-1 text-xs">
-                        <div>Account: {column.accountName}</div>
-                        <div>Extracted K-1 name: {column.extractedName}</div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                  <div className="font-normal text-[10px] text-muted-foreground">{column.ein}</div>
-                </th>
+        <div className={stickyComparisonTableClasses.scrollContainer}>
+          <table className={stickyComparisonTableClasses.table}>
+            <thead>
+              <tr className={stickyComparisonTableClasses.headerRow}>
+                <th className={stickyComparisonTableClasses.cornerHeaderCell}>Line</th>
+                {columns.map((column) => (
+                  <th key={column.doc.id} className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-right`}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="ml-auto max-w-[156px] cursor-default truncate">{column.accountName}</div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <div className="space-y-1 text-xs">
+                          <div>Account: {column.accountName}</div>
+                          <div>Extracted K-1 name: {column.extractedName}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="font-normal text-[10px] text-muted-foreground">{column.ein}</div>
+                  </th>
+                ))}
+                <th className={stickyComparisonTableClasses.totalHeaderCell}>Total</th>
+                <th className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-left`}>From</th>
+                <th className={`${stickyComparisonTableClasses.headerCell} w-[260px] text-left`}>Destination</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((section) => (
+                <SectionRows
+                  key={section.title}
+                  section={section}
+                  columns={columns}
+                  routingIndex={routingIndex}
+                  onDrill={onDrill}
+                  onOpenSourceValue={setSourceValueContext}
+                />
               ))}
-              <th className={stickyComparisonTableClasses.totalHeaderCell}>Total</th>
-              <th className={`${stickyComparisonTableClasses.headerCell} w-[180px] text-left`}>From</th>
-              <th className={`${stickyComparisonTableClasses.headerCell} w-[260px] text-left`}>Destination</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sections.map((section) => (
-              <SectionRows
-                key={section.title}
-                section={section}
-                columns={columns}
-                routingIndex={routingIndex}
-                onDrill={onDrill}
-                onOpenSourceValue={setSourceValueContext}
-              />
-            ))}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
     </>
   )
 }
@@ -525,16 +693,7 @@ function SectionRows({
           : null
         // Per-fund destination groups — only funds that actually have a value on
         // this line contribute, so an unrouted fund is never masked by another's routing.
-        const destinationGroups: DestinationGroup[] = row.box
-          ? columns.flatMap((column, index) => {
-              const numeric = moneyValues[index] ?? null
-              if (numeric === null || numeric === 0) {
-                return []
-              }
-              const routings = routingIndex.get(k1CellKey(column.doc.id, row.box!, row.code)) ?? []
-              return [{ key: column.doc.id, label: column.accountName, routings, needsReview: row.routable && routings.length === 0 }]
-            })
-          : []
+        const destinationGroups = destinationGroupsForRow(row, columns, moneyValues, routingIndex)
 
         return (
           <tr key={row.key} className="border-b border-dashed border-border/50 hover:bg-muted/10">
