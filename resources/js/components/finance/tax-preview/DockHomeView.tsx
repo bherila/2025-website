@@ -1,9 +1,10 @@
-import { ArrowRight, FileText, Pin } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
 import LotReconciliationHealthWidget from '@/components/finance/LotReconciliationHealthWidget'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { MillerDockSection, type MillerDockTileAmount, type MillerDockTileEntry, MillerDockTileGrid } from '@/components/ui/miller'
 import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 import { useTaxPreview } from '../TaxPreviewContext'
@@ -72,85 +73,43 @@ export function DockHomeView(): React.ReactElement {
       <LotReconciliationHealthWidget selectedYear={taxPreview.year} />
 
       {pinnedEntries.length > 0 && (
-        <Card className="border-primary/25 bg-accent/20">
-          <CardHeader>
-            <CardTitle className="finance-card-heading">
-              Pinned
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {pinnedEntries.map((entry) => (
-                <FormButton
-                  key={entry.id}
-                  id={entry.id}
-                  label={entry.label}
-                  shortLabel={entry.shortLabel}
-                  keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
-                  onOpen={openForm}
-                  pinned
-                  onTogglePin={() => togglePin(entry.id)}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <MillerDockSection
+          title="Pinned"
+          entries={pinnedEntries.map((entry) => toFormTile(entry, taxPreview))}
+          onOpen={openForm}
+          className="border-primary/25 bg-accent/20"
+          titleClassName="finance-card-heading"
+          isPinned={isPinned}
+          onTogglePin={togglePin}
+        />
       )}
 
       {recentEntries.length > 0 && (
-        <Card className="border-info/25 bg-info/5">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="finance-card-heading" data-tone="info">
-              Recent
-            </CardTitle>
-            <button
-              type="button"
-              onClick={clearRecent}
-              className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Clear
-            </button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {recentEntries.map((entry) => (
-                <FormButton
-                  key={entry.id}
-                  id={entry.id}
-                  label={entry.label}
-                  shortLabel={entry.shortLabel}
-                  keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
-                  onOpen={openForm}
-                  pinned={false}
-                  {...(isPinnable(entry) ? { onTogglePin: () => togglePin(entry.id) } : {})}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <MillerDockSection
+          title="Recent"
+          entries={recentEntries.map((entry) => toFormTile(entry, taxPreview, { canPin: isPinnable(entry) }))}
+          onOpen={openForm}
+          className="border-info/25 bg-info/5"
+          titleClassName="finance-card-heading text-info"
+          action={<ClearRecentButton onClear={clearRecent} />}
+          isPinned={isPinned}
+          onTogglePin={(id) => {
+            if (isPinnable(formRegistry[id])) {
+              togglePin(id)
+            }
+          }}
+        />
       )}
 
-      <Card className="border-success/25 bg-success/5">
-        <CardHeader>
-          <CardTitle className="finance-card-heading" data-tone="success">
-            App
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {apps.map((entry) => (
-              <FormButton
-                key={entry.id}
-                id={entry.id}
-                label={entry.label}
-                shortLabel={entry.shortLabel}
-                onOpen={openForm}
-                badge={entry.id === 'action-items' ? actionItemBadge(actionCounts) : null}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <MillerDockSection
+        title="App"
+        entries={apps.map((entry) => toFormTile(entry, taxPreview, {
+          badge: entry.id === 'action-items' ? actionItemBadge(actionCounts) : null,
+        }))}
+        onOpen={openForm}
+        className="border-success/25 bg-success/5"
+        titleClassName="finance-card-heading text-success"
+      />
 
       <Card className="border-primary/20">
         <CardHeader>
@@ -190,17 +149,10 @@ export function DockHomeView(): React.ReactElement {
               Worksheets compute a single value (or set of values) and write it back to the relevant form. They open
               as a modal dialog and don&apos;t affect the column stack.
             </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {worksheets.map((entry) => (
-                <FormButton
-                  key={entry.id}
-                  id={entry.id}
-                  label={entry.label}
-                  shortLabel={entry.shortLabel}
-                  onOpen={(id) => openWorksheet(id)}
-                />
-              ))}
-            </div>
+            <MillerDockTileGrid
+              entries={worksheets.map((entry) => toFormTile(entry, taxPreview))}
+              onOpen={openWorksheet}
+            />
           </CardContent>
         </Card>
       )}
@@ -251,89 +203,60 @@ function FormGrid({ label, entries, taxPreview, onOpen, isPinned, onTogglePin }:
   return (
     <div className="space-y-2">
       <h3 className="finance-kicker">{label}</h3>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {sorted.map((entry) => (
-          <FormButton
-            key={entry.id}
-            id={entry.id}
-            label={entry.label}
-            shortLabel={entry.shortLabel}
-            keyAmounts={getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null}
-            inactive={!formHasData(entry, taxPreview)}
-            onOpen={onOpen}
-            pinned={isPinned(entry.id)}
-            onTogglePin={() => onTogglePin(entry.id)}
-          />
-        ))}
-      </div>
+      <MillerDockTileGrid
+        entries={sorted.map((entry) => toFormTile(entry, taxPreview, { inactive: !formHasData(entry, taxPreview) }))}
+        onOpen={onOpen}
+        isPinned={isPinned}
+        onTogglePin={onTogglePin}
+      />
     </div>
   )
 }
 
-function FormButton({
-  id,
-  label,
-  shortLabel,
-  keyAmounts,
-  inactive,
-  onOpen,
-  badge,
-  pinned,
-  onTogglePin,
-}: {
-  id: FormId
-  label: string
-  shortLabel: string
-  keyAmounts?: KeyAmount[] | null
+interface ToFormTileOptions {
   inactive?: boolean
-  onOpen: (id: FormId) => void
-  badge?: React.ReactNode
-  pinned?: boolean
-  onTogglePin?: () => void
-}): React.ReactElement {
+  badge?: ReactNode
+  canPin?: boolean
+}
+
+function toFormTile(
+  entry: FormRegistryEntry,
+  taxPreview: TaxPreviewState,
+  options: ToFormTileOptions = {},
+): MillerDockTileEntry<FormId> {
+  const keyAmounts = getTaxFormMeta(entry).keyAmounts?.(taxPreview) ?? null
+
+  return {
+    id: entry.id,
+    label: entry.label,
+    shortLabel: entry.shortLabel,
+    amounts: keyAmounts?.map(formatTileAmount) ?? null,
+    ...options,
+  }
+}
+
+function formatTileAmount(keyAmount: KeyAmount): MillerDockTileAmount {
+  const amount: MillerDockTileAmount = {
+    label: keyAmount.label,
+    value: formatKeyValue(keyAmount.value),
+  }
+
+  if (keyAmount.value < 0) {
+    amount.valueClassName = 'text-destructive'
+  }
+
+  return amount
+}
+
+function ClearRecentButton({ onClear }: { onClear: () => void }): React.ReactElement {
   return (
-    <div className={`group relative flex items-stretch overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary/40 hover:bg-accent/30 ${inactive ? 'opacity-50' : ''}`}>
-      <button
-        type="button"
-        onClick={() => onOpen(id)}
-        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      >
-        <FileText className="h-4 w-4 shrink-0 self-start pt-0.5 text-info" aria-hidden="true" />
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-sm font-medium text-foreground">{shortLabel}</span>
-          <span className="truncate text-xs text-muted-foreground">{label}</span>
-          {keyAmounts && keyAmounts.length > 0 && (
-            <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {keyAmounts.map((ka) => (
-                <span key={ka.label} className="inline-flex items-baseline gap-1 font-currency text-[10px] tabular-nums">
-                  <span className="text-muted-foreground">{ka.label}</span>
-                  <span className={ka.value < 0 ? 'text-destructive' : 'text-foreground'}>
-                    {formatKeyValue(ka.value)}
-                  </span>
-                </span>
-              ))}
-            </span>
-          )}
-        </span>
-      </button>
-      <span className="flex shrink-0 items-center gap-2 pr-3">
-        {badge}
-        {onTogglePin && (
-          <button
-            type="button"
-            onClick={onTogglePin}
-            aria-label={pinned ? `Unpin ${shortLabel}` : `Pin ${shortLabel}`}
-            aria-pressed={pinned}
-            className={`rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              pinned ? 'opacity-100 text-foreground' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-            }`}
-          >
-            <Pin className={`h-3.5 w-3.5 ${pinned ? 'fill-current' : ''}`} aria-hidden="true" />
-          </button>
-        )}
-        <ArrowRight className="h-4 w-4 shrink-0 self-start mt-1 text-muted-foreground" aria-hidden="true" />
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={onClear}
+      className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      Clear
+    </button>
   )
 }
 

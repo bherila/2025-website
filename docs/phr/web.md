@@ -46,6 +46,10 @@ Blade pages provide two roots:
 
 The active section, active tab, and patient id are passed through `data-*` attributes on the mount elements. `pages.tsx` owns the mapping from route metadata to React page component.
 
+## Patient Miller Dock
+
+Patient-scoped navigation uses `resources/js/phr/miller/PhrMillerShell.tsx`, which adapts PHR module registry entries to the shared Miller primitives in `resources/js/components/ui/miller`. PHR owns the module list, patient route sync, and no-patient empty state; the shared layer owns column rendering, home launch tiles, command palette rendering/shortcut behavior, and pinned/recent preference mutation.
+
 ## Current pages
 
 `/phr/patients` shows all accessible patients as cards. Each card links to the patient's Summary tab and includes quick links for Labs, Vitals, and Imaging.

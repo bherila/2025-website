@@ -1,13 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { type Dispatch, type SetStateAction, useMemo } from 'react'
 
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
+import { MillerCommandPalette, type MillerCommandPaletteRow, useMillerCommandPaletteShortcut } from '@/components/ui/miller'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
@@ -22,7 +15,7 @@ const GROUP_HEADINGS: Record<FormCategory, string> = {
   App: 'App',
 }
 
-interface PaletteRow {
+interface PaletteRow extends MillerCommandPaletteRow<FormCategory> {
   /** Unique key per row — `formId` for singletons, `formId:instanceKey` for instances, `formId:create` for create rows. */
   rowKey: string
   formId: FormId
@@ -51,10 +44,8 @@ export function CommandPalette({ open, onOpenChange, registry }: CommandPaletteP
   const { openWorksheet } = useDockActions()
 
   const rows = useMemo(() => buildRows(registry, state), [registry, state])
-  const grouped = useMemo(() => groupByCategory(rows), [rows])
 
   const handleSelect = (row: PaletteRow): void => {
-    onOpenChange(false)
     if (row.presentation === 'modal') {
       openWorksheet(row.formId)
       return
@@ -87,27 +78,18 @@ export function CommandPalette({ open, onOpenChange, registry }: CommandPaletteP
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Jump to form" description="Search forms, schedules, and worksheets">
-      <CommandInput placeholder="Jump to a form, schedule, or worksheet…" />
-      <CommandList>
-        <CommandEmpty>No matching forms.</CommandEmpty>
-        {GROUP_ORDER.map((category) => {
-          const items = grouped[category]
-          if (!items || items.length === 0) {
-            return null
-          }
-          return (
-            <CommandGroup key={category} heading={GROUP_HEADINGS[category]}>
-              {items.map((row) => (
-                <CommandItem key={row.rowKey} value={row.rowKey} keywords={row.keywords} onSelect={() => handleSelect(row)}>
-                  {row.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )
-        })}
-      </CommandList>
-    </CommandDialog>
+    <MillerCommandPalette
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Jump to form"
+      description="Search forms, schedules, and worksheets"
+      placeholder="Jump to a form, schedule, or worksheet…"
+      emptyMessage="No matching forms."
+      groupOrder={GROUP_ORDER}
+      groupHeadings={GROUP_HEADINGS}
+      rows={rows}
+      onSelect={handleSelect}
+    />
   )
 }
 
@@ -116,26 +98,11 @@ export function CommandPalette({ open, onOpenChange, registry }: CommandPaletteP
  * field has focus or a Dialog is already open (so the palette doesn't fight
  * with worksheet/K-1 modals).
  */
-export function useCommandPaletteShortcut(setOpen: (next: boolean | ((prev: boolean) => boolean)) => void): void {
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key !== 'k' && e.key !== 'K') {
-        return
-      }
-      if (!(e.metaKey || e.ctrlKey)) {
-        return
-      }
-      e.preventDefault()
-      setOpen((prev) => !prev)
-    }
-    window.addEventListener('keydown', handler)
-    return () => {
-      window.removeEventListener('keydown', handler)
-    }
-  }, [setOpen])
+export function useCommandPaletteShortcut(
+  open: boolean,
+  setOpen: Dispatch<SetStateAction<boolean>>,
+): void {
+  useMillerCommandPaletteShortcut(open, setOpen)
 }
 
 function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPreview>): PaletteRow[] {
@@ -184,15 +151,4 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
     })
   }
   return rows
-}
-
-function groupByCategory(rows: PaletteRow[]): Partial<Record<FormCategory, PaletteRow[]>> {
-  const out: Partial<Record<FormCategory, PaletteRow[]>> = {}
-  for (const row of rows) {
-    if (!out[row.category]) {
-      out[row.category] = []
-    }
-    out[row.category]!.push(row)
-  }
-  return out
 }

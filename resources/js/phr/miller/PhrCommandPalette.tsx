@@ -1,14 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { type Dispatch, type SetStateAction, useMemo } from 'react'
 
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import { type MillerDrillTarget } from '@/components/ui/miller'
+import { MillerCommandPalette, type MillerCommandPaletteRow, type MillerDrillTarget, useMillerCommandPaletteShortcut } from '@/components/ui/miller'
 
 import {
   PHR_LIST_MODULES,
@@ -27,7 +19,7 @@ const GROUP_HEADINGS: Record<PhrModuleCategory, string> = {
 
 const DIRECT_JUMP_MODULE_IDS: ReadonlySet<PhrModuleId> = new Set(PHR_LIST_MODULES.map((module) => module.id))
 
-interface PaletteRow {
+interface PaletteRow extends MillerCommandPaletteRow<PhrModuleCategory> {
   rowKey: string
   moduleId: PhrModuleId
   label: string
@@ -47,15 +39,13 @@ interface PhrCommandPaletteProps {
  */
 export function PhrCommandPalette({ open, onClose, onDrill, registry }: PhrCommandPaletteProps): React.ReactElement {
   const rows = useMemo(() => buildRows(registry), [registry])
-  const grouped = useMemo(() => groupByCategory(rows), [rows])
 
   const handleSelect = (row: PaletteRow): void => {
-    onClose()
     onDrill({ id: row.moduleId })
   }
 
   return (
-    <CommandDialog
+    <MillerCommandPalette
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -64,57 +54,21 @@ export function PhrCommandPalette({ open, onClose, onDrill, registry }: PhrComma
       }}
       title="Jump to PHR module"
       description="Search clinical, document, and access modules"
-    >
-      <CommandInput placeholder="Jump to a PHR module…" />
-      <CommandList>
-        <CommandEmpty>No matching modules.</CommandEmpty>
-        {GROUP_ORDER.map((category) => {
-          const items = grouped[category]
-          if (!items || items.length === 0) {
-            return null
-          }
-
-          return (
-            <CommandGroup key={category} heading={GROUP_HEADINGS[category]}>
-              {items.map((row) => (
-                <CommandItem key={row.rowKey} value={row.rowKey} keywords={row.keywords} onSelect={() => handleSelect(row)}>
-                  {row.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )
-        })}
-      </CommandList>
-    </CommandDialog>
+      placeholder="Jump to a PHR module…"
+      emptyMessage="No matching modules."
+      groupOrder={GROUP_ORDER}
+      groupHeadings={GROUP_HEADINGS}
+      rows={rows}
+      onSelect={handleSelect}
+    />
   )
 }
 
 export function usePhrCommandPaletteShortcut(
   open: boolean,
-  setOpen: (next: boolean | ((prev: boolean) => boolean)) => void,
+  setOpen: Dispatch<SetStateAction<boolean>>,
 ): void {
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const handler = (event: KeyboardEvent): void => {
-      if (!isPaletteShortcut(event) || event.defaultPrevented) {
-        return
-      }
-      if (!open && shouldSuppressPaletteShortcut(event)) {
-        return
-      }
-
-      event.preventDefault()
-      setOpen((prev) => !prev)
-    }
-
-    window.addEventListener('keydown', handler)
-    return () => {
-      window.removeEventListener('keydown', handler)
-    }
-  }, [open, setOpen])
+  useMillerCommandPaletteShortcut(open, setOpen)
 }
 
 function buildRows(registry: typeof phrModuleRegistry): PaletteRow[] {
@@ -146,36 +100,4 @@ function isDirectJumpEntry(entry: PhrRegistryEntry): boolean {
 
 function uniqueKeywords(keywords: string[]): string[] {
   return Array.from(new Set(keywords.filter((keyword) => keyword.trim() !== '')))
-}
-
-function groupByCategory(rows: PaletteRow[]): Partial<Record<PhrModuleCategory, PaletteRow[]>> {
-  const out: Partial<Record<PhrModuleCategory, PaletteRow[]>> = {}
-  for (const row of rows) {
-    if (!out[row.category]) {
-      out[row.category] = []
-    }
-    out[row.category]!.push(row)
-  }
-  return out
-}
-
-function isPaletteShortcut(event: KeyboardEvent): boolean {
-  return (event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)
-}
-
-function shouldSuppressPaletteShortcut(event: KeyboardEvent): boolean {
-  return isEditableTarget(event) || document.querySelector('[role="dialog"][data-open]') !== null
-}
-
-function isEditableTarget(event: KeyboardEvent): boolean {
-  const target = event.target instanceof HTMLElement ? event.target : document.activeElement
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
-    return true
-  }
-
-  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
