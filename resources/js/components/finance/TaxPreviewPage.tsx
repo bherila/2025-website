@@ -55,9 +55,13 @@ function TaxPreviewPageContent(): React.ReactElement {
   }, [])
 
   const handleExportXlsx = useCallback(async (options: TaxPreviewXlsxExportOptions = {}) => {
+    const scope = options.scope ?? 'full'
+    if (scope === 'full' && isLoading) {
+      return
+    }
+
     setIsExporting(true)
     try {
-      const scope = options.scope ?? 'full'
       const fallbackFilename = options.filename ?? defaultXlsxFilename(scope, selectedYear)
       const grids = options.grids ?? (scope === 'full' ? fullExportGrids : [])
       const payload: TaxPreviewXlsxExportPayload = {
@@ -90,7 +94,7 @@ function TaxPreviewPageContent(): React.ReactElement {
     } finally {
       setIsExporting(false)
     }
-  }, [fullExportGrids, selectedYear])
+  }, [fullExportGrids, isLoading, selectedYear])
 
   const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
 
@@ -100,6 +104,7 @@ function TaxPreviewPageContent(): React.ReactElement {
         <DockHeaderBar
           selectedYear={selectedYear}
           availableYears={availableYears}
+          isExportXlsxDisabled={isLoading}
           isLoadingYears={isLoading && availableYears.length === 0}
           pendingReviewCount={pendingReviewCount}
           onYearChange={handleYearChange}

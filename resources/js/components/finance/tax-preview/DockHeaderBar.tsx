@@ -9,6 +9,7 @@ import { useDockActions } from './DockActions'
 interface DockHeaderBarProps {
   selectedYear: number
   availableYears: number[]
+  isExportXlsxDisabled: boolean
   isLoadingYears: boolean
   pendingReviewCount: number
   onYearChange: (year: number | 'all') => void
@@ -23,6 +24,7 @@ interface DockHeaderBarProps {
 export function DockHeaderBar({
   selectedYear,
   availableYears,
+  isExportXlsxDisabled,
   isLoadingYears,
   pendingReviewCount,
   onYearChange,
@@ -69,7 +71,7 @@ export function DockHeaderBar({
           onClick={() => {
             void exportXlsx()
           }}
-          disabled={isExportingXlsx}
+          disabled={isExportingXlsx || isExportXlsxDisabled}
         >
           <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
           {isExportingXlsx ? 'Generating...' : 'Export XLSX'}

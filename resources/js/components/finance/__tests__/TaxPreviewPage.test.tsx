@@ -112,6 +112,7 @@ describe('TaxPreviewPage', () => {
 
   beforeEach(() => {
     mockProvidedExportXlsx = null
+    mockTaxPreview.isLoading = false
     mockPostRaw.mockResolvedValue({
       ok: true,
       blob: jest.fn().mockResolvedValue(new Blob(['xlsx'])),
@@ -181,5 +182,18 @@ describe('TaxPreviewPage', () => {
       expect.objectContaining({ label: 'K-3 Part II — Foreign Income — Total' }),
       expect.objectContaining({ label: 'Foreign tax total (used)' }),
     ]))
+  })
+
+  it('does not post the full dock XLSX export while tax preview data is loading', async () => {
+    mockTaxPreview.isLoading = true
+    window.history.pushState(null, '', '/finance/tax-preview?year=2025')
+
+    render(<TaxPreviewPage initialData={{ year: 2025, availableYears: [2025, 2024] }} />)
+
+    await act(async () => {
+      await mockProvidedExportXlsx?.()
+    })
+
+    expect(mockPostRaw).not.toHaveBeenCalled()
   })
 })
