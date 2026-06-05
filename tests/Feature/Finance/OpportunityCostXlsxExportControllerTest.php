@@ -31,7 +31,7 @@ class OpportunityCostXlsxExportControllerTest extends TestCase
         }
 
         $this->assertSame(
-            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current'],
+            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
             $sheetNames,
         );
         $this->assertSame('Line', $spreadsheet->getSheetByName('Summary')?->getCell('A1')->getValue());

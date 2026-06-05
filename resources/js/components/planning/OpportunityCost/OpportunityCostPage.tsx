@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, GitFork, LineChart, type LucideIcon, Save, Table2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, GitFork, LineChart, type LucideIcon, ReceiptText, Save, Table2 } from 'lucide-react'
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
@@ -17,7 +17,14 @@ import {
   OpportunityCostFormSection,
   type OpportunityCostFormSectionId,
 } from './OpportunityCostForm'
-import { ProjectionAnnualFreeCashFlow, ProjectionLifetimeValue, ProjectionLiquidity, ProjectionVestingBreakdown } from './OpportunityCostResultViews'
+import {
+  ProjectionAfterTaxFreeCashFlow,
+  ProjectionAfterTaxLiquidity,
+  ProjectionAnnualFreeCashFlow,
+  ProjectionLifetimeValue,
+  ProjectionLiquidity,
+  ProjectionVestingBreakdown,
+} from './OpportunityCostResultViews'
 import { parseOpportunityCostUrlState, serializeOpportunityCostUrlState } from './opportunityCostUrlState'
 import { SavedJobPicker } from './SavedJobPicker'
 import type { OpportunityCostComparisonMeta, OpportunityCostInitialData, OpportunityCostInputs, OpportunityCostProjection } from './types'
@@ -26,7 +33,7 @@ interface OpportunityCostPageProps {
   initialData: OpportunityCostInitialData
 }
 
-type OpportunityCostResultViewId = 'liquidity-over-time' | 'annual-fcf' | 'ltv-table' | 'vesting-breakdown'
+type OpportunityCostResultViewId = 'liquidity-over-time' | 'annual-fcf' | 'ltv-table' | 'vesting-breakdown' | 'after-tax-liquidity' | 'after-tax-fcf'
 type OpportunityCostColumnId = OpportunityCostFormSectionId | OpportunityCostResultViewId
 
 interface OpportunityCostColumnMeta {
@@ -82,6 +89,26 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     meta: { description: 'RSU, ISO, and NSO vesting rows by grant.', icon: Briefcase },
     size: 'wide',
     render: (projection) => <ProjectionVestingBreakdown projection={projection} />,
+  },
+  {
+    id: 'after-tax-liquidity',
+    label: 'After-Tax Expected Liquidity Value Over Time',
+    shortLabel: 'After-Tax Liquidity',
+    presentation: 'column',
+    component: notRenderedViaMillerShell,
+    meta: { description: 'Liquidity bands net of federal regular tax and AMT from the tax-facts engine.', icon: LineChart },
+    size: 'wide',
+    render: (projection) => <ProjectionAfterTaxLiquidity projection={projection} />,
+  },
+  {
+    id: 'after-tax-fcf',
+    label: 'After-Tax FCF and Lifetime Value',
+    shortLabel: 'After-Tax FCF',
+    presentation: 'column',
+    component: notRenderedViaMillerShell,
+    meta: { description: 'After-tax annual FCF, LTV deltas, and ISO/NSO/83(b)/AMT breakdown.', icon: ReceiptText },
+    size: 'wide',
+    render: (projection) => <ProjectionAfterTaxFreeCashFlow projection={projection} />,
   },
 ]
 

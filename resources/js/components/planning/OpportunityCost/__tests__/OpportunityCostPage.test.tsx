@@ -57,7 +57,7 @@ describe('OpportunityCostPage', () => {
     window.history.replaceState(null, '', '/financial-planning/opportunity-cost')
   })
 
-  it('renders the show-route calculator shell and four result launchers', () => {
+  it('renders the show-route calculator shell and result launchers', () => {
     render(<OpportunityCostPage initialData={baseInitialData()} />)
 
     expect(screen.getByRole('heading', { name: 'Opportunity Cost Planner' })).toBeInTheDocument()
@@ -65,6 +65,8 @@ describe('OpportunityCostPage', () => {
     expect(screen.getByRole('button', { name: 'Open Annual FCF' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open LTV Table' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Vesting' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open After-Tax Liquidity' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open After-Tax FCF' })).toBeInTheDocument()
   })
 
   it('saves a new comparison for an authenticated user and switches to Update', async () => {
