@@ -139,7 +139,7 @@ class TaxPreviewFactsService
 
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
         $form4952 = $this->form4952FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $shortDividendDeduction, $marginInterestSources);
-        $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
+        $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099, $form4952);
         $form8829 = $userId !== null ? $this->form8829FactsBuilder->build($userId, $year) : Form8829Facts::empty();
         $scheduleC = $userId !== null ? $this->scheduleCFactsBuilder->build($userId, $year, $form8829) : ScheduleCFacts::empty();
         $scheduleF = $this->scheduleFFactsBuilder->build($userDeductions);
@@ -270,7 +270,17 @@ class TaxPreviewFactsService
             ],
             'scheduleE' => [
                 'year' => $year,
-                'scheduleE' => $this->scheduleEFactsBuilder->build($k1Docs, $docs1099)->toArray(),
+                'scheduleE' => $this->scheduleEFactsBuilder->build(
+                    $k1Docs,
+                    $docs1099,
+                    $this->form4952FactsBuilder->build(
+                        $k1Docs,
+                        $docs1099,
+                        $this->scheduleBFactsBuilder->build($k1Docs, $docs1099),
+                        $this->shortDividendItemizedDeduction($userId, $year),
+                        $this->marginInterestSources($userId, $year),
+                    ),
+                )->toArray(),
             ],
             'scheduleD' => [
                 'year' => $year,
@@ -559,7 +569,7 @@ class TaxPreviewFactsService
             $this->shortDividendItemizedDeduction($userId, $year),
             $this->marginInterestSources($userId, $year),
         );
-        $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099);
+        $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099, $form4952);
         $form4797 = $this->form4797FactsBuilder->build($this->userDeductionsForYear($userId, $year), $k1Docs);
         $scheduleD = $this->scheduleDFactsForSlice($k1Docs, $docs1099, $userId, $year, $form4797);
         $userDeductions = $this->userDeductionsForYear($userId, $year);

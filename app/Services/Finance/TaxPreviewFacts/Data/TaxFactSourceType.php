@@ -14,6 +14,7 @@ enum TaxFactSourceType: string
     case K1ForeignTaxPassiveIncome = 'k1_foreign_tax_passive_income';
     case K1InterestIncome = 'k1_interest_income';
     case K1InvestmentInterest = 'k1_investment_interest';
+    case K1Form4952GrossInvestmentIncome = 'k1_form_4952_gross_investment_income';
     case K1LongTermCapitalGain = 'k1_long_term_capital_gain';
     case K1NonportfolioLongTermCapitalGain = 'k1_nonportfolio_long_term_capital_gain';
     case K1NonportfolioShortTermCapitalGain = 'k1_nonportfolio_short_term_capital_gain';
@@ -48,6 +49,7 @@ enum TaxFactSourceType: string
     case Form1099IntTaxExemptInterest = '1099_int_tax_exempt_interest';
     case Form1099IntTreasuryInterest = '1099_int_treasury_interest';
     case Form1099MiscOtherIncome = '1099_misc_other_income';
+    case Form4952ScheduleEInvestmentInterest = 'form_4952_schedule_e_investment_interest';
     case Form1099FederalWithholding = '1099_federal_withholding';
     case Form1099RDistribution = '1099_r_distribution';
     case Form1099RFederalWithholding = '1099_r_federal_withholding';

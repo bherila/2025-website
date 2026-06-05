@@ -46,9 +46,21 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $saltCap = $this->saltCap($year, $magi);
         $saltDeduction = $this->roundMoney(min($saltCap, $saltPaidBeforeCap));
         $mortgageInterestTotal = $this->sumSources($mortgageInterestSources);
-        $investmentInterestTotal = $form4952->deductibleInvestmentInterestExpense;
-        $grossInvestmentInterestTotal = $form4952->totalInvestmentInterestExpense;
-        $disallowedInvestmentInterest = max(0.0, $this->subtractMoney($grossInvestmentInterestTotal, $investmentInterestTotal));
+        // Only the §163(d)(5)(A)(i) ordinary-investment portion of Form 4952's allowed
+        // deduction is itemized on Schedule A line 9; the §(ii) trader-fund portion is
+        // deducted above-the-line on Schedule E (Rev. Rul. 2008-38; Announcement 2008-65).
+        $scheduleAInvestmentInterestSources = [];
+        $grossScheduleAInvestmentInterest = 0.0;
+        foreach ($form4952->carryDestinations as $carryDestination) {
+            if ($carryDestination->destination === 'sch-a') {
+                $scheduleAInvestmentInterestSources = $carryDestination->sources;
+                $grossScheduleAInvestmentInterest = $carryDestination->grossInterest;
+                break;
+            }
+        }
+        $investmentInterestTotal = $form4952->deductibleScheduleAItemized;
+        $grossInvestmentInterestTotal = $grossScheduleAInvestmentInterest;
+        $disallowedInvestmentInterest = $form4952->carryforwardScheduleA;
         $charitableCashTotal = $this->sumSources($charitableCashSources);
         $charitableNoncashTotal = $this->sumSources($charitableNoncashSources);
         $charitableTotal = $this->sumMoney([$charitableCashTotal, $charitableNoncashTotal]);
@@ -77,7 +89,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             saltCapNeedsMagi: $this->hasSaltPhaseDown($year) && $magi === null,
             mortgageInterestSources: $mortgageInterestSources,
             mortgageInterestTotal: $mortgageInterestTotal,
-            investmentInterestSources: $form4952->investmentInterestSources,
+            investmentInterestSources: $scheduleAInvestmentInterestSources,
             grossInvestmentInterestTotal: $grossInvestmentInterestTotal,
             investmentInterestTotal: $investmentInterestTotal,
             disallowedInvestmentInterest: $disallowedInvestmentInterest,

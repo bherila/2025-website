@@ -159,12 +159,17 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
   )
 }
 
-function Form4952Adapter({ state }: FormRenderProps): React.ReactElement {
+function Form4952Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
   return (
     <Form4952Preview
       form4952Facts={state.taxFacts?.form4952 ?? null}
       shortDividendSummary={state.shortDividendSummary}
       onLoadShortDividendSummary={state.loadShortDividendSummary}
+      onReviewDoc={reviewK1Doc}
+      onOpenScheduleB={() => onDrill({ id: 'sch-b' })}
+      onOpenScheduleA={() => onDrill({ id: 'sch-a' })}
+      onOpenScheduleE={() => onDrill({ id: 'sch-e' })}
     />
   )
 }
