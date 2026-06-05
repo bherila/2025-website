@@ -8,14 +8,14 @@ use PHPUnit\Framework\TestCase;
 
 class OpportunityCostWorkbookBuilderTest extends TestCase
 {
-    public function test_builds_the_six_tabs_in_order(): void
+    public function test_builds_the_tabs_in_order(): void
     {
         $workbook = $this->build($this->goldenProjection());
 
         $names = array_map(fn (array $sheet): string => $sheet['name'], $workbook['sheets']);
 
         $this->assertSame(
-            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current'],
+            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
             $names,
         );
     }
@@ -102,6 +102,48 @@ class OpportunityCostWorkbookBuilderTest extends TestCase
         $this->assertNotEmpty(array_filter($summaryRows, fn (array $row): bool => ! empty($row['isTotal'])));
     }
 
+    public function test_equity_tax_summary_matches_after_tax_lifetime_values(): void
+    {
+        $projection = $this->goldenProjection();
+        $rows = $this->sheet($this->build($projection), 'Equity Tax Summary')['rows'];
+
+        $privateOffer = $projection['jobs'][1];
+        $matchingRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'After-tax total value — medium'));
+
+        $this->assertCount(count($projection['jobs']), $matchingRows);
+        $this->assertSame($privateOffer['afterTax']['lifetime']['totalValue']['medium'], $matchingRows[1]['amount']);
+        $this->assertStringContainsString('Medium after-tax LTV Δ vs current', $matchingRows[1]['note']);
+    }
+
+    public function test_equity_tax_annual_sheet_includes_iso_amt_and_tax_rows(): void
+    {
+        $projection = $this->goldenProjection();
+        $rows = $this->sheet($this->build($projection), 'Equity Tax Annual')['rows'];
+
+        $isoRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'ISO AMT preference'));
+        $amtRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'Estimated AMT'));
+        $totalTaxRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'Total estimated federal/AMT tax'));
+
+        $this->assertNotEmpty($isoRows);
+        $this->assertContains(104500.0, array_map(fn (array $row): float => $row['amount'], $isoRows));
+        $this->assertNotEmpty($amtRows);
+        $this->assertNotEmpty($totalTaxRows);
+        $this->assertTrue($totalTaxRows[0]['isTotal']);
+    }
+
+    public function test_equity_tax_sheets_include_nso_and_83b_source_rows_when_present(): void
+    {
+        $projection = $this->projectionWithNsoAnd83b();
+        $workbook = $this->build($projection);
+        $annualRows = $this->sheet($workbook, 'Equity Tax Annual')['rows'];
+        $sourceRows = $this->sheet($workbook, 'Equity Tax Sources')['rows'];
+
+        $this->assertNotEmpty(array_filter($annualRows, fn (array $row): bool => ($row['description'] ?? null) === 'NSO ordinary income' && $row['amount'] === 25000.0));
+        $this->assertNotEmpty(array_filter($annualRows, fn (array $row): bool => ($row['description'] ?? null) === '83(b) election source amount' && $row['amount'] === 12000.0));
+        $this->assertNotEmpty(array_filter($sourceRows, fn (array $row): bool => ($row['description'] ?? null) === 'NSO ordinary income' && $row['amount'] === 25000.0));
+        $this->assertNotEmpty(array_filter($sourceRows, fn (array $row): bool => ($row['description'] ?? null) === '83(b) election' && $row['amount'] === 12000.0));
+    }
+
     public function test_filename_defaults_and_honours_override(): void
     {
         $this->assertSame('opportunity-cost-comparison.xlsx', $this->build($this->goldenProjection())['filename']);
@@ -140,5 +182,35 @@ class OpportunityCostWorkbookBuilderTest extends TestCase
         $path = __DIR__.'/../../Fixtures/opportunity-cost/golden-projection.json';
 
         return json_decode((string) file_get_contents($path), true);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function projectionWithNsoAnd83b(): array
+    {
+        $projection = $this->goldenProjection();
+        $job = $projection['jobs'][0];
+        $job['afterTax']['annual'][0]['nsoOrdinaryIncome'] = 25000.0;
+        $job['afterTax']['annual'][0]['sourceIds'][] = 'oc-current-2026-nso-equity_comp_nso_ordinary_income';
+        $job['afterTax']['annual'][0]['sourceIds'][] = 'oc-current-2026-nso-equity_comp_83b_election';
+        $job['afterTax']['lifetime']['nsoOrdinaryIncome'] = 25000.0;
+        $job['afterTax']['sources'][] = [
+            'id' => 'oc-current-2026-nso-equity_comp_nso_ordinary_income',
+            'label' => 'Current role nso equity compensation',
+            'amount' => 25000.0,
+            'sourceType' => 'equity_comp_nso_ordinary_income',
+            'routing' => 'form_1040_nso_ordinary_income',
+        ];
+        $job['afterTax']['sources'][] = [
+            'id' => 'oc-current-2026-nso-equity_comp_83b_election',
+            'label' => 'Current role 83(b) election',
+            'amount' => 12000.0,
+            'sourceType' => 'equity_comp_83b_election',
+            'routing' => 'equity_comp_83b_election',
+        ];
+        $projection['jobs'][0] = $job;
+
+        return $projection;
     }
 }

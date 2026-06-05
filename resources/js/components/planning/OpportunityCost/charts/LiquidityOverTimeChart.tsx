@@ -5,30 +5,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 import { formatMoney } from '../formatters'
-import { mapLiquidityChartData, mapLiquiditySeries } from '../mappers'
+import { mapAfterTaxLiquidityChartData, mapLiquidityChartData, mapLiquiditySeries } from '../mappers'
 import type { OpportunityCostProjection } from '../types'
 
 interface LiquidityOverTimeChartProps {
   projection: OpportunityCostProjection
+  mode?: 'preTax' | 'afterTax'
 }
 
 const SERIES_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2']
 
-export function LiquidityOverTimeChart({ projection }: LiquidityOverTimeChartProps): ReactElement {
-  const rows = useMemo(() => mapLiquidityChartData(projection), [projection])
+export function LiquidityOverTimeChart({ projection, mode = 'preTax' }: LiquidityOverTimeChartProps): ReactElement {
+  const isAfterTax = mode === 'afterTax'
+  const rows = useMemo(
+    () => (isAfterTax ? mapAfterTaxLiquidityChartData(projection) : mapLiquidityChartData(projection)),
+    [isAfterTax, projection],
+  )
   const series = useMemo(() => mapLiquiditySeries(projection), [projection])
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Expected liquidity value over time</CardTitle>
-        <CardDescription>Low, medium, and high bands use dotted, solid, and dashed lines in addition to color.</CardDescription>
+        <CardTitle>{isAfterTax ? 'After-tax expected liquidity value over time' : 'Expected liquidity value over time'}</CardTitle>
+        <CardDescription>
+          {isAfterTax
+            ? 'Cumulative after-tax cash flow plus realizable equity value, using the backend federal regular tax and AMT projection.'
+            : 'Low, medium, and high bands use dotted, solid, and dashed lines in addition to color.'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {projection.jobs.length === 0 ? (
           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Add at least one job to see a liquidity projection.</p>
         ) : (
-          <div className="h-[360px] w-full" aria-label="Expected liquidity chart">
+          <div className="h-[360px] w-full" aria-label={isAfterTax ? 'After-tax expected liquidity chart' : 'Expected liquidity chart'}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -52,7 +61,7 @@ export function LiquidityOverTimeChart({ projection }: LiquidityOverTimeChartPro
           </div>
         )}
 
-        <div className="overflow-auto rounded-lg border" aria-label="Expected liquidity data table">
+        <div className="overflow-auto rounded-lg border" aria-label={isAfterTax ? 'After-tax expected liquidity data table' : 'Expected liquidity data table'}>
           <Table>
             <TableHeader>
               <TableRow>

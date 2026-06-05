@@ -1,4 +1,12 @@
-import { mapAnnualFreeCashFlowRows, mapLifetimeValueRows, mapLiquidityChartData } from '../mappers'
+import {
+  mapAfterTaxAnnualFreeCashFlowRows,
+  mapAfterTaxLifetimeValueRows,
+  mapAfterTaxLiquidityChartData,
+  mapAfterTaxSourceBreakdownRows,
+  mapAnnualFreeCashFlowRows,
+  mapLifetimeValueRows,
+  mapLiquidityChartData,
+} from '../mappers'
 import { opportunityCostProjectionSchema } from '../types'
 
 // Local Node-API declarations so this test does not depend on @types/node being in `types`.
@@ -34,5 +42,36 @@ describe('Opportunity Cost backend golden projection (cross-language contract)',
       const hypothetical = rows.find((row) => !row.isCurrent)
       expect(hypothetical?.totalValueDeltaMedium).not.toBeNull()
     }
+  })
+
+  it('feeds after-tax mappers from the committed golden fixture', () => {
+    const parsed = opportunityCostProjectionSchema.parse(raw)
+
+    const afterTaxFcfRows = mapAfterTaxAnnualFreeCashFlowRows(parsed)
+    const privateOffer2028 = afterTaxFcfRows.find((row) => row.jobId === 'hyp-1' && row.year === 2028)
+    expect(privateOffer2028).toMatchObject({
+      isoAmtPreference: 104500,
+      estimatedAmt: 15566,
+      totalEstimatedTax: 54964,
+      freeCashFlow: 120036,
+    })
+
+    const afterTaxLiquidityRows = mapAfterTaxLiquidityChartData(parsed)
+    expect(afterTaxLiquidityRows.find((row) => row.year === 2030)?.['hyp-1-medium']).toBe(1247449.32)
+    expect(afterTaxLiquidityRows.find((row) => row.year === 2035)?.['current-medium']).toBe(1787550)
+
+    const lifetimeRows = mapAfterTaxLifetimeValueRows(parsed)
+    expect(lifetimeRows.find((row) => row.jobId === 'hyp-1')).toMatchObject({
+      estimatedAmt: 69760.68,
+      totalValueDeltaMedium: -251759.02,
+    })
+
+    expect(mapAfterTaxSourceBreakdownRows(parsed)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        jobId: 'hyp-1',
+        sourceType: 'equity_comp_iso_bargain_element',
+        amount: 104500,
+      }),
+    ]))
   })
 })
