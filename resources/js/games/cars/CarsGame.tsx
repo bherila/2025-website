@@ -112,31 +112,36 @@ export function CarsGame(): ReactElement {
   }, [state])
 
   const handleCarClick = useCallback((carId: string): void => {
-    setState((current) => {
-      if (current.failedLevel) {
-        return current
-      }
+    if (state.failedLevel) {
+      setVipSelectionActive(false)
 
-      if (vipSelectionActive) {
-        return applyVipPowerUp(current, carId)
-      }
+      return
+    }
 
-      const clickedCar = current.cars.find((car) => car.id === carId)
-      if (clickedCar?.status === 'field' && !canMoveCar(current, carId)) {
-        setBlockedCarAttempt({ carId, nonce: Date.now() })
-        playSfx('car-blocked')
-      }
+    if (vipSelectionActive) {
+      setState(applyVipPowerUp(state, carId))
+      setVipSelectionActive(false)
 
-      const next = moveCarToParking(current, carId)
-      const parkedCar = next.cars.find((car) => car.id === carId)
-      if (clickedCar?.status === 'field' && parkedCar?.status === 'parked') {
-        playSfx('car-park-success')
-      }
+      return
+    }
 
-      return next
-    })
+    const clickedCar = state.cars.find((car) => car.id === carId)
+    const blocked = clickedCar?.status === 'field' && !canMoveCar(state, carId)
+    const next = moveCarToParking(state, carId)
+    const parkedCar = next.cars.find((car) => car.id === carId)
+
+    if (blocked) {
+      setBlockedCarAttempt({ carId, nonce: Date.now() })
+      playSfx('car-blocked')
+    }
+
+    if (clickedCar?.status === 'field' && parkedCar?.status === 'parked') {
+      playSfx('car-park-success')
+    }
+
+    setState(next)
     setVipSelectionActive(false)
-  }, [vipSelectionActive])
+  }, [state, vipSelectionActive])
 
   const handleShuffle = useCallback((): void => {
     setVipSelectionActive(false)
@@ -160,15 +165,13 @@ export function CarsGame(): ReactElement {
   }, [visualTestOptions.enabled])
 
   const handlePassengerGate = useCallback((passengerId: string): void => {
-    setState((current) => {
-      const next = processBoardingAtParkingGate(current, passengerId)
-      if (next !== current && next.passengerQueue.length < current.passengerQueue.length) {
-        playSfx('passenger-board')
-      }
+    const next = processBoardingAtParkingGate(state, passengerId)
+    if (next !== state && next.passengerQueue.length < state.passengerQueue.length) {
+      playSfx('passenger-board')
+    }
 
-      return next
-    })
-  }, [])
+    setState(next)
+  }, [state])
 
   const handleNextLevel = useCallback((): void => {
     setVipSelectionActive(false)
