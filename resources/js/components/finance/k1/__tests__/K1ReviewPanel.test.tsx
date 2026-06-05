@@ -1,7 +1,10 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
-import type { FK1StructuredData } from '@/types/finance/k1-data'
+import type { FK1StructuredData, K1CodeItem } from '@/types/finance/k1-data'
+
+import K1CodesModal from '../K1CodesModal'
+import K1ReviewPanel from '../K1ReviewPanel'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -10,7 +13,20 @@ jest.mock('@/components/ui/badge', () => ({
 }))
 
 jest.mock('@/components/ui/checkbox', () => ({
-  Checkbox: (p: Record<string, unknown>) => <input type="checkbox" data-testid={p['data-testid'] as string} />,
+  Checkbox: ({ checked = false, onCheckedChange, ...props }: MockCheckboxProps) => (
+    <input
+      {...props}
+      type="checkbox"
+      checked={checked === true}
+      onChange={(event) => onCheckedChange?.(event.target.checked)}
+    />
+  ),
+}))
+
+jest.mock('@/components/ui/button', () => ({
+  Button: ({ children, type = 'button', variant: _variant, size: _size, ...props }: MockButtonProps) => (
+    <button type={type} {...props}>{children}</button>
+  ),
 }))
 
 jest.mock('@/components/ui/input', () => ({
@@ -43,6 +59,7 @@ jest.mock('@/components/ui/tooltip', () => ({
 jest.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -57,7 +74,30 @@ jest.mock('@/components/ui/table', () => ({
   TableRow: ({ children, ...p }: React.ComponentProps<'tr'>) => <tr {...p}>{children}</tr>,
 }))
 
-import K1ReviewPanel from '../K1ReviewPanel'
+interface MockButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: string
+  variant?: string
+}
+
+interface MockCheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'checked' | 'onChange'> {
+  checked?: boolean | 'indeterminate'
+  onCheckedChange?: (checked: boolean) => void
+}
+
+function ControlledK1ReviewPanel({ initialData }: { initialData: FK1StructuredData }): React.ReactElement {
+  const [currentData, setCurrentData] = React.useState(initialData)
+
+  return (
+    <>
+      <K1ReviewPanel data={currentData} onChange={setCurrentData} />
+      <output data-testid="k1-data">{JSON.stringify(currentData)}</output>
+    </>
+  )
+}
+
+function readPanelData(): FK1StructuredData {
+  return JSON.parse(screen.getByTestId('k1-data').textContent ?? '{}') as FK1StructuredData
+}
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -170,5 +210,148 @@ describe('K1ReviewPanel — sourced-by-partner default', () => {
 
     expect(container.textContent).not.toContain('Sourced by Partner → US (f)')
     expect(container.textContent).toContain('Sourced by Partner (f)')
+  })
+})
+
+describe('K1ReviewPanel — clearable source overrides', () => {
+  it('gates field edits behind an override checkbox and clears back to the source value', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: 'Source Partnership' },
+          },
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Entity \/ Partner Info/ }))
+
+    expect(screen.getByText('Source Partnership')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Source Partnership')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+    expect(screen.getByDisplayValue('Source Partnership')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByDisplayValue('Source Partnership'), {
+      target: { value: 'Manual Partnership' },
+    })
+
+    expect(readPanelData().fields.B).toMatchObject({
+      value: 'Manual Partnership',
+      originalValue: 'Source Partnership',
+      manualOverride: true,
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+
+    expect(readPanelData().fields.B).toEqual({ value: 'Source Partnership' })
+    expect(screen.queryByDisplayValue('Manual Partnership')).not.toBeInTheDocument()
+    expect(screen.getByText('Source Partnership')).toBeInTheDocument()
+  })
+
+  it('restores null source values when clearing field overrides', () => {
+    render(
+      <ControlledK1ReviewPanel
+        initialData={makeData({
+          fields: {
+            B: { value: null },
+          },
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Entity \/ Partner Info/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+
+    const overrideInput = screen.getByRole('textbox')
+    fireEvent.change(overrideInput, {
+      target: { value: 'Manual Partnership' },
+    })
+
+    expect(readPanelData().fields.B).toMatchObject({
+      value: 'Manual Partnership',
+      originalValue: null,
+      manualOverride: true,
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override B' }))
+
+    expect(readPanelData().fields.B).toEqual({ value: null })
+    expect(screen.queryByDisplayValue('Manual Partnership')).not.toBeInTheDocument()
+  })
+
+  it('saves code row overrides with a source snapshot and clears them after reload', () => {
+    const sourceItems: K1CodeItem[] = [{
+      code: 'S',
+      value: '100',
+      notes: 'source notes',
+      character: 'short',
+    }]
+    const handleChange = jest.fn()
+    const onClose = jest.fn()
+    const codeDefinitions = { S: 'Non-portfolio capital gain' }
+    const { rerender } = render(
+      <K1CodesModal
+        open
+        box="11"
+        boxLabel="Box 11"
+        codeDefinitions={codeDefinitions}
+        items={sourceItems}
+        onChange={handleChange}
+        onClose={onClose}
+      />,
+    )
+
+    expect(screen.getByText('100')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('100')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override code row 1' }))
+    fireEvent.change(screen.getByDisplayValue('100'), {
+      target: { value: '250' },
+    })
+    fireEvent.change(screen.getByDisplayValue('source notes'), {
+      target: { value: 'manual notes' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const savedItems = handleChange.mock.calls[0]?.[0] as K1CodeItem[]
+    expect(savedItems[0]).toMatchObject({
+      code: 'S',
+      value: '250',
+      notes: 'manual notes',
+      character: 'short',
+      manualOverride: true,
+      sourceItem: {
+        code: 'S',
+        value: '100',
+        notes: 'source notes',
+        character: 'short',
+      },
+    })
+
+    handleChange.mockClear()
+    rerender(
+      <K1CodesModal
+        key="reloaded"
+        open
+        box="11"
+        boxLabel="Box 11"
+        codeDefinitions={codeDefinitions}
+        items={savedItems}
+        onChange={handleChange}
+        onClose={onClose}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Override code row 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(handleChange).toHaveBeenCalledWith([{
+      code: 'S',
+      value: '100',
+      notes: 'source notes',
+      character: 'short',
+    }])
   })
 })

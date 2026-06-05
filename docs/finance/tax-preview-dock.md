@@ -128,6 +128,10 @@ When adding source navigation, keep older `onTabChange(tab)` component callbacks
 
 The All-in-One K-1 and K-3 apps are viewport-sized dock columns. Their comparison tables own a bounded `overflow-auto` viewport so horizontal and vertical table scrolling happen in the same container. Keep column headers sticky to that table viewport with `top-0`; keep first-column row labels and section-title cells sticky with `left-0` and the same right-edge shadow used by statement/transaction tables.
 
+### K-1 / K-3 source-value overrides
+
+K-1 and K-3 source detail fields are read-only by default. Users must explicitly check the row's override control before editing a value. While an override is active, field rows retain the extracted source value in `originalValue`, and coded K-1 rows retain their extracted source row in `sourceItem`. Clearing the override removes the manual marker and restores the retained source value so a saved review can be reloaded and reverted cleanly.
+
 ---
 
 ## URL hash format
