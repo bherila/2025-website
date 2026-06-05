@@ -95,6 +95,9 @@ Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conv
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/compute', [OpportunityCostController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/save', [OpportunityCostController::class, 'store']);
+Route::middleware(['web', 'auth'])->patch('/financial-planning/opportunity-cost/s/{code}', [OpportunityCostController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/s/{code}/claim', [OpportunityCostController::class, 'claim']);
 
 Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
