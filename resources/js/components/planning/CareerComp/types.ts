@@ -1,0 +1,251 @@
+import { z } from 'zod'
+
+export const equityGrowthBandSchema = z.object({
+  lowPct: z.number(),
+  mediumPct: z.number(),
+  highPct: z.number(),
+})
+
+export const companySpecSchema = z.object({
+  type: z.enum(['public', 'private']),
+  currentSharePrice: z.number(),
+  fourNineA: z.number(),
+  fullyDilutedShares: z.number(),
+  annualDilutionPct: z.number(),
+  liquidityDate: z.string().nullish(),
+})
+
+export const cashCompSchema = z.object({
+  baseSalary: z.number(),
+  cashBonus: z.number(),
+})
+
+export const rsuGrantSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['hire', 'refresher']),
+  grantDate: z.string(),
+  shareCount: z.number().nullish(),
+  grantValue: z.number().nullish(),
+  grantPrice: z.number().nullish(),
+  cliffMonths: z.number(),
+  vestingYears: z.number(),
+})
+
+export const optionGrantSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['hire', 'refresher']),
+  type: z.enum(['iso', 'nso']),
+  grantDate: z.string(),
+  shareCount: z.number(),
+  strike: z.number(),
+  cliffMonths: z.number(),
+  vestingYears: z.number(),
+  earlyExercise83b: z.boolean().default(false),
+})
+
+export const jobSpecSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  company: companySpecSchema,
+  comp: cashCompSchema,
+  rsuGrants: z.array(rsuGrantSchema),
+  optionGrants: z.array(optionGrantSchema),
+  growthBands: equityGrowthBandSchema,
+})
+
+export const careerCompInputsSchema = z.object({
+  horizonYears: z.number(),
+  startYear: z.number(),
+  currentJob: jobSpecSchema.nullable(),
+  hypotheticalJobs: z.array(jobSpecSchema),
+})
+
+export const annualProjectionSchema = z.object({
+  year: z.number(),
+  salary: z.number(),
+  bonus: z.number(),
+  vestedLiquidEquity: z.number(),
+  shareSaleProceeds: z.number(),
+  exerciseOutlay: z.number(),
+  freeCashFlow: z.number(),
+})
+
+export const taxFactSourceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  amount: z.number(),
+  sourceType: z.string(),
+  taxDocumentId: z.number().nullable(),
+  taxDocumentAccountId: z.number().nullable(),
+  accountId: z.number().nullable(),
+  formType: z.string().nullable(),
+  box: z.string().nullable(),
+  code: z.string().nullable(),
+  routing: z.string().nullable(),
+  routingReason: z.string().nullable(),
+  notes: z.string().nullable(),
+  isReviewed: z.boolean(),
+  reviewStatus: z.string(),
+  reviewAction: z.string().nullable(),
+})
+
+export const form6251SourceEntrySchema = z.object({
+  label: z.string(),
+  code: z.string(),
+  line: z.string(),
+  amount: z.number(),
+  description: z.string(),
+  requiresStatementReview: z.boolean(),
+})
+
+export const form6251FactsSchema = z
+  .object({
+    line1TaxableIncome: z.number(),
+    line3OtherAdjustments: z.number(),
+    adjustmentTotal: z.number(),
+    amti: z.number(),
+    tentativeMinTax: z.number(),
+    regularTax: z.number(),
+    amt: z.number(),
+    filingStatus: z.string(),
+    sourceEntries: z.array(form6251SourceEntrySchema),
+    requiresStatementReview: z.boolean(),
+    manualReviewReasons: z.array(z.string()),
+  })
+  .passthrough()
+
+export const equityCompensationAfterTaxAnnualSchema = z.object({
+  year: z.number(),
+  taxableCompIncome: z.number(),
+  nsoOrdinaryIncome: z.number(),
+  isoAmtPreference: z.number(),
+  equitySaleProceeds: z.number(),
+  estimatedRegularTax: z.number(),
+  estimatedAmt: z.number(),
+  totalEstimatedTax: z.number(),
+  freeCashFlow: z.number(),
+  sourceIds: z.array(z.string()),
+})
+
+export const equityCompensationAfterTaxSchema = z.object({
+  annual: z.array(equityCompensationAfterTaxAnnualSchema),
+  lifetime: z.object({
+    taxableCompIncome: z.number(),
+    nsoOrdinaryIncome: z.number(),
+    isoAmtPreference: z.number(),
+    equitySaleProceeds: z.number(),
+    estimatedRegularTax: z.number(),
+    estimatedAmt: z.number(),
+    totalEstimatedTax: z.number(),
+    freeCashFlow: z.number(),
+    totalValue: z.object({
+      low: z.number(),
+      medium: z.number(),
+      high: z.number(),
+    }),
+  }),
+  sources: z.array(taxFactSourceSchema),
+  form6251: z.array(
+    z.object({
+      year: z.number(),
+      facts: form6251FactsSchema,
+    }),
+  ),
+})
+
+export const liquidityPointSchema = z.object({
+  year: z.number(),
+  cumulativeValue: z.number(),
+})
+
+export const bandedMoneySchema = z.object({
+  low: z.number(),
+  medium: z.number(),
+  high: z.number(),
+})
+
+export const vestingProjectionSchema = z.object({
+  grantId: z.string(),
+  type: z.enum(['rsu', 'iso', 'nso']),
+  year: z.number(),
+  vestedShares: z.number(),
+  exercisableShares: z.number(),
+})
+
+export const jobProjectionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isCurrent: z.boolean(),
+  annual: z.array(annualProjectionSchema),
+  liquidity: z.object({
+    low: z.array(liquidityPointSchema),
+    medium: z.array(liquidityPointSchema),
+    high: z.array(liquidityPointSchema),
+  }),
+  vesting: z.array(vestingProjectionSchema),
+  lifetime: z.object({
+    totalCashComp: z.number(),
+    totalEquityValue: bandedMoneySchema,
+    totalValue: bandedMoneySchema,
+  }),
+  afterTax: equityCompensationAfterTaxSchema.optional(),
+})
+
+export const deltaVsCurrentSchema = z.object({
+  jobId: z.string(),
+  name: z.string(),
+  cashCompDelta: z.number(),
+  totalValueDelta: bandedMoneySchema,
+})
+
+export const careerCompProjectionSchema = z.object({
+  startYear: z.number(),
+  horizonYears: z.number(),
+  currentJobId: z.string().nullable(),
+  jobs: z.array(jobProjectionSchema),
+  deltasVsCurrent: z.array(deltaVsCurrentSchema),
+  warnings: z.array(z.string()),
+})
+
+export interface CareerComparisonMeta {
+  id: number
+  shortCode: string
+  shareUrl: string
+  ownerUserId: number | null
+  shareIncludesCurrent: boolean
+}
+
+export interface SavedCareerJob {
+  id: number
+  kind: 'current' | 'hypothetical'
+  name: string
+  spec: JobSpec
+}
+
+export interface CareerCompInitialData {
+  inputs: CareerCompInputs
+  projection: CareerCompProjection | null
+  authenticated: boolean
+  comparison?: CareerComparisonMeta | null
+  canEdit?: boolean
+}
+
+export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
+export type CompanySpec = z.infer<typeof companySpecSchema>
+export type CashComp = z.infer<typeof cashCompSchema>
+export type RsuGrant = z.infer<typeof rsuGrantSchema>
+export type OptionGrant = z.infer<typeof optionGrantSchema>
+export type JobSpec = z.infer<typeof jobSpecSchema>
+export type CareerCompInputs = z.infer<typeof careerCompInputsSchema>
+export type AnnualProjection = z.infer<typeof annualProjectionSchema>
+export type TaxFactSource = z.infer<typeof taxFactSourceSchema>
+export type Form6251SourceEntry = z.infer<typeof form6251SourceEntrySchema>
+export type Form6251Facts = z.infer<typeof form6251FactsSchema>
+export type EquityCompensationAfterTaxAnnual = z.infer<typeof equityCompensationAfterTaxAnnualSchema>
+export type EquityCompensationAfterTax = z.infer<typeof equityCompensationAfterTaxSchema>
+export type LiquidityPoint = z.infer<typeof liquidityPointSchema>
+export type BandedMoney = z.infer<typeof bandedMoneySchema>
+export type VestingProjection = z.infer<typeof vestingProjectionSchema>
+export type JobProjection = z.infer<typeof jobProjectionSchema>
+export type DeltaVsCurrent = z.infer<typeof deltaVsCurrentSchema>
+export type CareerCompProjection = z.infer<typeof careerCompProjectionSchema>
