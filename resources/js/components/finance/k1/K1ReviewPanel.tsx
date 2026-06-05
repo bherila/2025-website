@@ -15,9 +15,13 @@ import { K1_CODE_ROUTING_NOTES } from '@/lib/finance/k1RoutingNotes'
 import {
   getK1ActivityClassification,
   getK1CompletenessChecklist,
+  getK1MaterialParticipationOverride,
   getK1SourceValueOverrides,
   getSbpElection,
   getUnroutedCodes,
+  isK1MaterialParticipationOverrideKey,
+  isTraderFundK1,
+  withK1MaterialParticipationOverride,
 } from '@/lib/finance/k1Utils'
 import {
   k1CodeSourceFieldId,
@@ -152,6 +156,7 @@ function fieldWithClearedOverride(field: K1FieldValue | undefined): K1FieldValue
 
 function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.ReactElement | null {
   const overrides = Object.entries(getK1SourceValueOverrides(data))
+    .filter(([key]) => !isK1MaterialParticipationOverrideKey(key))
   if (overrides.length === 0) {
     return null
   }
@@ -179,6 +184,48 @@ function SourceOverridesCallout({ data }: { data: FK1StructuredData }): React.Re
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function TraderMaterialParticipationSection({
+  data,
+  onChange,
+}: {
+  data: FK1StructuredData
+  onChange: (updated: FK1StructuredData) => void
+}) {
+  if (!isTraderFundK1(data)) {
+    return null
+  }
+
+  const participates = getK1MaterialParticipationOverride(data)
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/10 px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <Checkbox
+          id="k1-material-participation"
+          checked={participates}
+          onCheckedChange={(checked) => onChange(withK1MaterialParticipationOverride(data, checked === true))}
+          className="mt-0.5"
+        />
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="k1-material-participation" className="cursor-pointer text-xs font-medium">
+            Materially participated in the securities-trading activity
+          </Label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={participates ? 'default' : 'secondary'} className="text-[9px]">
+              {participates ? 'Trade/business interest' : 'Investment interest'}
+            </Badge>
+            <span className="text-[10px] leading-relaxed text-muted-foreground">
+              {participates
+                ? 'Off Form 4952; fully deductible on Schedule E Part II line 28 (Pub. 550; §62(a)(1)).'
+                : 'Default: Form 4952 §163(d) limit; allowed portion on Schedule E with carryforward tracking.'}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -1798,6 +1845,8 @@ export default function K1ReviewPanel({ data, onChange, readOnly = false, focusF
         onOverrideChange={setFieldOverride}
         focusFieldId={focusFieldId}
       />
+
+      <TraderMaterialParticipationSection data={data} onChange={onChange} />
 
       {/* Income + Deduction blocks side-by-side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

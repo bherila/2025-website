@@ -24,6 +24,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $investmentInterestSources = [];
         $investmentExpenseSources = [];
         $excludedInvestmentExpenseSources = [];
+        $materialParticipationScheduleEInterestSources = [];
         $scheduleESourceIds = [];
 
         if ($shortDividendDeduction > 0.0) {
@@ -50,6 +51,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
 
             $partnerName = $this->k1PartnerName($doc, $data);
             $isTraderFund = $this->isTraderFundK1($data);
+            $isMaterialParticipationTrader = $isTraderFund && $this->k1MaterialParticipationOverrideValue($data);
             foreach (['H', 'G', 'AC', 'AD'] as $code) {
                 foreach ($this->k1CodeItems($data, '13', $code) as $index => $item) {
                     $rawAmount = $this->parseMoney($item['value'] ?? null);
@@ -58,6 +60,27 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     }
 
                     $sourceId = "k1-{$doc->id}-13{$code}-{$index}";
+                    if ($isMaterialParticipationTrader) {
+                        $materialParticipationScheduleEInterestSources[] = new TaxFactSource(
+                            id: "{$sourceId}-material-participation",
+                            label: "{$partnerName} — Box 13{$code} materially-participating trader interest",
+                            amount: $this->roundMoney(-abs($rawAmount)),
+                            sourceType: TaxFactSourceType::K1MaterialParticipationTraderInterest,
+                            taxDocumentId: $doc->id,
+                            formType: $this->formType($doc),
+                            box: '13',
+                            code: $code,
+                            routing: TaxFactRouting::ScheduleELine28,
+                            routingReason: 'Material participation in a securities-trading partnership takes the Box 13 interest out of §163(d)/Form 4952; Pub. 550 and §62(a)(1) support a full above-the-line Schedule E deduction.',
+                            notes: $this->box13InvestmentInterestNotes($item, $rawAmount),
+                            isReviewed: $this->sourceIsReviewed($doc),
+                            reviewStatus: $this->reviewStatus($doc),
+                            reviewAction: $this->reviewAction($doc),
+                        );
+
+                        continue;
+                    }
+
                     $investmentInterestSources[] = new TaxFactSource(
                         id: $sourceId,
                         label: "{$partnerName} — Box 13{$code}",
@@ -139,6 +162,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $totalInvestmentInterestExpense = $this->sumAbsoluteSources($investmentInterestSources);
         $totalInvestmentExpenses = $this->sumAbsoluteSources($investmentExpenseSources);
         $totalExcludedInvestmentExpenses = $this->sumAbsoluteSources($excludedInvestmentExpenseSources);
+        $totalMaterialParticipationScheduleEInterest = $this->sumAbsoluteSources($materialParticipationScheduleEInterestSources);
         $grossInvestmentIncomeFromScheduleB = $scheduleB->form4952Line5aTotal;
         $grossInvestmentIncomeFromK1Sources = $this->k1Form4952GrossInvestmentIncomeSources($k1Docs);
         $grossInvestmentIncomeFromK1 = $this->sumSources($grossInvestmentIncomeFromK1Sources);
@@ -217,6 +241,8 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             totalInvestmentExpenses: $totalInvestmentExpenses,
             excludedInvestmentExpenseSources: $excludedInvestmentExpenseSources,
             totalExcludedInvestmentExpenses: $totalExcludedInvestmentExpenses,
+            materialParticipationScheduleEInterestSources: $materialParticipationScheduleEInterestSources,
+            totalMaterialParticipationScheduleEInterest: $totalMaterialParticipationScheduleEInterest,
             grossInvestmentIncomeFromScheduleB: $grossInvestmentIncomeFromScheduleB,
             grossInvestmentIncomeFromK1: $grossInvestmentIncomeFromK1,
             grossInvestmentIncomeTotal: $grossInvestmentIncomeTotal,

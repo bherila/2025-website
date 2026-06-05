@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { extractK3ForeignTaxTotal } from '@/finance/1116/k3-to-1116'
-import { getK1PartnerName, k3ForeignTaxTotalOverrideKey } from '@/lib/finance/k1Utils'
+import { getK1PartnerName, isK1MaterialParticipationOverrideKey, k3ForeignTaxTotalOverrideKey } from '@/lib/finance/k1Utils'
 import { parseMoney, parseMoneyOrZero } from '@/lib/finance/money'
 import type { FK1StructuredData, K1SourceValueOverride } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
@@ -190,6 +190,10 @@ function buildOverrideRows(k1Docs: TaxDocument[]): OverrideRow[] {
     const extractedName = getK1PartnerName(data, doc.employment_entity?.display_name ?? 'Partnership')
 
     for (const [sourceKey, override] of Object.entries(overrides)) {
+      if (isK1MaterialParticipationOverrideKey(sourceKey)) {
+        continue
+      }
+
       const descriptor = describeOverrideKey(sourceKey, override.label)
       const delta = overrideDelta(override)
       rows.push({

@@ -62,6 +62,8 @@ export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc, on
     || taxFacts.box4Sources.length > 0
     || taxFacts.box11ZZSources.length > 0
     || taxFacts.box13ZZSources.length > 0
+    || taxFacts.form4952InvestmentInterestSources.length > 0
+    || taxFacts.materialParticipationTraderInterestSources.length > 0
     || taxFacts.grandTotal !== 0
 
   if (!hasFacts) {
@@ -150,12 +152,49 @@ export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc, on
             {source.notes && <FormLine label="Note" raw={source.notes} note />}
           </div>
         ))}
+        {taxFacts.form4952InvestmentInterestSources.map((source) => (
+          <FormLine
+            key={source.id}
+            label={(
+              <span className="inline-flex items-center gap-1">
+                {source.label}
+                <InfoTooltip>
+                  Non-materially-participating securities-trading partnership interest remains subject to
+                  Form 4952, but the allowed portion is deducted above the line on Schedule E Part II.
+                </InfoTooltip>
+              </span>
+            )}
+            value={source.amount}
+          />
+        ))}
+        {taxFacts.materialParticipationTraderInterestSources.map((source) => (
+          <div key={source.id}>
+            <FormLine
+              label={(
+                <span className="inline-flex items-center gap-1">
+                  {source.label}
+                  <InfoTooltip>
+                    Material participation treats the securities-trading interest as trade-or-business
+                    interest outside Form 4952; Pub. 550 and §62(a)(1) support the full above-the-line
+                    Schedule E deduction.
+                  </InfoTooltip>
+                </span>
+              )}
+              value={source.amount}
+              isReviewed={source.isReviewed === false ? false : undefined}
+              {...sourceDetailProps(source, onOpenDoc)}
+            />
+            {source.notes && <FormLine label="Note" raw={source.notes} note />}
+          </div>
+        ))}
         {taxFacts.totalNonpassive === 0
           && taxFacts.box1Sources.length === 0
           && taxFacts.box3Sources.length === 0
           && taxFacts.box4Sources.length === 0
           && taxFacts.box11ZZSources.length === 0
-          && taxFacts.box13ZZSources.length === 0 && (
+          && taxFacts.box13ZZSources.length === 0
+          && taxFacts.form4952InvestmentInterestSources.length === 0
+          && taxFacts.materialParticipationTraderInterestSources.length === 0 && (
           <FormLine label="No nonpassive K-1 activity" raw="—" />
         )}
         <FormTotalLine label="Total nonpassive income / (loss) — Part II" value={taxFacts.totalNonpassive} />
@@ -186,7 +225,13 @@ export default function ScheduleEPreview({ taxFacts, selectedYear, onOpenDoc, on
           {taxFacts.totalBox13ZZ !== 0 && (
             <FormLine label="Other deductions (Box 13ZZ)" value={currency(0).subtract(taxFacts.totalBox13ZZ).value} />
           )}
-          {taxFacts.totalNonpassive === 0 && taxFacts.totalBox1 === 0 && taxFacts.totalBox4 === 0 && taxFacts.totalBox11ZZ === 0 && taxFacts.totalBox13ZZ === 0 && (
+          {taxFacts.totalForm4952InvestmentInterest !== 0 && (
+            <FormLine label="Investment interest allowed by Form 4952 on Schedule E" value={currency(0).subtract(taxFacts.totalForm4952InvestmentInterest).value} />
+          )}
+          {taxFacts.totalMaterialParticipationTraderInterest !== 0 && (
+            <FormLine label="Material-participation trader interest" value={currency(0).subtract(taxFacts.totalMaterialParticipationTraderInterest).value} />
+          )}
+          {taxFacts.totalNonpassive === 0 && taxFacts.totalBox1 === 0 && taxFacts.totalBox4 === 0 && taxFacts.totalBox11ZZ === 0 && taxFacts.totalBox13ZZ === 0 && taxFacts.totalForm4952InvestmentInterest === 0 && taxFacts.totalMaterialParticipationTraderInterest === 0 && (
             <FormLine label="No nonpassive K-1 activity" raw="—" />
           )}
           <FormTotalLine label="Total nonpassive income / (loss)" value={taxFacts.totalNonpassive} />

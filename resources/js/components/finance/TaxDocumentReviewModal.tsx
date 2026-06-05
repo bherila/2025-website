@@ -38,7 +38,7 @@ import { fetchWrapper } from '@/fetchWrapper'
 import { F1116ReviewPanel, isF1116Data } from '@/finance/1116'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 import { broker1099TransactionsToLots } from '@/lib/finance/form8949Extraction'
-import { getSbpElection } from '@/lib/finance/k1Utils'
+import { getK1MaterialParticipationOverride, getSbpElection } from '@/lib/finance/k1Utils'
 import { parseMoney } from '@/lib/finance/money'
 import { extractBrokerEntriesFromManualInput } from '@/lib/finance/taxDocumentManualInput'
 import { extractLinkParsedData, hasLegacyFlatBrokerParsedData, patchLinkParsedDataInArray } from '@/lib/finance/taxDocumentUtils'
@@ -742,14 +742,16 @@ export default function TaxDocumentReviewModal({
     enabled: open && effectiveFormType === 'k1' && Boolean(focusFieldId),
   })
 
-  // When a K-1 is already confirmed, every section is rendered read-only EXCEPT the K-3 SBP
-  // election checkbox (it's a user tax-planning preference, not extracted data). Detect when
-  // the checkbox has been toggled relative to the saved value so we can surface a save
-  // affordance — otherwise the user would have to "Reopen for Review" just to persist the
-  // toggle, which is confusing.
+  // When a K-1 is already confirmed, every section is rendered read-only EXCEPT partner-level
+  // elections (tax-planning preferences, not extracted data). Detect when those controls differ
+  // from the saved value so users can persist the choice without reopening the K-1 for review.
   const savedSbpElection = effectiveFormType === 'k1' ? getSbpElection(activeDoc?.parsed_data) : false
   const currentSbpElection = effectiveFormType === 'k1' ? getSbpElection(editData) : false
   const hasUnsavedSbpElectionChange = Boolean(savedSbpElection) !== Boolean(currentSbpElection)
+  const savedMaterialParticipation = effectiveFormType === 'k1' ? getK1MaterialParticipationOverride(activeDoc?.parsed_data) : false
+  const currentMaterialParticipation = effectiveFormType === 'k1' ? getK1MaterialParticipationOverride(editData) : false
+  const hasUnsavedMaterialParticipationChange = Boolean(savedMaterialParticipation) !== Boolean(currentMaterialParticipation)
+  const hasUnsavedK1ElectionChange = hasUnsavedSbpElectionChange || hasUnsavedMaterialParticipationChange
 
   const fetchPending = useCallback(async () => {
     if (!open) return
@@ -1438,11 +1440,15 @@ export default function TaxDocumentReviewModal({
                       onChange={(e) => setNotes(e.target.value)}
                       readOnly={effectiveReviewed}
                     />
-                    {(!effectiveReviewed || hasUnsavedSbpElectionChange) && (
+                    {(!effectiveReviewed || hasUnsavedK1ElectionChange) && (
                       <div className="flex items-center justify-end gap-2">
-                        {effectiveReviewed && hasUnsavedSbpElectionChange && (
+                        {effectiveReviewed && hasUnsavedK1ElectionChange && (
                           <span className="text-[10px] text-amber-600 dark:text-amber-500 italic">
-                            SBP election has unsaved changes
+                            {hasUnsavedSbpElectionChange && hasUnsavedMaterialParticipationChange
+                              ? 'K-1 elections have unsaved changes'
+                              : hasUnsavedSbpElectionChange
+                                ? 'SBP election has unsaved changes'
+                                : 'Material participation has unsaved changes'}
                           </span>
                         )}
                         <Button

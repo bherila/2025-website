@@ -99,6 +99,28 @@ class Form4952FactsBuilderTest extends TestCase
         $this->assertFalse($destinations->has('sch-e'));
     }
 
+    public function test_materially_participating_trader_fund_interest_bypasses_form_4952(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '25', box13HInterest: '200', materialParticipation: true);
+
+        $facts = $this->build([$traderFund]);
+
+        $this->assertSame(0.0, $facts->totalInvestmentInterestExpense);
+        $this->assertSame(0.0, $facts->deductibleInvestmentInterestExpense);
+        $this->assertSame(0.0, $facts->disallowedCarryforward);
+        $this->assertSame(0.0, $facts->deductibleScheduleEAboveLine);
+        $this->assertSame(0.0, $facts->carryforwardScheduleE);
+        $this->assertSame([], $facts->investmentInterestSources);
+        $this->assertSame([], $facts->carryDestinations);
+
+        $this->assertSame(200.0, $facts->totalMaterialParticipationScheduleEInterest);
+        $this->assertCount(1, $facts->materialParticipationScheduleEInterestSources);
+        $source = $facts->materialParticipationScheduleEInterestSources[0];
+        $this->assertSame(-200.0, $source->amount);
+        $this->assertSame(TaxFactRouting::ScheduleELine28->value, $source->routing);
+        $this->assertSame(TaxFactSourceType::K1MaterialParticipationTraderInterest->value, $source->sourceType);
+    }
+
     public function test_exposes_navigable_line_4a_k1_sources_summing_to_the_total(): void
     {
         $investorFund = $this->investorFundK1('Investor Fund', interestIncome: '500', box13HInterest: '0');
@@ -122,7 +144,7 @@ class Form4952FactsBuilderTest extends TestCase
         return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, $marginInterestSources);
     }
 
-    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest): FileForTaxDocument
+    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false): FileForTaxDocument
     {
         return $this->createK1([
             'B' => $name,
@@ -130,7 +152,13 @@ class Form4952FactsBuilderTest extends TestCase
             '5' => $interestIncome,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ]);
+        ], $materialParticipation ? [
+            'k1:material-participation' => [
+                'value' => 'true',
+                'originalValue' => null,
+                'label' => 'Material participation in securities-trading activity',
+            ],
+        ] : []);
     }
 
     private function investorFundK1(string $name, string $interestIncome, string $box13HInterest): FileForTaxDocument
@@ -147,10 +175,21 @@ class Form4952FactsBuilderTest extends TestCase
     /**
      * @param  array<int|string, string>  $fields
      * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @param  array<string, array<string, string|null>>  $sourceValueOverrides
      */
-    private function createK1(array $fields, array $codes): FileForTaxDocument
+    private function createK1(array $fields, array $codes, array $sourceValueOverrides = []): FileForTaxDocument
     {
         $user = $this->createUser();
+        $parsedData = [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
+            'codes' => $codes,
+            'warnings' => [],
+        ];
+        if ($sourceValueOverrides !== []) {
+            $parsedData['sourceValueOverrides'] = $sourceValueOverrides;
+        }
 
         return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
@@ -164,13 +203,7 @@ class Form4952FactsBuilderTest extends TestCase
             'file_size_bytes' => 0,
             'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $user->id,
-            'parsed_data' => [
-                'schemaVersion' => '2026.1',
-                'formType' => 'K-1-1065',
-                'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
-                'codes' => $codes,
-                'warnings' => [],
-            ],
+            'parsed_data' => $parsedData,
         ]);
     }
 }

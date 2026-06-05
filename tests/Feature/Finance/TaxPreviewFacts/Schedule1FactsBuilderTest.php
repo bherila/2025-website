@@ -58,6 +58,24 @@ class Schedule1FactsBuilderTest extends TestCase
         $this->assertSame(1000.0, $facts->line5Total);
     }
 
+    public function test_material_participating_trader_interest_reduces_schedule_1_line_5(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', ordinaryIncome: '1000', interestIncome: '25', box13HInterest: '200', materialParticipation: true);
+
+        $form4952 = $this->buildForm4952([$traderFund]);
+        $this->assertSame(0.0, $form4952->totalInvestmentInterestExpense);
+        $this->assertSame(200.0, $form4952->totalMaterialParticipationScheduleEInterest);
+
+        $facts = $this->buildSchedule1([$traderFund], $form4952);
+
+        $deductionSource = collect($facts->line5Sources)
+            ->firstWhere('sourceType', TaxFactSourceType::K1MaterialParticipationTraderInterest->value);
+        $this->assertNotNull($deductionSource);
+        $this->assertSame(-200.0, $deductionSource->amount);
+        $this->assertSame(TaxFactRouting::Schedule1Line5->value, $deductionSource->routing);
+        $this->assertSame(800.0, $facts->line5Total);
+    }
+
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
@@ -76,7 +94,7 @@ class Schedule1FactsBuilderTest extends TestCase
         return app(Schedule1FactsBuilder::class)->build($k1Docs, [], null, null, null, null, $form4952);
     }
 
-    private function traderFundK1(string $name, string $ordinaryIncome, string $interestIncome, string $box13HInterest): FileForTaxDocument
+    private function traderFundK1(string $name, string $ordinaryIncome, string $interestIncome, string $box13HInterest, bool $materialParticipation = false): FileForTaxDocument
     {
         return $this->createK1([
             'B' => $name,
@@ -85,7 +103,13 @@ class Schedule1FactsBuilderTest extends TestCase
             '5' => $interestIncome,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ]);
+        ], $materialParticipation ? [
+            'k1:material-participation' => [
+                'value' => 'true',
+                'originalValue' => null,
+                'label' => 'Material participation in securities-trading activity',
+            ],
+        ] : []);
     }
 
     private function investorFundK1(string $name, string $ordinaryIncome, string $interestIncome, string $box13HInterest): FileForTaxDocument
@@ -103,10 +127,21 @@ class Schedule1FactsBuilderTest extends TestCase
     /**
      * @param  array<int|string, string>  $fields
      * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @param  array<string, array<string, string|null>>  $sourceValueOverrides
      */
-    private function createK1(array $fields, array $codes): FileForTaxDocument
+    private function createK1(array $fields, array $codes, array $sourceValueOverrides = []): FileForTaxDocument
     {
         $user = $this->createUser();
+        $parsedData = [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
+            'codes' => $codes,
+            'warnings' => [],
+        ];
+        if ($sourceValueOverrides !== []) {
+            $parsedData['sourceValueOverrides'] = $sourceValueOverrides;
+        }
 
         return app(DocumentIngestionService::class)->createTaxFormDetail([
             'user_id' => $user->id,
@@ -120,13 +155,7 @@ class Schedule1FactsBuilderTest extends TestCase
             'file_size_bytes' => 0,
             'file_hash' => hash('sha256', fake()->uuid()),
             'uploaded_by_user_id' => $user->id,
-            'parsed_data' => [
-                'schemaVersion' => '2026.1',
-                'formType' => 'K-1-1065',
-                'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
-                'codes' => $codes,
-                'warnings' => [],
-            ],
+            'parsed_data' => $parsedData,
         ]);
     }
 }

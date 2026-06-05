@@ -340,6 +340,11 @@ abstract class TaxPreviewFactBuilder
         return 'k3:foreign-tax-total';
     }
 
+    protected function k1MaterialParticipationOverrideKey(): string
+    {
+        return 'k1:material-participation';
+    }
+
     protected function k3Part2OverrideKey(string $line, string $category): string
     {
         return "k3:part2:{$line}:{$category}";
@@ -366,6 +371,37 @@ abstract class TaxPreviewFactBuilder
         }
 
         return $this->parseMoney($override['value'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function k1MaterialParticipationOverrideValue(array $data): bool
+    {
+        $overrides = $data['sourceValueOverrides'] ?? null;
+        if (! is_array($overrides)) {
+            return false;
+        }
+
+        $override = $overrides[$this->k1MaterialParticipationOverrideKey()] ?? null;
+        if (! is_array($override)) {
+            return false;
+        }
+
+        $value = $override['value'] ?? null;
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value !== 0.0;
+        }
+
+        if (! is_string($value)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($value)), ['true', '1', 'yes', 'y'], true);
     }
 
     /**

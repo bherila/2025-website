@@ -53,6 +53,11 @@ readonly class ScheduleEFacts
     public array $form4952InvestmentInterestSources;
 
     /**
+     * @var TaxFactSource[]
+     */
+    public array $materialParticipationTraderInterestSources;
+
+    /**
      * @param  TaxFactSource[]  $miscIncomeSources
      * @param  TaxFactSource[]  $box1Sources
      * @param  TaxFactSource[]  $box2Sources
@@ -62,6 +67,7 @@ readonly class ScheduleEFacts
      * @param  TaxFactSource[]  $box13ZZSources
      * @param  TaxFactSource[]  $traderNiiSources
      * @param  TaxFactSource[]  $form4952InvestmentInterestSources
+     * @param  TaxFactSource[]  $materialParticipationTraderInterestSources
      */
     public function __construct(
         array $miscIncomeSources,
@@ -83,6 +89,8 @@ readonly class ScheduleEFacts
         public float $totalTraderNii,
         array $form4952InvestmentInterestSources,
         public float $totalForm4952InvestmentInterest,
+        array $materialParticipationTraderInterestSources,
+        public float $totalMaterialParticipationTraderInterest,
         public float $totalPassive,
         public float $totalNonpassive,
         public float $totalNonpassiveIncome,
@@ -98,6 +106,7 @@ readonly class ScheduleEFacts
         $this->box13ZZSources = $box13ZZSources;
         $this->traderNiiSources = $traderNiiSources;
         $this->form4952InvestmentInterestSources = $form4952InvestmentInterestSources;
+        $this->materialParticipationTraderInterestSources = $materialParticipationTraderInterestSources;
     }
 
     /**
@@ -125,6 +134,8 @@ readonly class ScheduleEFacts
             'totalTraderNii' => $this->totalTraderNii,
             'form4952InvestmentInterestSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->form4952InvestmentInterestSources),
             'totalForm4952InvestmentInterest' => $this->totalForm4952InvestmentInterest,
+            'materialParticipationTraderInterestSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->materialParticipationTraderInterestSources),
+            'totalMaterialParticipationTraderInterest' => $this->totalMaterialParticipationTraderInterest,
             'totalPassive' => $this->totalPassive,
             'totalNonpassive' => $this->totalNonpassive,
             'totalNonpassiveIncome' => $this->totalNonpassiveIncome,

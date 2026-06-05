@@ -83,6 +83,44 @@ class ScheduleEFactsBuilderTest extends TestCase
         $this->assertSame(123.0, $facts['scheduleE']['totalNonpassive']);
     }
 
+    public function test_materially_participating_trader_interest_is_fully_deducted_on_schedule_e(): void
+    {
+        $user = $this->createUser();
+
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'Trader Fund',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                    '1' => '1000',
+                    '5' => '25',
+                ],
+                codes: [
+                    '13' => [['code' => 'H', 'value' => '200']],
+                ],
+                sourceValueOverrides: [
+                    'k1:material-participation' => [
+                        'value' => 'true',
+                        'originalValue' => null,
+                        'label' => 'Material participation in securities-trading activity',
+                    ],
+                ],
+            ),
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleE');
+
+        $this->assertSame(200.0, $facts['scheduleE']['totalMaterialParticipationTraderInterest']);
+        $this->assertSame(-200.0, $facts['scheduleE']['materialParticipationTraderInterestSources'][0]['amount']);
+        $this->assertSame('schedule_e_line_28', $facts['scheduleE']['materialParticipationTraderInterestSources'][0]['routing']);
+        $this->assertSame(1000.0, $facts['scheduleE']['totalNonpassiveIncome']);
+        $this->assertSame(-200.0, $facts['scheduleE']['totalNonpassiveLoss']);
+        $this->assertSame(800.0, $facts['scheduleE']['totalNonpassive']);
+        $this->assertSame(800.0, $facts['scheduleE']['grandTotal']);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -105,16 +143,22 @@ class ScheduleEFactsBuilderTest extends TestCase
     /**
      * @param  array<int|string, string>  $fields
      * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @param  array<string, array<string, string|null>>  $sourceValueOverrides
      * @return array<string, mixed>
      */
-    private function k1Data(array $fields = [], array $codes = []): array
+    private function k1Data(array $fields = [], array $codes = [], array $sourceValueOverrides = []): array
     {
-        return [
+        $data = [
             'schemaVersion' => '2026.1',
             'formType' => 'K-1-1065',
             'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
             'codes' => $codes,
             'warnings' => [],
         ];
+        if ($sourceValueOverrides !== []) {
+            $data['sourceValueOverrides'] = $sourceValueOverrides;
+        }
+
+        return $data;
     }
 }

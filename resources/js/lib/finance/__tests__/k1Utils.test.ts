@@ -5,6 +5,7 @@ import {
   extractK1Form461Disclosure,
   getK1ActivityClassification,
   getK1CompletenessChecklist,
+  getK1MaterialParticipationOverride,
   getK1sWithAMTItems,
   getK1sWithPassiveLosses,
   getK1sWithSEItems,
@@ -15,6 +16,7 @@ import {
   parseK1Field,
   resolve11SCharacter,
   sumAbsK1CodeItems,
+  withK1MaterialParticipationOverride,
 } from '../k1Utils'
 
 declare const require: (path: string) => unknown
@@ -199,6 +201,31 @@ describe('trader fund helpers', () => {
 
     expect(isTraderFundK1(explicitFalse)).toBe(false)
     expect(isTraderFundK1(explicitTrue)).toBe(true)
+  })
+
+  it('defaults material participation to false and stores true in the source override map', () => {
+    const data = makeData({
+      fields: {
+        partnershipPosition_traderInSecurities: { value: 'true' },
+      },
+    })
+
+    expect(getK1MaterialParticipationOverride(data)).toBe(false)
+
+    const updated = withK1MaterialParticipationOverride(data, true)
+
+    expect(getK1MaterialParticipationOverride(updated)).toBe(true)
+    expect(updated.sourceValueOverrides?.['k1:material-participation']).toMatchObject({
+      value: 'true',
+      originalValue: null,
+      label: 'Material participation in securities-trading activity',
+    })
+  })
+
+  it('clears material participation back to the default non-material regime', () => {
+    const data = withK1MaterialParticipationOverride(makeData(), true)
+
+    expect(withK1MaterialParticipationOverride(data, false).sourceValueOverrides).toBeUndefined()
   })
 
   it('extracts Box 20AJ Form 461 support disclosure', () => {

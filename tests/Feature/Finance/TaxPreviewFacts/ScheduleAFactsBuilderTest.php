@@ -143,6 +143,8 @@ class ScheduleAFactsBuilderTest extends TestCase
             totalInvestmentExpenses: 0.0,
             excludedInvestmentExpenseSources: [],
             totalExcludedInvestmentExpenses: 0.0,
+            materialParticipationScheduleEInterestSources: [],
+            totalMaterialParticipationScheduleEInterest: 0.0,
             grossInvestmentIncomeFromScheduleB: 0.0,
             grossInvestmentIncomeFromK1: 0.0,
             grossInvestmentIncomeTotal: 0.0,
