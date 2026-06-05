@@ -4,7 +4,7 @@ namespace Tests\Unit\Finance;
 
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Builders\EquityCompensationFactsBuilder;
-use App\Services\Planning\OpportunityCost\JobSpec;
+use App\Services\Planning\CareerComp\JobSpec;
 use PHPUnit\Framework\TestCase;
 
 class EquityCompensationFactsBuilderTest extends TestCase

@@ -53,7 +53,7 @@ export default defineConfig({
         'resources/js/financial-planning/retirement-contribution-calculator.tsx',
         'resources/js/financial-planning/rent-vs-buy.tsx',
         'resources/js/financial-planning/roth-conversion.tsx',
-        'resources/js/financial-planning/opportunity-cost.tsx',
+        'resources/js/financial-planning/career-comparison.tsx',
         'resources/js/markdown-renderer/index.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/class-action-tracker.tsx',

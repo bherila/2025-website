@@ -27,6 +27,7 @@ use App\Http\Controllers\Finance\UserDeductionController;
 use App\Http\Controllers\Finance\UserTaxStateController;
 use App\Http\Controllers\FinanceTool\AccountSuggestController;
 use App\Http\Controllers\FinanceTool\CapitalGainsReconciliationController;
+use App\Http\Controllers\FinanceTool\CareerCompXlsxExportController;
 use App\Http\Controllers\FinanceTool\EmploymentEntityYearController;
 use App\Http\Controllers\FinanceTool\FinanceApiController;
 use App\Http\Controllers\FinanceTool\FinanceDocumentController;
@@ -46,7 +47,6 @@ use App\Http\Controllers\FinanceTool\Form8829InputController;
 use App\Http\Controllers\FinanceTool\Form8949LotExportController;
 use App\Http\Controllers\FinanceTool\LotReconciliationLinkController;
 use App\Http\Controllers\FinanceTool\LotWorkspaceController;
-use App\Http\Controllers\FinanceTool\OpportunityCostXlsxExportController;
 use App\Http\Controllers\FinanceTool\ReconciliationSummaryController;
 use App\Http\Controllers\FinanceTool\ScheduleDCarryoverInputController;
 use App\Http\Controllers\FinanceTool\StatementController;
@@ -59,7 +59,7 @@ use App\Http\Controllers\FinanceTool\TaxDocumentLotsRebuildController;
 use App\Http\Controllers\FinanceTool\TaxLineAdjustmentController;
 use App\Http\Controllers\FinanceTool\TaxPreviewExportController;
 use App\Http\Controllers\FinanceTool\TaxYearLotsMatchController;
-use App\Http\Controllers\FinancialPlanning\OpportunityCostController;
+use App\Http\Controllers\FinancialPlanning\CareerCompController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LicenseKeyController;
 use App\Http\Controllers\LoginAuditController;
@@ -93,13 +93,13 @@ Route::post('/webhooks/stripe', StripeWebhookController::class);
 Route::post('/webhooks/brevo/inbound', [BrevoInboundController::class, 'handle']);
 
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conversion/compute', [RothConversionController::class, 'compute']);
-Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/compute', [OpportunityCostController::class, 'compute']);
+Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/compute', [CareerCompController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
-Route::middleware(['web', 'auth'])->get('/financial-planning/opportunity-cost/saved-jobs', [OpportunityCostController::class, 'savedJobs']);
-Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/save', [OpportunityCostController::class, 'store']);
-Route::middleware(['web', 'auth'])->patch('/financial-planning/opportunity-cost/s/{code}', [OpportunityCostController::class, 'update']);
-Route::middleware(['web', 'auth'])->post('/financial-planning/opportunity-cost/s/{code}/claim', [OpportunityCostController::class, 'claim']);
+Route::middleware(['web', 'auth'])->get('/financial-planning/career-comparison/saved-jobs', [CareerCompController::class, 'savedJobs']);
+Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/save', [CareerCompController::class, 'store']);
+Route::middleware(['web', 'auth'])->patch('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'update']);
+Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/s/{code}/claim', [CareerCompController::class, 'claim']);
 
 Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
@@ -563,7 +563,7 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
 Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
-Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/opportunity-cost/export-xlsx', [OpportunityCostXlsxExportController::class, 'export']);
+Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/export-xlsx', [CareerCompXlsxExportController::class, 'export']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
