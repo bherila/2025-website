@@ -25,8 +25,6 @@ class DocumentIngestionService
 
     private const string TOTAL_FEES_LABEL = 'Total Fees';
 
-    private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
-
     public function __construct(
         private readonly TransactionImportService $transactionImportService,
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
@@ -472,7 +470,7 @@ class DocumentIngestionService
             return null;
         }
 
-        $isCredit = $value < 0 || preg_match('/\b(credit|rebate|reversal)\b/', $normalizedLineItem) === 1;
+        $isCredit = preg_match('/\b(credit|rebate|reversal)\b/', $normalizedLineItem) === 1;
 
         return [
             'line_item' => $lineItem !== '' ? substr($lineItem, 0, 255) : $feeKind['label'],
@@ -527,11 +525,18 @@ class DocumentIngestionService
         }
 
         $normalized = str_replace([',', '$'], '', trim($value));
+        $isParenthesized = preg_match('/^\((.+)\)$/', $normalized, $matches) === 1;
+        if ($isParenthesized) {
+            $normalized = trim($matches[1]);
+        }
+
         if (! is_numeric($normalized)) {
             return null;
         }
 
-        return (float) $normalized;
+        $numericValue = (float) $normalized;
+
+        return $isParenthesized ? -$numericValue : $numericValue;
     }
 
     private function feeTagForCharacteristic(int $userId, string $taxCharacteristic): FinAccountTag
@@ -604,10 +609,10 @@ class DocumentIngestionService
             ->whereRaw('ABS(COALESCE(t_amt, 0) - ?) < 0.0001', [$feeDetail['amount']])
             ->where(function ($query) use ($feeDetail): void {
                 $query->whereRaw(
-                    "LOWER(COALESCE(t_type, '')) IN (?, ?, ?)",
-                    self::FEE_TRANSACTION_TYPES,
-                )->orWhereRaw(
                     "LOWER(COALESCE(t_description, '')) LIKE ?",
+                    ['%'.$feeDetail['match'].'%'],
+                )->orWhereRaw(
+                    "LOWER(COALESCE(t_type, '')) LIKE ?",
                     ['%'.$feeDetail['match'].'%'],
                 );
             })

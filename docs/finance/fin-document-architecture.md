@@ -103,9 +103,9 @@
    Fees` is a subtotal and is not imported as a transaction. Re-running
    synthesis for a statement deletes existing `stmt_fee_synth` rows for that
    `statement_id` before inserting the current fee details. When the parsed
-   transaction payload already has a matching fee row in the statement period,
-   ingestion tags that existing row instead of adding a duplicate synthetic
-   transaction.
+   transaction payload already has a same-signed fee row in the statement
+   period whose description or type identifies the same fee detail, ingestion
+   tags that existing row instead of adding a duplicate synthetic transaction.
 
 ## API Endpoints
 
