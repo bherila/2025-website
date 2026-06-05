@@ -18,7 +18,8 @@ class OpportunityCostController extends Controller
         return view('financial-planning.opportunity-cost', [
             'initialData' => [
                 'inputs' => OpportunityCostInputs::defaults(),
-                'share' => null,
+                'projection' => null,
+                'authenticated' => auth()->check(),
             ],
         ]);
     }
@@ -28,6 +29,8 @@ class OpportunityCostController extends Controller
         return view('financial-planning.opportunity-cost', [
             'initialData' => [
                 'inputs' => OpportunityCostInputs::defaults(),
+                'projection' => null,
+                'authenticated' => auth()->check(),
                 'share' => [
                     'code' => $code,
                     'isStub' => true,
