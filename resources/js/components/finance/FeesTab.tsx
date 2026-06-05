@@ -35,7 +35,7 @@ import {
   YEAR_CHANGED_EVENT,
   type YearSelection,
 } from '@/lib/financeRouteBuilder'
-import { formatCurrency, formatFriendlyAmount } from '@/lib/formatCurrency'
+import { formatCurrency } from '@/lib/formatCurrency'
 import { cn } from '@/lib/utils'
 
 const expectedFeePayloadSchema = z.object({
@@ -75,6 +75,13 @@ interface FeesTabProps {
 
 interface FeeDragLineChartProps {
   series: MonthlyFeeDragPoint[]
+}
+
+interface FeeDragChartPoint extends MonthlyFeeDragPoint {
+  grossReturnPctActual: number | null
+  netReturnPctActual: number | null
+  grossReturnPctProjected: number | null
+  netReturnPctProjected: number | null
 }
 
 function parseNullableNumber(value: unknown): number | null {
@@ -124,13 +131,37 @@ function numericInputValue(value: number | null): string {
   return value === null ? '' : String(value)
 }
 
+function formatReturnPct(value: number): string {
+  if (!Number.isFinite(value)) return '-'
+
+  return `${value.toFixed(2)}%`
+}
+
+function feeDragChartData(series: MonthlyFeeDragPoint[]): FeeDragChartPoint[] {
+  const firstProjectedIndex = series.findIndex((point) => point.is_projected)
+
+  return series.map((point, index) => {
+    const anchorsProjection = firstProjectedIndex > 0 && index === firstProjectedIndex - 1
+
+    return {
+      ...point,
+      grossReturnPctActual: point.is_projected ? null : point.gross_return_pct,
+      netReturnPctActual: point.is_projected ? null : point.net_return_pct,
+      grossReturnPctProjected: point.is_projected || anchorsProjection ? point.gross_return_pct : null,
+      netReturnPctProjected: point.is_projected || anchorsProjection ? point.net_return_pct : null,
+    }
+  })
+}
+
 export function FeeDragLineChart({ series }: FeeDragLineChartProps) {
+  const chartData = useMemo(() => feeDragChartData(series), [series])
+
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <LineChart data={series} margin={{ top: 12, right: 20, left: 8, bottom: 4 }}>
+      <LineChart data={chartData} margin={{ top: 12, right: 20, left: 8, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#737373" opacity={0.3} />
         <XAxis dataKey="month" tickFormatter={formatMonth} />
-        <YAxis tickFormatter={(value) => formatFriendlyAmount(Number(value))} />
+        <YAxis tickFormatter={(value) => formatReturnPct(Number(value))} />
         <Tooltip
           contentStyle={{
             backgroundColor: '#1f2937',
@@ -138,11 +169,13 @@ export function FeeDragLineChart({ series }: FeeDragLineChartProps) {
             borderRadius: '6px',
             color: '#ffffff',
           }}
-          formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
+          formatter={(value, name) => [formatReturnPct(Number(value)), String(name)]}
           labelFormatter={(label) => String(label)}
         />
-        <Line type="monotone" dataKey="gross_return" name="Gross return" stroke="#0f766e" strokeWidth={2} dot={false} />
-        <Line type="monotone" dataKey="net_return" name="Net of fees" stroke="#2563eb" strokeWidth={2} dot={false} />
+        <Line type="monotone" dataKey="grossReturnPctActual" name="Gross return" stroke="#0f766e" strokeWidth={2} dot={false} connectNulls={false} />
+        <Line type="monotone" dataKey="netReturnPctActual" name="Net of fees" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls={false} />
+        <Line type="monotone" dataKey="grossReturnPctProjected" name="Gross return projection" stroke="#0f766e" strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="4 4" />
+        <Line type="monotone" dataKey="netReturnPctProjected" name="Net of fees projection" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="4 4" />
       </LineChart>
     </ResponsiveContainer>
   )

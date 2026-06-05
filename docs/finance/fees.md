@@ -41,7 +41,16 @@ Fee tags choose the bucket:
 
 ## Monthly Fee Drag
 
-Monthly fee drag uses the same signed helper as actual fees. A month with net fee credits can therefore have negative `fees`, and `gross_return` remains `net_return + fees`.
+Monthly fee drag uses the same signed helper as actual fees. A month with net fee credits can therefore have negative `fees`.
+
+The chart payload reports annualized return percentages, not return dollars:
+
+- `net_return_pct = ((ending balance - starting balance + withdrawals - deposits) / starting balance) * 12 * 100`
+- `gross_return_pct = ((net return + signed fees) / starting balance) * 12 * 100`
+
+Annualization is intentionally simple multiplication by 12, not compounding. The `fees` payload field stays in signed dollars for tooltip/context display.
+
+If there is no usable starting balance or no statement closing in the month, both percentage fields are `null`; the chart treats that as a gap rather than a 0% flatline. Months after the latest available statement close are flagged with `is_projected: true`, and the UI draws those projected segments with dotted lines. The all-accounts series computes a blended percentage using the sum of account starting balances as the denominator instead of averaging account-level percentages.
 
 ## K-1 Reconciliation
 

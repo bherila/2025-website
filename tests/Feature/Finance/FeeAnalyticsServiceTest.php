@@ -140,7 +140,7 @@ class FeeAnalyticsServiceTest extends TestCase
         $this->assertSame(0.0, $service->actualFeesForAccount((int) $account->acct_id, 2025)['total']);
     }
 
-    public function test_monthly_fee_drag_series_gross_return_equals_net_return_plus_fees(): void
+    public function test_monthly_fee_drag_series_returns_annualized_return_percentages(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -155,13 +155,17 @@ class FeeAnalyticsServiceTest extends TestCase
         $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
 
         $this->assertCount(12, $series);
+        $this->assertSame('2025-01', $series[0]['month']);
         $this->assertSame(6.0, $series[0]['fees']);
-        foreach ($series as $row) {
-            $this->assertEqualsWithDelta($row['gross_return'], MoneyMath::add($row['net_return'], $row['fees']), 0.001);
-        }
+        $this->assertSame(0.0, $series[0]['net_return_pct']);
+        $this->assertEqualsWithDelta(7.2, $series[0]['gross_return_pct'], 0.0001);
+        $this->assertGreaterThanOrEqual($series[0]['net_return_pct'], $series[0]['gross_return_pct']);
+        $this->assertFalse($series[0]['is_projected']);
+        $this->assertEqualsWithDelta(27.2727, $series[1]['net_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(27.2727, $series[1]['gross_return_pct'], 0.0001);
     }
 
-    public function test_monthly_fee_drag_series_for_accounts_returns_batched_aggregate_series(): void
+    public function test_monthly_fee_drag_series_for_accounts_returns_blended_annualized_percentages(): void
     {
         $user = User::factory()->create();
         $this->actingAs($user);
@@ -183,9 +187,39 @@ class FeeAnalyticsServiceTest extends TestCase
 
         $this->assertCount(12, $series);
         $this->assertSame('2025-01', $series[0]['month']);
-        $this->assertSame(150.0, $series[0]['net_return']);
         $this->assertSame(15.0, $series[0]['fees']);
-        $this->assertSame(165.0, $series[0]['gross_return']);
+        $this->assertEqualsWithDelta(60.0, $series[0]['net_return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(66.0, $series[0]['gross_return_pct'], 0.0001);
+        $this->assertFalse($series[0]['is_projected']);
+    }
+
+    public function test_monthly_fee_drag_returns_null_pct_when_no_starting_balance(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user, ['acct_last_balance' => '0']);
+        $this->createLineItem($account, ['t_date' => '2025-01-15', 't_type' => 'Fee', 't_amt' => -10]);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
+
+        $this->assertSame(10.0, $series[0]['fees']);
+        $this->assertNull($series[0]['net_return_pct']);
+        $this->assertNull($series[0]['gross_return_pct']);
+    }
+
+    public function test_monthly_fee_drag_flags_future_months_as_projected(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->createAccount($user);
+        $this->createStatement($account, '2025-01-31', 1000);
+
+        $series = app(FeeAnalyticsService::class)->monthlyFeeDragSeries((int) $account->acct_id, 2025);
+
+        $this->assertFalse($series[0]['is_projected']);
+        $this->assertTrue($series[1]['is_projected']);
+        $this->assertNull($series[1]['net_return_pct']);
+        $this->assertNull($series[1]['gross_return_pct']);
     }
 
     public function test_reconcile_k1_fees_flags_unclassified_when_13zz_has_no_fee_subtotal(): void

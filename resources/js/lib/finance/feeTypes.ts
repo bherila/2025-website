@@ -15,10 +15,11 @@ export interface FeeBreakdown {
 
 export interface MonthlyFeeDragPoint {
   month: string
-  gross_return: number
-  net_return: number
+  gross_return_pct: number | null
+  net_return_pct: number | null
   /** Net signed fees for the month. May be negative when credits exceed charges. */
   fees: number
+  is_projected: boolean
 }
 
 export interface FeeLineItem extends AccountLineItem {
