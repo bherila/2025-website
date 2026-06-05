@@ -37,6 +37,7 @@
         ['type' => 'link', 'label' => 'Retirement Contribution Calculator', 'href' => '/financial-planning/retirement-contribution-calculator'],
         ['type' => 'link', 'label' => 'Rent vs Buy', 'href' => '/financial-planning/rent-vs-buy'],
         ['type' => 'link', 'label' => 'Roth Conversion Planner', 'href' => '/financial-planning/roth-conversion'],
+        ['type' => 'link', 'label' => 'Opportunity Cost Planner', 'href' => '/financial-planning/opportunity-cost'],
       ]));
 
       // Build Tools submenu (authenticated sub-items filtered server-side)
