@@ -51,13 +51,13 @@ class OpportunityCostXlsxExportController extends Controller
             foreach ($sheetData['rows'] as $rowIndex => $rowData) {
                 $excelRow = $rowIndex + 2;
 
-                if (array_key_exists('line', $rowData) && $rowData['line'] !== null) {
-                    $sheet->setCellValueExplicit("A{$excelRow}", (string) $rowData['line'], DataType::TYPE_STRING);
+                if (array_key_exists('line', $rowData)) {
+                    $sheet->setCellValueExplicit("A{$excelRow}", $rowData['line'], DataType::TYPE_STRING);
                 }
                 $sheet->setCellValueExplicit("B{$excelRow}", $rowData['description'], DataType::TYPE_STRING);
 
-                if (array_key_exists('amount', $rowData) && $rowData['amount'] !== null) {
-                    $sheet->setCellValue("C{$excelRow}", (float) $rowData['amount']);
+                if (array_key_exists('amount', $rowData)) {
+                    $sheet->setCellValue("C{$excelRow}", $rowData['amount']);
                 }
 
                 if (! empty($rowData['note'])) {
