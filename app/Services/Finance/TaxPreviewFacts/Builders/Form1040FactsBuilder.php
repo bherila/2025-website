@@ -104,12 +104,21 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
             $schedule1->line7Total,
             $schedule1->line9TotalOtherIncome,
         ]);
-        $line9 = $this->sumMoney([$line1z, $line2b, $line3b, $line4b, $line5b, $line6b, $line7, $line8]);
+        $line9 = $this->sumMoney([
+            $this->asIrsLine($line1z),
+            $this->asIrsLine($line2b),
+            $this->asIrsLine($line3b),
+            $this->asIrsLine($line4b),
+            $this->asIrsLine($line5b),
+            $this->asIrsLine($line6b),
+            $this->asIrsLine($line7),
+            $this->asIrsLine($line8),
+        ]);
         $line10 = $schedule1->line15Total;
-        $line11 = $this->subtractMoney($line9, $line10);
+        $line11 = $this->subtractMoney($this->asIrsLine($line9), $this->asIrsLine($line10));
         $line13 = $form8995->deduction;
-        $line14 = $this->sumMoney([$line12['amount'], $line13]);
-        $line15 = max(0.0, $this->subtractMoney($line11, $line14));
+        $line14 = $this->sumMoney([$this->asIrsLine($line12['amount']), $this->asIrsLine($line13)]);
+        $line15 = max(0.0, $this->subtractMoney($this->asIrsLine($line11), $this->asIrsLine($line14)));
         $preferentialCapitalGain = $this->preferentialCapitalGain($scheduleD);
         $line16 = FederalIncomeTax::regularTax($line15, $year, $isMarried, $line3a, $preferentialCapitalGain);
         $line16Computation = $line3a > 0.0 || $preferentialCapitalGain > 0.0 ? 'qualified_dividends_capital_gain' : 'ordinary_brackets';
@@ -130,7 +139,7 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
             $this->source('form1040-line17-form6251', 'Form 6251 alternative minimum tax', $form6251->amt, TaxFactSourceType::Form1040Schedule2, TaxFactRouting::Form1040Line17, 'Form 6251 AMT flows through Schedule 2 Part I to Form 1040 line 17.'),
         ] : [];
         $line17 = $form6251->amt;
-        $line18 = $this->sumMoney([$line16, $line17]);
+        $line18 = $this->sumMoney([$this->asIrsLine($line16), $this->asIrsLine($line17)]);
         $line19 = 0.0;
         $line20Sources = [
             ...$schedule3->line1Sources,
@@ -142,18 +151,18 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
             ...$schedule3->line6Sources,
         ];
         $line20 = $schedule3->line8TotalNonrefundableCredits;
-        $line21 = $this->sumMoney([$line19, $line20]);
-        $line22 = max(0.0, $this->subtractMoney($line18, $line21));
+        $line21 = $this->sumMoney([$this->asIrsLine($line19), $this->asIrsLine($line20)]);
+        $line22 = max(0.0, $this->subtractMoney($this->asIrsLine($line18), $this->asIrsLine($line21)));
         $line23Sources = $this->line23Sources($scheduleSE, $form8959, $form8960, $isMarried);
         $line23 = $this->sumSources($line23Sources);
-        $line24 = $this->sumMoney([$line22, $line23]);
+        $line24 = $this->sumMoney([$this->asIrsLine($line22), $this->asIrsLine($line23)]);
         $line25aSources = $this->w2Sources($w2Docs, 'box2_fed_tax', '2', TaxFactSourceType::W2FederalWithholding, TaxFactRouting::Form1040Line25a, 'W-2 Box 2 federal income tax withheld flows to Form 1040 line 25a.');
         $line25bSources = $this->federal1099WithholdingSources($docs1099);
         $line25cSources = $this->line25cSources($form8959);
         $line25a = $this->sumSources($line25aSources);
         $line25b = $this->sumSources($line25bSources);
         $line25c = $this->sumSources($line25cSources);
-        $line25d = $this->sumMoney([$line25a, $line25b, $line25c]);
+        $line25d = $this->sumMoney([$this->asIrsLine($line25a), $this->asIrsLine($line25b), $this->asIrsLine($line25c)]);
         $line26Sources = [];
         $line26 = 0.0;
         $line31Sources = [
@@ -165,11 +174,11 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
         ];
         $line31 = $schedule3->line15TotalPaymentsRefundableCredits;
         $line32 = $line31;
-        $line33 = $this->sumMoney([$line25d, $line26, $line32]);
-        $line34 = max(0.0, $this->subtractMoney($line33, $line24));
+        $line33 = $this->sumMoney([$this->asIrsLine($line25d), $this->asIrsLine($line26), $this->asIrsLine($line32)]);
+        $line34 = max(0.0, $this->subtractMoney($this->asIrsLine($line33), $this->asIrsLine($line24)));
         $line35a = $line34;
         $line36 = 0.0;
-        $line37 = max(0.0, $this->subtractMoney($line24, $line33));
+        $line37 = max(0.0, $this->subtractMoney($this->asIrsLine($line24), $this->asIrsLine($line33)));
         $line38 = 0.0;
 
         return new Form1040Facts(
@@ -249,6 +258,14 @@ class Form1040FactsBuilder extends TaxPreviewFactBuilder
     public function regularTax(ScheduleBFacts $scheduleB, ScheduleDFacts $scheduleD, float $taxableIncome, int $year, bool $isMarried): float
     {
         return FederalIncomeTax::regularTax($taxableIncome, $year, $isMarried, $scheduleB->qualifiedDividendTotal, $this->preferentialCapitalGain($scheduleD));
+    }
+
+    /**
+     * Round a cents-precision amount to the whole-dollar value reported on an IRS line.
+     */
+    private function asIrsLine(float|int $value): float
+    {
+        return (float) round($value);
     }
 
     /**
