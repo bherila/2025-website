@@ -52,6 +52,38 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.id', 'hyp-1');
     }
 
+    public function test_compute_endpoint_preserves_raise_and_refresher_inputs(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 3,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Public offer',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 100],
+                    'comp' => ['baseSalary' => 100000, 'cashBonus' => 0, 'annualRaisePct' => 10],
+                    'refresher' => [
+                        'pctOfBase' => 100,
+                        'cadenceYears' => 10,
+                        'firstYearOffset' => 1,
+                        'vestingYears' => 1,
+                        'cliffMonths' => 0,
+                        'vestingFrequency' => 'annual',
+                    ],
+                    'rsuGrants' => [],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 100, 'highPct' => 200],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.annual.1.salary', 110000);
+        $response->assertJsonPath('jobs.0.lifetime.totalEquityValue.medium', 220000);
+    }
+
     public function test_public_company_validates_without_private_only_fields(): void
     {
         $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
