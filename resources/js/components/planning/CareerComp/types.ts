@@ -221,6 +221,24 @@ export interface CareerComparisonMeta {
   shareUrl: string
   ownerUserId: number | null
   shareIncludesCurrent: boolean
+  isSnapshot?: boolean
+  title?: string | null
+}
+
+export interface CareerCompWorkflowSummary {
+  id: number
+  title: string | null
+  shortCode: string
+  lastActiveAt: string | null
+  updatedAt: string | null
+}
+
+export interface CareerCompWorkflow extends CareerComparisonMeta {
+  title: string | null
+  inputs: CareerCompInputs
+  projection: CareerCompProjection | null
+  lastActiveAt: string | null
+  updatedAt: string | null
 }
 
 export interface SavedCareerJob {

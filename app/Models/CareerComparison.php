@@ -7,10 +7,14 @@ use Database\Factories\CareerComparisonFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property int|null $user_id
+ * @property string|null $title
+ * @property bool $is_snapshot
+ * @property Carbon|null $last_active_at
  * @property int|null $current_job_id
  * @property list<int> $hypothetical_job_ids
  * @property string $short_code
@@ -26,6 +30,9 @@ class CareerComparison extends Model
 
     protected $fillable = [
         'user_id',
+        'title',
+        'is_snapshot',
+        'last_active_at',
         'current_job_id',
         'hypothetical_job_ids',
         'short_code',
@@ -39,6 +46,8 @@ class CareerComparison extends Model
             'hypothetical_job_ids' => 'array',
             'computed_json' => 'array',
             'share_includes_current' => 'boolean',
+            'is_snapshot' => 'boolean',
+            'last_active_at' => 'datetime',
         ];
     }
 
