@@ -500,9 +500,10 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
   )
 }
 
-function JobEditor({ job, onChange, onRemove, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
+function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
   const nameId = useId()
   const isPrivate = job.company.type === 'private'
+  const removeText = removeLabel ?? `Remove ${job.name}`
 
   return (
     <Card>
@@ -511,7 +512,7 @@ function JobEditor({ job, onChange, onRemove, onOpenGrantEditor }: { job: JobSpe
           <CardTitle className="text-base">{job.name}</CardTitle>
           <CardDescription>{isPrivate ? 'Private company inputs include 409A, dilution, and liquidity date.' : 'Public company inputs use current share price.'}</CardDescription>
         </div>
-        {onRemove ? <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${job.name}`} onClick={onRemove}><Trash2 className="size-4" /></Button> : null}
+        {onRemove ? <Button type="button" variant="ghost" size="sm" aria-label={removeText} title={removeText} onClick={onRemove}><Trash2 className="size-4" /></Button> : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -569,6 +570,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
             job={inputs.currentJob}
             onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
             onRemove={() => onChange({ ...inputs, currentJob: null })}
+            removeLabel="Remove current job — compare against no job"
             onOpenGrantEditor={onOpenGrantEditor}
           />
         ) : (
