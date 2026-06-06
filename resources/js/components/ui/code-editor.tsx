@@ -1,6 +1,6 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { oneDark } from '@codemirror/theme-one-dark'
-import CodeMirror, { type Extension } from '@uiw/react-codemirror'
+import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror'
 
 interface CodeEditorProps {
   value: string
@@ -10,6 +10,8 @@ interface CodeEditorProps {
   placeholder?: string
   className?: string
   readOnly?: boolean
+  ariaLabel?: string
+  ariaLabelledBy?: string
 }
 
 const LANGUAGE_EXTENSIONS: Record<string, Extension[]> = {
@@ -26,8 +28,21 @@ export function CodeEditor({
   placeholder,
   className,
   readOnly = false,
+  ariaLabel,
+  ariaLabelledBy,
 }: CodeEditorProps): React.JSX.Element {
-  const extensions: Extension[] = LANGUAGE_EXTENSIONS[language] ?? []
+  const accessibilityExtensions: Extension[] = ariaLabel !== undefined || ariaLabelledBy !== undefined
+    ? [
+        EditorView.contentAttributes.of({
+          ...(ariaLabel !== undefined ? { 'aria-label': ariaLabel } : {}),
+          ...(ariaLabelledBy !== undefined ? { 'aria-labelledby': ariaLabelledBy } : {}),
+        }),
+      ]
+    : []
+  const extensions: Extension[] = [
+    ...(LANGUAGE_EXTENSIONS[language] ?? []),
+    ...accessibilityExtensions,
+  ]
 
   return (
     <CodeMirror

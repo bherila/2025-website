@@ -230,7 +230,7 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
             id="markdown-tab-panel"
             aria-labelledby="markdown-tab"
           >
-            <label className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
+            <label id="markdown-editor-label" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
             <CodeEditor
               value={markdown}
               onChange={setMarkdown}
@@ -238,6 +238,7 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
               height="70vh"
               placeholder={'# Hello\n\nPaste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams.'}
               className="w-full rounded-md border border-border overflow-hidden"
+              ariaLabelledBy="markdown-editor-label"
             />
           </div>
         )}

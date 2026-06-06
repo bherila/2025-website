@@ -5,10 +5,23 @@ import { MarkdownRendererPage } from '../MarkdownRendererPage'
 import type { MarkdownInitialData } from '../types'
 
 jest.mock('@/components/ui/code-editor', () => ({
-  CodeEditor({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  CodeEditor({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+    ariaLabelledBy,
+  }: {
+    value: string
+    onChange: (v: string) => void
+    placeholder?: string
+    ariaLabel?: string
+    ariaLabelledBy?: string
+  }) {
     return (
       <textarea
-        aria-label="Markdown"
+        {...(ariaLabel !== undefined ? { 'aria-label': ariaLabel } : {})}
+        {...(ariaLabelledBy !== undefined ? { 'aria-labelledby': ariaLabelledBy } : {})}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -107,6 +120,15 @@ describe('MarkdownRendererPage', () => {
     expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByRole('textbox', { name: 'Markdown' })).toBeInTheDocument()
     expect(screen.queryByTestId('preview')).not.toBeInTheDocument()
+  })
+
+  it('labels the markdown editor with the visible editor label', () => {
+    render(<MarkdownRendererPage initialData={makeInitialData()} />)
+
+    const editor = screen.getByRole('textbox', { name: 'Markdown' })
+
+    expect(document.getElementById('markdown-editor-label')).toHaveTextContent('Markdown')
+    expect(editor).toHaveAttribute('aria-labelledby', 'markdown-editor-label')
   })
 
   it('defaults existing documents to the preview tab', () => {
