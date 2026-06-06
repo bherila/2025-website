@@ -63,7 +63,7 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.refresher.pctOfBase" => ['nullable', 'numeric', 'min:0', 'max:1000'],
             "{$prefix}.refresher.cadenceYears" => ['nullable', 'integer', 'min:1', 'max:30'],
             "{$prefix}.refresher.firstYearOffset" => ['nullable', 'integer', 'min:0', 'max:30'],
-            "{$prefix}.refresher.vestingYears" => ['nullable', 'numeric', 'min:0', 'max:10'],
+            "{$prefix}.refresher.vestingYears" => ['nullable', 'numeric', 'min:0.25', 'max:10'],
             "{$prefix}.refresher.cliffMonths" => ['nullable', 'integer', 'min:0', 'max:120'],
             "{$prefix}.refresher.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
             "{$prefix}.rsuGrants" => ['nullable', 'array', 'max:50'],

@@ -84,6 +84,21 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.lifetime.totalEquityValue.medium', 220000);
     }
 
+    public function test_compute_endpoint_rejects_zero_refresher_vesting_years(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['hypotheticalJobs'][0]['refresher']['pctOfBase'] = 100;
+        $inputs['hypotheticalJobs'][0]['refresher']['vestingYears'] = 0;
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['inputs.hypotheticalJobs.0.refresher.vestingYears']);
+    }
+
     public function test_public_company_validates_without_private_only_fields(): void
     {
         $response = $this->postJson('/api/financial-planning/career-comparison/compute', [

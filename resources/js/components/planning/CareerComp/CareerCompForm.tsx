@@ -605,7 +605,7 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
             <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
             <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
             <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
-            <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
+            <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
             <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
             <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
           </div>
