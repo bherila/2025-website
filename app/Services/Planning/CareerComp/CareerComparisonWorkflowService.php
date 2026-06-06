@@ -28,12 +28,18 @@ class CareerComparisonWorkflowService
 
     /**
      * Resolve a shared fork by code, treating expired forks as absent.
+     *
+     * Only rows deliberately published as shares (`is_snapshot = true`) are reachable. The owner's
+     * private "latest" (NULL short_code) and any legacy pre-share private workflow row — which
+     * carried a code but was never published (`is_snapshot = false`) — are excluded by construction,
+     * so an old comparison URL can never be used to read or mutate a user's private scenario.
      */
     public function findActiveShare(string $code): ?CareerComparison
     {
         return CareerComparison::query()
             ->whereNotNull('short_code')
             ->where('short_code', $code)
+            ->where('is_snapshot', true)
             ->where(function ($query): void {
                 $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
             })
@@ -60,6 +66,7 @@ class CareerComparisonWorkflowService
     {
         return $this->writeComparison(null, $inputs, $userId, fn (): array => [
             'user_id' => $userId,
+            'is_snapshot' => true,
             'short_code' => $this->shortCode(),
             'share_includes_current' => $shareIncludesCurrent,
             'expires_at' => $expiresAt,
@@ -99,7 +106,11 @@ class CareerComparisonWorkflowService
      */
     private function writeComparison(?CareerComparison $existing, CareerCompInputs $inputs, ?int $jobOwnerId, ?callable $metaForCreate, bool $preserveCurrent = false): CareerComparison
     {
-        $projection = $this->calculator->project($inputs)->toArray();
+        // When preserving a confidential current job the editor could not see, the submitted inputs
+        // carry `currentJob: null`. Re-hydrate the stored current job before projecting so the saved
+        // computed_json (currentJobId + deltas-vs-current) stays consistent with the preserved
+        // `current_job_id`, instead of being recorded as a no-current-job scenario.
+        $projection = $this->calculator->project($this->projectionInputs($existing, $inputs, $preserveCurrent))->toArray();
 
         return DB::transaction(function () use ($existing, $inputs, $jobOwnerId, $metaForCreate, $preserveCurrent, $projection): CareerComparison {
             if ($existing instanceof CareerComparison) {
@@ -134,6 +145,28 @@ class CareerComparisonWorkflowService
                 'computed_json' => $projection,
             ], $metaForCreate !== null ? $metaForCreate() : []));
         });
+    }
+
+    /**
+     * Inputs to project from: identical to the submitted inputs, except a preserved confidential
+     * current job (redacted to null in the submission) is re-hydrated from the stored row so the
+     * projection matches the `current_job_id` the save keeps.
+     */
+    private function projectionInputs(?CareerComparison $existing, CareerCompInputs $inputs, bool $preserveCurrent): CareerCompInputs
+    {
+        if (! $preserveCurrent || ! $existing instanceof CareerComparison || $existing->current_job_id === null) {
+            return $inputs;
+        }
+
+        $storedCurrent = CareerJob::query()->find($existing->current_job_id);
+
+        if (! $storedCurrent instanceof CareerJob) {
+            return $inputs;
+        }
+
+        return CareerCompInputs::fromArray(array_replace($inputs->toArray(), [
+            'currentJob' => $storedCurrent->spec_json,
+        ]));
     }
 
     /**
