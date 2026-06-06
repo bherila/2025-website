@@ -506,10 +506,11 @@ class TransactionImportService
             't_fee',
         ];
 
+        $numericFingerprintFields = ['t_qty', 't_amt', 't_fee'];
         $parts = [];
         foreach ($fingerprintFields as $field) {
             if (array_key_exists($field, $row) && $row[$field] !== null && $row[$field] !== '') {
-                $parts[$field] = is_numeric($row[$field])
+                $parts[$field] = in_array($field, $numericFingerprintFields, true) && is_numeric($row[$field])
                     ? number_format((float) $row[$field], 8, '.', '')
                     : trim((string) $row[$field]);
             }

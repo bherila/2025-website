@@ -402,6 +402,41 @@ class FinanceImportTransactionsCommandTest extends TestCase
             ->count('external_id'));
     }
 
+    public function test_schwab_fingerprint_preserves_long_identifier_strings(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                [
+                    't_date' => '2026-04-16',
+                    't_type' => 'Stock Plan Activity',
+                    't_amt' => 0,
+                    't_symbol' => 'ABC',
+                    't_source' => 'schwab-stock-plan',
+                    'lotId' => '123456789012345678901',
+                ],
+                [
+                    't_date' => '2026-04-16',
+                    't_type' => 'Stock Plan Activity',
+                    't_amt' => 0,
+                    't_symbol' => 'ABC',
+                    't_source' => 'schwab-stock-plan',
+                    'lotId' => '123456789012345678902',
+                ],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(2, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-16')
+            ->where('t_type', 'Stock Plan Activity')
+            ->whereNotNull('external_id')
+            ->distinct('external_id')
+            ->count('external_id'));
+    }
+
     public function test_external_id_skips_repeat_import_before_legacy_duplicate_heuristic(): void
     {
         $payload = [
