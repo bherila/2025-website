@@ -21,6 +21,7 @@ class FinAccountLineItems extends Model
     protected $fillable = [
         't_account',
         'statement_id',
+        'external_id',
         't_date',
         't_date_posted',
         't_type',
