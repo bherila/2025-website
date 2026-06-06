@@ -8,6 +8,11 @@ use Tests\TestCase;
 
 class MarkdownRendererControllerTest extends TestCase
 {
+    private function oversizedMultibyteMarkdownContent(): string
+    {
+        return str_repeat('😀', 1_250_001);
+    }
+
     public function test_markdown_page_is_public(): void
     {
         $this->withoutVite();
@@ -167,6 +172,19 @@ class MarkdownRendererControllerTest extends TestCase
         $response->assertJsonValidationErrors(['markdown_content']);
     }
 
+    public function test_save_rejects_multibyte_content_over_5mb_by_bytes(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/tools/markdown/save', [
+            'title' => 'Too big',
+            'markdown_content' => $this->oversizedMultibyteMarkdownContent(),
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['markdown_content']);
+    }
+
     public function test_save_accepts_content_at_5mb(): void
     {
         $user = User::factory()->create();
@@ -191,6 +209,24 @@ class MarkdownRendererControllerTest extends TestCase
         $response = $this->actingAs($owner)->patchJson("/api/tools/markdown/s/{$document->short_code}", [
             'title' => 'Too big',
             'markdown_content' => str_repeat('a', 5_000_001),
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['markdown_content']);
+    }
+
+    public function test_update_rejects_multibyte_content_over_5mb_by_bytes(): void
+    {
+        $owner = User::factory()->create();
+        $document = MarkdownDocument::factory()->create([
+            'user_id' => $owner->id,
+            'short_code' => 'upd5mb2',
+            'markdown_content' => 'original',
+        ]);
+
+        $response = $this->actingAs($owner)->patchJson("/api/tools/markdown/s/{$document->short_code}", [
+            'title' => 'Too big',
+            'markdown_content' => $this->oversizedMultibyteMarkdownContent(),
         ]);
 
         $response->assertUnprocessable();
