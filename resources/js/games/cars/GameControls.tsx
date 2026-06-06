@@ -1,5 +1,5 @@
-import { Accessibility, ChevronDown, Crown, HelpCircle, Plus, RotateCcw, Shuffle, Users } from 'lucide-react'
-import { type ComponentProps, type Dispatch, type ReactElement, type ReactNode, type SetStateAction } from 'react'
+import { Accessibility, ChevronDown, Crown, HelpCircle, Plus, RotateCcw, Shuffle, Users, Volume2, VolumeX } from 'lucide-react'
+import { type ComponentProps, type Dispatch, type ReactElement, type ReactNode, type SetStateAction, useEffect, useState } from 'react'
 
 import {
   AlertDialog,
@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
+import { preloadSfx, setMuted } from './audio/audioManager'
 import { type GameState, getLevelDifficulty } from './gameEngine'
 
 export interface GameStats {
@@ -51,6 +52,8 @@ const POWER_UP_CONFIRMATIONS = {
     title: 'Use Fill power-up?',
   },
 } satisfies Record<string, PowerUpConfirmation>
+
+export const AUDIO_MUTED_STORAGE_KEY = 'bwh.cars-game.audio.v1'
 
 interface StatsHeaderProps {
   colorblindMode: boolean
@@ -163,10 +166,24 @@ export function BottomControls({
   onVipSelectionActiveChange,
 }: BottomControlsProps): ReactElement {
   const levelEnded = Boolean(state.completedLevel || state.failedLevel)
+  const [audioMuted, setAudioMuted] = useState(loadAudioMuted)
+
+  useEffect(() => {
+    setMuted(audioMuted)
+    saveAudioMuted(audioMuted)
+  }, [audioMuted])
+
+  useEffect(() => {
+    void preloadSfx()
+  }, [])
 
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex justify-center sm:bottom-3">
-      <div className="pointer-events-auto flex items-center gap-2 rounded-3xl border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-950/20 backdrop-blur-md dark:border-white/10 dark:bg-slate-950/80">
+      <div
+        aria-label="Game controls"
+        className="pointer-events-auto flex items-center gap-1 rounded-3xl border border-white/70 bg-white/85 p-1 shadow-xl shadow-slate-950/20 backdrop-blur-md sm:gap-2 sm:p-2 dark:border-white/10 dark:bg-slate-950/80"
+        role="toolbar"
+      >
         <BottomControlButton
           accentClassName="bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 hover:from-amber-300 hover:to-amber-500"
           active={vipSelectionActive}
@@ -216,6 +233,14 @@ export function BottomControls({
           label="Tutorial"
           variant="ghost"
           onClick={onTutorialOpen}
+        />
+        <BottomControlButton
+          active={audioMuted}
+          disabled={false}
+          icon={audioMuted ? <VolumeX /> : <Volume2 />}
+          label={audioMuted ? 'Unmute audio' : 'Mute audio'}
+          variant="ghost"
+          onClick={() => setAudioMuted((current) => !current)}
         />
       </div>
     </div>
@@ -271,6 +296,22 @@ interface MetricProps {
   value: string
 }
 
+function loadAudioMuted(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.localStorage.getItem(AUDIO_MUTED_STORAGE_KEY) === '1'
+}
+
+function saveAudioMuted(enabled: boolean): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(AUDIO_MUTED_STORAGE_KEY, enabled ? '1' : '0')
+}
+
 function Metric({ emphasis = false, label, value }: MetricProps): ReactElement {
   return (
     <div className="min-w-20 rounded-lg border border-slate-200/70 bg-white/55 px-2.5 py-1.5 shadow-xs dark:border-white/10 dark:bg-white/5">
@@ -308,7 +349,7 @@ function BottomControlButton({
       aria-label={label}
       aria-pressed={active ? true : undefined}
       className={cn(
-        'relative size-12 min-w-0 rounded-2xl border-slate-200 bg-white/90 p-0 text-slate-800 shadow-md shadow-slate-950/10 transition-transform hover:-translate-y-0.5 hover:bg-white active:scale-95 disabled:opacity-40 sm:size-14 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/15 [&_svg]:size-6',
+        'relative size-10 min-w-0 rounded-2xl border-slate-200 bg-white/90 p-0 text-slate-800 shadow-md shadow-slate-950/10 transition-transform hover:-translate-y-0.5 hover:bg-white active:scale-95 disabled:opacity-40 sm:size-14 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/15 [&_svg]:size-5 sm:[&_svg]:size-6',
         accentClassName,
         active && 'border-amber-300 bg-amber-300 text-amber-950 shadow-amber-950/15 ring-2 ring-amber-200 dark:border-amber-300 dark:bg-amber-300 dark:text-amber-950 dark:ring-amber-200/50',
       )}

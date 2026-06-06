@@ -1,8 +1,9 @@
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import { PortraitGameShell } from '../PortraitGameShell'
+import { playSfx } from './audio/audioManager'
 import { CarsScene } from './CarsScene'
 import {
   BottomControls,
@@ -70,6 +71,17 @@ export function CarsGame(): ReactElement {
 
     return loadColorblindMode()
   })
+  const stateRef = useRef(state)
+  const completedLevelSoundKeyRef = useRef(completedLevelSoundKey(state.completedLevel))
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  const commitState = useCallback((next: GameState): void => {
+    stateRef.current = next
+    setState(next)
+  }, [])
 
   useEffect(() => {
     if (visualTestOptions.enabled) {
@@ -84,6 +96,15 @@ export function CarsGame(): ReactElement {
 
     saveLevelSnapshot(state)
   }, [state, visualTestOptions.enabled])
+
+  useEffect(() => {
+    const completedKey = completedLevelSoundKey(state.completedLevel)
+    if (completedKey && completedKey !== completedLevelSoundKeyRef.current) {
+      playSfx('level-complete')
+    }
+
+    completedLevelSoundKeyRef.current = completedKey
+  }, [state.completedLevel])
 
   const stats = useMemo<GameStats>(() => {
     const departedCars = state.cars.filter((car) => car.status === 'departed').length
@@ -101,38 +122,52 @@ export function CarsGame(): ReactElement {
   }, [state])
 
   const handleCarClick = useCallback((carId: string): void => {
-    setState((current) => {
-      if (current.failedLevel) {
-        return current
-      }
+    const current = stateRef.current
 
-      if (vipSelectionActive) {
-        return applyVipPowerUp(current, carId)
-      }
+    if (current.failedLevel) {
+      setVipSelectionActive(false)
 
-      const clickedCar = current.cars.find((car) => car.id === carId)
-      if (clickedCar?.status === 'field' && !canMoveCar(current, carId)) {
-        setBlockedCarAttempt({ carId, nonce: Date.now() })
-      }
+      return
+    }
 
-      return moveCarToParking(current, carId)
-    })
+    if (vipSelectionActive) {
+      commitState(applyVipPowerUp(current, carId))
+      setVipSelectionActive(false)
+
+      return
+    }
+
+    const clickedCar = current.cars.find((car) => car.id === carId)
+    const blocked = clickedCar?.status === 'field' && !canMoveCar(current, carId)
+    const next = moveCarToParking(current, carId)
+    const parkedCar = next.cars.find((car) => car.id === carId)
+
+    if (blocked) {
+      setBlockedCarAttempt({ carId, nonce: Date.now() })
+      playSfx('car-blocked')
+    }
+
+    if (clickedCar?.status === 'field' && parkedCar?.status === 'parked') {
+      playSfx('car-park-success')
+    }
+
+    commitState(next)
     setVipSelectionActive(false)
-  }, [vipSelectionActive])
+  }, [commitState, vipSelectionActive])
 
   const handleShuffle = useCallback((): void => {
     setVipSelectionActive(false)
-    setState((current) => applyShufflePowerUp(current))
-  }, [])
+    commitState(applyShufflePowerUp(stateRef.current))
+  }, [commitState])
 
   const handleFill = useCallback((): void => {
     setVipSelectionActive(false)
-    setState((current) => applyFillPowerUp(current))
-  }, [])
+    commitState(applyFillPowerUp(stateRef.current))
+  }, [commitState])
 
   const handleOpenSlot = useCallback((): void => {
-    setState((current) => openParkingSlot(current))
-  }, [])
+    commitState(openParkingSlot(stateRef.current))
+  }, [commitState])
 
   const handleColorblindModeChange = useCallback((enabled: boolean): void => {
     setColorblindMode(enabled)
@@ -142,24 +177,30 @@ export function CarsGame(): ReactElement {
   }, [visualTestOptions.enabled])
 
   const handlePassengerGate = useCallback((passengerId: string): void => {
-    setState((current) => processBoardingAtParkingGate(current, passengerId))
-  }, [])
+    const current = stateRef.current
+    const next = processBoardingAtParkingGate(current, passengerId)
+    if (next !== current && next.passengerQueue.length < current.passengerQueue.length) {
+      playSfx('passenger-board')
+    }
+
+    commitState(next)
+  }, [commitState])
 
   const handleNextLevel = useCallback((): void => {
     setVipSelectionActive(false)
     if (!visualTestOptions.enabled) {
       clearLevelSnapshot()
     }
-    setState((current) => advanceToNextLevel(current))
-  }, [visualTestOptions.enabled])
+    commitState(advanceToNextLevel(stateRef.current))
+  }, [commitState, visualTestOptions.enabled])
 
   const handleReset = useCallback((): void => {
     setVipSelectionActive(false)
     if (!visualTestOptions.enabled) {
       clearLevelSnapshot()
     }
-    setState((current) => restartLevel(current))
-  }, [visualTestOptions.enabled])
+    commitState(restartLevel(stateRef.current))
+  }, [commitState, visualTestOptions.enabled])
 
   return (
     <div className="bg-sky-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
@@ -273,4 +314,12 @@ function saveColorblindMode(enabled: boolean): void {
   }
 
   window.localStorage.setItem(COLORBLIND_MODE_STORAGE_KEY, enabled ? '1' : '0')
+}
+
+function completedLevelSoundKey(completedLevel: GameState['completedLevel']): string | null {
+  if (!completedLevel) {
+    return null
+  }
+
+  return `${completedLevel.level}:${completedLevel.score}:${completedLevel.awardedPowerUp}`
 }
