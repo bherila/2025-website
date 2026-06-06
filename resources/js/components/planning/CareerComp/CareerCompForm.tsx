@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 import { Briefcase, Building2, Copy, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
-import { type ChangeEvent, type FocusEvent, type ReactElement, useId, useState } from 'react'
+import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElement, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,10 +34,17 @@ export interface CareerCompFormSectionMeta {
   }
 }
 
+interface ActiveGrantSelection {
+  jobId: string
+  grantType: GrantType
+  grantId?: string | undefined
+}
+
 interface CareerCompFormProps {
   inputs: CareerCompInputs
   onChange: (inputs: CareerCompInputs) => void
   onOpenGrantEditor: OpenGrantEditor
+  activeGrant?: ActiveGrantSelection | null | undefined
 }
 
 interface CareerCompFormSectionProps extends CareerCompFormProps {
@@ -253,16 +260,21 @@ function optionGrantSummary(grant: OptionGrant): string {
 }
 
 /** Compact, clickable list row for a grant. Editing happens in a dedicated Miller column. */
-function GrantRow({ title, summary, onEdit, onDuplicate, onRemove }: {
+function GrantRow({ title, summary, selected, onEdit, onDuplicate, onRemove }: {
   title: string
   summary: string
+  selected: boolean
   onEdit: () => void
   onDuplicate: () => void
   onRemove: () => void
 }): ReactElement {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md border p-3">
-      <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
+    <div
+      className={selected
+        ? 'flex items-center justify-between gap-2 rounded-md border border-primary/60 bg-primary/10 p-3 ring-1 ring-primary/30'
+        : 'flex items-center justify-between gap-2 rounded-md border p-3'}
+    >
+      <button type="button" aria-current={selected ? 'true' : undefined} onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
         <p className="truncate text-sm font-medium">{title}</p>
         <p className="truncate text-xs text-muted-foreground">{summary}</p>
       </button>
@@ -298,7 +310,7 @@ function buildNewOptionGrant(job: JobSpec): OptionGrant {
     : base
 }
 
-function RsuGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
+function RsuGrantsList({ job, onChange, onOpenGrantEditor, activeGrant }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   function setGrants(rsuGrants: RsuGrant[]): void {
     onChange({ ...job, rsuGrants })
   }
@@ -313,8 +325,31 @@ function RsuGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onC
     setGrants(next)
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return
+    }
+
+    if (job.rsuGrants.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+    const currentIndex = activeGrant?.jobId === job.id && activeGrant.grantType === 'rsu' && activeGrant.grantId
+      ? job.rsuGrants.findIndex((grant) => grant.id === activeGrant.grantId)
+      : -1
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const nextIndex = currentIndex === -1
+      ? (direction === 1 ? 0 : job.rsuGrants.length - 1)
+      : (currentIndex + direction + job.rsuGrants.length) % job.rsuGrants.length
+    const nextGrant = job.rsuGrants[nextIndex]
+    if (nextGrant) {
+      onOpenGrantEditor(job.id, 'rsu', nextGrant.id)
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" tabIndex={0} onKeyDown={handleKeyDown} aria-label="RSU grants section">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">RSU grants</Label>
         <Button type="button" variant="outline" size="sm" onClick={() => onOpenGrantEditor(job.id, 'rsu')}>
@@ -329,6 +364,7 @@ function RsuGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onC
             key={grant.id}
             title={`RSU grant ${index + 1}`}
             summary={rsuGrantSummary(grant)}
+            selected={activeGrant?.jobId === job.id && activeGrant.grantType === 'rsu' && activeGrant.grantId === grant.id}
             onEdit={() => onOpenGrantEditor(job.id, 'rsu', grant.id)}
             onDuplicate={() => duplicateGrant(index)}
             onRemove={() => setGrants(job.rsuGrants.filter((entry) => entry.id !== grant.id))}
@@ -339,7 +375,7 @@ function RsuGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onC
   )
 }
 
-function OptionGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
+function OptionGrantsList({ job, onChange, onOpenGrantEditor, activeGrant }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   function setGrants(optionGrants: OptionGrant[]): void {
     onChange({ ...job, optionGrants })
   }
@@ -354,8 +390,31 @@ function OptionGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; 
     setGrants(next)
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return
+    }
+
+    if (job.optionGrants.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+    const currentIndex = activeGrant?.jobId === job.id && activeGrant.grantType === 'opt' && activeGrant.grantId
+      ? job.optionGrants.findIndex((grant) => grant.id === activeGrant.grantId)
+      : -1
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const nextIndex = currentIndex === -1
+      ? (direction === 1 ? 0 : job.optionGrants.length - 1)
+      : (currentIndex + direction + job.optionGrants.length) % job.optionGrants.length
+    const nextGrant = job.optionGrants[nextIndex]
+    if (nextGrant) {
+      onOpenGrantEditor(job.id, 'opt', nextGrant.id)
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" tabIndex={0} onKeyDown={handleKeyDown} aria-label="Option grants section">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">Option grants (ISO / NSO)</Label>
         <Button type="button" variant="outline" size="sm" onClick={() => onOpenGrantEditor(job.id, 'opt')}>
@@ -370,6 +429,7 @@ function OptionGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; 
             key={grant.id}
             title={`Option grant ${index + 1}`}
             summary={optionGrantSummary(grant)}
+            selected={activeGrant?.jobId === job.id && activeGrant.grantType === 'opt' && activeGrant.grantId === grant.id}
             onEdit={() => onOpenGrantEditor(job.id, 'opt', grant.id)}
             onDuplicate={() => duplicateGrant(index)}
             onRemove={() => setGrants(job.optionGrants.filter((entry) => entry.id !== grant.id))}
@@ -430,17 +490,14 @@ function OptionGrantFields({ grant, onChange }: { grant: OptionGrant; onChange: 
   )
 }
 
-/**
- * Adds (no `grantId`) or edits one grant in its own Miller column. Edits are written into the job
- * only on Save, then the column closes; Cancel discards the draft.
- */
-export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange, onClose }: {
+/** Adds (no `grantId`) or edits one grant in its own Miller column. Edits are written as fields change. */
+export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange, onGrantCreated }: {
   inputs: CareerCompInputs
   jobId: string
   grantType: GrantType
   grantId?: string | undefined
   onChange: (inputs: CareerCompInputs) => void
-  onClose: () => void
+  onGrantCreated?: ((grantId: string) => void) | undefined
 }): ReactElement {
   const job = findJob(inputs, jobId)
 
@@ -462,23 +519,28 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
   const isNew = !grantId
   const heading = grantType === 'rsu' ? (isNew ? 'Add RSU grant' : 'Edit RSU grant') : isNew ? 'Add option grant' : 'Edit option grant'
 
-  function saveGrant(): void {
+  function updateGrant(patch: Partial<RsuGrant> | Partial<OptionGrant>): void {
     if (!draft) {
       return
     }
 
+    const nextDraft = { ...draft, ...patch } as RsuGrant | OptionGrant
+    setDraft(nextDraft)
     onChange(updateJob(inputs, jobId, (current) => {
       if (grantType === 'rsu') {
-        const grant = draft as RsuGrant
+        const grant = nextDraft as RsuGrant
         const exists = current.rsuGrants.some((entry) => entry.id === grant.id)
         return { ...current, rsuGrants: exists ? current.rsuGrants.map((entry) => (entry.id === grant.id ? grant : entry)) : [...current.rsuGrants, grant] }
       }
 
-      const grant = draft as OptionGrant
+      const grant = nextDraft as OptionGrant
       const exists = current.optionGrants.some((entry) => entry.id === grant.id)
       return { ...current, optionGrants: exists ? current.optionGrants.map((entry) => (entry.id === grant.id ? grant : entry)) : [...current.optionGrants, grant] }
     }))
-    onClose()
+
+    if (!grantId) {
+      onGrantCreated?.(nextDraft.id)
+    }
   }
 
   return (
@@ -488,19 +550,15 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
         <p className="text-xs text-muted-foreground">{job.name}</p>
       </div>
       {grantType === 'rsu' ? (
-        <RsuGrantFields grant={draft as RsuGrant} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+        <RsuGrantFields grant={draft as RsuGrant} onChange={updateGrant} />
       ) : (
-        <OptionGrantFields grant={draft as OptionGrant} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+        <OptionGrantFields grant={draft as OptionGrant} onChange={updateGrant} />
       )}
-      <div className="flex items-center gap-2">
-        <Button type="button" onClick={saveGrant}>Save grant</Button>
-        <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-      </div>
     </div>
   )
 }
 
-function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
+function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, activeGrant }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   const nameId = useId()
   const isPrivate = job.company.type === 'private'
   const removeText = removeLabel ?? `Remove ${job.name}`
@@ -538,15 +596,15 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor }: 
         </div>
 
         <div className="space-y-4 border-t pt-4">
-          <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} />
-          <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} />
+          <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />
+          <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />
         </div>
       </CardContent>
     </Card>
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor }: CareerCompFormSectionProps): ReactElement {
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, activeGrant }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -567,6 +625,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
       <div className="space-y-4">
         {inputs.currentJob ? (
           <JobEditor
+            activeGrant={activeGrant}
             job={inputs.currentJob}
             onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
             onRemove={() => onChange({ ...inputs, currentJob: null })}
@@ -593,6 +652,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
       {inputs.hypotheticalJobs.map((job) => (
         <JobEditor
           key={job.id}
+          activeGrant={activeGrant}
           job={job}
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}

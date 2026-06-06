@@ -374,11 +374,17 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'grant', jobId, grantType, grantId }])
   }
 
+  function updateNewGrantColumn(grantId: string): void {
+    setColumnStack((stack) => stack.map((column) => (column.kind === 'grant' && column.grantId === undefined ? { ...column, grantId } : column)))
+  }
+
+  const activeGrant = [...columnStack].reverse().find((column): column is Extract<CareerCompColumnState, { kind: 'grant' }> => column.kind === 'grant') ?? null
+
   function closeColumn(depth: number): void {
     setColumnStack((stack) => stack.slice(0, depth))
   }
 
-  function toMillerColumn(column: CareerCompColumnState, depth: number): MillerColumnShellColumn {
+  function toMillerColumn(column: CareerCompColumnState): MillerColumnShellColumn {
     if (column.kind === 'grant') {
       return {
         key: `grant:${column.jobId}:${column.grantType}:${column.grantId ?? 'new'}`,
@@ -392,7 +398,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             grantType={column.grantType}
             grantId={column.grantId}
             onChange={setInputs}
-            onClose={() => closeColumn(depth)}
+            onGrantCreated={updateNewGrantColumn}
           />
         ),
       }
@@ -406,7 +412,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} />,
+        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} activeGrant={activeGrant} />,
       }
     }
 
@@ -422,7 +428,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
   }
 
-  const columns: MillerColumnShellColumn[] = columnStack.map((column, depth) => toMillerColumn(column, depth))
+  const columns: MillerColumnShellColumn[] = columnStack.map((column) => toMillerColumn(column))
   const warnings = projection?.warnings ?? []
 
   const homeView = (
