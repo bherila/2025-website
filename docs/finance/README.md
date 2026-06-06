@@ -11,6 +11,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | Tags + characteristics | [tags.md](tags.md) | `app/Models/FinanceTool/FinAccountTag.php::TAX_CHARACTERISTICS` |
 | Transactions table UI | [transactions-table.md](transactions-table.md) | `resources/js/components/finance/TransactionsPage.tsx` |
 | CSV statement import | [import.md](import.md), [csv-parsers.md](csv-parsers.md), [statements.md](statements.md) | `app/Services/Finance/Parsers/` |
+| Account-data import reconciliation | [account-data-import-reconciliation.md](account-data-import-reconciliation.md) | `finance:import-transactions`, `finance:lots-import` |
 | IB statement schema | [ib-statement-schema.md](ib-statement-schema.md) | `fin_statement_positions`, `fin_statement_performance`, etc. |
 | Auto-tagging rules | [rules-engine.md](rules-engine.md) | `app/Services/Finance/RulesEngineService.php` |
 | Payslips (W-2 prep) | [payslips.md](payslips.md) | `app/Models/FinanceTool/FinPayslips.php` |
