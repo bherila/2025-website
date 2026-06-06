@@ -223,6 +223,32 @@ class CareerCompPersistenceTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_legacy_short_code_backfill_clears_default_snapshot_rows(): void
+    {
+        $legacyDefaultSnapshot = CareerComparison::factory()->create([
+            'is_snapshot' => true,
+            'last_active_at' => null,
+            'short_code' => 'legacy01',
+        ]);
+        $legacyPrivateLatest = CareerComparison::factory()->create([
+            'is_snapshot' => false,
+            'last_active_at' => now(),
+            'short_code' => 'private1',
+        ]);
+        $publishedShare = CareerComparison::factory()->create([
+            'is_snapshot' => true,
+            'last_active_at' => now(),
+            'short_code' => 'shared01',
+        ]);
+
+        $migration = require database_path('migrations/2026_06_06_000003_clear_short_codes_on_legacy_private_career_comparisons.php');
+        $migration->up();
+
+        $this->assertNull($legacyDefaultSnapshot->refresh()->short_code);
+        $this->assertNull($legacyPrivateLatest->refresh()->short_code);
+        $this->assertSame('shared01', $publishedShare->refresh()->short_code);
+    }
+
     public function test_preserved_current_save_keeps_the_stored_projection_consistent_with_the_current_job(): void
     {
         $owner = User::factory()->create();

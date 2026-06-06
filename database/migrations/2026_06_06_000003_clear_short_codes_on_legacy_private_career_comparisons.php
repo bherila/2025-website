@@ -10,11 +10,11 @@ return new class extends Migration
      * Harden share resolution against legacy data.
      *
      * Before the "single private latest + editable share links" model, every saved comparison was
-     * stored with a non-null short_code regardless of whether it was ever shared. Share lookup now
-     * requires `is_snapshot = true`, so those unpublished private rows are already unreachable as
-     * shares; this backfill additionally clears their short_code so a private row holds no code at
-     * all. That is defense in depth, and it also restores owner visibility because the home page
-     * loads the user's latest by its NULL short_code.
+     * stored with a non-null short_code regardless of whether it was ever shared. The metadata
+     * migration defaulted those legacy rows to `is_snapshot = true`, but they still have no workflow
+     * activity timestamp. Clear those legacy codes so a private row holds no share URL at all. That
+     * is defense in depth, and it also restores owner visibility because the home page loads the
+     * user's latest by its NULL short_code.
      *
      * Deliberately published shares (`is_snapshot = true`) keep their code and stay reachable. Any
      * row published as a share before this change but written with `is_snapshot = false` is already
@@ -28,8 +28,11 @@ return new class extends Migration
         }
 
         DB::table('opportunity_cost_comparisons')
-            ->where('is_snapshot', false)
             ->whereNotNull('short_code')
+            ->where(function ($query): void {
+                $query->where('is_snapshot', false)
+                    ->orWhereNull('last_active_at');
+            })
             ->update(['short_code' => null]);
     }
 
