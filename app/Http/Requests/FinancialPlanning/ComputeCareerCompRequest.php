@@ -3,6 +3,7 @@
 namespace App\Http\Requests\FinancialPlanning;
 
 use App\Services\Planning\CareerComp\VestingSchedule;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -64,7 +65,7 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.refresher.cadenceYears" => ['nullable', 'integer', 'min:1', 'max:30'],
             "{$prefix}.refresher.firstYearOffset" => ['nullable', 'integer', 'min:0', 'max:30'],
             "{$prefix}.refresher.vestingYears" => ['nullable', 'numeric', 'min:0.25', 'max:10'],
-            "{$prefix}.refresher.cliffMonths" => ['nullable', 'integer', 'min:0', 'max:120'],
+            "{$prefix}.refresher.cliffMonths" => ['nullable', 'integer', 'min:0', 'max:120', self::refresherCliffDoesNotExceedVesting()],
             "{$prefix}.refresher.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
             "{$prefix}.rsuGrants" => ['nullable', 'array', 'max:50'],
             "{$prefix}.rsuGrants.*.id" => ['required', 'string', 'max:120'],
@@ -92,5 +93,23 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.growthBands.mediumPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],
             "{$prefix}.growthBands.highPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],
         ];
+    }
+
+    private static function refresherCliffDoesNotExceedVesting(): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail): void {
+            if (! is_numeric($value)) {
+                return;
+            }
+
+            $vestingYears = request()->input(str_replace('.cliffMonths', '.vestingYears', $attribute));
+            if (! is_numeric($vestingYears)) {
+                return;
+            }
+
+            if ((int) $value > (float) $vestingYears * 12) {
+                $fail('The :attribute must not exceed the refresher vesting duration.');
+            }
+        };
     }
 }

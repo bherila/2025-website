@@ -99,6 +99,22 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonValidationErrors(['inputs.hypotheticalJobs.0.refresher.vestingYears']);
     }
 
+    public function test_compute_endpoint_rejects_refresher_cliff_longer_than_vesting(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['hypotheticalJobs'][0]['refresher']['pctOfBase'] = 100;
+        $inputs['hypotheticalJobs'][0]['refresher']['vestingYears'] = 0.25;
+        $inputs['hypotheticalJobs'][0]['refresher']['cliffMonths'] = 12;
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['inputs.hypotheticalJobs.0.refresher.cliffMonths']);
+    }
+
     public function test_public_company_validates_without_private_only_fields(): void
     {
         $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
