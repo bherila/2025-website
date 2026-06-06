@@ -16,7 +16,6 @@ use App\Services\Planning\CareerComp\ComparisonShareRedactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class CareerCompController extends Controller
@@ -56,13 +55,16 @@ class CareerCompController extends Controller
             ->where('short_code', $code)
             ->firstOrFail();
 
-        $canEdit = Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id;
+        $ownsComparison = Auth::id() !== null
+            && (int) Auth::id() === (int) $comparison->user_id;
+        $canEdit = $ownsComparison
+            && ! $comparison->is_snapshot;
         $inputs = $this->workflows->inputsFromComparison($comparison)->toArray();
         $projection = $comparison->computed_json;
 
         // Confidential ("exclusive") share: redact the current job by identity for anyone who
         // cannot edit the comparison, so no current-job dollar value reaches the page payload.
-        if (! $comparison->share_includes_current && ! $canEdit) {
+        if (! $comparison->share_includes_current && ! $ownsComparison) {
             $currentJobId = is_array($projection) && is_string($projection['currentJobId'] ?? null)
                 ? $projection['currentJobId']
                 : (is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null);
@@ -109,7 +111,8 @@ class CareerCompController extends Controller
     public function store(StoreCareerCompComparisonRequest $request): JsonResponse
     {
         $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
-        $comparison = $this->workflows->createWorkflow((int) Auth::id(), $inputs, $request->validated('title'));
+        $shareIncludesCurrent = $request->has('shareIncludesCurrent') ? $request->boolean('shareIncludesCurrent') : true;
+        $comparison = $this->workflows->createWorkflow((int) Auth::id(), $inputs, $request->validated('title'), $shareIncludesCurrent);
 
         return response()->json($this->workflows->response($comparison), 201);
     }
@@ -138,13 +141,7 @@ class CareerCompController extends Controller
         abort_if($comparison->user_id !== null && (int) $comparison->user_id !== $userId, 403);
 
         if ($comparison->user_id === null) {
-            DB::transaction(function () use ($comparison, $userId): void {
-                $comparison->update(['user_id' => $userId]);
-                CareerJob::query()
-                    ->whereIn('id', $this->referencedJobIdsForClaim($comparison))
-                    ->whereNull('user_id')
-                    ->update(['user_id' => $userId]);
-            });
+            $comparison = $this->workflows->claim($comparison, $userId, $this->referencedJobIdsForClaim($comparison));
         }
 
         return response()->json($this->workflows->response($comparison));

@@ -382,4 +382,349 @@ class CareerCompPersistenceTest extends TestCase
         $response->assertJsonPath('currentJob.rsuGrants.0.grantPrice', 10);
         $response->assertJsonPath('currentJob.rsuGrants.0.vestingFrequency', 'quarterly');
     }
+
+    public function test_anonymous_user_can_create_share_snapshot(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+            'shareIncludesCurrent' => true,
+        ]);
+
+        $response->assertCreated();
+        $shortCode = $response->json('shortCode');
+        $this->assertIsString($shortCode);
+        $response->assertJsonPath('shareUrl', url("/financial-planning/career-comparison/s/{$shortCode}"));
+        $this->assertDatabaseHas('opportunity_cost_comparisons', [
+            'short_code' => $shortCode,
+            'user_id' => null,
+            'is_snapshot' => true,
+        ]);
+
+        $this->withoutVite();
+        $this->get("/financial-planning/career-comparison/s/{$shortCode}")->assertOk();
+    }
+
+    public function test_exclusive_share_snapshot_does_not_persist_current_job_at_rest(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['comp']['baseSalary'] = 987654;
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => false,
+        ]);
+
+        $response->assertCreated();
+        $comparison = CareerComparison::query()->where('short_code', $response->json('shortCode'))->firstOrFail();
+
+        // The confidential current job must never reach the database, neither as a
+        // career_jobs row nor inside the stored projection JSON.
+        $this->assertNull($comparison->current_job_id);
+        $this->assertNull($comparison->computed_json['currentJobId'] ?? null);
+        $this->assertStringNotContainsString('987654', json_encode($comparison->computed_json));
+        $this->assertSame([], $comparison->computed_json['deltasVsCurrent'] ?? null);
+    }
+
+    public function test_save_honors_share_includes_current_false(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+            'shareIncludesCurrent' => false,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('shareIncludesCurrent', false);
+        $this->assertDatabaseHas('opportunity_cost_comparisons', [
+            'id' => $response->json('id'),
+            'share_includes_current' => false,
+        ]);
+    }
+
+    public function test_bearer_token_rejects_missing_invalid_and_non_loginable_keys(): void
+    {
+        $this->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+        ])->assertUnauthorized();
+
+        $this->withHeader('Authorization', 'Bearer not-a-real-key')
+            ->postJson('/api/financial-planning/career-comparison/workflows', [
+                'inputs' => CareerCompInputs::defaults(),
+            ])->assertUnauthorized();
+
+        // User ID 1 is always treated as admin, so occupy that id first; the
+        // locked-out user below then has no roles and cannot log in.
+        User::factory()->create();
+        $token = 'locked-out-token';
+        User::factory()->create([
+            'user_role' => '',
+            'mcp_api_key' => hash('sha256', $token),
+        ]);
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/financial-planning/career-comparison/workflows', [
+                'inputs' => CareerCompInputs::defaults(),
+            ])->assertUnauthorized();
+    }
+
+    public function test_snapshots_are_excluded_from_workflow_list_last_active_and_get(): void
+    {
+        $user = User::factory()->create();
+        $workflow = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+            'title' => 'Real workflow',
+        ]);
+        $workflowId = $workflow->json('id');
+
+        $snapshot = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $snapshot->assertCreated();
+        $snapshotId = $snapshot->json('id');
+
+        $list = $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows');
+        $ids = array_column($list->json('workflows'), 'id');
+        $this->assertContains($workflowId, $ids);
+        $this->assertNotContains($snapshotId, $ids);
+
+        $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows/last-active')
+            ->assertJsonPath('workflow.id', $workflowId);
+
+        $this->actingAs($user)->getJson("/api/financial-planning/career-comparison/workflows/{$snapshotId}")
+            ->assertNotFound();
+    }
+
+    public function test_owned_share_snapshot_loads_read_only(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+        $snapshot = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $snapshot->assertCreated();
+
+        $page = $this->actingAs($user)->get("/financial-planning/career-comparison/s/{$snapshot->json('shortCode')}");
+
+        $page->assertOk();
+        $page->assertSee('"canEdit":false', false);
+    }
+
+    public function test_claim_promotes_snapshot_to_editable_workflow(): void
+    {
+        $owner = User::factory()->create();
+        $claimant = User::factory()->create();
+
+        // An anonymous share snapshot (user_id null, is_snapshot true).
+        $snapshot = $this->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $shortCode = $snapshot->json('shortCode');
+
+        $claimed = $this->actingAs($claimant)->postJson("/api/financial-planning/career-comparison/s/{$shortCode}/claim");
+        $claimed->assertOk();
+
+        $this->assertDatabaseHas('opportunity_cost_comparisons', [
+            'short_code' => $shortCode,
+            'user_id' => $claimant->id,
+            'is_snapshot' => false,
+        ]);
+
+        // After claiming it behaves like a workflow: it lists, auto-loads, and updates.
+        $list = $this->actingAs($claimant)->getJson('/api/financial-planning/career-comparison/workflows');
+        $this->assertContains($shortCode, array_column($list->json('workflows'), 'shortCode'));
+
+        $workflowId = $claimed->json('id');
+        $this->actingAs($claimant)->patchJson("/api/financial-planning/career-comparison/workflows/{$workflowId}", [
+            'inputs' => CareerCompInputs::defaults(),
+        ])->assertOk();
+
+        // A different user still cannot claim or reach it.
+        $this->actingAs($owner)->getJson("/api/financial-planning/career-comparison/workflows/{$workflowId}")
+            ->assertNotFound();
+    }
+
+    public function test_activating_a_workflow_marks_it_last_active_and_clears_siblings(): void
+    {
+        $user = User::factory()->create();
+        $first = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+            'title' => 'First',
+        ])->json('id');
+        $second = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+            'title' => 'Second',
+        ])->json('id');
+
+        // Creating Second made it last-active; activating First should flip it back.
+        $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows/last-active')
+            ->assertJsonPath('workflow.id', $second);
+
+        $this->actingAs($user)->postJson("/api/financial-planning/career-comparison/workflows/{$first}/activate")
+            ->assertOk();
+
+        $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows/last-active')
+            ->assertJsonPath('workflow.id', $first);
+        $this->assertNull(CareerComparison::query()->find($second)->last_active_at);
+    }
+
+    public function test_update_removes_orphaned_jobs_but_keeps_jobs_shared_with_another_workflow(): void
+    {
+        $user = User::factory()->create();
+        $created = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $workflowId = $created->json('id');
+        $comparison = CareerComparison::query()->findOrFail($workflowId);
+        $staleCurrentJobId = $comparison->current_job_id;
+
+        // A second workflow that references the first one's current job must protect it.
+        CareerComparison::factory()->create([
+            'user_id' => $user->id,
+            'is_snapshot' => false,
+            'current_job_id' => $staleCurrentJobId,
+            'hypothetical_job_ids' => [],
+        ]);
+
+        $updated = CareerCompInputs::defaults();
+        $updated['currentJob']['name'] = 'Renamed current role';
+        $this->actingAs($user)->patchJson("/api/financial-planning/career-comparison/workflows/{$workflowId}", [
+            'inputs' => $updated,
+        ])->assertOk();
+
+        // The original current job is still referenced by the sibling, so it survives.
+        $this->assertDatabaseHas('career_jobs', ['id' => $staleCurrentJobId]);
+    }
+
+    public function test_delete_removes_jobs_no_longer_referenced(): void
+    {
+        $user = User::factory()->create();
+        $created = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $workflowId = $created->json('id');
+        $comparison = CareerComparison::query()->findOrFail($workflowId);
+        $currentJobId = $comparison->current_job_id;
+
+        $this->actingAs($user)->deleteJson("/api/financial-planning/career-comparison/workflows/{$workflowId}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('career_jobs', ['id' => $currentJobId]);
+    }
+
+    public function test_share_snapshots_edited_state_without_mutating_saved_workflow(): void
+    {
+        $user = User::factory()->create();
+        $baseInputs = CareerCompInputs::defaults();
+        $baseInputs['currentJob']['comp']['baseSalary'] = 100000;
+
+        $workflow = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
+            'inputs' => $baseInputs,
+        ]);
+        $workflowId = $workflow->json('id');
+        $this->assertSame(100000, (int) $workflow->json('inputs.currentJob.comp.baseSalary'));
+
+        $editedInputs = $baseInputs;
+        $editedInputs['currentJob']['comp']['baseSalary'] = 200000;
+        $share = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $editedInputs,
+        ]);
+        $share->assertCreated();
+
+        // The snapshot reflects the edited state at click time...
+        $this->assertSame(200000, (int) $share->json('inputs.currentJob.comp.baseSalary'));
+        // ...while the saved workflow is untouched.
+        $reloaded = $this->actingAs($user)->getJson("/api/financial-planning/career-comparison/workflows/{$workflowId}");
+        $this->assertSame(100000, (int) $reloaded->json('inputs.currentJob.comp.baseSalary'));
+    }
+
+    public function test_import_rsu_requires_authentication(): void
+    {
+        $this->postJson('/api/financial-planning/career-comparison/workflows/import-rsu', [
+            'currentJob' => CareerCompInputs::defaults()['currentJob'],
+        ])->assertUnauthorized();
+    }
+
+    public function test_rsu_import_reconstructs_cliff_vesting_years_and_frequencies(): void
+    {
+        $user = User::factory()->create();
+
+        // A 1-year cliff then annual vesting over 4 years.
+        foreach (['2026-01-15', '2027-01-15', '2028-01-15', '2029-01-15'] as $vestDate) {
+            FinEquityAwards::query()->create([
+                'uid' => $user->id,
+                'award_id' => 'ANNUAL',
+                'grant_date' => '2025-01-15',
+                'vest_date' => $vestDate,
+                'share_count' => 100,
+                'symbol' => 'AAA',
+                'grant_price' => 50,
+                'vest_price' => null,
+            ]);
+        }
+
+        // Monthly vesting with no cliff.
+        foreach (['2025-02-01', '2025-03-01', '2025-04-01', '2025-05-01'] as $vestDate) {
+            FinEquityAwards::query()->create([
+                'uid' => $user->id,
+                'award_id' => 'MONTHLY',
+                'grant_date' => '2025-01-01',
+                'vest_date' => $vestDate,
+                'share_count' => 10,
+                'symbol' => 'BBB',
+                'grant_price' => 20,
+                'vest_price' => null,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows/import-rsu', [
+            'currentJob' => CareerCompInputs::defaults()['currentJob'],
+        ]);
+
+        $response->assertOk();
+        $grants = collect($response->json('currentJob.rsuGrants'))->keyBy('id');
+        $this->assertCount(2, $grants);
+
+        $annual = $grants->get('rsu-tool-annual');
+        $this->assertNotNull($annual);
+        $this->assertSame(400, (int) $annual['shareCount']);
+        $this->assertSame(12, $annual['cliffMonths']);
+        $this->assertSame(4, $annual['vestingYears']);
+        $this->assertSame('annual', $annual['vestingFrequency']);
+        $this->assertSame('2025-01-15', $annual['grantDate']);
+
+        $monthly = $grants->get('rsu-tool-monthly');
+        $this->assertNotNull($monthly);
+        $this->assertSame(1, $monthly['cliffMonths']);
+        $this->assertSame('monthly', $monthly['vestingFrequency']);
+    }
+
+    public function test_rsu_import_fills_unset_current_share_price_but_never_overwrites_user_value(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'PRICED',
+            'grant_date' => '2025-01-15',
+            'vest_date' => '2026-01-15',
+            'share_count' => 100,
+            'symbol' => 'AAA',
+            'grant_price' => 30,
+            'vest_price' => 150,
+        ]);
+
+        // currentSharePrice unset (0) -> filled from the latest market vest price.
+        $unset = CareerCompInputs::defaults()['currentJob'];
+        $unset['company']['currentSharePrice'] = 0;
+        $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows/import-rsu', [
+            'currentJob' => $unset,
+        ])->assertOk()->assertJsonPath('currentJob.company.currentSharePrice', 150);
+
+        // currentSharePrice already set by the user -> preserved untouched.
+        $set = CareerCompInputs::defaults()['currentJob'];
+        $set['company']['currentSharePrice'] = 99;
+        $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows/import-rsu', [
+            'currentJob' => $set,
+        ])->assertOk()->assertJsonPath('currentJob.company.currentSharePrice', 99);
+    }
 }

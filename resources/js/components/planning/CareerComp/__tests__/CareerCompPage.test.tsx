@@ -121,6 +121,17 @@ describe('CareerCompPage', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost/financial-planning/career-comparison/s/share123')
   })
 
+  it('strips the shared code from the URL when starting a new workflow', () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison/s/abc1234')
+
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: savedComparison, canEdit: false })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+
+    expect(window.location.pathname).toBe('/financial-planning/career-comparison')
+    expect(window.location.search).toBe('')
+  })
+
   it('claims an anonymous comparison on login', async () => {
     render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: { ...savedComparison, ownerUserId: null }, canEdit: false })} />)
 
