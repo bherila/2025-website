@@ -52,6 +52,7 @@ export function CodeEditor({
       theme={oneDark}
       onChange={onChange}
       readOnly={readOnly}
+      indentWithTab={false}
       {...(placeholder !== undefined ? { placeholder } : {})}
       className={className}
       basicSetup={{
