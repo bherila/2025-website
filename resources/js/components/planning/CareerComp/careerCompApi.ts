@@ -1,11 +1,9 @@
 import { fetchWrapper } from '@/fetchWrapper'
 
-import type { CareerCompInputs, CareerCompProjection, CareerCompWorkflow, CareerCompWorkflowSummary, JobSpec, RsuGrant, SavedCareerJob } from './types'
+import type { CareerCompInputs, CareerCompProjection, CareerCompWorkflow, JobSpec, RsuGrant } from './types'
 
 interface SaveCareerCompResponse extends CareerCompWorkflow {
   id: number
-  shortCode: string
-  shareUrl: string
   projection: CareerCompProjection
 }
 
@@ -13,42 +11,31 @@ export function computeCareerComp(inputs: CareerCompInputs): Promise<CareerCompP
   return fetchWrapper.post('/api/financial-planning/career-comparison/compute', { inputs }) as Promise<CareerCompProjection>
 }
 
-export function saveCareerComparison(inputs: CareerCompInputs, shareIncludesCurrent = true): Promise<SaveCareerCompResponse> {
-  return fetchWrapper.post('/api/financial-planning/career-comparison/workflows', { inputs, shareIncludesCurrent }) as Promise<SaveCareerCompResponse>
+/** Autosave the authenticated user's private latest scenario (NULL share code). */
+export function saveLatestCareerComparison(inputs: CareerCompInputs): Promise<SaveCareerCompResponse> {
+  return fetchWrapper.put('/api/financial-planning/career-comparison/latest', { inputs }) as Promise<SaveCareerCompResponse>
 }
 
-export function updateCareerComparison(id: number, inputs: CareerCompInputs, shareIncludesCurrent = true): Promise<SaveCareerCompResponse> {
-  return fetchWrapper.patch(`/api/financial-planning/career-comparison/workflows/${id}`, { inputs, shareIncludesCurrent }) as Promise<SaveCareerCompResponse>
+/** Fork the current scenario into a new, link-shareable, editable copy (logged-in only). */
+export function shareCareerComparison(inputs: CareerCompInputs, shareIncludesCurrent: boolean, expiresAt: string | null = null): Promise<SaveCareerCompResponse> {
+  return fetchWrapper.post('/api/financial-planning/career-comparison/share', { inputs, shareIncludesCurrent, expiresAt }) as Promise<SaveCareerCompResponse>
 }
 
-export function claimCareerComparison(shortCode: string): Promise<SaveCareerCompResponse> {
-  return fetchWrapper.post(`/api/financial-planning/career-comparison/s/${shortCode}/claim`, {}) as Promise<SaveCareerCompResponse>
+/** Autosave edits to a shared fork — open to anyone holding the link. */
+export function saveSharedCareerComparison(code: string, inputs: CareerCompInputs): Promise<SaveCareerCompResponse> {
+  return fetchWrapper.put(`/api/financial-planning/career-comparison/s/${code}`, { inputs }) as Promise<SaveCareerCompResponse>
 }
 
-export function listSavedCareerJobs(): Promise<{ jobs: SavedCareerJob[] }> {
-  return fetchWrapper.get('/api/financial-planning/career-comparison/saved-jobs') as Promise<{ jobs: SavedCareerJob[] }>
+/** Creator-only: set or clear a shared fork's expiration. */
+export function updateSharedCareerComparisonExpiration(code: string, expiresAt: string | null): Promise<SaveCareerCompResponse> {
+  return fetchWrapper.patch(`/api/financial-planning/career-comparison/s/${code}`, { expiresAt }) as Promise<SaveCareerCompResponse>
 }
 
-export function listCareerCompWorkflows(): Promise<{ workflows: CareerCompWorkflowSummary[] }> {
-  return fetchWrapper.get('/api/financial-planning/career-comparison/workflows') as Promise<{ workflows: CareerCompWorkflowSummary[] }>
-}
-
-export function getCareerCompWorkflow(id: number): Promise<CareerCompWorkflow> {
-  return fetchWrapper.get(`/api/financial-planning/career-comparison/workflows/${id}`) as Promise<CareerCompWorkflow>
-}
-
-export function deleteCareerCompWorkflow(id: number): Promise<{ deleted: true }> {
-  return fetchWrapper.delete(`/api/financial-planning/career-comparison/workflows/${id}`, {}) as Promise<{ deleted: true }>
-}
-
-export function activateCareerCompWorkflow(id: number): Promise<CareerCompWorkflow> {
-  return fetchWrapper.post(`/api/financial-planning/career-comparison/workflows/${id}/activate`, {}) as Promise<CareerCompWorkflow>
-}
-
-export function shareCareerComparison(inputs: CareerCompInputs, shareIncludesCurrent = true): Promise<SaveCareerCompResponse> {
-  return fetchWrapper.post('/api/financial-planning/career-comparison/share', { inputs, shareIncludesCurrent }) as Promise<SaveCareerCompResponse>
+/** Creator-only: delete a shared fork. */
+export function deleteSharedCareerComparison(code: string): Promise<{ deleted: true }> {
+  return fetchWrapper.delete(`/api/financial-planning/career-comparison/s/${code}`, {}) as Promise<{ deleted: true }>
 }
 
 export function importRsuIntoCurrentJob(currentJob: JobSpec | null): Promise<{ currentJob: JobSpec; importedGrants: RsuGrant[] }> {
-  return fetchWrapper.post('/api/financial-planning/career-comparison/workflows/import-rsu', { currentJob }) as Promise<{ currentJob: JobSpec; importedGrants: RsuGrant[] }>
+  return fetchWrapper.post('/api/financial-planning/career-comparison/latest/import-rsu', { currentJob }) as Promise<{ currentJob: JobSpec; importedGrants: RsuGrant[] }>
 }

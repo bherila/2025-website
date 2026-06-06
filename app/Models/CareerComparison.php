@@ -17,8 +17,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_active_at
  * @property int|null $current_job_id
  * @property list<int> $hypothetical_job_ids
- * @property string $short_code
+ * @property string|null $short_code
  * @property bool $share_includes_current
+ * @property Carbon|null $expires_at
  * @property array<string, mixed>|null $computed_json
  */
 class CareerComparison extends Model
@@ -37,6 +38,7 @@ class CareerComparison extends Model
         'hypothetical_job_ids',
         'short_code',
         'share_includes_current',
+        'expires_at',
         'computed_json',
     ];
 
@@ -48,6 +50,7 @@ class CareerComparison extends Model
             'share_includes_current' => 'boolean',
             'is_snapshot' => 'boolean',
             'last_active_at' => 'datetime',
+            'expires_at' => 'datetime',
         ];
     }
 

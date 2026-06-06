@@ -14,111 +14,125 @@ class CareerComparisonWorkflowService
     public function __construct(private CareerCompCalculator $calculator) {}
 
     /**
-     * @return Collection<int, CareerComparison>
+     * The owner's private "latest" scenario: the row with a NULL short_code (never shared).
      */
-    public function listWorkflows(int $userId): Collection
+    public function latestForUser(int $userId): ?CareerComparison
     {
         return CareerComparison::query()
             ->where('user_id', $userId)
-            ->where('is_snapshot', false)
-            ->orderByDesc('last_active_at')
+            ->whereNull('short_code')
             ->orderByDesc('updated_at')
             ->orderByDesc('id')
-            ->get();
-    }
-
-    public function lastActiveWorkflow(int $userId): ?CareerComparison
-    {
-        return CareerComparison::query()
-            ->where('user_id', $userId)
-            ->where('is_snapshot', false)
-            ->orderByDesc('last_active_at')
-            ->orderByDesc('updated_at')
             ->first();
     }
 
-    public function createWorkflow(int $userId, CareerCompInputs $inputs, ?string $title = null): CareerComparison
+    /**
+     * Resolve a shared fork by code, treating expired forks as absent.
+     */
+    public function findActiveShare(string $code): ?CareerComparison
+    {
+        return CareerComparison::query()
+            ->whereNotNull('short_code')
+            ->where('short_code', $code)
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->first();
+    }
+
+    /**
+     * Upsert the user's single private latest (NULL short_code) from the given inputs (autosave target).
+     */
+    public function saveLatest(int $userId, CareerCompInputs $inputs): CareerComparison
+    {
+        return $this->writeComparison($this->latestForUser($userId), $inputs, $userId, fn (): array => [
+            'user_id' => $userId,
+            'short_code' => null,
+            'share_includes_current' => true,
+            'expires_at' => null,
+        ]);
+    }
+
+    /**
+     * Fork the given inputs into a new, link-shareable, editable copy owned by the creator.
+     */
+    public function createShare(int $userId, CareerCompInputs $inputs, bool $shareIncludesCurrent, ?\DateTimeInterface $expiresAt = null): CareerComparison
+    {
+        return $this->writeComparison(null, $inputs, $userId, fn (): array => [
+            'user_id' => $userId,
+            'short_code' => $this->shortCode(),
+            'share_includes_current' => $shareIncludesCurrent,
+            'expires_at' => $expiresAt,
+        ]);
+    }
+
+    /**
+     * Persist edits made to a shared fork by anyone holding the link. When the editor cannot see the
+     * confidential current job, `$preserveCurrent` keeps the stored current job instead of wiping it.
+     */
+    public function saveShare(CareerComparison $share, CareerCompInputs $inputs, bool $preserveCurrent = false): CareerComparison
+    {
+        return $this->writeComparison($share, $inputs, $share->user_id !== null ? (int) $share->user_id : null, null, $preserveCurrent);
+    }
+
+    public function setShareExpiration(CareerComparison $share, ?\DateTimeInterface $expiresAt): CareerComparison
+    {
+        $share->update(['expires_at' => $expiresAt]);
+
+        return $share->refresh();
+    }
+
+    public function deleteShare(CareerComparison $share): void
+    {
+        DB::transaction(function () use ($share): void {
+            $jobIds = $this->referencedJobIds($share);
+            $shareId = $share->id;
+            $share->delete();
+            $this->deleteOrphanedJobs($jobIds, $shareId);
+        });
+    }
+
+    /**
+     * Create-or-update a comparison from inputs, persisting its jobs and pruning orphans.
+     *
+     * @param  (callable(): array<string, mixed>)|null  $metaForCreate  Extra columns when creating; null updates $existing.
+     */
+    private function writeComparison(?CareerComparison $existing, CareerCompInputs $inputs, ?int $jobOwnerId, ?callable $metaForCreate, bool $preserveCurrent = false): CareerComparison
     {
         $projection = $this->calculator->project($inputs)->toArray();
 
-        return DB::transaction(function () use ($userId, $inputs, $projection, $title): CareerComparison {
-            $this->clearLastActive($userId);
-            $references = $this->persistJobs($inputs, $userId);
+        return DB::transaction(function () use ($existing, $inputs, $jobOwnerId, $metaForCreate, $preserveCurrent, $projection): CareerComparison {
+            if ($existing instanceof CareerComparison) {
+                $staleJobIds = $this->referencedJobIds($existing);
+                if ($preserveCurrent && $existing->current_job_id !== null) {
+                    $staleJobIds = array_values(array_filter($staleJobIds, fn (int $id): bool => $id !== (int) $existing->current_job_id));
+                }
 
-            return CareerComparison::query()->create([
-                'user_id' => $userId,
-                'title' => $this->workflowTitle($inputs, $title),
+                $references = $this->persistJobs($inputs, $jobOwnerId, ! $preserveCurrent);
+                $currentJobId = $preserveCurrent ? $existing->current_job_id : $references['currentJobId'];
+
+                $existing->update([
+                    'title' => $this->workflowTitle($inputs, $existing->title),
+                    'current_job_id' => $currentJobId,
+                    'hypothetical_job_ids' => $references['hypotheticalJobIds'],
+                    'computed_json' => $projection,
+                ]);
+
+                $this->deleteOrphanedJobs($staleJobIds, $existing->id);
+
+                return $existing->refresh();
+            }
+
+            $references = $this->persistJobs($inputs, $jobOwnerId);
+
+            return CareerComparison::query()->create(array_merge([
+                'title' => $this->workflowTitle($inputs, null),
                 'is_snapshot' => false,
                 'last_active_at' => now(),
                 'current_job_id' => $references['currentJobId'],
                 'hypothetical_job_ids' => $references['hypotheticalJobIds'],
-                'short_code' => $this->shortCode(),
-                'share_includes_current' => true,
                 'computed_json' => $projection,
-            ]);
-        });
-    }
-
-    public function updateWorkflow(CareerComparison $workflow, CareerCompInputs $inputs, ?string $title = null, ?bool $shareIncludesCurrent = null): CareerComparison
-    {
-        $projection = $this->calculator->project($inputs)->toArray();
-
-        return DB::transaction(function () use ($workflow, $inputs, $projection, $title, $shareIncludesCurrent): CareerComparison {
-            $staleJobIds = $this->referencedJobIds($workflow);
-            $references = $this->persistJobs($inputs, (int) $workflow->user_id);
-
-            $workflow->update([
-                'title' => $this->workflowTitle($inputs, $title ?? $workflow->title),
-                'current_job_id' => $references['currentJobId'],
-                'hypothetical_job_ids' => $references['hypotheticalJobIds'],
-                'share_includes_current' => $shareIncludesCurrent ?? $workflow->share_includes_current,
-                'computed_json' => $projection,
-            ]);
-
-            $this->deleteOrphanedJobs($staleJobIds, $workflow->id);
-
-            return $workflow->refresh();
-        });
-    }
-
-    public function markLastActive(CareerComparison $workflow): CareerComparison
-    {
-        return DB::transaction(function () use ($workflow): CareerComparison {
-            $this->clearLastActive((int) $workflow->user_id);
-            $workflow->update(['last_active_at' => now()]);
-
-            return $workflow->refresh();
-        });
-    }
-
-    public function deleteWorkflow(CareerComparison $workflow): void
-    {
-        DB::transaction(function () use ($workflow): void {
-            $jobIds = $this->referencedJobIds($workflow);
-            $workflowId = $workflow->id;
-            $workflow->delete();
-            $this->deleteOrphanedJobs($jobIds, $workflowId);
-        });
-    }
-
-    public function createSnapshot(?int $userId, CareerCompInputs $inputs, bool $shareIncludesCurrent = true): CareerComparison
-    {
-        $projection = $this->calculator->project($inputs)->toArray();
-
-        return DB::transaction(function () use ($userId, $inputs, $projection, $shareIncludesCurrent): CareerComparison {
-            $references = $this->persistJobs($inputs, $userId);
-
-            return CareerComparison::query()->create([
-                'user_id' => $userId,
-                'title' => null,
-                'is_snapshot' => true,
-                'last_active_at' => null,
-                'current_job_id' => $references['currentJobId'],
-                'hypothetical_job_ids' => $references['hypotheticalJobIds'],
-                'short_code' => $this->shortCode(),
-                'share_includes_current' => $shareIncludesCurrent,
-                'computed_json' => $projection,
-            ]);
+            ], $metaForCreate !== null ? $metaForCreate() : []));
         });
     }
 
@@ -186,11 +200,10 @@ class CareerComparisonWorkflowService
             'id' => $comparison->id,
             'title' => $comparison->title,
             'shortCode' => $comparison->short_code,
-            'shareUrl' => url("/financial-planning/career-comparison/s/{$comparison->short_code}"),
+            'shareUrl' => $comparison->short_code !== null ? url("/financial-planning/career-comparison/s/{$comparison->short_code}") : null,
             'ownerUserId' => $comparison->user_id,
             'shareIncludesCurrent' => $comparison->share_includes_current,
-            'isSnapshot' => $comparison->is_snapshot,
-            'lastActiveAt' => $comparison->last_active_at?->toIso8601String(),
+            'expiresAt' => $comparison->expires_at?->toIso8601String(),
             'updatedAt' => $comparison->updated_at?->toIso8601String(),
             'inputs' => $this->inputsFromComparison($comparison)->toArray(),
             'projection' => $comparison->computed_json,
@@ -198,34 +211,11 @@ class CareerComparisonWorkflowService
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    public function summary(CareerComparison $comparison): array
-    {
-        return [
-            'id' => $comparison->id,
-            'title' => $comparison->title,
-            'shortCode' => $comparison->short_code,
-            'lastActiveAt' => $comparison->last_active_at?->toIso8601String(),
-            'updatedAt' => $comparison->updated_at?->toIso8601String(),
-        ];
-    }
-
-    private function clearLastActive(int $userId): void
-    {
-        CareerComparison::query()
-            ->where('user_id', $userId)
-            ->where('is_snapshot', false)
-            ->whereNotNull('last_active_at')
-            ->update(['last_active_at' => null]);
-    }
-
-    /**
      * @return array{currentJobId: int|null, hypotheticalJobIds: list<int>}
      */
-    private function persistJobs(CareerCompInputs $inputs, ?int $userId): array
+    private function persistJobs(CareerCompInputs $inputs, ?int $userId, bool $persistCurrent = true): array
     {
-        $currentJob = $inputs->currentJob();
+        $currentJob = $persistCurrent ? $inputs->currentJob() : null;
         $currentJobId = null;
 
         if ($currentJob !== null) {
