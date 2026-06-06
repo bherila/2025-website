@@ -2,15 +2,11 @@ import currency from 'currency.js'
 
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
-import type { CareerCompInputs,JobSpec } from './types'
+import type { CareerCompInputs } from './types'
 
 export const QUERY_KEYS = {
   payload: 'cc',
 } as const
-
-interface SerializeCareerCompUrlStateOptions {
-  excludeCurrent?: boolean
-}
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
@@ -83,17 +79,6 @@ function diffFromDefaults(value: unknown, defaults: unknown): JsonValue | undefi
   return isJsonValue(value) ? value : undefined
 }
 
-function applySerializeOptions(inputs: CareerCompInputs, options: SerializeCareerCompUrlStateOptions): CareerCompInputs {
-  if (!options.excludeCurrent) {
-    return inputs
-  }
-
-  return {
-    ...inputs,
-    currentJob: null,
-  }
-}
-
 function encodePayload(payload: JsonValue): string {
   return btoa(encodeURIComponent(JSON.stringify(payload)))
 }
@@ -117,12 +102,9 @@ export function parseCareerCompUrlState(search: string, base: CareerCompInputs =
   }
 }
 
-export function serializeCareerCompUrlState(
-  inputs: CareerCompInputs,
-  options: SerializeCareerCompUrlStateOptions = {},
-): string {
-  const normalizedInputs = applySerializeOptions(normalizeCareerCompInputs(inputs), options)
-  const defaults = applySerializeOptions(normalizeCareerCompInputs(DEFAULT_CAREER_COMP_INPUTS), options)
+export function serializeCareerCompUrlState(inputs: CareerCompInputs): string {
+  const normalizedInputs = normalizeCareerCompInputs(inputs)
+  const defaults = normalizeCareerCompInputs(DEFAULT_CAREER_COMP_INPUTS)
   const diff = diffFromDefaults(normalizedInputs, defaults)
 
   if (!diff) {
@@ -132,12 +114,4 @@ export function serializeCareerCompUrlState(
   const params = new URLSearchParams()
   params.set(QUERY_KEYS.payload, encodePayload(diff))
   return params.toString()
-}
-
-export function cloneJobWithId(job: JobSpec, id: string, name: string): JobSpec {
-  return {
-    ...job,
-    id,
-    name,
-  }
 }

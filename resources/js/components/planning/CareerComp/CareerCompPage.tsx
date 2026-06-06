@@ -237,10 +237,12 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const saveLabel = isShareView ? 'Saved to link' : 'Saved'
 
   useEffect(() => {
-    if (!isShareView) {
+    // Anonymous public-calculator users have no server record, so the URL (?cc=) is their only
+    // persistence + share path. Logged-in users autosave server-side, so we skip the URL clutter.
+    if (!isShareView && !initialData.authenticated) {
       replaceUrlWithInputs(normalizedInputs)
     }
-  }, [isShareView, normalizedInputs])
+  }, [isShareView, initialData.authenticated, normalizedInputs])
 
   useEffect(() => {
     let active = true

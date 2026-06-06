@@ -595,6 +595,22 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
           <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
         </div>
 
+        <div className="space-y-3 border-t pt-4">
+          <div>
+            <Label className="text-sm font-semibold">Raises &amp; RSU refreshers</Label>
+            <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus. Refreshers grant a % of that year&apos;s base, priced at the projected per-band share price; set % to 0 to disable.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <NumberField label="Annual raise" value={job.comp.annualRaisePct} suffix="%" min={0} onChange={(value) => onChange({ ...job, comp: { ...job.comp, annualRaisePct: value } })} />
+            <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
+            <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
+            <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
+            <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
+            <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
+            <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
+          </div>
+        </div>
+
         <div className="space-y-4 border-t pt-4">
           <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />
           <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />

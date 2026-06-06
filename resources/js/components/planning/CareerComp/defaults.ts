@@ -44,6 +44,15 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
     comp: {
       baseSalary: 180000,
       cashBonus: 25000,
+      annualRaisePct: 0,
+    },
+    refresher: {
+      pctOfBase: 0,
+      cadenceYears: 1,
+      firstYearOffset: 1,
+      vestingYears: 4,
+      cliffMonths: 0,
+      vestingFrequency: 'monthly',
     },
     rsuGrants: [buildDefaultRsuGrant(id, 1)],
     optionGrants: [buildDefaultOptionGrant(id, 1)],
