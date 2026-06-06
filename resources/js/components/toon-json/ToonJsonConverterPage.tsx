@@ -13,6 +13,23 @@ interface ToonJsonConverterPageProps {
 const DEBOUNCE_MS = 200
 const MAX_BYTES = 5_000_000
 
+function byteLength(value: string): number {
+  let bytes = 0
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0
+    if (codePoint <= 0x7f) {
+      bytes += 1
+    } else if (codePoint <= 0x7ff) {
+      bytes += 2
+    } else if (codePoint <= 0xffff) {
+      bytes += 3
+    } else {
+      bytes += 4
+    }
+  }
+  return bytes
+}
+
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -62,6 +79,7 @@ export function ToonJsonConverterPage({ initialData }: ToonJsonConverterPageProp
     const r = toonToJson(debouncedToon)
     if (r.ok) {
       setToonError(null)
+      setJsonError(null)
       setJson(r.output ?? '')
     } else {
       setToonError(r)
@@ -75,6 +93,7 @@ export function ToonJsonConverterPage({ initialData }: ToonJsonConverterPageProp
     const r = jsonToToon(debouncedJson)
     if (r.ok) {
       setJsonError(null)
+      setToonError(null)
       setToon(r.output ?? '')
     } else {
       setJsonError(r)
@@ -82,24 +101,65 @@ export function ToonJsonConverterPage({ initialData }: ToonJsonConverterPageProp
   }, [debouncedJson, lastEdited])
 
   const hasDocument = document !== null
-  const isValid = !toonError && !jsonError && toon.trim() !== '' && toon.length <= MAX_BYTES
+  const activeInput = lastEdited === 'json' ? json : toon
+  const isValid = !toonError && !jsonError && activeInput.trim() !== '' && (lastEdited === 'json' || byteLength(toon) <= MAX_BYTES)
   const canSave = initialData.authenticated && !hasDocument
   const canUpdate = initialData.authenticated && hasDocument && ownsCurrentDocument
+
+  const getSaveableToon = (): string | null => {
+    if (lastEdited === 'json') {
+      const r = jsonToToon(json)
+      if (!r.ok) {
+        setJsonError(r)
+        return null
+      }
+
+      const nextToon = r.output ?? ''
+      setJsonError(null)
+      setToonError(null)
+      setToon(nextToon)
+      return nextToon
+    }
+
+    const r = toonToJson(toon)
+    if (!r.ok) {
+      setToonError(r)
+      return null
+    }
+
+    setToonError(null)
+    setJsonError(null)
+    setJson(r.output ?? '')
+    return toon
+  }
 
   const handleSave = async (): Promise<void> => {
     if (saving) {
       return
     }
-    setSaving(true)
     setSaveError(null)
+    const toonToSave = getSaveableToon()
+    if (toonToSave === null) {
+      return
+    }
+    if (toonToSave.trim() === '') {
+      setSaveError('TOON content is required.')
+      return
+    }
+    if (byteLength(toonToSave) > MAX_BYTES) {
+      setSaveError('TOON content must not exceed 5,000,000 bytes.')
+      return
+    }
+
+    setSaving(true)
     try {
       const trimmedTitle = title.trim() === '' ? null : title.trim()
       let response: SaveToonResponse
       if (document) {
-        response = await updateToonDocument(document.shortCode, trimmedTitle, toon)
+        response = await updateToonDocument(document.shortCode, trimmedTitle, toonToSave)
         setDocument({ ...document, title: response.title, shareUrl: response.shareUrl })
       } else {
-        response = await saveToonDocument(trimmedTitle, toon)
+        response = await saveToonDocument(trimmedTitle, toonToSave)
         setDocument({
           id: response.id,
           shortCode: response.shortCode,
@@ -191,6 +251,7 @@ export function ToonJsonConverterPage({ initialData }: ToonJsonConverterPageProp
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">TOON</label>
           <textarea
+            aria-label="TOON"
             value={toon}
             onChange={(event) => {
               setToon(event.target.value)
@@ -205,6 +266,7 @@ export function ToonJsonConverterPage({ initialData }: ToonJsonConverterPageProp
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">JSON</label>
           <textarea
+            aria-label="JSON"
             value={json}
             onChange={(event) => {
               setJson(event.target.value)

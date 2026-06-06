@@ -8,6 +8,11 @@ use Tests\TestCase;
 
 class ToonConverterControllerTest extends TestCase
 {
+    private function oversizedMultibyteToonContent(): string
+    {
+        return 'value: '.str_repeat("\u{00E9}", 2_500_001);
+    }
+
     public function test_toon_json_page_is_public(): void
     {
         $this->withoutVite();
@@ -87,6 +92,22 @@ class ToonConverterControllerTest extends TestCase
         $response = $this->actingAs($user)->postJson('/api/tools/toon-json/save', [
             'title' => 'Too big',
             'toon_content' => str_repeat('a', 5_000_001),
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['toon_content']);
+    }
+
+    public function test_save_over_5mb_multibyte_toon_returns_422_by_bytes(): void
+    {
+        $user = User::factory()->create();
+        $toonContent = $this->oversizedMultibyteToonContent();
+        $this->assertGreaterThan(5_000_000, strlen($toonContent));
+        $this->assertLessThan(5_000_000, mb_strlen($toonContent));
+
+        $response = $this->actingAs($user)->postJson('/api/tools/toon-json/save', [
+            'title' => 'Too big',
+            'toon_content' => $toonContent,
         ]);
 
         $response->assertUnprocessable();
@@ -178,6 +199,31 @@ class ToonConverterControllerTest extends TestCase
 
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors(['toon_content']);
+    }
+
+    public function test_owner_patch_over_5mb_multibyte_toon_returns_422_by_bytes(): void
+    {
+        $owner = User::factory()->create();
+        $document = ToonDocument::factory()->create([
+            'user_id' => $owner->id,
+            'short_code' => 'updtn3a',
+            'toon_content' => 'valid: true',
+        ]);
+        $toonContent = $this->oversizedMultibyteToonContent();
+        $this->assertGreaterThan(5_000_000, strlen($toonContent));
+        $this->assertLessThan(5_000_000, mb_strlen($toonContent));
+
+        $response = $this->actingAs($owner)->patchJson("/api/tools/toon-json/s/{$document->short_code}", [
+            'title' => 'Too big',
+            'toon_content' => $toonContent,
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['toon_content']);
+        $this->assertDatabaseHas('toon_documents', [
+            'id' => $document->id,
+            'toon_content' => 'valid: true',
+        ]);
     }
 
     public function test_two_saves_produce_different_short_codes(): void

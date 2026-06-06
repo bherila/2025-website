@@ -22,9 +22,14 @@ class UpdateToonDocumentRequest extends FormRequest
         return [
             'title' => ['nullable', 'string', 'max:120'],
             'toon_content' => [
+                'bail',
                 'required',
                 'string',
-                'max:5000000',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (strlen((string) $value) > 5_000_000) {
+                        $fail('The TOON content must not exceed 5,000,000 bytes.');
+                    }
+                },
                 function (string $attribute, mixed $value, Closure $fail): void {
                     try {
                         Toon::decode((string) $value);
