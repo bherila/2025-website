@@ -144,4 +144,19 @@ describe('CareerCompPage', () => {
     await waitFor(() => expect(mockImportRsu).toHaveBeenCalledWith(DEFAULT_CAREER_COMP_INPUTS.currentJob))
     expect(await screen.findByText('No RSU awards found to import.')).toBeInTheDocument()
   })
+
+  it('keeps focus in a new grant editor after the first field change creates the grant', () => {
+    render(<CareerCompPage initialData={baseInitialData()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Offers' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add RSU grant' }))
+
+    const shareCount = screen.getByLabelText('Share count')
+    shareCount.focus()
+    expect(shareCount).toHaveFocus()
+
+    fireEvent.change(shareCount, { target: { value: '2500' } })
+
+    expect(shareCount).toHaveFocus()
+  })
 })
