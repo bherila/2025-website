@@ -24,7 +24,7 @@ interface GrantEditorTarget {
 }
 
 // The form is controlled and grant editing happens in a child column; this harness mirrors the page
-// by holding both the inputs and the active grant-editor target so edits/saves re-render.
+// by holding both the inputs and the active grant-editor target so edit-as-you-type changes re-render.
 function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
   const [inputs, setInputs] = useState(initial)
   const [editor, setEditor] = useState<GrantEditorTarget | null>(null)
@@ -35,9 +35,10 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
         inputs={inputs}
         onChange={setInputs}
         onOpenGrantEditor={(jobId, grantType, grantId) => setEditor({ jobId, grantType, grantId })}
+        activeGrant={editor}
       />
       {editor ? (
-        <GrantEditorColumn inputs={inputs} jobId={editor.jobId} grantType={editor.grantType} grantId={editor.grantId} onChange={setInputs} onClose={() => setEditor(null)} />
+        <GrantEditorColumn inputs={inputs} jobId={editor.jobId} grantType={editor.grantType} grantId={editor.grantId} onChange={setInputs} onGrantCreated={(grantId) => setEditor((current) => (current ? { ...current, grantId } : current))} />
       ) : null}
     </>
   )
@@ -63,19 +64,19 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.queryByText('Current share price')).not.toBeInTheDocument()
   })
 
-  it('adds a new RSU grant via its own column, which closes after saving', () => {
+  it('adds a new RSU grant via its own column as fields change', () => {
     render(<Harness initial={makeInputs('public')} />)
 
     expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
     expect(screen.queryByText('RSU grant 2')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add RSU grant' }))
-    // The editor column exposes grant fields (e.g. vesting frequency) plus a Save action.
     expect(screen.getByText('Vesting frequency')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Save grant' }))
+    fireEvent.change(screen.getByLabelText('Share count'), { target: { value: '2500' } })
 
     expect(screen.getByText('RSU grant 2')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save grant' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
   })
 
   it('duplicates and removes RSU grant rows inline', () => {
@@ -87,6 +88,33 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove RSU grant 2' }))
     expect(screen.queryByText('RSU grant 2')).not.toBeInTheDocument()
     expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
+  })
+
+  it('highlights the open grant and navigates RSU grants with arrow keys', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate RSU grant 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit RSU grant 1' }))
+
+    expect(screen.getByRole('button', { name: /^RSU grant 1/ })).toHaveAttribute('aria-current', 'true')
+
+    fireEvent.keyDown(screen.getByLabelText('RSU grants section'), { key: 'ArrowDown' })
+    expect(screen.getByRole('button', { name: /^RSU grant 2/ })).toHaveAttribute('aria-current', 'true')
+
+    fireEvent.keyDown(screen.getByLabelText('RSU grants section'), { key: 'ArrowUp' })
+    expect(screen.getByRole('button', { name: /^RSU grant 1/ })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('highlights the open option grant and navigates option grants with arrow keys', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Option grant 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
+
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveAttribute('aria-current', 'true')
+
+    fireEvent.keyDown(screen.getByLabelText('Option grants section'), { key: 'ArrowDown' })
+    expect(screen.getByRole('button', { name: /^Option grant 2/ })).toHaveAttribute('aria-current', 'true')
   })
 
   it('opens an existing option grant in its editor column', () => {
