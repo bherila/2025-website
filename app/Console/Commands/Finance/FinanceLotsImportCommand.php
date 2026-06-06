@@ -61,11 +61,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         {--file= : Path to input file; omit to read from stdin}
         {--input-format= : Force input format: json | csv | toon | text (auto-detected by default)}
         {--dry-run : Show what would be imported without writing to the database}
+        {--mode=closed-1099b : Import mode: closed-1099b or open-positions}
         {--clear : Delete all existing lots for this account before importing}
         {--schema : Print expected input schemas and exit}
         {--format=table : Output format: table or json}';
 
-    protected $description = 'Import 1099-B lots (JSON / CSV / TOON / broker PDF/text) into fin_account_lots';
+    protected $description = 'Import closed 1099-B lots or open position lots into fin_account_lots';
 
     private const CSV_REQUIRED_COLS = ['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'realized_gain_loss'];
 
@@ -118,6 +119,13 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return 1;
         }
 
+        $mode = (string) $this->option('mode');
+        if (! in_array($mode, ['closed-1099b', 'open-positions'], true)) {
+            $this->error('--mode must be closed-1099b or open-positions.');
+
+            return 1;
+        }
+
         $raw = $this->readInput();
         if ($raw === null) {
             return 1;
@@ -127,17 +135,19 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $this->info("Detected input format: {$inputFormat}");
 
         $lots = match ($inputFormat) {
-            'json' => $this->parseJson($raw),
-            'csv' => $this->parseCsv($raw),
-            'toon' => $this->parseToon($raw),
-            default => $this->parseText($raw),
+            'json' => $this->parseJson($raw, $mode),
+            'csv' => $mode === 'open-positions' ? $this->parseOpenPositionsCsv($raw) : $this->parseCsv($raw),
+            'toon' => $this->parseToon($raw, $mode),
+            default => $mode === 'open-positions' ? null : $this->parseText($raw),
         };
 
         if ($lots === null) {
             return 1;
         }
 
-        $lots = $this->normaliseImportedLotWashSales($lots);
+        if ($mode === 'closed-1099b') {
+            $lots = $this->normaliseImportedLotWashSales($lots);
+        }
 
         $this->info(sprintf('Parsed %d lot record(s).', count($lots)));
 
@@ -174,7 +184,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         [$inserted, $skipped] = $this->persistLots($acctId, $lots, $documentId, skipDuplicateCheck: $doClear);
-        $this->dispatchMatcherAfterImport($userId, $acctId, $documentId, $inserted, $deleted, $lots, $deletedYears);
+        if ($mode === 'closed-1099b') {
+            $this->dispatchMatcherAfterImport($userId, $acctId, $documentId, $inserted, $deleted, $lots, $deletedYears);
+        }
 
         $this->info("Imported: {$inserted} inserted, {$skipped} skipped (duplicate).");
 
@@ -290,13 +302,17 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      *
      * @return array<int, array<string, mixed>>|null
      */
-    private function parseJson(string $raw): ?array
+    private function parseJson(string $raw, string $mode = 'closed-1099b'): ?array
     {
         $data = json_decode($raw, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             $this->error('Invalid JSON: '.json_last_error_msg());
 
             return null;
+        }
+
+        if ($mode === 'open-positions') {
+            return $this->parseOpenPositionsData($data);
         }
 
         // Support both {"transactions": [...]} wrapper and bare [...] array
@@ -360,6 +376,75 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     }
 
     /**
+     * @param  array<mixed>  $data
+     * @return array<int, array<string, mixed>>|null
+     */
+    private function parseOpenPositionsData(array $data): ?array
+    {
+        if (isset($data['positions']) && is_array($data['positions'])) {
+            $rows = $data['positions'];
+        } elseif (isset($data['lots']) && is_array($data['lots'])) {
+            $rows = $data['lots'];
+        } elseif (isset($data['transactions']) && is_array($data['transactions'])) {
+            $rows = $data['transactions'];
+        } elseif (array_is_list($data)) {
+            $rows = $data;
+        } else {
+            $this->error('Open-position JSON must contain a "positions", "lots", or "transactions" array, or be a top-level array.');
+
+            return null;
+        }
+
+        $lots = [];
+        foreach ($rows as $i => $row) {
+            if (! is_array($row)) {
+                $this->warn("Row {$i}: expected an object — skipped.");
+
+                continue;
+            }
+
+            $symbol = $this->normaliseSymbol($row);
+            $purchaseDate = $this->normaliseDateField((string) ($row['purchase_date'] ?? $row['open_date'] ?? $row['acquired_date'] ?? ''));
+            if ($symbol === '' || $purchaseDate === null || ! is_numeric($row['quantity'] ?? null) || ! is_numeric($row['cost_basis'] ?? null)) {
+                $this->warn("Row {$i}: open positions require symbol, quantity, purchase_date/open_date, and cost_basis — skipped.");
+
+                continue;
+            }
+
+            $quantity = (float) $row['quantity'];
+            $costBasis = round((float) $row['cost_basis'], 4);
+            $costPerUnit = is_numeric($row['cost_per_unit'] ?? null)
+                ? round((float) $row['cost_per_unit'], 8)
+                : ($quantity > 0 ? round($costBasis / $quantity, 8) : null);
+
+            $lots[] = [
+                'symbol' => $symbol,
+                'description' => trim((string) ($row['description'] ?? '')),
+                'cusip' => isset($row['cusip']) ? strtoupper(trim((string) $row['cusip'])) : null,
+                'quantity' => $quantity,
+                'purchase_date' => $purchaseDate,
+                'sale_date' => null,
+                'cost_basis' => $costBasis,
+                'cost_per_unit' => $costPerUnit,
+                'proceeds' => null,
+                'realized_gain_loss' => null,
+                'wash_sale_disallowed' => 0,
+                'is_short_term' => null,
+                'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+                'lot_source' => 'statement_position',
+                'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
+                'external_id' => $this->normaliseLotExternalId($row),
+                'market_value' => is_numeric($row['market_value'] ?? null) ? round((float) $row['market_value'], 4) : null,
+                'snapshot_price' => is_numeric($row['snapshot_price'] ?? $row['market_price'] ?? null) ? round((float) ($row['snapshot_price'] ?? $row['market_price']), 8) : null,
+                'snapshot_date' => $this->normaliseDateField((string) ($row['snapshot_date'] ?? $row['as_of_date'] ?? '')),
+                'skip_transaction_matching' => true,
+            ];
+        }
+
+        return $lots;
+    }
+
+    /**
      * Parse TOON-encoded lot data (helgesverre/toon).
      *
      * TOON decodes to the same structure as JSON, so this method delegates to
@@ -367,7 +452,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      *
      * @return array<int, array<string, mixed>>|null
      */
-    private function parseToon(string $raw): ?array
+    private function parseToon(string $raw, string $mode = 'closed-1099b'): ?array
     {
         try {
             $decoded = Toon::decode($raw);
@@ -385,7 +470,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return null;
         }
 
-        return $this->parseJson($asJson);
+        return $this->parseJson($asJson, $mode);
     }
 
     /**
@@ -569,6 +654,38 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     }
 
     /**
+     * @return array<int, array<string, mixed>>|null
+     */
+    private function parseOpenPositionsCsv(string $raw): ?array
+    {
+        $lines = preg_split('/\r?\n/', trim($raw));
+        if (empty($lines)) {
+            $this->error('CSV input is empty.');
+
+            return null;
+        }
+
+        $headers = array_map('strtolower', array_map('trim', str_getcsv((string) array_shift($lines))));
+        $colIndex = array_flip($headers);
+        $rows = [];
+
+        foreach ($lines as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+
+            $cells = str_getcsv($line);
+            $row = [];
+            foreach ($colIndex as $column => $index) {
+                $row[$column] = trim($cells[$index] ?? '');
+            }
+            $rows[] = $row;
+        }
+
+        return $this->parseOpenPositionsData(['positions' => $rows]);
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $lots
      * @return array<int, array<string, mixed>>
      */
@@ -729,15 +846,38 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     {
         $symbols = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['symbol'], $lots)));
         $purchaseDates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['purchase_date'], $lots)));
-        $saleDates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['sale_date'], $lots)));
+        $saleDates = array_values(array_unique(array_map(fn (array $lot): string => (string) ($lot['sale_date'] ?? ''), $lots)));
+        $externalIds = array_values(array_unique(array_filter(
+            array_map(fn (array $lot): ?string => $this->normaliseLotExternalId($lot), $lots),
+            static fn (?string $externalId): bool => $externalId !== null && $externalId !== '',
+        )));
         $existingKeys = [];
+
+        if ($externalIds !== []) {
+            $existingRows = DB::table('fin_account_lots')
+                ->where('acct_id', $acctId)
+                ->whereIn('external_id', $externalIds)
+                ->get(['source', 'external_id']);
+
+            foreach ($existingRows as $row) {
+                $existingKeys[$this->lotDuplicateKey((array) $row)] = true;
+            }
+        }
 
         if (! empty($symbols) && ! empty($purchaseDates) && ! empty($saleDates)) {
             $existingRows = DB::table('fin_account_lots')
                 ->where('acct_id', $acctId)
                 ->whereIn('symbol', $symbols)
                 ->whereIn('purchase_date', $purchaseDates)
-                ->whereIn('sale_date', $saleDates)
+                ->where(function ($query) use ($saleDates): void {
+                    $nonNullSaleDates = array_values(array_filter($saleDates, static fn (string $saleDate): bool => $saleDate !== ''));
+                    if ($nonNullSaleDates !== []) {
+                        $query->whereIn('sale_date', $nonNullSaleDates);
+                    }
+                    if (in_array('', $saleDates, true)) {
+                        $nonNullSaleDates !== [] ? $query->orWhereNull('sale_date') : $query->whereNull('sale_date');
+                    }
+                })
                 ->get(['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis']);
 
             foreach ($existingRows as $row) {
@@ -760,16 +900,34 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     }
 
     /**
+     * @param  array<string, mixed>  $row
+     */
+    private function normaliseLotExternalId(array $row): ?string
+    {
+        foreach (['external_id', 'lot_id', 'lotId'] as $key) {
+            if (isset($row[$key]) && trim((string) $row[$key]) !== '') {
+                return trim((string) $row[$key]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array<string, mixed>  $lot
      */
     private function lotDuplicateKey(array $lot): string
     {
+        if (isset($lot['external_id']) && trim((string) $lot['external_id']) !== '') {
+            return 'external|'.($lot['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED).'|'.trim((string) $lot['external_id']);
+        }
+
         return implode('|', [
             (string) $lot['symbol'],
             number_format((float) $lot['quantity'], 4, '.', ''),
             (string) $lot['purchase_date'],
-            (string) $lot['sale_date'],
-            number_format((float) $lot['proceeds'], 2, '.', ''),
+            (string) ($lot['sale_date'] ?? ''),
+            number_format((float) ($lot['proceeds'] ?? 0), 2, '.', ''),
             number_format((float) $lot['cost_basis'], 2, '.', ''),
         ]);
     }
@@ -784,9 +942,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         ?int $documentId,
         Carbon $now,
     ): array {
-        $costPerUnit = $lot['quantity'] > 0
-            ? round($lot['cost_basis'] / $lot['quantity'], 8)
-            : null;
+        $costPerUnit = array_key_exists('cost_per_unit', $lot)
+            ? $lot['cost_per_unit']
+            : ($lot['quantity'] > 0 ? round($lot['cost_basis'] / $lot['quantity'], 8) : null);
 
         return [
             'acct_id' => $acctId,
@@ -797,16 +955,20 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             'purchase_date' => $lot['purchase_date'],
             'cost_basis' => $lot['cost_basis'],
             'cost_per_unit' => $costPerUnit,
+            'market_value' => $lot['market_value'] ?? null,
+            'snapshot_price' => $lot['snapshot_price'] ?? null,
+            'snapshot_date' => $lot['snapshot_date'] ?? null,
             'sale_date' => $lot['sale_date'],
             'proceeds' => $lot['proceeds'],
             'realized_gain_loss' => $lot['realized_gain_loss'],
-            'is_short_term' => $lot['is_short_term'] ? 1 : 0,
-            'lot_source' => 'import_1099b',
-            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'is_short_term' => $lot['is_short_term'] === null ? null : ((bool) $lot['is_short_term'] ? 1 : 0),
+            'lot_source' => $lot['lot_source'] ?? 'import_1099b',
+            'source' => $lot['source'] ?? FinAccountLot::SOURCE_BROKER_1099B,
+            'external_id' => $lot['external_id'] ?? null,
             'open_t_id' => null,
             'close_t_id' => null,
             'document_id' => $documentId,
-            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
+            'lot_origin' => $lot['lot_origin'] ?? FinAccountLot::ORIGIN_1099B_DISPOSITION,
             'form_8949_box' => $lot['form_8949_box'] ?? null,
             'is_covered' => $lot['is_covered'] ?? null,
             'wash_sale_disallowed' => $lot['wash_sale_disallowed'] ?? 0,
@@ -1200,11 +1362,11 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 $lot['symbol'],
                 number_format((float) $lot['quantity'], 3),
                 $lot['purchase_date'],
-                $lot['sale_date'],
-                number_format((float) $lot['proceeds'], 2),
+                $lot['sale_date'] ?? '',
+                $lot['proceeds'] === null ? '' : number_format((float) $lot['proceeds'], 2),
                 number_format((float) $lot['cost_basis'], 2),
-                number_format((float) $lot['realized_gain_loss'], 2),
-                $lot['is_short_term'] ? 'ST' : 'LT',
+                $lot['realized_gain_loss'] === null ? '' : number_format((float) $lot['realized_gain_loss'], 2),
+                $lot['is_short_term'] === null ? 'open' : ((bool) $lot['is_short_term'] ? 'ST' : 'LT'),
             ];
         }
 

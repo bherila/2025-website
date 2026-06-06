@@ -32,6 +32,8 @@ class TransactionImportService
                         'required' => ['t_date', 't_type', 't_amt'],
                         'properties' => [
                             't_account' => ['type' => 'integer', 'description' => 'Account ID. Overrides payload account_id and --account.'],
+                            'external_id' => ['type' => 'string', 'description' => 'Stable source transaction fingerprint; dedupes by account + source + external_id when present.'],
+                            'broker_transaction_id' => ['type' => 'string', 'description' => 'Alias for external_id.'],
                             't_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Transaction date (YYYY-MM-DD).'],
                             't_type' => ['type' => 'string', 'description' => 'Transaction type (e.g. Buy, Sell, Dividend, deposit, withdrawal).'],
                             't_amt' => ['type' => 'number', 'description' => 'Amount (negative = debit/cost, positive = credit/proceeds).'],
@@ -45,6 +47,8 @@ class TransactionImportService
                             't_comment' => ['type' => 'string'],
                             't_source' => ['type' => 'string', 'description' => 'Import source identifier.'],
                             't_origin' => ['type' => 'string', 'enum' => ['manual', 'import', 'api']],
+                            'effective_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Alias for t_date_posted/effective/as-of date.'],
+                            'as_of_date' => ['type' => 'string', 'format' => 'date', 'description' => 'Alias for t_date_posted/effective/as-of date.'],
                             'opt_expiration' => ['type' => 'string', 'format' => 'date', 'description' => 'Options expiration date.'],
                             'opt_type' => ['type' => 'string', 'enum' => ['call', 'put']],
                             'opt_strike' => ['type' => 'number'],
@@ -248,6 +252,7 @@ class TransactionImportService
 
             $normalized['t_date'] = substr((string) $normalized['t_date'], 0, 10);
             $normalized['t_symbol'] = $this->normalizeSymbol($normalized['t_symbol'] ?? null);
+            $normalized = $this->normalizeSourceIdentity($normalized);
 
             $rowToInsert = array_intersect_key($normalized, $allowedFields);
             $rowToInsert['when_added'] = now();
@@ -299,6 +304,15 @@ class TransactionImportService
             'price' => 't_price',
             'commission' => 't_commission',
             'fee' => 't_fee',
+            'source' => 't_source',
+            'externalId' => 'external_id',
+            'broker_transaction_id' => 'external_id',
+            'brokerTransactionId' => 'external_id',
+            'posted_date' => 't_date_posted',
+            'effective_date' => 't_date_posted',
+            'effectiveDate' => 't_date_posted',
+            'as_of_date' => 't_date_posted',
+            'asOfDate' => 't_date_posted',
         ];
 
         foreach ($aliases as $alias => $column) {
@@ -357,39 +371,150 @@ class TransactionImportService
         $toInsert = [];
         $skipped = [];
 
-        /** @var array<int, array<string, bool>> $existingByAccount */
-        $existingByAccount = [];
+        /** @var array<int, array<string, bool>> $existingExternalByAccount */
+        $existingExternalByAccount = [];
+
+        /** @var array<int, array<string, bool>> $existingLegacyByAccount */
+        $existingLegacyByAccount = [];
 
         /** @var array<int, list<string>> $datesByAccount */
         $datesByAccount = [];
+
+        /** @var array<int, list<string>> $externalIdsByAccount */
+        $externalIdsByAccount = [];
+
         foreach ($validRows as $row) {
-            $datesByAccount[(int) $row['t_account']][] = (string) $row['t_date'];
+            $acctId = (int) $row['t_account'];
+            if ($this->hasExternalIdentity($row)) {
+                $externalIdsByAccount[$acctId][] = (string) $row['external_id'];
+            } else {
+                $datesByAccount[$acctId][] = (string) $row['t_date'];
+            }
+        }
+
+        foreach ($externalIdsByAccount as $acctId => $externalIds) {
+            $existing = FinAccountLineItems::query()
+                ->where('t_account', $acctId)
+                ->whereIn('external_id', array_values(array_unique($externalIds)))
+                ->get(['t_source', 'external_id']);
+
+            foreach ($existing as $transaction) {
+                $existingExternalByAccount[$acctId][$this->externalDuplicateKey($transaction->getAttributes())] = true;
+            }
         }
 
         foreach ($datesByAccount as $acctId => $accountDates) {
             $existing = FinAccountLineItems::query()
                 ->where('t_account', $acctId)
                 ->whereBetween('t_date', [min($accountDates), max($accountDates)])
+                ->where(function ($query): void {
+                    $query->whereNull('external_id')->orWhere('external_id', '');
+                })
                 ->get(['t_date', 't_type', 't_amt', 't_symbol']);
 
             foreach ($existing as $transaction) {
-                $existingByAccount[$acctId][$this->duplicateKey($transaction->getAttributes())] = true;
+                $existingLegacyByAccount[$acctId][$this->duplicateKey($transaction->getAttributes())] = true;
             }
         }
 
         foreach ($validRows as $row) {
             $acctId = (int) $row['t_account'];
-            $key = $this->duplicateKey($row);
 
-            if (isset($existingByAccount[$acctId][$key])) {
+            if ($this->hasExternalIdentity($row)) {
+                $key = $this->externalDuplicateKey($row);
+                if (isset($existingExternalByAccount[$acctId][$key])) {
+                    $skipped[] = $row;
+                } else {
+                    $toInsert[] = $row;
+                    $existingExternalByAccount[$acctId][$key] = true;
+                }
+
+                continue;
+            }
+
+            $key = $this->duplicateKey($row);
+            if (isset($existingLegacyByAccount[$acctId][$key])) {
                 $skipped[] = $row;
             } else {
                 $toInsert[] = $row;
-                $existingByAccount[$acctId][$key] = true;
+                $existingLegacyByAccount[$acctId][$key] = true;
             }
         }
 
         return [$toInsert, $skipped];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function normalizeSourceIdentity(array $row): array
+    {
+        if (isset($row['t_date_posted'])) {
+            $row['t_date_posted'] = substr((string) $row['t_date_posted'], 0, 10);
+        }
+
+        if (isset($row['external_id']) && trim((string) $row['external_id']) !== '') {
+            $row['external_id'] = trim((string) $row['external_id']);
+
+            return $row;
+        }
+
+        $source = strtolower((string) ($row['t_source'] ?? ''));
+        if ($source === '' || ! str_contains($source, 'schwab')) {
+            return $row;
+        }
+
+        $fingerprintFields = [
+            'lotId',
+            'lot_id',
+            'schwabOrderId',
+            'schwab_order_id',
+            'depositSequenceId',
+            'deposit_sequence_id',
+            'itemIssueId',
+            'item_issue_id',
+            'acctgRuleCd',
+            'acctg_rule_cd',
+            'action',
+            't_date',
+            't_date_posted',
+            't_symbol',
+            't_qty',
+            't_amt',
+            't_fee',
+        ];
+
+        $parts = [];
+        foreach ($fingerprintFields as $field) {
+            if (array_key_exists($field, $row) && $row[$field] !== null && $row[$field] !== '') {
+                $parts[$field] = is_numeric($row[$field])
+                    ? number_format((float) $row[$field], 8, '.', '')
+                    : trim((string) $row[$field]);
+            }
+        }
+
+        if ($parts !== []) {
+            $row['external_id'] = 'schwab:'.hash('sha256', json_encode($parts, JSON_THROW_ON_ERROR));
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function hasExternalIdentity(array $row): bool
+    {
+        return isset($row['external_id']) && trim((string) $row['external_id']) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function externalDuplicateKey(array $row): string
+    {
+        return ($row['t_source'] ?? '').'|'.trim((string) ($row['external_id'] ?? ''));
     }
 
     /**

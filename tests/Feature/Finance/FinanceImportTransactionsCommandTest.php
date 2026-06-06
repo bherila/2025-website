@@ -311,4 +311,81 @@ class FinanceImportTransactionsCommandTest extends TestCase
             'statement_id' => 99999,
         ]);
     }
+
+    public function test_external_id_dedupes_schwab_stock_plan_split_rows_without_collapsing_distinct_lots(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                [
+                    't_date' => '2026-04-15',
+                    't_type' => 'Stock Plan Release',
+                    't_amt' => 0,
+                    't_symbol' => 'ABC',
+                    't_qty' => 1.25,
+                    't_source' => 'schwab-stock-plan',
+                    'lotId' => 'lot-001',
+                    'schwabOrderId' => 'order-001',
+                    'effective_date' => '2026-04-16',
+                ],
+                [
+                    't_date' => '2026-04-15',
+                    't_type' => 'Stock Plan Release',
+                    't_amt' => 0,
+                    't_symbol' => 'ABC',
+                    't_qty' => 2.50,
+                    't_source' => 'schwab-stock-plan',
+                    'lotId' => 'lot-002',
+                    'schwabOrderId' => 'order-001',
+                    'effective_date' => '2026-04-16',
+                ],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(2, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-15')
+            ->where('t_type', 'Stock Plan Release')
+            ->where('t_amt', 0)
+            ->where('t_symbol', 'ABC')
+            ->count());
+
+        $this->assertSame(2, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_source', 'schwab-stock-plan')
+            ->whereNotNull('external_id')
+            ->distinct('external_id')
+            ->count('external_id'));
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-04-15',
+            't_date_posted' => '2026-04-16',
+            't_qty' => 1.25,
+        ]);
+    }
+
+    public function test_external_id_skips_repeat_import_before_legacy_duplicate_heuristic(): void
+    {
+        $payload = [
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-04-20', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker', 'external_id' => 'txn-1'],
+                ['t_date' => '2026-04-20', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker', 'external_id' => 'txn-2'],
+            ],
+        ];
+
+        $this->withPayload($payload);
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->withPayload($payload);
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(2, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-20')
+            ->count());
+    }
 }
