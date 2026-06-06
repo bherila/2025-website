@@ -24,6 +24,7 @@ use App\Http\Controllers\PHR\PageController as PHRPageController;
 use App\Http\Controllers\PHR\PhrDocumentController;
 use App\Http\Controllers\PHR\PhrExportController;
 use App\Http\Controllers\RecipeController;
+use App\Http\Controllers\Toon\ToonConverterController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountController;
 use Illuminate\Support\Facades\Route;
@@ -175,6 +176,11 @@ Route::get('/tools/markdown', [MarkdownRendererController::class, 'show'])
     ->name('tools.markdown');
 Route::get('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'showByCode'])
     ->name('tools.markdown.shared');
+
+Route::get('/tools/toon-json', [ToonConverterController::class, 'show'])
+    ->name('tools.toon-json');
+Route::get('/tools/toon-json/s/{code}', [ToonConverterController::class, 'showByCode'])
+    ->name('tools.toon-json.shared');
 
 Route::get('/tools/address-labels', [AddressLabelController::class, 'index'])->name('tools.address-labels.index');
 Route::post('/tools/address-labels/pdf', [AddressLabelController::class, 'generate'])->name('tools.address-labels.pdf');

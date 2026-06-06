@@ -55,6 +55,7 @@ export default defineConfig({
         'resources/js/financial-planning/roth-conversion.tsx',
         'resources/js/financial-planning/career-comparison.tsx',
         'resources/js/markdown-renderer/index.tsx',
+        'resources/js/toon-json/index.tsx',
         'resources/js/license-manager.tsx',
         'resources/js/class-action-tracker.tsx',
         'resources/js/client-management/admin/agreement.tsx',
