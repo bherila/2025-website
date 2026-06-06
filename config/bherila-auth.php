@@ -25,6 +25,16 @@ return [
         'admin_ability' => env('BHERILA_AUTH_AUDIT_ADMIN_ABILITY'),
     ],
 
+    'throttle' => [
+        // Opt-in brute-force lockout backed by auth_audit_log rows. Disabled by default.
+        'enabled' => env('BHERILA_AUTH_THROTTLE_ENABLED', false),
+        'max_attempts' => env('BHERILA_AUTH_THROTTLE_MAX_ATTEMPTS', 5),
+        'decay_minutes' => env('BHERILA_AUTH_THROTTLE_DECAY_MINUTES', 15),
+        // email, ip, or email_ip. Invalid values fall back to email_ip.
+        'key' => env('BHERILA_AUTH_THROTTLE_KEY', 'email_ip'),
+        'record_blocked' => env('BHERILA_AUTH_THROTTLE_RECORD_BLOCKED', true),
+    ],
+
     'password_resets' => [
         'reset_url' => env('BHERILA_AUTH_PASSWORD_RESET_URL', env('APP_URL', '').'/reset-password/{token}?email={email}'),
         'request_url' => env('BHERILA_AUTH_PASSWORD_REQUEST_URL', '/forgot-password'),
