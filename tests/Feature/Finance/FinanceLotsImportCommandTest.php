@@ -328,6 +328,42 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_open_positions_csv_accepts_formatted_amounts(): void
+    {
+        Queue::fake();
+        $csv = implode("\n", [
+            'Symbol,Quantity,Purchase Date,Cost Basis,Cost Per Unit,Market Value,Lot Price,Lot ID',
+            'meta,2,08/15/2025,"1,564.26","782.13","1,186.00","593.00",csv-formatted-lot-1',
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.csv';
+        file_put_contents($tmpFile, $csv);
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--mode' => 'open-positions',
+            '--input-format' => 'csv',
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Parsed 1 lot record(s)')
+            ->expectsOutputToContain('Imported: 1 inserted');
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => 'META',
+            'purchase_date' => '2025-08-15',
+            'cost_basis' => 1564.26,
+            'cost_per_unit' => 782.13,
+            'market_value' => 1186,
+            'snapshot_price' => 593,
+            'external_id' => 'csv-formatted-lot-1',
+        ]);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+
+        unlink($tmpFile);
+    }
+
     public function test_open_positions_mode_dedupes_by_external_id(): void
     {
         Queue::fake();
@@ -347,6 +383,56 @@ class FinanceLotsImportCommandTest extends TestCase
             ->where('acct_id', $this->acctId)
             ->where('external_id', 'same-lot')
             ->count());
+
+        unlink($tmpFile);
+    }
+
+    public function test_open_positions_mode_dedupes_externalized_import_against_legacy_lot(): void
+    {
+        Queue::fake();
+        DB::table('fin_account_lots')->insert([
+            'acct_id' => $this->acctId,
+            'symbol' => 'META',
+            'quantity' => 2,
+            'purchase_date' => '2025-08-15',
+            'sale_date' => null,
+            'cost_basis' => 1564.26,
+            'proceeds' => null,
+            'realized_gain_loss' => null,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => 'statement_position',
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
+            'external_id' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode([
+            'positions' => [
+                ['symbol' => 'META', 'quantity' => 2, 'purchase_date' => '2025-08-15', 'cost_basis' => 1564.26, 'lot_id' => 'new-external-lot'],
+            ],
+        ]));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--mode' => 'open-positions',
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Imported: 0 inserted, 1 skipped');
+
+        $this->assertSame(1, DB::table('fin_account_lots')
+            ->where('acct_id', $this->acctId)
+            ->where('symbol', 'META')
+            ->where('purchase_date', '2025-08-15')
+            ->where('cost_basis', 1564.26)
+            ->count());
+        $this->assertDatabaseMissing('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'external_id' => 'new-external-lot',
+        ]);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
 
         unlink($tmpFile);
     }

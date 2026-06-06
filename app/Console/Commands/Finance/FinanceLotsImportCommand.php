@@ -405,22 +405,22 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
             $symbol = $this->normaliseSymbol($row);
             $purchaseDate = $this->normaliseDateField((string) ($this->firstPresent($row, ['purchase_date', 'purchaseDate', 'open_date', 'openDate', 'acquired_date', 'acquiredDate']) ?? ''));
-            $quantity = $this->firstPresent($row, ['quantity']);
-            $costBasisValue = $this->firstPresent($row, ['cost_basis', 'costBasis']);
-            if ($symbol === '' || $purchaseDate === null || ! is_numeric($quantity) || ! is_numeric($costBasisValue)) {
+            $quantityValue = $this->openPositionNumber($this->firstPresent($row, ['quantity']));
+            $costBasisValue = $this->openPositionNumber($this->firstPresent($row, ['cost_basis', 'costBasis']));
+            if ($symbol === '' || $purchaseDate === null || $quantityValue === null || $costBasisValue === null) {
                 $this->warn("Row {$i}: open positions require symbol, quantity, purchase_date/open_date, and cost_basis — skipped.");
 
                 continue;
             }
 
-            $quantity = (float) $quantity;
-            $costBasis = round((float) $costBasisValue, 4);
-            $costPerUnitValue = $this->firstPresent($row, ['cost_per_unit', 'costPerUnit', 'cost_per_share', 'costPerShare']);
-            $marketValue = $this->firstPresent($row, ['market_value', 'marketValue']);
-            $snapshotPrice = $this->firstPresent($row, ['snapshot_price', 'snapshotPrice', 'market_price', 'marketPrice', 'lot_price', 'lotPrice']);
+            $quantity = $quantityValue;
+            $costBasis = round($costBasisValue, 4);
+            $costPerUnitValue = $this->openPositionNumber($this->firstPresent($row, ['cost_per_unit', 'costPerUnit', 'cost_per_share', 'costPerShare']));
+            $marketValue = $this->openPositionNumber($this->firstPresent($row, ['market_value', 'marketValue']));
+            $snapshotPrice = $this->openPositionNumber($this->firstPresent($row, ['snapshot_price', 'snapshotPrice', 'market_price', 'marketPrice', 'lot_price', 'lotPrice']));
             $snapshotDate = $this->firstPresent($row, ['snapshot_date', 'snapshotDate', 'as_of_date', 'asOfDate']);
-            $costPerUnit = is_numeric($costPerUnitValue)
-                ? round((float) $costPerUnitValue, 8)
+            $costPerUnit = $costPerUnitValue !== null
+                ? round($costPerUnitValue, 8)
                 : ($quantity > 0 ? round($costBasis / $quantity, 8) : null);
 
             $lots[] = [
@@ -440,8 +440,8 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'lot_source' => 'statement_position',
                 'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
                 'external_id' => $this->normaliseLotExternalId($row),
-                'market_value' => is_numeric($marketValue) ? round((float) $marketValue, 4) : null,
-                'snapshot_price' => is_numeric($snapshotPrice) ? round((float) $snapshotPrice, 8) : null,
+                'market_value' => $marketValue !== null ? round($marketValue, 4) : null,
+                'snapshot_price' => $snapshotPrice !== null ? round($snapshotPrice, 8) : null,
                 'snapshot_date' => $this->normaliseDateField((string) ($snapshotDate ?? '')),
                 'skip_transaction_matching' => true,
             ];
@@ -839,15 +839,32 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
     private function filterDuplicateLotsInMemory(array $lots): array
     {
         $filtered = [];
-        $seenKeys = [];
+        $seenExternalKeys = [];
+        $seenLegacyKeys = [];
+        $seenLegacyWithoutExternalKeys = [];
 
         foreach ($lots as $lot) {
-            $key = $this->lotDuplicateKey($lot);
-            if (isset($seenKeys[$key])) {
+            $legacyKey = $this->lotLegacyDuplicateKey($lot);
+            $externalKey = $this->lotExternalDuplicateKey($lot);
+
+            if ($externalKey !== null) {
+                if (isset($seenExternalKeys[$externalKey]) || isset($seenLegacyWithoutExternalKeys[$legacyKey])) {
+                    continue;
+                }
+
+                $seenExternalKeys[$externalKey] = true;
+                $seenLegacyKeys[$legacyKey] = true;
+                $filtered[] = $lot;
+
                 continue;
             }
 
-            $seenKeys[$key] = true;
+            if (isset($seenLegacyKeys[$legacyKey])) {
+                continue;
+            }
+
+            $seenLegacyKeys[$legacyKey] = true;
+            $seenLegacyWithoutExternalKeys[$legacyKey] = true;
             $filtered[] = $lot;
         }
 
@@ -864,10 +881,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         $purchaseDates = array_values(array_unique(array_map(fn (array $lot): string => (string) $lot['purchase_date'], $lots)));
         $saleDates = array_values(array_unique(array_map(fn (array $lot): string => (string) ($lot['sale_date'] ?? ''), $lots)));
         $externalIds = array_values(array_unique(array_filter(
-            array_map(fn (array $lot): ?string => $this->normaliseLotExternalId($lot), $lots),
+            array_map(fn (array $lot): ?string => $this->lotExternalIdForKey($lot), $lots),
             static fn (?string $externalId): bool => $externalId !== null && $externalId !== '',
         )));
-        $existingKeys = [];
+        $existingExternalKeys = [];
+        $existingLegacyKeys = [];
+        $existingLegacyWithoutExternalKeys = [];
 
         if ($externalIds !== []) {
             $existingRows = DB::table('fin_account_lots')
@@ -876,7 +895,10 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 ->get(['source', 'external_id']);
 
             foreach ($existingRows as $row) {
-                $existingKeys[$this->lotDuplicateKey((array) $row)] = true;
+                $externalKey = $this->lotExternalDuplicateKey((array) $row);
+                if ($externalKey !== null) {
+                    $existingExternalKeys[$externalKey] = true;
+                }
             }
         }
 
@@ -894,21 +916,42 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                         $nonNullSaleDates !== [] ? $query->orWhereNull('sale_date') : $query->whereNull('sale_date');
                     }
                 })
-                ->get(['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis']);
+                ->get(['symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'external_id']);
 
             foreach ($existingRows as $row) {
-                $existingKeys[$this->lotDuplicateKey((array) $row)] = true;
+                $rowArray = (array) $row;
+                $legacyKey = $this->lotLegacyDuplicateKey($rowArray);
+                $existingLegacyKeys[$legacyKey] = true;
+
+                if ($this->lotExternalIdForKey($rowArray) === null) {
+                    $existingLegacyWithoutExternalKeys[$legacyKey] = true;
+                }
             }
         }
 
         $filtered = [];
         foreach ($lots as $lot) {
-            $key = $this->lotDuplicateKey($lot);
-            if (isset($existingKeys[$key])) {
+            $legacyKey = $this->lotLegacyDuplicateKey($lot);
+            $externalKey = $this->lotExternalDuplicateKey($lot);
+
+            if ($externalKey !== null) {
+                if (isset($existingExternalKeys[$externalKey]) || isset($existingLegacyWithoutExternalKeys[$legacyKey])) {
+                    continue;
+                }
+
+                $existingExternalKeys[$externalKey] = true;
+                $existingLegacyKeys[$legacyKey] = true;
+                $filtered[] = $lot;
+
                 continue;
             }
 
-            $existingKeys[$key] = true;
+            if (isset($existingLegacyKeys[$legacyKey])) {
+                continue;
+            }
+
+            $existingLegacyKeys[$legacyKey] = true;
+            $existingLegacyWithoutExternalKeys[$legacyKey] = true;
             $filtered[] = $lot;
         }
 
@@ -931,6 +974,18 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
     /**
      * @param  array<string, mixed>  $row
+     */
+    private function lotExternalIdForKey(array $row): ?string
+    {
+        if (isset($row['external_id']) && trim((string) $row['external_id']) !== '') {
+            return trim((string) $row['external_id']);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
      * @param  list<string>  $keys
      */
     private function firstPresent(array $row, array $keys): mixed
@@ -942,6 +997,37 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         return null;
+    }
+
+    private function openPositionNumber(mixed $value): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $isNegative = false;
+        if (preg_match('/^\((.*)\)$/', $raw, $matches) === 1) {
+            $isNegative = true;
+            $raw = trim((string) $matches[1]);
+        }
+
+        $normalised = str_replace(['$', ','], '', $raw);
+        if ($normalised === '' || ! is_numeric($normalised)) {
+            return null;
+        }
+
+        $number = (float) $normalised;
+
+        return $isNegative ? -$number : $number;
     }
 
     private function clearExistingLots(int $acctId, string $mode): int
@@ -963,10 +1049,32 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
      */
     private function lotDuplicateKey(array $lot): string
     {
-        if (isset($lot['external_id']) && trim((string) $lot['external_id']) !== '') {
-            return 'external|'.($lot['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED).'|'.trim((string) $lot['external_id']);
+        $externalKey = $this->lotExternalDuplicateKey($lot);
+        if ($externalKey !== null) {
+            return $externalKey;
         }
 
+        return $this->lotLegacyDuplicateKey($lot);
+    }
+
+    /**
+     * @param  array<string, mixed>  $lot
+     */
+    private function lotExternalDuplicateKey(array $lot): ?string
+    {
+        $externalId = $this->lotExternalIdForKey($lot);
+        if ($externalId === null) {
+            return null;
+        }
+
+        return 'external|'.($lot['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED).'|'.$externalId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $lot
+     */
+    private function lotLegacyDuplicateKey(array $lot): string
+    {
         return implode('|', [
             (string) $lot['symbol'],
             number_format((float) $lot['quantity'], 4, '.', ''),
@@ -1115,7 +1223,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         $insertedLots = [];
-        $rows = $query->get(['lot_id', 'symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis']);
+        $rows = $query->get(['lot_id', 'symbol', 'quantity', 'purchase_date', 'sale_date', 'proceeds', 'cost_basis', 'source', 'external_id']);
         foreach ($rows as $row) {
             $rowArray = (array) $row;
             $key = $this->lotDuplicateKey($rowArray);
