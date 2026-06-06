@@ -693,9 +693,12 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
     private function normaliseOpenPositionCsvHeader(string $header): string
     {
-        $spaced = preg_replace('/(?<!^)[A-Z]/', '_$0', trim($header)) ?? $header;
+        $normalised = preg_replace('/[\s-]+/', '_', trim($header)) ?? $header;
+        $normalised = preg_replace('/([A-Z]+)([A-Z][a-z])/', '$1_$2', $normalised) ?? $normalised;
+        $normalised = preg_replace('/([a-z0-9])([A-Z])/', '$1_$2', $normalised) ?? $normalised;
+        $normalised = preg_replace('/_+/', '_', $normalised) ?? $normalised;
 
-        return strtolower(str_replace([' ', '-'], '_', $spaced));
+        return strtolower(trim($normalised, '_'));
     }
 
     /**
