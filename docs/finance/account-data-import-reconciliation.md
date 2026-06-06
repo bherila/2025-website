@@ -45,8 +45,10 @@ If those columns are missing, the import commands can fail before dry-run output
 
    ```bash
    php artisan finance:transactions --account=123 --symbol=XYZ --limit=50 --format=json
-   php artisan finance:lots-reconcile --account=123 --year=2025 --format=json
+   php artisan finance:lots-reconcile --user=1 --year=2025 --format=json
    ```
+
+   Reconciliation is scoped by user and tax year, or by a single tax document with `--tax-document=456`.
 
 3. Dry-run transactions first:
 
@@ -127,4 +129,3 @@ A separate stock-price history service should own that work. The intended shape 
 - Prefer existing local quote data when present.
 - Backfill idempotently, with source/provider metadata.
 - Let RSU, career-comparison, and lot workflows read from the same price history table instead of embedding provider-specific fetch logic.
-
