@@ -18,7 +18,7 @@ class UpdateMarkdownDocumentRequest extends FormRequest
     {
         return [
             'title' => ['nullable', 'string', 'max:120'],
-            'markdown_content' => ['required', 'string', 'max:1000000'],
+            'markdown_content' => ['required', 'string', 'max:5000000'],
         ];
     }
 }
