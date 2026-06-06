@@ -4,11 +4,11 @@ namespace App\Http\Requests\FinancialPlanning;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreCareerCompComparisonRequest extends FormRequest
+class ShareCareerCompComparisonRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return true;
     }
 
     /**
@@ -18,10 +18,7 @@ class StoreCareerCompComparisonRequest extends FormRequest
     {
         return array_merge(
             ComputeCareerCompRequest::inputRules(),
-            [
-                'shareIncludesCurrent' => ['nullable', 'boolean'],
-                'title' => ['nullable', 'string', 'max:120'],
-            ],
+            ['shareIncludesCurrent' => ['nullable', 'boolean']],
         );
     }
 }

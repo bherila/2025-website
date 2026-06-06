@@ -87,6 +87,7 @@ use App\Http\Controllers\UtilityBillTracker\UtilityBillApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillImportController;
 use App\Http\Controllers\UtilityBillTracker\UtilityBillLinkingController;
 use App\Http\Controllers\Webhooks\BrevoInboundController;
+use App\Http\Middleware\AuthenticateWebOrMcpRequest;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/webhooks/stripe', StripeWebhookController::class);
@@ -100,6 +101,17 @@ Route::middleware(['web', 'auth'])->get('/financial-planning/career-comparison/s
 Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/save', [CareerCompController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'update']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/s/{code}/claim', [CareerCompController::class, 'claim']);
+Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/share', [CareerCompController::class, 'share']);
+Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->prefix('/financial-planning/career-comparison/workflows')->group(function (): void {
+    Route::get('/', [CareerCompController::class, 'index']);
+    Route::post('/', [CareerCompController::class, 'store']);
+    Route::get('/last-active', [CareerCompController::class, 'lastActive']);
+    Route::post('/import-rsu', [CareerCompController::class, 'importRsu']);
+    Route::get('/{workflow}', [CareerCompController::class, 'showWorkflow']);
+    Route::patch('/{workflow}', [CareerCompController::class, 'update']);
+    Route::delete('/{workflow}', [CareerCompController::class, 'destroy']);
+    Route::post('/{workflow}/activate', [CareerCompController::class, 'activate']);
+});
 
 Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);

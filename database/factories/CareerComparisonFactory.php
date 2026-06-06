@@ -20,6 +20,9 @@ class CareerComparisonFactory extends Factory
     {
         return [
             'user_id' => null,
+            'title' => null,
+            'is_snapshot' => true,
+            'last_active_at' => null,
             'current_job_id' => null,
             'hypothetical_job_ids' => [],
             'short_code' => ShortCode::generate(

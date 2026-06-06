@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, GitFork, LineChart, type LucideIcon, ReceiptText, Save, Table2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, FolderOpen, GitFork, LineChart, type LucideIcon, ReceiptText, Save, Table2, Trash2, Upload } from 'lucide-react'
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
@@ -8,7 +8,18 @@ import { MillerColumnShell, type MillerColumnShellColumn, type MillerRegistryEnt
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 
-import { claimCareerComparison, computeCareerComp, saveCareerComparison, updateCareerComparison } from './careerCompApi'
+import {
+  activateCareerCompWorkflow,
+  claimCareerComparison,
+  computeCareerComp,
+  deleteCareerCompWorkflow,
+  getCareerCompWorkflow,
+  importRsuIntoCurrentJob,
+  listCareerCompWorkflows,
+  saveCareerComparison,
+  shareCareerComparison,
+  updateCareerComparison,
+} from './careerCompApi'
 import {
   CAREER_COMP_FORM_SECTIONS,
   CareerCompFormSection,
@@ -27,7 +38,7 @@ import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCo
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
 import { SavedJobPicker } from './SavedJobPicker'
-import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs, CareerCompProjection } from './types'
+import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs, CareerCompProjection, CareerCompWorkflowSummary } from './types'
 
 interface CareerCompPageProps {
   initialData: CareerCompInitialData
@@ -186,19 +197,15 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const [canEdit, setCanEdit] = useState(initialData.canEdit ?? false)
   const [shareIncludesCurrent, setShareIncludesCurrent] = useState(initialData.comparison?.shareIncludesCurrent ?? true)
   const [saving, setSaving] = useState(false)
-  const [urlOnlyShareUrl, setUrlOnlyShareUrl] = useState(window.location.href)
+  const [workflowSummaries, setWorkflowSummaries] = useState<CareerCompWorkflowSummary[]>([])
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('')
+  const [savedInputsJson, setSavedInputsJson] = useState(() => (initialData.comparison && initialData.canEdit ? JSON.stringify(normalizeCareerCompInputs(initialData.inputs)) : null))
+  const [workflowBusy, setWorkflowBusy] = useState(false)
   const [activeColumn, setActiveColumn] = useState<CareerCompColumnState | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
   const isSharedView = savedComparison !== null
-  // The exclusive link is built from URL state with the current job stripped, so it is leak-free
-  // regardless of save state; the inclusive link uses the canonical saved/URL-state share link.
-  const exclusiveShareUrl = useMemo(() => {
-    const queryString = serializeCareerCompUrlState(normalizedInputs, { excludeCurrent: true })
-    return `${window.location.origin}${urlStatePathname()}${queryString ? `?${queryString}` : ''}`
-  }, [normalizedInputs])
-  const canonicalShareUrl = savedComparison?.shareUrl ?? urlOnlyShareUrl
-  const shareUrl = shareIncludesCurrent ? canonicalShareUrl : exclusiveShareUrl
+  const hasUnsavedChanges = savedInputsJson === null || savedInputsJson !== JSON.stringify(normalizedInputs)
   const saveLabel = useMemo(() => {
     if (savedComparison && canEdit) {
       return 'Update'
@@ -211,9 +218,33 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
 
   useEffect(() => {
     if (!isSharedView || !canEdit) {
-      setUrlOnlyShareUrl(replaceUrlWithInputs(normalizedInputs))
+      replaceUrlWithInputs(normalizedInputs)
     }
   }, [canEdit, isSharedView, normalizedInputs])
+
+  useEffect(() => {
+    if (!initialData.authenticated) {
+      return
+    }
+
+    let active = true
+    listCareerCompWorkflows()
+      .then((response) => {
+        if (active) {
+          setWorkflowSummaries(response.workflows)
+          setSelectedWorkflowId(savedComparison ? String(savedComparison.id) : '')
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setWorkflowSummaries([])
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [initialData.authenticated, savedComparison])
 
   useEffect(() => {
     if (!initialData.authenticated || !savedComparison || canEdit || savedComparison.ownerUserId !== null) {
@@ -272,7 +303,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       if (savedComparison && !canEdit) {
         setSavedComparison(null)
         setCanEdit(false)
-        setUrlOnlyShareUrl(replaceUrlWithInputs(normalizedInputs, urlStatePathname()))
+        replaceUrlWithInputs(normalizedInputs, urlStatePathname())
         setStatus('Forked to URL state. Edits update this link.')
         return
       }
@@ -286,19 +317,21 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
 
     try {
       const response = savedComparison && canEdit
-        ? await updateCareerComparison(savedComparison.shortCode, normalizedInputs, shareIncludesCurrent)
+        ? await updateCareerComparison(savedComparison.id, normalizedInputs, shareIncludesCurrent)
         : await saveCareerComparison(normalizedInputs, shareIncludesCurrent)
       const nextComparison: CareerComparisonMeta = {
         id: response.id,
         shortCode: response.shortCode,
         shareUrl: response.shareUrl,
-        ownerUserId: null,
+        ownerUserId: response.ownerUserId,
         shareIncludesCurrent,
+        isSnapshot: false,
+        title: response.title,
       }
       setSavedComparison(nextComparison)
       setCanEdit(true)
       setProjection(response.projection)
-      window.history.replaceState(null, '', response.shareUrl)
+      setSavedInputsJson(JSON.stringify(normalizedInputs))
       setStatus(savedComparison && canEdit ? 'Updated.' : 'Saved.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -308,8 +341,85 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   }
 
   async function copyShareUrl(): Promise<void> {
-    await navigator.clipboard.writeText(shareUrl)
-    setStatus('Share link copied.')
+    setWorkflowBusy(true)
+    try {
+      const snapshot = await shareCareerComparison(normalizedInputs, shareIncludesCurrent)
+      await navigator.clipboard.writeText(snapshot.shareUrl)
+      setStatus('Share snapshot copied.')
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
+  async function loadWorkflow(id: string): Promise<void> {
+    if (!id) {
+      return
+    }
+
+    setWorkflowBusy(true)
+    try {
+      const workflow = await getCareerCompWorkflow(Number(id))
+      await activateCareerCompWorkflow(workflow.id)
+      setInputs(workflow.inputs)
+      setProjection(workflow.projection)
+      setSavedComparison({
+        id: workflow.id,
+        shortCode: workflow.shortCode,
+        shareUrl: workflow.shareUrl,
+        ownerUserId: workflow.ownerUserId,
+        shareIncludesCurrent: workflow.shareIncludesCurrent,
+        isSnapshot: false,
+        title: workflow.title,
+      })
+      setCanEdit(true)
+      setShareIncludesCurrent(workflow.shareIncludesCurrent)
+      setSavedInputsJson(JSON.stringify(normalizeCareerCompInputs(workflow.inputs)))
+      setStatus('Loaded workflow.')
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
+  async function deleteCurrentWorkflow(): Promise<void> {
+    if (!savedComparison || !canEdit) {
+      return
+    }
+
+    setWorkflowBusy(true)
+    try {
+      await deleteCareerCompWorkflow(savedComparison.id)
+      setSavedComparison(null)
+      setCanEdit(false)
+      setSavedInputsJson(null)
+      setWorkflowSummaries((current) => current.filter((workflow) => workflow.id !== savedComparison.id))
+      setStatus('Deleted workflow.')
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
+  async function importRsu(): Promise<void> {
+    if (!initialData.authenticated) {
+      setStatus('Log in to import RSU awards.')
+      return
+    }
+
+    setWorkflowBusy(true)
+    try {
+      const response = await importRsuIntoCurrentJob(normalizedInputs.currentJob)
+      setInputs({ ...normalizedInputs, currentJob: response.currentJob })
+      setStatus(response.importedGrants.length > 0 ? `Imported ${response.importedGrants.length} RSU grant${response.importedGrants.length === 1 ? '' : 's'}.` : 'No RSU awards found to import.')
+    } catch (error: unknown) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setWorkflowBusy(false)
+    }
   }
 
   async function handleExportXlsx(): Promise<void> {
@@ -398,8 +508,13 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
               {savedComparison && !canEdit ? <GitFork className="size-4" /> : <Save className="size-4" />}
               {saving ? 'Saving…' : saveLabel}
             </Button>
-            <Button type="button" variant="secondary" onClick={copyShareUrl} data-career-comp-action-slot="copy-link">
-              <Copy className="size-4" /> Copy link
+            {initialData.authenticated ? (
+              <Button type="button" variant="secondary" onClick={importRsu} disabled={workflowBusy} data-career-comp-action-slot="import-rsu">
+                <Upload className="size-4" /> Import RSU
+              </Button>
+            ) : null}
+            <Button type="button" variant="secondary" onClick={copyShareUrl} disabled={workflowBusy} data-career-comp-action-slot="copy-link">
+              <Copy className="size-4" /> Share
             </Button>
             <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting} data-career-comp-action-slot="export">
               <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
@@ -415,6 +530,30 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             </Select>
           </div>
         </div>
+        {initialData.authenticated ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Badge variant={hasUnsavedChanges ? 'outline' : 'secondary'}>{hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}</Badge>
+            <Select value={selectedWorkflowId} onValueChange={(value) => {
+              setSelectedWorkflowId(value)
+              void loadWorkflow(value)
+            }}>
+              <SelectTrigger aria-label="Saved workflows" className="w-[16rem]">
+                <span className="truncate">{selectedWorkflowId ? workflowSummaries.find((workflow) => String(workflow.id) === selectedWorkflowId)?.title ?? 'Saved workflow' : 'Load workflow'}</span>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
+                {workflowSummaries.map((workflow) => (
+                  <SelectItem key={workflow.id} value={String(workflow.id)}>{workflow.title ?? `Workflow ${workflow.id}`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="button" variant="secondary" onClick={() => selectedWorkflowId && void loadWorkflow(selectedWorkflowId)} disabled={!selectedWorkflowId || workflowBusy}>
+              <FolderOpen className="size-4" /> Load
+            </Button>
+            <Button type="button" variant="destructive" onClick={deleteCurrentWorkflow} disabled={!savedComparison || !canEdit || workflowBusy}>
+              <Trash2 className="size-4" /> Delete
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       <SavedJobPicker inputs={inputs} authenticated={initialData.authenticated} onApply={setInputs} />
