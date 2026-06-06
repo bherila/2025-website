@@ -475,4 +475,23 @@ class FinanceImportTransactionsCommandTest extends TestCase
             ->where('t_symbol', 'ABC')
             ->count());
     }
+
+    public function test_mixed_batch_externalized_import_falls_back_to_seen_legacy_rows_without_external_id(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-04-22', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker'],
+                ['t_date' => '2026-04-22', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker', 'external_id' => 'txn-mixed-reimport'],
+            ],
+        ]);
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(1, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-22')
+            ->where('t_type', 'Buy')
+            ->where('t_symbol', 'ABC')
+            ->count());
+    }
 }

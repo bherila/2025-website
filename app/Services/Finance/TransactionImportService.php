@@ -383,6 +383,9 @@ class TransactionImportService
         /** @var array<int, array<string, bool>> $seenLegacyByAccount */
         $seenLegacyByAccount = [];
 
+        /** @var array<int, array<string, bool>> $seenLegacyWithoutExternalByAccount */
+        $seenLegacyWithoutExternalByAccount = [];
+
         /** @var array<int, list<string>> $datesByAccount */
         $datesByAccount = [];
 
@@ -432,7 +435,11 @@ class TransactionImportService
             if ($this->hasExternalIdentity($row)) {
                 $externalKey = $this->externalDuplicateKey($row);
                 $legacyKey = $this->duplicateKey($row);
-                if (isset($existingExternalByAccount[$acctId][$externalKey]) || isset($existingLegacyWithoutExternalByAccount[$acctId][$legacyKey])) {
+                if (
+                    isset($existingExternalByAccount[$acctId][$externalKey])
+                    || isset($existingLegacyWithoutExternalByAccount[$acctId][$legacyKey])
+                    || isset($seenLegacyWithoutExternalByAccount[$acctId][$legacyKey])
+                ) {
                     $skipped[] = $row;
                 } else {
                     $toInsert[] = $row;
@@ -449,6 +456,7 @@ class TransactionImportService
             } else {
                 $toInsert[] = $row;
                 $seenLegacyByAccount[$acctId][$key] = true;
+                $seenLegacyWithoutExternalByAccount[$acctId][$key] = true;
             }
         }
 
