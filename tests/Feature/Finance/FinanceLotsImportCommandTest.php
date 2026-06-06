@@ -350,6 +350,21 @@ class FinanceLotsImportCommandTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        DB::table('fin_account_lots')->insert([
+            'acct_id' => $this->acctId,
+            'symbol' => 'GOOG',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'cost_basis' => 100,
+            'proceeds' => 120,
+            'realized_gain_loss' => 20,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => 'import',
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
         file_put_contents($tmpFile, json_encode([
@@ -371,6 +386,11 @@ class FinanceLotsImportCommandTest extends TestCase
             'acct_id' => $this->acctId,
             'symbol' => 'AAPL',
             'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => 'GOOG',
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_DISPOSITION,
         ]);
         $this->assertDatabaseMissing('fin_account_lots', [
             'acct_id' => $this->acctId,

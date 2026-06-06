@@ -947,8 +947,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
 
         if ($mode === 'open-positions') {
             $query->where(function ($inner): void {
-                $inner->where('source', FinAccountLot::SOURCE_ACCOUNT_DERIVED)
-                    ->orWhere('lot_origin', FinAccountLot::ORIGIN_STATEMENT_POSITION)
+                $inner->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_POSITION)
                     ->orWhere('lot_source', 'statement_position');
             });
         }
