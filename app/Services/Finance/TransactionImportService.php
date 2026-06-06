@@ -377,6 +377,12 @@ class TransactionImportService
         /** @var array<int, array<string, bool>> $existingLegacyByAccount */
         $existingLegacyByAccount = [];
 
+        /** @var array<int, array<string, bool>> $existingLegacyWithoutExternalByAccount */
+        $existingLegacyWithoutExternalByAccount = [];
+
+        /** @var array<int, array<string, bool>> $seenLegacyByAccount */
+        $seenLegacyByAccount = [];
+
         /** @var array<int, list<string>> $datesByAccount */
         $datesByAccount = [];
 
@@ -385,10 +391,10 @@ class TransactionImportService
 
         foreach ($validRows as $row) {
             $acctId = (int) $row['t_account'];
+            $datesByAccount[$acctId][] = (string) $row['t_date'];
+
             if ($this->hasExternalIdentity($row)) {
                 $externalIdsByAccount[$acctId][] = (string) $row['external_id'];
-            } else {
-                $datesByAccount[$acctId][] = (string) $row['t_date'];
             }
         }
 
@@ -407,10 +413,16 @@ class TransactionImportService
             $existing = FinAccountLineItems::query()
                 ->where('t_account', $acctId)
                 ->whereBetween('t_date', [min($accountDates), max($accountDates)])
-                ->get(['t_date', 't_type', 't_amt', 't_symbol']);
+                ->get(['t_date', 't_type', 't_amt', 't_symbol', 'external_id']);
 
             foreach ($existing as $transaction) {
-                $existingLegacyByAccount[$acctId][$this->duplicateKey($transaction->getAttributes())] = true;
+                $attributes = $transaction->getAttributes();
+                $legacyKey = $this->duplicateKey($attributes);
+                $existingLegacyByAccount[$acctId][$legacyKey] = true;
+
+                if (! $this->hasExternalIdentity($attributes)) {
+                    $existingLegacyWithoutExternalByAccount[$acctId][$legacyKey] = true;
+                }
             }
         }
 
@@ -418,24 +430,25 @@ class TransactionImportService
             $acctId = (int) $row['t_account'];
 
             if ($this->hasExternalIdentity($row)) {
-                $key = $this->externalDuplicateKey($row);
-                if (isset($existingExternalByAccount[$acctId][$key])) {
+                $externalKey = $this->externalDuplicateKey($row);
+                $legacyKey = $this->duplicateKey($row);
+                if (isset($existingExternalByAccount[$acctId][$externalKey]) || isset($existingLegacyWithoutExternalByAccount[$acctId][$legacyKey])) {
                     $skipped[] = $row;
                 } else {
                     $toInsert[] = $row;
-                    $existingExternalByAccount[$acctId][$key] = true;
-                    $existingLegacyByAccount[$acctId][$this->duplicateKey($row)] = true;
+                    $existingExternalByAccount[$acctId][$externalKey] = true;
+                    $seenLegacyByAccount[$acctId][$legacyKey] = true;
                 }
 
                 continue;
             }
 
             $key = $this->duplicateKey($row);
-            if (isset($existingLegacyByAccount[$acctId][$key])) {
+            if (isset($existingLegacyByAccount[$acctId][$key]) || isset($seenLegacyByAccount[$acctId][$key])) {
                 $skipped[] = $row;
             } else {
                 $toInsert[] = $row;
-                $existingLegacyByAccount[$acctId][$key] = true;
+                $seenLegacyByAccount[$acctId][$key] = true;
             }
         }
 

@@ -671,7 +671,7 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return null;
         }
 
-        $headers = array_map('strtolower', array_map('trim', str_getcsv((string) array_shift($lines))));
+        $headers = array_map(fn (string $header): string => $this->normaliseOpenPositionCsvHeader($header), str_getcsv((string) array_shift($lines)));
         $colIndex = array_flip($headers);
         $rows = [];
 
@@ -689,6 +689,13 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         return $this->parseOpenPositionsData(['positions' => $rows]);
+    }
+
+    private function normaliseOpenPositionCsvHeader(string $header): string
+    {
+        $spaced = preg_replace('/(?<!^)[A-Z]/', '_$0', trim($header)) ?? $header;
+
+        return strtolower(str_replace([' ', '-'], '_', $spaced));
     }
 
     /**

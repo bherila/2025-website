@@ -256,6 +256,42 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_open_positions_csv_accepts_account_data_camel_case_headers(): void
+    {
+        Queue::fake();
+        $csv = implode("\n", [
+            'symbol,quantity,purchaseDate,costBasis,costPerUnit,marketValue,lotPrice,lotId',
+            'meta,2,08/15/2025,1564.26,782.13,1186,593,csv-camel-lot-1',
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.csv';
+        file_put_contents($tmpFile, $csv);
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--mode' => 'open-positions',
+            '--input-format' => 'csv',
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Parsed 1 lot record(s)')
+            ->expectsOutputToContain('Imported: 1 inserted');
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => 'META',
+            'purchase_date' => '2025-08-15',
+            'cost_basis' => 1564.26,
+            'cost_per_unit' => 782.13,
+            'market_value' => 1186,
+            'snapshot_price' => 593,
+            'external_id' => 'csv-camel-lot-1',
+        ]);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+
+        unlink($tmpFile);
+    }
+
     public function test_open_positions_mode_dedupes_by_external_id(): void
     {
         Queue::fake();
