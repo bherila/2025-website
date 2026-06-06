@@ -212,7 +212,7 @@ class CareerCompCalculatorTest extends TestCase
         $valuation = (new EquityValuationService)->value($job, [
             ['grantId' => 'rsu', 'type' => 'rsu', 'year' => 2026, 'vestedShares' => 100, 'exercisableShares' => 0],
             ['grantId' => 'rsu', 'type' => 'rsu', 'year' => 2028, 'vestedShares' => 100, 'exercisableShares' => 0],
-        ], 2026, 3);
+        ], [], 2026, 3);
 
         $this->assertSame(0.0, $valuation['liquidity']['medium'][0]['cumulativeValue']);
         $this->assertSame(2332.0, $valuation['liquidity']['medium'][2]['cumulativeValue']);
@@ -234,10 +234,64 @@ class CareerCompCalculatorTest extends TestCase
 
         $valuation = (new EquityValuationService)->value($job, [
             ['grantId' => 'rsu', 'type' => 'rsu', 'year' => 2026, 'vestedShares' => 0.004, 'exercisableShares' => 0],
-        ], 2026, 1);
+        ], [], 2026, 1);
 
         $this->assertSame(0.4, $valuation['annualEquity'][2026]);
         $this->assertSame(0.4, $valuation['totals']['medium']);
+    }
+
+    public function test_annual_raise_compounds_base_and_bonus(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 3,
+            'currentJob' => [
+                'id' => 'c',
+                'name' => 'C',
+                'company' => ['type' => 'public', 'currentSharePrice' => 100],
+                'comp' => ['baseSalary' => 100000, 'cashBonus' => 10000, 'annualRaisePct' => 10],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ],
+            'hypotheticalJobs' => [],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+        $this->assertSame(100000.0, $job['annual'][0]['salary']);
+        $this->assertSame(110000.0, $job['annual'][1]['salary']);
+        $this->assertSame(121000.0, $job['annual'][2]['salary']);
+        $this->assertSame(11000.0, $job['annual'][1]['bonus']);
+        // (110000) + (121000) + (133100) = 364100 across base + bonus.
+        $this->assertSame(364100.0, $job['lifetime']['totalCashComp']);
+    }
+
+    public function test_rsu_refresher_grants_resolve_shares_per_growth_band(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 3,
+            'currentJob' => [
+                'id' => 'c',
+                'name' => 'C',
+                'company' => ['type' => 'public', 'currentSharePrice' => 100],
+                'comp' => ['baseSalary' => 100000, 'cashBonus' => 0, 'annualRaisePct' => 0],
+                // One refresher granted in 2027 (offset 1), vesting fully one year later (2028).
+                'refresher' => ['pctOfBase' => 100, 'cadenceYears' => 10, 'firstYearOffset' => 1, 'vestingYears' => 1, 'cliffMonths' => 0, 'vestingFrequency' => 'annual'],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 100, 'highPct' => 200],
+            ],
+            'hypotheticalJobs' => [],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+        // $100k granted at the 2027 price (low 100 / med 200) buys 1000 / 500 shares, realized at the
+        // 2028 price (low 100 / med 400) → 100k / 200k. Higher band buys fewer shares but worth more.
+        $this->assertSame(100000.0, $job['lifetime']['totalEquityValue']['low']);
+        $this->assertSame(200000.0, $job['lifetime']['totalEquityValue']['medium']);
+        $this->assertGreaterThan(290000.0, $job['lifetime']['totalEquityValue']['high']);
+        $this->assertSame(300000.0, $job['lifetime']['totalCashComp']);
+
+        $refresherRows = array_values(array_filter($job['vesting'], fn (array $row): bool => str_contains((string) $row['grantId'], 'refresher')));
+        $this->assertNotEmpty($refresherRows);
+        $this->assertSame(2028, $refresherRows[0]['year']);
     }
 
     public function test_iso_limit_warning_accounts_for_fractional_shares(): void

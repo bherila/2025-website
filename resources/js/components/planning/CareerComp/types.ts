@@ -18,6 +18,8 @@ export const companySpecSchema = z.object({
 export const cashCompSchema = z.object({
   baseSalary: z.number(),
   cashBonus: z.number(),
+  // Compounding annual raise applied to base + bonus (0 = no raise). Defaulted for back-compat.
+  annualRaisePct: z.number().default(0),
 })
 
 export const VESTING_FREQUENCIES = ['monthly', 'quarterly', 'annual'] as const
@@ -25,6 +27,19 @@ export const VESTING_FREQUENCIES = ['monthly', 'quarterly', 'annual'] as const
 // Optional with a 'monthly' default so older shared links / saved comparisons that predate the
 // field decode to the historical monthly cadence rather than failing validation.
 export const vestingFrequencySchema = z.enum(VESTING_FREQUENCIES).default('monthly')
+
+// RSU refresher policy. pctOfBase = 0 disables refreshers; all fields defaulted so older
+// links/records that predate this decode cleanly.
+export const refresherPolicySchema = z
+  .object({
+    pctOfBase: z.number().default(0),
+    cadenceYears: z.number().default(1),
+    firstYearOffset: z.number().default(1),
+    vestingYears: z.number().default(4),
+    cliffMonths: z.number().default(0),
+    vestingFrequency: vestingFrequencySchema,
+  })
+  .prefault({})
 
 export const rsuGrantSchema = z.object({
   id: z.string(),
@@ -56,6 +71,7 @@ export const jobSpecSchema = z.object({
   name: z.string(),
   company: companySpecSchema,
   comp: cashCompSchema,
+  refresher: refresherPolicySchema,
   rsuGrants: z.array(rsuGrantSchema),
   optionGrants: z.array(optionGrantSchema),
   growthBands: equityGrowthBandSchema,
@@ -247,6 +263,7 @@ export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
 export type CompanySpec = z.infer<typeof companySpecSchema>
 export type CashComp = z.infer<typeof cashCompSchema>
 export type VestingFrequency = z.infer<typeof vestingFrequencySchema>
+export type RefresherPolicy = z.infer<typeof refresherPolicySchema>
 export type RsuGrant = z.infer<typeof rsuGrantSchema>
 export type OptionGrant = z.infer<typeof optionGrantSchema>
 export type JobSpec = z.infer<typeof jobSpecSchema>

@@ -55,9 +55,16 @@ final class CareerCompCalculator
         $warnings = $this->staticWarnings($job, $startYear, $horizonYears);
         $rsuRows = $this->rsuVestingExpander->expand($job, $startYear, $horizonYears);
         $optionResult = $this->optionsVestingService->expand($job, $startYear, $horizonYears);
-        $vestingRows = array_merge($rsuRows, $optionResult['rows']);
+        $baseVestingRows = array_merge($rsuRows, $optionResult['rows']);
         $warnings = array_merge($warnings, $optionResult['warnings']);
-        $valuation = $this->equityValuationService->value($job, $vestingRows, $startYear, $horizonYears);
+        $refresherDefs = $this->refresherDefinitions($job, $startYear, $horizonYears);
+        $valuation = $this->equityValuationService->value($job, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
+        // Fold representative refresher vesting into the breakdown + after-tax facts.
+        $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
+
+        $raisePct = $job->number('comp.annualRaisePct');
+        $baseSalary = $job->number('comp.baseSalary');
+        $cashBonus = $job->number('comp.cashBonus');
 
         $annual = [];
         $totalCashComp = 0.0;
@@ -65,8 +72,9 @@ final class CareerCompCalculator
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
-            $salary = MoneyMath::round($job->number('comp.baseSalary'));
-            $bonus = MoneyMath::round($job->number('comp.cashBonus'));
+            $raiseFactor = $this->raiseFactor($raisePct, $offset);
+            $salary = MoneyMath::round(MoneyMath::multiply($baseSalary, $raiseFactor));
+            $bonus = MoneyMath::round(MoneyMath::multiply($cashBonus, $raiseFactor));
             $vestedLiquidEquity = MoneyMath::round($valuation['annualEquity'][$year] ?? 0.0);
             $shareSaleProceeds = $vestedLiquidEquity;
             $exerciseOutlay = $this->exerciseOutlayForYear($job, $optionResult['rows'], $year);
@@ -114,6 +122,59 @@ final class CareerCompCalculator
             ],
             'warnings' => $warnings,
         ];
+    }
+
+    private function raiseFactor(float $raisePct, int $offset): float
+    {
+        return round((1.0 + ($raisePct / 100.0)) ** $offset, 8);
+    }
+
+    /**
+     * Build the RSU refresher grants implied by the job's refresher policy: one every
+     * `cadenceYears` starting `firstYearOffset`, valued at `pctOfBase`% of that year's raised base.
+     * The dollar value is band-agnostic; share counts are resolved per band downstream.
+     *
+     * @return list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>
+     */
+    private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears): array
+    {
+        $pctOfBase = $job->number('refresher.pctOfBase');
+        if ($pctOfBase <= 0.0) {
+            return [];
+        }
+
+        $cadence = max(1, $job->int('refresher.cadenceYears'));
+        $firstOffset = max(0, $job->int('refresher.firstYearOffset'));
+        $vestingMonths = max(0, (int) round($job->number('refresher.vestingYears') * 12));
+        $cliffMonths = max(0, $job->int('refresher.cliffMonths'));
+        $frequency = VestingSchedule::normalizeFrequency($job->value('refresher.vestingFrequency'));
+        $baseSalary = $job->number('comp.baseSalary');
+        $raisePct = $job->number('comp.annualRaisePct');
+
+        $definitions = [];
+        for ($offset = 0; $offset < $horizonYears; $offset++) {
+            if ($offset < $firstOffset || ($offset - $firstOffset) % $cadence !== 0) {
+                continue;
+            }
+
+            $raisedBase = MoneyMath::multiply($baseSalary, $this->raiseFactor($raisePct, $offset));
+            $value = MoneyMath::multiply($raisedBase, $pctOfBase / 100.0);
+            if ($value <= 0.0) {
+                continue;
+            }
+
+            $definitions[] = [
+                'grantId' => $job->id().'-refresher-'.($startYear + $offset),
+                'grantYearOffset' => $offset,
+                'grantYear' => $startYear + $offset,
+                'value' => $value,
+                'vestingMonths' => $vestingMonths,
+                'cliffMonths' => $cliffMonths,
+                'frequency' => $frequency,
+            ];
+        }
+
+        return $definitions;
     }
 
     /**

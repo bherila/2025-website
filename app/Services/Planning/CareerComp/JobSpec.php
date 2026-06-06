@@ -40,6 +40,19 @@ final readonly class JobSpec
             'comp' => [
                 'baseSalary' => 0.0,
                 'cashBonus' => 0.0,
+                // Compounding annual raise applied to base + bonus (0 = no raise).
+                'annualRaisePct' => 0.0,
+            ],
+            // RSU refresher policy (pctOfBase = 0 disables it). Refreshers are minted every
+            // cadenceYears starting firstYearOffset, valued at pctOfBase% of that year's raised base,
+            // converted to shares at the projected per-band price, then vested on the schedule below.
+            'refresher' => [
+                'pctOfBase' => 0.0,
+                'cadenceYears' => 1,
+                'firstYearOffset' => 1,
+                'vestingYears' => 4,
+                'cliffMonths' => 0,
+                'vestingFrequency' => 'monthly',
             ],
             'rsuGrants' => [],
             'optionGrants' => [],

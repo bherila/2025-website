@@ -56,6 +56,7 @@ interface NumberFieldProps {
   value: number
   suffix?: string
   min?: number
+  max?: number
   onChange: (value: number) => void
 }
 
@@ -162,7 +163,7 @@ function nextGrantId(existing: { id: string }[], jobId: string, kind: 'rsu' | 'o
   return id
 }
 
-function NumberField({ label, value, suffix, min, onChange }: NumberFieldProps): ReactElement {
+function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
 
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -177,7 +178,7 @@ function NumberField({ label, value, suffix, min, onChange }: NumberFieldProps):
     <div className="space-y-2">
       <Label htmlFor={inputId}>{label}</Label>
       <InputGroup>
-        <InputGroupInput id={inputId} type="number" min={min} value={value} onChange={handleChange} onFocus={handleFocus} />
+        <InputGroupInput id={inputId} type="number" min={min} max={max} value={value} onChange={handleChange} onFocus={handleFocus} />
         {suffix ? <InputGroupAddon><InputGroupText>{suffix}</InputGroupText></InputGroupAddon> : null}
       </InputGroup>
     </div>
@@ -593,6 +594,22 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
           <NumberField label="Low growth" value={job.growthBands.lowPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, lowPct: value } })} />
           <NumberField label="Medium growth" value={job.growthBands.mediumPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, mediumPct: value } })} />
           <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
+        </div>
+
+        <div className="space-y-3 border-t pt-4">
+          <div>
+            <Label className="text-sm font-semibold">Raises &amp; RSU refreshers</Label>
+            <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus. Refreshers grant a % of that year&apos;s base, priced at the projected per-band share price; set % to 0 to disable.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <NumberField label="Annual raise" value={job.comp.annualRaisePct} suffix="%" min={0} onChange={(value) => onChange({ ...job, comp: { ...job.comp, annualRaisePct: value } })} />
+            <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
+            <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
+            <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
+            <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
+            <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
+            <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
+          </div>
         </div>
 
         <div className="space-y-4 border-t pt-4">

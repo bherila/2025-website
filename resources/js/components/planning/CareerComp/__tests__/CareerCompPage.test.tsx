@@ -13,8 +13,9 @@ import {
   updateSharedCareerComparisonExpiration,
 } from '../careerCompApi'
 import { CareerCompPage } from '../CareerCompPage'
+import { serializeCareerCompUrlState } from '../careerCompUrlState'
 import { DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
-import type { CareerComparisonMeta, CareerCompInitialData } from '../types'
+import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs } from '../types'
 
 jest.mock('../careerCompApi', () => ({
   computeCareerComp: jest.fn(),
@@ -96,6 +97,30 @@ describe('CareerCompPage', () => {
 
     await waitFor(() => expect(mockSaveLatest).toHaveBeenCalled())
     expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+
+  it('ignores stale URL state when an authenticated user has server inputs', async () => {
+    const urlInputs: CareerCompInputs = {
+      ...DEFAULT_CAREER_COMP_INPUTS,
+      horizonYears: 17,
+      currentJob: DEFAULT_CAREER_COMP_INPUTS.currentJob
+        ? {
+            ...DEFAULT_CAREER_COMP_INPUTS.currentJob,
+            comp: {
+              ...DEFAULT_CAREER_COMP_INPUTS.currentJob.comp,
+              baseSalary: 999999,
+            },
+          }
+        : null,
+    }
+    window.history.replaceState(null, '', `/financial-planning/career-comparison?${serializeCareerCompUrlState(urlInputs)}`)
+
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
+
+    await waitFor(() => expect(mockSaveLatest).toHaveBeenCalled())
+    const savedInputs = mockSaveLatest.mock.calls[0]?.[0] as CareerCompInputs
+    expect(savedInputs.horizonYears).toBe(DEFAULT_CAREER_COMP_INPUTS.horizonYears)
+    expect(savedInputs.currentJob?.comp.baseSalary).toBe(DEFAULT_CAREER_COMP_INPUTS.currentJob?.comp.baseSalary)
   })
 
   it('does not autosave for an anonymous visitor of the public tool', async () => {

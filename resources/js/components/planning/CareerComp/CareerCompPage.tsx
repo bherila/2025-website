@@ -135,9 +135,13 @@ function findMeta<T extends { id: string }>(list: readonly T[], id: string): T {
   return found
 }
 
+function acceptsUrlState(initialData: CareerCompInitialData): boolean {
+  return !initialData.authenticated && (initialData.comparison?.shortCode ?? null) === null
+}
+
 function initialInputs(initialData: CareerCompInitialData): CareerCompInputs {
   const base = initialData.inputs ?? DEFAULT_CAREER_COMP_INPUTS
-  return window.location.search ? parseCareerCompUrlState(window.location.search, base) : normalizeCareerCompInputs(base)
+  return acceptsUrlState(initialData) && window.location.search ? parseCareerCompUrlState(window.location.search, base) : normalizeCareerCompInputs(base)
 }
 
 function replaceUrlWithInputs(inputs: CareerCompInputs, pathname = window.location.pathname): string {
@@ -237,10 +241,12 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const saveLabel = isShareView ? 'Saved to link' : 'Saved'
 
   useEffect(() => {
-    if (!isShareView) {
+    // Anonymous public-calculator users have no server record, so the URL (?cc=) is their only
+    // persistence + share path. Logged-in users autosave server-side, so we skip the URL clutter.
+    if (!isShareView && !initialData.authenticated) {
       replaceUrlWithInputs(normalizedInputs)
     }
-  }, [isShareView, normalizedInputs])
+  }, [isShareView, initialData.authenticated, normalizedInputs])
 
   useEffect(() => {
     let active = true
