@@ -569,6 +569,46 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_json_import_clear_preserves_open_position_lots(): void
+    {
+        $payload = $this->sampleJsonPayload();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode($payload));
+
+        $this->artisan('finance:lots-import', ['--account' => $this->acctId, '--file' => $tmpFile])->assertSuccessful();
+        DB::table('fin_account_lots')->insert([
+            'acct_id' => $this->acctId,
+            'symbol' => 'META',
+            'quantity' => 2,
+            'purchase_date' => '2025-08-15',
+            'sale_date' => null,
+            'cost_basis' => 1564.26,
+            'proceeds' => null,
+            'realized_gain_loss' => null,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => 'statement_position',
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
+            'external_id' => 'existing-open-lot',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--clear' => true,
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Cleared 3 existing lot record(s)');
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'external_id' => 'existing-open-lot',
+        ]);
+        $this->assertDatabaseCount('fin_account_lots', 4);
+
+        unlink($tmpFile);
+    }
+
     public function test_json_import_clear_queues_matcher_for_deleted_lot_years(): void
     {
         $payload = $this->sampleJsonPayload();

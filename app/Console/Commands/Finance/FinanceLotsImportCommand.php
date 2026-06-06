@@ -1039,6 +1039,16 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 $inner->where('lot_origin', FinAccountLot::ORIGIN_STATEMENT_POSITION)
                     ->orWhere('lot_source', 'statement_position');
             });
+        } else {
+            $query->where(function ($inner): void {
+                $inner->where('lot_origin', FinAccountLot::ORIGIN_1099B_DISPOSITION)
+                    ->orWhere('source', FinAccountLot::SOURCE_BROKER_1099B)
+                    ->orWhereIn('lot_source', [
+                        FinAccountLot::SOURCE_1099B,
+                        FinAccountLot::SOURCE_1099B_UNDERSCORE,
+                        'import_1099b',
+                    ]);
+            });
         }
 
         return $query->delete();
