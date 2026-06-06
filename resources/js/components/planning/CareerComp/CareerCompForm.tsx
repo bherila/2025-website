@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { Briefcase, Building2, type LucideIcon, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Briefcase, Building2, Copy, type LucideIcon, Plus, Settings2, Trash2 } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type ReactElement, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant } from './defaults'
-import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant } from './types'
+import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, VestingFrequency } from './types'
 
 export type CareerCompFormSectionId = 'basics' | 'current-job' | 'offers'
 
@@ -42,6 +42,7 @@ interface NumberFieldProps {
   label: string
   value: number
   suffix?: string
+  min?: number
   onChange: (value: number) => void
 }
 
@@ -49,6 +50,45 @@ interface MoneyFieldProps {
   label: string
   value: number
   onChange: (value: number) => void
+}
+
+interface SelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+const VESTING_FREQUENCY_OPTIONS: SelectOption<VestingFrequency>[] = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
+]
+
+const GRANT_KIND_OPTIONS: SelectOption<'hire' | 'refresher'>[] = [
+  { value: 'hire', label: 'New hire' },
+  { value: 'refresher', label: 'Refresher' },
+]
+
+const OPTION_TYPE_OPTIONS: SelectOption<'iso' | 'nso'>[] = [
+  { value: 'iso', label: 'ISO' },
+  { value: 'nso', label: 'NSO' },
+]
+
+const COMPANY_TYPE_OPTIONS: SelectOption<'public' | 'private'>[] = [
+  { value: 'public', label: 'Public' },
+  { value: 'private', label: 'Private' },
+]
+
+const YES_NO_OPTIONS: SelectOption<'yes' | 'no'>[] = [
+  { value: 'no', label: 'No' },
+  { value: 'yes', label: 'Yes' },
+]
+
+function frequencyLabel(frequency: VestingFrequency): string {
+  return VESTING_FREQUENCY_OPTIONS.find((option) => option.value === frequency)?.label ?? 'Monthly'
+}
+
+function formatShares(value: number): string {
+  return Number.isFinite(value) ? value.toLocaleString() : '0'
 }
 
 export function notRenderedViaMillerShell(): never {
@@ -97,7 +137,19 @@ function parseMoney(raw: string): number {
   return currency(raw).value
 }
 
-function NumberField({ label, value, suffix, onChange }: NumberFieldProps): ReactElement {
+/** Stable, collision-free id for a freshly added or duplicated grant within a job. */
+function nextGrantId(existing: { id: string }[], jobId: string, kind: 'rsu' | 'opt'): string {
+  const used = new Set(existing.map((grant) => grant.id))
+  let ordinal = existing.length + 1
+  let id = `${jobId}-${kind}-${ordinal}`
+  while (used.has(id)) {
+    ordinal += 1
+    id = `${jobId}-${kind}-${ordinal}`
+  }
+  return id
+}
+
+function NumberField({ label, value, suffix, min, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
 
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -112,7 +164,7 @@ function NumberField({ label, value, suffix, onChange }: NumberFieldProps): Reac
     <div className="space-y-2">
       <Label htmlFor={inputId}>{label}</Label>
       <InputGroup>
-        <InputGroupInput id={inputId} type="number" value={value} onChange={handleChange} onFocus={handleFocus} />
+        <InputGroupInput id={inputId} type="number" min={min} value={value} onChange={handleChange} onFocus={handleFocus} />
         {suffix ? <InputGroupAddon><InputGroupText>{suffix}</InputGroupText></InputGroupAddon> : null}
       </InputGroup>
     </div>
@@ -121,10 +173,13 @@ function NumberField({ label, value, suffix, onChange }: NumberFieldProps): Reac
 
 function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
   const inputId = useId()
-  const [rawValue, setRawValue] = useState(String(value))
+  // While focused we show the user's in-progress text (`draft`); otherwise we mirror the prop so
+  // that loading a share link, applying a saved job, or switching offers refreshes the display
+  // instead of leaving a stale value frozen from first render.
+  const [draft, setDraft] = useState<string | null>(null)
 
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
-    setRawValue(event.target.value)
+    setDraft(event.target.value)
     onChange(parseMoney(event.target.value))
   }
 
@@ -133,7 +188,7 @@ function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
   }
 
   function handleBlur(): void {
-    setRawValue(String(value))
+    setDraft(null)
   }
 
   return (
@@ -141,7 +196,7 @@ function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
       <Label htmlFor={inputId}>{label}</Label>
       <InputGroup>
         <InputGroupAddon><InputGroupText>$</InputGroupText></InputGroupAddon>
-        <InputGroupInput id={inputId} inputMode="decimal" value={rawValue} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
+        <InputGroupInput id={inputId} inputMode="decimal" value={draft ?? String(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
       </InputGroup>
     </div>
   )
@@ -158,6 +213,55 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   )
 }
 
+function SelectField<T extends string>({ label, value, options, onChange }: {
+  label: string
+  value: T
+  options: SelectOption<T>[]
+  onChange: (value: T) => void
+}): ReactElement {
+  const labelId = useId()
+  const triggerId = useId()
+  const selected = options.find((option) => option.value === value)
+
+  return (
+    <div className="space-y-2">
+      <Label id={labelId} htmlFor={triggerId}>{label}</Label>
+      <Select value={value} onValueChange={(next) => onChange(next as T)}>
+        <SelectTrigger id={triggerId} aria-labelledby={labelId}>{selected?.label ?? value}</SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function GrantRowHeader({ title, summary, onDuplicate, onRemove }: {
+  title: string
+  summary: string
+  onDuplicate: () => void
+  onRemove: () => void
+}): ReactElement {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-xs text-muted-foreground">{summary}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" variant="ghost" size="sm" aria-label={`Duplicate ${title}`} onClick={onDuplicate}>
+          <Copy className="size-4" />
+        </Button>
+        <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${title}`} onClick={onRemove}>
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function RsuGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobSpec) => void }): ReactElement {
   function setGrants(rsuGrants: RsuGrant[]): void {
     onChange({ ...job, rsuGrants })
@@ -167,42 +271,54 @@ function RsuGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobS
     setGrants(job.rsuGrants.map((grant) => (grant.id === grantId ? { ...grant, ...patch } : grant)))
   }
 
+  // New grants inherit the previous grant's vesting schedule so refreshers need only a date + size.
+  function addGrant(): void {
+    const previous = job.rsuGrants[job.rsuGrants.length - 1]
+    const base = buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)
+    const grant: RsuGrant = previous
+      ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, grantPrice: previous.grantPrice }
+      : base
+    setGrants([...job.rsuGrants, grant])
+  }
+
+  function duplicateGrant(index: number): void {
+    const original = job.rsuGrants[index]
+    if (!original) {
+      return
+    }
+    const next = [...job.rsuGrants]
+    next.splice(index + 1, 0, { ...original, id: nextGrantId(job.rsuGrants, job.id, 'rsu') })
+    setGrants(next)
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">RSU grants</Label>
-        <Button type="button" variant="outline" size="sm" onClick={() => setGrants([...job.rsuGrants, buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)])}>
+        <Button type="button" variant="outline" size="sm" onClick={addGrant}>
           <Plus className="mr-1 size-3.5" /> Add RSU grant
         </Button>
       </div>
       {job.rsuGrants.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No RSU grants. Add one to model restricted stock vesting.</p>
       ) : (
-        job.rsuGrants.map((grant) => (
+        job.rsuGrants.map((grant, index) => (
           <div key={grant.id} className="space-y-3 rounded-md border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{grant.id}</span>
-              <Button type="button" variant="ghost" size="sm" aria-label={`Remove RSU grant ${grant.id}`} onClick={() => setGrants(job.rsuGrants.filter((entry) => entry.id !== grant.id))}>
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
+            <GrantRowHeader
+              title={`RSU grant ${index + 1}`}
+              summary={`${grant.kind === 'refresher' ? 'Refresher' : 'New hire'} · ${formatShares(grant.shareCount ?? 0)} sh · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()} · ${grant.cliffMonths}mo cliff`}
+              onDuplicate={() => duplicateGrant(index)}
+              onRemove={() => setGrants(job.rsuGrants.filter((entry) => entry.id !== grant.id))}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Grant kind</Label>
-                <Select value={grant.kind} onValueChange={(value) => updateGrant(grant.id, { kind: value === 'refresher' ? 'refresher' : 'hire' })}>
-                  <SelectTrigger>{grant.kind === 'refresher' ? 'Refresher' : 'New hire'}</SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hire">New hire</SelectItem>
-                    <SelectItem value="refresher">Refresher</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => updateGrant(grant.id, { kind })} />
               <DateField label="Grant date" value={grant.grantDate} onChange={(value) => updateGrant(grant.id, { grantDate: value })} />
-              <NumberField label="Share count" value={grant.shareCount ?? 0} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
+              <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
               <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => updateGrant(grant.id, { grantValue: value > 0 ? value : undefined })} />
               <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => updateGrant(grant.id, { grantPrice: value > 0 ? value : undefined })} />
-              <NumberField label="Cliff months" value={grant.cliffMonths} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
-              <NumberField label="Vesting years" value={grant.vestingYears} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
+              <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
+              <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
+              <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => updateGrant(grant.id, { vestingFrequency })} />
             </div>
           </div>
         ))
@@ -220,61 +336,54 @@ function OptionGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: J
     setGrants(job.optionGrants.map((grant) => (grant.id === grantId ? { ...grant, ...patch } : grant)))
   }
 
+  function addGrant(): void {
+    const previous = job.optionGrants[job.optionGrants.length - 1]
+    const base = buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)
+    const grant: OptionGrant = previous
+      ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, earlyExercise83b: previous.earlyExercise83b }
+      : base
+    setGrants([...job.optionGrants, grant])
+  }
+
+  function duplicateGrant(index: number): void {
+    const original = job.optionGrants[index]
+    if (!original) {
+      return
+    }
+    const next = [...job.optionGrants]
+    next.splice(index + 1, 0, { ...original, id: nextGrantId(job.optionGrants, job.id, 'opt') })
+    setGrants(next)
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">Option grants (ISO / NSO)</Label>
-        <Button type="button" variant="outline" size="sm" onClick={() => setGrants([...job.optionGrants, buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)])}>
+        <Button type="button" variant="outline" size="sm" onClick={addGrant}>
           <Plus className="mr-1 size-3.5" /> Add option grant
         </Button>
       </div>
       {job.optionGrants.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No option grants. Add one to model ISO/NSO vesting and exercise.</p>
       ) : (
-        job.optionGrants.map((grant) => (
+        job.optionGrants.map((grant, index) => (
           <div key={grant.id} className="space-y-3 rounded-md border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{grant.id}</span>
-              <Button type="button" variant="ghost" size="sm" aria-label={`Remove option grant ${grant.id}`} onClick={() => setGrants(job.optionGrants.filter((entry) => entry.id !== grant.id))}>
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
+            <GrantRowHeader
+              title={`Option grant ${index + 1}`}
+              summary={`${grant.type.toUpperCase()} · ${formatShares(grant.shareCount)} sh @ $${grant.strike} · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()}`}
+              onDuplicate={() => duplicateGrant(index)}
+              onRemove={() => setGrants(job.optionGrants.filter((entry) => entry.id !== grant.id))}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Grant kind</Label>
-                <Select value={grant.kind} onValueChange={(value) => updateGrant(grant.id, { kind: value === 'refresher' ? 'refresher' : 'hire' })}>
-                  <SelectTrigger>{grant.kind === 'refresher' ? 'Refresher' : 'New hire'}</SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hire">New hire</SelectItem>
-                    <SelectItem value="refresher">Refresher</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Option type</Label>
-                <Select value={grant.type} onValueChange={(value) => updateGrant(grant.id, { type: value === 'nso' ? 'nso' : 'iso' })}>
-                  <SelectTrigger>{grant.type === 'nso' ? 'NSO' : 'ISO'}</SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="iso">ISO</SelectItem>
-                    <SelectItem value="nso">NSO</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => updateGrant(grant.id, { kind })} />
+              <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => updateGrant(grant.id, { type })} />
               <DateField label="Grant date" value={grant.grantDate} onChange={(value) => updateGrant(grant.id, { grantDate: value })} />
-              <NumberField label="Share count" value={grant.shareCount} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
+              <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
               <MoneyField label="Strike price" value={grant.strike} onChange={(value) => updateGrant(grant.id, { strike: value })} />
-              <NumberField label="Cliff months" value={grant.cliffMonths} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
-              <NumberField label="Vesting years" value={grant.vestingYears} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
-              <div className="space-y-2">
-                <Label>83(b) early exercise</Label>
-                <Select value={grant.earlyExercise83b ? 'yes' : 'no'} onValueChange={(value) => updateGrant(grant.id, { earlyExercise83b: value === 'yes' })}>
-                  <SelectTrigger>{grant.earlyExercise83b ? 'Yes' : 'No'}</SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="no">No</SelectItem>
-                    <SelectItem value="yes">Yes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
+              <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
+              <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => updateGrant(grant.id, { vestingFrequency })} />
+              <SelectField label="83(b) early exercise" value={grant.earlyExercise83b ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => updateGrant(grant.id, { earlyExercise83b: value === 'yes' })} />
             </div>
           </div>
         ))
@@ -296,13 +405,14 @@ function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job: JobSp
 
 function JobEditor({ job, onChange, onRemove }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined }): ReactElement {
   const nameId = useId()
+  const isPrivate = job.company.type === 'private'
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div>
           <CardTitle className="text-base">{job.name}</CardTitle>
-          <CardDescription>{job.company.type === 'private' ? 'Private company inputs include 409A, dilution, and liquidity date.' : 'Public company inputs use current share price.'}</CardDescription>
+          <CardDescription>{isPrivate ? 'Private company inputs include 409A, dilution, and liquidity date.' : 'Public company inputs use current share price.'}</CardDescription>
         </div>
         {onRemove ? <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${job.name}`} onClick={onRemove}><Trash2 className="size-4" /></Button> : null}
       </CardHeader>
@@ -312,26 +422,21 @@ function JobEditor({ job, onChange, onRemove }: { job: JobSpec; onChange: (job: 
             <Label htmlFor={nameId}>Job name</Label>
             <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
           </div>
-          <div className="space-y-2">
-            <Label>Company type</Label>
-            <Select value={job.company.type} onValueChange={(value) => onChange({ ...job, company: { ...job.company, type: value === 'private' ? 'private' : 'public' } })}>
-              <SelectTrigger>{job.company.type === 'private' ? 'Private' : 'Public'}</SelectTrigger>
-              <SelectContent>
-                <SelectItem value="public">Public</SelectItem>
-                <SelectItem value="private">Private</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <SelectField label="Company type" value={job.company.type} options={COMPANY_TYPE_OPTIONS} onChange={(type) => onChange({ ...job, company: { ...job.company, type } })} />
           <MoneyField label="Base salary" value={job.comp.baseSalary} onChange={(value) => onChange({ ...job, comp: { ...job.comp, baseSalary: value } })} />
           <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />
-          <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
-          <MoneyField label="409A price" value={job.company.fourNineA} onChange={(value) => onChange({ ...job, company: { ...job.company, fourNineA: value } })} />
-          <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
-          <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
+          {isPrivate ? (
+            <>
+              <MoneyField label="409A price" value={job.company.fourNineA} onChange={(value) => onChange({ ...job, company: { ...job.company, fourNineA: value } })} />
+              <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
+              <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
+            </>
+          ) : (
+            <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
+          )}
           <NumberField label="Low growth" value={job.growthBands.lowPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, lowPct: value } })} />
           <NumberField label="Medium growth" value={job.growthBands.mediumPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, mediumPct: value } })} />
           <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
-          <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
         </div>
 
         <div className="space-y-4 border-t pt-4">
@@ -352,8 +457,8 @@ export function CareerCompFormSection({ inputs, section, onChange }: CareerCompF
           <CardDescription>Choose the calendar start year and comparison horizon.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <NumberField label="Start year" value={inputs.startYear} onChange={(value) => onChange({ ...inputs, startYear: value })} />
-          <NumberField label="Horizon" value={inputs.horizonYears} suffix="years" onChange={(value) => onChange({ ...inputs, horizonYears: value })} />
+          <NumberField label="Start year" value={inputs.startYear} min={2000} onChange={(value) => onChange({ ...inputs, startYear: value })} />
+          <NumberField label="Horizon" value={inputs.horizonYears} suffix="years" min={1} onChange={(value) => onChange({ ...inputs, horizonYears: value })} />
         </CardContent>
       </Card>
     )

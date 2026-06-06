@@ -128,7 +128,7 @@ final class CareerCompCalculator
             }
 
             $strike = $this->strikeForGrant($job, (string) $row['grantId']);
-            $outlays[] = MoneyMath::multiply($row['exercisableShares'], $strike);
+            $outlays[] = MoneyMath::multiply($strike, $row['exercisableShares']);
         }
 
         return MoneyMath::sum($outlays);

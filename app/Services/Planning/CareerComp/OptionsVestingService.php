@@ -49,10 +49,10 @@ final class OptionsVestingService
             $shares = (float) $rawRow['shares'];
             $alreadyUsed = $usedIsoValueByYear[$year] ?? 0.0;
             $remainingIsoValue = max(0.0, MoneyMath::subtract(100000.0, $alreadyUsed));
-            $requestedValue = MoneyMath::multiply($shares, $strike);
+            $requestedValue = MoneyMath::multiply($strike, $shares);
             $isoShares = $strike > 0.0 ? min($shares, MoneyMath::divide($remainingIsoValue, $strike)) : 0.0;
             $nsoShares = max(0.0, $shares - $isoShares);
-            $usedIsoValueByYear[$year] = MoneyMath::add($alreadyUsed, MoneyMath::multiply($isoShares, $strike));
+            $usedIsoValueByYear[$year] = MoneyMath::add($alreadyUsed, MoneyMath::multiply($strike, $isoShares));
 
             if ($isoShares > 0.0) {
                 $rows[] = $this->row($rawRow, 'iso', $isoShares);
@@ -99,25 +99,13 @@ final class OptionsVestingService
             return [(int) $grantDate->format('Y') => $shareCount];
         }
 
-        $vestingMonths = max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12));
-        $cliffMonths = max(0, (int) round((float) ($grant['cliffMonths'] ?? 0)));
-        if ($vestingMonths <= 0 || $cliffMonths > $vestingMonths) {
-            return [];
-        }
-
-        $sharesByYear = [];
-        $monthlyShares = $shareCount / $vestingMonths;
-        for ($month = 1; $month <= $vestingMonths; $month++) {
-            if ($month < $cliffMonths) {
-                continue;
-            }
-
-            $vestedShares = $month === $cliffMonths ? $monthlyShares * $cliffMonths : $monthlyShares;
-            $year = (int) $grantDate->modify('+'.$month.' months')->format('Y');
-            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $vestedShares;
-        }
-
-        return $sharesByYear;
+        return VestingSchedule::sharesByYear(
+            $shareCount,
+            $grantDate,
+            max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12)),
+            max(0, (int) round((float) ($grant['cliffMonths'] ?? 0))),
+            VestingSchedule::normalizeFrequency($grant['vestingFrequency'] ?? null),
+        );
     }
 
     private function date(string $date): ?DateTimeImmutable

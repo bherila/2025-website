@@ -27,6 +27,17 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
     expect(normalized.currentJob?.rsuGrants[0]?.shareCount).toBe(1000)
   })
 
+  it('clamps horizonYears to the backend-accepted maximum of 30', () => {
+    const normalized = normalizeCareerCompInputs({
+      horizonYears: 45,
+      startYear: 2026,
+      currentJob: null,
+      hypotheticalJobs: [],
+    })
+
+    expect(normalized.horizonYears).toBe(30)
+  })
+
   it('coerces an empty optional liquidityDate to null and drops grants with no grant date', () => {
     const inputs = {
       horizonYears: 5,

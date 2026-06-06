@@ -39,31 +39,18 @@ final class RsuVestingExpander
      */
     private function sharesByYear(array $grant): array
     {
-        $shareCount = $this->grantShareCount($grant);
-        $vestingMonths = max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12));
-        $cliffMonths = max(0, (int) round((float) ($grant['cliffMonths'] ?? 0)));
-        if ($shareCount <= 0.0 || $vestingMonths <= 0 || $cliffMonths > $vestingMonths) {
-            return [];
-        }
-
         $grantDate = $this->date((string) ($grant['grantDate'] ?? ''));
         if (! $grantDate instanceof DateTimeImmutable) {
             return [];
         }
 
-        $sharesByYear = [];
-        $monthlyShares = $shareCount / $vestingMonths;
-        for ($month = 1; $month <= $vestingMonths; $month++) {
-            if ($month < $cliffMonths) {
-                continue;
-            }
-
-            $vestedShares = $month === $cliffMonths ? $monthlyShares * $cliffMonths : $monthlyShares;
-            $year = (int) $grantDate->modify('+'.$month.' months')->format('Y');
-            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $vestedShares;
-        }
-
-        return $sharesByYear;
+        return VestingSchedule::sharesByYear(
+            $this->grantShareCount($grant),
+            $grantDate,
+            max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12)),
+            max(0, (int) round((float) ($grant['cliffMonths'] ?? 0))),
+            VestingSchedule::normalizeFrequency($grant['vestingFrequency'] ?? null),
+        );
     }
 
     /** @param array<string, mixed> $grant */

@@ -59,4 +59,27 @@ describe('careerCompUrlState', () => {
   it('falls back to base inputs when payload parsing fails', () => {
     expect(parseCareerCompUrlState('?cc=not-valid', DEFAULT_CAREER_COMP_INPUTS)).toEqual(DEFAULT_CAREER_COMP_INPUTS)
   })
+
+  it('degrades a legacy shared link whose grants predate vestingFrequency to monthly', () => {
+    // Mirrors a 'cc=' payload encoded before vestingFrequency existed: the grant has no such key.
+    const legacyDiff = {
+      hypotheticalJobs: [
+        {
+          id: 'hyp-1',
+          name: 'Legacy offer',
+          company: { type: 'public', currentSharePrice: 30, fourNineA: 0, fullyDilutedShares: 0, annualDilutionPct: 0, liquidityDate: null },
+          comp: { baseSalary: 150000, cashBonus: 0 },
+          rsuGrants: [{ id: 'r1', kind: 'hire', grantDate: '2026-01-01', shareCount: 800, cliffMonths: 12, vestingYears: 4 }],
+          optionGrants: [],
+          growthBands: { lowPct: 0, mediumPct: 5, highPct: 10 },
+        },
+      ],
+    }
+    const payload = btoa(encodeURIComponent(JSON.stringify(legacyDiff)))
+
+    const parsed = parseCareerCompUrlState(`cc=${payload}`)
+
+    expect(parsed.hypotheticalJobs[0]?.name).toBe('Legacy offer')
+    expect(parsed.hypotheticalJobs[0]?.rsuGrants[0]?.vestingFrequency).toBe('monthly')
+  })
 })

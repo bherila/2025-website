@@ -51,4 +51,49 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('deltasVsCurrent', []);
         $response->assertJsonPath('jobs.0.id', 'hyp-1');
     }
+
+    public function test_public_company_validates_without_private_only_fields(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 5,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Public offer',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 50],
+                    'comp' => ['baseSalary' => 200000, 'cashBonus' => 0],
+                    'rsuGrants' => [[
+                        'id' => 'r1', 'kind' => 'hire', 'grantDate' => '2026-01-01',
+                        'shareCount' => 400, 'cliffMonths' => 12, 'vestingYears' => 4,
+                        'vestingFrequency' => 'quarterly',
+                    ]],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 5, 'highPct' => 10],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.id', 'hyp-1');
+    }
+
+    public function test_compute_rejects_invalid_vesting_frequency(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['hypotheticalJobs'][0]['rsuGrants'] = [[
+            'id' => 'r1', 'kind' => 'hire', 'grantDate' => '2026-01-01',
+            'shareCount' => 100, 'cliffMonths' => 0, 'vestingYears' => 1,
+            'vestingFrequency' => 'weekly',
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['inputs.hypotheticalJobs.0.rsuGrants.0.vestingFrequency']);
+    }
 }

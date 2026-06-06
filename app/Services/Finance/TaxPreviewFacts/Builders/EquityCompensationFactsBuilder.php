@@ -210,8 +210,8 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
     {
         $strike = $this->strikeForGrant($job, $row['grantId']);
         $sharePrice = $this->equityValuationService->sharePrice($job, max(0, $yearOffset), 'medium');
-        $marketValue = MoneyMath::multiply($row['exercisableShares'], $sharePrice);
-        $exerciseOutlay = MoneyMath::multiply($row['exercisableShares'], $strike);
+        $marketValue = MoneyMath::multiply($sharePrice, $row['exercisableShares']);
+        $exerciseOutlay = MoneyMath::multiply($strike, $row['exercisableShares']);
 
         return max(0.0, MoneyMath::subtract($marketValue, $exerciseOutlay));
     }

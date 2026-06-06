@@ -70,7 +70,9 @@ export function normalizeCareerCompInputs(rawInputs: unknown): CareerCompInputs 
 
   return {
     ...inputs,
-    horizonYears: Math.min(40, Math.max(1, Math.round(inputs.horizonYears))),
+    // Clamp to the backend's accepted range (ComputeCareerCompRequest max:30) so a large horizon
+    // does not pass client normalization only to 422 on compute.
+    horizonYears: Math.min(30, Math.max(1, Math.round(inputs.horizonYears))),
     startYear: Math.max(1900, Math.round(inputs.startYear)),
     currentJob: inputs.currentJob ? normalizeJob(inputs.currentJob, 'current') : null,
     hypotheticalJobs: inputs.hypotheticalJobs.length > 0
