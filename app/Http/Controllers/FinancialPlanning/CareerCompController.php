@@ -4,11 +4,9 @@ namespace App\Http\Controllers\FinancialPlanning;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FinancialPlanning\ComputeCareerCompRequest;
+use App\Http\Requests\FinancialPlanning\SaveCareerCompComparisonRequest;
 use App\Http\Requests\FinancialPlanning\ShareCareerCompComparisonRequest;
-use App\Http\Requests\FinancialPlanning\StoreCareerCompComparisonRequest;
-use App\Http\Requests\FinancialPlanning\UpdateCareerCompComparisonRequest;
 use App\Models\CareerComparison;
-use App\Models\CareerJob;
 use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
 use App\Services\Planning\CareerComp\CareerCompInputs;
@@ -16,7 +14,6 @@ use App\Services\Planning\CareerComp\ComparisonShareRedactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class CareerCompController extends Controller
@@ -29,13 +26,13 @@ class CareerCompController extends Controller
 
     public function show(): View
     {
-        $lastActive = Auth::id() !== null ? $this->workflows->lastActiveWorkflow((int) Auth::id()) : null;
+        $latest = Auth::id() !== null ? $this->workflows->latestForUser((int) Auth::id()) : null;
 
-        if ($lastActive instanceof CareerComparison) {
+        if ($latest instanceof CareerComparison) {
             return view('financial-planning.career-comparison', [
-                'initialData' => array_merge($this->workflows->response($lastActive), [
+                'initialData' => array_merge($this->workflows->response($latest), [
                     'authenticated' => true,
-                    'comparison' => $this->comparisonMeta($lastActive),
+                    'comparison' => $this->comparisonMeta($latest, true),
                     'canEdit' => true,
                 ]),
             ]);
@@ -52,23 +49,17 @@ class CareerCompController extends Controller
 
     public function showByCode(string $code): View
     {
-        $comparison = CareerComparison::query()
-            ->where('short_code', $code)
-            ->firstOrFail();
+        $share = $this->workflows->findActiveShare($code);
+        abort_unless($share instanceof CareerComparison, 404);
 
-        $canEdit = Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id;
-        $inputs = $this->workflows->inputsFromComparison($comparison)->toArray();
-        $projection = $comparison->computed_json;
+        $isCreator = $this->isCreator($share);
+        $inputs = $this->workflows->inputsFromComparison($share)->toArray();
+        $projection = $share->computed_json;
 
-        // Confidential ("exclusive") share: redact the current job by identity for anyone who
-        // cannot edit the comparison, so no current-job dollar value reaches the page payload.
-        if (! $comparison->share_includes_current && ! $canEdit) {
-            $currentJobId = is_array($projection) && is_string($projection['currentJobId'] ?? null)
-                ? $projection['currentJobId']
-                : (is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null);
-            $redacted = $this->shareRedactor->redact($inputs, $projection, is_string($currentJobId) ? $currentJobId : null);
-            $inputs = $redacted['inputs'];
-            $projection = $redacted['projection'];
+        // Confidential share: hide the current job from anyone who is not the creator, so no
+        // current-job dollar value reaches the page payload (directly or via the deltas column).
+        if (! $share->share_includes_current && ! $isCreator) {
+            [$inputs, $projection] = $this->redactCurrent($inputs, $projection);
         }
 
         return view('financial-planning.career-comparison', [
@@ -76,27 +67,11 @@ class CareerCompController extends Controller
                 'inputs' => $inputs,
                 'projection' => $projection,
                 'authenticated' => Auth::check(),
-                'comparison' => $this->comparisonMeta($comparison),
-                'canEdit' => $canEdit,
+                'comparison' => $this->comparisonMeta($share, $isCreator),
+                // Shared forks are collaboratively editable by anyone holding the link.
+                'canEdit' => true,
             ],
         ]);
-    }
-
-    public function savedJobs(): JsonResponse
-    {
-        $jobs = CareerJob::query()
-            ->where('user_id', Auth::id())
-            ->orderByDesc('updated_at')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (CareerJob $job): array => [
-                'id' => $job->id,
-                'kind' => $job->kind,
-                'name' => $job->name,
-                'spec' => $job->spec_json,
-            ]);
-
-        return response()->json(['jobs' => $jobs]);
     }
 
     public function compute(ComputeCareerCompRequest $request): JsonResponse
@@ -106,96 +81,89 @@ class CareerCompController extends Controller
             ->toArray());
     }
 
-    public function store(StoreCareerCompComparisonRequest $request): JsonResponse
+    /**
+     * Autosave: upsert the authenticated user's private latest (NULL short_code) comparison.
+     */
+    public function saveLatest(SaveCareerCompComparisonRequest $request): JsonResponse
     {
         $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
-        $comparison = $this->workflows->createWorkflow((int) Auth::id(), $inputs, $request->validated('title'));
-
-        return response()->json($this->workflows->response($comparison), 201);
-    }
-
-    public function update(UpdateCareerCompComparisonRequest $request, int|string $workflow): JsonResponse
-    {
-        $comparison = is_string($workflow) && ! ctype_digit($workflow)
-            ? CareerComparison::query()->where('short_code', $workflow)->firstOrFail()
-            : $this->ownedWorkflow($workflow);
-        abort_unless(Auth::id() !== null && (int) Auth::id() === (int) $comparison->user_id, 403);
-
-        $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
-        $comparison = $this->workflows->updateWorkflow($comparison, $inputs, $request->validated('title'), $request->has('shareIncludesCurrent') ? $request->boolean('shareIncludesCurrent') : null);
+        $comparison = $this->workflows->saveLatest((int) Auth::id(), $inputs);
 
         return response()->json($this->workflows->response($comparison));
     }
 
-    public function claim(string $code): JsonResponse
+    /**
+     * Return the authenticated user's current latest comparison, if any.
+     */
+    public function latest(): JsonResponse
     {
-        $comparison = CareerComparison::query()
-            ->where('short_code', $code)
-            ->firstOrFail();
+        $latest = $this->workflows->latestForUser((int) Auth::id());
 
-        $userId = (int) Auth::id();
-
-        abort_if($comparison->user_id !== null && (int) $comparison->user_id !== $userId, 403);
-
-        if ($comparison->user_id === null) {
-            DB::transaction(function () use ($comparison, $userId): void {
-                $comparison->update(['user_id' => $userId]);
-                CareerJob::query()
-                    ->whereIn('id', $this->referencedJobIdsForClaim($comparison))
-                    ->whereNull('user_id')
-                    ->update(['user_id' => $userId]);
-            });
-        }
-
-        return response()->json($this->workflows->response($comparison));
-    }
-
-    public function index(): JsonResponse
-    {
-        return response()->json([
-            'workflows' => $this->workflows->listWorkflows((int) Auth::id())
-                ->map(fn (CareerComparison $comparison): array => $this->workflows->summary($comparison))
-                ->values(),
-        ]);
-    }
-
-    public function showWorkflow(int $workflow): JsonResponse
-    {
-        return response()->json($this->workflows->response($this->ownedWorkflow($workflow)));
-    }
-
-    public function lastActive(): JsonResponse
-    {
-        $workflow = $this->workflows->lastActiveWorkflow((int) Auth::id());
-
-        if (! $workflow instanceof CareerComparison) {
+        if (! $latest instanceof CareerComparison) {
             return response()->json(['workflow' => null]);
         }
 
-        return response()->json(['workflow' => $this->workflows->response($workflow)]);
+        return response()->json(['workflow' => $this->workflows->response($latest)]);
     }
 
-    public function activate(int $workflow): JsonResponse
-    {
-        return response()->json($this->workflows->response($this->workflows->markLastActive($this->ownedWorkflow($workflow))));
-    }
-
-    public function destroy(int $workflow): JsonResponse
-    {
-        $this->workflows->deleteWorkflow($this->ownedWorkflow($workflow));
-
-        return response()->json(['deleted' => true]);
-    }
-
+    /**
+     * Fork the current inputs into a new, link-shareable, editable copy owned by the creator.
+     */
     public function share(ShareCareerCompComparisonRequest $request): JsonResponse
     {
-        $snapshot = $this->workflows->createSnapshot(
-            Auth::id() !== null ? (int) Auth::id() : null,
-            CareerCompInputs::fromArray($request->validated('inputs')),
+        $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
+        $share = $this->workflows->createShare(
+            (int) Auth::id(),
+            $inputs,
             $request->boolean('shareIncludesCurrent', true),
+            $request->date('expiresAt'),
         );
 
-        return response()->json($this->workflows->response($snapshot), 201);
+        return response()->json($this->shareResponse($share, true), 201);
+    }
+
+    /**
+     * Autosave edits made to a shared fork by anyone holding the link.
+     */
+    public function saveShare(ShareCareerCompComparisonRequest $request, string $code): JsonResponse
+    {
+        $share = $this->workflows->findActiveShare($code);
+        abort_unless($share instanceof CareerComparison, 404);
+
+        $isCreator = $this->isCreator($share);
+        $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
+        $share = $this->workflows->saveShare($share, $inputs, ! $share->share_includes_current && ! $isCreator);
+
+        return response()->json($this->shareResponse($share, $isCreator));
+    }
+
+    /**
+     * Creator-only: set or clear a shared fork's expiration.
+     */
+    public function updateShare(Request $request, string $code): JsonResponse
+    {
+        $share = $this->workflows->findActiveShare($code);
+        abort_unless($share instanceof CareerComparison, 404);
+        abort_unless($this->isCreator($share), 403);
+
+        $request->validate(['expiresAt' => ['nullable', 'date']]);
+        $share = $this->workflows->setShareExpiration($share, $request->date('expiresAt'));
+
+        return response()->json($this->shareResponse($share, true));
+    }
+
+    /**
+     * Creator-only: delete a shared fork.
+     */
+    public function deleteShare(string $code): JsonResponse
+    {
+        $share = $this->workflows->findActiveShare($code);
+        abort_unless($share instanceof CareerComparison, 404);
+        abort_unless($this->isCreator($share), 403);
+
+        $this->workflows->deleteShare($share);
+
+        return response()->json(['deleted' => true]);
     }
 
     public function importRsu(Request $request): JsonResponse
@@ -207,47 +175,58 @@ class CareerCompController extends Controller
         return response()->json($this->workflows->importRsuCurrentJob((int) Auth::id(), $validated['currentJob'] ?? null));
     }
 
-    private function ownedWorkflow(int|string $workflow): CareerComparison
+    private function isCreator(CareerComparison $comparison): bool
     {
-        $query = CareerComparison::query()
-            ->where('user_id', Auth::id());
-
-        if (is_int($workflow) || ctype_digit((string) $workflow)) {
-            $query->where('id', (int) $workflow)
-                ->where('is_snapshot', false);
-        } else {
-            $query->where('short_code', (string) $workflow);
-        }
-
-        return $query->firstOrFail();
+        return Auth::id() !== null && $comparison->user_id !== null && (int) Auth::id() === (int) $comparison->user_id;
     }
 
     /**
-     * @return list<int>
+     * Build a share's API response, redacting the confidential current job for non-creators.
+     *
+     * @return array<string, mixed>
      */
-    private function referencedJobIdsForClaim(CareerComparison $comparison): array
+    private function shareResponse(CareerComparison $share, bool $isCreator): array
     {
-        $ids = $comparison->current_job_id !== null ? [(int) $comparison->current_job_id] : [];
+        $response = $this->workflows->response($share);
+        $response['isCreator'] = $isCreator;
 
-        foreach ($comparison->hypothetical_job_ids as $id) {
-            $ids[] = (int) $id;
+        if (! $share->share_includes_current && ! $isCreator) {
+            $inputs = is_array($response['inputs'] ?? null) ? $response['inputs'] : [];
+            $projection = is_array($response['projection'] ?? null) ? $response['projection'] : null;
+            [$response['inputs'], $response['projection']] = $this->redactCurrent($inputs, $projection);
         }
 
-        return $ids;
+        return $response;
+    }
+
+    /**
+     * @param  array<string, mixed>  $inputs
+     * @param  array<string, mixed>|null  $projection
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>|null}
+     */
+    private function redactCurrent(array $inputs, ?array $projection): array
+    {
+        $currentJobId = is_array($projection) && is_string($projection['currentJobId'] ?? null)
+            ? $projection['currentJobId']
+            : (is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null);
+        $redacted = $this->shareRedactor->redact($inputs, $projection, is_string($currentJobId) ? $currentJobId : null);
+
+        return [$redacted['inputs'], $redacted['projection']];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function comparisonMeta(CareerComparison $comparison): array
+    private function comparisonMeta(CareerComparison $comparison, bool $isCreator): array
     {
         return [
             'id' => $comparison->id,
             'shortCode' => $comparison->short_code,
-            'shareUrl' => url("/financial-planning/career-comparison/s/{$comparison->short_code}"),
+            'shareUrl' => $comparison->short_code !== null ? url("/financial-planning/career-comparison/s/{$comparison->short_code}") : null,
             'ownerUserId' => $comparison->user_id,
             'shareIncludesCurrent' => $comparison->share_includes_current,
-            'isSnapshot' => $comparison->is_snapshot,
+            'expiresAt' => $comparison->expires_at?->toIso8601String(),
+            'isCreator' => $isCreator,
             'title' => $comparison->title,
         ];
     }

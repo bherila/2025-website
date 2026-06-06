@@ -4,17 +4,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { sampleCareerCompProjection } from '../__fixtures__/sampleProjection'
 import {
-  activateCareerCompWorkflow,
-  claimCareerComparison,
   computeCareerComp,
-  deleteCareerCompWorkflow,
-  getCareerCompWorkflow,
+  deleteSharedCareerComparison,
   importRsuIntoCurrentJob,
-  listCareerCompWorkflows,
-  listSavedCareerJobs,
-  saveCareerComparison,
+  saveLatestCareerComparison,
+  saveSharedCareerComparison,
   shareCareerComparison,
-  updateCareerComparison,
+  updateSharedCareerComparisonExpiration,
 } from '../careerCompApi'
 import { CareerCompPage } from '../CareerCompPage'
 import { DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
@@ -22,36 +18,46 @@ import type { CareerComparisonMeta, CareerCompInitialData } from '../types'
 
 jest.mock('../careerCompApi', () => ({
   computeCareerComp: jest.fn(),
-  saveCareerComparison: jest.fn(),
-  updateCareerComparison: jest.fn(),
-  claimCareerComparison: jest.fn(),
-  listSavedCareerJobs: jest.fn(),
-  listCareerCompWorkflows: jest.fn(),
-  getCareerCompWorkflow: jest.fn(),
-  activateCareerCompWorkflow: jest.fn(),
-  deleteCareerCompWorkflow: jest.fn(),
+  saveLatestCareerComparison: jest.fn(),
   shareCareerComparison: jest.fn(),
+  saveSharedCareerComparison: jest.fn(),
+  updateSharedCareerComparisonExpiration: jest.fn(),
+  deleteSharedCareerComparison: jest.fn(),
   importRsuIntoCurrentJob: jest.fn(),
 }))
 
 const mockCompute = computeCareerComp as jest.Mock
-const mockSave = saveCareerComparison as jest.Mock
-const mockUpdate = updateCareerComparison as jest.Mock
-const mockClaim = claimCareerComparison as jest.Mock
-const mockList = listSavedCareerJobs as jest.Mock
-const mockListWorkflows = listCareerCompWorkflows as jest.Mock
-const mockGetWorkflow = getCareerCompWorkflow as jest.Mock
-const mockActivateWorkflow = activateCareerCompWorkflow as jest.Mock
-const mockDeleteWorkflow = deleteCareerCompWorkflow as jest.Mock
+const mockSaveLatest = saveLatestCareerComparison as jest.Mock
 const mockShare = shareCareerComparison as jest.Mock
+const mockSaveShare = saveSharedCareerComparison as jest.Mock
+const mockUpdateExpiration = updateSharedCareerComparisonExpiration as jest.Mock
+const mockDeleteShare = deleteSharedCareerComparison as jest.Mock
 const mockImportRsu = importRsuIntoCurrentJob as jest.Mock
 
-const savedComparison: CareerComparisonMeta = {
-  id: 1,
-  shortCode: 'abc1234',
-  shareUrl: 'http://localhost/financial-planning/career-comparison/s/abc1234',
+const sharedFork: CareerComparisonMeta = {
+  id: 2,
+  shortCode: 'share123',
+  shareUrl: 'http://localhost/financial-planning/career-comparison/s/share123',
   ownerUserId: 5,
   shareIncludesCurrent: true,
+  expiresAt: null,
+  isCreator: false,
+}
+
+function workflowResponse(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 1,
+    title: null,
+    shortCode: null,
+    shareUrl: null,
+    ownerUserId: 5,
+    shareIncludesCurrent: true,
+    expiresAt: null,
+    updatedAt: null,
+    inputs: DEFAULT_CAREER_COMP_INPUTS,
+    projection: sampleCareerCompProjection,
+    ...overrides,
+  }
 }
 
 function baseInitialData(overrides: Partial<CareerCompInitialData> = {}): CareerCompInitialData {
@@ -67,81 +73,75 @@ describe('CareerCompPage', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCompute.mockResolvedValue(sampleCareerCompProjection)
-    mockSave.mockResolvedValue({ id: 1, shortCode: 'abc1234', shareUrl: savedComparison.shareUrl, projection: sampleCareerCompProjection })
-    mockUpdate.mockResolvedValue({ id: 1, shortCode: 'abc1234', shareUrl: savedComparison.shareUrl, projection: sampleCareerCompProjection })
-    mockClaim.mockResolvedValue({ id: 1, shortCode: 'abc1234', shareUrl: savedComparison.shareUrl, projection: sampleCareerCompProjection })
-    mockList.mockResolvedValue({ jobs: [] })
-    mockListWorkflows.mockResolvedValue({ workflows: [] })
-    mockGetWorkflow.mockResolvedValue({ ...savedComparison, title: 'Saved workflow', inputs: DEFAULT_CAREER_COMP_INPUTS, projection: sampleCareerCompProjection, lastActiveAt: null, updatedAt: null })
-    mockActivateWorkflow.mockResolvedValue({ ...savedComparison, title: 'Saved workflow', inputs: DEFAULT_CAREER_COMP_INPUTS, projection: sampleCareerCompProjection, lastActiveAt: null, updatedAt: null })
-    mockDeleteWorkflow.mockResolvedValue({ deleted: true })
-    mockShare.mockResolvedValue({ id: 2, shortCode: 'share123', shareUrl: 'http://localhost/financial-planning/career-comparison/s/share123', projection: sampleCareerCompProjection })
+    mockSaveLatest.mockResolvedValue(workflowResponse())
+    mockShare.mockResolvedValue(workflowResponse({ id: 2, shortCode: 'share123', shareUrl: sharedFork.shareUrl, isCreator: true }))
+    mockSaveShare.mockResolvedValue(workflowResponse({ id: 2, shortCode: 'share123', shareUrl: sharedFork.shareUrl }))
+    mockUpdateExpiration.mockResolvedValue(workflowResponse({ id: 2, shortCode: 'share123', shareUrl: sharedFork.shareUrl, isCreator: true }))
+    mockDeleteShare.mockResolvedValue({ deleted: true })
     mockImportRsu.mockResolvedValue({ currentJob: { ...DEFAULT_CAREER_COMP_INPUTS.currentJob!, rsuGrants: [] }, importedGrants: [] })
     Object.assign(navigator, { clipboard: { writeText: jest.fn().mockResolvedValue(undefined) } })
     window.history.replaceState(null, '', '/financial-planning/career-comparison')
   })
 
-  it('renders the show-route calculator shell and result launchers', () => {
+  it('renders the calculator shell and result launchers', () => {
     render(<CareerCompPage initialData={baseInitialData()} />)
 
     expect(screen.getByRole('heading', { name: 'Career Comparison' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Liquidity' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open Annual FCF' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open LTV Table' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open Vesting' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open After-Tax Liquidity' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open After-Tax FCF' })).toBeInTheDocument()
   })
 
-  it('saves a new comparison for an authenticated user and switches to Update', async () => {
+  it('autosaves the private latest for an authenticated user', async () => {
     render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1))
-    expect(mockSave.mock.calls[0][1]).toBe(true)
-    expect(await screen.findByRole('button', { name: 'Update' })).toBeInTheDocument()
+    await waitFor(() => expect(mockSaveLatest).toHaveBeenCalled())
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
-  it('forks to URL state when an unauthenticated guest views a comparison they cannot edit', async () => {
-    render(<CareerCompPage initialData={baseInitialData({ comparison: { ...savedComparison, ownerUserId: 9 }, canEdit: false })} />)
+  it('does not autosave for an anonymous visitor of the public tool', async () => {
+    render(<CareerCompPage initialData={baseInitialData()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Fork' }))
-
-    expect(await screen.findByText(/forked to url state/i)).toBeInTheDocument()
-    expect(mockSave).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockCompute).toHaveBeenCalled())
+    expect(mockSaveLatest).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument()
   })
 
-  it('creates and copies a point-in-time share snapshot for a saved comparison', async () => {
-    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: savedComparison, canEdit: true })} />)
+  it('creates and copies a share link from the share dialog', async () => {
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create & copy link' }))
 
     await waitFor(() => expect(mockShare).toHaveBeenCalledTimes(1))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost/financial-planning/career-comparison/s/share123')
+    expect(mockShare.mock.calls[0][1]).toBe(true)
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(sharedFork.shareUrl)
   })
 
-  it('claims an anonymous comparison on login', async () => {
-    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: { ...savedComparison, ownerUserId: null }, canEdit: false })} />)
+  it('autosaves edits on a shared fork to that link', async () => {
+    render(<CareerCompPage initialData={baseInitialData({ comparison: sharedFork, canEdit: true })} />)
 
-    await waitFor(() => expect(mockClaim).toHaveBeenCalledWith('abc1234'))
-    expect(await screen.findByRole('button', { name: 'Update' })).toBeInTheDocument()
+    await waitFor(() => expect(mockSaveShare).toHaveBeenCalled())
+    expect(mockSaveShare.mock.calls[0][0]).toBe('share123')
+    expect(mockSaveLatest).not.toHaveBeenCalled()
+    expect(await screen.findByText('Saved to link')).toBeInTheDocument()
+  })
+
+  it('lets the share creator delete the link', async () => {
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: { ...sharedFork, isCreator: true }, canEdit: true })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage link' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete link' }))
+
+    await waitFor(() => expect(mockDeleteShare).toHaveBeenCalledWith('share123'))
+    expect(await screen.findByText(/this link will no longer work/i)).toBeInTheDocument()
   })
 
   it('imports RSU grants into the current job for authenticated users', async () => {
-    mockImportRsu.mockResolvedValue({
-      currentJob: {
-        ...DEFAULT_CAREER_COMP_INPUTS.currentJob!,
-        rsuGrants: [{ id: 'rsu-tool-2026', kind: 'hire', grantDate: '2026-01-01', shareCount: 100, grantValue: null, grantPrice: 10, cliffMonths: 0, vestingYears: 1, vestingFrequency: 'quarterly' }],
-      },
-      importedGrants: [{ id: 'rsu-tool-2026', kind: 'hire', grantDate: '2026-01-01', shareCount: 100, grantValue: null, grantPrice: 10, cliffMonths: 0, vestingYears: 1, vestingFrequency: 'quarterly' }],
-    })
-
     render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Import RSU' }))
 
     await waitFor(() => expect(mockImportRsu).toHaveBeenCalledWith(DEFAULT_CAREER_COMP_INPUTS.currentJob))
-    expect(await screen.findByText('Imported 1 RSU grant.')).toBeInTheDocument()
+    expect(await screen.findByText('No RSU awards found to import.')).toBeInTheDocument()
   })
 })

@@ -217,35 +217,22 @@ export const careerCompProjectionSchema = z.object({
 
 export interface CareerComparisonMeta {
   id: number
-  shortCode: string
-  shareUrl: string
+  /** NULL on the owner's private latest; set only on shared forks. */
+  shortCode: string | null
+  shareUrl: string | null
   ownerUserId: number | null
   shareIncludesCurrent: boolean
-  isSnapshot?: boolean
+  expiresAt?: string | null
+  /** True when the current viewer owns this shared fork (can delete / set expiration). */
+  isCreator?: boolean
   title?: string | null
-}
-
-export interface CareerCompWorkflowSummary {
-  id: number
-  title: string | null
-  shortCode: string
-  lastActiveAt: string | null
-  updatedAt: string | null
 }
 
 export interface CareerCompWorkflow extends CareerComparisonMeta {
   title: string | null
   inputs: CareerCompInputs
   projection: CareerCompProjection | null
-  lastActiveAt: string | null
   updatedAt: string | null
-}
-
-export interface SavedCareerJob {
-  id: number
-  kind: 'current' | 'hypothetical'
-  name: string
-  spec: JobSpec
 }
 
 export interface CareerCompInitialData {

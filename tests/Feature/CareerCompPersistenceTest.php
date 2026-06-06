@@ -12,51 +12,48 @@ use Tests\TestCase;
 
 class CareerCompPersistenceTest extends TestCase
 {
-    public function test_login_is_required_to_save(): void
+    public function test_login_is_required_to_save_latest(): void
     {
-        $response = $this->postJson('/api/financial-planning/career-comparison/save', [
+        $this->putJson('/api/financial-planning/career-comparison/latest', [
             'inputs' => CareerCompInputs::defaults(),
-        ]);
-
-        $response->assertUnauthorized();
+        ])->assertUnauthorized();
     }
 
-    public function test_authenticated_user_can_save_persists_jobs_and_comparison(): void
+    public function test_autosave_upserts_a_single_private_latest_with_null_short_code(): void
     {
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
+        $first = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
             'inputs' => CareerCompInputs::defaults(),
-            'shareIncludesCurrent' => true,
         ]);
 
-        $response->assertCreated();
-        $shortCode = $response->json('shortCode');
-        $this->assertIsString($shortCode);
-        $response->assertJsonPath('shareUrl', url("/financial-planning/career-comparison/s/{$shortCode}"));
-        $this->assertSame((int) CareerCompInputs::defaults()['startYear'], $response->json('projection.startYear'));
-
+        $first->assertOk();
+        $first->assertJsonPath('shortCode', null);
+        $this->assertSame((int) CareerCompInputs::defaults()['startYear'], $first->json('projection.startYear'));
         $this->assertDatabaseHas('career_jobs', ['user_id' => $user->id, 'kind' => 'current']);
         $this->assertDatabaseHas('career_jobs', ['user_id' => $user->id, 'kind' => 'hypothetical']);
-        $this->assertDatabaseHas('opportunity_cost_comparisons', [
-            'user_id' => $user->id,
-            'short_code' => $shortCode,
-            'share_includes_current' => true,
+
+        $updatedInputs = CareerCompInputs::defaults();
+        $updatedInputs['currentJob']['name'] = 'Updated current role';
+        $second = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
+            'inputs' => $updatedInputs,
         ]);
 
-        $comparison = CareerComparison::query()->where('short_code', $shortCode)->firstOrFail();
-        $this->assertNotNull($comparison->current_job_id);
-        $this->assertCount(1, $comparison->hypothetical_job_ids);
+        $second->assertOk();
+        $second->assertJsonPath('id', $first->json('id'));
+        $second->assertJsonPath('inputs.currentJob.name', 'Updated current role');
+        // Autosave never accumulates rows: exactly one private latest per user.
+        $this->assertSame(1, CareerComparison::query()->where('user_id', $user->id)->whereNull('short_code')->count());
     }
 
-    public function test_save_validates_nested_jobs(): void
+    public function test_save_latest_validates_nested_jobs(): void
     {
         $user = User::factory()->create();
         $inputs = CareerCompInputs::defaults();
         unset($inputs['hypotheticalJobs'][0]['name'], $inputs['hypotheticalJobs'][0]['company']);
         $inputs['currentJob']['company']['type'] = 'not-a-type';
 
-        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
+        $response = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
             'inputs' => $inputs,
         ]);
 
@@ -68,63 +65,144 @@ class CareerCompPersistenceTest extends TestCase
         ]);
     }
 
-    public function test_only_owner_can_update_saved_comparison(): void
+    public function test_share_requires_login(): void
     {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
-        $comparison = CareerComparison::factory()->create([
-            'user_id' => $owner->id,
-            'short_code' => 'occ12345',
-        ]);
+        $this->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ])->assertUnauthorized();
+    }
 
-        $forbidden = $this->actingAs($other)->patchJson("/api/financial-planning/career-comparison/s/{$comparison->short_code}", [
+    public function test_share_forks_an_editable_copy_and_leaves_latest_untouched(): void
+    {
+        $user = User::factory()->create();
+        $latest = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
             'inputs' => CareerCompInputs::defaults(),
         ]);
-        $forbidden->assertForbidden();
+        $latestId = $latest->json('id');
 
-        $allowed = $this->actingAs($owner)->patchJson("/api/financial-planning/career-comparison/s/{$comparison->short_code}", [
+        $share = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
             'inputs' => CareerCompInputs::defaults(),
             'shareIncludesCurrent' => false,
         ]);
-        $allowed->assertOk();
 
-        $this->assertDatabaseHas('opportunity_cost_comparisons', [
-            'id' => $comparison->id,
-            'share_includes_current' => false,
-        ]);
-        $this->assertDatabaseHas('career_jobs', ['user_id' => $owner->id, 'kind' => 'current']);
+        $share->assertCreated();
+        $code = $share->json('shortCode');
+        $this->assertIsString($code);
+        $share->assertJsonPath('shareUrl', url("/financial-planning/career-comparison/s/{$code}"));
+        $share->assertJsonPath('isCreator', true);
+
+        // The private latest keeps its NULL code; the share is a separate owned, coded row.
+        $this->assertDatabaseHas('opportunity_cost_comparisons', ['id' => $latestId, 'user_id' => $user->id, 'short_code' => null]);
+        $this->assertDatabaseHas('opportunity_cost_comparisons', ['short_code' => $code, 'user_id' => $user->id, 'share_includes_current' => false]);
     }
 
-    public function test_anonymous_comparison_can_be_claimed_by_authenticated_user(): void
+    public function test_anyone_with_the_link_can_edit_a_shared_fork(): void
     {
-        $user = User::factory()->create();
-        $currentJob = CareerJob::factory()->current()->create(['user_id' => null]);
-        $hypotheticalJob = CareerJob::factory()->create(['user_id' => null]);
-        $comparison = CareerComparison::factory()->create([
-            'user_id' => null,
-            'current_job_id' => $currentJob->id,
-            'hypothetical_job_ids' => [$hypotheticalJob->id],
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
         ]);
+        $code = $share->json('shortCode');
 
-        $response = $this->actingAs($user)->postJson("/api/financial-planning/career-comparison/s/{$comparison->short_code}/claim");
+        $editedInputs = CareerCompInputs::defaults();
+        $editedInputs['currentJob']['name'] = 'Edited by a visitor';
+
+        // A different user holding the link (not the creator) can still edit the fork.
+        $response = $this->actingAs($visitor)->putJson("/api/financial-planning/career-comparison/s/{$code}", [
+            'inputs' => $editedInputs,
+        ]);
 
         $response->assertOk();
-        $response->assertJsonPath('shortCode', $comparison->short_code);
-        $this->assertDatabaseHas('opportunity_cost_comparisons', ['id' => $comparison->id, 'user_id' => $user->id]);
-        $this->assertDatabaseHas('career_jobs', ['id' => $currentJob->id, 'user_id' => $user->id]);
-        $this->assertDatabaseHas('career_jobs', ['id' => $hypotheticalJob->id, 'user_id' => $user->id]);
+        $response->assertJsonPath('inputs.currentJob.name', 'Edited by a visitor');
     }
 
-    public function test_comparison_owned_by_another_user_cannot_be_claimed(): void
+    public function test_show_by_code_is_editable_and_404s_when_expired(): void
+    {
+        $this->withoutVite();
+        $owner = User::factory()->create();
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $code = $share->json('shortCode');
+
+        $this->get("/financial-planning/career-comparison/s/{$code}")
+            ->assertOk()
+            ->assertSee('"canEdit":true', false);
+
+        CareerComparison::query()->where('short_code', $code)->update(['expires_at' => now()->subDay()]);
+
+        $this->get("/financial-planning/career-comparison/s/{$code}")->assertNotFound();
+        $this->putJson("/api/financial-planning/career-comparison/s/{$code}", ['inputs' => CareerCompInputs::defaults()])->assertNotFound();
+    }
+
+    public function test_creator_can_set_expiration_and_delete_while_others_cannot(): void
     {
         $owner = User::factory()->create();
         $intruder = User::factory()->create();
-        $comparison = CareerComparison::factory()->create(['user_id' => $owner->id]);
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+        $code = $share->json('shortCode');
 
-        $response = $this->actingAs($intruder)->postJson("/api/financial-planning/career-comparison/s/{$comparison->short_code}/claim");
+        $this->actingAs($intruder)->patchJson("/api/financial-planning/career-comparison/s/{$code}", ['expiresAt' => '2030-01-01'])->assertForbidden();
+        $this->actingAs($intruder)->deleteJson("/api/financial-planning/career-comparison/s/{$code}")->assertForbidden();
 
-        $response->assertForbidden();
-        $this->assertDatabaseHas('opportunity_cost_comparisons', ['id' => $comparison->id, 'user_id' => $owner->id]);
+        $this->actingAs($owner)->patchJson("/api/financial-planning/career-comparison/s/{$code}", ['expiresAt' => '2030-01-01'])->assertOk();
+        $this->assertNotNull(CareerComparison::query()->where('short_code', $code)->value('expires_at'));
+
+        $this->actingAs($owner)->deleteJson("/api/financial-planning/career-comparison/s/{$code}")
+            ->assertOk()
+            ->assertJsonPath('deleted', true);
+        $this->assertDatabaseMissing('opportunity_cost_comparisons', ['short_code' => $code]);
+    }
+
+    public function test_confidential_share_hides_current_from_non_creator_and_preserves_it_on_save(): void
+    {
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['name'] = 'Confidential current';
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => false,
+        ]);
+        $code = $share->json('shortCode');
+        $storedCurrentJobId = CareerComparison::query()->where('short_code', $code)->value('current_job_id');
+
+        // A non-creator's payload has the current job redacted; saving must not wipe the stored one.
+        $redactedInputs = CareerCompInputs::defaults();
+        $redactedInputs['currentJob'] = null;
+        $redactedInputs['hypotheticalJobs'][0]['name'] = 'Visitor offer edit';
+
+        $response = $this->actingAs($visitor)->putJson("/api/financial-planning/career-comparison/s/{$code}", [
+            'inputs' => $redactedInputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('inputs.currentJob', null);
+        $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
+    }
+
+    public function test_show_by_code_404s_for_unknown_code(): void
+    {
+        $this->withoutVite();
+        $this->get('/financial-planning/career-comparison/s/nope9999')->assertNotFound();
+    }
+
+    public function test_show_auto_loads_latest_for_logged_in_user(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['name'] = 'Autoloaded role';
+        $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', ['inputs' => $inputs]);
+
+        $page = $this->actingAs($user)->get('/financial-planning/career-comparison');
+
+        $page->assertOk();
+        $page->assertSee('Autoloaded role');
+        $page->assertSee('"canEdit":true', false);
     }
 
     public function test_shared_page_escapes_initial_json_script_data(): void
@@ -150,197 +228,25 @@ class CareerCompPersistenceTest extends TestCase
         $response = $this->get("/financial-planning/career-comparison/s/{$comparison->short_code}");
 
         $response->assertOk();
-        $content = $response->getContent();
+        $content = (string) $response->getContent();
         $this->assertStringNotContainsString('</script><script>alert(1)</script>', $content);
         $this->assertStringContainsString('\\u003C/script\\u003E\\u003Cscript\\u003Ealert(1)\\u003C/script\\u003E', $content);
     }
 
-    public function test_show_by_code_loads_saved_comparison_and_owner_can_edit(): void
-    {
-        $this->withoutVite();
-        $user = User::factory()->create();
-        $saved = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
-            'inputs' => CareerCompInputs::defaults(),
-        ]);
-        $shortCode = $saved->json('shortCode');
-
-        $owner = $this->actingAs($user)->get("/financial-planning/career-comparison/s/{$shortCode}");
-        $owner->assertOk();
-        $owner->assertSee($shortCode);
-        $owner->assertSee('"canEdit":true', false);
-    }
-
-    public function test_show_by_code_marks_non_owner_cannot_edit(): void
-    {
-        $this->withoutVite();
-        $owner = User::factory()->create();
-        $currentJob = CareerJob::factory()->current()->create(['user_id' => $owner->id]);
-        $comparison = CareerComparison::factory()->create([
-            'user_id' => $owner->id,
-            'current_job_id' => $currentJob->id,
-            'hypothetical_job_ids' => [],
-            'computed_json' => ['startYear' => 2026, 'horizonYears' => 10],
-        ]);
-
-        $guest = $this->get("/financial-planning/career-comparison/s/{$comparison->short_code}");
-
-        $guest->assertOk();
-        $guest->assertSee('"canEdit":false', false);
-    }
-
-    public function test_show_by_code_404s_for_unknown_code(): void
-    {
-        $this->withoutVite();
-
-        $this->get('/financial-planning/career-comparison/s/nope9999')->assertNotFound();
-    }
-
-    public function test_saved_jobs_requires_authentication(): void
-    {
-        $this->getJson('/api/financial-planning/career-comparison/saved-jobs')->assertUnauthorized();
-    }
-
-    public function test_saved_jobs_returns_only_the_authenticated_users_jobs(): void
-    {
-        $user = User::factory()->create();
-        $other = User::factory()->create();
-        $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
-            'inputs' => CareerCompInputs::defaults(),
-        ]);
-        CareerJob::factory()->create(['user_id' => $other->id, 'name' => 'Someone else job']);
-
-        $response = $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/saved-jobs');
-
-        $response->assertOk();
-        $names = array_column($response->json('jobs'), 'name');
-        $this->assertContains('Current role', $names);
-        $this->assertNotContains('Someone else job', $names);
-        foreach ($response->json('jobs') as $job) {
-            $this->assertArrayHasKey('spec', $job);
-            $this->assertArrayHasKey('kind', $job);
-        }
-    }
-
-    public function test_saves_generate_unique_short_codes(): void
-    {
-        $user = User::factory()->create();
-
-        $first = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
-            'inputs' => CareerCompInputs::defaults(),
-        ]);
-        $second = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/save', [
-            'inputs' => CareerCompInputs::defaults(),
-        ]);
-
-        $first->assertCreated();
-        $second->assertCreated();
-        $this->assertNotSame($first->json('shortCode'), $second->json('shortCode'));
-    }
-
-    public function test_workflow_crud_marks_last_active_and_enforces_ownership(): void
-    {
-        $user = User::factory()->create();
-        $other = User::factory()->create();
-
-        $created = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
-            'inputs' => CareerCompInputs::defaults(),
-            'title' => 'Primary workflow',
-        ]);
-
-        $created->assertCreated();
-        $workflowId = $created->json('id');
-        $created->assertJsonPath('title', 'Primary workflow');
-        $this->assertDatabaseHas('opportunity_cost_comparisons', [
-            'id' => $workflowId,
-            'user_id' => $user->id,
-            'is_snapshot' => false,
-        ]);
-
-        $this->actingAs($other)
-            ->getJson("/api/financial-planning/career-comparison/workflows/{$workflowId}")
-            ->assertNotFound();
-
-        $list = $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows');
-        $list->assertOk()->assertJsonPath('workflows.0.id', $workflowId);
-
-        $updatedInputs = CareerCompInputs::defaults();
-        $updatedInputs['currentJob']['name'] = 'Updated current role';
-        $updated = $this->actingAs($user)->patchJson("/api/financial-planning/career-comparison/workflows/{$workflowId}", [
-            'inputs' => $updatedInputs,
-        ]);
-        $updated->assertOk()->assertJsonPath('inputs.currentJob.name', 'Updated current role');
-
-        $lastActive = $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/workflows/last-active');
-        $lastActive->assertOk()->assertJsonPath('workflow.id', $workflowId);
-
-        $this->actingAs($user)->deleteJson("/api/financial-planning/career-comparison/workflows/{$workflowId}")
-            ->assertOk()
-            ->assertJsonPath('deleted', true);
-        $this->assertDatabaseMissing('opportunity_cost_comparisons', ['id' => $workflowId]);
-    }
-
-    public function test_show_auto_loads_last_active_workflow_for_logged_in_user(): void
-    {
-        $this->withoutVite();
-        $user = User::factory()->create();
-        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
-            'inputs' => CareerCompInputs::defaults(),
-            'title' => 'Last active workflow',
-        ]);
-
-        $page = $this->actingAs($user)->get('/financial-planning/career-comparison');
-
-        $page->assertOk();
-        $page->assertSee('Last active workflow');
-        $page->assertSee('"canEdit":true', false);
-        $page->assertSee((string) $response->json('shortCode'));
-    }
-
-    public function test_share_creates_point_in_time_snapshot_without_mutating_workflow(): void
-    {
-        $user = User::factory()->create();
-        $workflow = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows', [
-            'inputs' => CareerCompInputs::defaults(),
-            'title' => 'Saved workflow',
-        ]);
-        $workflowId = $workflow->json('id');
-        $workflowCode = $workflow->json('shortCode');
-
-        $share = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
-            'inputs' => CareerCompInputs::defaults(),
-            'shareIncludesCurrent' => false,
-        ]);
-
-        $share->assertCreated();
-        $this->assertNotSame($workflowCode, $share->json('shortCode'));
-        $this->assertDatabaseHas('opportunity_cost_comparisons', [
-            'id' => $workflowId,
-            'is_snapshot' => false,
-            'share_includes_current' => true,
-        ]);
-        $this->assertDatabaseHas('opportunity_cost_comparisons', [
-            'short_code' => $share->json('shortCode'),
-            'is_snapshot' => true,
-            'share_includes_current' => false,
-        ]);
-    }
-
-    public function test_bearer_token_can_use_workflow_api_with_mcp_api_key(): void
+    public function test_bearer_token_can_autosave_latest_with_mcp_api_key(): void
     {
         $token = 'mcp-token-for-test';
         $user = User::factory()->create(['mcp_api_key' => hash('sha256', $token)]);
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson('/api/financial-planning/career-comparison/workflows', [
+            ->putJson('/api/financial-planning/career-comparison/latest', [
                 'inputs' => CareerCompInputs::defaults(),
-                'title' => 'CLI workflow',
             ]);
 
-        $response->assertCreated();
+        $response->assertOk();
         $this->assertDatabaseHas('opportunity_cost_comparisons', [
             'user_id' => $user->id,
-            'title' => 'CLI workflow',
-            'is_snapshot' => false,
+            'short_code' => null,
         ]);
     }
 
@@ -371,7 +277,7 @@ class CareerCompPersistenceTest extends TestCase
         $inputs = CareerCompInputs::defaults();
         $inputs['currentJob']['comp']['baseSalary'] = 222000;
 
-        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/workflows/import-rsu', [
+        $response = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/latest/import-rsu', [
             'currentJob' => $inputs['currentJob'],
         ]);
 

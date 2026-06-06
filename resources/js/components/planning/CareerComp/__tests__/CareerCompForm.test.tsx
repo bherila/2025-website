@@ -3,7 +3,7 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { type ReactElement, useState } from 'react'
 
-import { CareerCompFormSection } from '../CareerCompForm'
+import { CareerCompFormSection, GrantEditorColumn, type GrantType } from '../CareerCompForm'
 import { buildDefaultJob } from '../defaults'
 import type { CareerCompInputs } from '../types'
 
@@ -17,13 +17,33 @@ function makeInputs(type: 'public' | 'private'): CareerCompInputs {
   }
 }
 
-// The form is controlled; this harness holds state so add/duplicate/remove edits re-render.
-function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
-  const [inputs, setInputs] = useState(initial)
-  return <CareerCompFormSection section="offers" inputs={inputs} onChange={setInputs} />
+interface GrantEditorTarget {
+  jobId: string
+  grantType: GrantType
+  grantId?: string | undefined
 }
 
-describe('CareerCompForm public/private gating + multi-grant entry', () => {
+// The form is controlled and grant editing happens in a child column; this harness mirrors the page
+// by holding both the inputs and the active grant-editor target so edits/saves re-render.
+function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
+  const [inputs, setInputs] = useState(initial)
+  const [editor, setEditor] = useState<GrantEditorTarget | null>(null)
+  return (
+    <>
+      <CareerCompFormSection
+        section="offers"
+        inputs={inputs}
+        onChange={setInputs}
+        onOpenGrantEditor={(jobId, grantType, grantId) => setEditor({ jobId, grantType, grantId })}
+      />
+      {editor ? (
+        <GrantEditorColumn inputs={inputs} jobId={editor.jobId} grantType={editor.grantType} grantId={editor.grantId} onChange={setInputs} onClose={() => setEditor(null)} />
+      ) : null}
+    </>
+  )
+}
+
+describe('CareerCompForm public/private gating + grant column entry', () => {
   it('shows current share price and hides private-only fields for a public company', () => {
     render(<Harness initial={makeInputs('public')} />)
 
@@ -31,7 +51,6 @@ describe('CareerCompForm public/private gating + multi-grant entry', () => {
     expect(screen.queryByText('409A price')).not.toBeInTheDocument()
     expect(screen.queryByText('Annual dilution')).not.toBeInTheDocument()
     expect(screen.queryByText('Liquidity date')).not.toBeInTheDocument()
-    // The dead "Fully diluted shares" input was removed entirely.
     expect(screen.queryByText('Fully diluted shares')).not.toBeInTheDocument()
   })
 
@@ -44,23 +63,25 @@ describe('CareerCompForm public/private gating + multi-grant entry', () => {
     expect(screen.queryByText('Current share price')).not.toBeInTheDocument()
   })
 
-  it('adds and duplicates RSU grants without repeating manual entry', () => {
+  it('adds a new RSU grant via its own column, which closes after saving', () => {
     render(<Harness initial={makeInputs('public')} />)
 
     expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
     expect(screen.queryByText('RSU grant 2')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add RSU grant' }))
-    expect(screen.getByText('RSU grant 2')).toBeInTheDocument()
+    // The editor column exposes grant fields (e.g. vesting frequency) plus a Save action.
+    expect(screen.getByText('Vesting frequency')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save grant' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate RSU grant 1' }))
-    expect(screen.getByText('RSU grant 3')).toBeInTheDocument()
+    expect(screen.getByText('RSU grant 2')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save grant' })).not.toBeInTheDocument()
   })
 
-  it('removes a specific RSU grant', () => {
+  it('duplicates and removes RSU grant rows inline', () => {
     render(<Harness initial={makeInputs('public')} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add RSU grant' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate RSU grant 1' }))
     expect(screen.getByText('RSU grant 2')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove RSU grant 2' }))
@@ -68,10 +89,10 @@ describe('CareerCompForm public/private gating + multi-grant entry', () => {
     expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
   })
 
-  it('exposes a vesting frequency control on equity grants', () => {
+  it('opens an existing option grant in its editor column', () => {
     render(<Harness initial={makeInputs('public')} />)
 
-    // One for the default RSU grant and one for the default option grant.
-    expect(screen.getAllByText('Vesting frequency').length).toBeGreaterThanOrEqual(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
+    expect(screen.getByText('83(b) early exercise')).toBeInTheDocument()
   })
 })

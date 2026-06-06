@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { Briefcase, Building2, Copy, type LucideIcon, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Briefcase, Building2, Copy, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type ReactElement, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,11 @@ import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant } from '
 import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, VestingFrequency } from './types'
 
 export type CareerCompFormSectionId = 'basics' | 'current-job' | 'offers'
+
+export type GrantType = 'rsu' | 'opt'
+
+/** Opens a dedicated Miller column to add (no grantId) or edit (with grantId) a single grant. */
+export type OpenGrantEditor = (jobId: string, grantType: GrantType, grantId?: string) => void
 
 export interface CareerCompFormSectionMeta {
   id: CareerCompFormSectionId
@@ -32,6 +37,7 @@ export interface CareerCompFormSectionMeta {
 interface CareerCompFormProps {
   inputs: CareerCompInputs
   onChange: (inputs: CareerCompInputs) => void
+  onOpenGrantEditor: OpenGrantEditor
 }
 
 interface CareerCompFormSectionProps extends CareerCompFormProps {
@@ -238,19 +244,32 @@ function SelectField<T extends string>({ label, value, options, onChange }: {
   )
 }
 
-function GrantRowHeader({ title, summary, onDuplicate, onRemove }: {
+function rsuGrantSummary(grant: RsuGrant): string {
+  return `${grant.kind === 'refresher' ? 'Refresher' : 'New hire'} · ${formatShares(grant.shareCount ?? 0)} sh · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()} · ${grant.cliffMonths}mo cliff`
+}
+
+function optionGrantSummary(grant: OptionGrant): string {
+  return `${grant.type.toUpperCase()} · ${formatShares(grant.shareCount)} sh @ $${grant.strike} · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()}`
+}
+
+/** Compact, clickable list row for a grant. Editing happens in a dedicated Miller column. */
+function GrantRow({ title, summary, onEdit, onDuplicate, onRemove }: {
   title: string
   summary: string
+  onEdit: () => void
   onDuplicate: () => void
   onRemove: () => void
 }): ReactElement {
   return (
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0">
+    <div className="flex items-center justify-between gap-2 rounded-md border p-3">
+      <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
         <p className="truncate text-sm font-medium">{title}</p>
         <p className="truncate text-xs text-muted-foreground">{summary}</p>
-      </div>
+      </button>
       <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" variant="ghost" size="sm" aria-label={`Edit ${title}`} onClick={onEdit}>
+          <Pencil className="size-4" />
+        </Button>
         <Button type="button" variant="ghost" size="sm" aria-label={`Duplicate ${title}`} onClick={onDuplicate}>
           <Copy className="size-4" />
         </Button>
@@ -262,23 +281,26 @@ function GrantRowHeader({ title, summary, onDuplicate, onRemove }: {
   )
 }
 
-function RsuGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobSpec) => void }): ReactElement {
+// New grants inherit the previous grant's vesting schedule so refreshers need only a date + size.
+function buildNewRsuGrant(job: JobSpec): RsuGrant {
+  const previous = job.rsuGrants[job.rsuGrants.length - 1]
+  const base = buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)
+  return previous
+    ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, grantPrice: previous.grantPrice }
+    : base
+}
+
+function buildNewOptionGrant(job: JobSpec): OptionGrant {
+  const previous = job.optionGrants[job.optionGrants.length - 1]
+  const base = buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)
+  return previous
+    ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, earlyExercise83b: previous.earlyExercise83b }
+    : base
+}
+
+function RsuGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
   function setGrants(rsuGrants: RsuGrant[]): void {
     onChange({ ...job, rsuGrants })
-  }
-
-  function updateGrant(grantId: string, patch: Partial<RsuGrant>): void {
-    setGrants(job.rsuGrants.map((grant) => (grant.id === grantId ? { ...grant, ...patch } : grant)))
-  }
-
-  // New grants inherit the previous grant's vesting schedule so refreshers need only a date + size.
-  function addGrant(): void {
-    const previous = job.rsuGrants[job.rsuGrants.length - 1]
-    const base = buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)
-    const grant: RsuGrant = previous
-      ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, grantPrice: previous.grantPrice }
-      : base
-    setGrants([...job.rsuGrants, grant])
   }
 
   function duplicateGrant(index: number): void {
@@ -295,7 +317,7 @@ function RsuGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobS
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">RSU grants</Label>
-        <Button type="button" variant="outline" size="sm" onClick={addGrant}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onOpenGrantEditor(job.id, 'rsu')}>
           <Plus className="mr-1 size-3.5" /> Add RSU grant
         </Button>
       </div>
@@ -303,46 +325,23 @@ function RsuGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobS
         <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No RSU grants. Add one to model restricted stock vesting.</p>
       ) : (
         job.rsuGrants.map((grant, index) => (
-          <div key={grant.id} className="space-y-3 rounded-md border p-3">
-            <GrantRowHeader
-              title={`RSU grant ${index + 1}`}
-              summary={`${grant.kind === 'refresher' ? 'Refresher' : 'New hire'} · ${formatShares(grant.shareCount ?? 0)} sh · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()} · ${grant.cliffMonths}mo cliff`}
-              onDuplicate={() => duplicateGrant(index)}
-              onRemove={() => setGrants(job.rsuGrants.filter((entry) => entry.id !== grant.id))}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => updateGrant(grant.id, { kind })} />
-              <DateField label="Grant date" value={grant.grantDate} onChange={(value) => updateGrant(grant.id, { grantDate: value })} />
-              <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
-              <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => updateGrant(grant.id, { grantValue: value > 0 ? value : undefined })} />
-              <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => updateGrant(grant.id, { grantPrice: value > 0 ? value : undefined })} />
-              <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
-              <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
-              <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => updateGrant(grant.id, { vestingFrequency })} />
-            </div>
-          </div>
+          <GrantRow
+            key={grant.id}
+            title={`RSU grant ${index + 1}`}
+            summary={rsuGrantSummary(grant)}
+            onEdit={() => onOpenGrantEditor(job.id, 'rsu', grant.id)}
+            onDuplicate={() => duplicateGrant(index)}
+            onRemove={() => setGrants(job.rsuGrants.filter((entry) => entry.id !== grant.id))}
+          />
         ))
       )}
     </div>
   )
 }
 
-function OptionGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: JobSpec) => void }): ReactElement {
+function OptionGrantsList({ job, onChange, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
   function setGrants(optionGrants: OptionGrant[]): void {
     onChange({ ...job, optionGrants })
-  }
-
-  function updateGrant(grantId: string, patch: Partial<OptionGrant>): void {
-    setGrants(job.optionGrants.map((grant) => (grant.id === grantId ? { ...grant, ...patch } : grant)))
-  }
-
-  function addGrant(): void {
-    const previous = job.optionGrants[job.optionGrants.length - 1]
-    const base = buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)
-    const grant: OptionGrant = previous
-      ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, earlyExercise83b: previous.earlyExercise83b }
-      : base
-    setGrants([...job.optionGrants, grant])
   }
 
   function duplicateGrant(index: number): void {
@@ -359,7 +358,7 @@ function OptionGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: J
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-semibold">Option grants (ISO / NSO)</Label>
-        <Button type="button" variant="outline" size="sm" onClick={addGrant}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onOpenGrantEditor(job.id, 'opt')}>
           <Plus className="mr-1 size-3.5" /> Add option grant
         </Button>
       </div>
@@ -367,32 +366,21 @@ function OptionGrantsEditor({ job, onChange }: { job: JobSpec; onChange: (job: J
         <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No option grants. Add one to model ISO/NSO vesting and exercise.</p>
       ) : (
         job.optionGrants.map((grant, index) => (
-          <div key={grant.id} className="space-y-3 rounded-md border p-3">
-            <GrantRowHeader
-              title={`Option grant ${index + 1}`}
-              summary={`${grant.type.toUpperCase()} · ${formatShares(grant.shareCount)} sh @ $${grant.strike} · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()}`}
-              onDuplicate={() => duplicateGrant(index)}
-              onRemove={() => setGrants(job.optionGrants.filter((entry) => entry.id !== grant.id))}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => updateGrant(grant.id, { kind })} />
-              <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => updateGrant(grant.id, { type })} />
-              <DateField label="Grant date" value={grant.grantDate} onChange={(value) => updateGrant(grant.id, { grantDate: value })} />
-              <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => updateGrant(grant.id, { shareCount: value })} />
-              <MoneyField label="Strike price" value={grant.strike} onChange={(value) => updateGrant(grant.id, { strike: value })} />
-              <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => updateGrant(grant.id, { cliffMonths: value })} />
-              <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => updateGrant(grant.id, { vestingYears: value })} />
-              <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => updateGrant(grant.id, { vestingFrequency })} />
-              <SelectField label="83(b) early exercise" value={grant.earlyExercise83b ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => updateGrant(grant.id, { earlyExercise83b: value === 'yes' })} />
-            </div>
-          </div>
+          <GrantRow
+            key={grant.id}
+            title={`Option grant ${index + 1}`}
+            summary={optionGrantSummary(grant)}
+            onEdit={() => onOpenGrantEditor(job.id, 'opt', grant.id)}
+            onDuplicate={() => duplicateGrant(index)}
+            onRemove={() => setGrants(job.optionGrants.filter((entry) => entry.id !== grant.id))}
+          />
         ))
       )}
     </div>
   )
 }
 
-function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job: JobSpec) => JobSpec): CareerCompInputs {
+export function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job: JobSpec) => JobSpec): CareerCompInputs {
   if (inputs.currentJob?.id === jobId) {
     return { ...inputs, currentJob: updater(inputs.currentJob) }
   }
@@ -403,7 +391,116 @@ function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job: JobSp
   }
 }
 
-function JobEditor({ job, onChange, onRemove }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined }): ReactElement {
+function findJob(inputs: CareerCompInputs, jobId: string): JobSpec | null {
+  if (inputs.currentJob?.id === jobId) {
+    return inputs.currentJob
+  }
+
+  return inputs.hypotheticalJobs.find((job) => job.id === jobId) ?? null
+}
+
+function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch: Partial<RsuGrant>) => void }): ReactElement {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
+      <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
+      <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => onChange({ shareCount: value })} />
+      <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => onChange({ grantValue: value > 0 ? value : undefined })} />
+      <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => onChange({ grantPrice: value > 0 ? value : undefined })} />
+      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value })} />
+      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value })} />
+      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency })} />
+    </div>
+  )
+}
+
+function OptionGrantFields({ grant, onChange }: { grant: OptionGrant; onChange: (patch: Partial<OptionGrant>) => void }): ReactElement {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
+      <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => onChange({ type })} />
+      <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
+      <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
+      <MoneyField label="Strike price" value={grant.strike} onChange={(value) => onChange({ strike: value })} />
+      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value })} />
+      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value })} />
+      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency })} />
+      <SelectField label="83(b) early exercise" value={grant.earlyExercise83b ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => onChange({ earlyExercise83b: value === 'yes' })} />
+    </div>
+  )
+}
+
+/**
+ * Adds (no `grantId`) or edits one grant in its own Miller column. Edits are written into the job
+ * only on Save, then the column closes; Cancel discards the draft.
+ */
+export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange, onClose }: {
+  inputs: CareerCompInputs
+  jobId: string
+  grantType: GrantType
+  grantId?: string | undefined
+  onChange: (inputs: CareerCompInputs) => void
+  onClose: () => void
+}): ReactElement {
+  const job = findJob(inputs, jobId)
+
+  // Build the draft once when the column opens; later input changes must not reset in-progress edits.
+  const [draft, setDraft] = useState<RsuGrant | OptionGrant | null>(() => {
+    if (!job) {
+      return null
+    }
+    if (grantType === 'rsu') {
+      return (grantId ? job.rsuGrants.find((grant) => grant.id === grantId) : undefined) ?? buildNewRsuGrant(job)
+    }
+    return (grantId ? job.optionGrants.find((grant) => grant.id === grantId) : undefined) ?? buildNewOptionGrant(job)
+  })
+
+  if (!job || !draft) {
+    return <p className="text-sm text-muted-foreground">This grant is no longer available.</p>
+  }
+
+  const isNew = !grantId
+  const heading = grantType === 'rsu' ? (isNew ? 'Add RSU grant' : 'Edit RSU grant') : isNew ? 'Add option grant' : 'Edit option grant'
+
+  function saveGrant(): void {
+    if (!draft) {
+      return
+    }
+
+    onChange(updateJob(inputs, jobId, (current) => {
+      if (grantType === 'rsu') {
+        const grant = draft as RsuGrant
+        const exists = current.rsuGrants.some((entry) => entry.id === grant.id)
+        return { ...current, rsuGrants: exists ? current.rsuGrants.map((entry) => (entry.id === grant.id ? grant : entry)) : [...current.rsuGrants, grant] }
+      }
+
+      const grant = draft as OptionGrant
+      const exists = current.optionGrants.some((entry) => entry.id === grant.id)
+      return { ...current, optionGrants: exists ? current.optionGrants.map((entry) => (entry.id === grant.id ? grant : entry)) : [...current.optionGrants, grant] }
+    }))
+    onClose()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold">{heading}</p>
+        <p className="text-xs text-muted-foreground">{job.name}</p>
+      </div>
+      {grantType === 'rsu' ? (
+        <RsuGrantFields grant={draft as RsuGrant} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+      ) : (
+        <OptionGrantFields grant={draft as OptionGrant} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+      )}
+      <div className="flex items-center gap-2">
+        <Button type="button" onClick={saveGrant}>Save grant</Button>
+        <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
+function JobEditor({ job, onChange, onRemove, onOpenGrantEditor }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; onOpenGrantEditor: OpenGrantEditor }): ReactElement {
   const nameId = useId()
   const isPrivate = job.company.type === 'private'
 
@@ -440,15 +537,15 @@ function JobEditor({ job, onChange, onRemove }: { job: JobSpec; onChange: (job: 
         </div>
 
         <div className="space-y-4 border-t pt-4">
-          <RsuGrantsEditor job={job} onChange={onChange} />
-          <OptionGrantsEditor job={job} onChange={onChange} />
+          <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} />
+          <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} />
         </div>
       </CardContent>
     </Card>
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange }: CareerCompFormSectionProps): ReactElement {
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -472,6 +569,7 @@ export function CareerCompFormSection({ inputs, section, onChange }: CareerCompF
             job={inputs.currentJob}
             onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
             onRemove={() => onChange({ ...inputs, currentJob: null })}
+            onOpenGrantEditor={onOpenGrantEditor}
           />
         ) : (
           <Card className="border-dashed">
@@ -496,6 +594,7 @@ export function CareerCompFormSection({ inputs, section, onChange }: CareerCompF
           job={job}
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}
+          onOpenGrantEditor={onOpenGrantEditor}
         />
       ))}
       <Button
@@ -506,16 +605,6 @@ export function CareerCompFormSection({ inputs, section, onChange }: CareerCompF
       >
         <Plus className="mr-2 size-4" /> Add offer
       </Button>
-    </div>
-  )
-}
-
-export function CareerCompForm(props: CareerCompFormProps): ReactElement {
-  return (
-    <div className="space-y-4">
-      {CAREER_COMP_FORM_SECTIONS.map((section) => (
-        <CareerCompFormSection key={section.id} {...props} section={section.id} />
-      ))}
     </div>
   )
 }

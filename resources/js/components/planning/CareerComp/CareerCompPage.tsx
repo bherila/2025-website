@@ -1,29 +1,31 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Copy, Download, FolderOpen, GitFork, LineChart, type LucideIcon, ReceiptText, Save, Table2, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Download, LineChart, type LucideIcon, ReceiptText, Settings2, Share2, Table2, Trash2, Upload } from 'lucide-react'
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { MillerColumnShell, type MillerColumnShellColumn, type MillerRegistryEntry } from '@/components/ui/miller'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { downloadFinanceExport } from '@/lib/finance/downloadFinanceExport'
 
 import {
-  activateCareerCompWorkflow,
-  claimCareerComparison,
   computeCareerComp,
-  deleteCareerCompWorkflow,
-  getCareerCompWorkflow,
+  deleteSharedCareerComparison,
   importRsuIntoCurrentJob,
-  listCareerCompWorkflows,
-  saveCareerComparison,
+  saveLatestCareerComparison,
+  saveSharedCareerComparison,
   shareCareerComparison,
-  updateCareerComparison,
+  updateSharedCareerComparisonExpiration,
 } from './careerCompApi'
 import {
   CAREER_COMP_FORM_SECTIONS,
   CareerCompFormSection,
   type CareerCompFormSectionId,
+  GrantEditorColumn,
+  type GrantType,
   notRenderedViaMillerShell,
 } from './CareerCompForm'
 import {
@@ -37,8 +39,7 @@ import {
 import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCompUrlState'
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
-import { SavedJobPicker } from './SavedJobPicker'
-import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs, CareerCompProjection, CareerCompWorkflowSummary } from './types'
+import type { CareerCompInitialData, CareerCompInputs, CareerCompProjection } from './types'
 
 interface CareerCompPageProps {
   initialData: CareerCompInitialData
@@ -46,6 +47,8 @@ interface CareerCompPageProps {
 
 type CareerCompResultViewId = 'liquidity-over-time' | 'annual-fcf' | 'ltv-table' | 'vesting-breakdown' | 'after-tax-liquidity' | 'after-tax-fcf'
 type CareerCompColumnId = CareerCompFormSectionId | CareerCompResultViewId
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface CareerCompColumnMeta {
   description: string
@@ -55,6 +58,7 @@ interface CareerCompColumnMeta {
 type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
   | { kind: 'result'; id: CareerCompResultViewId }
+  | { kind: 'grant'; jobId: string; grantType: GrantType; grantId?: string | undefined }
 
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
   render: (projection: CareerCompProjection) => ReactElement
@@ -68,7 +72,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'Cumulative realizable equity value by job and growth band.', icon: LineChart },
-    size: 'wide',
+    size: 'full',
     render: (projection) => <ProjectionLiquidity projection={projection} />,
   },
   {
@@ -78,7 +82,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'Pre-tax annual cash flow breakdown per job.', icon: BarChart3 },
-    size: 'wide',
+    size: 'full',
     render: (projection) => <ProjectionAnnualFreeCashFlow projection={projection} />,
   },
   {
@@ -108,7 +112,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'Liquidity bands net of federal regular tax and AMT from the tax-facts engine.', icon: LineChart },
-    size: 'wide',
+    size: 'full',
     render: (projection) => <ProjectionAfterTaxLiquidity projection={projection} />,
   },
   {
@@ -118,7 +122,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'After-tax annual FCF, LTV deltas, and ISO/NSO/83(b)/AMT breakdown.', icon: ReceiptText },
-    size: 'wide',
+    size: 'full',
     render: (projection) => <ProjectionAfterTaxFreeCashFlow projection={projection} />,
   },
 ]
@@ -134,10 +138,6 @@ function findMeta<T extends { id: string }>(list: readonly T[], id: string): T {
 function initialInputs(initialData: CareerCompInitialData): CareerCompInputs {
   const base = initialData.inputs ?? DEFAULT_CAREER_COMP_INPUTS
   return window.location.search ? parseCareerCompUrlState(window.location.search, base) : normalizeCareerCompInputs(base)
-}
-
-function urlStatePathname(): string {
-  return window.location.pathname.replace(/\/s\/[^/]+$/, '')
 }
 
 function replaceUrlWithInputs(inputs: CareerCompInputs, pathname = window.location.pathname): string {
@@ -187,92 +187,89 @@ function renderColumnLauncher(
   return <ColumnOpenButton key={entry.id} label={entry.shortLabel} description={details.description} icon={details.icon} onClick={onOpen} />
 }
 
+function SaveStateBadge({ state, label }: { state: SaveState; label: string }): ReactElement | null {
+  if (state === 'saving') {
+    return <Badge variant="outline">Saving…</Badge>
+  }
+  if (state === 'saved') {
+    return <Badge variant="secondary">{label}</Badge>
+  }
+  if (state === 'error') {
+    return <Badge variant="destructive">Save failed</Badge>
+  }
+  return null
+}
+
+/** ISO timestamp → value for a <input type="date"> (YYYY-MM-DD), or '' when absent. */
+function toDateInputValue(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 10) : ''
+}
+
 export function CareerCompPage({ initialData }: CareerCompPageProps): ReactElement {
+  const shareCode = initialData.comparison?.shortCode ?? null
+  const isShareView = shareCode !== null
+  const isCreator = initialData.comparison?.isCreator ?? false
+
   const [inputs, setInputs] = useState<CareerCompInputs>(() => initialInputs(initialData))
   const normalizedInputs = useMemo(() => normalizeCareerCompInputs(inputs), [inputs])
   const [projection, setProjection] = useState<CareerCompProjection | null>(initialData.projection)
   const [loading, setLoading] = useState(initialData.projection === null)
   const [status, setStatus] = useState<string | null>(null)
-  const [savedComparison, setSavedComparison] = useState<CareerComparisonMeta | null>(initialData.comparison ?? null)
-  const [canEdit, setCanEdit] = useState(initialData.canEdit ?? false)
-  const [shareIncludesCurrent, setShareIncludesCurrent] = useState(initialData.comparison?.shareIncludesCurrent ?? true)
-  const [saving, setSaving] = useState(false)
-  const [workflowSummaries, setWorkflowSummaries] = useState<CareerCompWorkflowSummary[]>([])
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('')
-  const [savedInputsJson, setSavedInputsJson] = useState(() => (initialData.comparison && initialData.canEdit ? JSON.stringify(normalizeCareerCompInputs(initialData.inputs)) : null))
-  const [workflowBusy, setWorkflowBusy] = useState(false)
-  const [activeColumn, setActiveColumn] = useState<CareerCompColumnState | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [columnStack, setColumnStack] = useState<CareerCompColumnState[]>([])
   const [isExporting, setIsExporting] = useState(false)
+  const [shareDeleted, setShareDeleted] = useState(false)
 
-  const isSharedView = savedComparison !== null
-  const hasUnsavedChanges = savedInputsJson === null || savedInputsJson !== JSON.stringify(normalizedInputs)
-  const saveLabel = useMemo(() => {
-    if (savedComparison && canEdit) {
-      return 'Update'
-    }
-    if (savedComparison && !canEdit) {
-      return 'Fork'
-    }
-    return 'Save'
-  }, [canEdit, savedComparison])
+  // Share dialog (private latest only).
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareIncludeCurrent, setShareIncludeCurrent] = useState(true)
+  const [shareExpiresOn, setShareExpiresOn] = useState('')
+  const [creatingShare, setCreatingShare] = useState(false)
+
+  // Manage-share dialog (creator of a shared fork).
+  const [manageOpen, setManageOpen] = useState(false)
+  const [manageExpiresOn, setManageExpiresOn] = useState(() => toDateInputValue(initialData.comparison?.expiresAt))
+
+  // On a shared fork, edits autosave to that fork (open to anyone). On the private tool, edits
+  // autosave to the owner's latest. Anonymous visitors of the public tool only recompute.
+  const canAutosave = (isShareView && !shareDeleted) || (!isShareView && initialData.authenticated)
+  const saveLabel = isShareView ? 'Saved to link' : 'Saved'
 
   useEffect(() => {
-    if (!isSharedView || !canEdit) {
+    if (!isShareView) {
       replaceUrlWithInputs(normalizedInputs)
     }
-  }, [canEdit, isSharedView, normalizedInputs])
-
-  useEffect(() => {
-    if (!initialData.authenticated) {
-      return
-    }
-
-    let active = true
-    listCareerCompWorkflows()
-      .then((response) => {
-        if (active) {
-          setWorkflowSummaries(response.workflows)
-          setSelectedWorkflowId(savedComparison ? String(savedComparison.id) : '')
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setWorkflowSummaries([])
-        }
-      })
-
-    return () => {
-      active = false
-    }
-  }, [initialData.authenticated, savedComparison])
-
-  useEffect(() => {
-    if (!initialData.authenticated || !savedComparison || canEdit || savedComparison.ownerUserId !== null) {
-      return
-    }
-
-    let active = true
-    claimCareerComparison(savedComparison.shortCode)
-      .then((response) => {
-        if (active) {
-          setCanEdit(true)
-          setSavedComparison((current) => (current ? { ...current, shareUrl: response.shareUrl } : current))
-          setStatus('Saved comparison is now linked to your account.')
-        }
-      })
-      .catch(() => {
-        // Leave the comparison as a read-only fork target if the claim is rejected.
-      })
-
-    return () => {
-      active = false
-    }
-  }, [canEdit, initialData.authenticated, savedComparison])
+  }, [isShareView, normalizedInputs])
 
   useEffect(() => {
     let active = true
     setLoading(true)
     const timeout = window.setTimeout(() => {
+      if (canAutosave) {
+        setSaveState('saving')
+        const persist = isShareView && shareCode !== null ? saveSharedCareerComparison(shareCode, normalizedInputs) : saveLatestCareerComparison(normalizedInputs)
+        persist
+          .then((response) => {
+            if (active) {
+              setProjection(response.projection)
+              setSaveState('saved')
+              setStatus(null)
+            }
+          })
+          .catch((error: unknown) => {
+            if (active) {
+              setSaveState('error')
+              setStatus(error instanceof Error ? error.message : String(error))
+            }
+          })
+          .finally(() => {
+            if (active) {
+              setLoading(false)
+            }
+          })
+        return
+      }
+
       computeCareerComp(normalizedInputs)
         .then((nextProjection) => {
           if (active) {
@@ -296,111 +293,49 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       active = false
       window.clearTimeout(timeout)
     }
-  }, [normalizedInputs])
+  }, [normalizedInputs, canAutosave, isShareView, shareCode])
 
-  async function handleSave(): Promise<void> {
-    if (!initialData.authenticated) {
-      if (savedComparison && !canEdit) {
-        setSavedComparison(null)
-        setCanEdit(false)
-        replaceUrlWithInputs(normalizedInputs, urlStatePathname())
-        setStatus('Forked to URL state. Edits update this link.')
-        return
-      }
-
-      setStatus('Log in to save a share link.')
-      return
-    }
-
-    setSaving(true)
+  async function handleCreateShare(): Promise<void> {
+    setCreatingShare(true)
     setStatus(null)
-
     try {
-      const response = savedComparison && canEdit
-        ? await updateCareerComparison(savedComparison.id, normalizedInputs, shareIncludesCurrent)
-        : await saveCareerComparison(normalizedInputs, shareIncludesCurrent)
-      const nextComparison: CareerComparisonMeta = {
-        id: response.id,
-        shortCode: response.shortCode,
-        shareUrl: response.shareUrl,
-        ownerUserId: response.ownerUserId,
-        shareIncludesCurrent,
-        isSnapshot: false,
-        title: response.title,
+      const response = await shareCareerComparison(normalizedInputs, shareIncludeCurrent, shareExpiresOn || null)
+      if (response.shareUrl) {
+        await navigator.clipboard.writeText(response.shareUrl)
       }
-      setSavedComparison(nextComparison)
-      setCanEdit(true)
-      setProjection(response.projection)
-      setSavedInputsJson(JSON.stringify(normalizedInputs))
-      setStatus(savedComparison && canEdit ? 'Updated.' : 'Saved.')
+      setShareOpen(false)
+      setStatus(response.shareUrl ? `Share link created and copied: ${response.shareUrl}` : 'Share link created.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
     } finally {
-      setSaving(false)
+      setCreatingShare(false)
     }
   }
 
-  async function copyShareUrl(): Promise<void> {
-    setWorkflowBusy(true)
-    try {
-      const snapshot = await shareCareerComparison(normalizedInputs, shareIncludesCurrent)
-      await navigator.clipboard.writeText(snapshot.shareUrl)
-      setStatus('Share snapshot copied.')
-    } catch (error: unknown) {
-      setStatus(error instanceof Error ? error.message : String(error))
-    } finally {
-      setWorkflowBusy(false)
-    }
-  }
-
-  async function loadWorkflow(id: string): Promise<void> {
-    if (!id) {
+  async function handleUpdateExpiration(): Promise<void> {
+    if (shareCode === null) {
       return
     }
-
-    setWorkflowBusy(true)
     try {
-      const workflow = await getCareerCompWorkflow(Number(id))
-      await activateCareerCompWorkflow(workflow.id)
-      setInputs(workflow.inputs)
-      setProjection(workflow.projection)
-      setSavedComparison({
-        id: workflow.id,
-        shortCode: workflow.shortCode,
-        shareUrl: workflow.shareUrl,
-        ownerUserId: workflow.ownerUserId,
-        shareIncludesCurrent: workflow.shareIncludesCurrent,
-        isSnapshot: false,
-        title: workflow.title,
-      })
-      setCanEdit(true)
-      setShareIncludesCurrent(workflow.shareIncludesCurrent)
-      setSavedInputsJson(JSON.stringify(normalizeCareerCompInputs(workflow.inputs)))
-      setStatus('Loaded workflow.')
+      await updateSharedCareerComparisonExpiration(shareCode, manageExpiresOn || null)
+      setManageOpen(false)
+      setStatus(manageExpiresOn ? `Link expires ${manageExpiresOn}.` : 'Expiration removed.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
-    } finally {
-      setWorkflowBusy(false)
     }
   }
 
-  async function deleteCurrentWorkflow(): Promise<void> {
-    if (!savedComparison || !canEdit) {
+  async function handleDeleteShare(): Promise<void> {
+    if (shareCode === null) {
       return
     }
-
-    setWorkflowBusy(true)
     try {
-      await deleteCareerCompWorkflow(savedComparison.id)
-      setSavedComparison(null)
-      setCanEdit(false)
-      setSavedInputsJson(null)
-      setWorkflowSummaries((current) => current.filter((workflow) => workflow.id !== savedComparison.id))
-      setStatus('Deleted workflow.')
+      await deleteSharedCareerComparison(shareCode)
+      setShareDeleted(true)
+      setManageOpen(false)
+      setStatus('Share deleted. This link will no longer work.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
-    } finally {
-      setWorkflowBusy(false)
     }
   }
 
@@ -410,15 +345,12 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       return
     }
 
-    setWorkflowBusy(true)
     try {
       const response = await importRsuIntoCurrentJob(normalizedInputs.currentJob)
       setInputs({ ...normalizedInputs, currentJob: response.currentJob })
       setStatus(response.importedGrants.length > 0 ? `Imported ${response.importedGrants.length} RSU grant${response.importedGrants.length === 1 ? '' : 's'}.` : 'No RSU awards found to import.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
-    } finally {
-      setWorkflowBusy(false)
     }
   }
 
@@ -434,15 +366,38 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
   }
 
-  function openColumn(column: CareerCompColumnState): void {
-    setActiveColumn(column)
+  function openSection(column: CareerCompColumnState): void {
+    setColumnStack([column])
   }
 
-  function closeColumn(_depth: number): void {
-    setActiveColumn(null)
+  function openGrantEditor(jobId: string, grantType: GrantType, grantId?: string): void {
+    setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'grant', jobId, grantType, grantId }])
   }
 
-  function toMillerColumn(column: CareerCompColumnState): MillerColumnShellColumn {
+  function closeColumn(depth: number): void {
+    setColumnStack((stack) => stack.slice(0, depth))
+  }
+
+  function toMillerColumn(column: CareerCompColumnState, depth: number): MillerColumnShellColumn {
+    if (column.kind === 'grant') {
+      return {
+        key: `grant:${column.jobId}:${column.grantType}:${column.grantId ?? 'new'}`,
+        id: `grant-${column.grantType}`,
+        label: column.grantType === 'rsu' ? 'RSU grant' : 'Option grant',
+        shortLabel: column.grantId ? 'Edit grant' : 'Add grant',
+        children: (
+          <GrantEditorColumn
+            inputs={inputs}
+            jobId={column.jobId}
+            grantType={column.grantType}
+            grantId={column.grantId}
+            onChange={setInputs}
+            onClose={() => closeColumn(depth)}
+          />
+        ),
+      }
+    }
+
     if (column.kind === 'form') {
       const section = findMeta(CAREER_COMP_FORM_SECTIONS, column.id)
 
@@ -451,7 +406,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} />,
+        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} />,
       }
     }
 
@@ -467,22 +422,93 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
   }
 
-  const columns: MillerColumnShellColumn[] = activeColumn ? [toMillerColumn(activeColumn)] : []
+  const columns: MillerColumnShellColumn[] = columnStack.map((column, depth) => toMillerColumn(column, depth))
   const warnings = projection?.warnings ?? []
 
   const homeView = (
     <div className="grid gap-6 p-4 md:p-6">
-      <section className="grid gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">Financial planning</Badge>
-          <Badge variant="outline">Public calculator</Badge>
-          {loading ? <Badge variant="outline">Calculating</Badge> : null}
+      <header className="grid gap-3 border-b border-border pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground">Career Comparison</h1>
+              {isShareView ? <Badge variant="outline">Shared link{isCreator ? ' · you own this' : ''}</Badge> : null}
+              {canAutosave ? <SaveStateBadge state={saveState} label={saveLabel} /> : null}
+              {loading ? <Badge variant="outline">Calculating</Badge> : null}
+            </div>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              {isShareView
+                ? 'Anyone with this link can edit this scenario; changes save to the link.'
+                : 'Compare a current job (or no job) against hypothetical offers with cash compensation, equity liquidity, and vesting views.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {initialData.authenticated && !isShareView ? (
+              <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="secondary">
+                    <Share2 className="size-4" /> Share
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create a share link</DialogTitle>
+                    <DialogDescription>Forks the current scenario into a separate, editable copy. Anyone with the link can view and edit it.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={shareIncludeCurrent} onCheckedChange={(checked) => setShareIncludeCurrent(checked === true)} />
+                      Include my current job (uncheck to keep it confidential)
+                    </label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="share-expires-on">Expiration (optional)</Label>
+                      <Input id="share-expires-on" type="date" value={shareExpiresOn} onChange={(event) => setShareExpiresOn(event.target.value)} />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" onClick={handleCreateShare} disabled={creatingShare}>
+                      {creatingShare ? 'Creating…' : 'Create & copy link'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            ) : null}
+            {isShareView && isCreator && !shareDeleted ? (
+              <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="secondary">
+                    <Settings2 className="size-4" /> Manage link
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Manage share link</DialogTitle>
+                    <DialogDescription>Set an expiration or delete this link. Deleting is permanent and breaks the link for everyone.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2 py-2">
+                    <Label htmlFor="manage-expires-on">Expiration</Label>
+                    <Input id="manage-expires-on" type="date" value={manageExpiresOn} onChange={(event) => setManageExpiresOn(event.target.value)} />
+                  </div>
+                  <DialogFooter className="sm:justify-between">
+                    <Button type="button" variant="destructive" onClick={handleDeleteShare}>
+                      <Trash2 className="size-4" /> Delete link
+                    </Button>
+                    <Button type="button" onClick={handleUpdateExpiration}>Save expiration</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            ) : null}
+            {initialData.authenticated && !isShareView ? (
+              <Button type="button" variant="secondary" onClick={importRsu}>
+                <Upload className="size-4" /> Import RSU
+              </Button>
+            ) : null}
+            <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting}>
+              <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
+            </Button>
+          </div>
         </div>
-        <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Career Comparison</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Compare a current job (or no job) against hypothetical offers with cash compensation, equity liquidity, and vesting views.
-        </p>
-      </section>
+      </header>
 
       {warnings.length > 0 ? (
         <section className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
@@ -497,78 +523,17 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         <section className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>
       ) : null}
 
-      <section className="grid gap-3 rounded-md border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">Scenario actions</h2>
-            <p className="text-sm text-muted-foreground">Save or fork this comparison, copy a single canonical share link, or export to XLSX.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2" data-career-comp-action-bar>
-            <Button type="button" onClick={handleSave} disabled={saving} data-career-comp-action-slot="save-fork">
-              {savedComparison && !canEdit ? <GitFork className="size-4" /> : <Save className="size-4" />}
-              {saving ? 'Saving…' : saveLabel}
-            </Button>
-            {initialData.authenticated ? (
-              <Button type="button" variant="secondary" onClick={importRsu} disabled={workflowBusy} data-career-comp-action-slot="import-rsu">
-                <Upload className="size-4" /> Import RSU
-              </Button>
-            ) : null}
-            <Button type="button" variant="secondary" onClick={copyShareUrl} disabled={workflowBusy} data-career-comp-action-slot="copy-link">
-              <Copy className="size-4" /> Share
-            </Button>
-            <Button type="button" variant="secondary" onClick={handleExportXlsx} disabled={isExporting} data-career-comp-action-slot="export">
-              <Download className="size-4" /> {isExporting ? 'Exporting…' : 'Export to XLSX'}
-            </Button>
-            <Select value={shareIncludesCurrent ? 'inclusive' : 'exclusive'} onValueChange={(value) => setShareIncludesCurrent(value === 'inclusive')}>
-              <SelectTrigger aria-label="Share mode" data-career-comp-action-slot="share-mode" className="w-[12rem]">
-                <span className="truncate">{shareIncludesCurrent ? 'Share: include current' : 'Share: hide current'}</span>
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
-                <SelectItem value="inclusive">Include current job</SelectItem>
-                <SelectItem value="exclusive">Hide current job (confidential)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        {initialData.authenticated ? (
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-            <Badge variant={hasUnsavedChanges ? 'outline' : 'secondary'}>{hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}</Badge>
-            <Select value={selectedWorkflowId} onValueChange={(value) => {
-              setSelectedWorkflowId(value)
-              void loadWorkflow(value)
-            }}>
-              <SelectTrigger aria-label="Saved workflows" className="w-[16rem]">
-                <span className="truncate">{selectedWorkflowId ? workflowSummaries.find((workflow) => String(workflow.id) === selectedWorkflowId)?.title ?? 'Saved workflow' : 'Load workflow'}</span>
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false} sideOffset={4}>
-                {workflowSummaries.map((workflow) => (
-                  <SelectItem key={workflow.id} value={String(workflow.id)}>{workflow.title ?? `Workflow ${workflow.id}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button type="button" variant="secondary" onClick={() => selectedWorkflowId && void loadWorkflow(selectedWorkflowId)} disabled={!selectedWorkflowId || workflowBusy}>
-              <FolderOpen className="size-4" /> Load
-            </Button>
-            <Button type="button" variant="destructive" onClick={deleteCurrentWorkflow} disabled={!savedComparison || !canEdit || workflowBusy}>
-              <Trash2 className="size-4" /> Delete
-            </Button>
-          </div>
-        ) : null}
-      </section>
-
-      <SavedJobPicker inputs={inputs} authenticated={initialData.authenticated} onApply={setInputs} />
-
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Inputs</h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {CAREER_COMP_FORM_SECTIONS.map((section) => renderColumnLauncher(section, () => openColumn({ kind: 'form', id: section.id })))}
+        <div className="grid gap-2">
+          {CAREER_COMP_FORM_SECTIONS.map((section) => renderColumnLauncher(section, () => openSection({ kind: 'form', id: section.id })))}
         </div>
       </section>
 
       <section className="grid gap-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Results</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {RESULT_VIEWS.map((view) => renderColumnLauncher(view, () => openColumn({ kind: 'result', id: view.id })))}
+        <div className="grid gap-2">
+          {RESULT_VIEWS.map((view) => renderColumnLauncher(view, () => openSection({ kind: 'result', id: view.id })))}
         </div>
       </section>
     </div>
@@ -577,7 +542,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   return (
     <Container fluid className="flex h-[calc(100vh-4rem)] min-h-[680px] flex-col bg-background">
       <div className="relative min-h-0 flex-1">
-        <MillerColumnShell homeView={homeView} columns={columns} onTruncate={closeColumn} />
+        <MillerColumnShell homeView={homeView} columns={columns} onTruncate={closeColumn} homeColumnClassName="w-full md:w-[460px] xl:w-[460px]" />
       </div>
     </Container>
   )

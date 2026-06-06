@@ -18,7 +18,10 @@ class ShareCareerCompComparisonRequest extends FormRequest
     {
         return array_merge(
             ComputeCareerCompRequest::inputRules(),
-            ['shareIncludesCurrent' => ['nullable', 'boolean']],
+            [
+                'shareIncludesCurrent' => ['nullable', 'boolean'],
+                'expiresAt' => ['nullable', 'date'],
+            ],
         );
     }
 }

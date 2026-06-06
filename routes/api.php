@@ -97,21 +97,16 @@ Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/roth-conv
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/compute', [CareerCompController::class, 'compute']);
 Route::middleware(['web', 'auth'])->post('/financial-planning/roth-conversion/save', [RothConversionController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s/{code}', [RothConversionController::class, 'update']);
-Route::middleware(['web', 'auth'])->get('/financial-planning/career-comparison/saved-jobs', [CareerCompController::class, 'savedJobs']);
-Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/save', [CareerCompController::class, 'store']);
-Route::middleware(['web', 'auth'])->patch('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'update']);
-Route::middleware(['web', 'auth'])->post('/financial-planning/career-comparison/s/{code}/claim', [CareerCompController::class, 'claim']);
-Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/share', [CareerCompController::class, 'share']);
-Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->prefix('/financial-planning/career-comparison/workflows')->group(function (): void {
-    Route::get('/', [CareerCompController::class, 'index']);
-    Route::post('/', [CareerCompController::class, 'store']);
-    Route::get('/last-active', [CareerCompController::class, 'lastActive']);
+Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->prefix('/financial-planning/career-comparison/latest')->group(function (): void {
+    Route::get('/', [CareerCompController::class, 'latest']);
+    Route::put('/', [CareerCompController::class, 'saveLatest']);
     Route::post('/import-rsu', [CareerCompController::class, 'importRsu']);
-    Route::get('/{workflow}', [CareerCompController::class, 'showWorkflow']);
-    Route::patch('/{workflow}', [CareerCompController::class, 'update']);
-    Route::delete('/{workflow}', [CareerCompController::class, 'destroy']);
-    Route::post('/{workflow}/activate', [CareerCompController::class, 'activate']);
 });
+// Creating/managing a share requires an owner; editing a fork is open to anyone with the link.
+Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->post('/financial-planning/career-comparison/share', [CareerCompController::class, 'share']);
+Route::middleware(['web', 'throttle:60,1'])->put('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'saveShare']);
+Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->patch('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'updateShare']);
+Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->delete('/financial-planning/career-comparison/s/{code}', [CareerCompController::class, 'deleteShare']);
 
 Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
