@@ -170,11 +170,11 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             return 0;
         }
 
-        $deletedYears = $doClear ? $this->closedLotYearsForAccount($acctId) : [];
+        $deletedYears = $doClear && $mode === 'closed-1099b' ? $this->closedLotYearsForAccount($acctId) : [];
         $deleted = 0;
 
         if ($doClear) {
-            $deleted = DB::table('fin_account_lots')->where('acct_id', $acctId)->delete();
+            $deleted = $this->clearExistingLots($acctId, $mode);
             $this->info("Cleared {$deleted} existing lot record(s) for account {$acctId}.");
         }
 
@@ -404,17 +404,23 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
             }
 
             $symbol = $this->normaliseSymbol($row);
-            $purchaseDate = $this->normaliseDateField((string) ($row['purchase_date'] ?? $row['open_date'] ?? $row['acquired_date'] ?? ''));
-            if ($symbol === '' || $purchaseDate === null || ! is_numeric($row['quantity'] ?? null) || ! is_numeric($row['cost_basis'] ?? null)) {
+            $purchaseDate = $this->normaliseDateField((string) ($this->firstPresent($row, ['purchase_date', 'purchaseDate', 'open_date', 'openDate', 'acquired_date', 'acquiredDate']) ?? ''));
+            $quantity = $this->firstPresent($row, ['quantity']);
+            $costBasisValue = $this->firstPresent($row, ['cost_basis', 'costBasis']);
+            if ($symbol === '' || $purchaseDate === null || ! is_numeric($quantity) || ! is_numeric($costBasisValue)) {
                 $this->warn("Row {$i}: open positions require symbol, quantity, purchase_date/open_date, and cost_basis — skipped.");
 
                 continue;
             }
 
-            $quantity = (float) $row['quantity'];
-            $costBasis = round((float) $row['cost_basis'], 4);
-            $costPerUnit = is_numeric($row['cost_per_unit'] ?? null)
-                ? round((float) $row['cost_per_unit'], 8)
+            $quantity = (float) $quantity;
+            $costBasis = round((float) $costBasisValue, 4);
+            $costPerUnitValue = $this->firstPresent($row, ['cost_per_unit', 'costPerUnit', 'cost_per_share', 'costPerShare']);
+            $marketValue = $this->firstPresent($row, ['market_value', 'marketValue']);
+            $snapshotPrice = $this->firstPresent($row, ['snapshot_price', 'snapshotPrice', 'market_price', 'marketPrice', 'lot_price', 'lotPrice']);
+            $snapshotDate = $this->firstPresent($row, ['snapshot_date', 'snapshotDate', 'as_of_date', 'asOfDate']);
+            $costPerUnit = is_numeric($costPerUnitValue)
+                ? round((float) $costPerUnitValue, 8)
                 : ($quantity > 0 ? round($costBasis / $quantity, 8) : null);
 
             $lots[] = [
@@ -434,9 +440,9 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
                 'lot_source' => 'statement_position',
                 'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
                 'external_id' => $this->normaliseLotExternalId($row),
-                'market_value' => is_numeric($row['market_value'] ?? null) ? round((float) $row['market_value'], 4) : null,
-                'snapshot_price' => is_numeric($row['snapshot_price'] ?? $row['market_price'] ?? null) ? round((float) ($row['snapshot_price'] ?? $row['market_price']), 8) : null,
-                'snapshot_date' => $this->normaliseDateField((string) ($row['snapshot_date'] ?? $row['as_of_date'] ?? '')),
+                'market_value' => is_numeric($marketValue) ? round((float) $marketValue, 4) : null,
+                'snapshot_price' => is_numeric($snapshotPrice) ? round((float) $snapshotPrice, 8) : null,
+                'snapshot_date' => $this->normaliseDateField((string) ($snapshotDate ?? '')),
                 'skip_transaction_matching' => true,
             ];
         }
@@ -911,6 +917,36 @@ class FinanceLotsImportCommand extends BaseFinanceCommand
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  list<string>  $keys
+     */
+    private function firstPresent(array $row, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
+                return $row[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function clearExistingLots(int $acctId, string $mode): int
+    {
+        $query = DB::table('fin_account_lots')->where('acct_id', $acctId);
+
+        if ($mode === 'open-positions') {
+            $query->where(function ($inner): void {
+                $inner->where('source', FinAccountLot::SOURCE_ACCOUNT_DERIVED)
+                    ->orWhere('lot_origin', FinAccountLot::ORIGIN_STATEMENT_POSITION)
+                    ->orWhere('lot_source', 'statement_position');
+            });
+        }
+
+        return $query->delete();
     }
 
     /**

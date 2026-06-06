@@ -367,6 +367,41 @@ class FinanceImportTransactionsCommandTest extends TestCase
         ]);
     }
 
+    public function test_schwab_fingerprint_includes_transaction_type_and_method(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                [
+                    't_date' => '2026-04-15',
+                    't_type' => 'Qualified Dividend',
+                    't_method' => 'QDV',
+                    't_amt' => 12.34,
+                    't_symbol' => 'ABC',
+                    't_source' => 'schwab-brokerage',
+                ],
+                [
+                    't_date' => '2026-04-15',
+                    't_type' => 'Bank Interest',
+                    't_method' => 'BKINT',
+                    't_amt' => 12.34,
+                    't_symbol' => 'ABC',
+                    't_source' => 'schwab-brokerage',
+                ],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(2, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-15')
+            ->where('t_amt', 12.34)
+            ->whereNotNull('external_id')
+            ->distinct('external_id')
+            ->count('external_id'));
+    }
+
     public function test_external_id_skips_repeat_import_before_legacy_duplicate_heuristic(): void
     {
         $payload = [
@@ -386,6 +421,32 @@ class FinanceImportTransactionsCommandTest extends TestCase
         $this->assertSame(2, FinAccountLineItems::query()
             ->where('t_account', $this->checkingId)
             ->where('t_date', '2026-04-20')
+            ->count());
+    }
+
+    public function test_legacy_fallback_dedupe_sees_existing_externalized_rows(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-04-20', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker', 'external_id' => 'txn-1'],
+            ],
+        ]);
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-04-20', 't_type' => 'Buy', 't_amt' => -10.00, 't_symbol' => 'ABC', 't_source' => 'broker'],
+            ],
+        ]);
+        $this->artisan('finance:import-transactions')->assertExitCode(0);
+
+        $this->assertSame(1, FinAccountLineItems::query()
+            ->where('t_account', $this->checkingId)
+            ->where('t_date', '2026-04-20')
+            ->where('t_type', 'Buy')
+            ->where('t_symbol', 'ABC')
             ->count());
     }
 }

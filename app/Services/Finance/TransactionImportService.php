@@ -407,9 +407,6 @@ class TransactionImportService
             $existing = FinAccountLineItems::query()
                 ->where('t_account', $acctId)
                 ->whereBetween('t_date', [min($accountDates), max($accountDates)])
-                ->where(function ($query): void {
-                    $query->whereNull('external_id')->orWhere('external_id', '');
-                })
                 ->get(['t_date', 't_type', 't_amt', 't_symbol']);
 
             foreach ($existing as $transaction) {
@@ -427,6 +424,7 @@ class TransactionImportService
                 } else {
                     $toInsert[] = $row;
                     $existingExternalByAccount[$acctId][$key] = true;
+                    $existingLegacyByAccount[$acctId][$this->duplicateKey($row)] = true;
                 }
 
                 continue;
@@ -477,6 +475,8 @@ class TransactionImportService
             'acctgRuleCd',
             'acctg_rule_cd',
             'action',
+            't_type',
+            't_method',
             't_date',
             't_date_posted',
             't_symbol',

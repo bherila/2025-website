@@ -4,6 +4,7 @@ namespace Tests\Feature\Finance;
 
 use App\Jobs\LotsMatchJob;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
@@ -212,6 +213,49 @@ class FinanceLotsImportCommandTest extends TestCase
         unlink($tmpFile);
     }
 
+    public function test_open_positions_mode_accepts_account_data_camel_case_lot_schema(): void
+    {
+        Queue::fake();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode([
+            'lots' => [
+                [
+                    'symbol' => 'meta',
+                    'quantity' => 2,
+                    'purchaseDate' => '08/15/2025',
+                    'costBasis' => 1564.26,
+                    'costPerUnit' => 782.13,
+                    'marketValue' => 1186,
+                    'lotPrice' => 593,
+                    'lotId' => 'camel-lot-1',
+                ],
+            ],
+        ]));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--mode' => 'open-positions',
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Parsed 1 lot record(s)')
+            ->expectsOutputToContain('Imported: 1 inserted');
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => 'META',
+            'purchase_date' => '2025-08-15',
+            'cost_basis' => 1564.26,
+            'cost_per_unit' => 782.13,
+            'market_value' => 1186,
+            'snapshot_price' => 593,
+            'external_id' => 'camel-lot-1',
+        ]);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
+
+        unlink($tmpFile);
+    }
+
     public function test_open_positions_mode_dedupes_by_external_id(): void
     {
         Queue::fake();
@@ -231,6 +275,77 @@ class FinanceLotsImportCommandTest extends TestCase
             ->where('acct_id', $this->acctId)
             ->where('external_id', 'same-lot')
             ->count());
+
+        unlink($tmpFile);
+    }
+
+    public function test_open_positions_clear_preserves_closed_tax_lots(): void
+    {
+        Queue::fake();
+        $now = now();
+        DB::table('fin_account_lots')->insert([
+            'acct_id' => $this->acctId,
+            'symbol' => 'AAPL',
+            'quantity' => 1,
+            'purchase_date' => '2025-01-01',
+            'sale_date' => '2025-02-01',
+            'cost_basis' => 100,
+            'proceeds' => 120,
+            'realized_gain_loss' => 20,
+            'source' => FinAccountLot::SOURCE_BROKER_1099B,
+            'lot_source' => 'import_1099b',
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('fin_account_lots')->insert([
+            'acct_id' => $this->acctId,
+            'symbol' => 'MSFT',
+            'quantity' => 1,
+            'purchase_date' => '2025-03-01',
+            'sale_date' => null,
+            'cost_basis' => 200,
+            'proceeds' => null,
+            'realized_gain_loss' => null,
+            'source' => FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => 'statement_position',
+            'lot_origin' => FinAccountLot::ORIGIN_STATEMENT_POSITION,
+            'external_id' => 'old-open-lot',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'lots_').'.json';
+        file_put_contents($tmpFile, json_encode([
+            'positions' => [
+                ['symbol' => 'ABC', 'quantity' => 1, 'purchase_date' => '2026-02-01', 'cost_basis' => 100, 'lot_id' => 'new-open-lot'],
+            ],
+        ]));
+
+        $this->artisan('finance:lots-import', [
+            '--account' => $this->acctId,
+            '--file' => $tmpFile,
+            '--mode' => 'open-positions',
+            '--clear' => true,
+        ])->assertSuccessful()
+            ->expectsOutputToContain('Cleared 1 existing lot record(s)')
+            ->expectsOutputToContain('Imported: 1 inserted');
+
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'symbol' => 'AAPL',
+            'lot_origin' => FinAccountLot::ORIGIN_1099B_DISPOSITION,
+        ]);
+        $this->assertDatabaseMissing('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'external_id' => 'old-open-lot',
+        ]);
+        $this->assertDatabaseHas('fin_account_lots', [
+            'acct_id' => $this->acctId,
+            'external_id' => 'new-open-lot',
+        ]);
+
+        Queue::assertNotPushed(LotsMatchJob::class);
 
         unlink($tmpFile);
     }
