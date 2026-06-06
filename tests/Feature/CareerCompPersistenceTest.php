@@ -184,6 +184,106 @@ class CareerCompPersistenceTest extends TestCase
         $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
     }
 
+    public function test_published_share_is_marked_as_a_snapshot(): void
+    {
+        $user = User::factory()->create();
+        $share = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => CareerCompInputs::defaults(),
+        ]);
+
+        $share->assertCreated();
+        $this->assertDatabaseHas('opportunity_cost_comparisons', [
+            'short_code' => $share->json('shortCode'),
+            'is_snapshot' => true,
+        ]);
+    }
+
+    public function test_legacy_private_row_with_a_short_code_is_not_reachable_as_a_share(): void
+    {
+        $this->withoutVite();
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+
+        // A pre-share-model private workflow: it carried a code but was never published as a share.
+        $legacy = CareerComparison::factory()->create([
+            'user_id' => $owner->id,
+            'is_snapshot' => false,
+            'short_code' => 'legacy01',
+            'hypothetical_job_ids' => [],
+            'computed_json' => ['startYear' => 2026, 'horizonYears' => 10],
+        ]);
+
+        // It must not be viewable or editable by anyone holding the old link, including the owner.
+        $this->get("/financial-planning/career-comparison/s/{$legacy->short_code}")->assertNotFound();
+        $this->actingAs($visitor)
+            ->putJson("/api/financial-planning/career-comparison/s/{$legacy->short_code}", ['inputs' => CareerCompInputs::defaults()])
+            ->assertNotFound();
+        $this->actingAs($owner)
+            ->putJson("/api/financial-planning/career-comparison/s/{$legacy->short_code}", ['inputs' => CareerCompInputs::defaults()])
+            ->assertNotFound();
+    }
+
+    public function test_legacy_short_code_backfill_clears_default_snapshot_rows(): void
+    {
+        $legacyDefaultSnapshot = CareerComparison::factory()->create([
+            'is_snapshot' => true,
+            'last_active_at' => null,
+            'short_code' => 'legacy01',
+        ]);
+        $legacyPrivateLatest = CareerComparison::factory()->create([
+            'is_snapshot' => false,
+            'last_active_at' => now(),
+            'short_code' => 'private1',
+        ]);
+        $publishedShare = CareerComparison::factory()->create([
+            'is_snapshot' => true,
+            'last_active_at' => now(),
+            'short_code' => 'shared01',
+        ]);
+
+        $migration = require database_path('migrations/2026_06_06_000003_clear_short_codes_on_legacy_private_career_comparisons.php');
+        $migration->up();
+
+        $this->assertNull($legacyDefaultSnapshot->refresh()->short_code);
+        $this->assertNull($legacyPrivateLatest->refresh()->short_code);
+        $this->assertSame('shared01', $publishedShare->refresh()->short_code);
+    }
+
+    public function test_preserved_current_save_keeps_the_stored_projection_consistent_with_the_current_job(): void
+    {
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['name'] = 'Confidential current';
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => false,
+        ]);
+        $code = $share->json('shortCode');
+        $currentJobId = CareerComparison::query()->where('short_code', $code)->value('current_job_id');
+        $this->assertNotNull($currentJobId);
+
+        // A non-creator's payload has the current job redacted to null.
+        $redactedInputs = CareerCompInputs::defaults();
+        $redactedInputs['currentJob'] = null;
+        $redactedInputs['hypotheticalJobs'][0]['name'] = 'Visitor offer edit';
+
+        $this->actingAs($visitor)->putJson("/api/financial-planning/career-comparison/s/{$code}", [
+            'inputs' => $redactedInputs,
+        ])->assertOk();
+
+        // The kept current_job_id and the stored projection must agree: the projection is recomputed
+        // with the preserved current job, not recorded as a no-current-job scenario.
+        $stored = CareerComparison::query()->where('short_code', $code)->firstOrFail();
+        $this->assertSame((int) $currentJobId, (int) $stored->current_job_id);
+
+        $currentSpecId = CareerJob::query()->find($currentJobId)?->spec_json['id'] ?? null;
+        $projection = $stored->computed_json;
+        $this->assertNotNull($projection['currentJobId'] ?? null);
+        $this->assertSame($currentSpecId, $projection['currentJobId']);
+        $this->assertNotEmpty($projection['deltasVsCurrent'] ?? []);
+    }
+
     public function test_show_by_code_404s_for_unknown_code(): void
     {
         $this->withoutVite();
