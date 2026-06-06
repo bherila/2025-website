@@ -6,7 +6,6 @@ import type { MarkdownInitialData } from '../types'
 
 jest.mock('@/components/ui/code-editor', () => ({
   CodeEditor({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-    const React = jest.requireActual('react') as typeof import('react')
     return (
       <textarea
         aria-label="Markdown"
