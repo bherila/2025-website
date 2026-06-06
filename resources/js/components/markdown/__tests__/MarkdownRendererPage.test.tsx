@@ -4,6 +4,20 @@ import { act } from 'react'
 import { MarkdownRendererPage } from '../MarkdownRendererPage'
 import type { MarkdownInitialData } from '../types'
 
+jest.mock('@/components/ui/code-editor', () => ({
+  CodeEditor({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+    const React = jest.requireActual('react') as typeof import('react')
+    return (
+      <textarea
+        aria-label="Markdown"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    )
+  },
+}))
+
 const mockPreviewSettlers: Array<() => void> = []
 
 jest.mock('../Preview', () => {
