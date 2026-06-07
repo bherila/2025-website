@@ -33,6 +33,24 @@ class VestingScheduleTest extends TestCase
         $this->assertEqualsWithDelta(1200.0, array_sum($byYear), 0.0001);
     }
 
+    public function test_weighted_annual_tranches_release_configured_percentages(): void
+    {
+        $byYear = VestingSchedule::sharesByYearForGrant(1000.0, $this->date('2026-01-01'), [
+            'vestingSchedule' => [
+                'type' => 'tranches',
+                'tranches' => [
+                    ['month' => 12, 'percent' => 40],
+                    ['month' => 24, 'percent' => 30],
+                    ['month' => 36, 'percent' => 20],
+                    ['month' => 48, 'percent' => 10],
+                ],
+            ],
+        ]);
+
+        $this->assertSame([2027 => 400.0, 2028 => 300.0, 2029 => 200.0, 2030 => 100.0], $byYear);
+        $this->assertEqualsWithDelta(1000.0, array_sum($byYear), 0.0001);
+    }
+
     public function test_final_month_releases_remainder_when_not_cadence_aligned(): void
     {
         // 14-month vest, quarterly, no cliff: events at 3, 6, 9, 12, then the 13th/14th remainder at month 14.

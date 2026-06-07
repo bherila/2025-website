@@ -71,27 +71,47 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.rsuGrants.*.id" => ['required', 'string', 'max:120'],
             "{$prefix}.rsuGrants.*.kind" => ['required', Rule::in(['hire', 'refresher'])],
             "{$prefix}.rsuGrants.*.grantDate" => ['required', 'date_format:Y-m-d'],
+            "{$prefix}.rsuGrants.*.vestingStartDate" => ['nullable', 'date_format:Y-m-d'],
             "{$prefix}.rsuGrants.*.shareCount" => ['nullable', 'numeric', 'min:0'],
             "{$prefix}.rsuGrants.*.grantValue" => ['nullable', 'numeric', 'min:0'],
             "{$prefix}.rsuGrants.*.grantPrice" => ['nullable', 'numeric', 'min:0'],
             "{$prefix}.rsuGrants.*.cliffMonths" => ['required', 'integer', 'min:0', 'max:120'],
             "{$prefix}.rsuGrants.*.vestingYears" => ['required', 'numeric', 'min:0.25', 'max:10'],
             "{$prefix}.rsuGrants.*.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
+            ...self::vestingScheduleRules("{$prefix}.rsuGrants.*.vestingSchedule"),
             "{$prefix}.optionGrants" => ['nullable', 'array', 'max:50'],
             "{$prefix}.optionGrants.*.id" => ['required', 'string', 'max:120'],
             "{$prefix}.optionGrants.*.kind" => ['required', Rule::in(['hire', 'refresher'])],
             "{$prefix}.optionGrants.*.type" => ['required', Rule::in(['iso', 'nso'])],
             "{$prefix}.optionGrants.*.grantDate" => ['required', 'date_format:Y-m-d'],
+            "{$prefix}.optionGrants.*.vestingStartDate" => ['nullable', 'date_format:Y-m-d'],
             "{$prefix}.optionGrants.*.shareCount" => ['required', 'numeric', 'min:0'],
             "{$prefix}.optionGrants.*.strike" => ['required', 'numeric', 'min:0'],
             "{$prefix}.optionGrants.*.cliffMonths" => ['required', 'integer', 'min:0', 'max:120'],
             "{$prefix}.optionGrants.*.vestingYears" => ['required', 'numeric', 'min:0.25', 'max:10'],
             "{$prefix}.optionGrants.*.vestingFrequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
             "{$prefix}.optionGrants.*.earlyExercise83b" => ['required', 'boolean'],
+            ...self::vestingScheduleRules("{$prefix}.optionGrants.*.vestingSchedule"),
             "{$prefix}.growthBands" => [$required, 'array'],
             "{$prefix}.growthBands.lowPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],
             "{$prefix}.growthBands.mediumPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],
             "{$prefix}.growthBands.highPct" => ['nullable', 'numeric', 'min:-100', 'max:1000'],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function vestingScheduleRules(string $prefix): array
+    {
+        return [
+            $prefix => ['nullable', 'array'],
+            "{$prefix}.type" => ['nullable', Rule::in(VestingSchedule::SCHEDULE_TYPES)],
+            "{$prefix}.presetId" => ['nullable', 'string', 'max:120'],
+            "{$prefix}.durationMonths" => ['nullable', 'integer', 'min:1', 'max:120'],
+            "{$prefix}.cliffMonths" => ['nullable', 'integer', 'min:0', 'max:120'],
+            "{$prefix}.frequency" => ['nullable', Rule::in(VestingSchedule::FREQUENCIES)],
+            "{$prefix}.tranches" => ['nullable', 'array', 'max:24'],
+            "{$prefix}.tranches.*.month" => ['required_with:'.$prefix.'.tranches', 'integer', 'min:0', 'max:120'],
+            "{$prefix}.tranches.*.percent" => ['required_with:'.$prefix.'.tranches', 'numeric', 'min:0', 'max:100'],
         ];
     }
 

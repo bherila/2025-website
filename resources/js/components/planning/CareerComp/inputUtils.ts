@@ -1,5 +1,5 @@
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
-import { type CareerCompInputs,careerCompInputsSchema,type JobSpec } from './types'
+import { type CareerCompInputs, careerCompInputsSchema, type JobSpec, type OptionGrant, type RsuGrant } from './types'
 
 type JsonObject = Record<string, unknown>
 
@@ -43,6 +43,13 @@ function hasGrantDate(grant: { grantDate: string }): boolean {
   return grant.grantDate.trim() !== ''
 }
 
+function normalizeGrantDates<T extends RsuGrant | OptionGrant>(grant: T): T {
+  return {
+    ...grant,
+    vestingStartDate: grant.vestingStartDate && grant.vestingStartDate.trim() !== '' ? grant.vestingStartDate : null,
+  }
+}
+
 function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
   const jobId = job.id.trim() || fallbackId
 
@@ -58,8 +65,8 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
     },
     // grantDate is a required Y-m-d on the backend; drop incomplete grants so one cleared date does
     // not 422 the whole projection. They remain in the form's raw state for the user to finish.
-    rsuGrants: job.rsuGrants.filter(hasGrantDate).map((grant, index) => ({ ...grant, id: grant.id.trim() || `${jobId}-rsu-${index + 1}` })),
-    optionGrants: job.optionGrants.filter(hasGrantDate).map((grant, index) => ({ ...grant, id: grant.id.trim() || `${jobId}-opt-${index + 1}` })),
+    rsuGrants: job.rsuGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-rsu-${index + 1}` })),
+    optionGrants: job.optionGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-opt-${index + 1}` })),
   }
 }
 

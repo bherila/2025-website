@@ -99,12 +99,10 @@ final class OptionsVestingService
             return [(int) $grantDate->format('Y') => $shareCount];
         }
 
-        return VestingSchedule::sharesByYear(
+        return VestingSchedule::sharesByYearForGrant(
             $shareCount,
-            $grantDate,
-            max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12)),
-            max(0, (int) round((float) ($grant['cliffMonths'] ?? 0))),
-            VestingSchedule::normalizeFrequency($grant['vestingFrequency'] ?? null),
+            $this->date((string) ($grant['vestingStartDate'] ?? '')) ?? $grantDate,
+            $grant,
         );
     }
 

@@ -145,6 +145,65 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertNotEmpty($result['warnings']);
     }
 
+    public function test_option_vesting_can_start_after_grant_date(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'delayed-options-job',
+            'name' => 'Delayed options job',
+            'optionGrants' => [[
+                'id' => 'iso-delayed',
+                'kind' => 'hire',
+                'type' => 'iso',
+                'grantDate' => '2026-08-17',
+                'vestingStartDate' => '2027-08-17',
+                'shareCount' => 4800,
+                'strike' => 2.8,
+                'cliffMonths' => 12,
+                'vestingYears' => 4,
+                'vestingFrequency' => 'monthly',
+                'earlyExercise83b' => false,
+            ]],
+        ], false);
+
+        $result = (new OptionsVestingService)->expand($job, 2026, 7);
+
+        $this->assertSame([2028 => 1600.0, 2029 => 1200.0, 2030 => 1200.0, 2031 => 800.0], $this->sharesByYear($result['rows']));
+    }
+
+    public function test_option_vesting_supports_weighted_tranche_schedule(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'weighted-options-job',
+            'name' => 'Weighted options job',
+            'optionGrants' => [[
+                'id' => 'nso-weighted',
+                'kind' => 'hire',
+                'type' => 'nso',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 1000,
+                'strike' => 1,
+                'cliffMonths' => 12,
+                'vestingYears' => 4,
+                'vestingFrequency' => 'annual',
+                'earlyExercise83b' => false,
+                'vestingSchedule' => [
+                    'type' => 'tranches',
+                    'presetId' => 'annual-40-30-20-10',
+                    'tranches' => [
+                        ['month' => 12, 'percent' => 40],
+                        ['month' => 24, 'percent' => 30],
+                        ['month' => 36, 'percent' => 20],
+                        ['month' => 48, 'percent' => 10],
+                    ],
+                ],
+            ]],
+        ], false);
+
+        $result = (new OptionsVestingService)->expand($job, 2026, 5);
+
+        $this->assertSame([2027 => 400.0, 2028 => 300.0, 2029 => 200.0, 2030 => 100.0], $this->sharesByYear($result['rows']));
+    }
+
     public function test_multiple_rsu_grants_aggregate_vested_shares_per_year(): void
     {
         $job = JobSpec::nullableFromArray([
@@ -218,6 +277,29 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(2332.0, $valuation['liquidity']['medium'][2]['cumulativeValue']);
         $this->assertSame(2332.0, $valuation['annualEquity'][2028]);
         $this->assertSame(2332.0, $valuation['totals']['medium']);
+    }
+
+    public function test_private_valuation_prefers_estimated_share_price_over_409a(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'private-option-job',
+            'name' => 'Private option job',
+            'company' => [
+                'type' => 'private',
+                'currentSharePrice' => 30,
+                'fourNineA' => 3,
+                'annualDilutionPct' => 0,
+                'liquidityDate' => '2026-01-01',
+            ],
+            'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+        ], false);
+
+        $valuation = (new EquityValuationService)->value($job, [
+            ['grantId' => 'opt', 'type' => 'iso', 'year' => 2026, 'vestedShares' => 100, 'exercisableShares' => 100],
+        ], [], 2026, 1);
+
+        $this->assertSame(3000.0, $valuation['annualEquity'][2026]);
+        $this->assertSame(3000.0, $valuation['totals']['medium']);
     }
 
     public function test_equity_valuation_preserves_fractional_share_precision(): void
