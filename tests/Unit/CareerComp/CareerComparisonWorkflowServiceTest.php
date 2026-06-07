@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\CareerCompInputs;
 use App\Services\Planning\CareerComp\JobSpec;
+use App\Services\Planning\CareerComp\RsuVestingExpander;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -103,6 +104,50 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         $grant = $this->service()->importRsuCurrentJob($user->id, null)['importedGrants'][0];
 
         $this->assertSame('monthly', $grant['vestingFrequency']);
+    }
+
+    public function test_short_post_cliff_import_keeps_actual_vesting_span(): void
+    {
+        $user = User::factory()->create();
+        foreach (['2026-12-01', '2027-01-01', '2027-02-01', '2027-03-01'] as $vestDate) {
+            $this->award($user->id, [
+                'grant_date' => '2025-12-01',
+                'vest_date' => $vestDate,
+            ]);
+        }
+
+        $result = $this->service()->importRsuCurrentJob($user->id, null);
+        $grant = $result['importedGrants'][0];
+
+        $this->assertSame(12, $grant['cliffMonths']);
+        $this->assertSame(1.25, $grant['vestingYears']);
+        $this->assertSame('monthly', $grant['vestingFrequency']);
+        $this->assertSame(
+            [2026 => 320.0, 2027 => 80.0],
+            $this->sharesByYear((new RsuVestingExpander)->expand(JobSpec::nullableFromArray($result['currentJob'], true), 2026, 2)),
+        );
+    }
+
+    public function test_sub_year_import_keeps_actual_vesting_span(): void
+    {
+        $user = User::factory()->create();
+        foreach (['2026-04-15', '2026-07-15'] as $vestDate) {
+            $this->award($user->id, [
+                'grant_date' => '2026-01-15',
+                'vest_date' => $vestDate,
+            ]);
+        }
+
+        $result = $this->service()->importRsuCurrentJob($user->id, null);
+        $grant = $result['importedGrants'][0];
+
+        $this->assertSame(3, $grant['cliffMonths']);
+        $this->assertSame(0.5, $grant['vestingYears']);
+        $this->assertSame('quarterly', $grant['vestingFrequency']);
+        $this->assertSame(
+            [2026 => 200.0],
+            $this->sharesByYear((new RsuVestingExpander)->expand(JobSpec::nullableFromArray($result['currentJob'], true), 2026, 2)),
+        );
     }
 
     public function test_single_tranche_grant_defaults_to_annual_cadence(): void
@@ -201,5 +246,21 @@ class CareerComparisonWorkflowServiceTest extends TestCase
             'currentJob' => $current,
             'hypotheticalJobs' => [$hypothetical],
         ]));
+    }
+
+    /**
+     * @param  list<array{year:int,vestedShares:float}>  $rows
+     * @return array<int, float>
+     */
+    private function sharesByYear(array $rows): array
+    {
+        $shares = [];
+        foreach ($rows as $row) {
+            $shares[$row['year']] = ($shares[$row['year']] ?? 0.0) + $row['vestedShares'];
+        }
+
+        ksort($shares);
+
+        return $shares;
     }
 }
