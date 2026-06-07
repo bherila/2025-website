@@ -10,7 +10,27 @@ The FPDM spike against the current official IRS Form 1040 template failed before
 FPDF-Merge Error: Fast Web View mode is not supported
 ```
 
-FPDM can only proceed if the IRS PDF is preprocessed to remove linearization/Fast Web View. That preprocessing is not acceptable here because this project must not require PDFtk, pdftk-java, or Java, and it must not fetch or rewrite IRS templates during a user export request. The `tmw/fpdm` dependency was removed after the spike.
+Development-time template normalization is acceptable if the normalized official template is committed to the repository and validated with manifest hashes. Runtime/export-time preprocessing is not acceptable: user export requests must use pinned local templates and must not invoke Java, PDFtk, qpdf, Ghostscript, or network fetches.
+
+Normalization was re-spiked locally with these development-time candidates:
+
+```bash
+qpdf --object-streams=disable --stream-data=preserve --normalize-content=n resources/irs/forms/2025/f1040.pdf storage/app/testing/f1040-qpdf-object-streams-disabled.pdf
+qpdf --qdf --object-streams=disable resources/irs/forms/2025/f1040.pdf storage/app/testing/f1040-qpdf-qdf.pdf
+qpdf --force-version=1.4 --object-streams=disable --stream-data=uncompress --decode-level=all resources/irs/forms/2025/f1040.pdf storage/app/testing/f1040-qpdf-v14-uncompressed.pdf
+qpdf --force-version=1.4 --object-streams=disable --stream-data=compress --decode-level=all resources/irs/forms/2025/f1040.pdf storage/app/testing/f1040-qpdf-v14-compressed.pdf
+```
+
+Those qpdf outputs kept the XFA/form metadata, but FPDM still failed:
+
+```text
+FilterFlateDecode: invalid stream data
+FPDF-Merge Error: trailer_table corrupted?; missing start delimiter <<
+```
+
+Ghostscript was also tried as a non-Java development-time normalizer, but its output reported `Form: none`, which drops editability and is not acceptable as the primary fillable-form path.
+
+The `tmw/fpdm` dependency was removed after these failed spikes.
 
 The production native-PHP path should be a licensed AcroForm filler such as SetaPDF-FormFiller. A scaffold class exists, but no licensed implementation is wired.
 
@@ -88,7 +108,9 @@ Complete return export requires profile readiness. Individual Form 1040 export m
 ## Limits
 
 - No Java or PDFtk dependency.
-- No coordinate stamping as the primary path while IRS fillable AcroForm fields are available.
+- Development-time normalization is allowed only when the normalized official template is committed and covered by manifest hashes.
+- No runtime/export-time template rewriting or IRS template fetching.
+- No coordinate stamping as the primary path while IRS fillable fields are available.
 - FPDI/TCPDF remains a fallback only for future static overlays, continuation pages, or flattened print packets.
 - Complete editable return merging is blocked until field-collision behavior is proven safe.
 - Unsupported required schedules block complete-return export instead of producing a partial return packet.

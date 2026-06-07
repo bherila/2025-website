@@ -52,7 +52,7 @@ class IrsReturnReadinessServiceTest extends TestCase
         $this->assertNotEmpty($readiness->warnings);
         $this->assertNotEmpty(array_filter(
             $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'FPDM rejects'),
+            static fn (string $error): bool => str_contains($error, 'qpdf normalization'),
         ));
     }
 

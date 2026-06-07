@@ -25,7 +25,7 @@ class FinanceIrsFormFillSpikeCommand extends Command
     public function handle(): int
     {
         if (! class_exists('FPDM')) {
-            $this->error('FPDM is not installed. It was removed after the spike showed the current IRS Form 1040 PDF cannot be filled by FPDM without preprocessing.');
+            $this->error('FPDM is not installed. It was removed after the spike showed the raw IRS Form 1040 PDF fails in FPDM and qpdf-normalized committed-template candidates still are not FPDM-fillable.');
 
             return self::FAILURE;
         }
@@ -40,10 +40,14 @@ class FinanceIrsFormFillSpikeCommand extends Command
             $pdf = new $fpdmClass($this->templates->templatePath($template));
             $pdf->useCheckboxParser = true;
             $pdf->Load([
-                'f1_01[0]' => 'FPDM',
-                'f1_02[0]' => 'SPIKE',
-                'c1_1[0]' => true,
-                'c1_34[0]' => true,
+                'f1_14[0]' => 'FPDM',
+                'f1_15[0]' => 'SPIKE',
+                'f1_16[0]' => '123456789',
+                'f1_20[0]' => '1 Main St',
+                'f1_22[0]' => 'Anytown',
+                'f1_23[0]' => 'CA',
+                'f1_24[0]' => '94105',
+                'c1_10[1]' => true,
             ], true);
             $pdf->Merge(false);
             $content = $pdf->Output('S');

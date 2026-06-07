@@ -7,7 +7,7 @@ use App\Services\Finance\TaxReturnPdf\Exceptions\TaxReturnPdfUnavailableExceptio
 
 class UnavailableAcroFormFillEngine implements IrsAcroFormFillEngine
 {
-    public const string REASON = 'Native editable IRS PDF filling is blocked: FPDM rejects the current official Form 1040 PDF because it is linearized/Fast Web View, and this project must not require PDFtk or Java preprocessing.';
+    public const string REASON = 'Native editable IRS PDF filling is blocked: FPDM rejects the raw official Form 1040 PDF, and development-time qpdf normalization still did not produce an FPDM-fillable editable template. Runtime Java/PDFtk/preprocessing remains intentionally unsupported.';
 
     public function __construct(
         private readonly IrsFieldDumpService $fieldDumpService,

@@ -124,7 +124,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $response->assertJsonPath('message', 'Tax return PDF export is not ready.');
         $this->assertNotEmpty(array_filter(
             $response->json('errors'),
-            static fn (string $error): bool => str_contains($error, 'FPDM rejects'),
+            static fn (string $error): bool => str_contains($error, 'qpdf normalization'),
         ));
         $this->assertStringNotContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertFileDoesNotExist($unexpectedPath);

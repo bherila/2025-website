@@ -22,7 +22,7 @@ This document enumerates every place the application produces downloadable files
 - **Client:** `TaxPreviewPage.tsx` and `TaxReturnPdfExportDialog.tsx`
 - **Contents:** Intended to populate IRS Form 1040 from backend Tax Preview facts and backend-owned tax-return profile data.
 - **Format:** PDF (`application/pdf`) when a native editable AcroForm engine is available.
-- **Current status:** blocked/readiness MVP. The pinned official 2025 Form 1040 template and field map are present, field inspection works, and export attempts are audited, but the native editable fill engine is intentionally unavailable because FPDM cannot fill the current IRS PDF without PDF preprocessing.
+- **Current status:** blocked/readiness MVP. The pinned official 2025 Form 1040 template and field map are present, field inspection works, and export attempts are audited, but the native editable fill engine is intentionally unavailable because FPDM cannot fill the raw IRS PDF and qpdf-normalized committed-template candidates still are not FPDM-fillable.
 - **Generated file retention:** no generated PDFs are persisted by default.
 - **Current watermark:** none; no PDF is generated in the blocked MVP.
 

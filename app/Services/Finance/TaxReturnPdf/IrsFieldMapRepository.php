@@ -36,7 +36,7 @@ class IrsFieldMapRepository
     public function validate(IrsFieldMap $map): void
     {
         $template = $this->templates->template($map->taxYear, $map->formId);
-        $fields = $this->indexedFields($this->fieldDumpService->dump($this->templates->templatePath($template)));
+        $fields = $this->fieldsByName($this->fieldDumpService->dump($this->templates->templatePath($template)));
         $errors = [];
 
         foreach ($map->mappings as $index => $mapping) {
@@ -49,20 +49,25 @@ class IrsFieldMapRepository
                 continue;
             }
 
-            $field = $fields[$pdfField] ?? null;
-            if (! $field instanceof IrsFieldDefinition) {
+            $matchingFields = $fields[$pdfField] ?? [];
+            if ($matchingFields === []) {
                 $errors[] = "{$key} maps to unknown PDF field {$pdfField}.";
 
                 continue;
             }
 
             if (($mapping['format'] ?? null) === 'checkbox') {
-                if ($field->type !== 'Btn') {
+                if (! $this->hasFieldType($matchingFields, 'Btn')) {
                     $errors[] = "{$key} maps checkbox format to non-button PDF field {$pdfField}.";
                 }
 
-                if ($field->onValues === []) {
+                $onValues = $this->onValues($matchingFields);
+                if ($onValues === []) {
                     $errors[] = "{$key} maps checkbox PDF field {$pdfField}, but no on-value was found in the template.";
+                }
+
+                if (isset($mapping['onValue']) && ! in_array((string) $mapping['onValue'], $onValues, true)) {
+                    $errors[] = "{$key} maps checkbox PDF field {$pdfField} to unknown on-value {$mapping['onValue']}.";
                 }
             }
         }
@@ -74,16 +79,47 @@ class IrsFieldMapRepository
 
     /**
      * @param  array<int, IrsFieldDefinition>  $fields
-     * @return array<string, IrsFieldDefinition>
+     * @return array<string, array<int, IrsFieldDefinition>>
      */
-    private function indexedFields(array $fields): array
+    private function fieldsByName(array $fields): array
     {
         $indexed = [];
 
         foreach ($fields as $field) {
-            $indexed[$field->name] = $field;
+            $indexed[$field->name][] = $field;
         }
 
         return $indexed;
+    }
+
+    /**
+     * @param  array<int, IrsFieldDefinition>  $fields
+     */
+    private function hasFieldType(array $fields, string $type): bool
+    {
+        foreach ($fields as $field) {
+            if ($field->type === $type) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, IrsFieldDefinition>  $fields
+     * @return array<int, string>
+     */
+    private function onValues(array $fields): array
+    {
+        $onValues = [];
+
+        foreach ($fields as $field) {
+            foreach ($field->onValues as $onValue) {
+                $onValues[] = $onValue;
+            }
+        }
+
+        return array_values(array_unique($onValues));
     }
 }

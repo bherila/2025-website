@@ -63,13 +63,17 @@ class IrsFieldValueFormatter
     /**
      * @param  array<string, mixed>  $mapping
      */
-    private function checkbox(mixed $value, array $mapping): bool
+    private function checkbox(mixed $value, array $mapping): string|bool
     {
         if (array_key_exists('checkedWhen', $mapping)) {
-            return (string) $value === (string) $mapping['checkedWhen'];
+            $checked = (string) $value === (string) $mapping['checkedWhen'];
+
+            return $checked && isset($mapping['onValue']) ? (string) $mapping['onValue'] : $checked;
         }
 
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $checked = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+
+        return $checked && isset($mapping['onValue']) ? (string) $mapping['onValue'] : $checked;
     }
 
     /**
