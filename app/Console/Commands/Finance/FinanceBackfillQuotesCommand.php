@@ -43,7 +43,7 @@ class FinanceBackfillQuotesCommand extends BaseFinanceCommand
         $from = $this->parseDateOption('from');
         $to = $this->parseDateOption('to') ?? Carbon::now();
 
-        if ($from === false || $this->option('to') !== null && $to === false) {
+        if ($from === false || ($this->option('to') !== null && $to === false)) {
             return self::FAILURE;
         }
 

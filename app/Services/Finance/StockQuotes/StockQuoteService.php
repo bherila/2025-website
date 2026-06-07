@@ -23,7 +23,7 @@ class StockQuoteService
 {
     private const UPSERT_CHUNK = 500;
 
-    /** @var array<string, bool> symbols already ensured during this request */
+    /** @var array<string, bool> symbols already fetched during this request */
     private array $ensured = [];
 
     public function __construct(private ?StockQuoteProviderFactory $providerFactory = null) {}
@@ -115,6 +115,7 @@ class StockQuoteService
         }
 
         foreach ($targets as $symbol => $target) {
+            // This can perform an inline provider call; we cap it to one full-history fetch per symbol per request.
             $this->ensureCoverage($symbol, $target);
         }
     }
@@ -125,21 +126,24 @@ class StockQuoteService
      */
     public function ensureCoverage(string $symbol, CarbonInterface|string $date): void
     {
-        if (! $this->fetchOnReadEnabled() || isset($this->ensured[$symbol])) {
+        if (! $this->fetchOnReadEnabled()) {
             return;
         }
-
-        $this->ensured[$symbol] = true;
 
         $target = $this->toDateString($date);
         if ($target > Carbon::today()->format('Y-m-d')) {
             return; // Future dates can never be satisfied by historical data.
         }
 
-        $latest = $this->latestQuoteDate($symbol);
-        if ($latest !== null && $latest->format('Y-m-d') >= $target) {
+        if ($this->hasQuoteOnOrBefore($symbol, $target)) {
             return; // Already covered locally.
         }
+
+        if (isset($this->ensured[$symbol])) {
+            return; // Full-history fetch already attempted during this request.
+        }
+
+        $this->ensured[$symbol] = true;
 
         try {
             $quotes = $this->factory()->make()->fetchDailyHistory($symbol);
@@ -210,6 +214,14 @@ class StockQuoteService
     private function factory(): StockQuoteProviderFactory
     {
         return $this->providerFactory ??= app(StockQuoteProviderFactory::class);
+    }
+
+    private function hasQuoteOnOrBefore(string $symbol, string $date): bool
+    {
+        return StockQuotesDaily::query()
+            ->where('c_symb', $symbol)
+            ->whereDate('c_date', '<=', $date)
+            ->exists();
     }
 
     private function toDateString(CarbonInterface|string $date): string
