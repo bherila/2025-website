@@ -1064,6 +1064,7 @@ function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLab
             <Label htmlFor={nameId}>Job name</Label>
             <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
           </div>
+          <DateField label="Start date" value={job.startDate ?? ''} onChange={(value) => onChange({ ...job, startDate: value || null })} />
           <SelectField label="Company type" value={job.company.type} options={COMPANY_TYPE_OPTIONS} onChange={(type) => onChange({ ...job, company: { ...job.company, type } })} />
           <MoneyField label="Base salary" value={job.comp.baseSalary} onChange={(value) => onChange({ ...job, comp: { ...job.comp, baseSalary: value } })} />
           <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />

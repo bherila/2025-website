@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 import { formatMoney } from '../formatters'
-import { type LiquidityChartRow,mapPaperEquityChartData, mapPaperEquitySeries, SERIES_COLORS } from '../mappers'
+import { BAND_LABELS, type LiquidityChartRow, mapPaperEquityChartData, mapPaperEquitySeries, type ProjectionBand, SERIES_COLORS } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
 interface PaperLifetimeValueChartProps {
   projection: CareerCompProjection
+  selectedBand?: ProjectionBand
+  selectedJobIds?: readonly string[]
 }
 
 type ValueScale = 'linear' | 'log'
@@ -34,10 +36,11 @@ function chartRowsForScale(rows: ReturnType<typeof mapPaperEquityChartData>, ser
   })
 }
 
-export function PaperLifetimeValueChart({ projection }: PaperLifetimeValueChartProps): ReactElement {
+export function PaperLifetimeValueChart({ projection, selectedBand = 'medium', selectedJobIds }: PaperLifetimeValueChartProps): ReactElement {
   const [valueScale, setValueScale] = useState<ValueScale>('linear')
-  const rows = useMemo(() => mapPaperEquityChartData(projection), [projection])
-  const series = useMemo(() => mapPaperEquitySeries(projection), [projection])
+  const chartOptions = useMemo(() => (selectedJobIds === undefined ? { band: selectedBand } : { band: selectedBand, jobIds: selectedJobIds }), [selectedBand, selectedJobIds])
+  const rows = useMemo(() => mapPaperEquityChartData(projection, chartOptions), [projection, chartOptions])
+  const series = useMemo(() => mapPaperEquitySeries(projection, chartOptions), [projection, chartOptions])
   const chartRows = useMemo(() => chartRowsForScale(rows, series, valueScale), [rows, series, valueScale])
   const jobColorById = useMemo(() => Object.fromEntries(projection.jobs.map((job, index) => [job.id, SERIES_COLORS[index % SERIES_COLORS.length] ?? '#2563eb'])), [projection.jobs])
 
@@ -45,15 +48,15 @@ export function PaperLifetimeValueChart({ projection }: PaperLifetimeValueChartP
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1.5">
-          <CardTitle>Paper equity value over time</CardTitle>
+          <CardTitle>Total equity value</CardTitle>
           <CardDescription>
-            Scenario lines mark private-company paper value from vested diluted ownership, net of cumulative exercise cost. Public current jobs are included as a medium liquid-equity comparison line.
+            Lines show cumulative cash compensation plus {BAND_LABELS[selectedBand].toLowerCase()} liquid equity, or private-company paper scenarios when available.
           </CardDescription>
         </div>
         {series.length > 0 ? (
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Scale</span>
-            <ButtonGroup role="group" aria-label="Paper equity chart scale">
+            <ButtonGroup role="group" aria-label="Total equity chart scale">
               <Button type="button" size="sm" variant={valueScale === 'linear' ? 'secondary' : 'outline'} onClick={() => setValueScale('linear')} aria-pressed={valueScale === 'linear'}>
                 Linear
               </Button>
@@ -66,9 +69,9 @@ export function PaperLifetimeValueChart({ projection }: PaperLifetimeValueChartP
       </CardHeader>
       <CardContent className="space-y-6">
         {series.length === 0 ? (
-          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Add private-company valuation scenarios to see paper equity value.</p>
+          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Select at least one job to see total equity value.</p>
         ) : (
-          <div className="h-[340px] w-full" aria-label="Paper equity value chart">
+          <div className="h-[340px] w-full" aria-label="Total equity value chart">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartRows} margin={{ top: 8, right: 24, bottom: 8, left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -106,7 +109,7 @@ export function PaperLifetimeValueChart({ projection }: PaperLifetimeValueChartP
         )}
 
         {series.length > 0 ? (
-          <div className="overflow-auto rounded-lg border" aria-label="Paper equity value data table">
+          <div className="overflow-auto rounded-lg border" aria-label="Total equity value data table">
             <Table>
               <TableHeader>
                 <TableRow>

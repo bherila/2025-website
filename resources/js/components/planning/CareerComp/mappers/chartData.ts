@@ -27,7 +27,7 @@ export interface PaperEquitySeries {
   scenarioLabel: string
   outcome: ProjectionBand
   strokeDasharray: string | undefined
-  source: 'paperEquity' | 'currentJobLiquidity'
+  source: 'paperEquity' | 'liquidEquity'
 }
 
 export interface AnnualFreeCashFlowRow {
@@ -132,18 +132,20 @@ function paperSeriesKey(job: JobProjection, scenarioId: string): string {
   return `${job.id}-paper-${scenarioId}`
 }
 
-function currentJobComparisonSeriesKey(job: JobProjection): string {
-  return `${job.id}-current-equity-medium`
+function liquidTotalSeriesKey(job: JobProjection, band: ProjectionBand): string {
+  return `${job.id}-liquid-${band}`
 }
 
-function currentJobWithoutPaperScenarios(projection: CareerCompProjection): JobProjection | undefined {
-  if (projection.currentJobId === null) {
-    return undefined
-  }
+function cumulativeExerciseOutlay(job: JobProjection, year: number): number {
+  return job.annual
+    .filter((annual) => annual.year <= year)
+    .reduce((total, annual) => currency(total).add(annual.exerciseOutlay).value, 0)
+}
 
-  const currentJob = projection.jobs.find((job) => job.id === projection.currentJobId)
-
-  return currentJob !== undefined && currentJob.paperEquity.scenarios.length === 0 ? currentJob : undefined
+function cumulativeCashComp(job: JobProjection, year: number): number {
+  return job.annual
+    .filter((annual) => annual.year <= year)
+    .reduce((total, annual) => currency(total).add(annual.salary).add(annual.bonus).value, 0)
 }
 
 function annualForYear(job: JobProjection, year: number): EquityCompensationAfterTaxAnnual | undefined {
@@ -195,57 +197,78 @@ export function mapLiquidityChartData(projection: CareerCompProjection): Liquidi
   })
 }
 
-export function mapPaperEquitySeries(projection: CareerCompProjection): PaperEquitySeries[] {
-  const paperSeries = projection.jobs.flatMap((job) => job.paperEquity.scenarios.map((scenario) => ({
-    key: paperSeriesKey(job, scenario.id),
-    label: `${job.name} ${scenario.label}`,
-    jobId: job.id,
-    jobName: job.name,
-    scenarioId: scenario.id,
-    scenarioLabel: scenario.label,
-    outcome: scenario.outcome,
-    strokeDasharray: BAND_DASHES[scenario.outcome],
-    source: 'paperEquity' as const,
-  })))
-  const currentJob = currentJobWithoutPaperScenarios(projection)
-
-  if (currentJob === undefined) {
-    return paperSeries
-  }
-
-  return [
-    {
-      key: currentJobComparisonSeriesKey(currentJob),
-      label: `${currentJob.name} liquid equity med`,
-      jobId: currentJob.id,
-      jobName: currentJob.name,
-      scenarioId: 'current-equity-medium',
-      scenarioLabel: 'Current equity',
-      outcome: 'medium',
-      strokeDasharray: undefined,
-      source: 'currentJobLiquidity',
-    },
-    ...paperSeries,
-  ]
+interface PaperEquityChartOptions {
+  band?: ProjectionBand
+  jobIds?: readonly string[]
 }
 
-export function mapPaperEquityChartData(projection: CareerCompProjection): LiquidityChartRow[] {
+function selectedJobs(projection: CareerCompProjection, jobIds: readonly string[] | undefined): JobProjection[] {
+  if (jobIds === undefined) {
+    return projection.jobs
+  }
+
+  const selected = new Set(jobIds)
+
+  return projection.jobs.filter((job) => selected.has(job.id))
+}
+
+export function mapPaperEquitySeries(projection: CareerCompProjection, options: PaperEquityChartOptions = {}): PaperEquitySeries[] {
+  const band = options.band ?? 'medium'
+
+  return selectedJobs(projection, options.jobIds).flatMap((job) => {
+    const paperSeries: PaperEquitySeries[] = job.paperEquity.scenarios
+      .filter((scenario) => scenario.outcome === band)
+      .map((scenario) => ({
+        key: paperSeriesKey(job, scenario.id),
+        label: `${job.name} ${scenario.label}`,
+        jobId: job.id,
+        jobName: job.name,
+        scenarioId: scenario.id,
+        scenarioLabel: scenario.label,
+        outcome: scenario.outcome,
+        strokeDasharray: BAND_DASHES[scenario.outcome],
+        source: 'paperEquity' as const,
+      }))
+
+    if (paperSeries.length > 0) {
+      return paperSeries
+    }
+
+    return [{
+      key: liquidTotalSeriesKey(job, band),
+      label: `${job.name} liquid equity ${BAND_LABELS[band].toLowerCase()}`,
+      jobId: job.id,
+      jobName: job.name,
+      scenarioId: `liquid-${band}`,
+      scenarioLabel: `${BAND_LABELS[band]} liquid`,
+      outcome: band,
+      strokeDasharray: BAND_DASHES[band],
+      source: 'liquidEquity' as const,
+    } satisfies PaperEquitySeries]
+  })
+}
+
+export function mapPaperEquityChartData(projection: CareerCompProjection, options: PaperEquityChartOptions = {}): LiquidityChartRow[] {
   const years = Array.from({ length: projection.horizonYears }, (_entry, index) => projection.startYear + index)
+  const band = options.band ?? 'medium'
+  const jobs = selectedJobs(projection, options.jobIds)
 
   return years.map((year) => {
     const row: LiquidityChartRow = { year }
-    projection.jobs.forEach((job) => {
-      job.paperEquity.scenarios.forEach((scenario) => {
-        const point = scenario.points.find((entry) => entry.year === year)
-        row[paperSeriesKey(job, scenario.id)] = currency(point?.netPaperValue ?? 0).value
-      })
-    })
+    jobs.forEach((job) => {
+      const cashComp = cumulativeCashComp(job, year)
+      const scenarios = job.paperEquity.scenarios.filter((scenario) => scenario.outcome === band)
 
-    const currentJob = currentJobWithoutPaperScenarios(projection)
-    if (currentJob !== undefined) {
-      const point = currentJob.liquidity.medium.find((entry) => entry.year === year)
-      row[currentJobComparisonSeriesKey(currentJob)] = currency(point?.cumulativeValue ?? 0).value
-    }
+      scenarios.forEach((scenario) => {
+        const point = scenario.points.find((entry) => entry.year === year)
+        row[paperSeriesKey(job, scenario.id)] = currency(cashComp).add(point?.netPaperValue ?? 0).value
+      })
+
+      if (scenarios.length === 0) {
+        const point = job.liquidity[band].find((entry) => entry.year === year)
+        row[liquidTotalSeriesKey(job, band)] = currency(cashComp).add(point?.cumulativeValue ?? 0).subtract(cumulativeExerciseOutlay(job, year)).value
+      }
+    })
 
     return row
   })

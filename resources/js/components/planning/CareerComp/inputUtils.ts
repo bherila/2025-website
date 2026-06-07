@@ -61,6 +61,7 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
     ...job,
     id: jobId,
     name: job.name.trim() || fallbackId,
+    startDate: job.startDate && job.startDate.trim() !== '' ? job.startDate : null,
     grantTypes,
     company: {
       ...job.company,

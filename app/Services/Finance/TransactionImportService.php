@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\DB;
 
 class TransactionImportService
 {
+    /** @var array<string, mixed> */
+    private const array INSERT_COLUMN_DEFAULTS = [
+        't_qty' => 0,
+    ];
+
     /**
      * @return array<string, mixed>
      */
@@ -271,6 +276,7 @@ class TransactionImportService
         }
 
         [$toInsert, $skipped] = $this->deduplicateRows($validRows);
+        $toInsert = $this->rectangularRows($toInsert);
         $dryRun = (bool) ($options['dry_run'] ?? false);
 
         if (! $dryRun && $toInsert !== []) {
@@ -360,6 +366,37 @@ class TransactionImportService
         $symbol = trim((string) $value);
 
         return $symbol === '' ? null : strtoupper($symbol);
+    }
+
+    /**
+     * Laravel's bulk insert builds one column list for the whole payload. Normalize sparse optional
+     * fields so later rows cannot introduce columns absent from the first row.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function rectangularRows(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($rows as $row) {
+            foreach (array_keys($row) as $key) {
+                $keys[$key] = true;
+            }
+        }
+
+        $defaults = [];
+        foreach (array_keys($keys) as $key) {
+            $defaults[$key] = self::INSERT_COLUMN_DEFAULTS[$key] ?? null;
+        }
+
+        return array_map(
+            static fn (array $row): array => array_replace($defaults, $row),
+            $rows,
+        );
     }
 
     /**

@@ -43,6 +43,7 @@ final class CareerCompInputs
             'currentJob' => [
                 'id' => 'current',
                 'name' => 'Current role',
+                'startDate' => null,
                 'company' => [
                     'type' => 'public',
                     'currentSharePrice' => 80.0,
@@ -93,6 +94,7 @@ final class CareerCompInputs
             'hypotheticalJobs' => [[
                 'id' => 'hyp-1',
                 'name' => 'Private offer',
+                'startDate' => null,
                 'company' => [
                     'type' => 'private',
                     'currentSharePrice' => 0.0,

@@ -29,6 +29,7 @@ final readonly class JobSpec
         return [
             'id' => $isCurrent ? 'current' : 'job',
             'name' => $isCurrent ? 'Current role' : 'Opportunity',
+            'startDate' => null,
             'company' => [
                 'type' => 'public',
                 'currentSharePrice' => 0.0,
