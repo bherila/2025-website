@@ -37,6 +37,7 @@ enum TaxFactRouting: string
     case Form1116SourcedByPartner = 'form_1116_sourced_by_partner';
     case Form4952Line1 = 'form_4952_line_1';
     case Form4952Line4a = 'form_4952_line_4a';
+    case Form4952Line5 = 'form_4952_line_5';
     case Form8829Line18 = 'form_8829_line_18';
     case Form8829Line19 = 'form_8829_line_19';
     case Form8829Line20 = 'form_8829_line_20';

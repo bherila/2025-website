@@ -302,15 +302,39 @@ class Form4952FactsBuilderTest extends TestCase
 
     public function test_line_5_investment_expenses_follow_the_tcja_suspension_window(): void
     {
-        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200');
+        $traderFund = $this->traderFundK1(
+            'Trader Fund',
+            interestIncome: '200',
+            box13HInterest: '50',
+            box20BInvestmentExpense: '75',
+        );
 
         $suspended = $this->build([$traderFund], year: 2025);
         $this->assertSame(0.0, $suspended->line5InvestmentExpenses);
         $this->assertTrue($suspended->line5TcjaSuspended);
         $this->assertStringContainsString('67(g)', $suspended->line5SuspensionReason);
+        $this->assertSame(0.0, $suspended->totalInvestmentExpenses);
+        $this->assertSame(75.0, $suspended->totalExcludedInvestmentExpenses);
+        $this->assertSame([], $suspended->investmentExpenseSources);
+        $this->assertCount(1, $suspended->excludedInvestmentExpenseSources);
+        $this->assertSame(-75.0, $suspended->excludedInvestmentExpenseSources[0]->amount);
+        $this->assertSame(TaxFactRouting::ExcludedForm4952Line5->value, $suspended->excludedInvestmentExpenseSources[0]->routing);
+        $this->assertSame(TaxFactSourceType::K1ExcludedInvestmentExpense->value, $suspended->excludedInvestmentExpenseSources[0]->sourceType);
 
         $active = $this->build([$traderFund], year: 2026);
         $this->assertFalse($active->line5TcjaSuspended);
+        $this->assertSame(75.0, $active->line5InvestmentExpenses);
+        $this->assertSame(75.0, $active->totalInvestmentExpenses);
+        $this->assertSame(0.0, $active->totalExcludedInvestmentExpenses);
+        $this->assertSame([], $active->excludedInvestmentExpenseSources);
+        $this->assertSame(125.0, $active->line6NetInvestmentIncome);
+        $this->assertCount(1, $active->investmentExpenseSources);
+        $this->assertSame(-75.0, $active->investmentExpenseSources[0]->amount);
+        $this->assertSame(TaxFactRouting::Form4952Line5->value, $active->investmentExpenseSources[0]->routing);
+        $this->assertSame(TaxFactSourceType::K1InvestmentExpense->value, $active->investmentExpenseSources[0]->sourceType);
+        $this->assertSame($traderFund->id, $active->investmentExpenseSources[0]->taxDocumentId);
+        $this->assertSame('20', $active->investmentExpenseSources[0]->box);
+        $this->assertSame('B', $active->investmentExpenseSources[0]->code);
     }
 
     public function test_allocation_worksheet_lines_18_to_20_reconcile(): void
@@ -354,7 +378,7 @@ class Form4952FactsBuilderTest extends TestCase
     /**
      * @param  array{scheduleA:float,scheduleE:float}|null  $tracingSplit
      */
-    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false, ?array $tracingSplit = null, ?string $shortTermGain = null, ?string $longTermGain = null, ?string $box17BAmtAdjustment = null): FileForTaxDocument
+    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false, ?array $tracingSplit = null, ?string $shortTermGain = null, ?string $longTermGain = null, ?string $box17BAmtAdjustment = null, ?string $box20BInvestmentExpense = null): FileForTaxDocument
     {
         $sourceValueOverrides = [];
         if ($materialParticipation) {
@@ -389,6 +413,9 @@ class Form4952FactsBuilderTest extends TestCase
         ];
         if ($box17BAmtAdjustment !== null) {
             $codes['17'] = [['code' => 'B', 'value' => $box17BAmtAdjustment]]; // AMT gain/loss adjustment.
+        }
+        if ($box20BInvestmentExpense !== null) {
+            $codes['20'] = [['code' => 'B', 'value' => $box20BInvestmentExpense]];
         }
 
         return $this->createK1($fields, $codes, $sourceValueOverrides);

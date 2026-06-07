@@ -38,6 +38,7 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $materialParticipationScheduleEInterestSources = [];
         $scheduleESourceIds = [];
         $tracingSplitsBySourceId = [];
+        $line5Suspended = $this->tcjaMiscDeductionsSuspended($year);
 
         if ($shortDividendDeduction > 0.0) {
             $investmentInterestSources[] = new TaxFactSource(
@@ -127,22 +128,34 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                     continue;
                 }
 
-                $excludedInvestmentExpenseSources[] = new TaxFactSource(
+                $source = new TaxFactSource(
                     id: "k1-{$doc->id}-20B-{$index}",
                     label: "{$partnerName} — Box 20B (investment expenses)",
                     amount: $this->roundMoney(-abs($rawAmount)),
-                    sourceType: TaxFactSourceType::K1ExcludedInvestmentExpense,
+                    sourceType: $line5Suspended
+                        ? TaxFactSourceType::K1ExcludedInvestmentExpense
+                        : TaxFactSourceType::K1InvestmentExpense,
                     taxDocumentId: $doc->id,
                     formType: $this->formType($doc),
                     box: '20',
                     code: 'B',
-                    routing: TaxFactRouting::ExcludedForm4952Line5,
-                    routingReason: 'K-1 Box 20B investment expenses are tracked for debugging but are excluded from the current Form 4952 line 5 return treatment.',
+                    routing: $line5Suspended
+                        ? TaxFactRouting::ExcludedForm4952Line5
+                        : TaxFactRouting::Form4952Line5,
+                    routingReason: $line5Suspended
+                        ? "§67(g) suspends K-1 Box 20B investment expenses for {$year}; this source is tracked for debugging but excluded from Form 4952 line 5."
+                        : 'K-1 Box 20B investment expenses feed Form 4952 line 5 outside the §67(g) suspension window.',
                     notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
                     isReviewed: $this->sourceIsReviewed($doc),
                     reviewStatus: $this->reviewStatus($doc),
                     reviewAction: $this->reviewAction($doc),
                 );
+
+                if ($line5Suspended) {
+                    $excludedInvestmentExpenseSources[] = $source;
+                } else {
+                    $investmentExpenseSources[] = $source;
+                }
             }
         }
 
@@ -294,11 +307,10 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             ),
         ];
 
-        // Line 5: investment expenses other than interest (§212). For an individual these are
-        // §67(b) miscellaneous itemized deductions, SUSPENDED for 2018–2025 by §67(g) (TCJA), so
-        // line 5 is $0; K-1 Box 20B items are tracked in $excludedInvestmentExpenseSources but
-        // excluded here. (Trader-fund §162 expenses are deducted above the line on Schedule E.)
-        $line5Suspended = $this->tcjaMiscDeductionsSuspended($year);
+        // Line 5: investment expenses other than interest (§212). For individuals these are
+        // miscellaneous itemized deductions suspended for 2018–2025 by §67(g) (TCJA), so K-1 Box
+        // 20B stays in excluded debug detail during the suspension window. Outside the window,
+        // eligible Box 20B sources feed Form 4952 line 5.
         $line5 = $line5Suspended ? 0.0 : $totalInvestmentExpenses;
         $line5SuspensionReason = $line5Suspended
             ? "§67(g) (TCJA) suspends §212 investment-expense miscellaneous itemized deductions for {$year}; line 5 is \$0 and K-1 Box 20B items are tracked but excluded."
