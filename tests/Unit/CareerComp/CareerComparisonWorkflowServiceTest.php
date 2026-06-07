@@ -137,6 +137,19 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         $this->assertSame(45.0, $result['currentJob']['company']['currentSharePrice']);
     }
 
+    public function test_default_current_share_price_is_replaced_by_imported_price(): void
+    {
+        $user = User::factory()->create();
+        $this->award($user->id, ['vest_price' => 110]);
+
+        $base = JobSpec::defaults(true);
+        $base['company']['currentSharePrice'] = 25.0;
+
+        $result = $this->service()->importRsuCurrentJob($user->id, $base);
+
+        $this->assertSame(110.0, $result['currentJob']['company']['currentSharePrice']);
+    }
+
     public function test_existing_positive_current_share_price_is_not_overwritten(): void
     {
         $user = User::factory()->create();

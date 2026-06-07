@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class CareerComparisonWorkflowService
 {
+    private const PLACEHOLDER_CURRENT_SHARE_PRICE = 25.0;
+
     public function __construct(private CareerCompCalculator $calculator) {}
 
     /**
@@ -184,7 +186,7 @@ class CareerComparisonWorkflowService
 
         $currentJob['rsuGrants'] = $grants;
 
-        if ($grants !== [] && (float) ($currentJob['company']['currentSharePrice'] ?? 0.0) <= 0.0) {
+        if ($grants !== [] && $this->shouldImportCurrentSharePrice($currentJob)) {
             $currentSharePrice = $this->currentSharePriceFromAwards($awards);
 
             if ($currentSharePrice !== null) {
@@ -193,6 +195,17 @@ class CareerComparisonWorkflowService
         }
 
         return ['currentJob' => $currentJob, 'importedGrants' => $grants];
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentJob
+     */
+    private function shouldImportCurrentSharePrice(array $currentJob): bool
+    {
+        $currentPrice = (float) ($currentJob['company']['currentSharePrice'] ?? 0.0);
+
+        return $currentPrice <= 0.0
+            || abs($currentPrice - self::PLACEHOLDER_CURRENT_SHARE_PRICE) < 0.000001;
     }
 
     public function inputsFromComparison(CareerComparison $comparison): CareerCompInputs
