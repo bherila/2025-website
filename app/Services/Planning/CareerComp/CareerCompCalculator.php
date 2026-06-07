@@ -62,7 +62,8 @@ final class CareerCompCalculator
         $valuation = $this->equityValuationService->value($job, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
-        $paperEquity = $this->privateValuationScenarioService->project($job, $vestingRows, $startYear, $horizonYears);
+        $paperVestingRows = $this->paperVestingRows($job, $startYear, $horizonYears, $valuation['refresherRows']);
+        $paperEquity = $this->privateValuationScenarioService->project($job, $paperVestingRows, $startYear, $horizonYears);
         $warnings = array_merge($warnings, $paperEquity['warnings']);
         $paperEquityProjection = [
             'scenarios' => $paperEquity['scenarios'],
@@ -189,6 +190,54 @@ final class CareerCompCalculator
         }
 
         return $definitions;
+    }
+
+    /**
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $refresherRows
+     * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>
+     */
+    private function paperVestingRows(JobSpec $job, int $startYear, int $horizonYears, array $refresherRows): array
+    {
+        $paperStartYear = min($startYear, $this->earliestGrantYear($job) ?? $startYear);
+        $paperHorizonYears = max(1, $startYear + $horizonYears - $paperStartYear);
+        $paperOptionResult = $this->optionsVestingService->expand($job, $paperStartYear, $paperHorizonYears);
+
+        return array_merge(
+            $this->rsuVestingExpander->expand($job, $paperStartYear, $paperHorizonYears),
+            $paperOptionResult['rows'],
+            $refresherRows,
+        );
+    }
+
+    private function earliestGrantYear(JobSpec $job): ?int
+    {
+        $years = [];
+        foreach (array_merge($job->rsuGrants(), $job->optionGrants()) as $grant) {
+            $year = $this->grantYear($grant);
+            if ($year !== null) {
+                $years[] = $year;
+            }
+        }
+
+        return $years === [] ? null : min($years);
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     */
+    private function grantYear(array $grant): ?int
+    {
+        $grantDate = (string) ($grant['grantDate'] ?? '');
+        if ($grantDate === '') {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $grantDate);
+        if (! $date instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return (int) $date->format('Y');
     }
 
     /**

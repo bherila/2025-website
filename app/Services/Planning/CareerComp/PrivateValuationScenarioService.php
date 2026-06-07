@@ -122,7 +122,7 @@ final class PrivateValuationScenarioService
      */
     private function snapshotForYear(array $stages, int $year): array
     {
-        $snapshot = $stages[0] ?? [];
+        $snapshot = [];
         foreach ($stages as $stage) {
             if ((int) ($stage['year'] ?? 0) > $year) {
                 break;
