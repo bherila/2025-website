@@ -54,7 +54,8 @@ export default function ScheduleAPreview({
   ) =>
     sources.length > 0
       ? {
-          onClick: () => setActiveSources({ title, sources, total, ...options }),
+          onDetails: () => setActiveSources({ title, sources, total, ...options }),
+          detailsTooltip: title,
         }
       : {}
 

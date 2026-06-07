@@ -182,8 +182,8 @@ export function FormLine({
 
   if (control) {
     return (
-      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,auto)_2rem] items-center gap-2 px-3 py-1.5">
-        <span className={BOX_REF_CLASS}>{boxRef ? `${boxRef}.` : ''}</span>
+      <div className={`grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,auto)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,auto)_2rem]'} items-center gap-2 px-3 py-1.5`}>
+        {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
         <span className="text-[13px]">{label}</span>
         <span className="justify-self-end">{control}</span>
         <span aria-hidden="true" />
@@ -193,9 +193,9 @@ export function FormLine({
 
   return (
     <div
-      className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem] items-start gap-2 px-3 py-1.5"
+      className={`grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]'} items-start gap-2 px-3 py-1.5`}
     >
-      <span className={`${BOX_REF_CLASS} pt-0.5`}>{boxRef ? `${boxRef}.` : ''}</span>
+      {boxRef && <span className={`${BOX_REF_CLASS} pt-0.5`}>{boxRef}.</span>}
       <span className="min-w-0 text-[13px]">{label}</span>
       <span className={`${CURRENCY_TEXT} text-[13px] justify-self-end text-right break-words ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
@@ -268,7 +268,7 @@ export function FormTotalLine({
     isReviewed === false ? 'text-warning' : value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
   const content = (
     <>
-      <span className={BOX_REF_CLASS}>{boxRef ? `${boxRef}.` : ''}</span>
+      {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
       <span className="min-w-0 text-[13px]">{label}</span>
       <span className={`${CURRENCY_TEXT} text-[13px] justify-self-end text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
       <span className="flex flex-col items-end gap-1">
@@ -290,7 +290,7 @@ export function FormTotalLine({
       </span>
     </>
   )
-  const className = `grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem] items-center gap-2 px-3 py-2 text-left border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`
+  const className = `grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]'} items-center gap-2 px-3 py-2 text-left border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`
 
   return (
     <div className={className}>

@@ -289,7 +289,7 @@ describe('ScheduleDPreview detail navigation', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Line 5 total — short-term gain or \(loss\) from partnerships/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule D Line 5 Supporting Details' }))
 
     expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
     const modal = screen.getByRole('dialog', { name: 'Schedule D Line 5 Supporting Details' })

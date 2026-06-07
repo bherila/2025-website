@@ -183,7 +183,8 @@ export default function Schedule1Preview({
   const sourceClickProps = (title: string, sources: TaxFactSource[], total: number) =>
     sources.length > 0
       ? {
-          onClick: () => setActiveSources({ title, sources, total }),
+          onDetails: () => setActiveSources({ title, sources, total }),
+          detailsTooltip: title,
         }
       : {}
 

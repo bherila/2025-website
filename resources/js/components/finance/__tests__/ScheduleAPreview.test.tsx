@@ -117,7 +117,7 @@ describe('ScheduleAPreview', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Investment interest expense (from Form 4952)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Investment Interest Expense — Data Sources' }))
     const modal = screen.getByRole('dialog', { name: 'Investment Interest Expense — Data Sources' })
     expect(within(modal).getByText('Broker — margin interest')).toBeInTheDocument()
   })
