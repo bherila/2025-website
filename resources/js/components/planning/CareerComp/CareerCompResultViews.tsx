@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
 import { LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
 import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
-import { formatMoney, formatShares, formatSignedMoney } from './formatters'
+import { formatFriendlyMoney, formatShares, formatSignedFriendlyMoney } from './formatters'
 import { BAND_LABELS, type LifetimeValueRow, mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows, type ProjectionBand } from './mappers'
 import type { CareerCompProjection } from './types'
 
@@ -124,16 +124,16 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                 {lifetimeRows.map((row) => (
                   <TableRow key={row.jobId}>
                     <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.estimatedRegularTax)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.estimatedAmt)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalEstimatedTax)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.freeCashFlow)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalValueMedium)}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalValueDeltaMedium) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.isoAmtPreference)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.nsoOrdinaryIncome)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.eightyThreeBElectionAmount)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.equitySaleProceeds)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.estimatedRegularTax)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.estimatedAmt)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.totalEstimatedTax)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.freeCashFlow)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.totalValueMedium)}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(row.totalValueDeltaMedium) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.isoAmtPreference)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.nsoOrdinaryIncome)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.eightyThreeBElectionAmount)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.equitySaleProceeds)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -169,14 +169,14 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                   <TableRow key={`${row.jobId}-${row.year}`}>
                     <TableCell>{row.jobName}</TableCell>
                     <TableCell>{row.year}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.taxableCompIncome)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.nsoOrdinaryIncome)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.isoAmtPreference)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.equitySaleProceeds)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.estimatedRegularTax)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.estimatedAmt)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalEstimatedTax)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.freeCashFlow)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.taxableCompIncome)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.nsoOrdinaryIncome)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.isoAmtPreference)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.equitySaleProceeds)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.estimatedRegularTax)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.estimatedAmt)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.totalEstimatedTax)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.freeCashFlow)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -213,7 +213,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                         <span className="block text-xs text-muted-foreground">{row.label}</span>
                       </TableCell>
                       <TableCell>{row.routing ?? 'Unrouted'}</TableCell>
-                      <TableCell className="text-right">{formatMoney(row.amount)}</TableCell>
+                      <TableCell className="text-right">{formatFriendlyMoney(row.amount)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -315,14 +315,14 @@ export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactE
                 {visibleRows.map((row) => (
                   <TableRow key={row.jobId}>
                     <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalCashComp)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalEquity'))}</TableCell>
-                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalPaperEquity'))}</TableCell>
-                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalValue'))}</TableCell>
-                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalPaperValue'))}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.cashCompDelta) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(lifetimeValue(row, selectedBand, 'totalValueDelta')) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(lifetimeValue(row, selectedBand, 'totalPaperValueDelta')) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.totalCashComp)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalEquity'))}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperEquity'))}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalValue'))}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperValue'))}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(row.cashCompDelta) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(lifetimeValue(row, selectedBand, 'totalValueDelta')) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperValueDelta')) : 'No current job'}</TableCell>
                   </TableRow>
                 ))}
                 {visibleRows.length === 0 ? (

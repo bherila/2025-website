@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Toolt
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-import { formatMoney } from '../formatters'
+import { formatFriendlyMoney, formatMoney } from '../formatters'
 import { type AfterTaxAnnualFreeCashFlowRow, type AnnualFreeCashFlowRow, mapAfterTaxAnnualFreeCashFlowRows, mapAnnualFreeCashFlowRows } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
@@ -61,7 +61,7 @@ export function AnnualFreeCashFlowChart({ projection, mode = 'preTax' }: AnnualF
               <BarChart data={barRows} margin={{ top: 8, right: 24, bottom: 8, left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
-                <YAxis tickFormatter={(value: number) => formatMoney(value)} width={88} />
+                <YAxis tickFormatter={(value: number) => formatFriendlyMoney(value)} width={88} />
                 <Tooltip formatter={(value, name) => [formatMoney(absoluteMoney(Number(value ?? 0))), String(name)]} labelFormatter={(label) => `Year ${label}`} />
                 <ReferenceLine y={0} stroke="#94a3b8" />
                 <Bar dataKey="salary" name="Base salary" stackId="cash" fill="#2563eb" />
@@ -94,13 +94,13 @@ export function AnnualFreeCashFlowChart({ projection, mode = 'preTax' }: AnnualF
                 <TableRow key={`${row.jobId}-${row.year}`}>
                   <TableCell>{row.jobName}</TableCell>
                   <TableCell>{row.year}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.salary)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.bonus)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.vestedLiquidEquity)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.shareSaleProceeds)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.exerciseOutlay)}</TableCell>
-                  {isAfterTax ? <TableCell className="text-right">{formatMoney(totalEstimatedTax(row))}</TableCell> : null}
-                  <TableCell className="text-right">{formatMoney(row.freeCashFlow)}</TableCell>
+                  <TableCell className="text-right">{formatFriendlyMoney(row.salary)}</TableCell>
+                  <TableCell className="text-right">{formatFriendlyMoney(row.bonus)}</TableCell>
+                  <TableCell className="text-right">{formatFriendlyMoney(row.vestedLiquidEquity)}</TableCell>
+                  <TableCell className="text-right">{formatFriendlyMoney(row.shareSaleProceeds)}</TableCell>
+                  <TableCell className="text-right">{formatFriendlyMoney(row.exerciseOutlay)}</TableCell>
+                  {isAfterTax ? <TableCell className="text-right">{formatFriendlyMoney(totalEstimatedTax(row))}</TableCell> : null}
+                  <TableCell className="text-right">{formatFriendlyMoney(row.freeCashFlow)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
