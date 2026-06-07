@@ -176,6 +176,28 @@ class StockQuoteServiceTest extends TestCase
         ]);
     }
 
+    public function test_ensure_coverage_for_future_awards_accepts_recent_prior_quote_for_today_target(): void
+    {
+        Carbon::setTestNow('2026-06-07 12:00:00');
+        try {
+            DB::table('stock_quotes_daily')->insert([
+                'c_symb' => 'AAPL', 'c_date' => '2026-06-05',
+                'c_open' => 1, 'c_high' => 1, 'c_low' => 1, 'c_close' => 1, 'c_vol' => 1,
+            ]);
+            $award = FinEquityAwards::query()->create([
+                'award_id' => 'A1', 'grant_date' => '2026-01-01', 'vest_date' => '2026-07-01',
+                'share_count' => 10, 'symbol' => 'AAPL', 'uid' => '1',
+            ]);
+            Http::fake();
+
+            (new StockQuoteService)->ensureCoverageForAwards(new Collection([$award]));
+
+            Http::assertNothingSent();
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_ensure_coverage_does_not_fetch_for_future_dates(): void
     {
         Http::fake();

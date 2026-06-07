@@ -110,14 +110,20 @@ class StockQuoteService
             }
 
             $target = min($this->toDateString($vestDate), $today);
-            if (! isset($targets[$symbol]) || $target > $targets[$symbol]) {
-                $targets[$symbol] = $target;
+            $allowRecentPriorCoverage = $target === $today;
+            if (! isset($targets[$symbol]) || $target > $targets[$symbol]['date']) {
+                $targets[$symbol] = [
+                    'date' => $target,
+                    'allowRecentPriorCoverage' => $allowRecentPriorCoverage,
+                ];
+            } elseif ($target === $targets[$symbol]['date']) {
+                $targets[$symbol]['allowRecentPriorCoverage'] = $targets[$symbol]['allowRecentPriorCoverage'] || $allowRecentPriorCoverage;
             }
         }
 
         foreach ($targets as $symbol => $target) {
             // This can perform an inline provider call; we cap it to one full-history fetch per symbol per request.
-            $this->ensureCoverage($symbol, $target);
+            $this->ensureCoverage($symbol, $target['date'], $target['allowRecentPriorCoverage']);
         }
     }
 
@@ -125,7 +131,7 @@ class StockQuoteService
      * Ensure local quotes for $symbol cover $date, fetching the symbol's full
      * history from the provider when the date is not yet covered.
      */
-    public function ensureCoverage(string $symbol, CarbonInterface|string $date): void
+    public function ensureCoverage(string $symbol, CarbonInterface|string $date, bool $allowRecentPriorCoverage = false): void
     {
         if (! $this->fetchOnReadEnabled()) {
             return;
@@ -136,7 +142,7 @@ class StockQuoteService
             return; // Future dates can never be satisfied by historical data.
         }
 
-        if ($this->hasQuoteCoverageThrough($symbol, $target)) {
+        if ($this->hasQuoteCoverageThrough($symbol, $target, $allowRecentPriorCoverage)) {
             return; // Already covered locally.
         }
 
@@ -225,13 +231,19 @@ class StockQuoteService
             ->exists();
     }
 
-    private function hasQuoteCoverageThrough(string $symbol, string $date): bool
+    private function hasQuoteCoverageThrough(string $symbol, string $date, bool $allowRecentPriorCoverage): bool
     {
         $latest = $this->latestQuoteDate($symbol);
+        if ($latest === null || ! $this->hasQuoteOnOrBefore($symbol, $date)) {
+            return false;
+        }
 
-        return $latest !== null
-            && $latest->format('Y-m-d') >= $date
-            && $this->hasQuoteOnOrBefore($symbol, $date);
+        if ($latest->format('Y-m-d') >= $date) {
+            return true;
+        }
+
+        return $allowRecentPriorCoverage
+            && $latest->format('Y-m-d') >= Carbon::parse($date)->subDays(4)->format('Y-m-d');
     }
 
     private function toDateString(CarbonInterface|string $date): string
