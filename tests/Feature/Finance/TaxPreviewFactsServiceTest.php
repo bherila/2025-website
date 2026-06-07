@@ -98,6 +98,40 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(1050.0, $facts['form8960']['magi']);
     }
 
+    public function test_schedule1_slice_matches_full_facts_when_form4952_uses_schedule_d_short_term_gain(): void
+    {
+        $user = $this->createUser();
+        $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(
+                fields: [
+                    'B' => 'Test Trader Fund',
+                    '5' => '50',
+                    '8' => '75',
+                    'partnershipPosition_traderInSecurities' => 'true',
+                ],
+                codes: [
+                    '13' => [['code' => 'H', 'value' => '100']],
+                ],
+            ),
+        ]);
+
+        $service = app(TaxPreviewFactsService::class);
+        $fullFacts = $service->arrayForYear($user->id, 2025);
+        $sliceFacts = $service->arrayForYear($user->id, 2025, 'schedule1');
+        $sliceLine5DeductionSource = collect($sliceFacts['schedule1']['line5Sources'])
+            ->firstWhere('id', 'form4952-schedule1-line5-investment-interest');
+
+        $this->assertSame(75.0, $fullFacts['form4952']['line4fNetShortTermFromDisposition']);
+        $this->assertSame(125.0, $fullFacts['form4952']['line6NetInvestmentIncome']);
+        $this->assertSame(100.0, $fullFacts['form4952']['deductibleScheduleEAboveLine']);
+        $this->assertSame($fullFacts['schedule1']['line5Total'], $sliceFacts['schedule1']['line5Total']);
+        $this->assertSame(-100.0, $sliceFacts['schedule1']['line5Total']);
+        $this->assertIsArray($sliceLine5DeductionSource);
+        $this->assertSame(-100.0, $sliceLine5DeductionSource['amount']);
+    }
+
     public function test_unrouted_1099_misc_defaults_to_schedule1_line8z(): void
     {
         $user = $this->createUser();
@@ -1045,9 +1079,9 @@ class TaxPreviewFactsServiceTest extends TestCase
             fn ($mock) => $mock->shouldReceive('reportForUserYear')->never(),
         );
 
-        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'schedule1');
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleB');
 
-        $this->assertArrayHasKey('schedule1', $facts);
+        $this->assertArrayHasKey('scheduleB', $facts);
         $this->assertArrayNotHasKey('form8949', $facts);
     }
 

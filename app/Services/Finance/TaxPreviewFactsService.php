@@ -500,20 +500,8 @@ class TaxPreviewFactsService
         $scheduleF = $this->scheduleFFactsBuilder->build($userDeductions);
         $form4797 = $this->form4797FactsBuilder->build($userDeductions, $k1Docs);
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $this->isMarried($userId, $year));
-        // The Schedule 1 slice deliberately skips the capital-gains report (Schedule D) for speed, so
-        // Form 4952 is built with a null Schedule D here — Part II lines 4d–4h are 0 for this debug
-        // slice only. The full return (factsFromDocuments) builds Schedule D and computes them. $year
-        // is still passed so the §67(g) line-5 suspension is exact.
-        $form4952 = $this->form4952FactsBuilder->build(
-            $k1Docs,
-            $docs1099,
-            $this->scheduleBFactsBuilder->build($k1Docs, $docs1099),
-            null,
-            $form4797,
-            $year,
-            $this->shortDividendItemizedDeduction($userId, $year),
-            $this->marginInterestSources($userId, $year),
-        );
+        $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
+        $form4952 = $this->buildForm4952ForSlice($k1Docs, $docs1099, $scheduleB, $userId, $year);
 
         return $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797, $form4952);
     }
