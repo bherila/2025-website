@@ -5,7 +5,7 @@ import { MillerRegistryShell } from '@/components/ui/miller'
 import { useTaxPreview } from '../TaxPreviewContext'
 import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
 import { useDockActions } from './DockActions'
-import { type FormRegistry, getTaxFormMeta } from './formRegistry'
+import { type FormRegistry, getTaxFormMeta, isDrillOnly } from './formRegistry'
 import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
 
@@ -28,7 +28,10 @@ export function MillerShell({ registry, homeView }: MillerShellProps): ReactElem
       return
     }
     const entry = registry[rightmostForm]
-    const category = entry ? getTaxFormMeta(entry).category : null
+    if (!entry || isDrillOnly(entry)) {
+      return
+    }
+    const category = getTaxFormMeta(entry).category
     if (category === 'Schedule' || category === 'Form') {
       addRecent(rightmostForm)
     }

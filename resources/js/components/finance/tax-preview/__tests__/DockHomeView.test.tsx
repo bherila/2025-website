@@ -52,6 +52,37 @@ describe('DockHomeView', () => {
     expect(screen.queryByText('Recent')).not.toBeInTheDocument()
   })
 
+  it('excludes the drill-only Form 4952 detail entry from the Forms grid', () => {
+    render(
+      <Wrapper>
+        <DockHomeView />
+      </Wrapper>,
+    )
+    // The real Form 4952 form tile is present...
+    expect(screen.getByText('4952')).toBeInTheDocument()
+    // ...but its drill-only per-line detail column is not a top-level tile.
+    expect(screen.queryByText('4952 detail')).not.toBeInTheDocument()
+  })
+
+  it('drops a drill-only entry from Recents even when stored in prefs', () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        pinnedForms: [],
+        recentForms: { '2025': ['sch-a', 'form-4952-detail'] },
+      }),
+    )
+    render(
+      <Wrapper>
+        <DockHomeView />
+      </Wrapper>,
+    )
+    const recentCard = screen.getByText('Recent').closest('[data-slot="card"]') as HTMLElement
+    expect(within(recentCard).getByText('Sch A')).toBeInTheDocument()
+    expect(within(recentCard).queryByText('4952 detail')).not.toBeInTheDocument()
+  })
+
   it('renders the Pinned card with stored entries', () => {
     window.localStorage.setItem(
       STORAGE_KEY,

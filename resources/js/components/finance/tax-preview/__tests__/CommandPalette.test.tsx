@@ -168,7 +168,7 @@ const mockRegistry: FormRegistry = {
   },
   'form-4797': stubColumn('form-4797', 'Form 4797', '4797'),
   'form-4952': stubColumn('form-4952', 'Form 4952', '4952'),
-  'form-4952-detail': stubColumn('form-4952-detail', 'Form 4952 — Line details', '4952 detail'),
+  'form-4952-detail': { ...stubColumn('form-4952-detail', 'Form 4952 — Line details', '4952 detail'), drillOnly: true },
   'form-6251': stubColumn('form-6251', 'Form 6251', '6251'),
   'form-8582': {
     id: 'form-8582',
@@ -264,6 +264,17 @@ describe('CommandPalette', () => {
     expect(screen.getByRole('group', { name: 'Forms' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Worksheets' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'App' })).toBeInTheDocument()
+  })
+
+  it('omits drill-only entries that need an instance key to render', () => {
+    const onOpenChange = jest.fn()
+    render(
+      <Wrapper>
+        <CommandPalette open onOpenChange={onOpenChange} registry={mockRegistry} />
+      </Wrapper>,
+    )
+    expect(screen.getByText('Form 4952')).toBeInTheDocument()
+    expect(screen.queryByText('Form 4952 — Line details')).not.toBeInTheDocument()
   })
 
   it('expands a multi-instance form into one row per instance', () => {

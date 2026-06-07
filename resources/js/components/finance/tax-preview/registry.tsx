@@ -855,7 +855,7 @@ const rawFormRegistry: FormRegistry = {
     component: Form4952DetailAdapter,
     relatedForms: ['form-4952'],
     size: 'wide',
-    hasData: () => false,
+    drillOnly: true,
   },
   'form-6251': {
     id: 'form-6251',
