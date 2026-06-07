@@ -1,4 +1,4 @@
-import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant } from './types'
+import type { CareerCompInputs, JobSpec, ModelAssumptions, OptionGrant, RsuGrant } from './types'
 
 const currentYear = new Date().getFullYear()
 
@@ -89,9 +89,25 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
   }
 }
 
+export const DEFAULT_MODEL_ASSUMPTIONS: ModelAssumptions = {
+  commonFmvPctOfPreferred: {
+    stageA: 15,
+    stageB: 25,
+    stageC: 40,
+    bridge: 50,
+    stageD: 65,
+    stageE: 80,
+    liquidityEvent: 100,
+  },
+  tax: {
+    filingStatus: 'single',
+  },
+}
+
 export const DEFAULT_CAREER_COMP_INPUTS: CareerCompInputs = {
   horizonYears: 10,
   startYear: currentYear,
+  modelAssumptions: DEFAULT_MODEL_ASSUMPTIONS,
   currentJob: null,
   hypotheticalJobs: [buildDefaultJob('hyp-1', 'Offer 1')],
 }

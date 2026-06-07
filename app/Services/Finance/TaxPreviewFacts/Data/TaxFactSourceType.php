@@ -131,6 +131,8 @@ enum TaxFactSourceType: string
     case ShortDividendInvestmentInterest = 'short_dividend_investment_interest';
     case EquityCompIsoBargainElement = 'equity_comp_iso_bargain_element';
     case EquityCompNsoOrdinaryIncome = 'equity_comp_nso_ordinary_income';
+    case EquityCompRsuOrdinaryIncome = 'equity_comp_rsu_ordinary_income';
     case EquityComp83bElection = 'equity_comp_83b_election';
     case EquityCompSaleProceeds = 'equity_comp_sale_proceeds';
+    case EquityCompLongTermCapitalGain = 'equity_comp_long_term_capital_gain';
 }

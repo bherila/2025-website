@@ -11,11 +11,11 @@ import { Label } from '@/components/ui/label'
 import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
-import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant } from './defaults'
+import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant, DEFAULT_MODEL_ASSUMPTIONS } from './defaults'
 import { formatMoney } from './formatters'
-import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, ValuationScenario, ValuationScenarioStage, VestingFrequency, VestingSchedule } from './types'
+import type { CareerCompInputs, JobSpec, ModelAssumptions, OptionGrant, RsuGrant, ValuationScenario, ValuationScenarioStage, VestingFrequency, VestingSchedule } from './types'
 
-export type CareerCompFormSectionId = 'basics' | 'current-job' | 'offers'
+export type CareerCompFormSectionId = 'basics' | 'model-assumptions' | 'current-job' | 'offers'
 
 export type GrantType = 'rsu' | 'opt'
 
@@ -203,6 +203,11 @@ const VALUATION_OUTCOME_OPTIONS: SelectOption<'low' | 'medium' | 'high'>[] = [
   { value: 'low', label: 'Low' },
 ]
 
+const FILING_STATUS_OPTIONS: SelectOption<'single' | 'mfj'>[] = [
+  { value: 'single', label: 'Single' },
+  { value: 'mfj', label: 'Married filing jointly' },
+]
+
 function frequencyLabel(frequency: VestingFrequency): string {
   return VESTING_FREQUENCY_OPTIONS.find((option) => option.value === frequency)?.label ?? 'Monthly'
 }
@@ -274,6 +279,16 @@ export const CAREER_COMP_FORM_SECTIONS: CareerCompFormSectionMeta[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'Start year and horizon for every job comparison.', icon: Settings2 },
+  },
+  {
+    id: 'model-assumptions',
+    label: 'Model assumptions',
+    shortLabel: 'Assumptions',
+    description: 'Shared tax and private-market assumptions.',
+    icon: LineChart,
+    presentation: 'column',
+    component: notRenderedViaMillerShell,
+    meta: { description: 'Shared tax and private-market assumptions.', icon: LineChart },
   },
   {
     id: 'current-job',
@@ -352,6 +367,47 @@ function buildDefaultValuationScenario(existing: ValuationScenario[], startYear:
     outcome: 'medium',
     stages: [buildDefaultValuationStage(startYear)],
   }
+}
+
+function stageAssumptionKey(stage: ValuationScenarioStage): keyof ModelAssumptions['commonFmvPctOfPreferred'] {
+  if (stage.liquidityEvent) {
+    return 'liquidityEvent'
+  }
+
+  const tokens = (stage.stage ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  if (tokens.includes('ipo') || tokens.includes('exit') || tokens.includes('liquidity')) {
+    return 'liquidityEvent'
+  }
+  if (tokens.includes('bridge') || (tokens.includes('no') && tokens.includes('raise'))) {
+    return 'bridge'
+  }
+  if (tokens.includes('e') || tokens.includes('stagee')) {
+    return 'stageE'
+  }
+  if (tokens.includes('d') || tokens.includes('staged')) {
+    return 'stageD'
+  }
+  if (tokens.includes('c') || tokens.includes('stagec')) {
+    return 'stageC'
+  }
+  if (tokens.includes('b') || tokens.includes('stageb')) {
+    return 'stageB'
+  }
+
+  return 'stageA'
+}
+
+function commonFmvBenchmark(inputs: CareerCompInputs, job: JobSpec, stage: ValuationScenarioStage): string | null {
+  if (job.company.fullyDilutedShares <= 0 || stage.preferredPostMoneyValuation <= 0) {
+    return null
+  }
+
+  const key = stageAssumptionKey(stage)
+  const pct = inputs.modelAssumptions.commonFmvPctOfPreferred[key] ?? DEFAULT_MODEL_ASSUMPTIONS.commonFmvPctOfPreferred[key]
+  const preferredPerShare = currency(stage.preferredPostMoneyValuation).divide(job.company.fullyDilutedShares)
+  const benchmark = preferredPerShare.multiply(pct / 100).value
+
+  return `${currency(benchmark, { precision: 2 }).format()} @ ${pct}%`
 }
 
 function keyedValuationStages(scenario: ValuationScenario): { key: string; stage: ValuationScenarioStage }[] {
@@ -707,6 +763,68 @@ function findJob(inputs: CareerCompInputs, jobId: string): JobSpec | null {
   return inputs.hypotheticalJobs.find((job) => job.id === jobId) ?? null
 }
 
+function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs; onChange: (inputs: CareerCompInputs) => void }): ReactElement {
+  const assumptions = inputs.modelAssumptions
+  const commonFmvPctOfPreferred = assumptions.commonFmvPctOfPreferred
+
+  function updateAssumptions(patch: Partial<ModelAssumptions>): void {
+    onChange({
+      ...inputs,
+      modelAssumptions: {
+        ...assumptions,
+        ...patch,
+        commonFmvPctOfPreferred: {
+          ...assumptions.commonFmvPctOfPreferred,
+          ...(patch.commonFmvPctOfPreferred ?? {}),
+        },
+        tax: {
+          ...assumptions.tax,
+          ...(patch.tax ?? {}),
+        },
+      },
+    })
+  }
+
+  function updateCommonFmvPct(key: keyof ModelAssumptions['commonFmvPctOfPreferred'], value: number): void {
+    updateAssumptions({
+      commonFmvPctOfPreferred: {
+        ...commonFmvPctOfPreferred,
+        [key]: value,
+      },
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Model assumptions</CardTitle>
+        <CardDescription>Shared tax and private-market assumptions.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="space-y-3">
+          <Label className="text-sm font-semibold">Tax</Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField label="Filing status" value={assumptions.tax.filingStatus} options={FILING_STATUS_OPTIONS} onChange={(filingStatus) => updateAssumptions({ tax: { filingStatus } })} />
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t pt-4">
+          <Label className="text-sm font-semibold">Common FMV as % of preferred</Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField label="Stage A" value={commonFmvPctOfPreferred.stageA} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('stageA', value)} />
+            <NumberField label="Stage B" value={commonFmvPctOfPreferred.stageB} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('stageB', value)} />
+            <NumberField label="Stage C" value={commonFmvPctOfPreferred.stageC} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('stageC', value)} />
+            <NumberField label="Bridge / no raise" value={commonFmvPctOfPreferred.bridge} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('bridge', value)} />
+            <NumberField label="Stage D" value={commonFmvPctOfPreferred.stageD} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('stageD', value)} />
+            <NumberField label="Stage E" value={commonFmvPctOfPreferred.stageE} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('stageE', value)} />
+            <NumberField label="IPO / exit" value={commonFmvPctOfPreferred.liquidityEvent} suffix="%" min={0} max={100} onChange={(value) => updateCommonFmvPct('liquidityEvent', value)} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch: Partial<RsuGrant>) => void }): ReactElement {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -898,8 +1016,11 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
                 <span>Liquidity event</span>
                 <span />
               </div>
-              {keyedValuationStages(scenario).map(({ key, stage }, stageIndex) => (
-                <div key={key} className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[5rem_minmax(8rem,1.1fr)_minmax(9rem,1fr)_minmax(8rem,1fr)_7rem_7rem_7rem_8rem_2.5rem] md:items-center md:border-0 md:p-0">
+              {keyedValuationStages(scenario).map(({ key, stage }, stageIndex) => {
+                const benchmark = commonFmvBenchmark(inputs, job, stage)
+
+                return (
+                  <div key={key} className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[5rem_minmax(8rem,1.1fr)_minmax(9rem,1fr)_minmax(8rem,1fr)_7rem_7rem_7rem_8rem_2.5rem] md:items-start md:border-0 md:p-0">
                   <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground md:hidden">Year</span>
                     <NumberField compact label="Year" value={stage.year} min={2000} onChange={(year) => updateStage(scenario.id, stageIndex, { year })} />
@@ -920,6 +1041,7 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
                   <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground md:hidden">Common FMV / 409A</span>
                     <MoneyField compact label="Common FMV / 409A" value={stage.commonFmv} onChange={(commonFmv) => updateStage(scenario.id, stageIndex, { commonFmv })} />
+                    {benchmark ? <p className="text-[11px] leading-tight text-muted-foreground">Benchmark {benchmark}</p> : null}
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground md:hidden">Capital dilution</span>
@@ -951,7 +1073,8 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
                     </Button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <Button type="button" variant="outline" size="sm" onClick={() => addStage(scenario)}>
@@ -1144,6 +1267,10 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
         </CardContent>
       </Card>
     )
+  }
+
+  if (section === 'model-assumptions') {
+    return <ModelAssumptionsEditor inputs={inputs} onChange={onChange} />
   }
 
   if (section === 'current-job') {

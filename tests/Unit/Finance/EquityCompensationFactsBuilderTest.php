@@ -5,6 +5,7 @@ namespace Tests\Unit\Finance;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Builders\EquityCompensationFactsBuilder;
 use App\Services\Planning\CareerComp\JobSpec;
+use App\Support\Finance\FederalIncomeTax;
 use PHPUnit\Framework\TestCase;
 
 class EquityCompensationFactsBuilderTest extends TestCase
@@ -213,5 +214,109 @@ class EquityCompensationFactsBuilderTest extends TestCase
         $sources = array_column($facts['sources'], 'amount', 'sourceType');
         $this->assertSame(10000.0, $sources['equity_comp_nso_ordinary_income']);
         $this->assertSame(10000.0, $sources['equity_comp_83b_election']);
+    }
+
+    public function test_equity_capital_gain_uses_preferential_regular_tax_path(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'private-exit',
+            'name' => 'Private exit',
+            'company' => [
+                'type' => 'private',
+                'fourNineA' => 2.0,
+            ],
+            'comp' => [
+                'baseSalary' => 0.0,
+                'cashBonus' => 0.0,
+            ],
+        ], false);
+
+        $this->assertInstanceOf(JobSpec::class, $job);
+
+        $facts = (new EquityCompensationFactsBuilder)->build(
+            $job,
+            [],
+            [[
+                'year' => 2025,
+                'salary' => 0.0,
+                'bonus' => 0.0,
+                'vestedLiquidEquity' => 500000.0,
+                'shareSaleProceeds' => 500000.0,
+                'equitySaleBasis' => 5000.0,
+                'equityCapitalGain' => 495000.0,
+                'exerciseOutlay' => 0.0,
+                'freeCashFlow' => 500000.0,
+            ]],
+            ['low' => 500000.0, 'medium' => 500000.0, 'high' => 500000.0],
+        )->toArray();
+
+        $annual = $facts['annual'][0];
+        $expectedRegularTax = MoneyMath::round(FederalIncomeTax::regularTax(495000.0, 2025, false, 0.0, 495000.0));
+
+        $this->assertSame(0.0, $annual['taxableCompIncome']);
+        $this->assertSame(495000.0, $annual['totalTaxableIncome']);
+        $this->assertSame(500000.0, $annual['equitySaleProceeds']);
+        $this->assertSame(495000.0, $annual['equityCapitalGain']);
+        $this->assertSame($expectedRegularTax, $annual['estimatedRegularTax']);
+        $this->assertSame(0.0, $annual['estimatedAmt']);
+        $this->assertSame(MoneyMath::subtract(500000.0, $expectedRegularTax), $annual['freeCashFlow']);
+        $this->assertSame(495000.0, $facts['lifetime']['equityCapitalGain']);
+
+        $sourceTypes = array_column($facts['sources'], 'sourceType');
+        $this->assertContains('equity_comp_sale_proceeds', $sourceTypes);
+        $this->assertContains('equity_comp_long_term_capital_gain', $sourceTypes);
+    }
+
+    public function test_form6251_taxable_income_includes_equity_capital_gain_for_mixed_iso_exit_year(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'mixed-iso-exit',
+            'name' => 'Mixed ISO exit',
+            'company' => [
+                'type' => 'public',
+                'currentSharePrice' => 30.0,
+            ],
+            'comp' => [
+                'baseSalary' => 0.0,
+                'cashBonus' => 0.0,
+            ],
+            'optionGrants' => [[
+                'id' => 'iso-1',
+                'type' => 'iso',
+                'strike' => 10.0,
+                'earlyExercise83b' => false,
+            ]],
+        ], false);
+
+        $this->assertInstanceOf(JobSpec::class, $job);
+
+        $facts = (new EquityCompensationFactsBuilder)->build(
+            $job,
+            [
+                ['grantId' => 'iso-1', 'type' => 'iso', 'year' => 2026, 'vestedShares' => 10000.0, 'exercisableShares' => 10000.0],
+            ],
+            [[
+                'year' => 2026,
+                'salary' => 0.0,
+                'bonus' => 0.0,
+                'vestedLiquidEquity' => 700000.0,
+                'shareSaleProceeds' => 700000.0,
+                'equitySaleBasis' => 100000.0,
+                'equityCapitalGain' => 600000.0,
+                'exerciseOutlay' => 100000.0,
+                'freeCashFlow' => 600000.0,
+            ]],
+            ['low' => 700000.0, 'medium' => 700000.0, 'high' => 700000.0],
+        )->toArray();
+
+        $annual = $facts['annual'][0];
+        $form6251 = $facts['form6251'][0]['facts'];
+
+        $this->assertSame(600000.0, $annual['totalTaxableIncome']);
+        $this->assertSame(200000.0, $annual['isoAmtPreference']);
+        $this->assertGreaterThan(0.0, $annual['estimatedAmt']);
+        $this->assertSame(600000.0, $form6251['line1TaxableIncome']);
+        $this->assertSame(200000.0, $form6251['line3OtherAdjustments']);
+        $this->assertSame(800000.0, $form6251['amti']);
     }
 }

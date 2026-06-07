@@ -33,6 +33,7 @@ export type CareerCompRouteColumn = MillerColumnSpec<CareerCompRouteColumnId>
 
 export const CAREER_COMP_ROUTE_IDS: ReadonlySet<string> = new Set<CareerCompRouteColumnId>([
   'basics',
+  'model-assumptions',
   'current-job',
   'offers',
   ...CAREER_COMP_RESULT_VIEW_IDS,

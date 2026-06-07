@@ -47,6 +47,7 @@ export interface AfterTaxAnnualFreeCashFlowRow extends AnnualFreeCashFlowRow {
   nsoOrdinaryIncome: number
   isoAmtPreference: number
   equitySaleProceeds: number
+  equityCapitalGain: number
   estimatedRegularTax: number
   estimatedAmt: number
   totalEstimatedTax: number
@@ -86,6 +87,7 @@ export interface AfterTaxLifetimeValueRow {
   nsoOrdinaryIncome: number
   isoAmtPreference: number
   equitySaleProceeds: number
+  equityCapitalGain: number
   estimatedRegularTax: number
   estimatedAmt: number
   totalEstimatedTax: number
@@ -345,6 +347,7 @@ export function mapAfterTaxAnnualFreeCashFlowRows(projection: CareerCompProjecti
       nsoOrdinaryIncome: currency(afterTaxAnnual.nsoOrdinaryIncome).value,
       isoAmtPreference: currency(afterTaxAnnual.isoAmtPreference).value,
       equitySaleProceeds: currency(afterTaxAnnual.equitySaleProceeds).value,
+      equityCapitalGain: currency(afterTaxAnnual.equityCapitalGain).value,
       estimatedRegularTax: currency(afterTaxAnnual.estimatedRegularTax).value,
       estimatedAmt: currency(afterTaxAnnual.estimatedAmt).value,
       totalEstimatedTax: currency(afterTaxAnnual.totalEstimatedTax).value,
@@ -404,6 +407,7 @@ export function mapAfterTaxLifetimeValueRows(projection: CareerCompProjection): 
         nsoOrdinaryIncome: currency(lifetime.nsoOrdinaryIncome).value,
         isoAmtPreference: currency(lifetime.isoAmtPreference).value,
         equitySaleProceeds: currency(lifetime.equitySaleProceeds).value,
+        equityCapitalGain: currency(lifetime.equityCapitalGain).value,
         estimatedRegularTax: currency(lifetime.estimatedRegularTax).value,
         estimatedAmt: currency(lifetime.estimatedAmt).value,
         totalEstimatedTax: currency(lifetime.totalEstimatedTax).value,

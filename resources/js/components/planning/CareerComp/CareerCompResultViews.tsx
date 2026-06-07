@@ -48,6 +48,7 @@ function sourceTypeLabel(sourceType: string): string {
   const labels: Record<string, string> = {
     equity_comp_iso_bargain_element: 'ISO AMT preference',
     equity_comp_nso_ordinary_income: 'NSO ordinary income',
+    equity_comp_rsu_ordinary_income: 'RSU ordinary income',
     equity_comp_83b_election: '83(b) election',
     equity_comp_sale_proceeds: 'Equity sale proceeds',
   }
@@ -118,6 +119,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                   <TableHead className="text-right">NSO ordinary</TableHead>
                   <TableHead className="text-right">83(b)</TableHead>
                   <TableHead className="text-right">Sale proceeds</TableHead>
+                  <TableHead className="text-right">Capital gain</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -134,6 +136,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                     <TableCell className="text-right">{formatFriendlyMoney(row.nsoOrdinaryIncome)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.eightyThreeBElectionAmount)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.equitySaleProceeds)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.equityCapitalGain)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -158,6 +161,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                   <TableHead className="text-right">NSO ordinary</TableHead>
                   <TableHead className="text-right">ISO AMT pref</TableHead>
                   <TableHead className="text-right">Sale proceeds</TableHead>
+                  <TableHead className="text-right">Capital gain</TableHead>
                   <TableHead className="text-right">Regular tax</TableHead>
                   <TableHead className="text-right">AMT</TableHead>
                   <TableHead className="text-right">Total tax</TableHead>
@@ -173,6 +177,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
                     <TableCell className="text-right">{formatFriendlyMoney(row.nsoOrdinaryIncome)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.isoAmtPreference)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.equitySaleProceeds)}</TableCell>
+                    <TableCell className="text-right">{formatFriendlyMoney(row.equityCapitalGain)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.estimatedRegularTax)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.estimatedAmt)}</TableCell>
                     <TableCell className="text-right">{formatFriendlyMoney(row.totalEstimatedTax)}</TableCell>

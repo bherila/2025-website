@@ -14,6 +14,9 @@ describe('careerCompRoute', () => {
     expect(parseCareerCompHash('#/offers/ltv-table')).toEqual({
       columns: [{ id: 'offers' }, { id: 'ltv-table' }],
     })
+    expect(parseCareerCompHash('#/model-assumptions')).toEqual({
+      columns: [{ id: 'model-assumptions' }],
+    })
     expect(parseCareerCompHash('#/liquidity-over-time')).toEqual({
       columns: [{ id: 'liquidity-over-time' }],
     })

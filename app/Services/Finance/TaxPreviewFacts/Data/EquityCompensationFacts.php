@@ -5,12 +5,12 @@ namespace App\Services\Finance\TaxPreviewFacts\Data;
 readonly class EquityCompensationFacts
 {
     /**
-     * @var list<array{year:int,taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>
+     * @var list<array{year:int,taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>
      */
     public array $annual;
 
     /**
-     * @var array{taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}}
+     * @var array{taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}}
      */
     public array $lifetime;
 
@@ -25,8 +25,8 @@ readonly class EquityCompensationFacts
     public array $form6251;
 
     /**
-     * @param  list<array{year:int,taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>  $annual
-     * @param  array{taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}}  $lifetime
+     * @param  list<array{year:int,taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>  $annual
+     * @param  array{taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}}  $lifetime
      * @param  TaxFactSource[]  $sources
      * @param  list<array{year:int,facts:Form6251Facts}>  $form6251
      */
@@ -39,7 +39,7 @@ readonly class EquityCompensationFacts
     }
 
     /**
-     * @return array{annual:list<array{year:int,taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>,lifetime:array{taxableCompIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}},sources:list<array<string, mixed>>,form6251:list<array{year:int,facts:array<string, mixed>}>}
+     * @return array{annual:list<array{year:int,taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,sourceIds:list<string>}>,lifetime:array{taxableCompIncome:float,totalTaxableIncome:float,nsoOrdinaryIncome:float,isoAmtPreference:float,equitySaleProceeds:float,equityCapitalGain:float,estimatedRegularTax:float,estimatedAmt:float,totalEstimatedTax:float,freeCashFlow:float,totalValue:array{low:float,medium:float,high:float}},sources:list<array<string, mixed>>,form6251:list<array{year:int,facts:array<string, mixed>}>}
      */
     public function toArray(): array
     {

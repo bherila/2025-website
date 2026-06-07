@@ -50,7 +50,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
-    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried, ?float $regularTax = null, ?Form4952Facts $form4952 = null): Form6251Facts
+    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried, ?float $regularTax = null, ?Form4952Facts $form4952 = null, float $preferentialIncome = 0.0): Form6251Facts
     {
         $sourceEntries = [];
         $manualReviewReasons = [];
@@ -138,13 +138,14 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             sourceEntries: $sourceEntries,
             requiresStatementReview: $manualReviewReasons !== [],
             manualReviewReasons: array_values($manualReviewReasons),
+            preferentialIncome: $preferentialIncome,
         );
     }
 
     /**
      * @param  Form6251SourceEntryFact[]  $sourceEntries
      */
-    public function buildFromOtherAdjustments(float $taxableIncome, float $line3OtherAdjustments, int $year, bool $isMarried, ?float $regularTax = null, array $sourceEntries = []): Form6251Facts
+    public function buildFromOtherAdjustments(float $taxableIncome, float $line3OtherAdjustments, int $year, bool $isMarried, ?float $regularTax = null, array $sourceEntries = [], float $preferentialIncome = 0.0): Form6251Facts
     {
         return $this->buildFromLineItems(
             taxableIncome: $taxableIncome,
@@ -165,6 +166,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             sourceEntries: $sourceEntries,
             requiresStatementReview: false,
             manualReviewReasons: [],
+            preferentialIncome: $preferentialIncome,
         );
     }
 
@@ -191,6 +193,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         array $sourceEntries,
         bool $requiresStatementReview,
         array $manualReviewReasons,
+        float $preferentialIncome = 0.0,
     ): Form6251Facts {
         $adjustmentTotal = $this->sumMoney([
             $line2aTaxesOrStandardDeduction,
@@ -210,9 +213,17 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         $exemption = max(0.0, $this->subtractMoney($exemptionBase, $exemptionReduction));
         $amtTaxBase = max(0.0, $this->subtractMoney($amti, $exemption));
         $amtRateSplitThreshold = $this->amtTableValue(self::AMT_RATE_SPLIT_THRESHOLD, $year, $isMarried);
-        $amtBeforeForeignCredit = $amtTaxBase <= $amtRateSplitThreshold
-            ? MoneyMath::round($amtTaxBase * 0.26)
-            : $this->sumMoney([$amtRateSplitThreshold * 0.26, ($amtTaxBase - $amtRateSplitThreshold) * 0.28]);
+        $amtBeforeForeignCredit = $this->amtTaxBeforeForeignCredit($amtTaxBase, $amtRateSplitThreshold);
+        if ($preferentialIncome > 0.0) {
+            $preferentialAmt = FederalIncomeTax::taxWithPreferentialIncome(
+                taxableIncome: $amtTaxBase,
+                preferentialIncome: $preferentialIncome,
+                year: $year,
+                isMarried: $isMarried,
+                ordinaryTaxCalculator: fn (float $ordinaryIncome): float => $this->amtTaxBeforeForeignCredit($ordinaryIncome, $amtRateSplitThreshold),
+            );
+            $amtBeforeForeignCredit = min($amtBeforeForeignCredit, $preferentialAmt);
+        }
         $line8AmtForeignTaxCredit = min(max(0.0, $regularForeignTaxCredit), $amtBeforeForeignCredit);
         $tentativeMinTax = max(0.0, $this->subtractMoney($amtBeforeForeignCredit, $line8AmtForeignTaxCredit));
         $regularTax ??= FederalIncomeTax::ordinaryTax($taxableIncome, $year, $isMarried);
@@ -251,6 +262,13 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             requiresStatementReview: $requiresStatementReview,
             manualReviewReasons: $manualReviewReasons,
         );
+    }
+
+    private function amtTaxBeforeForeignCredit(float $amtTaxBase, float $amtRateSplitThreshold): float
+    {
+        return $amtTaxBase <= $amtRateSplitThreshold
+            ? MoneyMath::round($amtTaxBase * 0.26)
+            : $this->sumMoney([$amtRateSplitThreshold * 0.26, ($amtTaxBase - $amtRateSplitThreshold) * 0.28]);
     }
 
     /**

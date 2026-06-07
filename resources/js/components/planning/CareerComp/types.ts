@@ -6,6 +6,27 @@ export const equityGrowthBandSchema = z.object({
   highPct: z.number(),
 })
 
+export const modelAssumptionsSchema = z
+  .object({
+    commonFmvPctOfPreferred: z
+      .object({
+        stageA: z.number().default(15),
+        stageB: z.number().default(25),
+        stageC: z.number().default(40),
+        bridge: z.number().default(50),
+        stageD: z.number().default(65),
+        stageE: z.number().default(80),
+        liquidityEvent: z.number().default(100),
+      })
+      .prefault({}),
+    tax: z
+      .object({
+        filingStatus: z.enum(['single', 'mfj']).default('single'),
+      })
+      .prefault({}),
+  })
+  .prefault({})
+
 export const valuationScenarioStageSchema = z.object({
   id: z.string().optional(),
   year: z.number(),
@@ -131,6 +152,7 @@ export const jobSpecSchema = z.object({
 export const careerCompInputsSchema = z.object({
   horizonYears: z.number(),
   startYear: z.number(),
+  modelAssumptions: modelAssumptionsSchema,
   currentJob: jobSpecSchema.nullable(),
   hypotheticalJobs: z.array(jobSpecSchema),
 })
@@ -141,6 +163,9 @@ export const annualProjectionSchema = z.object({
   bonus: z.number(),
   vestedLiquidEquity: z.number(),
   shareSaleProceeds: z.number(),
+  equitySaleBasis: z.number().default(0),
+  equityCapitalGain: z.number().default(0),
+  privateRsuOrdinaryIncome: z.number().optional(),
   exerciseOutlay: z.number(),
   freeCashFlow: z.number(),
 })
@@ -192,9 +217,11 @@ export const form6251FactsSchema = z
 export const equityCompensationAfterTaxAnnualSchema = z.object({
   year: z.number(),
   taxableCompIncome: z.number(),
+  totalTaxableIncome: z.number().default(0),
   nsoOrdinaryIncome: z.number(),
   isoAmtPreference: z.number(),
   equitySaleProceeds: z.number(),
+  equityCapitalGain: z.number().default(0),
   estimatedRegularTax: z.number(),
   estimatedAmt: z.number(),
   totalEstimatedTax: z.number(),
@@ -206,9 +233,11 @@ export const equityCompensationAfterTaxSchema = z.object({
   annual: z.array(equityCompensationAfterTaxAnnualSchema),
   lifetime: z.object({
     taxableCompIncome: z.number(),
+    totalTaxableIncome: z.number().default(0),
     nsoOrdinaryIncome: z.number(),
     isoAmtPreference: z.number(),
     equitySaleProceeds: z.number(),
+    equityCapitalGain: z.number().default(0),
     estimatedRegularTax: z.number(),
     estimatedAmt: z.number(),
     totalEstimatedTax: z.number(),
@@ -248,6 +277,8 @@ export const paperEquityPointSchema = z.object({
   dilutedOwnershipPct: z.number(),
   commonFmv: z.number(),
   grossOwnershipValue: z.number(),
+  rsuOwnershipValue: z.number().optional(),
+  optionOwnershipValue: z.number().optional(),
   grossCommonValue: z.number(),
   commonIntrinsicValue: z.number(),
   exerciseCost: z.number(),
@@ -345,6 +376,7 @@ export interface CareerCompInitialData {
 }
 
 export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
+export type ModelAssumptions = z.infer<typeof modelAssumptionsSchema>
 export type ValuationScenarioStage = z.infer<typeof valuationScenarioStageSchema>
 export type ValuationScenario = z.infer<typeof valuationScenarioSchema>
 export type CompanySpec = z.infer<typeof companySpecSchema>

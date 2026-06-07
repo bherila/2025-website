@@ -20,6 +20,7 @@ final class CareerCompCalculator
     {
         $startYear = $inputs->int('startYear');
         $horizonYears = max(1, $inputs->int('horizonYears'));
+        $modelAssumptions = $inputs->modelAssumptions();
         $jobs = [];
         $warnings = [];
         $currentJob = $inputs->currentJob();
@@ -33,7 +34,7 @@ final class CareerCompCalculator
         }
 
         foreach ($jobSpecs as $job) {
-            $projected = $this->projectJob($job, $startYear, $horizonYears);
+            $projected = $this->projectJob($job, $startYear, $horizonYears, $modelAssumptions);
             $jobs[] = $projected['job'];
             $warnings = array_merge($warnings, $projected['warnings']);
         }
@@ -51,10 +52,10 @@ final class CareerCompCalculator
     /**
      * @return array{job:array<string, mixed>,warnings:list<string>}
      */
-    private function projectJob(JobSpec $job, int $startYear, int $horizonYears): array
+    private function projectJob(JobSpec $job, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions): array
     {
         $jobStartDate = $this->parseJobStartDate($job);
-        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears, $jobStartDate);
+        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears, $jobStartDate, $modelAssumptions);
         $vestingJob = $this->withProjectedOptionRefresherGrants($job, $projectedOptionGrants);
         $warnings = $this->staticWarnings($vestingJob, $startYear, $horizonYears);
         $rsuRows = $this->rsuVestingExpander->expand($vestingJob, $startYear, $horizonYears);
@@ -66,12 +67,13 @@ final class CareerCompCalculator
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
         $paperVestingRows = $this->paperVestingRows($vestingJob, $startYear, $horizonYears, $valuation['refresherRows']);
-        $paperEquity = $this->privateValuationScenarioService->project($vestingJob, $paperVestingRows, $startYear, $horizonYears);
+        $paperEquity = $this->privateValuationScenarioService->project($vestingJob, $paperVestingRows, $startYear, $horizonYears, $modelAssumptions);
         $warnings = array_merge($warnings, $paperEquity['warnings']);
         $paperEquityProjection = [
             'scenarios' => $paperEquity['scenarios'],
             'totalsByOutcome' => $paperEquity['totalsByOutcome'],
         ];
+        $valuation = $this->applyPrivateScenarioLiquidity($vestingJob, $valuation, $paperEquityProjection, $paperVestingRows, $modelAssumptions, $startYear, $horizonYears);
 
         $raisePct = $job->number('comp.annualRaisePct');
         $baseSalary = $job->number('comp.baseSalary');
@@ -89,6 +91,9 @@ final class CareerCompCalculator
             $bonus = MoneyMath::multiply(MoneyMath::multiply($cashBonus, $raiseFactor), $cashCompFactor);
             $vestedLiquidEquity = MoneyMath::round($valuation['annualEquity'][$year] ?? 0.0);
             $shareSaleProceeds = $vestedLiquidEquity;
+            $equitySaleBasis = MoneyMath::round($valuation['annualEquitySaleBasis'][$year] ?? 0.0);
+            $equityCapitalGain = MoneyMath::round($valuation['annualEquityCapitalGain'][$year] ?? 0.0);
+            $privateRsuOrdinaryIncome = MoneyMath::round($valuation['annualPrivateRsuOrdinaryIncome'][$year] ?? 0.0);
             $exerciseOutlay = $this->exerciseOutlayForYear($vestingJob, $optionResult['rows'], $year);
             $cashComp = MoneyMath::add($salary, $bonus);
             $freeCashFlow = MoneyMath::subtract(MoneyMath::add($cashComp, $shareSaleProceeds), $exerciseOutlay);
@@ -105,6 +110,9 @@ final class CareerCompCalculator
                 'bonus' => $bonus,
                 'vestedLiquidEquity' => $vestedLiquidEquity,
                 'shareSaleProceeds' => $shareSaleProceeds,
+                'equitySaleBasis' => $equitySaleBasis,
+                'equityCapitalGain' => $equityCapitalGain,
+                'privateRsuOrdinaryIncome' => $privateRsuOrdinaryIncome,
                 'exerciseOutlay' => $exerciseOutlay,
                 'freeCashFlow' => $freeCashFlow,
             ];
@@ -125,7 +133,13 @@ final class CareerCompCalculator
                 'high' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['high']),
             ],
         ];
-        $afterTax = $this->equityCompensationFactsBuilder->build($vestingJob, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
+        $afterTax = $this->equityCompensationFactsBuilder->build($vestingJob, $vestingRows, $annual, $lifetime['totalValue'], $modelAssumptions)->toArray();
+        $defaultAfterTaxTotalValue = [
+            'low' => MoneyMath::round($afterTax['lifetime']['totalValue']['low']),
+            'medium' => MoneyMath::round($afterTax['lifetime']['totalValue']['medium']),
+            'high' => MoneyMath::round($afterTax['lifetime']['totalValue']['high']),
+        ];
+        $afterTax['lifetime']['totalValue'] = $this->afterTaxTotalValueByOutcome($vestingJob, $vestingRows, $annual, $valuation, $lifetime['totalValue'], $defaultAfterTaxTotalValue, $modelAssumptions);
 
         return [
             'job' => [
@@ -268,7 +282,7 @@ final class CareerCompCalculator
     /**
      * @return list<array<string, mixed>>
      */
-    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate): array
+    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate, ModelAssumptions $modelAssumptions): array
     {
         if (! $job->grantsOptions() || (string) $job->value('refresher.optionType') !== 'iso') {
             return [];
@@ -307,7 +321,7 @@ final class CareerCompCalculator
                 'grantDate' => sprintf('%04d-01-01', $grantYear),
                 'vestingStartDate' => null,
                 'shareCount' => round($shareCount, 4),
-                'strike' => $this->optionRefresherStrike($job, $offset, $grantYear),
+                'strike' => $this->optionRefresherStrike($job, $offset, $grantYear, $modelAssumptions),
                 'cliffMonths' => $cliffMonths,
                 'vestingYears' => $vestingYears,
                 'vestingFrequency' => $frequency,
@@ -335,13 +349,232 @@ final class CareerCompCalculator
         return JobSpec::nullableFromArray($values, $job->isCurrent()) ?? $job;
     }
 
-    private function optionRefresherStrike(JobSpec $job, int $grantYearOffset, int $grantYear): float
+    private function optionRefresherStrike(JobSpec $job, int $grantYearOffset, int $grantYear, ModelAssumptions $modelAssumptions): float
     {
         if (! $job->isPrivate()) {
             return $this->equityValuationService->sharePrice($job, $grantYearOffset, 'medium');
         }
 
-        return $this->privateValuationScenarioService->commonFmvForYear($job, $grantYear, 'medium');
+        return $this->privateValuationScenarioService->commonFmvForYear($job, $grantYear, 'medium', $modelAssumptions);
+    }
+
+    /**
+     * @param  array<string, mixed>  $valuation
+     * @param  array{scenarios:list<array<string, mixed>>,totalsByOutcome:array{low:float,medium:float,high:float}}  $paperEquityProjection
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $taxBasisVestingRows
+     * @return array<string, mixed>
+     */
+    private function applyPrivateScenarioLiquidity(JobSpec $job, array $valuation, array $paperEquityProjection, array $taxBasisVestingRows, ModelAssumptions $modelAssumptions, int $startYear, int $horizonYears): array
+    {
+        if (! $job->isPrivate()) {
+            return $valuation;
+        }
+
+        $scenarios = array_values(array_filter($paperEquityProjection['scenarios'], 'is_array'));
+        if ($scenarios === []) {
+            return $valuation;
+        }
+
+        $bestScenariosByOutcome = $this->bestPrivateScenariosByOutcome($scenarios);
+        if ($bestScenariosByOutcome === []) {
+            return $valuation;
+        }
+
+        $valuation['annualEquitySaleBasis'] = [];
+        $valuation['annualEquityCapitalGain'] = [];
+        $valuation['annualPrivateRsuOrdinaryIncome'] = [];
+        $valuation['annualEquityByOutcome'] = [];
+        $valuation['annualEquitySaleBasisByOutcome'] = [];
+        $valuation['annualEquityCapitalGainByOutcome'] = [];
+        $valuation['annualPrivateRsuOrdinaryIncomeByOutcome'] = [];
+
+        foreach (['low', 'medium', 'high'] as $band) {
+            $scenario = $bestScenariosByOutcome[$band] ?? $bestScenariosByOutcome['medium'] ?? null;
+            if (! is_array($scenario)) {
+                continue;
+            }
+
+            $pointsByYear = $this->privateScenarioPointsByYear($scenario);
+            $liquidity = [];
+            $previousCumulativeValue = 0.0;
+            $previousCumulativeBasis = 0.0;
+            $previousCumulativePrivateRsuOrdinaryIncome = 0.0;
+            $finalCumulativeValue = 0.0;
+
+            for ($offset = 0; $offset < $horizonYears; $offset++) {
+                $year = $startYear + $offset;
+                $point = $pointsByYear[$year] ?? null;
+                $isLiquid = is_array($point) && filter_var($point['liquidityEvent'] ?? false, FILTER_VALIDATE_BOOL);
+                $cumulativeValue = $isLiquid ? MoneyMath::round($this->number($point['grossOwnershipValue'] ?? null)) : 0.0;
+                $cumulativePrivateRsuOrdinaryIncome = $isLiquid ? MoneyMath::round($this->number($point['rsuOwnershipValue'] ?? null)) : 0.0;
+                $cumulativeBasis = $isLiquid ? MoneyMath::round(MoneyMath::add(
+                    MoneyMath::add($this->number($point['exerciseCost'] ?? null), $this->cumulativeTaxedNsoBasis($job, $taxBasisVestingRows, $year, $modelAssumptions)),
+                    $cumulativePrivateRsuOrdinaryIncome,
+                )) : 0.0;
+
+                $liquidity[] = ['year' => $year, 'cumulativeValue' => $cumulativeValue];
+                $finalCumulativeValue = $cumulativeValue;
+
+                $annualProceeds = max(0.0, MoneyMath::subtract($cumulativeValue, $previousCumulativeValue));
+                $annualBasis = max(0.0, MoneyMath::subtract($cumulativeBasis, $previousCumulativeBasis));
+                $annualPrivateRsuOrdinaryIncome = max(0.0, MoneyMath::subtract($cumulativePrivateRsuOrdinaryIncome, $previousCumulativePrivateRsuOrdinaryIncome));
+                $annualCapitalGain = max(0.0, MoneyMath::subtract($annualProceeds, $annualBasis));
+                $valuation['annualEquityByOutcome'][$band][$year] = $annualProceeds;
+                $valuation['annualEquitySaleBasisByOutcome'][$band][$year] = $annualBasis;
+                $valuation['annualEquityCapitalGainByOutcome'][$band][$year] = $annualCapitalGain;
+                $valuation['annualPrivateRsuOrdinaryIncomeByOutcome'][$band][$year] = $annualPrivateRsuOrdinaryIncome;
+
+                if ($band === 'medium') {
+                    $valuation['annualEquity'][$year] = $annualProceeds;
+                    $valuation['annualEquitySaleBasis'][$year] = $annualBasis;
+                    $valuation['annualEquityCapitalGain'][$year] = $annualCapitalGain;
+                    $valuation['annualPrivateRsuOrdinaryIncome'][$year] = $annualPrivateRsuOrdinaryIncome;
+                }
+
+                $previousCumulativeValue = $cumulativeValue;
+                $previousCumulativeBasis = $cumulativeBasis;
+                $previousCumulativePrivateRsuOrdinaryIncome = $cumulativePrivateRsuOrdinaryIncome;
+            }
+
+            $valuation['liquidity'][$band] = $liquidity;
+            $valuation['totals'][$band] = $finalCumulativeValue;
+        }
+
+        return $valuation;
+    }
+
+    /**
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
+     * @param  list<array{year:int,salary:float,bonus:float,vestedLiquidEquity:float,shareSaleProceeds:float,equitySaleBasis:float,equityCapitalGain:float,privateRsuOrdinaryIncome:float,exerciseOutlay:float,freeCashFlow:float}>  $annual
+     * @param  array<string, mixed>  $valuation
+     * @param  array{low:float,medium:float,high:float}  $preTaxTotalValue
+     * @param  array{low:float,medium:float,high:float}  $defaultTotalValue
+     * @return array{low:float,medium:float,high:float}
+     */
+    private function afterTaxTotalValueByOutcome(JobSpec $job, array $vestingRows, array $annual, array $valuation, array $preTaxTotalValue, array $defaultTotalValue, ModelAssumptions $modelAssumptions): array
+    {
+        if (! is_array($valuation['annualEquityByOutcome'] ?? null)) {
+            return $defaultTotalValue;
+        }
+
+        $totalValue = ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0];
+        foreach (['low', 'medium', 'high'] as $band) {
+            $bandAnnual = $this->annualRowsForOutcome($annual, $valuation, $band);
+            $bandFacts = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $bandAnnual, $preTaxTotalValue, $modelAssumptions)->toArray();
+            $totalValue[$band] = MoneyMath::subtract($preTaxTotalValue[$band], $bandFacts['lifetime']['totalEstimatedTax']);
+        }
+
+        return $totalValue;
+    }
+
+    /**
+     * @param  list<array{year:int,salary:float,bonus:float,vestedLiquidEquity:float,shareSaleProceeds:float,equitySaleBasis:float,equityCapitalGain:float,privateRsuOrdinaryIncome:float,exerciseOutlay:float,freeCashFlow:float}>  $annual
+     * @param  array<string, mixed>  $valuation
+     * @return list<array{year:int,salary:float,bonus:float,vestedLiquidEquity:float,shareSaleProceeds:float,equitySaleBasis:float,equityCapitalGain:float,privateRsuOrdinaryIncome:float,exerciseOutlay:float,freeCashFlow:float}>
+     */
+    private function annualRowsForOutcome(array $annual, array $valuation, string $band): array
+    {
+        $rows = [];
+        foreach ($annual as $row) {
+            $year = (int) $row['year'];
+            $shareSaleProceeds = MoneyMath::round($valuation['annualEquityByOutcome'][$band][$year] ?? 0.0);
+            $row['vestedLiquidEquity'] = $shareSaleProceeds;
+            $row['shareSaleProceeds'] = $shareSaleProceeds;
+            $row['equitySaleBasis'] = MoneyMath::round($valuation['annualEquitySaleBasisByOutcome'][$band][$year] ?? 0.0);
+            $row['equityCapitalGain'] = MoneyMath::round($valuation['annualEquityCapitalGainByOutcome'][$band][$year] ?? 0.0);
+            $row['privateRsuOrdinaryIncome'] = MoneyMath::round($valuation['annualPrivateRsuOrdinaryIncomeByOutcome'][$band][$year] ?? 0.0);
+            $row['freeCashFlow'] = MoneyMath::subtract(MoneyMath::sum([$row['salary'], $row['bonus'], $shareSaleProceeds]), $row['exerciseOutlay']);
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
+     */
+    private function cumulativeTaxedNsoBasis(JobSpec $job, array $vestingRows, int $saleYear, ModelAssumptions $modelAssumptions): float
+    {
+        $basis = 0.0;
+
+        foreach ($vestingRows as $row) {
+            if ((int) $row['year'] > $saleYear || (string) $row['type'] !== 'nso') {
+                continue;
+            }
+
+            $basis = MoneyMath::add($basis, $this->nsoBargainElement($job, $row, (int) $row['year'], $modelAssumptions));
+        }
+
+        return $basis;
+    }
+
+    /**
+     * @param  array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}  $row
+     */
+    private function nsoBargainElement(JobSpec $job, array $row, int $exerciseYear, ModelAssumptions $modelAssumptions): float
+    {
+        $sharePrice = $this->privateValuationScenarioService->commonFmvForYear($job, $exerciseYear, 'medium', $modelAssumptions);
+        $spread = max(0.0, MoneyMath::subtract($sharePrice, $this->strikeForGrant($job, (string) $row['grantId'])));
+
+        return MoneyMath::multiply($spread, (float) $row['exercisableShares']);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $scenarios
+     * @return array{low?:array<string, mixed>,medium?:array<string, mixed>,high?:array<string, mixed>}
+     */
+    private function bestPrivateScenariosByOutcome(array $scenarios): array
+    {
+        $best = [];
+
+        foreach ($scenarios as $scenario) {
+            if (! $this->privateScenarioHasLiquidityEvent($scenario)) {
+                continue;
+            }
+
+            $outcome = (string) ($scenario['outcome'] ?? 'medium');
+            if (! in_array($outcome, ['low', 'medium', 'high'], true)) {
+                $outcome = 'medium';
+            }
+
+            $currentTotal = $this->number($best[$outcome]['totalNetPaperValue'] ?? null);
+            $candidateTotal = $this->number($scenario['totalNetPaperValue'] ?? null);
+            if (! isset($best[$outcome]) || $candidateTotal >= $currentTotal) {
+                $best[$outcome] = $scenario;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @param  array<string, mixed>  $scenario
+     */
+    private function privateScenarioHasLiquidityEvent(array $scenario): bool
+    {
+        foreach ($this->privateScenarioPointsByYear($scenario) as $point) {
+            if (filter_var($point['liquidityEvent'] ?? false, FILTER_VALIDATE_BOOL)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $scenario
+     * @return array<int, array<string, mixed>>
+     */
+    private function privateScenarioPointsByYear(array $scenario): array
+    {
+        $pointsByYear = [];
+        $points = is_array($scenario['points'] ?? null) ? array_values(array_filter($scenario['points'], 'is_array')) : [];
+
+        foreach ($points as $point) {
+            $pointsByYear[(int) ($point['year'] ?? 0)] = $point;
+        }
+
+        return $pointsByYear;
     }
 
     /**
@@ -452,6 +685,16 @@ final class CareerCompCalculator
 
     private function privateLiquidityWithinHorizon(JobSpec $job, int $startYear, int $horizonYears): bool
     {
+        foreach ($job->valuationScenarios() as $scenario) {
+            $stages = is_array($scenario['stages'] ?? null) ? array_values(array_filter($scenario['stages'], 'is_array')) : [];
+            foreach ($stages as $stage) {
+                $year = (int) ($stage['year'] ?? 0);
+                if ($year >= $startYear && $year < $startYear + $horizonYears && filter_var($stage['liquidityEvent'] ?? false, FILTER_VALIDATE_BOOL)) {
+                    return true;
+                }
+            }
+        }
+
         $value = $job->value('company.liquidityDate');
         if (! is_string($value) || $value === '') {
             return false;
@@ -465,6 +708,11 @@ final class CareerCompCalculator
         $year = (int) $date->format('Y');
 
         return $year >= $startYear && $year < $startYear + $horizonYears;
+    }
+
+    private function number(mixed $value): float
+    {
+        return is_numeric($value) ? (float) $value : 0.0;
     }
 
     /**

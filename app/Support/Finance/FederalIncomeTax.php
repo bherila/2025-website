@@ -66,7 +66,16 @@ final class FederalIncomeTax
             return $ordinaryTax;
         }
 
-        return min($ordinaryTax, self::qualifiedDividendCapitalGainTax($taxableIncome, $preferentialIncome, $year, $isMarried));
+        return min(
+            $ordinaryTax,
+            self::taxWithPreferentialIncome(
+                taxableIncome: $taxableIncome,
+                preferentialIncome: $preferentialIncome,
+                year: $year,
+                isMarried: $isMarried,
+                ordinaryTaxCalculator: static fn (float $ordinaryIncome): float => self::ordinaryTax($ordinaryIncome, $year, $isMarried),
+            ),
+        );
     }
 
     public static function ordinaryTax(float $taxableIncome, int $year, bool $isMarried): float
@@ -92,11 +101,20 @@ final class FederalIncomeTax
         return $tax;
     }
 
-    private static function qualifiedDividendCapitalGainTax(float $taxableIncome, float $preferentialIncome, int $year, bool $isMarried): float
+    /**
+     * @param  callable(float): float  $ordinaryTaxCalculator
+     */
+    public static function taxWithPreferentialIncome(float $taxableIncome, float $preferentialIncome, int $year, bool $isMarried, callable $ordinaryTaxCalculator): float
     {
+        $taxableIncome = max(0.0, $taxableIncome);
+        $preferentialIncome = min($taxableIncome, max(0.0, $preferentialIncome));
+        if ($preferentialIncome <= 0.0) {
+            return MoneyMath::round((float) $ordinaryTaxCalculator($taxableIncome));
+        }
+
         $thresholds = self::CAPITAL_GAIN_THRESHOLDS[self::tableYear(self::CAPITAL_GAIN_THRESHOLDS, $year)][$isMarried ? 'mfj' : 'single'];
         $ordinaryIncome = max(0.0, MoneyMath::subtract($taxableIncome, $preferentialIncome));
-        $tax = self::ordinaryTax($ordinaryIncome, $year, $isMarried);
+        $tax = MoneyMath::round((float) $ordinaryTaxCalculator($ordinaryIncome));
         $remainingPreferentialIncome = $preferentialIncome;
         $stackPosition = $ordinaryIncome;
 

@@ -79,9 +79,11 @@ function projectionWithAfterTax(projection: CareerCompProjection): CareerCompPro
         annual: job.annual.map((annual) => ({
           year: annual.year,
           taxableCompIncome: 0,
+          totalTaxableIncome: 0,
           nsoOrdinaryIncome: 0,
           isoAmtPreference: 0,
           equitySaleProceeds: 0,
+          equityCapitalGain: 0,
           estimatedRegularTax: 0,
           estimatedAmt: 0,
           totalEstimatedTax: 0,
@@ -90,9 +92,11 @@ function projectionWithAfterTax(projection: CareerCompProjection): CareerCompPro
         })),
         lifetime: {
           taxableCompIncome: 0,
+          totalTaxableIncome: 0,
           nsoOrdinaryIncome: 0,
           isoAmtPreference: 0,
           equitySaleProceeds: 0,
+          equityCapitalGain: 0,
           estimatedRegularTax: 0,
           estimatedAmt: 0,
           totalEstimatedTax: 0,

@@ -4,12 +4,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { type ReactElement, useState } from 'react'
 
 import { CareerCompFormSection, GrantEditorColumn, type GrantType, ValuationTimelineColumn } from '../CareerCompForm'
-import { buildDefaultJob } from '../defaults'
+import { buildDefaultJob, DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
 import type { CareerCompInputs } from '../types'
 
 function makeInputs(type: 'public' | 'private'): CareerCompInputs {
   const job = buildDefaultJob('hyp-1', 'Offer 1')
   return {
+    ...DEFAULT_CAREER_COMP_INPUTS,
     horizonYears: 10,
     startYear: 2026,
     currentJob: null,
@@ -50,6 +51,29 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
 }
 
 describe('CareerCompForm public/private gating + grant column entry', () => {
+  it('edits model assumptions in their own section', () => {
+    function AssumptionsHarness(): ReactElement {
+      const [inputs, setInputs] = useState(() => makeInputs('private'))
+
+      return (
+        <CareerCompFormSection
+          section="model-assumptions"
+          inputs={inputs}
+          onChange={setInputs}
+          onOpenGrantEditor={jest.fn()}
+          onOpenValuationTimeline={jest.fn()}
+        />
+      )
+    }
+
+    render(<AssumptionsHarness />)
+
+    fireEvent.change(screen.getByLabelText('Stage B'), { target: { value: '33' } })
+
+    expect(screen.getByLabelText('Stage B')).toHaveValue(33)
+    expect(screen.getByRole('combobox', { name: 'Filing status' })).toHaveTextContent('Single')
+  })
+
   it('shows current share price and hides private-only fields for a public company', () => {
     render(<Harness initial={makeInputs('public')} />)
 
@@ -87,6 +111,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Company valuation timeline/ }))
     expect(screen.getAllByText('Company valuation timeline')).toHaveLength(2)
+    expect(screen.getByText('Benchmark $0.15 @ 15%')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '250000000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
 
