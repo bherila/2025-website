@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
@@ -256,20 +256,20 @@ describe('ScheduleDPreview detail navigation', () => {
     expect(screen.getByText(/Schedule D lines 4 and 11/)).toBeInTheDocument()
   })
 
-  it('opens Schedule D line 5 supporting details with per-source navigation', () => {
-    const onOpenDoc = jest.fn()
+  it('drills into a tax-source-detail column from Schedule D line 5', () => {
+    const onOpenDetail = jest.fn()
     const facts = makeFacts({
       line5Sources: [
         makeSource({
           id: 'line5-box8',
-          label: 'TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8',
+          label: 'Partnership A — K-1 Box 8',
           amount: 1200,
           taxDocumentId: 20,
           formType: 'k1',
         }),
         makeSource({
           id: 'line5-box11s',
-          label: 'TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S',
+          label: 'Partnership A — K-1 Box 11S',
           amount: -500,
           taxDocumentId: 20,
           formType: 'k1',
@@ -285,19 +285,12 @@ describe('ScheduleDPreview detail navigation', () => {
       <ScheduleDPreview
         taxFacts={facts}
         selectedYear={2025}
-        onOpenDoc={onOpenDoc}
+        onOpenDetail={onOpenDetail}
       />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedule D Line 5 Supporting Details' }))
 
-    expect(screen.getByText('Schedule D Line 5 Supporting Details')).toBeInTheDocument()
-    const modal = screen.getByRole('dialog', { name: 'Schedule D Line 5 Supporting Details' })
-    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 8')).toBeInTheDocument()
-    expect(within(modal).getByText('TAX AWARE HEDGE FUND FUND, LLC — K-1 Box 11S')).toBeInTheDocument()
-
-    fireEvent.click(within(modal).getAllByRole('button', { name: 'Go to K1' })[0]!)
-
-    expect(onOpenDoc).toHaveBeenCalledWith(20)
+    expect(onOpenDetail).toHaveBeenCalledWith('sch-d:line-5')
   })
 })

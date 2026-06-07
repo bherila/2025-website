@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
 import type { ScheduleAFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
@@ -99,10 +99,12 @@ describe('ScheduleAPreview', () => {
     expect(screen.getByText('✓ Itemizing saves more — use Schedule A')).toBeInTheDocument()
   })
 
-  it('opens source attribution from Schedule A fact sources', () => {
+  it('drills into a tax-source-detail column from a Schedule A fact source', () => {
+    const onOpenDetail = jest.fn()
     render(
       <ScheduleAPreview
         selectedYear={2025}
+        onOpenDetail={onOpenDetail}
         scheduleAFacts={makeFacts({
           investmentInterestSources: [makeSource({
             id: 'margin-interest',
@@ -118,7 +120,6 @@ describe('ScheduleAPreview', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Investment Interest Expense — Data Sources' }))
-    const modal = screen.getByRole('dialog', { name: 'Investment Interest Expense — Data Sources' })
-    expect(within(modal).getByText('Broker — margin interest')).toBeInTheDocument()
+    expect(onOpenDetail).toHaveBeenCalledWith('sch-a:line-9')
   })
 })

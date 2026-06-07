@@ -1,12 +1,11 @@
 'use client'
 
 import currency from 'currency.js'
-import { useState } from 'react'
 
 import { type EmptyLine, EmptyLinesDisclosure } from '@/components/finance/EmptyLinesDisclosure'
 import { FactsLoadingPlaceholder, FormBlock, FormLine, FormSubLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
-import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
+import { taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourceDetailColumn'
 import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface Schedule1PreviewProps {
@@ -15,7 +14,8 @@ interface Schedule1PreviewProps {
   onTabChange?: (tab: TaxTabId) => void
   /** Backend audit facts, including unreviewed parsed sources. */
   taxFacts?: Schedule1Facts | null
-  onOpenDoc?: (docId: number) => void
+  /** Push a `tax-source-detail` Miller column for a `<form>:<line>` instance key. */
+  onOpenDetail?: (instanceKey: string) => void
 }
 
 export interface Schedule1Line8Breakdown {
@@ -48,14 +48,8 @@ export default function Schedule1Preview({
   selectedYear,
   onTabChange,
   taxFacts,
-  onOpenDoc,
+  onOpenDetail,
 }: Schedule1PreviewProps) {
-  const [activeSources, setActiveSources] = useState<{
-    title: string
-    sources: TaxFactSource[]
-    total: number
-  } | null>(null)
-
   if (!taxFacts) {
     return <FactsLoadingPlaceholder label="Schedule 1" />
   }
@@ -180,11 +174,12 @@ export default function Schedule1Preview({
     { lineNumber: '21', label: 'Student loan interest deduction', state: 'zero' },
   ]
 
-  const sourceClickProps = (title: string, sources: TaxFactSource[], total: number) =>
-    sources.length > 0
+  const sourceClickProps = (key: string, title: string, sources: TaxFactSource[]) =>
+    sources.length > 0 && onOpenDetail
       ? {
-          onDetails: () => setActiveSources({ title, sources, total }),
+          onDetails: () => onOpenDetail(key),
           detailsTooltip: title,
+          detailsGlyph: 'column' as const,
         }
       : {}
 
@@ -205,7 +200,7 @@ export default function Schedule1Preview({
               label="Taxable refunds, credits, or offsets of state and local income taxes"
               value={taxFacts.line1aTotal}
               isReviewed={line1aNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 1a Supporting Details', line1aSources, taxFacts.line1aTotal)}
+              {...sourceClickProps('sch-1:line-1a', 'Schedule 1 Line 1a Supporting Details', line1aSources)}
             />
             <FormSubLine text="From 1099-G box 2" />
           </>
@@ -217,7 +212,7 @@ export default function Schedule1Preview({
               label="Alimony received"
               value={taxFacts.line2aTotal}
               isReviewed={line2aNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 2a Supporting Details', line2aSources, taxFacts.line2aTotal)}
+              {...sourceClickProps('sch-1:line-2a', 'Schedule 1 Line 2a Supporting Details', line2aSources)}
             />
             <FormSubLine text="Pre-2019 divorce decrees only" />
           </>
@@ -229,7 +224,7 @@ export default function Schedule1Preview({
               label="Business income or (loss)"
               value={taxFacts.line3Total}
               isReviewed={line3NeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 3 Supporting Details', line3Sources, taxFacts.line3Total)}
+              {...sourceClickProps('sch-1:line-3', 'Schedule 1 Line 3 Supporting Details', line3Sources)}
             />
             <FormSubLine text="From Schedule C net income" />
           </>
@@ -241,7 +236,7 @@ export default function Schedule1Preview({
               label="Other gains or (losses)"
               value={taxFacts.line4Total}
               isReviewed={line4NeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 4 Supporting Details', line4Sources, taxFacts.line4Total)}
+              {...sourceClickProps('sch-1:line-4', 'Schedule 1 Line 4 Supporting Details', line4Sources)}
             />
             <FormSubLine text="From Form 4797 ordinary gain/loss total" />
           </>
@@ -253,7 +248,7 @@ export default function Schedule1Preview({
               label="Rental real estate, royalties, partnerships, S corporations, trusts"
               value={taxFacts.line5Total}
               isReviewed={line5NeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 5 Supporting Details', line5Sources, taxFacts.line5Total)}
+              {...sourceClickProps('sch-1:line-5', 'Schedule 1 Line 5 Supporting Details', line5Sources)}
             />
             <FormSubLine text="From Schedule E combined total" />
           </>
@@ -265,7 +260,7 @@ export default function Schedule1Preview({
               label="Farm income or (loss)"
               value={taxFacts.line6Total}
               isReviewed={line6NeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 6 Supporting Details', line6Sources, taxFacts.line6Total)}
+              {...sourceClickProps('sch-1:line-6', 'Schedule 1 Line 6 Supporting Details', line6Sources)}
             />
             <FormSubLine text="From Schedule F net profit/loss" />
           </>
@@ -277,7 +272,7 @@ export default function Schedule1Preview({
               label="Unemployment compensation"
               value={taxFacts.line7Total}
               isReviewed={line7NeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 7 Supporting Details', line7Sources, taxFacts.line7Total)}
+              {...sourceClickProps('sch-1:line-7', 'Schedule 1 Line 7 Supporting Details', line7Sources)}
             />
             <FormSubLine text="From 1099-G box 1" />
           </>
@@ -289,7 +284,7 @@ export default function Schedule1Preview({
               label="Gambling winnings"
               value={taxFacts.line8bTotal}
               isReviewed={line8bNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 8b Supporting Details', line8bSources, taxFacts.line8bTotal)}
+              {...sourceClickProps('sch-1:line-8b', 'Schedule 1 Line 8b Supporting Details', line8bSources)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8b" />
           </>
@@ -301,7 +296,7 @@ export default function Schedule1Preview({
               label="Jury duty pay"
               value={taxFacts.line8hTotal}
               isReviewed={line8hNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 8h Supporting Details', line8hSources, taxFacts.line8hTotal)}
+              {...sourceClickProps('sch-1:line-8h', 'Schedule 1 Line 8h Supporting Details', line8hSources)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8h" />
           </>
@@ -313,7 +308,7 @@ export default function Schedule1Preview({
               label="Prizes and awards"
               value={taxFacts.line8iTotal}
               isReviewed={line8iNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 8i Supporting Details', line8iSources, taxFacts.line8iTotal)}
+              {...sourceClickProps('sch-1:line-8i', 'Schedule 1 Line 8i Supporting Details', line8iSources)}
             />
             <FormSubLine text="From 1099-MISC routed to Schedule 1 line 8i" />
           </>
@@ -325,7 +320,7 @@ export default function Schedule1Preview({
               label="Other income"
               value={taxFacts.line8zTotal}
               isReviewed={line8zNeedsReview ? false : undefined}
-              {...sourceClickProps('Schedule 1 Line 8z Supporting Details', line8zSources, taxFacts.line8zTotal)}
+              {...sourceClickProps('sch-1:line-8z', 'Schedule 1 Line 8z Supporting Details', line8zSources)}
             />
             <FormSubLine text="From 1099-MISC documents routed or defaulted to Schedule 1 line 8z" />
           </>
@@ -336,7 +331,7 @@ export default function Schedule1Preview({
             label="Total other income (sum of lines 8a-8z)"
             value={taxFacts.line9TotalOtherIncome}
             isReviewed={lineOtherIncomeNeedsReview ? false : undefined}
-            {...sourceClickProps('Schedule 1 Line 9 Supporting Details', line8Sources, taxFacts.line9TotalOtherIncome)}
+            {...sourceClickProps('sch-1:line-9', 'Schedule 1 Line 9 Supporting Details', line8Sources)}
           />
         )}
         <FormTotalLine
@@ -359,7 +354,7 @@ export default function Schedule1Preview({
           label="Deductible part of self-employment tax"
           value={taxFacts.line15Total === 0 ? null : taxFacts.line15Total}
           isReviewed={line15NeedsReview ? false : undefined}
-          {...sourceClickProps('Schedule 1 Line 15 Supporting Details', line15Sources, taxFacts.line15Total)}
+          {...sourceClickProps('sch-1:line-15', 'Schedule 1 Line 15 Supporting Details', line15Sources)}
         />
         <FormSubLine text="Computed from Schedule SE and included in Form 1040 line 10." />
         <FormTotalLine
@@ -375,16 +370,6 @@ export default function Schedule1Preview({
           {...(onTabChange ? { onGoToSource: onTabChange } : {})}
         />
       </FormBlock>
-      {activeSources && (
-        <TaxFactSourcesModal
-          open
-          title={activeSources.title}
-          sources={activeSources.sources}
-          total={activeSources.total}
-          onClose={() => setActiveSources(null)}
-          {...(onOpenDoc ? { onOpenDoc } : {})}
-        />
-      )}
     </div>
   )
 }

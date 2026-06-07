@@ -30,6 +30,7 @@ import ScheduleSEPreview from '@/components/finance/ScheduleSEPreview'
 import SourceValueOverridesView from '@/components/finance/SourceValueOverridesView'
 import { ReadinessCards } from '@/components/finance/tax-preview/ReadinessCards'
 import { TAB_TO_FORM_ID, type TaxTabId } from '@/components/finance/tax-tab-ids'
+import TaxFactSourceDetailColumn from '@/components/finance/TaxFactSourceDetailColumn'
 import TaxLotReconciliationPanel from '@/components/finance/TaxLotReconciliationPanel'
 import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtExemption'
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
@@ -72,13 +73,12 @@ function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
 }
 
 function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
-  const { openTaxDocumentDetail } = useDockActions()
   return (
     <Schedule1Preview
       selectedYear={state.year}
       onTabChange={tabToDrill(onDrill)}
       taxFacts={state.taxFacts?.schedule1 ?? null}
-      onOpenDoc={openTaxDocumentDetail}
+      onOpenDetail={(instance) => onDrill({ id: 'tax-source-detail', instance })}
     />
   )
 }
@@ -95,14 +95,13 @@ function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
   )
 }
 
-function ScheduleAAdapter({ state }: FormRenderProps): React.ReactElement {
-  const { openTaxDocumentDetail } = useDockActions()
+function ScheduleAAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   return (
     <ScheduleAPreview
       selectedYear={state.year}
       isMarried={state.isMarried}
       scheduleAFacts={state.taxFacts?.scheduleA ?? null}
-      onOpenDoc={openTaxDocumentDetail}
+      onOpenDetail={(instance) => onDrill({ id: 'tax-source-detail', instance })}
     />
   )
 }
@@ -128,6 +127,7 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
       availableYears={state.availableYears}
       priorYearCapitalLossCarryover={state.priorYearCapitalLossCarryover}
       onOpenDoc={openTaxDocumentDetail}
+      onOpenDetail={(instance) => onDrill({ id: 'tax-source-detail', instance })}
       onGoToForm1040={() => onDrill({ id: 'form-1040', placement: 'left-of-current' })}
       onCarryoverSaved={() => state.refreshAll({ includeTaxFacts: true })}
     />
@@ -190,6 +190,16 @@ function Form4952DetailAdapter({ state, instance, onDrill }: FormRenderProps): R
     onDrill({ id: 'sch-b' })
   }
   return <Form4952DetailColumn facts={facts} instanceKey={instance?.key} onGoToSource={handleGoToSource} />
+}
+
+function TaxSourceDetailAdapter({ state, instance }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
+  const handleGoToSource = (source: TaxFactSource): void => {
+    if (source.taxDocumentId != null) {
+      openTaxDocumentDetail(source.taxDocumentId)
+    }
+  }
+  return <TaxFactSourceDetailColumn facts={state.taxFacts} instanceKey={instance?.key} onGoToSource={handleGoToSource} />
 }
 
 function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -855,6 +865,16 @@ const rawFormRegistry: FormRegistry = {
     component: Form4952DetailAdapter,
     relatedForms: ['form-4952'],
     size: 'wide',
+    drillOnly: true,
+  },
+  'tax-source-detail': {
+    id: 'tax-source-detail',
+    label: 'Source details',
+    shortLabel: 'Source details',
+    keywords: ['source details', 'supporting details', 'line detail', 'data sources'],
+    category: 'Form',
+    presentation: 'column',
+    component: TaxSourceDetailAdapter,
     drillOnly: true,
   },
   'form-6251': {

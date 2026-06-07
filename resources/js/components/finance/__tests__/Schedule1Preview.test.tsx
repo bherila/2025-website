@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
 import type { Schedule1Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
@@ -145,10 +145,12 @@ describe('Schedule1Preview', () => {
     expect(onTabChange).toHaveBeenCalledWith(TAX_TABS.scheduleC)
   })
 
-  it('opens source attribution from Schedule 1 fact sources', () => {
+  it('drills into a tax-source-detail column from a Schedule 1 fact source', () => {
+    const onOpenDetail = jest.fn()
     render(
       <Schedule1Preview
         selectedYear={2025}
+        onOpenDetail={onOpenDetail}
         taxFacts={makeFacts({
           line5Sources: [makeSource({ id: 'line5', label: 'Partnership — Schedule E net income/loss', amount: 1200 })],
           line5Total: 1200,
@@ -157,7 +159,6 @@ describe('Schedule1Preview', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedule 1 Line 5 Supporting Details' }))
-    const modal = screen.getByRole('dialog', { name: 'Schedule 1 Line 5 Supporting Details' })
-    expect(within(modal).getByText('Partnership — Schedule E net income/loss')).toBeInTheDocument()
+    expect(onOpenDetail).toHaveBeenCalledWith('sch-1:line-5')
   })
 })
