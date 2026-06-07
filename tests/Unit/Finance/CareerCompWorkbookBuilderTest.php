@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Finance;
 
-use App\Services\Finance\MoneyMath;
 use App\Services\Finance\CareerCompWorkbookBuilder;
+use App\Services\Finance\MoneyMath;
 use PHPUnit\Framework\TestCase;
 
 class CareerCompWorkbookBuilderTest extends TestCase
@@ -125,7 +125,7 @@ class CareerCompWorkbookBuilderTest extends TestCase
         $totalTaxRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'Total estimated federal/AMT tax'));
 
         $this->assertNotEmpty($isoRows);
-        $this->assertContains(104500.0, array_map(fn (array $row): float => $row['amount'], $isoRows));
+        $this->assertContains(80000.0, array_map(fn (array $row): float => $row['amount'], $isoRows));
         $this->assertNotEmpty($amtRows);
         $this->assertNotEmpty($totalTaxRows);
         $this->assertTrue($totalTaxRows[0]['isTotal']);

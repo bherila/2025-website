@@ -79,4 +79,139 @@ class EquityCompensationFactsBuilderTest extends TestCase
         $this->assertSame($annual['estimatedAmt'], $facts['form6251'][0]['facts']['amt']);
         $this->assertSame(MoneyMath::subtract(253000.0, $annual['totalEstimatedTax']), $facts['lifetime']['totalValue']['medium']);
     }
+
+    public function test_private_option_bargain_element_uses_common_fmv_not_preferred_share_price(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'private-offer',
+            'name' => 'Private offer',
+            'company' => [
+                'type' => 'private',
+                'currentSharePrice' => 29.134,
+                'fourNineA' => 2.8,
+                'fullyDilutedShares' => 6178405,
+                'valuationScenarios' => [[
+                    'id' => 'base',
+                    'label' => 'Base',
+                    'outcome' => 'medium',
+                    'stages' => [[
+                        'year' => 2026,
+                        'stage' => 'A',
+                        'preferredPostMoneyValuation' => 180001651,
+                        'capitalDilutionPct' => 0,
+                        'employeePoolDilutionPct' => 0,
+                        'commonFmv' => 2.8,
+                        'liquidityEvent' => false,
+                    ]],
+                ]],
+            ],
+            'comp' => [
+                'baseSalary' => 280000.0,
+                'cashBonus' => 0.0,
+            ],
+            'optionGrants' => [[
+                'id' => 'iso-hire',
+                'type' => 'iso',
+                'strike' => 2.8,
+                'earlyExercise83b' => true,
+            ]],
+        ], false);
+
+        $this->assertInstanceOf(JobSpec::class, $job);
+
+        $facts = (new EquityCompensationFactsBuilder)->build(
+            $job,
+            [
+                ['grantId' => 'iso-hire', 'type' => 'iso', 'year' => 2026, 'vestedShares' => 35714.2857, 'exercisableShares' => 35714.2857],
+                ['grantId' => 'iso-hire', 'type' => 'nso', 'year' => 2026, 'vestedShares' => 26069.7643, 'exercisableShares' => 26069.7643],
+            ],
+            [[
+                'year' => 2026,
+                'salary' => 280000.0,
+                'bonus' => 0.0,
+                'vestedLiquidEquity' => 0.0,
+                'shareSaleProceeds' => 0.0,
+                'exerciseOutlay' => 172995.34,
+                'freeCashFlow' => 107004.66,
+            ]],
+            ['low' => 107004.66, 'medium' => 107004.66, 'high' => 107004.66],
+        )->toArray();
+
+        $annual = $facts['annual'][0];
+
+        $this->assertSame(280000.0, $annual['taxableCompIncome']);
+        $this->assertSame(0.0, $annual['nsoOrdinaryIncome']);
+        $this->assertSame(0.0, $annual['isoAmtPreference']);
+        $this->assertSame(0.0, $annual['estimatedAmt']);
+        $this->assertSame(MoneyMath::subtract(107004.66, $annual['estimatedRegularTax']), $annual['freeCashFlow']);
+        $this->assertGreaterThan(0.0, $annual['freeCashFlow']);
+        $this->assertSame([], $facts['form6251']);
+
+        $sourceTypes = array_column($facts['sources'], 'sourceType');
+        $this->assertNotContains('equity_comp_iso_bargain_element', $sourceTypes);
+        $this->assertNotContains('equity_comp_nso_ordinary_income', $sourceTypes);
+        $this->assertContains('equity_comp_83b_election', $sourceTypes);
+    }
+
+    public function test_private_option_bargain_element_preserves_explicit_common_fmv_without_diluted_shares(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'private-no-shares',
+            'name' => 'Private no shares',
+            'company' => [
+                'type' => 'private',
+                'fourNineA' => 2.8,
+                'valuationScenarios' => [[
+                    'id' => 'base',
+                    'label' => 'Base',
+                    'outcome' => 'medium',
+                    'stages' => [[
+                        'year' => 2026,
+                        'stage' => 'A',
+                        'commonFmv' => 12.8,
+                        'liquidityEvent' => false,
+                    ]],
+                ]],
+            ],
+            'comp' => [
+                'baseSalary' => 0.0,
+                'cashBonus' => 0.0,
+            ],
+            'optionGrants' => [[
+                'id' => 'nso-hire',
+                'type' => 'nso',
+                'strike' => 2.8,
+                'earlyExercise83b' => true,
+            ]],
+        ], false);
+
+        $this->assertInstanceOf(JobSpec::class, $job);
+
+        $facts = (new EquityCompensationFactsBuilder)->build(
+            $job,
+            [
+                ['grantId' => 'nso-hire', 'type' => 'nso', 'year' => 2026, 'vestedShares' => 1000.0, 'exercisableShares' => 1000.0],
+            ],
+            [[
+                'year' => 2026,
+                'salary' => 0.0,
+                'bonus' => 0.0,
+                'vestedLiquidEquity' => 0.0,
+                'shareSaleProceeds' => 0.0,
+                'exerciseOutlay' => 2800.0,
+                'freeCashFlow' => -2800.0,
+            ]],
+            ['low' => -2800.0, 'medium' => -2800.0, 'high' => -2800.0],
+        )->toArray();
+
+        $annual = $facts['annual'][0];
+
+        $this->assertSame(10000.0, $annual['taxableCompIncome']);
+        $this->assertSame(10000.0, $annual['nsoOrdinaryIncome']);
+        $this->assertSame(0.0, $annual['isoAmtPreference']);
+
+        $sources = array_column($facts['sources'], 'amount', 'sourceType');
+        $this->assertSame(10000.0, $sources['equity_comp_nso_ordinary_income']);
+        $this->assertSame(10000.0, $sources['equity_comp_83b_election']);
+    }
 }

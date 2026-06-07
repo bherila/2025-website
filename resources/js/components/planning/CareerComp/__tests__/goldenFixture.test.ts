@@ -50,27 +50,27 @@ describe('Career Comparison backend golden projection (cross-language contract)'
     const afterTaxFcfRows = mapAfterTaxAnnualFreeCashFlowRows(parsed)
     const privateOffer2028 = afterTaxFcfRows.find((row) => row.jobId === 'hyp-1' && row.year === 2028)
     expect(privateOffer2028).toMatchObject({
-      isoAmtPreference: 104500,
-      estimatedAmt: 15566,
-      totalEstimatedTax: 54964,
-      freeCashFlow: 120036,
+      isoAmtPreference: 80000,
+      estimatedAmt: 9196,
+      totalEstimatedTax: 48594,
+      freeCashFlow: 126406,
     })
 
     const afterTaxLiquidityRows = mapAfterTaxLiquidityChartData(parsed)
-    expect(afterTaxLiquidityRows.find((row) => row.year === 2030)?.['hyp-1-medium']).toBe(1247449.33)
+    expect(afterTaxLiquidityRows.find((row) => row.year === 2030)?.['hyp-1-medium']).toBe(1270132.66)
     expect(afterTaxLiquidityRows.find((row) => row.year === 2035)?.['current-medium']).toBe(1787550)
 
     const lifetimeRows = mapAfterTaxLifetimeValueRows(parsed)
     expect(lifetimeRows.find((row) => row.jobId === 'hyp-1')).toMatchObject({
-      estimatedAmt: 69760.67,
-      totalValueDeltaMedium: 354541,
+      estimatedAmt: 47077.34,
+      totalValueDeltaMedium: 377224.33,
     })
 
     expect(mapAfterTaxSourceBreakdownRows(parsed)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         jobId: 'hyp-1',
         sourceType: 'equity_comp_iso_bargain_element',
-        amount: 104500,
+        amount: 80000,
       }),
     ]))
   })
