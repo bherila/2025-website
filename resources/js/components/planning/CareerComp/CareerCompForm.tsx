@@ -442,7 +442,7 @@ function buildNewRsuGrant(job: JobSpec): RsuGrant {
   const previous = job.rsuGrants[job.rsuGrants.length - 1]
   const base = buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)
   return previous
-    ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, vestingStartDate: previous.vestingStartDate, grantPrice: previous.grantPrice }
+    ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, grantPrice: previous.grantPrice }
     : base
 }
 
@@ -450,7 +450,7 @@ function buildNewOptionGrant(job: JobSpec): OptionGrant {
   const previous = job.optionGrants[job.optionGrants.length - 1]
   const base = buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)
   return previous
-    ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, vestingStartDate: previous.vestingStartDate, earlyExercise83b: previous.earlyExercise83b }
+    ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, earlyExercise83b: previous.earlyExercise83b }
     : base
 }
 
