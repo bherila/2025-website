@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { fetchWrapper } from '@/fetchWrapper'
+import type { TaxReturnPdfExportPayload, TaxReturnPdfExportResult } from '@/types/finance/tax-return-pdf'
 import type { TaxPreviewXlsxExportOptions, TaxPreviewXlsxExportPayload, XlsxExportScope, XlsxGridSheet } from '@/types/finance/xlsx-export'
 
 import { buildK1AllInOneXlsxGrids } from './K1AllInOneView'
@@ -14,6 +15,7 @@ import { MillerShell } from './tax-preview/MillerShell'
 import { formRegistry as dockRegistry } from './tax-preview/registry'
 import { TaxEstimateHeader } from './tax-preview/TaxEstimateHeader'
 import { TaxPreviewProvider, type TaxPreviewShellData, useTaxPreview } from './TaxPreviewContext'
+import { TaxReturnPdfExportDialog } from './TaxReturnPdfExportDialog'
 
 /** Data preloaded server-side in the Blade template <script> tag. */
 export type TaxPreviewPreload = TaxPreviewShellData
@@ -28,7 +30,9 @@ function TaxPreviewPageContent(): React.ReactElement {
     reviewedK1Docs,
     taxFacts,
   } = useTaxPreview()
-  const [isExporting, setIsExporting] = useState(false)
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
   const fullExportGrids = useMemo<XlsxGridSheet[]>(() => {
     return [
       ...buildK1AllInOneXlsxGrids(reviewedK1Docs, taxFacts),
@@ -58,7 +62,7 @@ function TaxPreviewPageContent(): React.ReactElement {
       return
     }
 
-    setIsExporting(true)
+    setIsExportingXlsx(true)
     try {
       const fallbackFilename = options.filename ?? defaultXlsxFilename(scope, selectedYear)
       const grids = options.grids ?? (scope === 'full' ? fullExportGrids : [])
@@ -90,19 +94,70 @@ function TaxPreviewPageContent(): React.ReactElement {
     } catch (error) {
       console.error('Failed to export tax preview workbook', error)
     } finally {
-      setIsExporting(false)
+      setIsExportingXlsx(false)
     }
   }, [fullExportGrids, isLoading, selectedYear])
+
+  const handleExportPdf = useCallback(async (payload: TaxReturnPdfExportPayload): Promise<TaxReturnPdfExportResult> => {
+    if (isLoading) {
+      return { ok: false, errors: ['Tax Preview data is still loading.'], warnings: [] }
+    }
+
+    setIsExportingPdf(true)
+    try {
+      const response = await fetchWrapper.postRaw('/finance/tax-preview/export-pdf', payload)
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null) as {
+          message?: string
+          errors?: string[]
+          warnings?: string[]
+        } | null
+
+        return {
+          ok: false,
+          message: errorPayload?.message ?? `Export failed with status ${response.status}`,
+          errors: errorPayload?.errors ?? [`Export failed with status ${response.status}`],
+          warnings: errorPayload?.warnings ?? [],
+        }
+      }
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get('content-disposition')
+      const filename = contentDisposition?.match(/filename="([^"]+)"/)?.[1] ?? payload.filename ?? `${payload.year}-form-1040.pdf`
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      return { ok: true, errors: [], warnings: [] }
+    } catch (error) {
+      console.error('Failed to export IRS PDF', error)
+
+      return { ok: false, errors: ['Failed to export IRS PDF.'], warnings: [] }
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }, [isLoading])
 
   const hasColumns = typeof window !== 'undefined' && window.location.hash.length > 1
 
   return (
-    <DockActionsProvider exportXlsx={handleExportXlsx} isExportingXlsx={isExporting}>
+    <DockActionsProvider
+      exportXlsx={handleExportXlsx}
+      isExportingXlsx={isExportingXlsx}
+      openTaxReturnPdfExport={() => setPdfDialogOpen(true)}
+      isExportingPdf={isExportingPdf}
+    >
       <div className="flex h-full flex-col">
         <DockHeaderBar
           selectedYear={selectedYear}
           availableYears={availableYears}
           isExportXlsxDisabled={isLoading}
+          isExportPdfDisabled={isLoading}
           isLoadingYears={isLoading && availableYears.length === 0}
           pendingReviewCount={pendingReviewCount}
           onYearChange={handleYearChange}
@@ -113,6 +168,13 @@ function TaxPreviewPageContent(): React.ReactElement {
           <MillerShell registry={dockRegistry} homeView={<DockHomeView />} />
         </div>
       </div>
+      <TaxReturnPdfExportDialog
+        open={pdfDialogOpen}
+        year={selectedYear}
+        isExporting={isExportingPdf}
+        onOpenChange={setPdfDialogOpen}
+        onExport={handleExportPdf}
+      />
     </DockActionsProvider>
   )
 }
