@@ -168,6 +168,7 @@ const mockRegistry: FormRegistry = {
   },
   'form-4797': stubColumn('form-4797', 'Form 4797', '4797'),
   'form-4952': stubColumn('form-4952', 'Form 4952', '4952'),
+  'form-4952-detail': stubColumn('form-4952-detail', 'Form 4952 — Line details', '4952 detail'),
   'form-6251': stubColumn('form-6251', 'Form 6251', '6251'),
   'form-8582': {
     id: 'form-8582',

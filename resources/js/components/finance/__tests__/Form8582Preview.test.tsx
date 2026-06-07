@@ -98,7 +98,7 @@ describe('Form8582Preview', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit carryforward' }))
     fireEvent.change(screen.getByLabelText('Ordinary Carryover'), { target: { value: '-2500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 

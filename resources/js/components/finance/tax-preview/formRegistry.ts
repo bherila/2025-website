@@ -31,6 +31,7 @@ export type FormId =
   | 'form-1116'
   | 'form-4797'
   | 'form-4952'
+  | 'form-4952-detail'
   | 'form-6251'
   | 'form-8582'
   | 'form-8606'
@@ -74,6 +75,7 @@ export const ALL_FORM_IDS = [
   'form-1116',
   'form-4797',
   'form-4952',
+  'form-4952-detail',
   'form-6251',
   'form-8582',
   'form-8606',

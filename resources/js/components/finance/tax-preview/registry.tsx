@@ -8,6 +8,7 @@ import CapitalGainsReconciliationPanel from '@/components/finance/CapitalGainsRe
 import Form1040Preview from '@/components/finance/Form1040Preview'
 import Form1116Preview from '@/components/finance/Form1116Preview'
 import Form4797Preview from '@/components/finance/Form4797Preview'
+import Form4952DetailColumn, { focusFieldIdFor } from '@/components/finance/Form4952DetailColumn'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
@@ -40,7 +41,7 @@ import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
+import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { useDockActions } from './DockActions'
 import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps, getTaxFormMeta } from './formRegistry'
@@ -167,11 +168,28 @@ function Form4952Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
       shortDividendSummary={state.shortDividendSummary}
       onLoadShortDividendSummary={state.loadShortDividendSummary}
       onReviewDoc={reviewK1Doc}
+      onOpenDetail={(instance) => onDrill({ id: 'form-4952-detail', instance })}
       onOpenScheduleB={() => onDrill({ id: 'sch-b' })}
       onOpenScheduleA={() => onDrill({ id: 'sch-a' })}
       onOpenScheduleE={() => onDrill({ id: 'sch-e' })}
     />
   )
+}
+
+function Form4952DetailAdapter({ state, instance, onDrill }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  const facts = state.taxFacts?.form4952
+  if (!facts) {
+    return <StubCard title="Form 4952 detail" note="No Form 4952 facts are available." />
+  }
+  const handleGoToSource = (source: TaxFactSource): void => {
+    if (source.taxDocumentId != null) {
+      reviewK1Doc(source.taxDocumentId, focusFieldIdFor(source))
+      return
+    }
+    onDrill({ id: 'sch-b' })
+  }
+  return <Form4952DetailColumn facts={facts} instanceKey={instance?.key} onGoToSource={handleGoToSource} />
 }
 
 function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
@@ -826,6 +844,18 @@ const rawFormRegistry: FormRegistry = {
         { label: 'Carryforward', value: f.disallowedCarryforward },
       ]
     },
+  },
+  'form-4952-detail': {
+    id: 'form-4952-detail',
+    label: 'Form 4952 — Line details',
+    shortLabel: '4952 detail',
+    keywords: ['4952 detail', 'investment interest detail', 'line 4a', 'line 4b'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form4952DetailAdapter,
+    relatedForms: ['form-4952'],
+    size: 'wide',
+    hasData: () => false,
   },
   'form-6251': {
     id: 'form-6251',
