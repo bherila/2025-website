@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
 import { LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
+import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
 import { formatMoney, formatShares, formatSignedMoney } from './formatters'
 import { mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows } from './mappers'
 import type { CareerCompProjection } from './types'
@@ -203,50 +204,56 @@ export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactE
   const hasCurrentJob = projection.currentJobId !== null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Lifetime value comparison</CardTitle>
-        <CardDescription>
-          Lifetime totals are read from the projection. Delta columns use server-computed deltas vs. current job.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-auto rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead className="text-right">Cash comp</TableHead>
-                <TableHead className="text-right">Equity low</TableHead>
-                <TableHead className="text-right">Equity med</TableHead>
-                <TableHead className="text-right">Equity high</TableHead>
-                <TableHead className="text-right">Total low</TableHead>
-                <TableHead className="text-right">Total med</TableHead>
-                <TableHead className="text-right">Total high</TableHead>
-                <TableHead className="text-right">Cash Δ</TableHead>
-                <TableHead className="text-right">Med total Δ</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.jobId}>
-                  <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalCashComp)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalEquityLow)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalEquityMedium)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalEquityHigh)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalValueLow)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalValueMedium)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.totalValueHigh)}</TableCell>
-                  <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.cashCompDelta) : 'No current job'}</TableCell>
-                  <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalValueDeltaMedium) : 'No current job'}</TableCell>
+    <div className="grid gap-6">
+      <PaperLifetimeValueChart projection={projection} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Lifetime value comparison</CardTitle>
+          <CardDescription>
+            Lifetime totals are read from the projection. Delta columns use server-computed deltas vs. current job.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job</TableHead>
+                  <TableHead className="text-right">Cash comp</TableHead>
+                  <TableHead className="text-right">Liquid equity med</TableHead>
+                  <TableHead className="text-right">Paper equity med</TableHead>
+                  <TableHead className="text-right">Liquid total med</TableHead>
+                  <TableHead className="text-right">Paper total med</TableHead>
+                  <TableHead className="text-right">Cash Δ</TableHead>
+                  <TableHead className="text-right">Liquid med Δ</TableHead>
+                  <TableHead className="text-right">Paper med Δ</TableHead>
+                  <TableHead className="text-right">Liquid low/high</TableHead>
+                  <TableHead className="text-right">Paper low/high</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.jobId}>
+                    <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalCashComp)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalEquityMedium)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalPaperEquityMedium)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalValueMedium)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalPaperValueMedium)}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.cashCompDelta) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalValueDeltaMedium) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalPaperValueDeltaMedium) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalValueLow)} / {formatMoney(row.totalValueHigh)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.totalPaperValueLow)} / {formatMoney(row.totalPaperValueHigh)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -276,7 +283,7 @@ export function ProjectionVestingBreakdown({ projection }: ProjectionProps): Rea
                   </TableHeader>
                   <TableBody>
                     {job.vesting.map((row) => (
-                      <TableRow key={`${job.id}-${row.grantId}-${row.type}-${row.year}`}>
+                      <TableRow key={`${job.id}-${row.grantId}-${row.type}-${row.year}`} className={row.source === 'projected_refresher' ? 'border-dashed opacity-60' : undefined}>
                         <TableCell>{row.grantId}</TableCell>
                         <TableCell className="uppercase">{row.type}</TableCell>
                         <TableCell>{row.year}</TableCell>

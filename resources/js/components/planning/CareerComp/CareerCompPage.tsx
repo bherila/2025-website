@@ -27,6 +27,7 @@ import {
   GrantEditorColumn,
   type GrantType,
   notRenderedViaMillerShell,
+  ValuationTimelineColumn,
 } from './CareerCompForm'
 import {
   ProjectionAfterTaxFreeCashFlow,
@@ -59,6 +60,7 @@ type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
   | { kind: 'result'; id: CareerCompResultViewId }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
+  | { kind: 'valuationTimeline'; jobId: string }
 
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
   render: (projection: CareerCompProjection) => ReactElement
@@ -385,6 +387,10 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'grant', editorKey, jobId, grantType, grantId }])
   }
 
+  function openValuationTimeline(jobId: string): void {
+    setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'valuationTimeline', jobId }])
+  }
+
   function updateNewGrantColumn(grantId: string): void {
     setColumnStack((stack) => stack.map((column) => (column.kind === 'grant' && column.grantId === undefined ? { ...column, grantId } : column)))
   }
@@ -415,6 +421,17 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       }
     }
 
+    if (column.kind === 'valuationTimeline') {
+      return {
+        key: `valuation:${column.jobId}`,
+        id: 'valuation-timeline',
+        label: 'Company valuation timeline',
+        shortLabel: 'Valuation',
+        size: 'wide',
+        children: <ValuationTimelineColumn inputs={inputs} jobId={column.jobId} onChange={setInputs} />,
+      }
+    }
+
     if (column.kind === 'form') {
       const section = findMeta(CAREER_COMP_FORM_SECTIONS, column.id)
 
@@ -423,7 +440,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} activeGrant={activeGrant} />,
+        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} activeGrant={activeGrant} />,
       }
     }
 

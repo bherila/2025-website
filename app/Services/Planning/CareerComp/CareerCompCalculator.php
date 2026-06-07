@@ -12,6 +12,7 @@ final class CareerCompCalculator
         private RsuVestingExpander $rsuVestingExpander = new RsuVestingExpander,
         private OptionsVestingService $optionsVestingService = new OptionsVestingService,
         private EquityValuationService $equityValuationService = new EquityValuationService,
+        private PrivateValuationScenarioService $privateValuationScenarioService = new PrivateValuationScenarioService,
         private EquityCompensationFactsBuilder $equityCompensationFactsBuilder = new EquityCompensationFactsBuilder,
     ) {}
 
@@ -61,6 +62,13 @@ final class CareerCompCalculator
         $valuation = $this->equityValuationService->value($job, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
+        $paperVestingRows = $this->paperVestingRows($job, $startYear, $horizonYears, $valuation['refresherRows']);
+        $paperEquity = $this->privateValuationScenarioService->project($job, $paperVestingRows, $startYear, $horizonYears);
+        $warnings = array_merge($warnings, $paperEquity['warnings']);
+        $paperEquityProjection = [
+            'scenarios' => $paperEquity['scenarios'],
+            'totalsByOutcome' => $paperEquity['totalsByOutcome'],
+        ];
 
         $raisePct = $job->number('comp.annualRaisePct');
         $baseSalary = $job->number('comp.baseSalary');
@@ -101,10 +109,16 @@ final class CareerCompCalculator
         $lifetime = [
             'totalCashComp' => $totalCashComp,
             'totalEquityValue' => $valuation['totals'],
+            'totalPaperEquityValue' => $paperEquityProjection['totalsByOutcome'],
             'totalValue' => [
                 'low' => MoneyMath::add($totalCashComp, $valuation['totals']['low']),
                 'medium' => MoneyMath::add($totalCashComp, $valuation['totals']['medium']),
                 'high' => MoneyMath::add($totalCashComp, $valuation['totals']['high']),
+            ],
+            'totalPaperValue' => [
+                'low' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['low']),
+                'medium' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['medium']),
+                'high' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['high']),
             ],
         ];
         $afterTax = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
@@ -116,6 +130,7 @@ final class CareerCompCalculator
                 'isCurrent' => $job->isCurrent(),
                 'annual' => $annual,
                 'liquidity' => $valuation['liquidity'],
+                'paperEquity' => $paperEquityProjection,
                 'vesting' => $vestingRows,
                 'lifetime' => $lifetime,
                 'afterTax' => $afterTax,
@@ -178,7 +193,55 @@ final class CareerCompCalculator
     }
 
     /**
-     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>  $optionRows
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $refresherRows
+     * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>
+     */
+    private function paperVestingRows(JobSpec $job, int $startYear, int $horizonYears, array $refresherRows): array
+    {
+        $paperStartYear = min($startYear, $this->earliestGrantYear($job) ?? $startYear);
+        $paperHorizonYears = max(1, $startYear + $horizonYears - $paperStartYear);
+        $paperOptionResult = $this->optionsVestingService->expand($job, $paperStartYear, $paperHorizonYears);
+
+        return array_merge(
+            $this->rsuVestingExpander->expand($job, $paperStartYear, $paperHorizonYears),
+            $paperOptionResult['rows'],
+            $refresherRows,
+        );
+    }
+
+    private function earliestGrantYear(JobSpec $job): ?int
+    {
+        $years = [];
+        foreach (array_merge($job->rsuGrants(), $job->optionGrants()) as $grant) {
+            $year = $this->grantYear($grant);
+            if ($year !== null) {
+                $years[] = $year;
+            }
+        }
+
+        return $years === [] ? null : min($years);
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     */
+    private function grantYear(array $grant): ?int
+    {
+        $grantDate = (string) ($grant['grantDate'] ?? '');
+        if ($grantDate === '') {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $grantDate);
+        if (! $date instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return (int) $date->format('Y');
+    }
+
+    /**
+     * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $optionRows
      */
     private function exerciseOutlayForYear(JobSpec $job, array $optionRows, int $year): float
     {
@@ -287,6 +350,11 @@ final class CareerCompCalculator
                     'low' => MoneyMath::subtract((float) ($job['lifetime']['totalValue']['low'] ?? 0.0), (float) ($current['lifetime']['totalValue']['low'] ?? 0.0)),
                     'medium' => MoneyMath::subtract((float) ($job['lifetime']['totalValue']['medium'] ?? 0.0), (float) ($current['lifetime']['totalValue']['medium'] ?? 0.0)),
                     'high' => MoneyMath::subtract((float) ($job['lifetime']['totalValue']['high'] ?? 0.0), (float) ($current['lifetime']['totalValue']['high'] ?? 0.0)),
+                ],
+                'totalPaperValueDelta' => [
+                    'low' => MoneyMath::subtract((float) ($job['lifetime']['totalPaperValue']['low'] ?? 0.0), (float) ($current['lifetime']['totalPaperValue']['low'] ?? 0.0)),
+                    'medium' => MoneyMath::subtract((float) ($job['lifetime']['totalPaperValue']['medium'] ?? 0.0), (float) ($current['lifetime']['totalPaperValue']['medium'] ?? 0.0)),
+                    'high' => MoneyMath::subtract((float) ($job['lifetime']['totalPaperValue']['high'] ?? 0.0), (float) ($current['lifetime']['totalPaperValue']['high'] ?? 0.0)),
                 ],
             ];
         }

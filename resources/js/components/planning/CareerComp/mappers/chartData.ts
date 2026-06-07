@@ -18,6 +18,17 @@ export interface LiquiditySeries {
   strokeDasharray: string | undefined
 }
 
+export interface PaperEquitySeries {
+  key: string
+  label: string
+  jobId: string
+  jobName: string
+  scenarioId: string
+  scenarioLabel: string
+  outcome: ProjectionBand
+  strokeDasharray: string | undefined
+}
+
 export interface AnnualFreeCashFlowRow {
   year: number
   jobId: string
@@ -51,10 +62,19 @@ export interface LifetimeValueRow {
   totalValueLow: number
   totalValueMedium: number
   totalValueHigh: number
+  totalPaperEquityLow: number
+  totalPaperEquityMedium: number
+  totalPaperEquityHigh: number
+  totalPaperValueLow: number
+  totalPaperValueMedium: number
+  totalPaperValueHigh: number
   cashCompDelta: number | null
   totalValueDeltaLow: number | null
   totalValueDeltaMedium: number | null
   totalValueDeltaHigh: number | null
+  totalPaperValueDeltaLow: number | null
+  totalPaperValueDeltaMedium: number | null
+  totalPaperValueDeltaHigh: number | null
 }
 
 export interface AfterTaxLifetimeValueRow {
@@ -89,13 +109,15 @@ export interface AfterTaxSourceBreakdownRow {
   amount: number
 }
 
-const BAND_LABELS: Record<ProjectionBand, string> = {
+export const SERIES_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2']
+
+export const BAND_LABELS: Record<ProjectionBand, string> = {
   low: 'Low',
   medium: 'Med',
   high: 'High',
 }
 
-const BAND_DASHES: Record<ProjectionBand, string | undefined> = {
+export const BAND_DASHES: Record<ProjectionBand, string | undefined> = {
   low: '2 4',
   medium: undefined,
   high: '8 4',
@@ -103,6 +125,10 @@ const BAND_DASHES: Record<ProjectionBand, string | undefined> = {
 
 function seriesKey(job: JobProjection, band: ProjectionBand): string {
   return `${job.id}-${band}`
+}
+
+function paperSeriesKey(job: JobProjection, scenarioId: string): string {
+  return `${job.id}-paper-${scenarioId}`
 }
 
 function annualForYear(job: JobProjection, year: number): EquityCompensationAfterTaxAnnual | undefined {
@@ -148,6 +174,34 @@ export function mapLiquidityChartData(projection: CareerCompProjection): Liquidi
       ;(['low', 'medium', 'high'] as ProjectionBand[]).forEach((band) => {
         const point = job.liquidity[band].find((entry) => entry.year === year)
         row[seriesKey(job, band)] = currency(point?.cumulativeValue ?? 0).value
+      })
+    })
+    return row
+  })
+}
+
+export function mapPaperEquitySeries(projection: CareerCompProjection): PaperEquitySeries[] {
+  return projection.jobs.flatMap((job) => job.paperEquity.scenarios.map((scenario) => ({
+    key: paperSeriesKey(job, scenario.id),
+    label: `${job.name} ${scenario.label}`,
+    jobId: job.id,
+    jobName: job.name,
+    scenarioId: scenario.id,
+    scenarioLabel: scenario.label,
+    outcome: scenario.outcome,
+    strokeDasharray: BAND_DASHES[scenario.outcome],
+  })))
+}
+
+export function mapPaperEquityChartData(projection: CareerCompProjection): LiquidityChartRow[] {
+  const years = Array.from({ length: projection.horizonYears }, (_entry, index) => projection.startYear + index)
+
+  return years.map((year) => {
+    const row: LiquidityChartRow = { year }
+    projection.jobs.forEach((job) => {
+      job.paperEquity.scenarios.forEach((scenario) => {
+        const point = scenario.points.find((entry) => entry.year === year)
+        row[paperSeriesKey(job, scenario.id)] = currency(point?.netPaperValue ?? 0).value
       })
     })
     return row
@@ -227,10 +281,19 @@ export function mapLifetimeValueRows(projection: CareerCompProjection): Lifetime
       totalValueLow: currency(job.lifetime.totalValue.low).value,
       totalValueMedium: currency(job.lifetime.totalValue.medium).value,
       totalValueHigh: currency(job.lifetime.totalValue.high).value,
+      totalPaperEquityLow: currency(job.lifetime.totalPaperEquityValue.low).value,
+      totalPaperEquityMedium: currency(job.lifetime.totalPaperEquityValue.medium).value,
+      totalPaperEquityHigh: currency(job.lifetime.totalPaperEquityValue.high).value,
+      totalPaperValueLow: currency(job.lifetime.totalPaperValue.low).value,
+      totalPaperValueMedium: currency(job.lifetime.totalPaperValue.medium).value,
+      totalPaperValueHigh: currency(job.lifetime.totalPaperValue.high).value,
       cashCompDelta: delta ? currency(delta.cashCompDelta).value : null,
       totalValueDeltaLow: delta ? currency(delta.totalValueDelta.low).value : null,
       totalValueDeltaMedium: delta ? currency(delta.totalValueDelta.medium).value : null,
       totalValueDeltaHigh: delta ? currency(delta.totalValueDelta.high).value : null,
+      totalPaperValueDeltaLow: delta ? currency(delta.totalPaperValueDelta.low).value : null,
+      totalPaperValueDeltaMedium: delta ? currency(delta.totalPaperValueDelta.medium).value : null,
+      totalPaperValueDeltaHigh: delta ? currency(delta.totalPaperValueDelta.high).value : null,
     }
   })
 }

@@ -1,5 +1,5 @@
 import currency from 'currency.js'
-import { Briefcase, Building2, Copy, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Briefcase, Building2, ChevronRight, Copy, LineChart, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElement, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,8 @@ import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant } from './defaults'
-import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, VestingFrequency, VestingSchedule } from './types'
+import { formatMoney } from './formatters'
+import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, ValuationScenario, ValuationScenarioStage, VestingFrequency, VestingSchedule } from './types'
 
 export type CareerCompFormSectionId = 'basics' | 'current-job' | 'offers'
 
@@ -19,6 +20,7 @@ export type GrantType = 'rsu' | 'opt'
 
 /** Opens a dedicated Miller column to add (no grantId) or edit (with grantId) a single grant. */
 export type OpenGrantEditor = (jobId: string, grantType: GrantType, grantId?: string) => void
+export type OpenValuationTimeline = (jobId: string) => void
 
 export interface CareerCompFormSectionMeta {
   id: CareerCompFormSectionId
@@ -44,6 +46,7 @@ interface CareerCompFormProps {
   inputs: CareerCompInputs
   onChange: (inputs: CareerCompInputs) => void
   onOpenGrantEditor: OpenGrantEditor
+  onOpenValuationTimeline: OpenValuationTimeline
   activeGrant?: ActiveGrantSelection | null | undefined
 }
 
@@ -191,6 +194,12 @@ const YES_NO_OPTIONS: SelectOption<'yes' | 'no'>[] = [
   { value: 'yes', label: 'Yes' },
 ]
 
+const VALUATION_OUTCOME_OPTIONS: SelectOption<'low' | 'medium' | 'high'>[] = [
+  { value: 'medium', label: 'Base / medium' },
+  { value: 'high', label: 'High' },
+  { value: 'low', label: 'Low' },
+]
+
 function frequencyLabel(frequency: VestingFrequency): string {
   return VESTING_FREQUENCY_OPTIONS.find((option) => option.value === frequency)?.label ?? 'Monthly'
 }
@@ -304,6 +313,57 @@ function nextGrantId(existing: { id: string }[], jobId: string, kind: 'rsu' | 'o
     id = `${jobId}-${kind}-${ordinal}`
   }
   return id
+}
+
+function nextScenarioId(existing: { id: string }[]): string {
+  const used = new Set(existing.map((scenario) => scenario.id))
+  let ordinal = existing.length + 1
+  let id = `scenario-${ordinal}`
+  while (used.has(id)) {
+    ordinal += 1
+    id = `scenario-${ordinal}`
+  }
+  return id
+}
+
+function buildDefaultValuationStage(year: number): ValuationScenarioStage {
+  return {
+    id: `stage-${year}`,
+    year,
+    stage: 'Stage',
+    preferredPostMoneyValuation: 100000000,
+    capitalDilutionPct: 0,
+    employeePoolDilutionPct: 0,
+    commonFmv: 0,
+    commonFmvDiscountPct: 0,
+    liquidityEvent: false,
+  }
+}
+
+function buildDefaultValuationScenario(existing: ValuationScenario[], startYear: number): ValuationScenario {
+  const id = nextScenarioId(existing)
+
+  return {
+    id,
+    label: `Scenario ${existing.length + 1}`,
+    outcome: 'medium',
+    stages: [buildDefaultValuationStage(startYear)],
+  }
+}
+
+function keyedValuationStages(scenario: ValuationScenario): { key: string; stage: ValuationScenarioStage }[] {
+  const seen = new Map<string, number>()
+
+  return scenario.stages.map((stage) => {
+    const baseKey = `${scenario.id}-${stage.id ?? `${stage.year}-${stage.stage ?? 'stage'}`}`
+    const duplicateCount = seen.get(baseKey) ?? 0
+    seen.set(baseKey, duplicateCount + 1)
+
+    return {
+      key: duplicateCount === 0 ? baseKey : `${baseKey}-${duplicateCount + 1}`,
+      stage,
+    }
+  })
 }
 
 function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldProps): ReactElement {
@@ -706,7 +766,182 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
   )
 }
 
-function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, activeGrant }: { job: JobSpec; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
+export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
+  inputs: CareerCompInputs
+  jobId: string
+  onChange: (inputs: CareerCompInputs) => void
+}): ReactElement {
+  const job = findJob(inputs, jobId)
+
+  if (!job) {
+    return <p className="text-sm text-muted-foreground">This job is no longer available.</p>
+  }
+
+  const scenarios = job.company.valuationScenarios
+
+  function setScenarios(valuationScenarios: ValuationScenario[]): void {
+    onChange(updateJob(inputs, jobId, (current) => ({
+      ...current,
+      company: { ...current.company, valuationScenarios },
+    })))
+  }
+
+  function updateScenario(scenarioId: string, patch: Partial<ValuationScenario>): void {
+    setScenarios(scenarios.map((scenario) => (scenario.id === scenarioId ? { ...scenario, ...patch } : scenario)))
+  }
+
+  function updateStage(scenarioId: string, index: number, patch: Partial<ValuationScenarioStage>): void {
+    setScenarios(scenarios.map((scenario) => {
+      if (scenario.id !== scenarioId) {
+        return scenario
+      }
+
+      return {
+        ...scenario,
+        stages: scenario.stages.map((stage, stageIndex) => (stageIndex === index ? { ...stage, ...patch } : stage)),
+      }
+    }))
+  }
+
+  function addStage(scenario: ValuationScenario): void {
+    const lastYear = Math.max(inputs.startYear, ...scenario.stages.map((stage) => stage.year))
+    updateScenario(scenario.id, { stages: [...scenario.stages, buildDefaultValuationStage(lastYear + 1)] })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold">Company valuation timeline</p>
+        <p className="text-xs text-muted-foreground">{job.name}</p>
+      </div>
+
+      {scenarios.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No valuation scenarios for this private company.</p>
+      ) : null}
+
+      <div className="space-y-4">
+        {scenarios.map((scenario, scenarioIndex) => (
+          <div key={scenario.id} className="space-y-3 rounded-md border p-3">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
+              <div className="space-y-2">
+                <Label htmlFor={`${scenario.id}-label`}>Scenario</Label>
+                <Input id={`${scenario.id}-label`} value={scenario.label} onChange={(event) => updateScenario(scenario.id, { label: event.target.value })} />
+              </div>
+              <SelectField label="Outcome" value={scenario.outcome} options={VALUATION_OUTCOME_OPTIONS} onChange={(outcome) => updateScenario(scenario.id, { outcome })} />
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove ${scenario.label}`}
+                  disabled={scenarios.length === 1}
+                  onClick={() => setScenarios(scenarios.filter((entry) => entry.id !== scenario.id))}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {keyedValuationStages(scenario).map(({ key, stage }, stageIndex) => (
+                <div key={key} className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
+                  <NumberField label="Year" value={stage.year} min={2000} onChange={(year) => updateStage(scenario.id, stageIndex, { year })} />
+                  <div className="space-y-2">
+                    <Label htmlFor={`${scenario.id}-${stageIndex}-stage`}>Stage</Label>
+                    <Input id={`${scenario.id}-${stageIndex}-stage`} value={stage.stage ?? ''} onChange={(event) => updateStage(scenario.id, stageIndex, { stage: event.target.value || null })} />
+                  </div>
+                  <MoneyField label="Headline valuation" value={stage.preferredPostMoneyValuation} onChange={(preferredPostMoneyValuation) => updateStage(scenario.id, stageIndex, { preferredPostMoneyValuation })} />
+                  <MoneyField label="Common FMV / 409A" value={stage.commonFmv} onChange={(commonFmv) => updateStage(scenario.id, stageIndex, { commonFmv })} />
+                  <NumberField label="Capital dilution" value={stage.capitalDilutionPct} suffix="%" min={0} max={100} onChange={(capitalDilutionPct) => updateStage(scenario.id, stageIndex, { capitalDilutionPct })} />
+                  <NumberField label="Pool dilution" value={stage.employeePoolDilutionPct} suffix="%" min={0} max={100} onChange={(employeePoolDilutionPct) => updateStage(scenario.id, stageIndex, { employeePoolDilutionPct })} />
+                  <NumberField label="FMV discount" value={stage.commonFmvDiscountPct} suffix="%" min={0} max={100} onChange={(commonFmvDiscountPct) => updateStage(scenario.id, stageIndex, { commonFmvDiscountPct })} />
+                  <SelectField label="Liquidity event" value={stage.liquidityEvent ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => updateStage(scenario.id, stageIndex, { liquidityEvent: value === 'yes' })} />
+                  <div className="sm:col-span-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={scenario.stages.length === 1}
+                      onClick={() => updateScenario(scenario.id, { stages: scenario.stages.filter((_stage, index) => index !== stageIndex) })}
+                    >
+                      <Trash2 className="size-4" /> Remove stage
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button type="button" variant="outline" size="sm" onClick={() => addStage(scenario)}>
+              <Plus className="size-4" /> Add stage
+            </Button>
+            {scenarioIndex < scenarios.length - 1 ? <div className="border-b" /> : null}
+          </div>
+        ))}
+      </div>
+
+      <Button type="button" variant="outline" className="w-full" onClick={() => setScenarios([...scenarios, buildDefaultValuationScenario(scenarios, inputs.startYear)])}>
+        <Plus className="size-4" /> Add scenario
+      </Button>
+    </div>
+  )
+}
+
+function ValuationTimelineLauncher({ job, onOpenValuationTimeline }: { job: JobSpec; onOpenValuationTimeline: OpenValuationTimeline }): ReactElement {
+  const scenarioCount = job.company.valuationScenarios.length
+  const stageCount = job.company.valuationScenarios.reduce((total, scenario) => total + scenario.stages.length, 0)
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenValuationTimeline(job.id)}
+      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
+        <LineChart className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">Company valuation timeline</span>
+        <span className="block text-xs text-muted-foreground">{scenarioCount} scenario{scenarioCount === 1 ? '' : 's'} · {stageCount} stage row{stageCount === 1 ? '' : 's'}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </button>
+  )
+}
+
+function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: JobSpec; startYear: number; horizonYears: number }): ReactElement | null {
+  if (job.refresher.pctOfBase <= 0) {
+    return null
+  }
+
+  const cadence = Math.max(1, Math.round(job.refresher.cadenceYears))
+  const firstOffset = Math.max(0, Math.round(job.refresher.firstYearOffset))
+  const rows: { year: number; value: number }[] = []
+
+  for (let offset = firstOffset; offset < horizonYears && rows.length < 4; offset += cadence) {
+    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** offset
+    rows.push({
+      year: startYear + offset,
+      value: currency(job.comp.baseSalary).multiply(raiseFactor).multiply(job.refresher.pctOfBase / 100).value,
+    })
+  }
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="space-y-2">
+      {rows.map((row) => (
+        <div key={`${job.id}-projected-refresher-${row.year}`} className="rounded-md border border-dashed p-3 text-xs opacity-60">
+          <p className="font-medium">Projected refresher · {row.year}</p>
+          <p className="text-muted-foreground">{formatMoney(row.value)} target value · {job.refresher.vestingYears}yr {frequencyLabel(job.refresher.vestingFrequency).toLowerCase()}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, activeGrant }: { job: JobSpec; startYear: number; horizonYears: number; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   const nameId = useId()
   const isPrivate = job.company.type === 'private'
   const removeText = removeLabel ?? `Remove ${job.name}`
@@ -736,6 +971,9 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
               <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
               <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
               <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
+              <div className="sm:col-span-2">
+                <ValuationTimelineLauncher job={job} onOpenValuationTimeline={onOpenValuationTimeline} />
+              </div>
             </>
           ) : (
             <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
@@ -759,6 +997,7 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
             <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
             <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
           </div>
+          <ProjectedRefreshersPreview job={job} startYear={startYear} horizonYears={horizonYears} />
         </div>
 
         <div className="space-y-4 border-t pt-4">
@@ -770,7 +1009,7 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, activeGrant }: CareerCompFormSectionProps): ReactElement {
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, activeGrant }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -793,10 +1032,13 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           <JobEditor
             activeGrant={activeGrant}
             job={inputs.currentJob}
+            startYear={inputs.startYear}
+            horizonYears={inputs.horizonYears}
             onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
             onRemove={() => onChange({ ...inputs, currentJob: null })}
             removeLabel="Remove current job — compare against no job"
             onOpenGrantEditor={onOpenGrantEditor}
+            onOpenValuationTimeline={onOpenValuationTimeline}
           />
         ) : (
           <Card className="border-dashed">
@@ -820,9 +1062,12 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           key={job.id}
           activeGrant={activeGrant}
           job={job}
+          startYear={inputs.startYear}
+          horizonYears={inputs.horizonYears}
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}
           onOpenGrantEditor={onOpenGrantEditor}
+          onOpenValuationTimeline={onOpenValuationTimeline}
         />
       ))}
       <Button

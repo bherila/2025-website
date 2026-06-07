@@ -6,9 +6,12 @@ export type {
   LifetimeValueRow,
   LiquidityChartRow,
   LiquiditySeries,
+  PaperEquitySeries,
   ProjectionBand,
 } from './chartData'
 export {
+  BAND_DASHES,
+  BAND_LABELS,
   mapAfterTaxAnnualFreeCashFlowRows,
   mapAfterTaxLifetimeValueRows,
   mapAfterTaxLiquidityChartData,
@@ -17,4 +20,7 @@ export {
   mapLifetimeValueRows,
   mapLiquidityChartData,
   mapLiquiditySeries,
+  mapPaperEquityChartData,
+  mapPaperEquitySeries,
+  SERIES_COLORS,
 } from './chartData'

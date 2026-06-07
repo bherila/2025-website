@@ -50,6 +50,7 @@ final class CareerCompInputs
                     'fullyDilutedShares' => 0.0,
                     'annualDilutionPct' => 0.0,
                     'liquidityDate' => null,
+                    'valuationScenarios' => [],
                 ],
                 'comp' => [
                     'baseSalary' => 185000.0,
@@ -84,6 +85,26 @@ final class CareerCompInputs
                     'fullyDilutedShares' => 10000000,
                     'annualDilutionPct' => 3.0,
                     'liquidityDate' => ($startYear + 4).'-01-01',
+                    'valuationScenarios' => [
+                        [
+                            'id' => 'base',
+                            'label' => 'Base case',
+                            'outcome' => 'medium',
+                            'stages' => [
+                                [
+                                    'id' => 'stage-current',
+                                    'year' => $startYear,
+                                    'stage' => 'Current',
+                                    'preferredPostMoneyValuation' => 100000000,
+                                    'capitalDilutionPct' => 0,
+                                    'employeePoolDilutionPct' => 0,
+                                    'commonFmv' => 10,
+                                    'commonFmvDiscountPct' => 0,
+                                    'liquidityEvent' => false,
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
                 'comp' => [
                     'baseSalary' => 175000.0,

@@ -3,7 +3,7 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { type ReactElement, useState } from 'react'
 
-import { CareerCompFormSection, GrantEditorColumn, type GrantType } from '../CareerCompForm'
+import { CareerCompFormSection, GrantEditorColumn, type GrantType, ValuationTimelineColumn } from '../CareerCompForm'
 import { buildDefaultJob } from '../defaults'
 import type { CareerCompInputs } from '../types'
 
@@ -28,6 +28,7 @@ interface GrantEditorTarget {
 function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
   const [inputs, setInputs] = useState(initial)
   const [editor, setEditor] = useState<GrantEditorTarget | null>(null)
+  const [timelineJobId, setTimelineJobId] = useState<string | null>(null)
   return (
     <>
       <CareerCompFormSection
@@ -35,10 +36,14 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
         inputs={inputs}
         onChange={setInputs}
         onOpenGrantEditor={(jobId, grantType, grantId) => setEditor({ jobId, grantType, grantId })}
+        onOpenValuationTimeline={setTimelineJobId}
         activeGrant={editor}
       />
       {editor ? (
         <GrantEditorColumn inputs={inputs} jobId={editor.jobId} grantType={editor.grantType} grantId={editor.grantId} onChange={setInputs} onGrantCreated={(grantId) => setEditor((current) => (current ? { ...current, grantId } : current))} />
+      ) : null}
+      {timelineJobId ? (
+        <ValuationTimelineColumn inputs={inputs} jobId={timelineJobId} onChange={setInputs} />
       ) : null}
     </>
   )
@@ -61,7 +66,18 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.getByText('409A price')).toBeInTheDocument()
     expect(screen.getByText('Annual dilution')).toBeInTheDocument()
     expect(screen.getByText('Liquidity date')).toBeInTheDocument()
+    expect(screen.getByText('Company valuation timeline')).toBeInTheDocument()
     expect(screen.queryByText('Current share price')).not.toBeInTheDocument()
+  })
+
+  it('opens and edits the private valuation timeline column', () => {
+    render(<Harness initial={makeInputs('private')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Company valuation timeline/ }))
+    expect(screen.getAllByText('Company valuation timeline')).toHaveLength(2)
+    fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '250000000' } })
+
+    expect(screen.getByDisplayValue('250000000')).toBeInTheDocument()
   })
 
   it('adds a new RSU grant via its own column as fields change', () => {

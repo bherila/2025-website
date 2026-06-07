@@ -6,6 +6,25 @@ export const equityGrowthBandSchema = z.object({
   highPct: z.number(),
 })
 
+export const valuationScenarioStageSchema = z.object({
+  id: z.string().optional(),
+  year: z.number(),
+  stage: z.string().nullish(),
+  preferredPostMoneyValuation: z.number().default(0),
+  capitalDilutionPct: z.number().default(0),
+  employeePoolDilutionPct: z.number().default(0),
+  commonFmv: z.number().default(0),
+  commonFmvDiscountPct: z.number().default(0),
+  liquidityEvent: z.boolean().default(false),
+})
+
+export const valuationScenarioSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  outcome: z.enum(['low', 'medium', 'high']).default('medium'),
+  stages: z.array(valuationScenarioStageSchema),
+})
+
 export const companySpecSchema = z.object({
   type: z.enum(['public', 'private']),
   currentSharePrice: z.number(),
@@ -13,6 +32,7 @@ export const companySpecSchema = z.object({
   fullyDilutedShares: z.number(),
   annualDilutionPct: z.number(),
   liquidityDate: z.string().nullish(),
+  valuationScenarios: z.array(valuationScenarioSchema).default([]),
 })
 
 export const cashCompSchema = z.object({
@@ -208,12 +228,42 @@ export const bandedMoneySchema = z.object({
   high: z.number(),
 })
 
+export const paperEquityPointSchema = z.object({
+  year: z.number(),
+  stage: z.string().nullable(),
+  preferredPostMoneyValuation: z.number(),
+  capitalDilutionPct: z.number(),
+  employeePoolDilutionPct: z.number(),
+  dilutedOwnershipPct: z.number(),
+  commonFmv: z.number(),
+  grossOwnershipValue: z.number(),
+  grossCommonValue: z.number(),
+  commonIntrinsicValue: z.number(),
+  exerciseCost: z.number(),
+  netPaperValue: z.number(),
+  liquidityEvent: z.boolean(),
+})
+
+export const paperEquityScenarioSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  outcome: z.enum(['low', 'medium', 'high']),
+  points: z.array(paperEquityPointSchema),
+  totalNetPaperValue: z.number(),
+})
+
+export const paperEquityProjectionSchema = z.object({
+  scenarios: z.array(paperEquityScenarioSchema).default([]),
+  totalsByOutcome: bandedMoneySchema.default({ low: 0, medium: 0, high: 0 }),
+}).default({ scenarios: [], totalsByOutcome: { low: 0, medium: 0, high: 0 } })
+
 export const vestingProjectionSchema = z.object({
   grantId: z.string(),
   type: z.enum(['rsu', 'iso', 'nso']),
   year: z.number(),
   vestedShares: z.number(),
   exercisableShares: z.number(),
+  source: z.enum(['projected_refresher']).optional(),
 })
 
 export const jobProjectionSchema = z.object({
@@ -226,11 +276,14 @@ export const jobProjectionSchema = z.object({
     medium: z.array(liquidityPointSchema),
     high: z.array(liquidityPointSchema),
   }),
+  paperEquity: paperEquityProjectionSchema,
   vesting: z.array(vestingProjectionSchema),
   lifetime: z.object({
     totalCashComp: z.number(),
     totalEquityValue: bandedMoneySchema,
+    totalPaperEquityValue: bandedMoneySchema.default({ low: 0, medium: 0, high: 0 }),
     totalValue: bandedMoneySchema,
+    totalPaperValue: bandedMoneySchema.default({ low: 0, medium: 0, high: 0 }),
   }),
   afterTax: equityCompensationAfterTaxSchema.optional(),
 })
@@ -240,6 +293,7 @@ export const deltaVsCurrentSchema = z.object({
   name: z.string(),
   cashCompDelta: z.number(),
   totalValueDelta: bandedMoneySchema,
+  totalPaperValueDelta: bandedMoneySchema.default({ low: 0, medium: 0, high: 0 }),
 })
 
 export const careerCompProjectionSchema = z.object({
@@ -280,6 +334,8 @@ export interface CareerCompInitialData {
 }
 
 export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
+export type ValuationScenarioStage = z.infer<typeof valuationScenarioStageSchema>
+export type ValuationScenario = z.infer<typeof valuationScenarioSchema>
 export type CompanySpec = z.infer<typeof companySpecSchema>
 export type CashComp = z.infer<typeof cashCompSchema>
 export type VestingFrequency = z.infer<typeof vestingFrequencySchema>
@@ -297,6 +353,9 @@ export type EquityCompensationAfterTaxAnnual = z.infer<typeof equityCompensation
 export type EquityCompensationAfterTax = z.infer<typeof equityCompensationAfterTaxSchema>
 export type LiquidityPoint = z.infer<typeof liquidityPointSchema>
 export type BandedMoney = z.infer<typeof bandedMoneySchema>
+export type PaperEquityPoint = z.infer<typeof paperEquityPointSchema>
+export type PaperEquityScenario = z.infer<typeof paperEquityScenarioSchema>
+export type PaperEquityProjection = z.infer<typeof paperEquityProjectionSchema>
 export type VestingProjection = z.infer<typeof vestingProjectionSchema>
 export type JobProjection = z.infer<typeof jobProjectionSchema>
 export type DeltaVsCurrent = z.infer<typeof deltaVsCurrentSchema>

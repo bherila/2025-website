@@ -376,6 +376,331 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(2028, $refresherRows[0]['year']);
     }
 
+    public function test_private_paper_equity_uses_vested_ownership_and_compounded_dilution(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 2,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-paper-job',
+                'name' => 'Private paper job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [
+                            ['year' => 2026, 'stage' => 'A', 'preferredPostMoneyValuation' => 180000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 180, 'liquidityEvent' => false],
+                            ['year' => 2027, 'stage' => 'B', 'preferredPostMoneyValuation' => 500000000, 'capitalDilutionPct' => 10, 'employeePoolDilutionPct' => 7, 'commonFmv' => 415, 'liquidityEvent' => false],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [[
+                    'id' => 'rsu-paper',
+                    'kind' => 'hire',
+                    'grantDate' => '2025-01-01',
+                    'shareCount' => 3000,
+                    'cliffMonths' => 12,
+                    'vestingYears' => 4,
+                    'vestingFrequency' => 'annual',
+                ]],
+                'optionGrants' => [],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $points = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'];
+
+        $this->assertSame(135000.0, $points[0]['grossOwnershipValue']);
+        $this->assertSame(0.075, $points[0]['dilutedOwnershipPct']);
+        $this->assertSame(622500.0, $points[1]['grossOwnershipValue']);
+        $this->assertSame(0.1245, $points[1]['dilutedOwnershipPct']);
+        $this->assertSame(622500.0, $projection['jobs'][0]['lifetime']['totalPaperEquityValue']['medium']);
+    }
+
+    public function test_private_paper_equity_applies_dilution_only_after_each_grant_date(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 3,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-future-grant-job',
+                'name' => 'Private future grant job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [
+                            ['year' => 2026, 'stage' => 'A', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => false],
+                            ['year' => 2027, 'stage' => 'B', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 50, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => false],
+                            ['year' => 2028, 'stage' => 'C', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => false],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [
+                    [
+                        'id' => 'current-option',
+                        'kind' => 'hire',
+                        'type' => 'nso',
+                        'grantDate' => '2026-01-01',
+                        'shareCount' => 1000,
+                        'strike' => 0,
+                        'vestingYears' => 1,
+                        'earlyExercise83b' => true,
+                    ],
+                    [
+                        'id' => 'future-option',
+                        'kind' => 'refresh',
+                        'type' => 'nso',
+                        'grantDate' => '2028-01-01',
+                        'shareCount' => 1000,
+                        'strike' => 0,
+                        'vestingYears' => 1,
+                        'earlyExercise83b' => true,
+                    ],
+                ],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $point = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'][2];
+
+        $this->assertSame(0.15, $point['dilutedOwnershipPct']);
+        $this->assertSame(150000.0, $point['grossOwnershipValue']);
+        $this->assertSame(150000.0, $point['netPaperValue']);
+    }
+
+    public function test_private_paper_equity_includes_pre_horizon_owned_shares(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 1,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-pre-horizon-job',
+                'name' => 'Private pre-horizon job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [[
+                            'year' => 2026,
+                            'stage' => 'A',
+                            'preferredPostMoneyValuation' => 100000000,
+                            'capitalDilutionPct' => 0,
+                            'employeePoolDilutionPct' => 0,
+                            'commonFmv' => 100,
+                        ]],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'owned-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2025-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 0,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $point = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'][0];
+
+        $this->assertSame(0.1, $point['dilutedOwnershipPct']);
+        $this->assertSame(100000.0, $point['grossOwnershipValue']);
+        $this->assertSame(100000.0, $projection['jobs'][0]['lifetime']['totalPaperEquityValue']['medium']);
+    }
+
+    public function test_private_paper_equity_does_not_apply_first_future_stage_to_earlier_years(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 3,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-future-stage-job',
+                'name' => 'Private future stage job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [[
+                            'year' => 2028,
+                            'stage' => 'Exit',
+                            'preferredPostMoneyValuation' => 100000000,
+                            'capitalDilutionPct' => 0,
+                            'employeePoolDilutionPct' => 0,
+                            'commonFmv' => 100,
+                        ]],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'future-stage-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2026-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 0,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $points = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'];
+
+        $this->assertNull($points[0]['stage']);
+        $this->assertSame(0.0, $points[0]['preferredPostMoneyValuation']);
+        $this->assertSame(0.0, $points[0]['grossOwnershipValue']);
+        $this->assertNull($points[1]['stage']);
+        $this->assertSame(0.0, $points[1]['preferredPostMoneyValuation']);
+        $this->assertSame(0.0, $points[1]['grossOwnershipValue']);
+        $this->assertSame('Exit', $points[2]['stage']);
+        $this->assertSame(100000.0, $points[2]['grossOwnershipValue']);
+    }
+
+    public function test_private_paper_equity_warns_when_multiple_scenarios_share_outcome(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 1,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-duplicate-outcome-job',
+                'name' => 'Private duplicate outcome job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [
+                        [
+                            'id' => 'base',
+                            'label' => 'Base',
+                            'outcome' => 'medium',
+                            'stages' => [[
+                                'year' => 2026,
+                                'stage' => 'A',
+                                'preferredPostMoneyValuation' => 100000000,
+                                'capitalDilutionPct' => 0,
+                                'employeePoolDilutionPct' => 0,
+                                'commonFmv' => 100,
+                            ]],
+                        ],
+                        [
+                            'id' => 'upside',
+                            'label' => 'Upside',
+                            'outcome' => 'medium',
+                            'stages' => [[
+                                'year' => 2026,
+                                'stage' => 'A',
+                                'preferredPostMoneyValuation' => 200000000,
+                                'capitalDilutionPct' => 0,
+                                'employeePoolDilutionPct' => 0,
+                                'commonFmv' => 100,
+                            ]],
+                        ],
+                    ],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'option-paper',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2026-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 0,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $this->assertContains(
+            'Private duplicate outcome job: multiple medium private valuation scenarios; paper lifetime totals use the highest scenario for that outcome.',
+            $projection['warnings'],
+        );
+        $this->assertSame(200000.0, $projection['jobs'][0]['lifetime']['totalPaperEquityValue']['medium']);
+    }
+
+    public function test_private_option_paper_equity_subtracts_exercise_cost_and_exposes_common_intrinsic_value(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 1,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-option-paper-job',
+                'name' => 'Private option paper job',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [[
+                            'year' => 2026,
+                            'stage' => 'A',
+                            'preferredPostMoneyValuation' => 100000000,
+                            'capitalDilutionPct' => 0,
+                            'employeePoolDilutionPct' => 0,
+                            'commonFmv' => 20,
+                            'liquidityEvent' => false,
+                        ]],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'iso-paper',
+                    'kind' => 'hire',
+                    'type' => 'iso',
+                    'grantDate' => '2025-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 5,
+                    'cliffMonths' => 12,
+                    'vestingYears' => 1,
+                    'vestingFrequency' => 'annual',
+                    'earlyExercise83b' => false,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $point = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'][0];
+
+        $this->assertSame(100000.0, $point['grossOwnershipValue']);
+        $this->assertSame(20000.0, $point['grossCommonValue']);
+        $this->assertSame(15000.0, $point['commonIntrinsicValue']);
+        $this->assertSame(5000.0, $point['exerciseCost']);
+        $this->assertSame(95000.0, $point['netPaperValue']);
+    }
+
     public function test_iso_limit_warning_accounts_for_fractional_shares(): void
     {
         $job = JobSpec::nullableFromArray([

@@ -198,4 +198,67 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.vesting.0.year', 2028);
         $response->assertJsonPath('jobs.0.vesting.0.vestedShares', 400);
     }
+
+    public function test_compute_accepts_private_valuation_scenarios_and_returns_paper_equity(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['startYear'] = 2026;
+        $inputs['horizonYears'] = 1;
+        $inputs['hypotheticalJobs'][0]['company']['fullyDilutedShares'] = 1000000;
+        $inputs['hypotheticalJobs'][0]['company']['valuationScenarios'] = [[
+            'id' => 'base',
+            'label' => 'Base',
+            'outcome' => 'medium',
+            'stages' => [[
+                'year' => 2026,
+                'stage' => 'A',
+                'preferredPostMoneyValuation' => 100000000,
+                'capitalDilutionPct' => 0,
+                'employeePoolDilutionPct' => 0,
+                'commonFmv' => 20,
+                'commonFmvDiscountPct' => 0,
+                'liquidityEvent' => false,
+            ]],
+        ]];
+        $inputs['hypotheticalJobs'][0]['optionGrants'][0]['grantDate'] = '2025-01-01';
+        $inputs['hypotheticalJobs'][0]['optionGrants'][0]['shareCount'] = 1000;
+        $inputs['hypotheticalJobs'][0]['optionGrants'][0]['strike'] = 5;
+        $inputs['hypotheticalJobs'][0]['optionGrants'][0]['vestingYears'] = 1;
+        $inputs['hypotheticalJobs'][0]['optionGrants'][0]['vestingFrequency'] = 'annual';
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.paperEquity.scenarios.0.id', 'base');
+        $response->assertJsonPath('jobs.0.paperEquity.scenarios.0.points.0.netPaperValue', 95000);
+        $response->assertJsonPath('jobs.0.lifetime.totalPaperEquityValue.medium', 95000);
+    }
+
+    public function test_compute_rejects_invalid_private_valuation_scenario_rows(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['hypotheticalJobs'][0]['company']['valuationScenarios'] = [[
+            'id' => 'base',
+            'label' => 'Base',
+            'outcome' => 'moonshot',
+            'stages' => [[
+                'year' => 2026,
+                'preferredPostMoneyValuation' => -1,
+            ]],
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors([
+            'inputs.hypotheticalJobs.0.company.valuationScenarios.0.outcome',
+            'inputs.hypotheticalJobs.0.company.valuationScenarios.0.stages.0.preferredPostMoneyValuation',
+        ]);
+    }
 }
