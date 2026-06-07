@@ -2,6 +2,18 @@ import currency from 'currency.js'
 
 import { parseMoney } from '@/lib/finance/money'
 
+interface CompactCurrencyUnit {
+  divisor: number
+  suffix: string
+  threshold: number
+}
+
+const COMPACT_CURRENCY_UNITS: CompactCurrencyUnit[] = [
+  { threshold: 1000000000, divisor: 1000000000, suffix: 'B' },
+  { threshold: 1000000, divisor: 1000000, suffix: 'M' },
+  { threshold: 1000, divisor: 1000, suffix: 'k' },
+]
+
 export function formatFriendlyAmount(amount: number): string {
   const absAmount = Math.abs(amount)
   if (absAmount >= 1000000) {
@@ -14,6 +26,16 @@ export function formatFriendlyAmount(amount: number): string {
   return amount.toFixed(0)
 }
 
+function compactAmountForUnit(amount: number, unit: CompactCurrencyUnit): number {
+  return currency(amount, { precision: 6 }).divide(unit.divisor).value
+}
+
+function compactCurrencyDisplayAmount(compactAmount: number): string {
+  return compactAmount < 10 && compactAmount % 1 !== 0
+    ? compactAmount.toFixed(1).replace(/\.0$/, '')
+    : String(Math.round(compactAmount))
+}
+
 function formatCompactCurrencyAmount(amount: number): string {
   const isNegative = amount < 0
   const absAmount = isNegative ? currency(amount).multiply(-1).value : currency(amount).value
@@ -22,17 +44,17 @@ function formatCompactCurrencyAmount(amount: number): string {
     return `${isNegative ? '-' : ''}${currency(absAmount, { precision: 0 }).format()}`
   }
 
-  const unit = absAmount >= 1000000000
-    ? { divisor: 1000000000, suffix: 'B' }
-    : absAmount >= 1000000
-      ? { divisor: 1000000, suffix: 'M' }
-      : { divisor: 1000, suffix: 'k' }
-  const compactAmount = currency(absAmount).divide(unit.divisor).value
-  const displayAmount = compactAmount < 10 && compactAmount % 1 !== 0
-    ? compactAmount.toFixed(1).replace(/\.0$/, '')
-    : String(Math.round(compactAmount))
+  const selectedIndex = COMPACT_CURRENCY_UNITS.findIndex((unit) => absAmount >= unit.threshold)
+  const unitIndex = selectedIndex === -1 ? COMPACT_CURRENCY_UNITS.length - 1 : selectedIndex
+  const unit = COMPACT_CURRENCY_UNITS[unitIndex]!
+  const compactAmount = compactAmountForUnit(absAmount, unit)
 
-  return `${isNegative ? '-' : ''}$${displayAmount}${unit.suffix}`
+  if (Math.round(compactAmount) >= 1000 && unitIndex > 0) {
+    const promotedUnit = COMPACT_CURRENCY_UNITS[unitIndex - 1]!
+    return `${isNegative ? '-' : ''}$${compactCurrencyDisplayAmount(compactAmountForUnit(absAmount, promotedUnit))}${promotedUnit.suffix}`
+  }
+
+  return `${isNegative ? '-' : ''}$${compactCurrencyDisplayAmount(compactAmount)}${unit.suffix}`
 }
 
 export function formatFriendlyCurrencyAmount(value: string | number | null | undefined): string {
