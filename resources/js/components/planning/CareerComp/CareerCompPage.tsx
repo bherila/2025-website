@@ -206,6 +206,42 @@ function SaveStateBadge({ state, label }: { state: SaveState; label: string }): 
   return null
 }
 
+function isIsoLimitWarning(warning: string | null): boolean {
+  return warning?.includes('ISO first-exercisable value exceeds $100k') ?? false
+}
+
+function WarningDetailsDialog({ warning, onOpenChange }: { warning: string | null; onOpenChange: (open: boolean) => void }): ReactElement {
+  const isIsoLimit = isIsoLimitWarning(warning)
+
+  return (
+    <Dialog open={warning !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{isIsoLimit ? 'Why ISO/NSO still matters with early exercise' : 'Projection warning'}</DialogTitle>
+          <DialogDescription>{warning}</DialogDescription>
+        </DialogHeader>
+        {isIsoLimit ? (
+          <div className="grid gap-3 text-sm leading-relaxed text-foreground">
+            <p>
+              Early exercise does not remove the ISO $100k limit. The model applies that limit based on the grant-date FMV of shares first exercisable in a calendar year. If early exercise makes the full grant exercisable in the grant year, the amount above $100k is modeled as NSO.
+            </p>
+            <p>
+              If the exercise price equals FMV at grant-date exercise, the immediate ISO AMT preference and NSO ordinary-income spread may both be $0. The ISO/NSO split can still matter later for holding-period treatment, sale reporting, and any future spread assumptions.
+            </p>
+            <p className="text-muted-foreground">
+              This is projection context, not tax advice. Confirm the actual grant terms, 83(b) filing, and reporting with a tax professional.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm leading-relaxed text-foreground">
+            This warning comes from the projection engine and may affect the comparison results. Review the related inputs before relying on this scenario.
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /** ISO timestamp → value for a <input type="date"> (YYYY-MM-DD), or '' when absent. */
 function toDateInputValue(iso: string | null | undefined): string {
   return iso ? iso.slice(0, 10) : ''
@@ -226,6 +262,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const grantEditorSequenceRef = useRef(0)
   const [isExporting, setIsExporting] = useState(false)
   const [shareDeleted, setShareDeleted] = useState(false)
+  const [selectedWarning, setSelectedWarning] = useState<string | null>(null)
 
   // Share dialog (private latest only).
   const [shareOpen, setShareOpen] = useState(false)
@@ -548,10 +585,20 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         <section className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div className="grid gap-1">
-            {warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            {warnings.map((warning) => (
+              <button
+                key={warning}
+                type="button"
+                className="rounded-sm text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700/50 dark:focus-visible:ring-amber-200/60"
+                onClick={() => setSelectedWarning(warning)}
+              >
+                {warning}
+              </button>
+            ))}
           </div>
         </section>
       ) : null}
+      <WarningDetailsDialog warning={selectedWarning} onOpenChange={(open) => { if (!open) setSelectedWarning(null) }} />
 
       {status ? (
         <section className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>

@@ -1,3 +1,4 @@
+import { sampleCareerCompProjection } from '../__fixtures__/sampleProjection'
 import { mapAfterTaxLiquidityChartData, mapPaperEquityChartData, mapPaperEquitySeries } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
@@ -174,5 +175,14 @@ describe('Career Comparison chart data mappers', () => {
 
     expect(mapPaperEquitySeries(projection)[0]).toMatchObject({ key: 'private-job-paper-base', outcome: 'medium' })
     expect(mapPaperEquityChartData(projection)[0]?.['private-job-paper-base']).toBe(95000)
+  })
+
+  it('adds the current job medium liquid equity as a comparison series when it has no paper scenarios', () => {
+    expect(mapPaperEquitySeries(sampleCareerCompProjection)[0]).toMatchObject({
+      key: 'current-current-equity-medium',
+      label: 'Current job liquid equity med',
+      source: 'currentJobLiquidity',
+    })
+    expect(mapPaperEquityChartData(sampleCareerCompProjection)[0]?.['current-current-equity-medium']).toBe(33000)
   })
 })
