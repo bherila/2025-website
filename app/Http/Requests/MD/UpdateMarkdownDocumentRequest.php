@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\MD;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateMarkdownDocumentRequest extends FormRequest
@@ -18,7 +19,16 @@ class UpdateMarkdownDocumentRequest extends FormRequest
     {
         return [
             'title' => ['nullable', 'string', 'max:120'],
-            'markdown_content' => ['required', 'string', 'max:1000000'],
+            'markdown_content' => [
+                'bail',
+                'required',
+                'string',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (strlen((string) $value) > 5_000_000) {
+                        $fail('The Markdown content must not exceed 5,000,000 bytes.');
+                    }
+                },
+            ],
         ];
     }
 }
