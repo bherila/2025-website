@@ -452,7 +452,7 @@ class CareerComparisonWorkflowService
 
     private function vestingYearsFromMonths(int $months): int|float
     {
-        $months = max(12, $months);
+        $months = max(3, $months);
 
         return $months % 12 === 0
             ? (int) ($months / 12)

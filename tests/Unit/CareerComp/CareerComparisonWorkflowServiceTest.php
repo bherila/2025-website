@@ -128,6 +128,28 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         );
     }
 
+    public function test_sub_year_import_keeps_actual_vesting_span(): void
+    {
+        $user = User::factory()->create();
+        foreach (['2026-04-15', '2026-07-15'] as $vestDate) {
+            $this->award($user->id, [
+                'grant_date' => '2026-01-15',
+                'vest_date' => $vestDate,
+            ]);
+        }
+
+        $result = $this->service()->importRsuCurrentJob($user->id, null);
+        $grant = $result['importedGrants'][0];
+
+        $this->assertSame(3, $grant['cliffMonths']);
+        $this->assertSame(0.5, $grant['vestingYears']);
+        $this->assertSame('quarterly', $grant['vestingFrequency']);
+        $this->assertSame(
+            [2026 => 200.0],
+            $this->sharesByYear((new RsuVestingExpander)->expand(JobSpec::nullableFromArray($result['currentJob'], true), 2026, 2)),
+        );
+    }
+
     public function test_single_tranche_grant_defaults_to_annual_cadence(): void
     {
         $user = User::factory()->create();
