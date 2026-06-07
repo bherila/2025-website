@@ -159,4 +159,43 @@ class CareerCompComputeTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['inputs.hypotheticalJobs.0.rsuGrants.0.vestingFrequency']);
     }
+
+    public function test_compute_accepts_delayed_option_vesting_start_and_tranche_schedule(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['startYear'] = 2026;
+        $inputs['horizonYears'] = 6;
+        $inputs['hypotheticalJobs'][0]['optionGrants'] = [[
+            'id' => 'delayed-iso',
+            'kind' => 'hire',
+            'type' => 'iso',
+            'grantDate' => '2026-08-17',
+            'vestingStartDate' => '2027-08-17',
+            'shareCount' => 1000,
+            'strike' => 2.8,
+            'cliffMonths' => 12,
+            'vestingYears' => 4,
+            'vestingFrequency' => 'annual',
+            'earlyExercise83b' => false,
+            'vestingSchedule' => [
+                'type' => 'tranches',
+                'presetId' => 'annual-40-30-20-10',
+                'tranches' => [
+                    ['month' => 12, 'percent' => 40],
+                    ['month' => 24, 'percent' => 30],
+                    ['month' => 36, 'percent' => 20],
+                    ['month' => 48, 'percent' => 10],
+                ],
+            ],
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.vesting.0.year', 2028);
+        $response->assertJsonPath('jobs.0.vesting.0.vestedShares', 400);
+    }
 }

@@ -11,7 +11,7 @@ import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant } from './defaults'
-import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, VestingFrequency } from './types'
+import type { CareerCompInputs, JobSpec, OptionGrant, RsuGrant, VestingFrequency, VestingSchedule } from './types'
 
 export type CareerCompFormSectionId = 'basics' | 'current-job' | 'offers'
 
@@ -71,10 +71,104 @@ interface SelectOption<T extends string> {
   label: string
 }
 
+type VestingSchedulePresetId =
+  | 'four-year-monthly-one-year-cliff'
+  | 'four-year-quarterly-one-year-cliff'
+  | 'four-year-annual-one-year-cliff'
+  | 'four-year-monthly-no-cliff'
+  | 'four-year-quarterly-no-cliff'
+  | 'three-year-monthly-no-cliff'
+  | 'annual-40-30-20-10'
+  | 'custom'
+
+type GrantVestingSchedule = NonNullable<VestingSchedule>
+
+interface VestingSchedulePreset {
+  label: string
+  cliffMonths: number
+  vestingYears: number
+  vestingFrequency: VestingFrequency
+  vestingSchedule: GrantVestingSchedule | null
+}
+
+type VestingSchedulePatch = Pick<RsuGrant, 'cliffMonths' | 'vestingYears' | 'vestingFrequency' | 'vestingSchedule'>
+
 const VESTING_FREQUENCY_OPTIONS: SelectOption<VestingFrequency>[] = [
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'annual', label: 'Annual' },
+]
+
+const VESTING_SCHEDULE_PRESETS: Record<Exclude<VestingSchedulePresetId, 'custom'>, VestingSchedulePreset> = {
+  'four-year-monthly-one-year-cliff': {
+    label: '4-year monthly, 1-year cliff',
+    cliffMonths: 12,
+    vestingYears: 4,
+    vestingFrequency: 'monthly',
+    vestingSchedule: { type: 'linear', presetId: 'four-year-monthly-one-year-cliff', durationMonths: 48, cliffMonths: 12, frequency: 'monthly' },
+  },
+  'four-year-quarterly-one-year-cliff': {
+    label: '4-year quarterly, 1-year cliff',
+    cliffMonths: 12,
+    vestingYears: 4,
+    vestingFrequency: 'quarterly',
+    vestingSchedule: { type: 'linear', presetId: 'four-year-quarterly-one-year-cliff', durationMonths: 48, cliffMonths: 12, frequency: 'quarterly' },
+  },
+  'four-year-annual-one-year-cliff': {
+    label: '4-year annual, 1-year cliff',
+    cliffMonths: 12,
+    vestingYears: 4,
+    vestingFrequency: 'annual',
+    vestingSchedule: { type: 'linear', presetId: 'four-year-annual-one-year-cliff', durationMonths: 48, cliffMonths: 12, frequency: 'annual' },
+  },
+  'four-year-monthly-no-cliff': {
+    label: '4-year monthly, no cliff',
+    cliffMonths: 0,
+    vestingYears: 4,
+    vestingFrequency: 'monthly',
+    vestingSchedule: { type: 'linear', presetId: 'four-year-monthly-no-cliff', durationMonths: 48, cliffMonths: 0, frequency: 'monthly' },
+  },
+  'four-year-quarterly-no-cliff': {
+    label: '4-year quarterly, no cliff',
+    cliffMonths: 0,
+    vestingYears: 4,
+    vestingFrequency: 'quarterly',
+    vestingSchedule: { type: 'linear', presetId: 'four-year-quarterly-no-cliff', durationMonths: 48, cliffMonths: 0, frequency: 'quarterly' },
+  },
+  'three-year-monthly-no-cliff': {
+    label: '3-year monthly, no cliff',
+    cliffMonths: 0,
+    vestingYears: 3,
+    vestingFrequency: 'monthly',
+    vestingSchedule: { type: 'linear', presetId: 'three-year-monthly-no-cliff', durationMonths: 36, cliffMonths: 0, frequency: 'monthly' },
+  },
+  'annual-40-30-20-10': {
+    label: '40/30/20/10 annual',
+    cliffMonths: 12,
+    vestingYears: 4,
+    vestingFrequency: 'annual',
+    vestingSchedule: {
+      type: 'tranches',
+      presetId: 'annual-40-30-20-10',
+      tranches: [
+        { month: 12, percent: 40 },
+        { month: 24, percent: 30 },
+        { month: 36, percent: 20 },
+        { month: 48, percent: 10 },
+      ],
+    },
+  },
+}
+
+const VESTING_SCHEDULE_OPTIONS: SelectOption<VestingSchedulePresetId>[] = [
+  { value: 'four-year-monthly-one-year-cliff', label: VESTING_SCHEDULE_PRESETS['four-year-monthly-one-year-cliff'].label },
+  { value: 'four-year-quarterly-one-year-cliff', label: VESTING_SCHEDULE_PRESETS['four-year-quarterly-one-year-cliff'].label },
+  { value: 'four-year-annual-one-year-cliff', label: VESTING_SCHEDULE_PRESETS['four-year-annual-one-year-cliff'].label },
+  { value: 'four-year-monthly-no-cliff', label: VESTING_SCHEDULE_PRESETS['four-year-monthly-no-cliff'].label },
+  { value: 'four-year-quarterly-no-cliff', label: VESTING_SCHEDULE_PRESETS['four-year-quarterly-no-cliff'].label },
+  { value: 'three-year-monthly-no-cliff', label: VESTING_SCHEDULE_PRESETS['three-year-monthly-no-cliff'].label },
+  { value: 'annual-40-30-20-10', label: VESTING_SCHEDULE_PRESETS['annual-40-30-20-10'].label },
+  { value: 'custom', label: 'Custom / manual fields' },
 ]
 
 const GRANT_KIND_OPTIONS: SelectOption<'hire' | 'refresher'>[] = [
@@ -99,6 +193,55 @@ const YES_NO_OPTIONS: SelectOption<'yes' | 'no'>[] = [
 
 function frequencyLabel(frequency: VestingFrequency): string {
   return VESTING_FREQUENCY_OPTIONS.find((option) => option.value === frequency)?.label ?? 'Monthly'
+}
+
+function vestingSchedulePresetValue(grant: RsuGrant | OptionGrant): VestingSchedulePresetId {
+  const presetId = grant.vestingSchedule?.presetId
+  if (presetId && VESTING_SCHEDULE_OPTIONS.some((option) => option.value === presetId)) {
+    return presetId as VestingSchedulePresetId
+  }
+
+  const matchingPreset = Object.entries(VESTING_SCHEDULE_PRESETS).find(([, preset]) => (
+    preset.vestingSchedule?.type === 'linear'
+    && grant.cliffMonths === preset.cliffMonths
+    && grant.vestingYears === preset.vestingYears
+    && (grant.vestingFrequency ?? 'monthly') === preset.vestingFrequency
+  ))
+
+  return (matchingPreset?.[0] as VestingSchedulePresetId | undefined) ?? 'custom'
+}
+
+function vestingScheduleLabel(grant: RsuGrant | OptionGrant): string {
+  const presetValue = vestingSchedulePresetValue(grant)
+
+  if (presetValue !== 'custom') {
+    return VESTING_SCHEDULE_PRESETS[presetValue].label
+  }
+
+  return `${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()} · ${grant.cliffMonths}mo cliff`
+}
+
+function vestingStartSuffix(grant: RsuGrant | OptionGrant): string {
+  if (!grant.vestingStartDate || grant.vestingStartDate === grant.grantDate) {
+    return ''
+  }
+
+  return ` · vests from ${grant.vestingStartDate}`
+}
+
+function vestingSchedulePatchForPreset(presetId: VestingSchedulePresetId): Partial<VestingSchedulePatch> {
+  if (presetId === 'custom') {
+    return { vestingSchedule: null }
+  }
+
+  const preset = VESTING_SCHEDULE_PRESETS[presetId]
+
+  return {
+    cliffMonths: preset.cliffMonths,
+    vestingYears: preset.vestingYears,
+    vestingFrequency: preset.vestingFrequency,
+    vestingSchedule: preset.vestingSchedule,
+  }
 }
 
 function formatShares(value: number): string {
@@ -253,11 +396,11 @@ function SelectField<T extends string>({ label, value, options, onChange }: {
 }
 
 function rsuGrantSummary(grant: RsuGrant): string {
-  return `${grant.kind === 'refresher' ? 'Refresher' : 'New hire'} · ${formatShares(grant.shareCount ?? 0)} sh · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()} · ${grant.cliffMonths}mo cliff`
+  return `${grant.kind === 'refresher' ? 'Refresher' : 'New hire'} · ${formatShares(grant.shareCount ?? 0)} sh · ${vestingScheduleLabel(grant)}${vestingStartSuffix(grant)}`
 }
 
 function optionGrantSummary(grant: OptionGrant): string {
-  return `${grant.type.toUpperCase()} · ${formatShares(grant.shareCount)} sh @ $${grant.strike} · ${grant.vestingYears}yr ${frequencyLabel(grant.vestingFrequency).toLowerCase()}`
+  return `${grant.type.toUpperCase()} · ${formatShares(grant.shareCount)} sh @ $${grant.strike} · ${vestingScheduleLabel(grant)}${vestingStartSuffix(grant)}`
 }
 
 /** Compact, clickable list row for a grant. Editing happens in a dedicated Miller column. */
@@ -299,7 +442,7 @@ function buildNewRsuGrant(job: JobSpec): RsuGrant {
   const previous = job.rsuGrants[job.rsuGrants.length - 1]
   const base = buildDefaultRsuGrant(job.id, job.rsuGrants.length + 1)
   return previous
-    ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, grantPrice: previous.grantPrice }
+    ? { ...base, id: nextGrantId(job.rsuGrants, job.id, 'rsu'), kind: 'refresher', cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, grantPrice: previous.grantPrice }
     : base
 }
 
@@ -307,7 +450,7 @@ function buildNewOptionGrant(job: JobSpec): OptionGrant {
   const previous = job.optionGrants[job.optionGrants.length - 1]
   const base = buildDefaultOptionGrant(job.id, job.optionGrants.length + 1)
   return previous
-    ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, earlyExercise83b: previous.earlyExercise83b }
+    ? { ...base, id: nextGrantId(job.optionGrants, job.id, 'opt'), kind: 'refresher', type: previous.type, strike: previous.strike, cliffMonths: previous.cliffMonths, vestingYears: previous.vestingYears, vestingFrequency: previous.vestingFrequency, vestingSchedule: previous.vestingSchedule, earlyExercise83b: previous.earlyExercise83b }
     : base
 }
 
@@ -465,12 +608,14 @@ function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch
     <div className="grid gap-3 sm:grid-cols-2">
       <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
       <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
+      <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => onChange({ vestingStartDate: value || null })} />
       <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => onChange({ shareCount: value })} />
       <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => onChange({ grantValue: value > 0 ? value : undefined })} />
       <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => onChange({ grantPrice: value > 0 ? value : undefined })} />
-      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value })} />
-      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value })} />
-      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency })} />
+      <SelectField label="Vesting schedule" value={vestingSchedulePresetValue(grant)} options={VESTING_SCHEDULE_OPTIONS} onChange={(presetId) => onChange(vestingSchedulePatchForPreset(presetId))} />
+      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value, vestingSchedule: null })} />
+      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value, vestingSchedule: null })} />
+      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency, vestingSchedule: null })} />
     </div>
   )
 }
@@ -481,11 +626,13 @@ function OptionGrantFields({ grant, onChange }: { grant: OptionGrant; onChange: 
       <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
       <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => onChange({ type })} />
       <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
+      <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => onChange({ vestingStartDate: value || null })} />
       <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
       <MoneyField label="Strike price" value={grant.strike} onChange={(value) => onChange({ strike: value })} />
-      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value })} />
-      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value })} />
-      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency })} />
+      <SelectField label="Vesting schedule" value={vestingSchedulePresetValue(grant)} options={VESTING_SCHEDULE_OPTIONS} onChange={(presetId) => onChange(vestingSchedulePatchForPreset(presetId))} />
+      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value, vestingSchedule: null })} />
+      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value, vestingSchedule: null })} />
+      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency, vestingSchedule: null })} />
       <SelectField label="83(b) early exercise" value={grant.earlyExercise83b ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => onChange({ earlyExercise83b: value === 'yes' })} />
     </div>
   )
@@ -584,7 +731,9 @@ function JobEditor({ job, onChange, onRemove, removeLabel, onOpenGrantEditor, ac
           <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />
           {isPrivate ? (
             <>
+              <MoneyField label="Estimated share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
               <MoneyField label="409A price" value={job.company.fourNineA} onChange={(value) => onChange({ ...job, company: { ...job.company, fourNineA: value } })} />
+              <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
               <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
               <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
             </>

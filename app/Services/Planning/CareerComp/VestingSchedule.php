@@ -20,6 +20,8 @@ final class VestingSchedule
 {
     public const FREQUENCIES = ['monthly', 'quarterly', 'annual'];
 
+    public const SCHEDULE_TYPES = ['linear', 'tranches'];
+
     public static function normalizeFrequency(mixed $frequency): string
     {
         $value = is_string($frequency) ? strtolower(trim($frequency)) : '';
@@ -34,6 +36,63 @@ final class VestingSchedule
             'annual' => 12,
             default => 1,
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @return array<int, float> calendar year => shares vesting that year
+     */
+    public static function sharesByYearForGrant(
+        float $shareCount,
+        DateTimeImmutable $vestingStartDate,
+        array $grant,
+    ): array {
+        $schedule = is_array($grant['vestingSchedule'] ?? null) ? $grant['vestingSchedule'] : null;
+
+        if (($schedule['type'] ?? null) === 'tranches') {
+            return self::trancheSharesByYear(
+                $shareCount,
+                $vestingStartDate,
+                is_array($schedule['tranches'] ?? null) ? $schedule['tranches'] : [],
+            );
+        }
+
+        return self::sharesByYear(
+            $shareCount,
+            $vestingStartDate,
+            self::vestingMonths($grant, $schedule),
+            self::cliffMonths($grant, $schedule),
+            self::frequency($grant, $schedule),
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tranches
+     * @return array<int, float> calendar year => shares vesting that year
+     */
+    public static function trancheSharesByYear(float $shareCount, DateTimeImmutable $vestingStartDate, array $tranches): array
+    {
+        if ($shareCount <= 0.0 || $tranches === []) {
+            return [];
+        }
+
+        $sharesByYear = [];
+
+        foreach ($tranches as $tranche) {
+            $month = max(0, (int) round((float) ($tranche['month'] ?? 0)));
+            $percent = is_numeric($tranche['percent'] ?? null) ? (float) $tranche['percent'] : 0.0;
+
+            if ($percent <= 0.0) {
+                continue;
+            }
+
+            $year = (int) $vestingStartDate->modify('+'.$month.' months')->format('Y');
+            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + ($shareCount * ($percent / 100.0));
+        }
+
+        ksort($sharesByYear);
+
+        return $sharesByYear;
     }
 
     /**
@@ -76,5 +135,40 @@ final class VestingSchedule
         }
 
         return $sharesByYear;
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @param  array<string, mixed>|null  $schedule
+     */
+    private static function vestingMonths(array $grant, ?array $schedule): int
+    {
+        if (is_numeric($schedule['durationMonths'] ?? null)) {
+            return max(0, (int) round((float) $schedule['durationMonths']));
+        }
+
+        return max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12));
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @param  array<string, mixed>|null  $schedule
+     */
+    private static function cliffMonths(array $grant, ?array $schedule): int
+    {
+        if (is_numeric($schedule['cliffMonths'] ?? null)) {
+            return max(0, (int) round((float) $schedule['cliffMonths']));
+        }
+
+        return max(0, (int) round((float) ($grant['cliffMonths'] ?? 0)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @param  array<string, mixed>|null  $schedule
+     */
+    private static function frequency(array $grant, ?array $schedule): string
+    {
+        return self::normalizeFrequency($schedule['frequency'] ?? $grant['vestingFrequency'] ?? null);
     }
 }

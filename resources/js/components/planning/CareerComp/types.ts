@@ -28,6 +28,22 @@ export const VESTING_FREQUENCIES = ['monthly', 'quarterly', 'annual'] as const
 // field decode to the historical monthly cadence rather than failing validation.
 export const vestingFrequencySchema = z.enum(VESTING_FREQUENCIES).default('monthly')
 
+export const vestingScheduleTrancheSchema = z.object({
+  month: z.number(),
+  percent: z.number(),
+})
+
+export const vestingScheduleSchema = z
+  .object({
+    type: z.enum(['linear', 'tranches']).default('linear'),
+    presetId: z.string().nullish(),
+    durationMonths: z.number().nullish(),
+    cliffMonths: z.number().nullish(),
+    frequency: vestingFrequencySchema.nullish(),
+    tranches: z.array(vestingScheduleTrancheSchema).nullish(),
+  })
+  .nullish()
+
 // RSU refresher policy. pctOfBase = 0 disables refreshers; all fields defaulted so older
 // links/records that predate this decode cleanly.
 export const refresherPolicySchema = z
@@ -45,12 +61,14 @@ export const rsuGrantSchema = z.object({
   id: z.string(),
   kind: z.enum(['hire', 'refresher']),
   grantDate: z.string(),
+  vestingStartDate: z.string().nullish(),
   shareCount: z.number().nullish(),
   grantValue: z.number().nullish(),
   grantPrice: z.number().nullish(),
   cliffMonths: z.number(),
   vestingYears: z.number(),
   vestingFrequency: vestingFrequencySchema,
+  vestingSchedule: vestingScheduleSchema,
 })
 
 export const optionGrantSchema = z.object({
@@ -58,12 +76,14 @@ export const optionGrantSchema = z.object({
   kind: z.enum(['hire', 'refresher']),
   type: z.enum(['iso', 'nso']),
   grantDate: z.string(),
+  vestingStartDate: z.string().nullish(),
   shareCount: z.number(),
   strike: z.number(),
   cliffMonths: z.number(),
   vestingYears: z.number(),
   vestingFrequency: vestingFrequencySchema,
   earlyExercise83b: z.boolean().default(false),
+  vestingSchedule: vestingScheduleSchema,
 })
 
 export const jobSpecSchema = z.object({
@@ -263,6 +283,7 @@ export type EquityGrowthBand = z.infer<typeof equityGrowthBandSchema>
 export type CompanySpec = z.infer<typeof companySpecSchema>
 export type CashComp = z.infer<typeof cashCompSchema>
 export type VestingFrequency = z.infer<typeof vestingFrequencySchema>
+export type VestingSchedule = z.infer<typeof vestingScheduleSchema>
 export type RefresherPolicy = z.infer<typeof refresherPolicySchema>
 export type RsuGrant = z.infer<typeof rsuGrantSchema>
 export type OptionGrant = z.infer<typeof optionGrantSchema>

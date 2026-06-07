@@ -44,12 +44,10 @@ final class RsuVestingExpander
             return [];
         }
 
-        return VestingSchedule::sharesByYear(
+        return VestingSchedule::sharesByYearForGrant(
             $this->grantShareCount($grant),
-            $grantDate,
-            max(0, (int) round((float) ($grant['vestingYears'] ?? 0) * 12)),
-            max(0, (int) round((float) ($grant['cliffMonths'] ?? 0))),
-            VestingSchedule::normalizeFrequency($grant['vestingFrequency'] ?? null),
+            $this->date((string) ($grant['vestingStartDate'] ?? '')) ?? $grantDate,
+            $grant,
         );
     }
 

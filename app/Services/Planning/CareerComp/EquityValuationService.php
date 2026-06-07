@@ -146,7 +146,11 @@ final class EquityValuationService
 
     public function sharePrice(JobSpec $job, int $yearOffset, string $band): float
     {
-        $basePrice = $job->isPrivate() ? $job->number('company.fourNineA') : $job->number('company.currentSharePrice');
+        $basePrice = $job->number('company.currentSharePrice');
+        if ($job->isPrivate() && $basePrice <= 0.0) {
+            $basePrice = $job->number('company.fourNineA');
+        }
+
         $growthPct = match ($band) {
             'low' => $job->number('growthBands.lowPct'),
             'high' => $job->number('growthBands.highPct'),
