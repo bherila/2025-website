@@ -37,6 +37,18 @@ import {
   ProjectionLiquidity,
   ProjectionVestingBreakdown,
 } from './CareerCompResultViews'
+import {
+  type CareerCompResultViewId,
+  type CareerCompRoute,
+  type CareerCompRouteColumn,
+  careerCompRoutesEqual,
+  grantRouteId,
+  grantRouteInstance,
+  grantTypeFromRouteId,
+  parseCareerCompHash,
+  parseGrantRouteInstance,
+  serializeCareerCompRoute,
+} from './careerCompRoute'
 import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCompUrlState'
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
@@ -46,7 +58,6 @@ interface CareerCompPageProps {
   initialData: CareerCompInitialData
 }
 
-type CareerCompResultViewId = 'liquidity-over-time' | 'annual-fcf' | 'ltv-table' | 'vesting-breakdown' | 'after-tax-liquidity' | 'after-tax-fcf'
 type CareerCompColumnId = CareerCompFormSectionId | CareerCompResultViewId
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -148,13 +159,92 @@ function initialInputs(initialData: CareerCompInitialData): CareerCompInputs {
 
 function replaceUrlWithInputs(inputs: CareerCompInputs, pathname = window.location.pathname): string {
   const queryString = serializeCareerCompUrlState(inputs)
-  const nextUrl = `${pathname}${queryString ? `?${queryString}` : ''}`
+  const nextUrl = `${pathname}${queryString ? `?${queryString}` : ''}${window.location.hash}`
 
-  if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== nextUrl) {
     window.history.replaceState(null, '', nextUrl)
   }
 
   return window.location.href
+}
+
+function readCurrentHash(): string {
+  return typeof window === 'undefined' ? '' : window.location.hash
+}
+
+function writeCareerCompRoute(route: CareerCompRoute): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const nextHash = serializeCareerCompRoute(route)
+  if (window.location.hash === nextHash) {
+    return
+  }
+
+  if (nextHash === '') {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+    window.dispatchEvent(new Event('hashchange'))
+    return
+  }
+
+  window.location.hash = nextHash
+}
+
+function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnState | null {
+  if (column.id === 'valuation-timeline') {
+    return column.instance ? { kind: 'valuationTimeline', jobId: column.instance } : null
+  }
+
+  const grantType = grantTypeFromRouteId(column.id)
+  if (grantType !== null) {
+    const parsed = parseGrantRouteInstance(column.instance)
+    return parsed
+      ? {
+          kind: 'grant',
+          editorKey: `grant:${parsed.jobId}:${grantType}:${parsed.grantId ?? 'new'}`,
+          jobId: parsed.jobId,
+          grantType,
+          grantId: parsed.grantId,
+        }
+      : null
+  }
+
+  if (CAREER_COMP_FORM_SECTIONS.some((section) => section.id === column.id)) {
+    return { kind: 'form', id: column.id as CareerCompFormSectionId }
+  }
+
+  if (RESULT_VIEWS.some((view) => view.id === column.id)) {
+    return { kind: 'result', id: column.id as CareerCompResultViewId }
+  }
+
+  return null
+}
+
+function routeToColumnStack(route: CareerCompRoute): CareerCompColumnState[] {
+  return route.columns.flatMap((column) => {
+    const state = routeColumnToState(column)
+    return state ? [state] : []
+  })
+}
+
+function columnStateToRouteColumn(column: CareerCompColumnState): CareerCompRouteColumn {
+  if (column.kind === 'form' || column.kind === 'result') {
+    return { id: column.id }
+  }
+
+  if (column.kind === 'valuationTimeline') {
+    return { id: 'valuation-timeline', instance: column.jobId }
+  }
+
+  return {
+    id: grantRouteId(column.grantType),
+    instance: grantRouteInstance(column.jobId, column.grantId),
+  }
+}
+
+function columnStackToRoute(columns: CareerCompColumnState[]): CareerCompRoute {
+  return { columns: columns.map(columnStateToRouteColumn) }
 }
 
 function ProjectionEmptyState({ loading }: { loading: boolean }): ReactElement {
@@ -258,7 +348,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const [loading, setLoading] = useState(initialData.projection === null)
   const [status, setStatus] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [columnStack, setColumnStack] = useState<CareerCompColumnState[]>([])
+  const [columnStack, setColumnStack] = useState<CareerCompColumnState[]>(() => routeToColumnStack(parseCareerCompHash(readCurrentHash())))
   const grantEditorSequenceRef = useRef(0)
   const [isExporting, setIsExporting] = useState(false)
   const [shareDeleted, setShareDeleted] = useState(false)
@@ -278,6 +368,29 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   // autosave to the owner's latest. Anonymous visitors of the public tool only recompute.
   const canAutosave = (isShareView && !shareDeleted) || (!isShareView && initialData.authenticated)
   const saveLabel = isShareView ? 'Saved to link' : 'Saved'
+
+  useEffect(() => {
+    const currentRoute = columnStackToRoute(columnStack)
+    if (!careerCompRoutesEqual(parseCareerCompHash(readCurrentHash()), currentRoute)) {
+      writeCareerCompRoute(currentRoute)
+    }
+  }, [columnStack])
+
+  useEffect(() => {
+    const handleHashChange = (): void => {
+      const nextRoute = parseCareerCompHash(readCurrentHash())
+      setColumnStack((current) => {
+        const currentRoute = columnStackToRoute(current)
+        return careerCompRoutesEqual(currentRoute, nextRoute) ? current : routeToColumnStack(nextRoute)
+      })
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [])
 
   useEffect(() => {
     // Anonymous public-calculator users have no server record, so the URL (?cc=) is their only

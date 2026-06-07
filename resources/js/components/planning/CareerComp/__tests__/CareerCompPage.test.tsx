@@ -92,6 +92,50 @@ describe('CareerCompPage', () => {
     expect(screen.getByRole('button', { name: 'Open After-Tax FCF' })).toBeInTheDocument()
   })
 
+  it('opens a Miller result column from the initial hash', () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/ltv-table')
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    expect(container.querySelector('section[data-column-id="ltv-table"]')).toBeInTheDocument()
+    expect(screen.getAllByText('Lifetime Value Comparison').length).toBeGreaterThan(0)
+  })
+
+  it('writes launcher navigation into the hash and clears it when the column closes', () => {
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open LTV Table' }))
+
+    expect(window.location.hash).toBe('#/ltv-table')
+    expect(container.querySelector('section[data-column-id="ltv-table"]')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close columns after LTV Table' }))
+
+    expect(window.location.hash).toBe('')
+    expect(container.querySelector('section[data-column-id="ltv-table"]')).not.toBeInTheDocument()
+  })
+
+  it('preserves hash navigation when anonymous URL input state is rewritten', async () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/offers')
+    const inputs = { ...DEFAULT_CAREER_COMP_INPUTS, horizonYears: DEFAULT_CAREER_COMP_INPUTS.horizonYears + 1 }
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData({ inputs })} />)
+
+    await waitFor(() => expect(window.location.search).toContain('cc='))
+    expect(window.location.hash).toBe('#/offers')
+    expect(container.querySelector('section[data-column-id="offers"]')).toBeInTheDocument()
+  })
+
+  it('opens grant editor columns from deep links', () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/offers/grant-rsu:hyp-1%3Ahyp-1-rsu-1')
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    expect(container.querySelector('section[data-column-id="grant-rsu"]')).toBeInTheDocument()
+    expect(screen.getByText('Edit RSU grant')).toBeInTheDocument()
+    expect(screen.getByLabelText('Share count')).toHaveValue(1000)
+  })
+
   it('opens ISO limit warning details from the warning banner', () => {
     const warning = 'New job offer: ISO first-exercisable value exceeds $100k in 2026; spillover treated as NSO.'
 
