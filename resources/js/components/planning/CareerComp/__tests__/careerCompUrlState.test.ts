@@ -16,6 +16,7 @@ describe('careerCompUrlState', () => {
           ...baseJob,
           id: 'hyp-1',
           name: 'Offer A',
+          startDate: '2027-03-15',
           comp: { ...baseJob.comp, baseSalary: 225000, cashBonus: 50000 },
           company: { ...baseJob.company, type: 'private', fourNineA: 7.5 },
         },

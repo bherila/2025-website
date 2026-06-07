@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom'
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 
-import { ProjectionAfterTaxFreeCashFlow, ProjectionAfterTaxLiquidity } from '../CareerCompResultViews'
+import { sampleCareerCompProjection } from '../__fixtures__/sampleProjection'
+import { ProjectionAfterTaxFreeCashFlow, ProjectionAfterTaxLiquidity, ProjectionLifetimeValue } from '../CareerCompResultViews'
 import { careerCompProjectionSchema } from '../types'
 
 // Local Node-API declarations so this test does not depend on @types/node being in `types`.
@@ -25,10 +26,58 @@ jest.mock('../charts/LiquidityOverTimeChart', () => ({
   },
 }))
 
+jest.mock('../charts/PaperLifetimeValueChart', () => ({
+  PaperLifetimeValueChart: function MockPaperLifetimeValueChart({ selectedBand, selectedJobIds }: { selectedBand?: string; selectedJobIds?: string[] }): ReactElement {
+    return <div data-testid="total-equity-chart" data-band={selectedBand ?? 'medium'} data-jobs={(selectedJobIds ?? []).join(',')} />
+  },
+}))
+
 const GOLDEN_FIXTURE_PATH = resolve(__dirname, '../../../../../../tests/Fixtures/career-comparison/golden-projection.json')
 const raw: unknown = JSON.parse(readFileSync(GOLDEN_FIXTURE_PATH, 'utf8'))
 
 describe('Career Comparison after-tax result views', () => {
+  it('includes newly projected jobs by default before the job filter is touched', () => {
+    const { rerender } = render(<ProjectionLifetimeValue projection={sampleCareerCompProjection} />)
+    const addedJobProjection = {
+      ...sampleCareerCompProjection,
+      jobs: [
+        ...sampleCareerCompProjection.jobs,
+        {
+          ...sampleCareerCompProjection.jobs[1]!,
+          id: 'hyp-2',
+          name: 'Offer 2',
+        },
+      ],
+    }
+
+    rerender(<ProjectionLifetimeValue projection={addedJobProjection} />)
+
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-jobs', 'current,hyp-1,hyp-2')
+    expect(screen.getByRole('cell', { name: 'Offer 2' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Show Current job'))
+
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-jobs', 'hyp-1,hyp-2')
+    expect(screen.getByRole('cell', { name: 'Offer 2' })).toBeInTheDocument()
+  })
+
+  it('filters lifetime value output by outcome and selected jobs', () => {
+    render(<ProjectionLifetimeValue projection={sampleCareerCompProjection} />)
+
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-band', 'medium')
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-jobs', 'current,hyp-1')
+    expect(screen.getByRole('cell', { name: 'Offer 1' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Liquid total med' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Low' }))
+    fireEvent.click(screen.getByLabelText('Show Offer 1'))
+
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-band', 'low')
+    expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-jobs', 'current')
+    expect(screen.queryByRole('cell', { name: 'Offer 1' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Liquid total low' })).toBeInTheDocument()
+  })
+
   it('renders the after-tax liquidity chart from the golden fixture', () => {
     const projection = careerCompProjectionSchema.parse(raw)
 

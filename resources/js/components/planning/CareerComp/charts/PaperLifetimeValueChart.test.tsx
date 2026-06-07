@@ -19,16 +19,31 @@ jest.mock('recharts', () => ({
 }))
 
 describe('PaperLifetimeValueChart', () => {
-  it('includes a current job comparison line and supports log scale', () => {
+  it('includes cash-adjusted total value lines and supports log scale', () => {
     render(<PaperLifetimeValueChart projection={sampleCareerCompProjection} />)
 
+    expect(screen.getByText('Total equity value')).toBeInTheDocument()
     expect(screen.getByTestId('y-axis')).toHaveAttribute('data-scale', 'linear')
-    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"current-current-equity-medium":33000'))
-    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"hyp-1-paper-base":45000'))
+    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"current-liquid-medium":233000'))
+    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"hyp-1-paper-base":275000'))
     expect(screen.getAllByTestId('chart-line')[0]).toHaveAttribute('data-name', 'Current job liquid equity med')
 
     fireEvent.click(screen.getByRole('button', { name: 'Log' }))
 
     expect(screen.getByTestId('y-axis')).toHaveAttribute('data-scale', 'log')
+  })
+
+  it('filters chart output by selected jobs', () => {
+    render(<PaperLifetimeValueChart projection={sampleCareerCompProjection} selectedJobIds={['hyp-1']} />)
+
+    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"hyp-1-paper-base":275000'))
+    expect(screen.getByTestId('line-chart')).not.toHaveAttribute('data-first-row', expect.stringContaining('current-liquid-medium'))
+  })
+
+  it('keeps the empty state when no jobs are selected', () => {
+    render(<PaperLifetimeValueChart projection={sampleCareerCompProjection} selectedJobIds={[]} />)
+
+    expect(screen.getByText('Select at least one job to see total equity value.')).toBeInTheDocument()
+    expect(screen.queryByTestId('line-chart')).not.toBeInTheDocument()
   })
 })

@@ -53,11 +53,23 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
   it('shows current share price and hides private-only fields for a public company', () => {
     render(<Harness initial={makeInputs('public')} />)
 
+    expect(screen.getByLabelText('Start date')).toBeInTheDocument()
     expect(screen.getByText('Current share price')).toBeInTheDocument()
     expect(screen.queryByText('409A price')).not.toBeInTheDocument()
     expect(screen.queryByText('Annual dilution')).not.toBeInTheDocument()
     expect(screen.queryByText('Liquidity date')).not.toBeInTheDocument()
     expect(screen.getByText('Fully diluted shares')).toBeInTheDocument()
+  })
+
+  it('edits the job-level start date without touching grant dates', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-07-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit RSU grant 1' }))
+
+    expect(screen.getByLabelText('Start date')).toHaveValue('2026-07-01')
+    expect(screen.getByLabelText('Grant date')).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText('Vesting start')).toHaveValue('')
   })
 
   it('shows 409A/dilution/liquidity and hides current share price for a private company', () => {

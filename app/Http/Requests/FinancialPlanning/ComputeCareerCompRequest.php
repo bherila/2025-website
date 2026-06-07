@@ -49,6 +49,7 @@ class ComputeCareerCompRequest extends FormRequest
         return [
             "{$prefix}.id" => [$required, 'string', 'max:120'],
             "{$prefix}.name" => [$required, 'string', 'max:200'],
+            "{$prefix}.startDate" => ['nullable', 'date_format:Y-m-d'],
             "{$prefix}.company" => [$required, 'array'],
             "{$prefix}.company.type" => [$required, Rule::in(['public', 'private'])],
             "{$prefix}.company.currentSharePrice" => ['nullable', 'numeric', 'min:0'],

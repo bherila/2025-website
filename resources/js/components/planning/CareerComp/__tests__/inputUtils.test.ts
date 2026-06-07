@@ -10,6 +10,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
       currentJob: {
         id: 'current',
         name: 'Current role',
+        startDate: null,
         company: { type: 'public', currentSharePrice: 80, fourNineA: 0, fullyDilutedShares: 0, annualDilutionPct: 0, liquidityDate: null },
         comp: { baseSalary: 185000, cashBonus: 25000 },
         rsuGrants: [{ id: 'current-rsu-hire', kind: 'hire', grantDate: '2026-01-01', shareCount: 1000, grantValue: null, grantPrice: 80, cliffMonths: 12, vestingYears: 4 }],
@@ -23,6 +24,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
 
     expect(normalized.currentJob).not.toBeNull()
     expect(normalized.currentJob?.id).toBe('current')
+    expect(normalized.currentJob?.startDate).toBeNull()
     expect(normalized.currentJob?.rsuGrants).toHaveLength(1)
     expect(normalized.currentJob?.rsuGrants[0]?.shareCount).toBe(1000)
   })
@@ -38,7 +40,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
     expect(normalized.horizonYears).toBe(30)
   })
 
-  it('coerces an empty optional liquidityDate to null and drops grants with no grant date', () => {
+  it('coerces empty optional dates to null and drops grants with no grant date', () => {
     const inputs = {
       horizonYears: 5,
       startYear: 2026,
@@ -46,6 +48,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
       hypotheticalJobs: [{
         id: 'hyp-1',
         name: 'Offer 1',
+        startDate: '',
         company: { type: 'public', currentSharePrice: 25, fourNineA: 5, fullyDilutedShares: 100000000, annualDilutionPct: 3, liquidityDate: '' },
         comp: { baseSalary: 180000, cashBonus: 25000 },
         rsuGrants: [
@@ -63,6 +66,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
     const job = normalized.hypotheticalJobs[0]
 
     expect(job?.company.liquidityDate).toBeNull()
+    expect(job?.startDate).toBeNull()
     expect(job?.rsuGrants).toHaveLength(1)
     expect(job?.rsuGrants[0]?.id).toBe('r-keep')
     expect(job?.optionGrants).toHaveLength(0)

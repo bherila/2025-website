@@ -91,6 +91,48 @@ class FinanceImportTransactionsCommandTest extends TestCase
         ]);
     }
 
+    public function test_inserts_sparse_rows_with_later_optional_fields(): void
+    {
+        $this->withPayload([
+            'account_id' => $this->checkingId,
+            'transactions' => [
+                ['t_date' => '2026-05-03', 't_type' => 'deposit', 't_amt' => 100.00],
+                [
+                    't_date' => '2026-05-04',
+                    't_type' => 'Buy',
+                    't_amt' => -501.25,
+                    't_symbol' => 'aapl',
+                    't_qty' => 5,
+                    't_price' => 100,
+                    't_fee' => 1.25,
+                    't_method' => 'BUY',
+                ],
+            ],
+        ]);
+
+        $this->artisan('finance:import-transactions')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-05-03',
+            't_type' => 'deposit',
+            't_symbol' => null,
+            't_qty' => 0,
+        ]);
+
+        $this->assertDatabaseHas('fin_account_line_items', [
+            't_account' => $this->checkingId,
+            't_date' => '2026-05-04',
+            't_type' => 'Buy',
+            't_symbol' => 'AAPL',
+            't_qty' => 5,
+            't_price' => 100,
+            't_fee' => 1.25,
+            't_method' => 'BUY',
+        ]);
+    }
+
     public function test_dry_run_does_not_insert(): void
     {
         $this->withPayload([

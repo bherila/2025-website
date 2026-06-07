@@ -53,14 +53,15 @@ final class CareerCompCalculator
      */
     private function projectJob(JobSpec $job, int $startYear, int $horizonYears): array
     {
-        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears);
+        $jobStartDate = $this->parseJobStartDate($job);
+        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears, $jobStartDate);
         $vestingJob = $this->withProjectedOptionRefresherGrants($job, $projectedOptionGrants);
         $warnings = $this->staticWarnings($vestingJob, $startYear, $horizonYears);
         $rsuRows = $this->rsuVestingExpander->expand($vestingJob, $startYear, $horizonYears);
         $optionResult = $this->optionsVestingService->expand($vestingJob, $startYear, $horizonYears);
         $baseVestingRows = array_merge($rsuRows, $optionResult['rows']);
         $warnings = array_merge($warnings, $optionResult['warnings']);
-        $refresherDefs = $this->refresherDefinitions($vestingJob, $startYear, $horizonYears);
+        $refresherDefs = $this->refresherDefinitions($vestingJob, $startYear, $horizonYears, $jobStartDate);
         $valuation = $this->equityValuationService->value($vestingJob, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
@@ -82,9 +83,10 @@ final class CareerCompCalculator
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
-            $raiseFactor = $this->raiseFactor($raisePct, $offset);
-            $salary = MoneyMath::round(MoneyMath::multiply($baseSalary, $raiseFactor));
-            $bonus = MoneyMath::round(MoneyMath::multiply($cashBonus, $raiseFactor));
+            $raiseFactor = $this->raiseFactor($raisePct, $this->cashCompRaiseOffset($jobStartDate, $offset, $year));
+            $cashCompFactor = $this->cashCompYearFactor($jobStartDate, $year);
+            $salary = MoneyMath::multiply(MoneyMath::multiply($baseSalary, $raiseFactor), $cashCompFactor);
+            $bonus = MoneyMath::multiply(MoneyMath::multiply($cashBonus, $raiseFactor), $cashCompFactor);
             $vestedLiquidEquity = MoneyMath::round($valuation['annualEquity'][$year] ?? 0.0);
             $shareSaleProceeds = $vestedLiquidEquity;
             $exerciseOutlay = $this->exerciseOutlayForYear($vestingJob, $optionResult['rows'], $year);
@@ -146,6 +148,68 @@ final class CareerCompCalculator
         return round((1.0 + ($raisePct / 100.0)) ** $offset, 8);
     }
 
+    private function parseJobStartDate(JobSpec $job): ?DateTimeImmutable
+    {
+        $value = $job->value('startDate');
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+        return $date instanceof DateTimeImmutable ? $date : null;
+    }
+
+    private function cashCompRaiseOffset(?DateTimeImmutable $jobStartDate, int $projectionOffset, int $year): int
+    {
+        if ($jobStartDate === null) {
+            return $projectionOffset;
+        }
+
+        $projectionStartYear = $year - $projectionOffset;
+        if ((int) $jobStartDate->format('Y') <= $projectionStartYear) {
+            return $projectionOffset;
+        }
+
+        return max(0, $year - (int) $jobStartDate->format('Y'));
+    }
+
+    private function refresherStartYear(?DateTimeImmutable $jobStartDate, int $projectionStartYear): int
+    {
+        if ($jobStartDate === null) {
+            return $projectionStartYear;
+        }
+
+        return max($projectionStartYear, (int) $jobStartDate->format('Y'));
+    }
+
+    /**
+     * Prorate cash compensation by calendar days worked in the projected year. Null start dates
+     * intentionally preserve the historical full-year model.
+     */
+    private function cashCompYearFactor(?DateTimeImmutable $jobStartDate, int $year): float
+    {
+        if ($jobStartDate === null) {
+            return 1.0;
+        }
+
+        $yearStart = new DateTimeImmutable(sprintf('%04d-01-01', $year));
+        $nextYearStart = $yearStart->modify('+1 year');
+
+        if ($jobStartDate <= $yearStart) {
+            return 1.0;
+        }
+
+        if ($jobStartDate >= $nextYearStart) {
+            return 0.0;
+        }
+
+        $daysInYear = (int) $yearStart->diff($nextYearStart)->days;
+        $workedDays = (int) $jobStartDate->diff($nextYearStart)->days;
+
+        return $daysInYear > 0 ? $workedDays / $daysInYear : 1.0;
+    }
+
     /**
      * Build the RSU refresher grants implied by the job's refresher policy: one every
      * `cadenceYears` starting `firstYearOffset`, valued at `pctOfBase`% of that year's raised base.
@@ -153,7 +217,7 @@ final class CareerCompCalculator
      *
      * @return list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>
      */
-    private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears): array
+    private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate): array
     {
         if (! $job->grantsRsu()) {
             return [];
@@ -171,23 +235,26 @@ final class CareerCompCalculator
         $frequency = VestingSchedule::normalizeFrequency($job->value('refresher.vestingFrequency'));
         $baseSalary = $job->number('comp.baseSalary');
         $raisePct = $job->number('comp.annualRaisePct');
+        $refresherStartYear = $this->refresherStartYear($jobStartDate, $startYear);
 
         $definitions = [];
         for ($offset = 0; $offset < $horizonYears; $offset++) {
-            if ($offset < $firstOffset || ($offset - $firstOffset) % $cadence !== 0) {
+            $grantYear = $startYear + $offset;
+            $yearsSinceRefresherStart = $grantYear - $refresherStartYear;
+            if ($yearsSinceRefresherStart < $firstOffset || ($yearsSinceRefresherStart - $firstOffset) % $cadence !== 0) {
                 continue;
             }
 
-            $raisedBase = MoneyMath::multiply($baseSalary, $this->raiseFactor($raisePct, $offset));
+            $raisedBase = MoneyMath::multiply($baseSalary, $this->raiseFactor($raisePct, $this->cashCompRaiseOffset($jobStartDate, $offset, $grantYear)));
             $value = MoneyMath::multiply($raisedBase, $pctOfBase / 100.0);
             if ($value <= 0.0) {
                 continue;
             }
 
             $definitions[] = [
-                'grantId' => $job->id().'-refresher-'.($startYear + $offset),
+                'grantId' => $job->id().'-refresher-'.$grantYear,
                 'grantYearOffset' => $offset,
-                'grantYear' => $startYear + $offset,
+                'grantYear' => $grantYear,
                 'value' => $value,
                 'vestingMonths' => $vestingMonths,
                 'cliffMonths' => $cliffMonths,
@@ -201,7 +268,7 @@ final class CareerCompCalculator
     /**
      * @return list<array<string, mixed>>
      */
-    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears): array
+    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate): array
     {
         if (! $job->grantsOptions() || (string) $job->value('refresher.optionType') !== 'iso') {
             return [];
@@ -223,14 +290,16 @@ final class CareerCompCalculator
         $vestingYears = max(0.25, $job->number('refresher.vestingYears'));
         $cliffMonths = max(0, $job->int('refresher.cliffMonths'));
         $frequency = VestingSchedule::normalizeFrequency($job->value('refresher.vestingFrequency'));
+        $refresherStartYear = $this->refresherStartYear($jobStartDate, $startYear);
         $grants = [];
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
-            if ($offset < $firstOffset || ($offset - $firstOffset) % $cadence !== 0) {
+            $grantYear = $startYear + $offset;
+            $yearsSinceRefresherStart = $grantYear - $refresherStartYear;
+            if ($yearsSinceRefresherStart < $firstOffset || ($yearsSinceRefresherStart - $firstOffset) % $cadence !== 0) {
                 continue;
             }
 
-            $grantYear = $startYear + $offset;
             $grants[] = [
                 'id' => $job->id().'-option-refresher-'.$grantYear,
                 'kind' => 'refresher',

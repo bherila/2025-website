@@ -1,13 +1,16 @@
-import { type ReactElement, useMemo } from 'react'
+import { type ReactElement, useMemo, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
 import { LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
 import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
 import { formatMoney, formatShares, formatSignedMoney } from './formatters'
-import { mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows } from './mappers'
+import { BAND_LABELS, type LifetimeValueRow, mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows, type ProjectionBand } from './mappers'
 import type { CareerCompProjection } from './types'
 
 interface ProjectionProps {
@@ -46,6 +49,30 @@ function sourceTypeLabel(sourceType: string): string {
   }
 
   return labels[sourceType] ?? sourceType
+}
+
+function lifetimeValue(row: LifetimeValueRow, band: ProjectionBand, metric: 'totalEquity' | 'totalPaperEquity' | 'totalValue' | 'totalPaperValue' | 'totalValueDelta' | 'totalPaperValueDelta'): number | null {
+  if (metric === 'totalEquity') {
+    return band === 'low' ? row.totalEquityLow : band === 'medium' ? row.totalEquityMedium : row.totalEquityHigh
+  }
+
+  if (metric === 'totalPaperEquity') {
+    return band === 'low' ? row.totalPaperEquityLow : band === 'medium' ? row.totalPaperEquityMedium : row.totalPaperEquityHigh
+  }
+
+  if (metric === 'totalValue') {
+    return band === 'low' ? row.totalValueLow : band === 'medium' ? row.totalValueMedium : row.totalValueHigh
+  }
+
+  if (metric === 'totalPaperValue') {
+    return band === 'low' ? row.totalPaperValueLow : band === 'medium' ? row.totalPaperValueMedium : row.totalPaperValueHigh
+  }
+
+  if (metric === 'totalValueDelta') {
+    return band === 'low' ? row.totalValueDeltaLow : band === 'medium' ? row.totalValueDeltaMedium : row.totalValueDeltaHigh
+  }
+
+  return band === 'low' ? row.totalPaperValueDeltaLow : band === 'medium' ? row.totalPaperValueDeltaMedium : row.totalPaperValueDeltaHigh
 }
 
 export function ProjectionAfterTaxLiquidity({ projection }: ProjectionProps): ReactElement {
@@ -200,18 +227,72 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
 }
 
 export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactElement {
+  const [selectedBand, setSelectedBand] = useState<ProjectionBand>('medium')
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>(() => projection.jobs.map((job) => job.id))
+  const [jobSelectionTouched, setJobSelectionTouched] = useState(false)
   const rows = useMemo(() => mapLifetimeValueRows(projection), [projection])
+  const projectionJobIds = useMemo(() => projection.jobs.map((job) => job.id), [projection.jobs])
+  const effectiveSelectedJobIds = useMemo(() => {
+    if (!jobSelectionTouched) {
+      return projectionJobIds
+    }
+
+    const projectionJobIdSet = new Set(projectionJobIds)
+    const retainedIds = selectedJobIds.filter((id) => projectionJobIdSet.has(id))
+
+    return retainedIds.length > 0 || selectedJobIds.length === 0 ? retainedIds : projectionJobIds
+  }, [jobSelectionTouched, projectionJobIds, selectedJobIds])
+  const selectedJobIdSet = useMemo(() => new Set(effectiveSelectedJobIds), [effectiveSelectedJobIds])
+  const visibleRows = useMemo(() => rows.filter((row) => selectedJobIdSet.has(row.jobId)), [rows, selectedJobIdSet])
   const hasCurrentJob = projection.currentJobId !== null
+
+  const toggleJob = (jobId: string, checked: boolean): void => {
+    setJobSelectionTouched(true)
+    setSelectedJobIds((currentIds) => {
+      const baseIds = jobSelectionTouched ? currentIds : effectiveSelectedJobIds
+
+      if (checked) {
+        return baseIds.includes(jobId) ? baseIds : [...baseIds, jobId]
+      }
+
+      return baseIds.filter((id) => id !== jobId)
+    })
+  }
 
   return (
     <div className="grid gap-6">
-      <PaperLifetimeValueChart projection={projection} />
+      <div className="flex flex-col gap-4 rounded-md border bg-card p-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">Outcome</div>
+          <ButtonGroup role="group" aria-label="Lifetime value outcome">
+            {(['low', 'medium', 'high'] as ProjectionBand[]).map((band) => (
+              <Button key={band} type="button" size="sm" variant={selectedBand === band ? 'secondary' : 'outline'} onClick={() => setSelectedBand(band)} aria-pressed={selectedBand === band}>
+                {BAND_LABELS[band]}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">Jobs</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {projection.jobs.map((job) => (
+              <label key={job.id} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={effectiveSelectedJobIds.includes(job.id)} onCheckedChange={(checked) => toggleJob(job.id, checked === true)} aria-label={`Show ${job.name}`} />
+                <span>{job.name}{job.isCurrent ? ' (current)' : ''}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <PaperLifetimeValueChart projection={projection} selectedBand={selectedBand} selectedJobIds={effectiveSelectedJobIds} />
 
       <Card>
         <CardHeader>
           <CardTitle>Lifetime value comparison</CardTitle>
           <CardDescription>
-            Lifetime totals are read from the projection. Delta columns use server-computed deltas vs. current job.
+            Lifetime totals are read from the projection for the selected outcome. Delta columns use server-computed deltas vs. current job.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -221,33 +302,34 @@ export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactE
                 <TableRow>
                   <TableHead>Job</TableHead>
                   <TableHead className="text-right">Cash comp</TableHead>
-                  <TableHead className="text-right">Liquid equity med</TableHead>
-                  <TableHead className="text-right">Paper equity med</TableHead>
-                  <TableHead className="text-right">Liquid total med</TableHead>
-                  <TableHead className="text-right">Paper total med</TableHead>
+                  <TableHead className="text-right">Liquid equity {BAND_LABELS[selectedBand].toLowerCase()}</TableHead>
+                  <TableHead className="text-right">Paper equity {BAND_LABELS[selectedBand].toLowerCase()}</TableHead>
+                  <TableHead className="text-right">Liquid total {BAND_LABELS[selectedBand].toLowerCase()}</TableHead>
+                  <TableHead className="text-right">Paper total {BAND_LABELS[selectedBand].toLowerCase()}</TableHead>
                   <TableHead className="text-right">Cash Δ</TableHead>
-                  <TableHead className="text-right">Liquid med Δ</TableHead>
-                  <TableHead className="text-right">Paper med Δ</TableHead>
-                  <TableHead className="text-right">Liquid low/high</TableHead>
-                  <TableHead className="text-right">Paper low/high</TableHead>
+                  <TableHead className="text-right">Liquid total Δ</TableHead>
+                  <TableHead className="text-right">Paper total Δ</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => (
+                {visibleRows.map((row) => (
                   <TableRow key={row.jobId}>
                     <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
                     <TableCell className="text-right">{formatMoney(row.totalCashComp)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalEquityMedium)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalPaperEquityMedium)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalValueMedium)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalPaperValueMedium)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalEquity'))}</TableCell>
+                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalPaperEquity'))}</TableCell>
+                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalValue'))}</TableCell>
+                    <TableCell className="text-right">{formatMoney(lifetimeValue(row, selectedBand, 'totalPaperValue'))}</TableCell>
                     <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.cashCompDelta) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalValueDeltaMedium) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(row.totalPaperValueDeltaMedium) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalValueLow)} / {formatMoney(row.totalValueHigh)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.totalPaperValueLow)} / {formatMoney(row.totalPaperValueHigh)}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(lifetimeValue(row, selectedBand, 'totalValueDelta')) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">{hasCurrentJob ? formatSignedMoney(lifetimeValue(row, selectedBand, 'totalPaperValueDelta')) : 'No current job'}</TableCell>
                   </TableRow>
                 ))}
+                {visibleRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">Select at least one job to compare.</TableCell>
+                  </TableRow>
+                ) : null}
               </TableBody>
             </Table>
           </div>

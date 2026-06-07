@@ -177,12 +177,49 @@ describe('Career Comparison chart data mappers', () => {
     expect(mapPaperEquityChartData(projection)[0]?.['private-job-paper-base']).toBe(95000)
   })
 
-  it('adds the current job medium liquid equity as a comparison series when it has no paper scenarios', () => {
+  it('adds the current job net medium liquid equity as a comparison series when paper scenarios exist', () => {
+    const projection: CareerCompProjection = {
+      ...sampleCareerCompProjection,
+      jobs: sampleCareerCompProjection.jobs.map((job) => job.id === 'current'
+        ? {
+            ...job,
+            annual: job.annual.map((annual) => annual.year === 2026 ? { ...annual, exerciseOutlay: 5000 } : annual),
+          }
+        : job),
+    }
+
     expect(mapPaperEquitySeries(sampleCareerCompProjection)[0]).toMatchObject({
-      key: 'current-current-equity-medium',
+      key: 'current-liquid-medium',
       label: 'Current job liquid equity med',
-      source: 'currentJobLiquidity',
+      source: 'liquidEquity',
     })
-    expect(mapPaperEquityChartData(sampleCareerCompProjection)[0]?.['current-current-equity-medium']).toBe(33000)
+    expect(mapPaperEquityChartData(projection)[0]?.['current-liquid-medium']).toBe(228000)
+    expect(mapPaperEquityChartData(projection)[0]?.['hyp-1-paper-base']).toBe(275000)
+  })
+
+  it('uses liquid total value lines when there are no matching paper scenarios', () => {
+    const projection: CareerCompProjection = {
+      ...sampleCareerCompProjection,
+      jobs: sampleCareerCompProjection.jobs.map((job) => ({
+        ...job,
+        paperEquity: { scenarios: [], totalsByOutcome: { low: 0, medium: 0, high: 0 } },
+      })),
+    }
+
+    expect(mapPaperEquitySeries(projection)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'current-liquid-medium', source: 'liquidEquity' }),
+      expect.objectContaining({ key: 'hyp-1-liquid-medium', source: 'liquidEquity' }),
+    ]))
+    expect(mapPaperEquityChartData(projection)[0]?.['current-liquid-medium']).toBe(233000)
+    expect(mapPaperEquityChartData(projection)[0]?.['hyp-1-liquid-medium']).toBe(275000)
+  })
+
+  it('filters total value series by selected job and outcome', () => {
+    const series = mapPaperEquitySeries(sampleCareerCompProjection, { band: 'low', jobIds: ['hyp-1'] })
+    const rows = mapPaperEquityChartData(sampleCareerCompProjection, { band: 'low', jobIds: ['hyp-1'] })
+
+    expect(series).toEqual([expect.objectContaining({ key: 'hyp-1-liquid-low', outcome: 'low' })])
+    expect(rows[0]?.['hyp-1-liquid-low']).toBe(270000)
+    expect(rows[0]?.['current-liquid-low']).toBeUndefined()
   })
 })

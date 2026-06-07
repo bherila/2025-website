@@ -35,6 +35,7 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
   return {
     id,
     name,
+    startDate: null,
     company: {
       type: 'public',
       currentSharePrice: 25,

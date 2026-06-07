@@ -118,6 +118,7 @@ export const optionGrantSchema = z.object({
 export const jobSpecSchema = z.object({
   id: z.string(),
   name: z.string(),
+  startDate: z.string().nullish().default(null),
   company: companySpecSchema,
   comp: cashCompSchema,
   grantTypes: grantTypesSchema,

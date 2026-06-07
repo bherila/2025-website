@@ -84,6 +84,128 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.lifetime.totalEquityValue.medium', 220000);
     }
 
+    public function test_compute_endpoint_prorates_first_year_cash_comp_from_job_start_date(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 2,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Midyear offer',
+                    'startDate' => '2026-07-01',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 0],
+                    'comp' => ['baseSalary' => 36500, 'cashBonus' => 3650, 'annualRaisePct' => 0],
+                    'rsuGrants' => [],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 1, 'highPct' => 2],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.annual.0.salary', 18400);
+        $response->assertJsonPath('jobs.0.annual.0.bonus', 1840);
+        $response->assertJsonPath('jobs.0.annual.1.salary', 36500);
+        $response->assertJsonPath('jobs.0.annual.1.bonus', 3650);
+        $response->assertJsonPath('jobs.0.lifetime.totalCashComp', 60390);
+    }
+
+    public function test_compute_endpoint_starts_raises_from_job_start_year(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 4,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Future offer',
+                    'startDate' => '2028-01-01',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 0],
+                    'comp' => ['baseSalary' => 100000, 'cashBonus' => 10000, 'annualRaisePct' => 10],
+                    'rsuGrants' => [],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 1, 'highPct' => 2],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.annual.0.salary', 0);
+        $response->assertJsonPath('jobs.0.annual.1.salary', 0);
+        $response->assertJsonPath('jobs.0.annual.2.salary', 100000);
+        $response->assertJsonPath('jobs.0.annual.3.salary', 110000);
+        $response->assertJsonPath('jobs.0.annual.2.bonus', 10000);
+        $response->assertJsonPath('jobs.0.annual.3.bonus', 11000);
+    }
+
+    public function test_compute_endpoint_keeps_projection_raise_offset_for_past_start_dates(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 2,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Existing role',
+                    'startDate' => '2020-01-01',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 0],
+                    'comp' => ['baseSalary' => 100000, 'cashBonus' => 10000, 'annualRaisePct' => 10],
+                    'rsuGrants' => [],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 1, 'highPct' => 2],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.annual.0.salary', 100000);
+        $response->assertJsonPath('jobs.0.annual.0.bonus', 10000);
+        $response->assertJsonPath('jobs.0.annual.1.salary', 110000);
+        $response->assertJsonPath('jobs.0.annual.1.bonus', 11000);
+    }
+
+    public function test_compute_endpoint_anchors_projected_refreshers_to_job_start_year(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 4,
+                'startYear' => 2026,
+                'currentJob' => null,
+                'hypotheticalJobs' => [[
+                    'id' => 'hyp-1',
+                    'name' => 'Future refresher offer',
+                    'startDate' => '2028-01-01',
+                    'company' => ['type' => 'public', 'currentSharePrice' => 100],
+                    'comp' => ['baseSalary' => 100000, 'cashBonus' => 0, 'annualRaisePct' => 10],
+                    'refresher' => [
+                        'pctOfBase' => 100,
+                        'cadenceYears' => 10,
+                        'firstYearOffset' => 1,
+                        'vestingYears' => 1,
+                        'cliffMonths' => 0,
+                        'vestingFrequency' => 'monthly',
+                    ],
+                    'rsuGrants' => [],
+                    'optionGrants' => [],
+                    'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $refresherRows = collect($response->json('jobs.0.vesting'))
+            ->filter(fn (array $row): bool => str_contains((string) $row['grantId'], '-refresher-'))
+            ->values();
+
+        $this->assertSame(['hyp-1-refresher-2029'], $refresherRows->pluck('grantId')->all());
+        $this->assertSame([2029], $refresherRows->pluck('year')->all());
+    }
+
     public function test_compute_endpoint_rejects_zero_refresher_vesting_years(): void
     {
         $inputs = CareerCompInputs::defaults();
