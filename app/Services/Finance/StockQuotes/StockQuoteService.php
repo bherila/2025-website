@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance\StockQuotes;
 
+use App\Models\FinanceTool\FinEquityAwards;
 use App\Models\FinanceTool\StockQuotesDaily;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -64,7 +65,7 @@ class StockQuoteService
      * Resolve the closing price on or before each award's vest_date in a single
      * query, keyed by award id. Awards without a matching quote are omitted.
      *
-     * @param  Collection<int, object{id: int|string, symbol: ?string, vest_date: ?string}>  $awards
+     * @param  Collection<int, FinEquityAwards>  $awards
      * @return array<int|string, mixed> award id => raw c_close value
      */
     public function closesForAwards(Collection $awards): array
@@ -90,7 +91,7 @@ class StockQuoteService
      * Ensure local quote coverage for every symbol referenced by $awards, using
      * the latest (capped at today) vest_date per symbol as the coverage target.
      *
-     * @param  Collection<int, object{symbol: ?string, vest_date: ?string}>  $awards
+     * @param  Collection<int, FinEquityAwards>  $awards
      */
     public function ensureCoverageForAwards(Collection $awards): void
     {

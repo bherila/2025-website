@@ -2,10 +2,13 @@
 
 namespace App\Models\FinanceTool;
 
+use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Model;
 
 class StockQuotesDaily extends Model
 {
+    use SerializesDatesAsLocal;
+
     protected $table = 'stock_quotes_daily';
 
     public $incrementing = false;

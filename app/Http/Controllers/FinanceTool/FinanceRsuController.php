@@ -22,9 +22,8 @@ class FinanceRsuController extends Controller
     public function getRsuData(Request $request): JsonResponse
     {
         $user = Auth::user();
-        $awards = DB::table('fin_equity_awards as a')
-            ->where('a.uid', $user->id)
-            ->select('a.*')
+        $awards = FinEquityAwards::query()
+            ->where('uid', $user->id)
             ->get();
 
         $this->stockQuoteService->ensureCoverageForAwards($awards);

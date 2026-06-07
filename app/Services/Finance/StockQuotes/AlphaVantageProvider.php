@@ -86,7 +86,7 @@ class AlphaVantageProvider implements StockQuoteProvider
         $quotes = [];
 
         foreach ($series as $date => $row) {
-            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date) || ! is_array($row)) {
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date)) {
                 continue;
             }
 
