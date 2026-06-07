@@ -60,12 +60,9 @@ final class PrivateValuationScenarioService
 
     public function commonFmvForYear(JobSpec $job, int $year, string $outcome = 'medium'): float
     {
-        $baseFullyDilutedShares = $job->number('company.fullyDilutedShares');
-        if ($baseFullyDilutedShares <= 0.0) {
-            return $job->number('company.fourNineA');
-        }
-
         $selectedOutcome = $this->normalizeOutcome($outcome);
+        $snapshots = [];
+
         foreach ($job->valuationScenarios() as $scenario) {
             if ($this->normalizeOutcome((string) ($scenario['outcome'] ?? 'medium')) !== $selectedOutcome) {
                 continue;
@@ -76,9 +73,20 @@ final class PrivateValuationScenarioService
                 continue;
             }
 
-            $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares);
-            if ($commonFmv > 0.0) {
-                return $commonFmv;
+            $snapshots[] = $snapshot;
+            $explicitCommonFmv = $this->explicitCommonFmvForSnapshot($snapshot);
+            if ($explicitCommonFmv > 0.0) {
+                return $explicitCommonFmv;
+            }
+        }
+
+        $baseFullyDilutedShares = $job->number('company.fullyDilutedShares');
+        if ($baseFullyDilutedShares > 0.0) {
+            foreach ($snapshots as $snapshot) {
+                $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares);
+                if ($derivedCommonFmv > 0.0) {
+                    return $derivedCommonFmv;
+                }
             }
         }
 
@@ -203,11 +211,32 @@ final class PrivateValuationScenarioService
      */
     private function commonFmvForSnapshot(JobSpec $job, array $snapshot, float $baseFullyDilutedShares): float
     {
-        $explicitCommonFmv = $this->number($snapshot['commonFmv'] ?? null);
+        $explicitCommonFmv = $this->explicitCommonFmvForSnapshot($snapshot);
         if ($explicitCommonFmv > 0.0) {
             return $explicitCommonFmv;
         }
 
+        $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares);
+        if ($derivedCommonFmv > 0.0) {
+            return $derivedCommonFmv;
+        }
+
+        return $job->number('company.fourNineA');
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function explicitCommonFmvForSnapshot(array $snapshot): float
+    {
+        return $this->number($snapshot['commonFmv'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function derivedCommonFmvForSnapshot(array $snapshot, float $baseFullyDilutedShares): float
+    {
         $preferredPostMoneyValuation = $this->number($snapshot['preferredPostMoneyValuation'] ?? null);
         if ($preferredPostMoneyValuation > 0.0 && $baseFullyDilutedShares > 0.0) {
             $commonDiscountPct = min(100.0, max(0.0, $this->number($snapshot['commonFmvDiscountPct'] ?? null)));
@@ -215,7 +244,7 @@ final class PrivateValuationScenarioService
             return MoneyMath::multiply(MoneyMath::divide($preferredPostMoneyValuation, $baseFullyDilutedShares), 1.0 - ($commonDiscountPct / 100.0));
         }
 
-        return $job->number('company.fourNineA');
+        return 0.0;
     }
 
     /**
