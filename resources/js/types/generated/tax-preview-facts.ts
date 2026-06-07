@@ -118,6 +118,12 @@ line7DisallowedCarryforward: number;
 line8DeductibleInvestmentInterest: number;
 line2cAdjustment: number;
 };
+export type Form4952CalculationRow = {
+label: string;
+amount: number;
+role: string;
+note: string | null;
+};
 export type Form4952CarryDestination = {
 sources: Array<TaxFactSource>;
 destination: string;
@@ -138,6 +144,10 @@ grossInvestmentIncomeFromK1Sources: Array<TaxFactSource>;
 qualifiedDividendSources: Array<TaxFactSource>;
 carryDestinations: Array<Form4952CarryDestination>;
 tracingSplitSources: Array<Form4952TracingSplit>;
+line4aCalculationRows: Array<Form4952CalculationRow>;
+line4cCalculationRows: Array<Form4952CalculationRow>;
+line4dCalculationRows: Array<Form4952CalculationRow>;
+line4eCalculationRows: Array<Form4952CalculationRow>;
 totalInvestmentInterestExpense: number;
 totalInvestmentExpenses: number;
 totalExcludedInvestmentExpenses: number;

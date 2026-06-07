@@ -75,7 +75,6 @@ function lineDetailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => v
 
   return {
     onDetails: () => onOpenDoc(source.taxDocumentId!),
-    detailsLabel: 'Detail',
     detailsTooltip: `Open ${label} detail`,
   }
 }
@@ -443,7 +442,8 @@ export default function ScheduleDPreview({
               boxRef="5"
               label="Line 5 total — short-term gain or (loss) from partnerships"
               value={taxFacts.line5GainLoss}
-              onClick={() => setLine5DetailsOpen(true)}
+              onDetails={() => setLine5DetailsOpen(true)}
+              detailsTooltip="Schedule D Line 5 Supporting Details"
             />
           )}
           <FormTotalLine boxRef="7" label="Net Short-Term" value={taxFacts.line7NetShortTerm} />

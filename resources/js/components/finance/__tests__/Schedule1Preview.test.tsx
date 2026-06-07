@@ -156,7 +156,7 @@ describe('Schedule1Preview', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Rental real estate, royalties, partnerships, S corporations, trusts'))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule 1 Line 5 Supporting Details' }))
     const modal = screen.getByRole('dialog', { name: 'Schedule 1 Line 5 Supporting Details' })
     expect(within(modal).getByText('Partnership — Schedule E net income/loss')).toBeInTheDocument()
   })

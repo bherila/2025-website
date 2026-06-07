@@ -21,7 +21,6 @@ function sourceDetailProps(source: TaxFactSource, onOpenDoc?: (docId: number) =>
 
   return {
     onDetails: () => onOpenDoc(source.taxDocumentId!),
-    detailsLabel: 'Detail',
     detailsTooltip: `Open ${formLabel} detail`,
   }
 }

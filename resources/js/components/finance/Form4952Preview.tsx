@@ -6,7 +6,7 @@ import Form4952SourceDetailModal from '@/components/finance/Form4952SourceDetail
 import { ShortDividendSummaryCard } from '@/components/finance/ShortDividendDetailModal'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
 import { k1CodeSourceFieldId, k1FieldSourceFieldId } from '@/lib/finance/taxSourceFieldIds'
-import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
+import type { Form4952CalculationRow, Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, type NavGlyph } from './tax-preview-primitives'
 
@@ -47,6 +47,7 @@ interface DetailModalState {
   title: string
   description?: string
   sources: TaxFactSource[]
+  calculationRows: Form4952CalculationRow[]
   amountMode: 'signed' | 'absolute' | 'expense'
 }
 
@@ -84,7 +85,7 @@ function SourceRows({
               label={source.label}
               value={value}
               isReviewed={source.isReviewed === false ? false : undefined}
-              {...(canGoToSource ? { onDetails: () => onGoToSource(source), detailsLabel: goToSourceLabel(source), detailsTooltip: 'Open the source document', detailsGlyph: 'window' as NavGlyph } : {})}
+              {...(canGoToSource ? { onDetails: () => onGoToSource(source), detailsTooltip: `Open ${goToSourceLabel(source)}`, detailsGlyph: 'window' as NavGlyph } : {})}
             />
             {source.notes && (
               <FormLine label="Note" raw={source.notes} note />
@@ -163,8 +164,13 @@ export default function Form4952Preview({
     return undefined
   }
 
-  const openSourcesModal = (title: string, description: string, sources: TaxFactSource[], amountMode: DetailModalState['amountMode'] = 'signed') =>
-    setDetailModal({ title, description, sources, amountMode })
+  const openSourcesModal = (
+    title: string,
+    description: string,
+    sources: TaxFactSource[],
+    amountMode: DetailModalState['amountMode'] = 'signed',
+    calculationRows: Form4952CalculationRow[] = [],
+  ) => setDetailModal({ title, description, sources, amountMode, calculationRows })
 
   return (
     <div className="space-y-5">
@@ -239,7 +245,7 @@ export default function Form4952Preview({
           boxRef="4a"
           label="Gross investment income from Schedule B"
           value={facts.grossInvestmentIncomeFromScheduleB}
-          {...(onOpenScheduleB && facts.grossInvestmentIncomeFromScheduleB !== 0 ? { onClick: onOpenScheduleB } : {})}
+          {...(onOpenScheduleB && facts.grossInvestmentIncomeFromScheduleB !== 0 ? { onClick: onOpenScheduleB, destinationTooltip: 'Open Schedule B' } : {})}
         />
         <FormLine
           boxRef="4a"
@@ -252,7 +258,6 @@ export default function Form4952Preview({
                 'Each partnership’s share of investment income that feeds Form 4952 line 4a. Net capital gain is excluded.',
                 facts.grossInvestmentIncomeFromK1Sources,
               ),
-              detailsLabel: 'Sources',
               detailsTooltip: 'List each K-1 and go to its source',
               detailsGlyph: 'window' as NavGlyph,
             }
@@ -262,6 +267,14 @@ export default function Form4952Preview({
           boxRef="4a"
           label={<>Gross investment income <InfoTooltip>Form 4952 line 4a: gross income from property held for investment — interest, ordinary dividends, royalties, and K-1 investment income. <strong>Excludes</strong> net capital gain and qualified dividends unless you elect to include them on line 4g (which forfeits the preferential rate). IRC §163(d)(4)(B); 2025 Form 4952 line 4a instructions.</InfoTooltip></>}
           value={facts.grossInvestmentIncomeTotal}
+          onDetails={() => openSourcesModal(
+            'Line 4a gross investment income',
+            'How Form 4952 line 4a is assembled from Schedule B and K-1 investment income.',
+            facts.grossInvestmentIncomeFromK1Sources,
+            'signed',
+            facts.line4aCalculationRows,
+          )}
+          detailsTooltip="Show line 4a sources and calculation"
         />
         {totalQualDiv > 0 && (
           <FormLine
@@ -275,23 +288,50 @@ export default function Form4952Preview({
                   'These qualified dividends are subtracted on line 4b. Go to each source to verify.',
                   facts.qualifiedDividendSources,
                 ),
-                detailsLabel: 'Sources',
                 detailsTooltip: 'List each qualified-dividend source',
                 detailsGlyph: 'window' as NavGlyph,
               }
               : {})}
           />
         )}
-        <FormLine boxRef="4c" label="Net investment income after qualified dividends" value={facts.line4cNetInvestmentIncomeAfterQualifiedDividends} />
+        <FormLine
+          boxRef="4c"
+          label="Net investment income after qualified dividends"
+          value={facts.line4cNetInvestmentIncomeAfterQualifiedDividends}
+          onDetails={() => openSourcesModal(
+            'Line 4c income after qualified dividends',
+            'Line 4c subtracts qualified dividends included on line 4a unless they are elected back into investment income on line 4g.',
+            facts.qualifiedDividendSources,
+            'signed',
+            facts.line4cCalculationRows,
+          )}
+          detailsTooltip="Show line 4c calculation"
+        />
         <FormLine
           boxRef="4d"
           label={<>Net gain from disposition of investment property <InfoTooltip>Form 4952 line 4d: net gain (floored at 0) from selling property held for investment. For a non-materially-participating partner in a securities-trading partnership, the fund’s trading gains <strong>are</strong> property held for investment (IRC §163(d)(5)(A)(ii)), so they feed line 4d.</InfoTooltip></>}
           value={facts.line4dNetGainFromDisposition}
+          onDetails={() => openSourcesModal(
+            'Line 4d net gain from disposition',
+            'Line 4d starts with the Schedule D net gain or loss, removes non-investment §1231 gain, then floors the result at $0.',
+            [],
+            'signed',
+            facts.line4dCalculationRows,
+          )}
+          detailsTooltip="Show line 4d calculation"
         />
         <FormLine
           boxRef="4e"
           label={<>Net capital gain from disposition <InfoTooltip>Form 4952 line 4e: the smaller of line 4d or your net capital gain (the long-term, preferential-rate slice). It is excluded from investment income unless elected on line 4g. IRC §163(d)(4)(B)(iii).</InfoTooltip></>}
           value={facts.line4eNetCapitalGainFromDisposition}
+          onDetails={() => openSourcesModal(
+            'Line 4e net capital gain from disposition',
+            'Line 4e is the preferential long-term slice, capped by line 4d. It does not raise investment income unless elected on line 4g.',
+            [],
+            'signed',
+            facts.line4eCalculationRows,
+          )}
+          detailsTooltip="Show line 4e calculation"
         />
         <FormLine
           boxRef="4f"
@@ -400,11 +440,11 @@ export default function Form4952Preview({
                         destination.sources,
                         'expense',
                       ),
-                      detailsLabel: 'Sources',
                       detailsTooltip: 'List the sources allocated here',
                       detailsGlyph: 'window' as NavGlyph,
                     }
                     : {})}
+                  {...(drill ? { destinationTooltip: `Open ${destination.formLine}` } : {})}
                 />
                 {showCarryProration && (
                   <FormSubLine
@@ -461,6 +501,7 @@ export default function Form4952Preview({
           title={detailModal.title}
           {...(detailModal.description ? { description: detailModal.description } : {})}
           sources={detailModal.sources}
+          calculationRows={detailModal.calculationRows}
           amountMode={detailModal.amountMode}
           onGoToSource={handleGoToSource}
           onClose={() => setDetailModal(null)}

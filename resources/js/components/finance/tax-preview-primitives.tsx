@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { ArrowRight, ArrowUpRight, ChevronRight, HelpCircle, Search } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, HelpCircle, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -57,33 +57,27 @@ export function DetailsButton({
   isReviewed,
   tooltip = 'View Details',
   glyph,
-  children,
 }: {
   onClick: () => void
   isReviewed?: boolean | undefined
   tooltip?: string
   /** Appends a navigation glyph after the label: `→` (column push) or `↗` (new window). */
   glyph?: NavGlyph
-  children?: React.ReactNode
 }) {
-  const colorClass = isReviewed === undefined
-    ? 'text-muted-foreground hover:text-foreground'
-    : isReviewed
-      ? 'text-success hover:text-success/80'
-      : 'text-warning hover:text-warning/80'
-  const isTextButton = children !== undefined
+  const colorClass = isReviewed === false
+    ? 'border-warning/70 text-warning hover:bg-warning/10 hover:text-warning'
+    : 'border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-700/70 dark:text-amber-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-200'
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
-          size={isTextButton ? 'sm' : 'icon'}
-          className={`${isTextButton ? 'h-6 shrink-0 gap-1 px-2 text-[11px]' : 'h-5 w-5 shrink-0'} ${colorClass}`}
+          variant="outline"
+          size="icon"
+          className={`h-7 w-7 shrink-0 ${colorClass}`}
           onClick={(e) => { e.stopPropagation(); onClick() }}
           aria-label={tooltip}
         >
-          {children ?? <Search className="h-3 w-3" />}
-          {isTextButton && glyph && <NavGlyphIcon glyph={glyph} />}
+          {glyph ? <NavGlyphIcon glyph={glyph} /> : <Search className="h-3.5 w-3.5" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
@@ -151,8 +145,9 @@ export function FormLine({
   onClick,
   onDetails,
   detailsTooltip,
-  detailsLabel,
   detailsGlyph,
+  destinationTooltip,
+  destinationGlyph,
   isReviewed,
   control,
 }: {
@@ -164,9 +159,11 @@ export function FormLine({
   onClick?: () => void
   onDetails?: () => void
   detailsTooltip?: string
-  detailsLabel?: string
   /** Navigation glyph for the details button: `→` (Miller column push) or `↗` (new window). */
   detailsGlyph?: NavGlyph
+  destinationTooltip?: string
+  /** Navigation glyph for the destination button; defaults to a Miller-column push. */
+  destinationGlyph?: NavGlyph
   isReviewed?: boolean | undefined
   /** Custom right-side control (e.g. a number input). When provided, replaces the value display. */
   control?: React.ReactNode
@@ -185,35 +182,41 @@ export function FormLine({
 
   if (control) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5">
+      <div className={`grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,auto)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,auto)_2rem]'} items-center gap-2 px-3 py-1.5`}>
         {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
-        <span className="flex-1 text-[13px]">{label}</span>
-        <span className="shrink-0">{control}</span>
+        <span className="text-[13px]">{label}</span>
+        <span className="justify-self-end">{control}</span>
+        <span aria-hidden="true" />
       </div>
     )
   }
 
   return (
     <div
-      className={`flex items-start gap-2 px-3 py-1.5 ${onClick ? 'cursor-pointer hover:bg-muted/20 transition-colors' : ''}`}
-      onClick={onClick}
+      className={`grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]'} items-start gap-2 px-3 py-1.5`}
     >
       {boxRef && <span className={`${BOX_REF_CLASS} pt-0.5`}>{boxRef}.</span>}
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] max-w-[45%] text-right break-words ${cls}`}>
+      <span className="min-w-0 text-[13px]">{label}</span>
+      <span className={`${CURRENCY_TEXT} text-[13px] justify-self-end text-right break-words ${cls}`}>
         {raw ?? (n === null ? '—' : fmtAmt(n))}
       </span>
-      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5" />}
-      {onDetails && (
-        <DetailsButton
-          onClick={onDetails}
-          isReviewed={isReviewed}
-          {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}
-          {...(detailsGlyph ? { glyph: detailsGlyph } : {})}
-        >
-          {detailsLabel}
-        </DetailsButton>
-      )}
+      <span className="flex flex-col items-end gap-1">
+        {onDetails && (
+          <DetailsButton
+            onClick={onDetails}
+            isReviewed={isReviewed}
+            {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}
+            {...(detailsGlyph ? { glyph: detailsGlyph } : {})}
+          />
+        )}
+        {onClick && (
+          <DetailsButton
+            onClick={onClick}
+            tooltip={destinationTooltip ?? 'Open related form'}
+            glyph={destinationGlyph ?? 'column'}
+          />
+        )}
+      </span>
     </div>
   )
 }
@@ -241,6 +244,11 @@ export function FormTotalLine({
   boxRef,
   onClick,
   isReviewed,
+  onDetails,
+  detailsTooltip,
+  detailsGlyph,
+  destinationTooltip,
+  destinationGlyph,
 }: {
   label: React.ReactNode
   value: number | null
@@ -248,26 +256,41 @@ export function FormTotalLine({
   boxRef?: string
   onClick?: () => void
   isReviewed?: boolean | undefined
+  onDetails?: () => void
+  detailsTooltip?: string
+  /** Navigation glyph for the details button: `→` (Miller column push) or `↗` (new window). */
+  detailsGlyph?: NavGlyph
+  destinationTooltip?: string
+  /** Navigation glyph for the destination button; defaults to a Miller-column push. */
+  destinationGlyph?: NavGlyph
 }) {
   const cls =
     isReviewed === false ? 'text-warning' : value === null ? 'text-muted-foreground' : value < 0 ? 'text-destructive' : 'text-success'
   const content = (
     <>
       {boxRef && <span className={BOX_REF_CLASS}>{boxRef}.</span>}
-      <span className="flex-1 text-[13px]">{label}</span>
-      <span className={`${CURRENCY_TEXT} text-[13px] min-w-[80px] text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
-      {onClick && <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
+      <span className="min-w-0 text-[13px]">{label}</span>
+      <span className={`${CURRENCY_TEXT} text-[13px] justify-self-end text-right ${cls}`}>{value === null ? '—' : fmtAmt(value)}</span>
+      <span className="flex flex-col items-end gap-1">
+        {onDetails && (
+          <DetailsButton
+            onClick={onDetails}
+            isReviewed={isReviewed}
+            {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}
+            {...(detailsGlyph ? { glyph: detailsGlyph } : {})}
+          />
+        )}
+        {onClick && (
+          <DetailsButton
+            onClick={onClick}
+            tooltip={destinationTooltip ?? 'Open related form'}
+            glyph={destinationGlyph ?? 'column'}
+          />
+        )}
+      </span>
     </>
   )
-  const className = `flex w-full items-center gap-2 px-3 py-2 text-left border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5 ${onClick ? 'cursor-pointer hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2' : ''}`
-
-  if (onClick) {
-    return (
-      <button type="button" className={className} onClick={onClick}>
-        {content}
-      </button>
-    )
-  }
+  const className = `grid ${boxRef ? 'grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]' : 'grid-cols-[minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]'} items-center gap-2 px-3 py-2 text-left border-l-2 border-l-primary/40 ${double ? 'border-t-2 border-double border-border' : 'border-t border-border'} bg-primary/5`
 
   return (
     <div className={className}>

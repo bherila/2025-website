@@ -48,6 +48,26 @@ readonly class Form4952Facts
     public array $tracingSplitSources;
 
     /**
+     * @var Form4952CalculationRow[]
+     */
+    public array $line4aCalculationRows;
+
+    /**
+     * @var Form4952CalculationRow[]
+     */
+    public array $line4cCalculationRows;
+
+    /**
+     * @var Form4952CalculationRow[]
+     */
+    public array $line4dCalculationRows;
+
+    /**
+     * @var Form4952CalculationRow[]
+     */
+    public array $line4eCalculationRows;
+
+    /**
      * @param  TaxFactSource[]  $investmentInterestSources
      * @param  TaxFactSource[]  $investmentExpenseSources
      * @param  TaxFactSource[]  $excludedInvestmentExpenseSources
@@ -56,6 +76,10 @@ readonly class Form4952Facts
      * @param  TaxFactSource[]  $qualifiedDividendSources
      * @param  Form4952CarryDestination[]  $carryDestinations
      * @param  Form4952TracingSplit[]  $tracingSplitSources
+     * @param  Form4952CalculationRow[]  $line4aCalculationRows
+     * @param  Form4952CalculationRow[]  $line4cCalculationRows
+     * @param  Form4952CalculationRow[]  $line4dCalculationRows
+     * @param  Form4952CalculationRow[]  $line4eCalculationRows
      */
     public function __construct(
         array $investmentInterestSources,
@@ -84,6 +108,10 @@ readonly class Form4952Facts
         public string $allocationMethod = 'pro_rata',
         public string $allocationMethodDescription = 'Pro-rata allocation under Rev. Rul. 2008-38.',
         array $tracingSplitSources = [],
+        array $line4aCalculationRows = [],
+        array $line4cCalculationRows = [],
+        array $line4dCalculationRows = [],
+        array $line4eCalculationRows = [],
         // Part II lines 4d–4h: net gain from the disposition of property held for investment
         // and the §163(d)(4)(B)(iii) election. Default 0 when no Schedule D gain feeds in.
         public float $line4dNetGainFromDisposition = 0.0,
@@ -117,6 +145,10 @@ readonly class Form4952Facts
         $this->qualifiedDividendSources = $qualifiedDividendSources;
         $this->carryDestinations = $carryDestinations;
         $this->tracingSplitSources = $tracingSplitSources;
+        $this->line4aCalculationRows = $line4aCalculationRows;
+        $this->line4cCalculationRows = $line4cCalculationRows;
+        $this->line4dCalculationRows = $line4dCalculationRows;
+        $this->line4eCalculationRows = $line4eCalculationRows;
     }
 
     /**
@@ -151,6 +183,10 @@ readonly class Form4952Facts
             'allocationMethod' => $this->allocationMethod,
             'allocationMethodDescription' => $this->allocationMethodDescription,
             'tracingSplitSources' => array_map(static fn (Form4952TracingSplit $source): array => $source->toArray(), $this->tracingSplitSources),
+            'line4aCalculationRows' => array_map(static fn (Form4952CalculationRow $row): array => $row->toArray(), $this->line4aCalculationRows),
+            'line4cCalculationRows' => array_map(static fn (Form4952CalculationRow $row): array => $row->toArray(), $this->line4cCalculationRows),
+            'line4dCalculationRows' => array_map(static fn (Form4952CalculationRow $row): array => $row->toArray(), $this->line4dCalculationRows),
+            'line4eCalculationRows' => array_map(static fn (Form4952CalculationRow $row): array => $row->toArray(), $this->line4eCalculationRows),
             'line4dNetGainFromDisposition' => $this->line4dNetGainFromDisposition,
             'line4eNetCapitalGainFromDisposition' => $this->line4eNetCapitalGainFromDisposition,
             'line4fNetShortTermFromDisposition' => $this->line4fNetShortTermFromDisposition,
