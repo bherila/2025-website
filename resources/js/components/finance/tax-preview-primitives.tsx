@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { ArrowRight, ChevronRight, HelpCircle, Search } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, ChevronRight, HelpCircle, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -40,15 +40,30 @@ export function AmountCell({ val, className = '' }: { val: string | number | nul
 
 // ── Shared details button ─────────────────────────────────────────────────────
 
+/**
+ * Where a "go to source" / drill affordance leads, which determines its trailing glyph:
+ * - `'column'` → `→` (ArrowRight): pushes a Miller column within the dock.
+ * - `'window'` → `↗` (ArrowUpRight): opens a new window / overlay (e.g. a document review modal).
+ */
+export type NavGlyph = 'column' | 'window'
+
+export function NavGlyphIcon({ glyph, className = 'h-3 w-3' }: { glyph: NavGlyph; className?: string }) {
+  const Icon = glyph === 'column' ? ArrowRight : ArrowUpRight
+  return <Icon aria-hidden="true" className={className} />
+}
+
 export function DetailsButton({
   onClick,
   isReviewed,
   tooltip = 'View Details',
+  glyph,
   children,
 }: {
   onClick: () => void
   isReviewed?: boolean | undefined
   tooltip?: string
+  /** Appends a navigation glyph after the label: `→` (column push) or `↗` (new window). */
+  glyph?: NavGlyph
   children?: React.ReactNode
 }) {
   const colorClass = isReviewed === undefined
@@ -63,11 +78,12 @@ export function DetailsButton({
         <Button
           variant="ghost"
           size={isTextButton ? 'sm' : 'icon'}
-          className={`${isTextButton ? 'h-6 shrink-0 px-2 text-[11px]' : 'h-5 w-5 shrink-0'} ${colorClass}`}
+          className={`${isTextButton ? 'h-6 shrink-0 gap-1 px-2 text-[11px]' : 'h-5 w-5 shrink-0'} ${colorClass}`}
           onClick={(e) => { e.stopPropagation(); onClick() }}
           aria-label={tooltip}
         >
           {children ?? <Search className="h-3 w-3" />}
+          {isTextButton && glyph && <NavGlyphIcon glyph={glyph} />}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
@@ -136,6 +152,7 @@ export function FormLine({
   onDetails,
   detailsTooltip,
   detailsLabel,
+  detailsGlyph,
   isReviewed,
   control,
 }: {
@@ -148,6 +165,8 @@ export function FormLine({
   onDetails?: () => void
   detailsTooltip?: string
   detailsLabel?: string
+  /** Navigation glyph for the details button: `→` (Miller column push) or `↗` (new window). */
+  detailsGlyph?: NavGlyph
   isReviewed?: boolean | undefined
   /** Custom right-side control (e.g. a number input). When provided, replaces the value display. */
   control?: React.ReactNode
@@ -190,6 +209,7 @@ export function FormLine({
           onClick={onDetails}
           isReviewed={isReviewed}
           {...(detailsTooltip ? { tooltip: detailsTooltip } : {})}
+          {...(detailsGlyph ? { glyph: detailsGlyph } : {})}
         >
           {detailsLabel}
         </DetailsButton>

@@ -5,10 +5,13 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952AmtFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952CarryDestination;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952TracingSplit;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleBFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
@@ -19,8 +22,12 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      * @param  TaxFactSource[]  $marginInterestSources
+     *
+     * $scheduleD / $form4797 / $year are optional so per-form CLI slices can build a bare
+     * Form 4952; when $scheduleD is null, Part II lines 4d–4h are 0 (correct whenever there
+     * is no net gain from the disposition of investment property).
      */
-    public function build(array $k1Docs, array $docs1099, ScheduleBFacts $scheduleB, float $shortDividendDeduction, array $marginInterestSources = []): Form4952Facts
+    public function build(array $k1Docs, array $docs1099, ScheduleBFacts $scheduleB, float $shortDividendDeduction, array $marginInterestSources = [], ?ScheduleDFacts $scheduleD = null, ?Form4797Facts $form4797 = null, ?int $year = null): Form4952Facts
     {
         $investmentInterestSources = [];
         $investmentExpenseSources = [];
@@ -176,9 +183,51 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $qualifiedDividendSources = $this->form4952QualifiedDividendSources($k1Docs, $scheduleB);
         $totalQualifiedDividends = $this->form4952QualifiedDividendsIncludedInGross($k1Docs, $scheduleB);
         $line4c = $this->subtractMoney($grossInvestmentIncomeTotal, $totalQualifiedDividends);
-        $niiBefore = max(0.0, $this->subtractMoney($line4c, $totalInvestmentExpenses));
-        $deductible = min($totalInvestmentInterestExpense, $niiBefore);
-        $carryforward = max(0.0, $this->subtractMoney($totalInvestmentInterestExpense, $deductible));
+
+        // Part II lines 4d–4f: net gain from the disposition of property held for investment.
+        // §163(d)(4)(B)(ii) limits "net gain" to dispositions of investment property. For a
+        // non-materially-participating partner in a securities-trading partnership the fund's
+        // trading gains ARE property held for investment (§163(d)(5)(A)(ii)), so they remain in
+        // line 4d via Schedule D; only genuine non-investment §1231 gains that Form 4797 routes
+        // to Schedule D are carved out. Line 4e is the net-capital-gain (preferential long-term)
+        // slice, excluded from investment income unless the line 4g election is made.
+        $scheduleDNetGainLoss = $scheduleD !== null ? $scheduleD->line16Combined : 0.0;
+        $scheduleDNetLongTerm = $scheduleD !== null ? $scheduleD->line15NetLongTerm : 0.0;
+        $nonInvestmentSection1231 = $form4797 !== null ? $form4797->netToScheduleDLongTerm : 0.0;
+        $investmentDispositionNet = $this->subtractMoney($scheduleDNetGainLoss, $nonInvestmentSection1231);
+        $investmentDispositionLongTerm = $this->subtractMoney($scheduleDNetLongTerm, $nonInvestmentSection1231);
+        $line4d = max(0.0, $investmentDispositionNet);
+        $line4e = max(0.0, min($line4d, max(0.0, $investmentDispositionLongTerm)));
+        $line4f = max(0.0, $this->subtractMoney($line4d, $line4e));
+
+        // Line 5: investment expenses other than interest (§212). For an individual these are
+        // §67(b) miscellaneous itemized deductions, SUSPENDED for 2018–2025 by §67(g) (TCJA), so
+        // line 5 is $0; K-1 Box 20B items are tracked in $excludedInvestmentExpenseSources but
+        // excluded here. (Trader-fund §162 expenses are deducted above the line on Schedule E.)
+        $effectiveYear = $year ?? (int) date('Y');
+        $line5Suspended = $this->tcjaMiscDeductionsSuspended($effectiveYear);
+        $line5 = $line5Suspended ? 0.0 : $totalInvestmentExpenses;
+        $line5SuspensionReason = $line5Suspended
+            ? "§67(g) (TCJA) suspends §212 investment-expense miscellaneous itemized deductions for {$effectiveYear}; line 5 is \$0 and K-1 Box 20B items are tracked but excluded."
+            : "Outside the §67(g) suspension window; line 5 reflects investment expenses for {$effectiveYear}.";
+
+        // No §163(d)(4)(B)(iii) / §1(h)(11)(D)(i) election is applied by default — electing would
+        // forfeit the preferential qualified-dividend / net-capital-gain rate on the elected amount.
+        $line4g = 0.0;
+        $regularCore = $this->computeForm4952Core($totalInvestmentInterestExpense, $line4c, $line4f, $line4g, $line5);
+        $line4h = $regularCore['line4h'];
+        $line6 = $regularCore['line6'];
+        $deductible = $regularCore['line8'];
+        $carryforward = $regularCore['line7'];
+        $niiBefore = $line6; // Net investment income without the QD/net-capital-gain election (line 4g = 0).
+
+        // Special Election Smart Worksheet (official Form 4952 line 4g worksheet): the maximum
+        // beneficial election is the lesser of the excess investment interest (B) and the
+        // qualified dividends + net capital gain available to elect (C). §163(d)(4)(B)(iii).
+        $electionA = max(0.0, $this->subtractMoney($this->sumMoney([$line4c, $line4f]), $line5));
+        $electionB = max(0.0, $this->subtractMoney($totalInvestmentInterestExpense, $electionA));
+        $electionC = $this->sumMoney([$totalQualifiedDividends, $line4e]);
+        $electionD = min($electionB, $electionC);
 
         $allocation = $this->allocateInvestmentInterestSources(
             $investmentInterestSources,
@@ -238,6 +287,41 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
             );
         }
 
+        // AMT Form 4952: recompute with AMT investment income/expense. AMT differs from regular
+        // tax when there is AMT-only investment income (e.g. specified private-activity-bond
+        // interest, §57(a)(5)) or an AMT basis adjustment to gain on disposition (K-1 Box 17B,
+        // §56(a)(6)). With no AMT items every AMT line equals the regular-tax form.
+        $amtDispositionAdjustment = $this->k1AmtDispositionAdjustment($k1Docs);
+        $amtAdditionalInvestmentInterest = 0.0; // hook: AMT-only investment interest (PAB-financed); none modeled yet.
+        $amtAdditionalInvestmentIncome = 0.0;   // hook: AMT-only investment income (specified PAB interest); none modeled yet.
+        $amtTotalInterest = $this->sumMoney([$totalInvestmentInterestExpense, $amtAdditionalInvestmentInterest]);
+        $amtLine4a = $this->sumMoney([$grossInvestmentIncomeTotal, $amtAdditionalInvestmentIncome]);
+        $amtLine4c = $this->subtractMoney($amtLine4a, $totalQualifiedDividends);
+        $amtInvestmentDispositionNet = $this->sumMoney([$investmentDispositionNet, $amtDispositionAdjustment]);
+        $amtInvestmentDispositionLongTerm = $this->sumMoney([$investmentDispositionLongTerm, $amtDispositionAdjustment]);
+        $amtLine4d = max(0.0, $amtInvestmentDispositionNet);
+        $amtLine4e = max(0.0, min($amtLine4d, max(0.0, $amtInvestmentDispositionLongTerm)));
+        $amtLine4f = max(0.0, $this->subtractMoney($amtLine4d, $amtLine4e));
+        $amtCore = $this->computeForm4952Core($amtTotalInterest, $amtLine4c, $amtLine4f, 0.0, $line5);
+        // Form 6251 line 2c = regular-tax deduction − AMT deduction (a positive amount increases AMTI; §56(b)(1)(C)).
+        $amtLine2cAdjustment = $this->subtractMoney($deductible, $amtCore['line8']);
+        $amt = new Form4952AmtFacts(
+            line1to3InvestmentInterest: $amtTotalInterest,
+            line4aGrossInvestmentIncome: $amtLine4a,
+            line4bQualifiedDividends: $totalQualifiedDividends,
+            line4cAfterQualifiedDividends: $amtLine4c,
+            line4dNetGainFromDisposition: $amtLine4d,
+            line4eNetCapitalGainFromDisposition: $amtLine4e,
+            line4fNetShortTermFromDisposition: $amtLine4f,
+            line4gElected: 0.0,
+            line4hTotalInvestmentIncome: $amtCore['line4h'],
+            line5InvestmentExpenses: $line5,
+            line6NetInvestmentIncome: $amtCore['line6'],
+            line7DisallowedCarryforward: $amtCore['line7'],
+            line8DeductibleInvestmentInterest: $amtCore['line8'],
+            line2cAdjustment: $amtLine2cAdjustment,
+        );
+
         return new Form4952Facts(
             investmentInterestSources: $investmentInterestSources,
             totalInvestmentInterestExpense: $totalInvestmentInterestExpense,
@@ -267,7 +351,78 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                 ? 'Tracing inputs under Treas. Reg. §1.163-8T set the §163(d)(5)(A) category gross amounts by use of debt proceeds; the Form 4952 allowed deduction and carryforward still reconcile to the aggregate §163(d) limit.'
                 : 'Pro-rata allocation under Rev. Rul. 2008-38 using each category share of gross Form 4952 line-1 investment interest.',
             tracingSplitSources: $tracingSplitSources,
+            line4dNetGainFromDisposition: $line4d,
+            line4eNetCapitalGainFromDisposition: $line4e,
+            line4fNetShortTermFromDisposition: $line4f,
+            line4gElectedQualifiedDividendsAndGain: $line4g,
+            line4hTotalInvestmentIncome: $line4h,
+            line5InvestmentExpenses: $line5,
+            line5TcjaSuspended: $line5Suspended,
+            line5SuspensionReason: $line5SuspensionReason,
+            line6NetInvestmentIncome: $line6,
+            electionNiiWithoutElection: $electionA,
+            electionExcessInvestmentInterest: $electionB,
+            electionAvailableForElection: $electionC,
+            electionMaxBeneficial: $electionD,
+            recommendedElection: $electionD,
+            line18AllowedDeduction: $deductible,
+            line19aScheduleEPassthru: $deductibleScheduleE,
+            line20ScheduleAItemized: $deductibleScheduleA,
+            amt: $amt,
         );
+    }
+
+    /**
+     * Form 4952 Part II/III core (lines 4h, 6, 7, 8), shared by the regular-tax and AMT passes.
+     *
+     * Line 4h = 4c + 4f + 4g; line 6 (net investment income) = 4h − line 5, not below 0; line 8
+     * (deduction) = smaller of line 3 or line 6; line 7 (carryforward) = line 3 − line 8.
+     *
+     * @return array{line4h:float,line6:float,line8:float,line7:float}
+     */
+    private function computeForm4952Core(float $totalInterest, float $line4c, float $line4f, float $line4g, float $line5): array
+    {
+        $line4h = $this->sumMoney([$line4c, $line4f, $line4g]);
+        $line6 = max(0.0, $this->subtractMoney($line4h, $line5));
+        $line8 = min($totalInterest, $line6);
+        $line7 = max(0.0, $this->subtractMoney($totalInterest, $line8));
+
+        return ['line4h' => $line4h, 'line6' => $line6, 'line8' => $line8, 'line7' => $line7];
+    }
+
+    /**
+     * §67(g) (TCJA) disallows all miscellaneous itemized deductions — including §212 investment
+     * expenses (Form 4952 line 5) — for individuals for tax years 2018 through 2025.
+     */
+    private function tcjaMiscDeductionsSuspended(int $year): bool
+    {
+        return $year >= 2018 && $year <= 2025;
+    }
+
+    /**
+     * Sum of K-1 Box 17 code B (AMT adjustment for gain or loss on the disposition of property,
+     * IRC §56(a)(6)); feeds the AMT net gain from disposition for AMT Form 4952 line 4d.
+     *
+     * @param  FileForTaxDocument[]  $k1Docs
+     */
+    private function k1AmtDispositionAdjustment(array $k1Docs): float
+    {
+        $total = 0.0;
+        foreach ($k1Docs as $doc) {
+            $data = $this->k1Data($doc);
+            if ($data === null) {
+                continue;
+            }
+
+            foreach ($this->k1CodeItems($data, '17', 'B') as $item) {
+                $rawAmount = $this->parseMoney($item['value'] ?? null);
+                if ($rawAmount !== null) {
+                    $total = $this->sumMoney([$total, $rawAmount]);
+                }
+            }
+        }
+
+        return $this->roundMoney($total);
     }
 
     /**
@@ -406,15 +561,18 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                 $code = 'A';
                 $basis = 'Box 20A — partnership-reported investment income.';
             } else {
+                // Box 20A absent: reconstruct line 4a from ordinary portfolio income only. Box 11C
+                // (§1256 contracts and straddles) is net capital gain, not line-4a ordinary income;
+                // it flows to line 4d via Schedule D, so it is intentionally excluded here to avoid
+                // double-counting it in net investment income. IRC §163(d)(4)(B).
                 $amount = $this->sumMoney([
                     $this->k1Field($data, '5'),
                     $this->k1Field($data, '6a'),
                     -$this->k1Field($data, '6b'),
-                    $this->sumK1CodeItems($data, '11', 'C'),
                 ]);
                 $box = null;
                 $code = null;
-                $basis = 'Box 5 interest + Box 6a ordinary dividends − Box 6b qualified dividends + Box 11C other portfolio income.';
+                $basis = 'Box 5 interest + Box 6a ordinary dividends − Box 6b qualified dividends (Box 11C §1256 gain flows to line 4d, not line 4a).';
             }
 
             $amount = $this->roundMoney($amount);

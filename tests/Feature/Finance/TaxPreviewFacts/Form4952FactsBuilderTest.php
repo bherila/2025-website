@@ -6,7 +6,9 @@ use App\Models\Files\FileForTaxDocument;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4952FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleBFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleDFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
@@ -198,21 +200,143 @@ class Form4952FactsBuilderTest extends TestCase
         $this->assertNotNull($facts->grossInvestmentIncomeFromK1Sources[0]->taxDocumentId);
     }
 
+    public function test_line_4d_includes_trader_fund_disposition_gain_split_into_4e_and_4f(): void
+    {
+        // For a non-materially-participating partner the fund's trading gains ARE property held
+        // for investment (§163(d)(5)(A)(ii)), so they feed line 4d. The long-term slice (300) goes
+        // to line 4e (excluded from NII unless elected); the short-term slice (100) goes to line 4f
+        // and DOES raise net investment income — here unlocking the full interest deduction.
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200', shortTermGain: '100', longTermGain: '300');
+        $scheduleD = $this->buildScheduleD([$traderFund]);
+
+        $facts = $this->build([$traderFund], scheduleD: $scheduleD);
+
+        $this->assertSame(400.0, $scheduleD->line16Combined);
+        $this->assertSame(400.0, $facts->line4dNetGainFromDisposition);
+        $this->assertSame(300.0, $facts->line4eNetCapitalGainFromDisposition);
+        $this->assertSame(100.0, $facts->line4fNetShortTermFromDisposition);
+        $this->assertSame(250.0, $facts->line4hTotalInvestmentIncome); // 4c (150) + 4f (100)
+        $this->assertSame(250.0, $facts->line6NetInvestmentIncome);
+        $this->assertSame(200.0, $facts->deductibleInvestmentInterestExpense);
+        $this->assertSame(0.0, $facts->disallowedCarryforward);
+    }
+
+    public function test_line_4d_is_zero_when_investment_dispositions_net_to_a_loss(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200', shortTermGain: '-500', longTermGain: '100');
+        $scheduleD = $this->buildScheduleD([$traderFund]);
+
+        $facts = $this->build([$traderFund], scheduleD: $scheduleD);
+
+        $this->assertSame(-400.0, $scheduleD->line16Combined);
+        $this->assertSame(0.0, $facts->line4dNetGainFromDisposition);
+        $this->assertSame(0.0, $facts->line4eNetCapitalGainFromDisposition);
+        $this->assertSame(0.0, $facts->line4fNetShortTermFromDisposition);
+        $this->assertSame(150.0, $facts->line6NetInvestmentIncome); // unchanged (= line 4c)
+        $this->assertSame(150.0, $facts->deductibleInvestmentInterestExpense);
+        $this->assertSame(50.0, $facts->disallowedCarryforward);
+    }
+
+    public function test_special_election_smart_worksheet_computes_lines_a_through_d(): void
+    {
+        // Box 20A investment income 200, Box 6b qualified dividends 150 → line 4a 200, 4b 150,
+        // 4c 50. Interest 500 ≫ NII-without-election 50, so the §163(d)(4)(B)(iii) election is
+        // beneficial up to the qualified dividends available: A=50, B=450, C=150, D=min(B,C)=150.
+        $fund = $this->electionFundK1('Election Fund', box20AInvestmentIncome: '200', box6bQualifiedDividends: '150', box13HInterest: '500');
+
+        $facts = $this->build([$fund]);
+
+        $this->assertSame(150.0, $facts->totalQualifiedDividends);
+        $this->assertSame(50.0, $facts->line4cNetInvestmentIncomeAfterQualifiedDividends);
+        $this->assertSame(50.0, $facts->electionNiiWithoutElection);
+        $this->assertSame(450.0, $facts->electionExcessInvestmentInterest);
+        $this->assertSame(150.0, $facts->electionAvailableForElection);
+        $this->assertSame(150.0, $facts->electionMaxBeneficial);
+        $this->assertSame(150.0, $facts->recommendedElection);
+        // The engine reports the recommendation but does not auto-apply it (line 4g stays 0).
+        $this->assertSame(0.0, $facts->line4gElectedQualifiedDividendsAndGain);
+    }
+
+    public function test_amt_form_4952_equals_regular_tax_without_amt_adjustments(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200');
+
+        $facts = $this->build([$traderFund]);
+
+        $this->assertNotNull($facts->amt);
+        $this->assertSame($facts->deductibleInvestmentInterestExpense, $facts->amt->line8DeductibleInvestmentInterest);
+        $this->assertSame($facts->line4dNetGainFromDisposition, $facts->amt->line4dNetGainFromDisposition);
+        $this->assertSame(0.0, $facts->amt->line2cAdjustment);
+    }
+
+    public function test_amt_disposition_adjustment_flows_to_amt_line_4d(): void
+    {
+        // K-1 Box 17B (AMT adjustment for gain/loss on disposition, §56(a)(6)) raises the AMT net
+        // gain from disposition even though regular-tax line 4d is 0 (no Schedule D gain wired in).
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200', box17BAmtAdjustment: '400');
+
+        $facts = $this->build([$traderFund]);
+
+        $this->assertSame(0.0, $facts->line4dNetGainFromDisposition);
+        $this->assertNotNull($facts->amt);
+        $this->assertSame(400.0, $facts->amt->line4dNetGainFromDisposition);
+    }
+
+    public function test_line_5_investment_expenses_follow_the_tcja_suspension_window(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200');
+
+        $suspended = $this->build([$traderFund], year: 2025);
+        $this->assertSame(0.0, $suspended->line5InvestmentExpenses);
+        $this->assertTrue($suspended->line5TcjaSuspended);
+        $this->assertStringContainsString('67(g)', $suspended->line5SuspensionReason);
+
+        $active = $this->build([$traderFund], year: 2026);
+        $this->assertFalse($active->line5TcjaSuspended);
+    }
+
+    public function test_allocation_worksheet_lines_18_to_20_reconcile(): void
+    {
+        $traderFund = $this->traderFundK1('Trader Fund', interestIncome: '150', box13HInterest: '200');
+        $facts = $this->build([$traderFund], marginInterestSources: [
+            new TaxFactSource(
+                id: 'margin-1',
+                label: 'Brokerage margin interest',
+                amount: -100.0,
+                sourceType: TaxFactSourceType::BrokerageMarginInterest,
+                routing: TaxFactRouting::Form4952Line1,
+            ),
+        ]);
+
+        $this->assertSame($facts->deductibleInvestmentInterestExpense, $facts->line18AllowedDeduction);
+        $this->assertSame($facts->deductibleScheduleEAboveLine, $facts->line19aScheduleEPassthru);
+        $this->assertSame($facts->deductibleScheduleAItemized, $facts->line20ScheduleAItemized);
+        $this->assertSame($facts->line18AllowedDeduction, $facts->line19aScheduleEPassthru + $facts->line20ScheduleAItemized);
+    }
+
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  TaxFactSource[]  $marginInterestSources
      */
-    private function build(array $k1Docs, array $marginInterestSources = []): Form4952Facts
+    private function build(array $k1Docs, array $marginInterestSources = [], ?ScheduleDFacts $scheduleD = null, int $year = 2025): Form4952Facts
     {
         $scheduleB = app(ScheduleBFactsBuilder::class)->build($k1Docs, []);
 
-        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, $marginInterestSources);
+        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, $marginInterestSources, $scheduleD, null, $year);
+    }
+
+    /**
+     * @param  FileForTaxDocument[]  $k1Docs
+     */
+    private function buildScheduleD(array $k1Docs): ScheduleDFacts
+    {
+        return app(ScheduleDFactsBuilder::class)->build($k1Docs, [], []);
     }
 
     /**
      * @param  array{scheduleA:float,scheduleE:float}|null  $tracingSplit
      */
-    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false, ?array $tracingSplit = null): FileForTaxDocument
+    private function traderFundK1(string $name, string $interestIncome, string $box13HInterest, bool $materialParticipation = false, ?array $tracingSplit = null, ?string $shortTermGain = null, ?string $longTermGain = null, ?string $box17BAmtAdjustment = null): FileForTaxDocument
     {
         $sourceValueOverrides = [];
         if ($materialParticipation) {
@@ -230,13 +354,42 @@ class Form4952FactsBuilderTest extends TestCase
             ];
         }
 
-        return $this->createK1([
+        $fields = [
             'B' => $name,
             'partnershipPosition_traderInSecurities' => 'true',
             '5' => $interestIncome,
+        ];
+        if ($shortTermGain !== null) {
+            $fields['8'] = $shortTermGain; // Box 8 net short-term capital gain → Schedule D line 5.
+        }
+        if ($longTermGain !== null) {
+            $fields['9a'] = $longTermGain; // Box 9a net long-term capital gain → Schedule D line 12.
+        }
+
+        $codes = [
+            '13' => [['code' => 'H', 'value' => $box13HInterest]],
+        ];
+        if ($box17BAmtAdjustment !== null) {
+            $codes['17'] = [['code' => 'B', 'value' => $box17BAmtAdjustment]]; // AMT gain/loss adjustment.
+        }
+
+        return $this->createK1($fields, $codes, $sourceValueOverrides);
+    }
+
+    /**
+     * A K-1 reporting investment income via Box 20A and qualified dividends in Box 6b, used to
+     * exercise the §163(d)(4)(B)(iii) election worksheet (lines A–D).
+     */
+    private function electionFundK1(string $name, string $box20AInvestmentIncome, string $box6bQualifiedDividends, string $box13HInterest): FileForTaxDocument
+    {
+        return $this->createK1([
+            'B' => $name,
+            'partnershipPosition_traderInSecurities' => 'false',
+            '6b' => $box6bQualifiedDividends,
         ], [
             '13' => [['code' => 'H', 'value' => $box13HInterest]],
-        ], $sourceValueOverrides);
+            '20' => [['code' => 'A', 'value' => $box20AInvestmentIncome]],
+        ]);
     }
 
     /**
