@@ -59,9 +59,9 @@ export const sampleCareerCompProjection: CareerCompProjection = {
             outcome: 'medium',
             totalNetPaperValue: 300000,
             points: [
-              { year: 2026, stage: 'A', preferredPostMoneyValuation: 100000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.05, commonFmv: 25, grossOwnershipValue: 50000, grossCommonValue: 30000, commonIntrinsicValue: 25000, exerciseCost: 5000, netPaperValue: 45000, cumulativeNetPaperValue: 45000, liquidityEvent: false },
-              { year: 2027, stage: 'B', preferredPostMoneyValuation: 250000000, capitalDilutionPct: 10, employeePoolDilutionPct: 5, dilutedOwnershipPct: 0.1, commonFmv: 40, grossOwnershipValue: 250000, grossCommonValue: 80000, commonIntrinsicValue: 70000, exerciseCost: 10000, netPaperValue: 240000, cumulativeNetPaperValue: 240000, liquidityEvent: false },
-              { year: 2028, stage: 'Exit', preferredPostMoneyValuation: 350000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.09, commonFmv: 55, grossOwnershipValue: 315000, grossCommonValue: 110000, commonIntrinsicValue: 100000, exerciseCost: 15000, netPaperValue: 300000, cumulativeNetPaperValue: 300000, liquidityEvent: true },
+              { year: 2026, stage: 'A', preferredPostMoneyValuation: 100000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.05, commonFmv: 25, grossOwnershipValue: 50000, grossCommonValue: 30000, commonIntrinsicValue: 25000, exerciseCost: 5000, netPaperValue: 45000, liquidityEvent: false },
+              { year: 2027, stage: 'B', preferredPostMoneyValuation: 250000000, capitalDilutionPct: 10, employeePoolDilutionPct: 5, dilutedOwnershipPct: 0.1, commonFmv: 40, grossOwnershipValue: 250000, grossCommonValue: 80000, commonIntrinsicValue: 70000, exerciseCost: 10000, netPaperValue: 240000, liquidityEvent: false },
+              { year: 2028, stage: 'Exit', preferredPostMoneyValuation: 350000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.09, commonFmv: 55, grossOwnershipValue: 315000, grossCommonValue: 110000, commonIntrinsicValue: 100000, exerciseCost: 15000, netPaperValue: 300000, liquidityEvent: true },
             ],
           },
         ],

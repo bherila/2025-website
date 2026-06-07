@@ -755,7 +755,6 @@
                                 "commonIntrinsicValue": 0.0,
                                 "exerciseCost": 0.0,
                                 "netPaperValue": 0.0,
-                                "cumulativeNetPaperValue": 0.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -771,7 +770,6 @@
                                 "commonIntrinsicValue": 153333.33,
                                 "exerciseCost": 38333.33,
                                 "netPaperValue": 153333.67,
-                                "cumulativeNetPaperValue": 153333.67,
                                 "liquidityEvent": false
                             },
                             {
@@ -787,7 +785,6 @@
                                 "commonIntrinsicValue": 233333.33,
                                 "exerciseCost": 58333.33,
                                 "netPaperValue": 233333.67,
-                                "cumulativeNetPaperValue": 233333.67,
                                 "liquidityEvent": false
                             },
                             {
@@ -803,7 +800,6 @@
                                 "commonIntrinsicValue": 313333.33,
                                 "exerciseCost": 78333.33,
                                 "netPaperValue": 313333.67,
-                                "cumulativeNetPaperValue": 313333.67,
                                 "liquidityEvent": false
                             },
                             {
@@ -819,7 +815,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -835,7 +830,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -851,7 +845,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -867,7 +860,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -883,7 +875,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             },
                             {
@@ -899,7 +890,6 @@
                                 "commonIntrinsicValue": 320000.0,
                                 "exerciseCost": 80000.0,
                                 "netPaperValue": 320000.0,
-                                "cumulativeNetPaperValue": 320000.0,
                                 "liquidityEvent": false
                             }
                         ],

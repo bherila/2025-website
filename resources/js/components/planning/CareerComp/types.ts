@@ -241,7 +241,6 @@ export const paperEquityPointSchema = z.object({
   commonIntrinsicValue: z.number(),
   exerciseCost: z.number(),
   netPaperValue: z.number(),
-  cumulativeNetPaperValue: z.number(),
   liquidityEvent: z.boolean(),
 })
 

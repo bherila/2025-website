@@ -3,27 +3,30 @@
 namespace App\Services\Planning\CareerComp;
 
 use App\Services\Finance\MoneyMath;
+use DateTimeImmutable;
 
 final class PrivateValuationScenarioService
 {
     /**
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
-     * @return array{scenarios:list<array{id:string,label:string,outcome:string,points:list<array<string, mixed>>,totalNetPaperValue:float}>,totalsByOutcome:array{low:float,medium:float,high:float}}
+     * @return array{scenarios:list<array{id:string,label:string,outcome:string,points:list<array<string, mixed>>,totalNetPaperValue:float}>,totalsByOutcome:array{low:float,medium:float,high:float},warnings:list<string>}
      */
     public function project(JobSpec $job, array $vestingRows, int $startYear, int $horizonYears): array
     {
         $totalsByOutcome = ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0];
+        $warnings = [];
 
         if (! $job->isPrivate()) {
-            return ['scenarios' => [], 'totalsByOutcome' => $totalsByOutcome];
+            return ['scenarios' => [], 'totalsByOutcome' => $totalsByOutcome, 'warnings' => $warnings];
         }
 
         $baseFullyDilutedShares = $job->number('company.fullyDilutedShares');
         if ($baseFullyDilutedShares <= 0.0) {
-            return ['scenarios' => [], 'totalsByOutcome' => $totalsByOutcome];
+            return ['scenarios' => [], 'totalsByOutcome' => $totalsByOutcome, 'warnings' => $warnings];
         }
 
         $scenarios = [];
+        $outcomeCounts = ['low' => 0, 'medium' => 0, 'high' => 0];
         foreach ($job->valuationScenarios() as $scenario) {
             $stages = $this->normalizedStages($scenario);
             if ($stages === []) {
@@ -31,6 +34,7 @@ final class PrivateValuationScenarioService
             }
 
             $outcome = $this->normalizeOutcome((string) ($scenario['outcome'] ?? 'medium'));
+            $outcomeCounts[$outcome]++;
             $points = $this->pointsForScenario($job, $vestingRows, $stages, $baseFullyDilutedShares, $startYear, $horizonYears);
             $totalNetPaperValue = $points === [] ? 0.0 : (float) $points[array_key_last($points)]['netPaperValue'];
 
@@ -45,7 +49,13 @@ final class PrivateValuationScenarioService
             $totalsByOutcome[$outcome] = max($totalsByOutcome[$outcome], MoneyMath::round($totalNetPaperValue));
         }
 
-        return ['scenarios' => $scenarios, 'totalsByOutcome' => $totalsByOutcome];
+        foreach ($outcomeCounts as $outcome => $count) {
+            if ($count > 1) {
+                $warnings[] = "{$job->name()}: multiple {$outcome} private valuation scenarios; paper lifetime totals use the highest scenario for that outcome.";
+            }
+        }
+
+        return ['scenarios' => $scenarios, 'totalsByOutcome' => $totalsByOutcome, 'warnings' => $warnings];
     }
 
     /**
@@ -75,10 +85,7 @@ final class PrivateValuationScenarioService
             $snapshot = $this->snapshotForYear($stages, $year);
             $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares);
             $shareTotals = $this->cumulativeShareTotals($job, $vestingRows, $year);
-            $dilutionFactor = $this->cumulativeDilutionFactor($stages, $year);
-            $dilutedOwnershipPct = $baseFullyDilutedShares > 0.0
-                ? round(($shareTotals['totalShares'] / $baseFullyDilutedShares) * $dilutionFactor * 100.0, 6)
-                : 0.0;
+            $dilutedOwnershipPct = $this->dilutedOwnershipPct($shareTotals['ownershipLots'], $stages, $year, $baseFullyDilutedShares);
 
             $preferredPostMoneyValuation = $this->number($snapshot['preferredPostMoneyValuation'] ?? null);
             $grossOwnershipValue = MoneyMath::multiply($preferredPostMoneyValuation, $dilutedOwnershipPct / 100.0);
@@ -102,7 +109,6 @@ final class PrivateValuationScenarioService
                 'commonIntrinsicValue' => $commonIntrinsicValue,
                 'exerciseCost' => $shareTotals['exerciseCost'],
                 'netPaperValue' => $netPaperValue,
-                'cumulativeNetPaperValue' => $netPaperValue,
                 'liquidityEvent' => $this->hasLiquidityEvent($stages, $year),
             ];
         }
@@ -131,12 +137,17 @@ final class PrivateValuationScenarioService
     /**
      * @param  list<array<string, mixed>>  $stages
      */
-    private function cumulativeDilutionFactor(array $stages, int $year): float
+    private function cumulativeDilutionFactor(array $stages, int $year, int $grantYear): float
     {
         $factor = 1.0;
         foreach ($stages as $stage) {
-            if ((int) ($stage['year'] ?? 0) > $year) {
+            $stageYear = (int) ($stage['year'] ?? 0);
+            if ($stageYear > $year) {
                 break;
+            }
+
+            if ($stageYear <= $grantYear) {
+                continue;
             }
 
             $dilutionPct = min(100.0, max(0.0, $this->number($stage['capitalDilutionPct'] ?? null) + $this->number($stage['employeePoolDilutionPct'] ?? null)));
@@ -182,12 +193,13 @@ final class PrivateValuationScenarioService
 
     /**
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
-     * @return array{rsuShares:float,optionShares:float,totalShares:float,exerciseCost:float,optionSharesByGrant:array<string, float>}
+     * @return array{rsuShares:float,optionShares:float,totalShares:float,exerciseCost:float,optionSharesByGrant:array<string, float>,ownershipLots:list<array{grantYear:int,shares:float}>}
      */
     private function cumulativeShareTotals(JobSpec $job, array $vestingRows, int $year): array
     {
         $rsuShares = 0.0;
         $optionSharesByGrant = [];
+        $ownershipLots = [];
 
         foreach ($vestingRows as $row) {
             if ((int) $row['year'] > $year) {
@@ -196,13 +208,27 @@ final class PrivateValuationScenarioService
 
             $type = (string) $row['type'];
             if ($type === 'rsu') {
-                $rsuShares += (float) $row['vestedShares'];
+                $vestedShares = (float) $row['vestedShares'];
+                $rsuShares += $vestedShares;
+                if ($vestedShares > 0.0) {
+                    $ownershipLots[] = [
+                        'grantYear' => $this->grantYearForRow($job, $row),
+                        'shares' => $vestedShares,
+                    ];
+                }
 
                 continue;
             }
 
             $grantId = (string) $row['grantId'];
-            $optionSharesByGrant[$grantId] = ($optionSharesByGrant[$grantId] ?? 0.0) + (float) $row['exercisableShares'];
+            $exercisableShares = (float) $row['exercisableShares'];
+            $optionSharesByGrant[$grantId] = ($optionSharesByGrant[$grantId] ?? 0.0) + $exercisableShares;
+            if ($exercisableShares > 0.0) {
+                $ownershipLots[] = [
+                    'grantYear' => $this->grantYearForRow($job, $row),
+                    'shares' => $exercisableShares,
+                ];
+            }
         }
 
         $optionShares = array_sum($optionSharesByGrant);
@@ -218,7 +244,65 @@ final class PrivateValuationScenarioService
             'totalShares' => round($rsuShares + $optionShares, 4),
             'exerciseCost' => $exerciseCost,
             'optionSharesByGrant' => $optionSharesByGrant,
+            'ownershipLots' => $ownershipLots,
         ];
+    }
+
+    /**
+     * @param  list<array{grantYear:int,shares:float}>  $ownershipLots
+     * @param  list<array<string, mixed>>  $stages
+     */
+    private function dilutedOwnershipPct(array $ownershipLots, array $stages, int $year, float $baseFullyDilutedShares): float
+    {
+        if ($baseFullyDilutedShares <= 0.0) {
+            return 0.0;
+        }
+
+        $dilutedShares = 0.0;
+        foreach ($ownershipLots as $lot) {
+            $dilutedShares += MoneyMath::multiply($lot['shares'], $this->cumulativeDilutionFactor($stages, $year, $lot['grantYear']));
+        }
+
+        return round(($dilutedShares / $baseFullyDilutedShares) * 100.0, 6);
+    }
+
+    /**
+     * @param  array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}  $row
+     */
+    private function grantYearForRow(JobSpec $job, array $row): int
+    {
+        return $this->grantYearForId($job, (string) $row['grantId']) ?? (int) $row['year'];
+    }
+
+    private function grantYearForId(JobSpec $job, string $grantId): ?int
+    {
+        foreach (array_merge($job->rsuGrants(), $job->optionGrants()) as $grant) {
+            if ((string) ($grant['id'] ?? '') !== $grantId) {
+                continue;
+            }
+
+            return $this->yearFromDate((string) ($grant['grantDate'] ?? ''));
+        }
+
+        if (preg_match('/-refresher-(\d{4})$/', $grantId, $matches) === 1) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function yearFromDate(string $date): ?int
+    {
+        if ($date === '') {
+            return null;
+        }
+
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (! $parsed instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return (int) $parsed->format('Y');
     }
 
     /**

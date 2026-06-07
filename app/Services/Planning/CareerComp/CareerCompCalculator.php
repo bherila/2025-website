@@ -63,6 +63,11 @@ final class CareerCompCalculator
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
         $paperEquity = $this->privateValuationScenarioService->project($job, $vestingRows, $startYear, $horizonYears);
+        $warnings = array_merge($warnings, $paperEquity['warnings']);
+        $paperEquityProjection = [
+            'scenarios' => $paperEquity['scenarios'],
+            'totalsByOutcome' => $paperEquity['totalsByOutcome'],
+        ];
 
         $raisePct = $job->number('comp.annualRaisePct');
         $baseSalary = $job->number('comp.baseSalary');
@@ -103,16 +108,16 @@ final class CareerCompCalculator
         $lifetime = [
             'totalCashComp' => $totalCashComp,
             'totalEquityValue' => $valuation['totals'],
-            'totalPaperEquityValue' => $paperEquity['totalsByOutcome'],
+            'totalPaperEquityValue' => $paperEquityProjection['totalsByOutcome'],
             'totalValue' => [
                 'low' => MoneyMath::add($totalCashComp, $valuation['totals']['low']),
                 'medium' => MoneyMath::add($totalCashComp, $valuation['totals']['medium']),
                 'high' => MoneyMath::add($totalCashComp, $valuation['totals']['high']),
             ],
             'totalPaperValue' => [
-                'low' => MoneyMath::add($totalCashComp, $paperEquity['totalsByOutcome']['low']),
-                'medium' => MoneyMath::add($totalCashComp, $paperEquity['totalsByOutcome']['medium']),
-                'high' => MoneyMath::add($totalCashComp, $paperEquity['totalsByOutcome']['high']),
+                'low' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['low']),
+                'medium' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['medium']),
+                'high' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['high']),
             ],
         ];
         $afterTax = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
@@ -124,7 +129,7 @@ final class CareerCompCalculator
                 'isCurrent' => $job->isCurrent(),
                 'annual' => $annual,
                 'liquidity' => $valuation['liquidity'],
-                'paperEquity' => $paperEquity,
+                'paperEquity' => $paperEquityProjection,
                 'vesting' => $vestingRows,
                 'lifetime' => $lifetime,
                 'afterTax' => $afterTax,

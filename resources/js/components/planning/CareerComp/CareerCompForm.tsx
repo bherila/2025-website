@@ -351,6 +351,21 @@ function buildDefaultValuationScenario(existing: ValuationScenario[], startYear:
   }
 }
 
+function keyedValuationStages(scenario: ValuationScenario): { key: string; stage: ValuationScenarioStage }[] {
+  const seen = new Map<string, number>()
+
+  return scenario.stages.map((stage) => {
+    const baseKey = `${scenario.id}-${stage.id ?? `${stage.year}-${stage.stage ?? 'stage'}`}`
+    const duplicateCount = seen.get(baseKey) ?? 0
+    seen.set(baseKey, duplicateCount + 1)
+
+    return {
+      key: duplicateCount === 0 ? baseKey : `${baseKey}-${duplicateCount + 1}`,
+      stage,
+    }
+  })
+}
+
 function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
 
@@ -828,8 +843,8 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
             </div>
 
             <div className="space-y-3">
-              {scenario.stages.map((stage, stageIndex) => (
-                <div key={stage.id ?? `${scenario.id}-${stage.year}-${stage.stage ?? 'stage'}`} className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
+              {keyedValuationStages(scenario).map(({ key, stage }, stageIndex) => (
+                <div key={key} className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
                   <NumberField label="Year" value={stage.year} min={2000} onChange={(year) => updateStage(scenario.id, stageIndex, { year })} />
                   <div className="space-y-2">
                     <Label htmlFor={`${scenario.id}-${stageIndex}-stage`}>Stage</Label>

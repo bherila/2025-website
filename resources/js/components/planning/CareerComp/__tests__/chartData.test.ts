@@ -53,8 +53,8 @@ describe('Career Comparison chart data mappers', () => {
               outcome: 'medium',
               totalNetPaperValue: 90000,
               points: [
-                { year: 2026, stage: 'A', preferredPostMoneyValuation: 100000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.05, commonFmv: 10, grossOwnershipValue: 50000, grossCommonValue: 10000, commonIntrinsicValue: 9000, exerciseCost: 1000, netPaperValue: 49000, cumulativeNetPaperValue: 49000, liquidityEvent: false },
-                { year: 2027, stage: 'B', preferredPostMoneyValuation: 200000000, capitalDilutionPct: 10, employeePoolDilutionPct: 5, dilutedOwnershipPct: 0.045, commonFmv: 20, grossOwnershipValue: 90000, grossCommonValue: 20000, commonIntrinsicValue: 18000, exerciseCost: 2000, netPaperValue: 88000, cumulativeNetPaperValue: 88000, liquidityEvent: false },
+                { year: 2026, stage: 'A', preferredPostMoneyValuation: 100000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.05, commonFmv: 10, grossOwnershipValue: 50000, grossCommonValue: 10000, commonIntrinsicValue: 9000, exerciseCost: 1000, netPaperValue: 49000, liquidityEvent: false },
+                { year: 2027, stage: 'B', preferredPostMoneyValuation: 200000000, capitalDilutionPct: 10, employeePoolDilutionPct: 5, dilutedOwnershipPct: 0.045, commonFmv: 20, grossOwnershipValue: 90000, grossCommonValue: 20000, commonIntrinsicValue: 18000, exerciseCost: 2000, netPaperValue: 88000, liquidityEvent: false },
               ],
             }],
             totalsByOutcome: { low: 0, medium: 90000, high: 0 },
@@ -154,7 +154,6 @@ describe('Career Comparison chart data mappers', () => {
               commonIntrinsicValue: 15000,
               exerciseCost: 5000,
               netPaperValue: 95000,
-              cumulativeNetPaperValue: 95000,
               liquidityEvent: false,
             }],
           }],
