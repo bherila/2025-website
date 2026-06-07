@@ -1,8 +1,9 @@
 'use client'
 
+import { Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
+import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormTotalLine, IconActionButton } from '@/components/finance/tax-preview-primitives'
 import { fetchWrapper } from '@/fetchWrapper'
 import {
   type PalCarryforwardEntry,
@@ -393,21 +394,18 @@ function PalCarryforwardInput({ year, form8582, carryforwards, onChange }: PalCa
                     <td className="py-1 px-3 text-muted-foreground">{cf.activity_ein ?? '—'}</td>
                     <td className="py-1 px-3 text-right tabular-nums">{fmtAmt(cf.ordinary_carryover)}</td>
                     <td className="py-1 px-3">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          type="button"
-                          className="text-xs text-blue-600 hover:text-blue-800"
+                      <div className="flex items-center justify-end gap-1">
+                        <IconActionButton
+                          tooltip="Edit carryforward"
+                          icon={<Pencil className="h-3.5 w-3.5" />}
                           onClick={() => handleEdit(cf)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-red-500 hover:text-red-700"
+                        />
+                        <IconActionButton
+                          tooltip="Delete carryforward"
+                          tone="danger"
+                          icon={<Trash2 className="h-3.5 w-3.5" />}
                           onClick={() => handleDelete(cf)}
-                        >
-                          ✕
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>

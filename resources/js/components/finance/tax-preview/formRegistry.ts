@@ -31,6 +31,7 @@ export type FormId =
   | 'form-1116'
   | 'form-4797'
   | 'form-4952'
+  | 'form-4952-detail'
   | 'form-6251'
   | 'form-8582'
   | 'form-8606'
@@ -74,6 +75,7 @@ export const ALL_FORM_IDS = [
   'form-1116',
   'form-4797',
   'form-4952',
+  'form-4952-detail',
   'form-6251',
   'form-8582',
   'form-8606',
@@ -108,6 +110,14 @@ export interface TaxFormMeta {
   relatedForms?: FormId[]
   keyAmounts?: (state: TaxPreviewState) => KeyAmount[] | null
   hasData?: (state: TaxPreviewState) => boolean
+  /**
+   * Drill-only entries are reachable only by pushing them from another column
+   * (e.g. a per-line detail view that requires an `instance` key). They are
+   * excluded from top-level navigation — the Home grids, Recents, and the
+   * command palette — because opening them without an instance shows nothing
+   * useful.
+   */
+  drillOnly?: boolean
 }
 
 export interface FormRegistryEntry extends MillerRegistryEntry<TaxPreviewState, FormId, TaxFormMeta> {
@@ -117,6 +127,7 @@ export interface FormRegistryEntry extends MillerRegistryEntry<TaxPreviewState, 
   relatedForms?: FormId[]
   keyAmounts?: (state: TaxPreviewState) => KeyAmount[] | null
   hasData?: (state: TaxPreviewState) => boolean
+  drillOnly?: boolean
 }
 
 export type FormRegistry = Record<FormId, FormRegistryEntry>
@@ -133,7 +144,13 @@ export function getTaxFormMeta(entry: FormRegistryEntry): TaxFormMeta {
     ...(entry.relatedForms ? { relatedForms: entry.relatedForms } : {}),
     ...(entry.keyAmounts ? { keyAmounts: entry.keyAmounts } : {}),
     ...(entry.hasData ? { hasData: entry.hasData } : {}),
+    ...(entry.drillOnly ? { drillOnly: entry.drillOnly } : {}),
   }
+}
+
+/** Whether an entry is reachable only by drilling (excluded from top-level nav). */
+export function isDrillOnly(entry: FormRegistryEntry): boolean {
+  return getTaxFormMeta(entry).drillOnly === true
 }
 
 export function getEntry(registry: FormRegistry, id: FormId): FormRegistryEntry {

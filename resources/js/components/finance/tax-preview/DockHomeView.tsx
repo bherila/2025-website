@@ -15,7 +15,7 @@ import { formatFriendlyAmount } from '@/lib/formatCurrency'
 
 import { useTaxPreview } from '../TaxPreviewContext'
 import { useDockActions } from './DockActions'
-import { type FormCategory, type FormId, type FormRegistryEntry, getTaxFormMeta, type KeyAmount, type TaxPreviewState } from './formRegistry'
+import { type FormCategory, type FormId, type FormRegistryEntry, getTaxFormMeta, isDrillOnly, type KeyAmount, type TaxPreviewState } from './formRegistry'
 import { formRegistry } from './registry'
 import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
 import { useTaxRoute } from './useTaxRoute'
@@ -56,7 +56,7 @@ export function DockHomeView(): React.ReactElement {
     reviewed1099Docs: taxPreview.reviewed1099Docs,
     income1099: taxPreview.income1099,
   })
-  const columnEntries = Object.values(formRegistry).filter((e) => e.presentation === 'column')
+  const columnEntries = Object.values(formRegistry).filter((e) => e.presentation === 'column' && !isDrillOnly(e))
   const worksheets = Object.values(formRegistry).filter((e) => e.presentation === 'modal')
 
   const schedules = columnEntries.filter((e) => getTaxFormMeta(e).category === 'Schedule')
@@ -185,7 +185,7 @@ function formHasData(entry: FormRegistryEntry, state: TaxPreviewState): boolean 
 function resolveEntries(ids: FormId[]): FormRegistryEntry[] {
   return ids
     .map((id) => formRegistry[id])
-    .filter((entry): entry is FormRegistryEntry => entry !== undefined && entry.presentation === 'column')
+    .filter((entry): entry is FormRegistryEntry => entry !== undefined && entry.presentation === 'column' && !isDrillOnly(entry))
 }
 
 interface FormGridProps {

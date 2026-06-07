@@ -86,6 +86,44 @@ export function DetailsButton({
 }
 
 /**
+ * Icon-only action button matching {@link DetailsButton}'s footprint, for row
+ * actions that aren't source/drill navigation (e.g. edit/delete). Keeps custom
+ * table layouts visually consistent with the shared tax-preview controls.
+ */
+export function IconActionButton({
+  onClick,
+  tooltip,
+  icon,
+  tone = 'neutral',
+}: {
+  onClick: () => void
+  tooltip: string
+  icon: React.ReactNode
+  tone?: 'neutral' | 'danger'
+}) {
+  const toneClass = tone === 'danger'
+    ? 'border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive dark:border-destructive/50'
+    : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={`h-7 w-7 shrink-0 ${toneClass}`}
+          onClick={(e) => { e.stopPropagation(); onClick() }}
+          aria-label={tooltip}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
  * Header button that drills into the All-in-One K-1 view (pushes a Miller column).
  * The `ArrowRight` icon signals a column push, matching the dock's drill convention.
  */
