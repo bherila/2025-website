@@ -47,4 +47,13 @@ return [
         'inbound_secret' => env('BREVO_INBOUND_SECRET'),
     ],
 
+    'stock_quotes' => [
+        'provider' => env('STOCK_QUOTE_PROVIDER', 'yahoo'),
+        'fetch_on_read' => env('STOCK_QUOTE_FETCH_ON_READ', true),
+    ],
+
+    'alphavantage' => [
+        'key' => env('ALPHAVANTAGE_API_KEY'),
+    ],
+
 ];

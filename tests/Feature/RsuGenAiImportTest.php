@@ -6,6 +6,7 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class RsuGenAiImportTest extends TestCase
@@ -56,6 +57,28 @@ class RsuGenAiImportTest extends TestCase
         $response = $this->postJson('/api/rsu/genai-import/1/results/1/confirm', []);
 
         $response->assertStatus(401);
+    }
+
+    public function test_rsu_index_does_not_fetch_quotes_for_awards_with_stored_vest_prices(): void
+    {
+        $user = User::factory()->create();
+        DB::table('fin_equity_awards')->insert([
+            'uid' => (string) $user->id,
+            'award_id' => 'RSU-STORED',
+            'grant_date' => '2024-01-15',
+            'vest_date' => '2025-01-15',
+            'share_count' => 100,
+            'symbol' => 'META',
+            'grant_price' => 415.25,
+            'vest_price' => 505.25,
+        ]);
+        Http::fake();
+
+        $this->actingAs($user)->getJson('/api/rsu')
+            ->assertOk()
+            ->assertJsonPath('0.vest_price', '505.25');
+
+        Http::assertNothingSent();
     }
 
     public function test_confirm_creates_award_from_reviewed_result_and_marks_job_imported(): void

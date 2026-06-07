@@ -120,12 +120,11 @@ After import, use `finance:lots-reconcile` to compare broker-reported dispositio
 
 ## Historical Prices
 
-The current importer stores broker-provided cost basis, market value, and snapshot price when present. It does not backfill historical market prices for vesting dates or acquired dates.
+The account-data importer stores broker-provided cost basis, market value, and snapshot price when present. It deliberately does not fetch historical market prices for vesting dates or acquired dates — price retrieval is kept out of the deterministic importers.
 
-A separate stock-price history service should own that work. The intended shape is:
+That work is owned by a separate stock-price history service (`App\Services\Finance\StockQuotes`):
 
-- Store normalized daily OHLC rows by symbol and date.
-- Fetch missing rows from a configured provider.
-- Prefer existing local quote data when present.
-- Backfill idempotently, with source/provider metadata.
-- Let RSU, career-comparison, and lot workflows read from the same price history table instead of embedding provider-specific fetch logic.
+- Normalized daily OHLCV rows are stored by symbol and date in `stock_quotes_daily` (unique on `(c_symb, c_date)`). The existing table is sufficient; no provider/run-metadata table was needed.
+- `finance:backfill-quotes {symbols*} {--from=} {--to=} {--provider=} {--force} {--dry-run}` fetches missing rows from a configured provider and upserts them idempotently (existing rows are skipped unless `--force`).
+- Providers are abstracted behind `StockQuoteProvider`, with `yahoo` (default, no API key) and `alphavantage` (requires `ALPHAVANTAGE_API_KEY`, `outputsize=full`) implementations selectable via `STOCK_QUOTE_PROVIDER` / `--provider`. Because AlphaVantage's free tier is heavily rate limited (~25 requests/day), selecting `alphavantage` automatically falls back to Yahoo when its quota is exhausted or no key is configured (`FallbackStockQuoteProvider`). Genuine request failures (bad symbol, network errors) still abort with a non-zero exit code.
+- `StockQuoteService` is the read API (`quoteOnOrBefore`, `closeOnOrBefore`, `latestQuoteDate`, `closesForAwards`); RSU/career-comparison reads resolve vest-date prices through it rather than embedding the lookup SQL.
