@@ -1,3 +1,4 @@
+import type { TaxPreviewState } from '../formRegistry'
 import { ALL_FORM_IDS } from '../formRegistry'
 import { formRegistry } from '../registry'
 import { FORM_IDS } from '../taxRoute'
@@ -56,5 +57,43 @@ describe('formRegistry', () => {
     for (const id of ALL_FORM_IDS) {
       expect(formRegistry[id]).toBeDefined()
     }
+  })
+
+  describe('form-4952', () => {
+    const entry = formRegistry['form-4952']!
+
+    it('has relatedForms linking to sch-a, sch-b, and sch-e', () => {
+      expect(entry.relatedForms).toEqual(['sch-a', 'sch-b', 'sch-e'])
+    })
+
+    it('has size wide', () => {
+      expect(entry.size).toBe('wide')
+    })
+
+    it('keyAmounts returns Deduction and Carryforward for a state with form4952 facts', () => {
+      const state = {
+        taxFacts: {
+          form4952: {
+            deductibleInvestmentInterestExpense: 1_500,
+            disallowedCarryforward: 250,
+          },
+        },
+      } as unknown as TaxPreviewState
+
+      expect(entry.keyAmounts!(state)).toEqual([
+        { label: 'Deduction', value: 1_500 },
+        { label: 'Carryforward', value: 250 },
+      ])
+    })
+
+    it('keyAmounts returns null when taxFacts is absent', () => {
+      const state = {} as unknown as TaxPreviewState
+      expect(entry.keyAmounts!(state)).toBeNull()
+    })
+
+    it('keyAmounts returns null when taxFacts.form4952 is absent', () => {
+      const state = { taxFacts: {} } as unknown as TaxPreviewState
+      expect(entry.keyAmounts!(state)).toBeNull()
+    })
   })
 })

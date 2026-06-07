@@ -814,6 +814,18 @@ const rawFormRegistry: FormRegistry = {
     category: 'Form',
     presentation: 'column',
     component: Form4952Adapter,
+    relatedForms: ['sch-a', 'sch-b', 'sch-e'],
+    size: 'wide',
+    keyAmounts: (state) => {
+      const f = state.taxFacts?.form4952
+      if (!f) {
+        return null
+      }
+      return [
+        { label: 'Deduction', value: f.deductibleInvestmentInterestExpense },
+        { label: 'Carryforward', value: f.disallowedCarryforward },
+      ]
+    },
   },
   'form-6251': {
     id: 'form-6251',

@@ -84,6 +84,30 @@ readonly class Form4952Facts
         public string $allocationMethod = 'pro_rata',
         public string $allocationMethodDescription = 'Pro-rata allocation under Rev. Rul. 2008-38.',
         array $tracingSplitSources = [],
+        // Part II lines 4d–4h: net gain from the disposition of property held for investment
+        // and the §163(d)(4)(B)(iii) election. Default 0 when no Schedule D gain feeds in.
+        public float $line4dNetGainFromDisposition = 0.0,
+        public float $line4eNetCapitalGainFromDisposition = 0.0,
+        public float $line4fNetShortTermFromDisposition = 0.0,
+        public float $line4gElectedQualifiedDividendsAndGain = 0.0,
+        public float $line4hTotalInvestmentIncome = 0.0,
+        // Line 5 investment expenses (§212) — $0 for individuals 2018–2025 under §67(g)/TCJA.
+        public float $line5InvestmentExpenses = 0.0,
+        public bool $line5TcjaSuspended = true,
+        public string $line5SuspensionReason = '',
+        public float $line6NetInvestmentIncome = 0.0,
+        // Special Election Smart Worksheet (official Form 4952 line 4g worksheet), lines A–D.
+        public float $electionNiiWithoutElection = 0.0,
+        public float $electionExcessInvestmentInterest = 0.0,
+        public float $electionAvailableForElection = 0.0,
+        public float $electionMaxBeneficial = 0.0,
+        public float $recommendedElection = 0.0,
+        // Allocation of Investment Interest Expense worksheet (lines 18–20).
+        public float $line18AllowedDeduction = 0.0,
+        public float $line19aScheduleEPassthru = 0.0,
+        public float $line20ScheduleAItemized = 0.0,
+        // Parallel AMT Form 4952 (null only for legacy/empty construction).
+        public ?Form4952AmtFacts $amt = null,
     ) {
         $this->investmentInterestSources = $investmentInterestSources;
         $this->investmentExpenseSources = $investmentExpenseSources;
@@ -96,7 +120,7 @@ readonly class Form4952Facts
     }
 
     /**
-     * @return array{investmentInterestSources:array<int,array<string,mixed>>,totalInvestmentInterestExpense:float,investmentExpenseSources:array<int,array<string,mixed>>,totalInvestmentExpenses:float,excludedInvestmentExpenseSources:array<int,array<string,mixed>>,totalExcludedInvestmentExpenses:float,materialParticipationScheduleEInterestSources:array<int,array<string,mixed>>,totalMaterialParticipationScheduleEInterest:float,grossInvestmentIncomeFromScheduleB:float,grossInvestmentIncomeFromK1:float,grossInvestmentIncomeTotal:float,line4cNetInvestmentIncomeAfterQualifiedDividends:float,netInvestmentIncomeBeforeQualifiedDividendElection:float,totalQualifiedDividends:float,deductibleInvestmentInterestExpense:float,disallowedCarryforward:float,grossInvestmentIncomeFromK1Sources:array<int,array<string,mixed>>,qualifiedDividendSources:array<int,array<string,mixed>>,deductibleScheduleEAboveLine:float,deductibleScheduleAItemized:float,carryforwardScheduleE:float,carryforwardScheduleA:float,carryDestinations:array<int,array<string,mixed>>,allocationMethod:string,allocationMethodDescription:string,tracingSplitSources:array<int,array<string,mixed>>}
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -127,6 +151,24 @@ readonly class Form4952Facts
             'allocationMethod' => $this->allocationMethod,
             'allocationMethodDescription' => $this->allocationMethodDescription,
             'tracingSplitSources' => array_map(static fn (Form4952TracingSplit $source): array => $source->toArray(), $this->tracingSplitSources),
+            'line4dNetGainFromDisposition' => $this->line4dNetGainFromDisposition,
+            'line4eNetCapitalGainFromDisposition' => $this->line4eNetCapitalGainFromDisposition,
+            'line4fNetShortTermFromDisposition' => $this->line4fNetShortTermFromDisposition,
+            'line4gElectedQualifiedDividendsAndGain' => $this->line4gElectedQualifiedDividendsAndGain,
+            'line4hTotalInvestmentIncome' => $this->line4hTotalInvestmentIncome,
+            'line5InvestmentExpenses' => $this->line5InvestmentExpenses,
+            'line5TcjaSuspended' => $this->line5TcjaSuspended,
+            'line5SuspensionReason' => $this->line5SuspensionReason,
+            'line6NetInvestmentIncome' => $this->line6NetInvestmentIncome,
+            'electionNiiWithoutElection' => $this->electionNiiWithoutElection,
+            'electionExcessInvestmentInterest' => $this->electionExcessInvestmentInterest,
+            'electionAvailableForElection' => $this->electionAvailableForElection,
+            'electionMaxBeneficial' => $this->electionMaxBeneficial,
+            'recommendedElection' => $this->recommendedElection,
+            'line18AllowedDeduction' => $this->line18AllowedDeduction,
+            'line19aScheduleEPassthru' => $this->line19aScheduleEPassthru,
+            'line20ScheduleAItemized' => $this->line20ScheduleAItemized,
+            'amt' => $this->amt?->toArray(),
         ];
     }
 }

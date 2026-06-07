@@ -656,9 +656,16 @@ class TaxPreviewFactsServiceTest extends TestCase
 
         $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'form4952');
 
-        $this->assertSame(160.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
+        // Box 11C (§1256 contracts) is net capital gain, not line-4a ordinary income, so line 4a is
+        // reconstructed from ordinary portfolio income only (100 + 50 − 20 = 130); the §1256 amount
+        // flows to line 4d via Schedule D instead.
+        $this->assertSame(130.0, $facts['form4952']['grossInvestmentIncomeFromK1']);
         $this->assertSame(0.0, $facts['form4952']['totalQualifiedDividends']);
-        $this->assertSame(160.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
+        // §1256 30 → Schedule D 60/40: line 4d 30, line 4e 18 (long-term, excluded), line 4f 12 (short-term).
+        $this->assertSame(30.0, $facts['form4952']['line4dNetGainFromDisposition']);
+        $this->assertSame(12.0, $facts['form4952']['line4fNetShortTermFromDisposition']);
+        // NII = line 4c (130) + line 4f (12); the long-term §1256 slice stays out unless elected.
+        $this->assertSame(142.0, $facts['form4952']['netInvestmentIncomeBeforeQualifiedDividendElection']);
     }
 
     public function test_broker_1099_link_matching_prefers_identifier_before_name_fallback(): void

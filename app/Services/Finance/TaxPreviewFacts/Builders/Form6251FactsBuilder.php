@@ -4,6 +4,7 @@ namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
 use App\Models\Files\FileForTaxDocument;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form6251SourceEntryFact;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
@@ -49,7 +50,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  FileForTaxDocument[]  $k1Docs
      */
-    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried, ?float $regularTax = null): Form6251Facts
+    public function build(array $k1Docs, ScheduleAFacts $scheduleA, float $taxableIncome, float $regularForeignTaxCredit, int $year, bool $isMarried, ?float $regularTax = null, ?Form4952Facts $form4952 = null): Form6251Facts
     {
         $sourceEntries = [];
         $manualReviewReasons = [];
@@ -121,6 +122,8 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             taxableIncome: $taxableIncome,
             line2aTaxesOrStandardDeduction: $line2a['amount'],
             line2aSource: $line2a['source'],
+            // §56(b)(1)(C): the regular-tax-minus-AMT Form 4952 investment-interest difference.
+            line2cInvestmentInterest: $form4952 !== null && $form4952->amt !== null ? $form4952->amt->line2cAdjustment : 0.0,
             line2dDepletion: $line2dDepletion,
             line2kDispositionOfProperty: $line2kDispositionOfProperty,
             line2lPost1986Depreciation: $line2lPost1986Depreciation,
@@ -147,6 +150,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             taxableIncome: $taxableIncome,
             line2aTaxesOrStandardDeduction: 0.0,
             line2aSource: 'none',
+            line2cInvestmentInterest: 0.0,
             line2dDepletion: 0.0,
             line2kDispositionOfProperty: 0.0,
             line2lPost1986Depreciation: 0.0,
@@ -172,6 +176,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         float $taxableIncome,
         float $line2aTaxesOrStandardDeduction,
         string $line2aSource,
+        float $line2cInvestmentInterest,
         float $line2dDepletion,
         float $line2kDispositionOfProperty,
         float $line2lPost1986Depreciation,
@@ -189,6 +194,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
     ): Form6251Facts {
         $adjustmentTotal = $this->sumMoney([
             $line2aTaxesOrStandardDeduction,
+            $line2cInvestmentInterest,
             $line2dDepletion,
             $line2kDispositionOfProperty,
             $line2lPost1986Depreciation,
@@ -217,7 +223,7 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
             line1TaxableIncome: $taxableIncome,
             line2aTaxesOrStandardDeduction: $line2aTaxesOrStandardDeduction,
             line2aSource: $line2aSource,
-            line2cInvestmentInterest: 0.0,
+            line2cInvestmentInterest: $line2cInvestmentInterest,
             line2dDepletion: $line2dDepletion,
             line2kDispositionOfProperty: $line2kDispositionOfProperty,
             line2lPost1986Depreciation: $line2lPost1986Depreciation,

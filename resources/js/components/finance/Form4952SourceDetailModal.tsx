@@ -1,13 +1,11 @@
 'use client'
 
-import { ArrowRight } from 'lucide-react'
-
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { TaxFactSource } from '@/types/generated/tax-preview-facts'
 
-import { fmtAmt } from './tax-preview-primitives'
+import { fmtAmt, NavGlyphIcon } from './tax-preview-primitives'
 
 interface Form4952SourceDetailModalProps {
   open: boolean
@@ -88,7 +86,7 @@ export default function Form4952SourceDetailModal({
                           onClick={() => { onGoToSource(source); onClose() }}
                         >
                           {goToLabel(source)}
-                          <ArrowRight className="h-3 w-3" />
+                          <NavGlyphIcon glyph={source.taxDocumentId != null ? 'window' : 'column'} />
                         </Button>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">—</span>
