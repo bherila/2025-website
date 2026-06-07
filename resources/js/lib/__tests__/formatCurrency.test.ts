@@ -17,8 +17,19 @@ describe('formatCurrency helpers', () => {
     expect(formatFriendlyCurrencyAmount(999)).toBe('$999')
   })
 
+  it('promotes near-boundary thousands when rounding crosses into millions', () => {
+    expect(formatFriendlyCurrencyAmount(999499)).toBe('$999k')
+    expect(formatFriendlyCurrencyAmount(999500)).toBe('$1M')
+  })
+
+  it('promotes near-boundary millions when rounding crosses into billions', () => {
+    expect(formatFriendlyCurrencyAmount(999499999)).toBe('$999M')
+    expect(formatFriendlyCurrencyAmount(999500000)).toBe('$1B')
+  })
+
   it('keeps negative friendly currency amounts obvious', () => {
     expect(formatFriendlyCurrencyAmount(-239283)).toBe('-$239k')
+    expect(formatFriendlyCurrencyAmount(-999500)).toBe('-$1M')
   })
 
   it('matches exact currency null fallback behavior', () => {
