@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinDocument;
 use App\Services\FileStorageService;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,49 @@ class FinanceStatementControllerTest extends TestCase
         $this->assertEqualsWithDelta(15.0, $data[2]['ytd_return_pct'], 0.0001);
         $this->assertEqualsWithDelta(12.1951, $data[3]['return_pct'], 0.0001);
         $this->assertEqualsWithDelta(35.0, $data[3]['ytd_return_pct'], 0.0001);
+    }
+
+    public function test_balance_timeseries_batches_statement_return_metric_queries(): void
+    {
+        $user = $this->createUser();
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Long History Return Account',
+            'acct_last_balance' => '0',
+        ]);
+
+        $statements = [
+            ['acct_id' => $acctId, 'balance' => '1000', 'statement_closing_date' => '2024-12-31', 'cost_basis' => 0, 'is_cost_basis_override' => 0],
+        ];
+        $lineItems = [];
+        $balance = 1000.0;
+
+        for ($month = 1; $month <= 12; $month++) {
+            $statementDate = CarbonImmutable::create(2025, $month, 1)->endOfMonth();
+            $cashFlowDate = CarbonImmutable::create(2025, $month, 15);
+            $balance += 115.0;
+
+            $lineItems[] = ['t_account' => $acctId, 't_date' => $cashFlowDate->toDateString(), 't_type' => 'Deposit', 't_amt' => 100, 't_description' => "Contribution {$month}"];
+            $lineItems[] = ['t_account' => $acctId, 't_date' => $cashFlowDate->addDay()->toDateString(), 't_type' => 'Fee', 't_amt' => -5, 't_description' => "Management fee {$month}"];
+            $statements[] = ['acct_id' => $acctId, 'balance' => (string) $balance, 'statement_closing_date' => $statementDate->toDateString(), 'cost_basis' => 0, 'is_cost_basis_override' => 0];
+        }
+
+        DB::table('fin_account_line_items')->insert($lineItems);
+        DB::table('fin_statements')->insert($statements);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/balance-timeseries");
+        $response->assertOk();
+        $data = $response->json();
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertCount(13, $data);
+        $this->assertEqualsWithDelta(2.0, $data[1]['return_pct'], 0.0001);
+        $this->assertEqualsWithDelta(2.0, $data[1]['ytd_return_pct'], 0.0001);
+        $this->assertLessThan(15, $queryCount, "Expected statement return metrics to be batched, got {$queryCount} queries");
     }
 
     public function test_update_statement_persists_cost_basis_override(): void
