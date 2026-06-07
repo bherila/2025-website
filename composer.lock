@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2d36da98eefe8540584663d946fc5891",
+    "content-hash": "effb3dcd76e301f1c3f2add0be66d691",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -236,16 +236,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.4.1",
+            "version": "v0.4.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth.git",
-                "reference": "a7d6db179b6c6c6786b370e3aab651ae5627dddf"
+                "reference": "da52cd9f9b9c9a05cbc09878ab4488f2a104431a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth/zipball/a7d6db179b6c6c6786b370e3aab651ae5627dddf",
-                "reference": "a7d6db179b6c6c6786b370e3aab651ae5627dddf",
+                "url": "https://api.github.com/repos/bherila/auth/zipball/da52cd9f9b9c9a05cbc09878ab4488f2a104431a",
+                "reference": "da52cd9f9b9c9a05cbc09878ab4488f2a104431a",
                 "shasum": ""
             },
             "require": {
@@ -294,10 +294,10 @@
             ],
             "description": "Shared Laravel authentication services for BWH applications.",
             "support": {
-                "source": "https://github.com/bherila/auth/tree/v0.4.1",
+                "source": "https://github.com/bherila/auth/tree/v0.4.2",
                 "issues": "https://github.com/bherila/auth/issues"
             },
-            "time": "2026-06-06T00:02:55+00:00"
+            "time": "2026-06-07T00:57:00+00:00"
         },
         {
             "name": "bherila/genai-laravel",
@@ -12675,9 +12675,9 @@
     "platform": {
         "php": ">=8.3 <8.6"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "platform-overrides": {
         "php": "8.3.0"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
