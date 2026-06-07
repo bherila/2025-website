@@ -27,6 +27,7 @@ export interface PaperEquitySeries {
   scenarioLabel: string
   outcome: ProjectionBand
   strokeDasharray: string | undefined
+  source: 'paperEquity' | 'currentJobLiquidity'
 }
 
 export interface AnnualFreeCashFlowRow {
@@ -131,6 +132,20 @@ function paperSeriesKey(job: JobProjection, scenarioId: string): string {
   return `${job.id}-paper-${scenarioId}`
 }
 
+function currentJobComparisonSeriesKey(job: JobProjection): string {
+  return `${job.id}-current-equity-medium`
+}
+
+function currentJobWithoutPaperScenarios(projection: CareerCompProjection): JobProjection | undefined {
+  if (projection.currentJobId === null) {
+    return undefined
+  }
+
+  const currentJob = projection.jobs.find((job) => job.id === projection.currentJobId)
+
+  return currentJob !== undefined && currentJob.paperEquity.scenarios.length === 0 ? currentJob : undefined
+}
+
 function annualForYear(job: JobProjection, year: number): EquityCompensationAfterTaxAnnual | undefined {
   return job.afterTax?.annual.find((annual) => annual.year === year)
 }
@@ -181,7 +196,7 @@ export function mapLiquidityChartData(projection: CareerCompProjection): Liquidi
 }
 
 export function mapPaperEquitySeries(projection: CareerCompProjection): PaperEquitySeries[] {
-  return projection.jobs.flatMap((job) => job.paperEquity.scenarios.map((scenario) => ({
+  const paperSeries = projection.jobs.flatMap((job) => job.paperEquity.scenarios.map((scenario) => ({
     key: paperSeriesKey(job, scenario.id),
     label: `${job.name} ${scenario.label}`,
     jobId: job.id,
@@ -190,7 +205,28 @@ export function mapPaperEquitySeries(projection: CareerCompProjection): PaperEqu
     scenarioLabel: scenario.label,
     outcome: scenario.outcome,
     strokeDasharray: BAND_DASHES[scenario.outcome],
+    source: 'paperEquity' as const,
   })))
+  const currentJob = currentJobWithoutPaperScenarios(projection)
+
+  if (currentJob === undefined) {
+    return paperSeries
+  }
+
+  return [
+    {
+      key: currentJobComparisonSeriesKey(currentJob),
+      label: `${currentJob.name} liquid equity med`,
+      jobId: currentJob.id,
+      jobName: currentJob.name,
+      scenarioId: 'current-equity-medium',
+      scenarioLabel: 'Current equity',
+      outcome: 'medium',
+      strokeDasharray: undefined,
+      source: 'currentJobLiquidity',
+    },
+    ...paperSeries,
+  ]
 }
 
 export function mapPaperEquityChartData(projection: CareerCompProjection): LiquidityChartRow[] {
@@ -204,6 +240,13 @@ export function mapPaperEquityChartData(projection: CareerCompProjection): Liqui
         row[paperSeriesKey(job, scenario.id)] = currency(point?.netPaperValue ?? 0).value
       })
     })
+
+    const currentJob = currentJobWithoutPaperScenarios(projection)
+    if (currentJob !== undefined) {
+      const point = currentJob.liquidity.medium.find((entry) => entry.year === year)
+      row[currentJobComparisonSeriesKey(currentJob)] = currency(point?.cumulativeValue ?? 0).value
+    }
+
     return row
   })
 }

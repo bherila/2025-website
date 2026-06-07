@@ -92,6 +92,18 @@ describe('CareerCompPage', () => {
     expect(screen.getByRole('button', { name: 'Open After-Tax FCF' })).toBeInTheDocument()
   })
 
+  it('opens ISO limit warning details from the warning banner', () => {
+    const warning = 'New job offer: ISO first-exercisable value exceeds $100k in 2026; spillover treated as NSO.'
+
+    render(<CareerCompPage initialData={baseInitialData({ projection: { ...sampleCareerCompProjection, warnings: [warning] } })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: warning }))
+
+    expect(screen.getByRole('dialog', { name: 'Why ISO/NSO still matters with early exercise' })).toBeInTheDocument()
+    expect(screen.getByText(/early exercise does not remove the ISO \$100k limit/i)).toBeInTheDocument()
+    expect(screen.getByText(/immediate ISO AMT preference and NSO ordinary-income spread may both be \$0/i)).toBeInTheDocument()
+  })
+
   it('autosaves the private latest for an authenticated user', async () => {
     render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
 
