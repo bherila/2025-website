@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
-import { TaxFactSourcesModal } from '@/components/finance/TaxFactSourcesModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +20,8 @@ interface ScheduleDPreviewProps {
   availableYears?: number[]
   priorYearCapitalLossCarryover?: CapitalLossCarryoverLines | null
   onOpenDoc?: (docId: number) => void
+  /** Push a `tax-source-detail` Miller column for a `<form>:<line>` instance key. */
+  onOpenDetail?: (instanceKey: string) => void
   onGoToForm1040?: () => void
   onCarryoverSaved?: (() => Promise<void> | void) | undefined
 }
@@ -155,10 +156,10 @@ export default function ScheduleDPreview({
   availableYears = [],
   priorYearCapitalLossCarryover,
   onOpenDoc,
+  onOpenDetail,
   onGoToForm1040,
   onCarryoverSaved,
 }: ScheduleDPreviewProps) {
-  const [line5DetailsOpen, setLine5DetailsOpen] = useState(false)
   const taxYear = selectedYear ?? new Date().getFullYear()
   const [carryoverForm, setCarryoverForm] = useState<ScheduleDCarryoverInputForm>({
     short_term_loss_carryover: '0',
@@ -442,8 +443,13 @@ export default function ScheduleDPreview({
               boxRef="5"
               label="Line 5 total — short-term gain or (loss) from partnerships"
               value={taxFacts.line5GainLoss}
-              onDetails={() => setLine5DetailsOpen(true)}
-              detailsTooltip="Schedule D Line 5 Supporting Details"
+              {...(onOpenDetail
+                ? {
+                    onDetails: () => onOpenDetail('sch-d:line-5'),
+                    detailsTooltip: 'Schedule D Line 5 Supporting Details',
+                    detailsGlyph: 'column' as const,
+                  }
+                : {})}
             />
           )}
           <FormTotalLine boxRef="7" label="Net Short-Term" value={taxFacts.line7NetShortTerm} />
@@ -536,14 +542,6 @@ export default function ScheduleDPreview({
         </Callout>
       )}
 
-      <TaxFactSourcesModal
-        open={line5DetailsOpen}
-        title="Schedule D Line 5 Supporting Details"
-        sources={taxFacts.line5Sources}
-        total={taxFacts.line5GainLoss}
-        onClose={() => setLine5DetailsOpen(false)}
-        {...(onOpenDoc ? { onOpenDoc } : {})}
-      />
     </div>
   )
 }

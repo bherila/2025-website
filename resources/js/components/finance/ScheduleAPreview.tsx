@@ -1,33 +1,25 @@
 'use client'
 
 import currency from 'currency.js'
-import { useState } from 'react'
 
 import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
-import { TaxFactSourcesModal, taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourcesModal'
+import { taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourceDetailColumn'
 import type { ScheduleAFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 interface ScheduleAPreviewProps {
   selectedYear: number
   isMarried?: boolean
   scheduleAFacts?: ScheduleAFacts | null
-  onOpenDoc?: (docId: number) => void
+  /** Push a `tax-source-detail` Miller column for a `<form>:<line>` instance key. */
+  onOpenDetail?: (instanceKey: string) => void
 }
 
 export default function ScheduleAPreview({
   selectedYear,
   isMarried = false,
   scheduleAFacts,
-  onOpenDoc,
+  onOpenDetail,
 }: ScheduleAPreviewProps) {
-  const [activeSources, setActiveSources] = useState<{
-    title: string
-    sources: TaxFactSource[]
-    total: number
-    amountMode?: 'signed' | 'absolute'
-    positiveAmountTone?: 'success' | 'destructive'
-  } | null>(null)
-
   if (!scheduleAFacts) {
     return <FactsLoadingPlaceholder label="Schedule A" />
   }
@@ -46,16 +38,12 @@ export default function ScheduleAPreview({
     : 'State income tax withheld / estimated tax paid'
   const investmentInterestNeedsReview = taxFactSourcesNeedReview(scheduleAFacts.investmentInterestSources)
 
-  const sourceClickProps = (
-    title: string,
-    sources: TaxFactSource[],
-    total: number,
-    options: { amountMode?: 'signed' | 'absolute'; positiveAmountTone?: 'success' | 'destructive' } = {},
-  ) =>
-    sources.length > 0
+  const sourceClickProps = (key: string, title: string, sources: TaxFactSource[]) =>
+    sources.length > 0 && onOpenDetail
       ? {
-          onDetails: () => setActiveSources({ title, sources, total, ...options }),
+          onDetails: () => onOpenDetail(key),
           detailsTooltip: title,
+          detailsGlyph: 'column' as const,
         }
       : {}
 
@@ -78,14 +66,14 @@ export default function ScheduleAPreview({
             label={line5aLabel}
             {...(scheduleAFacts.selectedLine5aTotal > 0 ? { value: scheduleAFacts.selectedLine5aTotal } : { raw: '—' })}
             isReviewed={taxFactSourcesNeedReview(selectedLine5aSources) ? false : undefined}
-            {...sourceClickProps('Schedule A Line 5a Supporting Details', selectedLine5aSources, scheduleAFacts.selectedLine5aTotal)}
+            {...sourceClickProps('sch-a:line-5a', 'Schedule A Line 5a Supporting Details', selectedLine5aSources)}
           />
           <FormLine
             boxRef="5b"
             label="Real estate taxes"
             {...(scheduleAFacts.realEstateTaxTotal > 0 ? { value: scheduleAFacts.realEstateTaxTotal } : { raw: '—' })}
             isReviewed={taxFactSourcesNeedReview(scheduleAFacts.realEstateTaxSources) ? false : undefined}
-            {...sourceClickProps('Schedule A Line 5b Supporting Details', scheduleAFacts.realEstateTaxSources, scheduleAFacts.realEstateTaxTotal)}
+            {...sourceClickProps('sch-a:line-5b', 'Schedule A Line 5b Supporting Details', scheduleAFacts.realEstateTaxSources)}
           />
           <FormLine
             boxRef="5c"
@@ -115,7 +103,7 @@ export default function ScheduleAPreview({
             label="Home mortgage interest"
             {...(scheduleAFacts.mortgageInterestTotal > 0 ? { value: scheduleAFacts.mortgageInterestTotal } : { raw: '—' })}
             isReviewed={taxFactSourcesNeedReview(scheduleAFacts.mortgageInterestSources) ? false : undefined}
-            {...sourceClickProps('Schedule A Line 8 Supporting Details', scheduleAFacts.mortgageInterestSources, scheduleAFacts.mortgageInterestTotal)}
+            {...sourceClickProps('sch-a:line-8', 'Schedule A Line 8 Supporting Details', scheduleAFacts.mortgageInterestSources)}
           />
           <FormLine
             boxRef="9"
@@ -123,12 +111,7 @@ export default function ScheduleAPreview({
             value={scheduleAFacts.investmentInterestTotal > 0 ? scheduleAFacts.investmentInterestTotal : null}
             {...(scheduleAFacts.investmentInterestTotal === 0 ? { raw: '—' } : {})}
             isReviewed={investmentInterestNeedsReview ? false : undefined}
-            {...sourceClickProps(
-              'Investment Interest Expense — Data Sources',
-              scheduleAFacts.investmentInterestSources,
-              scheduleAFacts.investmentInterestTotal,
-              { amountMode: 'absolute', positiveAmountTone: 'destructive' },
-            )}
+            {...sourceClickProps('sch-a:line-9', 'Investment Interest Expense — Data Sources', scheduleAFacts.investmentInterestSources)}
           />
           {scheduleAFacts.disallowedInvestmentInterest > 0 && (
             <FormLine label="Disallowed investment interest carryforward" value={scheduleAFacts.disallowedInvestmentInterest} />
@@ -142,14 +125,14 @@ export default function ScheduleAPreview({
             label="Cash contributions"
             {...(scheduleAFacts.charitableCashTotal > 0 ? { value: scheduleAFacts.charitableCashTotal } : { raw: '—' })}
             isReviewed={taxFactSourcesNeedReview(scheduleAFacts.charitableCashSources) ? false : undefined}
-            {...sourceClickProps('Schedule A Line 11 Supporting Details', scheduleAFacts.charitableCashSources, scheduleAFacts.charitableCashTotal)}
+            {...sourceClickProps('sch-a:line-11', 'Schedule A Line 11 Supporting Details', scheduleAFacts.charitableCashSources)}
           />
           <FormLine
             boxRef="12"
             label="Non-cash contributions"
             {...(scheduleAFacts.charitableNoncashTotal > 0 ? { value: scheduleAFacts.charitableNoncashTotal } : { raw: '—' })}
             isReviewed={taxFactSourcesNeedReview(scheduleAFacts.charitableNoncashSources) ? false : undefined}
-            {...sourceClickProps('Schedule A Line 12 Supporting Details', scheduleAFacts.charitableNoncashSources, scheduleAFacts.charitableNoncashTotal)}
+            {...sourceClickProps('sch-a:line-12', 'Schedule A Line 12 Supporting Details', scheduleAFacts.charitableNoncashSources)}
           />
           <FormTotalLine boxRef="14" label="Total gifts" value={scheduleAFacts.charitableTotal} />
         </FormBlock>
@@ -161,7 +144,7 @@ export default function ScheduleAPreview({
               label={src.label}
               value={src.amount}
               isReviewed={src.isReviewed === false ? false : undefined}
-              {...sourceClickProps('Schedule A Line 16 Supporting Details', scheduleAFacts.otherItemizedSources, scheduleAFacts.otherItemizedTotal)}
+              {...sourceClickProps('sch-a:line-16', 'Schedule A Line 16 Supporting Details', scheduleAFacts.otherItemizedSources)}
             />
           ))}
           {scheduleAFacts.otherItemizedSources.length === 0 && (
@@ -208,18 +191,6 @@ export default function ScheduleAPreview({
         )}
       </FormBlock>
 
-      {activeSources && (
-        <TaxFactSourcesModal
-          open
-          title={activeSources.title}
-          sources={activeSources.sources}
-          total={activeSources.total}
-          onClose={() => setActiveSources(null)}
-          {...(activeSources.amountMode ? { amountMode: activeSources.amountMode } : {})}
-          {...(activeSources.positiveAmountTone ? { positiveAmountTone: activeSources.positiveAmountTone } : {})}
-          {...(onOpenDoc ? { onOpenDoc } : {})}
-        />
-      )}
     </div>
   )
 }
