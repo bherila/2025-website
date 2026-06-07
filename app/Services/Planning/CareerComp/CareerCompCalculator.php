@@ -53,17 +53,19 @@ final class CareerCompCalculator
      */
     private function projectJob(JobSpec $job, int $startYear, int $horizonYears): array
     {
-        $warnings = $this->staticWarnings($job, $startYear, $horizonYears);
-        $rsuRows = $this->rsuVestingExpander->expand($job, $startYear, $horizonYears);
-        $optionResult = $this->optionsVestingService->expand($job, $startYear, $horizonYears);
+        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears);
+        $vestingJob = $this->withProjectedOptionRefresherGrants($job, $projectedOptionGrants);
+        $warnings = $this->staticWarnings($vestingJob, $startYear, $horizonYears);
+        $rsuRows = $this->rsuVestingExpander->expand($vestingJob, $startYear, $horizonYears);
+        $optionResult = $this->optionsVestingService->expand($vestingJob, $startYear, $horizonYears);
         $baseVestingRows = array_merge($rsuRows, $optionResult['rows']);
         $warnings = array_merge($warnings, $optionResult['warnings']);
-        $refresherDefs = $this->refresherDefinitions($job, $startYear, $horizonYears);
-        $valuation = $this->equityValuationService->value($job, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
+        $refresherDefs = $this->refresherDefinitions($vestingJob, $startYear, $horizonYears);
+        $valuation = $this->equityValuationService->value($vestingJob, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
-        $paperVestingRows = $this->paperVestingRows($job, $startYear, $horizonYears, $valuation['refresherRows']);
-        $paperEquity = $this->privateValuationScenarioService->project($job, $paperVestingRows, $startYear, $horizonYears);
+        $paperVestingRows = $this->paperVestingRows($vestingJob, $startYear, $horizonYears, $valuation['refresherRows']);
+        $paperEquity = $this->privateValuationScenarioService->project($vestingJob, $paperVestingRows, $startYear, $horizonYears);
         $warnings = array_merge($warnings, $paperEquity['warnings']);
         $paperEquityProjection = [
             'scenarios' => $paperEquity['scenarios'],
@@ -85,7 +87,7 @@ final class CareerCompCalculator
             $bonus = MoneyMath::round(MoneyMath::multiply($cashBonus, $raiseFactor));
             $vestedLiquidEquity = MoneyMath::round($valuation['annualEquity'][$year] ?? 0.0);
             $shareSaleProceeds = $vestedLiquidEquity;
-            $exerciseOutlay = $this->exerciseOutlayForYear($job, $optionResult['rows'], $year);
+            $exerciseOutlay = $this->exerciseOutlayForYear($vestingJob, $optionResult['rows'], $year);
             $cashComp = MoneyMath::add($salary, $bonus);
             $freeCashFlow = MoneyMath::subtract(MoneyMath::add($cashComp, $shareSaleProceeds), $exerciseOutlay);
 
@@ -121,7 +123,7 @@ final class CareerCompCalculator
                 'high' => MoneyMath::add($totalCashComp, $paperEquityProjection['totalsByOutcome']['high']),
             ],
         ];
-        $afterTax = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
+        $afterTax = $this->equityCompensationFactsBuilder->build($vestingJob, $vestingRows, $annual, $lifetime['totalValue'])->toArray();
 
         return [
             'job' => [
@@ -153,6 +155,10 @@ final class CareerCompCalculator
      */
     private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears): array
     {
+        if (! $job->grantsRsu()) {
+            return [];
+        }
+
         $pctOfBase = $job->number('refresher.pctOfBase');
         if ($pctOfBase <= 0.0) {
             return [];
@@ -190,6 +196,83 @@ final class CareerCompCalculator
         }
 
         return $definitions;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears): array
+    {
+        if (! $job->grantsOptions() || (string) $job->value('refresher.optionType') !== 'iso') {
+            return [];
+        }
+
+        $optionPct = $job->number('refresher.optionPctOfFullyDilutedShares');
+        $fullyDilutedShares = $job->number('company.fullyDilutedShares');
+        if ($optionPct <= 0.0 || $fullyDilutedShares <= 0.0) {
+            return [];
+        }
+
+        $shareCount = MoneyMath::multiply($fullyDilutedShares, $optionPct / 100.0);
+        if ($shareCount <= 0.0) {
+            return [];
+        }
+
+        $cadence = max(1, $job->int('refresher.cadenceYears'));
+        $firstOffset = max(0, $job->int('refresher.firstYearOffset'));
+        $vestingYears = max(0.25, $job->number('refresher.vestingYears'));
+        $cliffMonths = max(0, $job->int('refresher.cliffMonths'));
+        $frequency = VestingSchedule::normalizeFrequency($job->value('refresher.vestingFrequency'));
+        $grants = [];
+
+        for ($offset = 0; $offset < $horizonYears; $offset++) {
+            if ($offset < $firstOffset || ($offset - $firstOffset) % $cadence !== 0) {
+                continue;
+            }
+
+            $grantYear = $startYear + $offset;
+            $grants[] = [
+                'id' => $job->id().'-option-refresher-'.$grantYear,
+                'kind' => 'refresher',
+                'type' => 'iso',
+                'grantDate' => sprintf('%04d-01-01', $grantYear),
+                'vestingStartDate' => null,
+                'shareCount' => round($shareCount, 4),
+                'strike' => $this->optionRefresherStrike($job, $offset, $grantYear),
+                'cliffMonths' => $cliffMonths,
+                'vestingYears' => $vestingYears,
+                'vestingFrequency' => $frequency,
+                'earlyExercise83b' => false,
+                'source' => 'projected_refresher',
+            ];
+        }
+
+        return $grants;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $projectedOptionGrants
+     */
+    private function withProjectedOptionRefresherGrants(JobSpec $job, array $projectedOptionGrants): JobSpec
+    {
+        if ($projectedOptionGrants === []) {
+            return $job;
+        }
+
+        $values = $job->toArray();
+        $existingGrants = is_array($values['optionGrants'] ?? null) ? array_values(array_filter($values['optionGrants'], 'is_array')) : [];
+        $values['optionGrants'] = array_merge($existingGrants, $projectedOptionGrants);
+
+        return JobSpec::nullableFromArray($values, $job->isCurrent()) ?? $job;
+    }
+
+    private function optionRefresherStrike(JobSpec $job, int $grantYearOffset, int $grantYear): float
+    {
+        if (! $job->isPrivate()) {
+            return $this->equityValuationService->sharePrice($job, $grantYearOffset, 'medium');
+        }
+
+        return $this->privateValuationScenarioService->commonFmvForYear($job, $grantYear, 'medium');
     }
 
     /**

@@ -55,6 +55,21 @@ final class CareerCompInputs
                 'comp' => [
                     'baseSalary' => 185000.0,
                     'cashBonus' => 25000.0,
+                    'annualRaisePct' => 0.0,
+                ],
+                'grantTypes' => [
+                    'rsu' => true,
+                    'options' => true,
+                ],
+                'refresher' => [
+                    'pctOfBase' => 0.0,
+                    'optionPctOfFullyDilutedShares' => 0.0,
+                    'optionType' => 'iso',
+                    'cadenceYears' => 1,
+                    'firstYearOffset' => 1,
+                    'vestingYears' => 4,
+                    'cliffMonths' => 0,
+                    'vestingFrequency' => 'monthly',
                 ],
                 'rsuGrants' => [[
                     'id' => 'current-rsu-hire',
@@ -109,6 +124,21 @@ final class CareerCompInputs
                 'comp' => [
                     'baseSalary' => 175000.0,
                     'cashBonus' => 20000.0,
+                    'annualRaisePct' => 0.0,
+                ],
+                'grantTypes' => [
+                    'rsu' => true,
+                    'options' => true,
+                ],
+                'refresher' => [
+                    'pctOfBase' => 0.0,
+                    'optionPctOfFullyDilutedShares' => 0.0,
+                    'optionType' => 'iso',
+                    'cadenceYears' => 1,
+                    'firstYearOffset' => 1,
+                    'vestingYears' => 4,
+                    'cliffMonths' => 0,
+                    'vestingFrequency' => 'monthly',
                 ],
                 'rsuGrants' => [],
                 'optionGrants' => [[

@@ -94,7 +94,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     presentation: 'column',
     component: notRenderedViaMillerShell,
     meta: { description: 'Lifetime totals and server-computed deltas vs. current job.', icon: Table2 },
-    size: 'wide',
+    size: 'full',
     render: (projection) => <ProjectionLifetimeValue projection={projection} />,
   },
   {

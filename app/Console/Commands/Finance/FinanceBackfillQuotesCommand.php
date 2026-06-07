@@ -209,7 +209,7 @@ class FinanceBackfillQuotesCommand extends BaseFinanceCommand
     {
         $value = $this->option($option);
 
-        if ($value === null || trim((string) $value) === '') {
+        if (($value === null) || (trim((string) $value) === '')) {
             return null;
         }
 

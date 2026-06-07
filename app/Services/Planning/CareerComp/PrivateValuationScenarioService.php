@@ -58,6 +58,33 @@ final class PrivateValuationScenarioService
         return ['scenarios' => $scenarios, 'totalsByOutcome' => $totalsByOutcome, 'warnings' => $warnings];
     }
 
+    public function commonFmvForYear(JobSpec $job, int $year, string $outcome = 'medium'): float
+    {
+        $baseFullyDilutedShares = $job->number('company.fullyDilutedShares');
+        if ($baseFullyDilutedShares <= 0.0) {
+            return $job->number('company.fourNineA');
+        }
+
+        $selectedOutcome = $this->normalizeOutcome($outcome);
+        foreach ($job->valuationScenarios() as $scenario) {
+            if ($this->normalizeOutcome((string) ($scenario['outcome'] ?? 'medium')) !== $selectedOutcome) {
+                continue;
+            }
+
+            $snapshot = $this->snapshotForYear($this->normalizedStages($scenario), $year);
+            if ($snapshot === []) {
+                continue;
+            }
+
+            $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares);
+            if ($commonFmv > 0.0) {
+                return $commonFmv;
+            }
+        }
+
+        return $job->number('company.fourNineA');
+    }
+
     /**
      * @param  array<string, mixed>  $scenario
      * @return list<array<string, mixed>>

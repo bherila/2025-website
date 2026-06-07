@@ -52,21 +52,36 @@ function normalizeGrantDates<T extends RsuGrant | OptionGrant>(grant: T): T {
 
 function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
   const jobId = job.id.trim() || fallbackId
+  const grantTypes = {
+    rsu: job.grantTypes.rsu,
+    options: job.grantTypes.options,
+  }
 
   return {
     ...job,
     id: jobId,
     name: job.name.trim() || fallbackId,
+    grantTypes,
     company: {
       ...job.company,
       // Optional liquidity date: coerce empty/whitespace to null so the compute body never sends
       // '' (which fails the backend's nullable|date_format:Y-m-d rule with a 422).
       liquidityDate: job.company.liquidityDate && job.company.liquidityDate.trim() !== '' ? job.company.liquidityDate : null,
     },
+    refresher: {
+      ...job.refresher,
+      pctOfBase: grantTypes.rsu ? job.refresher.pctOfBase : 0,
+      optionPctOfFullyDilutedShares: grantTypes.options ? job.refresher.optionPctOfFullyDilutedShares : 0,
+      optionType: 'iso',
+    },
     // grantDate is a required Y-m-d on the backend; drop incomplete grants so one cleared date does
     // not 422 the whole projection. They remain in the form's raw state for the user to finish.
-    rsuGrants: job.rsuGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-rsu-${index + 1}` })),
-    optionGrants: job.optionGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-opt-${index + 1}` })),
+    rsuGrants: grantTypes.rsu
+      ? job.rsuGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-rsu-${index + 1}` }))
+      : [],
+    optionGrants: grantTypes.options
+      ? job.optionGrants.filter(hasGrantDate).map((grant, index) => normalizeGrantDates({ ...grant, id: grant.id.trim() || `${jobId}-opt-${index + 1}` }))
+      : [],
   }
 }
 

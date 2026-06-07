@@ -8,7 +8,7 @@ use DateTimeImmutable;
 final class OptionsVestingService
 {
     /**
-     * @return array{rows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>,warnings:list<string>}
+     * @return array{rows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>,warnings:list<string>}
      */
     public function expand(JobSpec $job, int $startYear, int $horizonYears): array
     {
@@ -27,6 +27,7 @@ final class OptionsVestingService
                     'shares' => round($shares, 4),
                     'strike' => is_numeric($grant['strike'] ?? null) ? (float) $grant['strike'] : 0.0,
                     'grantDate' => (string) ($grant['grantDate'] ?? ''),
+                    'source' => is_string($grant['source'] ?? null) ? $grant['source'] : null,
                 ];
             }
         }
@@ -70,17 +71,23 @@ final class OptionsVestingService
 
     /**
      * @param  array<string, mixed>  $rawRow
-     * @return array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}
+     * @return array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}
      */
     private function row(array $rawRow, string $type, float $shares): array
     {
-        return [
+        $row = [
             'grantId' => (string) $rawRow['grantId'],
             'type' => $type,
             'year' => (int) $rawRow['year'],
             'vestedShares' => round($shares, 4),
             'exercisableShares' => round($shares, 4),
         ];
+
+        if (is_string($rawRow['source'] ?? null) && $rawRow['source'] !== '') {
+            $row['source'] = $rawRow['source'];
+        }
+
+        return $row;
     }
 
     /**
