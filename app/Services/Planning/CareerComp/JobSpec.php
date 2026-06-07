@@ -44,11 +44,16 @@ final readonly class JobSpec
                 // Compounding annual raise applied to base + bonus (0 = no raise).
                 'annualRaisePct' => 0.0,
             ],
-            // RSU refresher policy (pctOfBase = 0 disables it). Refreshers are minted every
-            // cadenceYears starting firstYearOffset, valued at pctOfBase% of that year's raised base,
-            // converted to shares at the projected per-band price, then vested on the schedule below.
+            'grantTypes' => [
+                'rsu' => true,
+                'options' => true,
+            ],
+            // Projected refreshers are computed inline during reads. That adds compute latency, but it
+            // keeps saved comparisons compact and lets projections immediately reflect company inputs.
             'refresher' => [
                 'pctOfBase' => 0.0,
+                'optionPctOfFullyDilutedShares' => 0.0,
+                'optionType' => 'iso',
                 'cadenceYears' => 1,
                 'firstYearOffset' => 1,
                 'vestingYears' => 4,
@@ -135,6 +140,10 @@ final readonly class JobSpec
      */
     public function rsuGrants(): array
     {
+        if (! $this->grantsRsu()) {
+            return [];
+        }
+
         $grants = $this->value('rsuGrants');
 
         return is_array($grants) ? array_values(array_filter($grants, 'is_array')) : [];
@@ -145,9 +154,23 @@ final readonly class JobSpec
      */
     public function optionGrants(): array
     {
+        if (! $this->grantsOptions()) {
+            return [];
+        }
+
         $grants = $this->value('optionGrants');
 
         return is_array($grants) ? array_values(array_filter($grants, 'is_array')) : [];
+    }
+
+    public function grantsRsu(): bool
+    {
+        return filter_var($this->value('grantTypes.rsu'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true;
+    }
+
+    public function grantsOptions(): bool
+    {
+        return filter_var($this->value('grantTypes.options'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true;
     }
 
     /**

@@ -376,6 +376,81 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(2028, $refresherRows[0]['year']);
     }
 
+    public function test_projected_iso_refresher_creates_option_vesting_rows(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 4,
+            'currentJob' => [
+                'id' => 'proj',
+                'name' => 'Projected ISO job',
+                'company' => ['type' => 'public', 'currentSharePrice' => 10, 'fullyDilutedShares' => 1000000],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'refresher' => [
+                    'optionPctOfFullyDilutedShares' => 1,
+                    'optionType' => 'iso',
+                    'cadenceYears' => 10,
+                    'firstYearOffset' => 1,
+                    'vestingYears' => 1,
+                    'cliffMonths' => 0,
+                    'vestingFrequency' => 'annual',
+                ],
+                'growthBands' => ['lowPct' => -1, 'mediumPct' => 0, 'highPct' => 1],
+            ],
+            'hypotheticalJobs' => [],
+        ]))->toArray();
+
+        $refresherRows = array_values(array_filter(
+            $projection['jobs'][0]['vesting'],
+            fn (array $row): bool => (string) ($row['grantId'] ?? '') === 'proj-option-refresher-2027',
+        ));
+
+        $this->assertCount(1, $refresherRows);
+        $this->assertSame('iso', $refresherRows[0]['type']);
+        $this->assertSame(2028, $refresherRows[0]['year']);
+        $this->assertSame(10000.0, $refresherRows[0]['exercisableShares']);
+        $this->assertSame('projected_refresher', $refresherRows[0]['source']);
+        $this->assertSame(100000.0, $projection['jobs'][0]['annual'][2]['exerciseOutlay']);
+    }
+
+    public function test_projected_iso_refresher_spills_excess_over_iso_limit_into_nso(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 4,
+            'currentJob' => [
+                'id' => 'proj-spill',
+                'name' => 'Projected ISO spill job',
+                'company' => ['type' => 'public', 'currentSharePrice' => 10, 'fullyDilutedShares' => 1000000],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'refresher' => [
+                    'optionPctOfFullyDilutedShares' => 2,
+                    'optionType' => 'iso',
+                    'cadenceYears' => 10,
+                    'firstYearOffset' => 1,
+                    'vestingYears' => 1,
+                    'cliffMonths' => 0,
+                    'vestingFrequency' => 'annual',
+                ],
+                'growthBands' => ['lowPct' => -1, 'mediumPct' => 0, 'highPct' => 1],
+            ],
+            'hypotheticalJobs' => [],
+        ]))->toArray();
+
+        $refresherRows = array_values(array_filter(
+            $projection['jobs'][0]['vesting'],
+            fn (array $row): bool => (string) ($row['grantId'] ?? '') === 'proj-spill-option-refresher-2027',
+        ));
+
+        $this->assertCount(2, $refresherRows);
+        $this->assertSame(['iso', 'nso'], array_column($refresherRows, 'type'));
+        $this->assertSame([10000.0, 10000.0], array_column($refresherRows, 'exercisableShares'));
+        $this->assertContains(
+            'Projected ISO spill job: ISO first-exercisable value exceeds $100k in 2028; spillover treated as NSO.',
+            $projection['warnings'],
+        );
+    }
+
     public function test_private_paper_equity_uses_vested_ownership_and_compounded_dilution(): void
     {
         $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([

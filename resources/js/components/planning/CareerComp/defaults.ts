@@ -66,11 +66,17 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
     },
     refresher: {
       pctOfBase: 0,
+      optionPctOfFullyDilutedShares: 0,
+      optionType: 'iso',
       cadenceYears: 1,
       firstYearOffset: 1,
       vestingYears: 4,
       cliffMonths: 0,
       vestingFrequency: 'monthly',
+    },
+    grantTypes: {
+      rsu: true,
+      options: true,
     },
     rsuGrants: [buildDefaultRsuGrant(id, 1)],
     optionGrants: [buildDefaultOptionGrant(id, 1)],

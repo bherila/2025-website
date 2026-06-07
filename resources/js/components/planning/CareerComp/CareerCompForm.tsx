@@ -4,6 +4,7 @@ import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElemen
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
@@ -452,6 +453,15 @@ function SelectField<T extends string>({ label, value, options, onChange }: {
         </SelectContent>
       </Select>
     </div>
+  )
+}
+
+function GrantTypeCheckbox({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (checked: boolean) => void }): ReactElement {
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 rounded-md border p-3 text-sm font-medium">
+      <Checkbox id={id} checked={checked} onCheckedChange={(next) => onChange(next === true)} />
+      <span>{label}</span>
+    </label>
   )
 }
 
@@ -909,20 +919,37 @@ function ValuationTimelineLauncher({ job, onOpenValuationTimeline }: { job: JobS
 }
 
 function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: JobSpec; startYear: number; horizonYears: number }): ReactElement | null {
-  if (job.refresher.pctOfBase <= 0) {
+  const showRsu = job.grantTypes.rsu && job.refresher.pctOfBase > 0
+  const showOptions = job.grantTypes.options && job.refresher.optionPctOfFullyDilutedShares > 0 && job.company.fullyDilutedShares > 0
+  if (!showRsu && !showOptions) {
     return null
   }
 
   const cadence = Math.max(1, Math.round(job.refresher.cadenceYears))
   const firstOffset = Math.max(0, Math.round(job.refresher.firstYearOffset))
-  const rows: { year: number; value: number }[] = []
+  const rows: { key: string; year: number; title: string; summary: string }[] = []
 
   for (let offset = firstOffset; offset < horizonYears && rows.length < 4; offset += cadence) {
-    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** offset
-    rows.push({
-      year: startYear + offset,
-      value: currency(job.comp.baseSalary).multiply(raiseFactor).multiply(job.refresher.pctOfBase / 100).value,
-    })
+    const year = startYear + offset
+    if (showRsu) {
+      const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** offset
+      const value = currency(job.comp.baseSalary).multiply(raiseFactor).multiply(job.refresher.pctOfBase / 100).value
+      rows.push({
+        key: `${job.id}-projected-rsu-refresher-${year}`,
+        year,
+        title: `Projected RSU refresher · ${year}`,
+        summary: `${formatMoney(value)} target value · ${job.refresher.vestingYears}yr ${frequencyLabel(job.refresher.vestingFrequency).toLowerCase()}`,
+      })
+    }
+    if (showOptions) {
+      const shares = currency(job.company.fullyDilutedShares).multiply(job.refresher.optionPctOfFullyDilutedShares / 100).value
+      rows.push({
+        key: `${job.id}-projected-option-refresher-${year}`,
+        year,
+        title: `Projected ISO refresher · ${year}`,
+        summary: `${formatShares(shares)} shares · ${job.refresher.vestingYears}yr ${frequencyLabel(job.refresher.vestingFrequency).toLowerCase()}`,
+      })
+    }
   }
 
   if (rows.length === 0) {
@@ -932,9 +959,9 @@ function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: Job
   return (
     <div className="space-y-2">
       {rows.map((row) => (
-        <div key={`${job.id}-projected-refresher-${row.year}`} className="rounded-md border border-dashed p-3 text-xs opacity-60">
-          <p className="font-medium">Projected refresher · {row.year}</p>
-          <p className="text-muted-foreground">{formatMoney(row.value)} target value · {job.refresher.vestingYears}yr {frequencyLabel(job.refresher.vestingFrequency).toLowerCase()}</p>
+        <div key={row.key} className="rounded-md border border-dashed p-3 text-xs opacity-60">
+          <p className="font-medium">{row.title}</p>
+          <p className="text-muted-foreground">{row.summary}</p>
         </div>
       ))}
     </div>
@@ -943,8 +970,11 @@ function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: Job
 
 function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, activeGrant }: { job: JobSpec; startYear: number; horizonYears: number; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   const nameId = useId()
+  const rsuGrantTypeId = useId()
+  const optionGrantTypeId = useId()
   const isPrivate = job.company.type === 'private'
   const removeText = removeLabel ?? `Remove ${job.name}`
+  const hasProjectedRefreshers = job.grantTypes.rsu || job.grantTypes.options
 
   return (
     <Card>
@@ -976,33 +1006,50 @@ function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLab
               </div>
             </>
           ) : (
-            <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
+            <>
+              <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
+              <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
+            </>
           )}
           <NumberField label="Low growth" value={job.growthBands.lowPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, lowPct: value } })} />
           <NumberField label="Medium growth" value={job.growthBands.mediumPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, mediumPct: value } })} />
           <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
         </div>
 
+        <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+          <GrantTypeCheckbox id={rsuGrantTypeId} label="Grants RSU" checked={job.grantTypes.rsu} onChange={(rsu) => onChange({ ...job, grantTypes: { ...job.grantTypes, rsu } })} />
+          <GrantTypeCheckbox id={optionGrantTypeId} label="Grants options" checked={job.grantTypes.options} onChange={(options) => onChange({ ...job, grantTypes: { ...job.grantTypes, options } })} />
+        </div>
+
         <div className="space-y-3 border-t pt-4">
           <div>
-            <Label className="text-sm font-semibold">Raises &amp; RSU refreshers</Label>
-            <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus. Refreshers grant a % of that year&apos;s base, priced at the projected per-band share price; set % to 0 to disable.</p>
+            <Label className="text-sm font-semibold">Raises &amp; refreshers</Label>
+            <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField label="Annual raise" value={job.comp.annualRaisePct} suffix="%" min={0} onChange={(value) => onChange({ ...job, comp: { ...job.comp, annualRaisePct: value } })} />
-            <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
-            <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
-            <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
-            <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
-            <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
-            <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
+            {job.grantTypes.rsu ? (
+              <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
+            ) : null}
+            {job.grantTypes.options ? (
+              <NumberField label="Projected ISO refresher" value={job.refresher.optionPctOfFullyDilutedShares} suffix="% fully diluted" min={0} max={100} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, optionPctOfFullyDilutedShares: value, optionType: 'iso' } })} />
+            ) : null}
+            {hasProjectedRefreshers ? (
+              <>
+                <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
+                <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
+                <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
+                <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
+                <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
+              </>
+            ) : null}
           </div>
           <ProjectedRefreshersPreview job={job} startYear={startYear} horizonYears={horizonYears} />
         </div>
 
         <div className="space-y-4 border-t pt-4">
-          <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />
-          <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} />
+          {job.grantTypes.rsu ? <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
+          {job.grantTypes.options ? <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
         </div>
       </CardContent>
     </Card>

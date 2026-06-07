@@ -57,7 +57,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.queryByText('409A price')).not.toBeInTheDocument()
     expect(screen.queryByText('Annual dilution')).not.toBeInTheDocument()
     expect(screen.queryByText('Liquidity date')).not.toBeInTheDocument()
-    expect(screen.queryByText('Fully diluted shares')).not.toBeInTheDocument()
+    expect(screen.getByText('Fully diluted shares')).toBeInTheDocument()
   })
 
   it('shows 409A/dilution/liquidity and hides current share price for a private company', () => {
@@ -78,6 +78,38 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '250000000' } })
 
     expect(screen.getByDisplayValue('250000000')).toBeInTheDocument()
+  })
+
+  it('hides RSU controls when RSU grants are disabled and restores draft rows when re-enabled', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    expect(screen.getByText('RSU refresher')).toBeInTheDocument()
+    expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Grants RSU' }))
+    expect(screen.queryByText('RSU refresher')).not.toBeInTheDocument()
+    expect(screen.queryByText('RSU grant 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Option grant 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Grants RSU' }))
+    expect(screen.getByText('RSU refresher')).toBeInTheDocument()
+    expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
+  })
+
+  it('hides option controls when options are disabled and restores draft rows when re-enabled', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    expect(screen.getByText('Projected ISO refresher')).toBeInTheDocument()
+    expect(screen.getByText('Option grant 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Grants options' }))
+    expect(screen.queryByText('Projected ISO refresher')).not.toBeInTheDocument()
+    expect(screen.queryByText('Option grant 1')).not.toBeInTheDocument()
+    expect(screen.getByText('RSU grant 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Grants options' }))
+    expect(screen.getByText('Projected ISO refresher')).toBeInTheDocument()
+    expect(screen.getByText('Option grant 1')).toBeInTheDocument()
   })
 
   it('adds a new RSU grant via its own column as fields change', () => {

@@ -67,4 +67,41 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
     expect(job?.rsuGrants[0]?.id).toBe('r-keep')
     expect(job?.optionGrants).toHaveLength(0)
   })
+
+  it('normalizes disabled grant families out of submitted inputs', () => {
+    const inputs = {
+      horizonYears: 5,
+      startYear: 2026,
+      currentJob: null,
+      hypotheticalJobs: [{
+        id: 'hyp-1',
+        name: 'Offer 1',
+        company: { type: 'public', currentSharePrice: 25, fourNineA: 5, fullyDilutedShares: 100000000, annualDilutionPct: 3, liquidityDate: null },
+        comp: { baseSalary: 180000, cashBonus: 25000 },
+        grantTypes: { rsu: false, options: false },
+        refresher: {
+          pctOfBase: 20,
+          optionPctOfFullyDilutedShares: 1.5,
+          optionType: 'iso',
+          cadenceYears: 1,
+          firstYearOffset: 1,
+          vestingYears: 4,
+          cliffMonths: 0,
+          vestingFrequency: 'monthly',
+        },
+        rsuGrants: [{ id: 'r-hidden', kind: 'hire', grantDate: '2026-01-01', shareCount: 1000, cliffMonths: 12, vestingYears: 4 }],
+        optionGrants: [{ id: 'o-hidden', kind: 'hire', type: 'iso', grantDate: '2026-01-01', shareCount: 4000, strike: 5, cliffMonths: 12, vestingYears: 4, earlyExercise83b: false }],
+        growthBands: { lowPct: 0, mediumPct: 8, highPct: 18 },
+      }],
+    }
+
+    const normalized = normalizeCareerCompInputs(inputs)
+    const job = normalized.hypotheticalJobs[0]
+
+    expect(job?.grantTypes).toEqual({ rsu: false, options: false })
+    expect(job?.refresher.pctOfBase).toBe(0)
+    expect(job?.refresher.optionPctOfFullyDilutedShares).toBe(0)
+    expect(job?.rsuGrants).toHaveLength(0)
+    expect(job?.optionGrants).toHaveLength(0)
+  })
 })

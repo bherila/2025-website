@@ -69,11 +69,20 @@ export const vestingScheduleSchema = z
 export const refresherPolicySchema = z
   .object({
     pctOfBase: z.number().default(0),
+    optionPctOfFullyDilutedShares: z.number().default(0),
+    optionType: z.enum(['iso']).default('iso'),
     cadenceYears: z.number().default(1),
     firstYearOffset: z.number().default(1),
     vestingYears: z.number().default(4),
     cliffMonths: z.number().default(0),
     vestingFrequency: vestingFrequencySchema,
+  })
+  .prefault({})
+
+export const grantTypesSchema = z
+  .object({
+    rsu: z.boolean().default(true),
+    options: z.boolean().default(true),
   })
   .prefault({})
 
@@ -111,6 +120,7 @@ export const jobSpecSchema = z.object({
   name: z.string(),
   company: companySpecSchema,
   comp: cashCompSchema,
+  grantTypes: grantTypesSchema,
   refresher: refresherPolicySchema,
   rsuGrants: z.array(rsuGrantSchema),
   optionGrants: z.array(optionGrantSchema),
