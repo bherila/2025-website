@@ -80,6 +80,7 @@ use App\Http\Controllers\PHR\PhrExportController;
 use App\Http\Controllers\PHR\PhrGenAiImportController;
 use App\Http\Controllers\PHR\ProcedureController as PHRProcedureController;
 use App\Http\Controllers\PHR\VitalController as PHRVitalController;
+use App\Http\Controllers\Toon\ToonConverterController;
 use App\Http\Controllers\UserApiController;
 use App\Http\Controllers\UserManagementApiController;
 use App\Http\Controllers\UtilityBillTracker\UtilityAccountApiController;
@@ -110,6 +111,9 @@ Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->delete('/financi
 
 Route::middleware(['web', 'auth'])->post('/tools/markdown/save', [MarkdownRendererController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownRendererController::class, 'update']);
+
+Route::middleware(['web', 'auth'])->post('/tools/toon-json/save', [ToonConverterController::class, 'store']);
+Route::middleware(['web', 'auth'])->patch('/tools/toon-json/s/{code}', [ToonConverterController::class, 'update']);
 
 Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->get('/finance/accounts/suggest', [AccountSuggestController::class, 'index']);

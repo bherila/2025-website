@@ -48,6 +48,7 @@
         $__isAuthenticated ? ['type' => 'link', 'label' => 'Class Action Tracker', 'href' => '/tools/class-action-tracker'] : null,
         ['type' => 'link', 'label' => 'Address Label PDF Generator', 'href' => '/tools/address-labels'],
         ['type' => 'link', 'label' => 'Markdown Renderer', 'href' => '/tools/markdown'],
+        ['type' => 'link', 'label' => 'TOON ↔ JSON Converter', 'href' => '/tools/toon-json'],
       ]));
 
       // Build account submenu (authenticated only; admin sub-items filtered server-side)
