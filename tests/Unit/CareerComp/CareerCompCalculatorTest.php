@@ -451,6 +451,70 @@ class CareerCompCalculatorTest extends TestCase
         );
     }
 
+    public function test_private_early_exercise_option_tax_uses_common_fmv_instead_of_preferred_share_price(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 1,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-early-exercise-option-job',
+                'name' => 'Private early exercise option job',
+                'company' => [
+                    'type' => 'private',
+                    'currentSharePrice' => 29.134,
+                    'fourNineA' => 2.8,
+                    'fullyDilutedShares' => 6178405,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [[
+                            'year' => 2026,
+                            'stage' => 'A',
+                            'preferredPostMoneyValuation' => 180001651,
+                            'capitalDilutionPct' => 0,
+                            'employeePoolDilutionPct' => 0,
+                            'commonFmv' => 2.8,
+                            'liquidityEvent' => false,
+                        ]],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 280000.0, 'cashBonus' => 0.0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'iso-hire',
+                    'kind' => 'hire',
+                    'type' => 'iso',
+                    'grantDate' => '2026-06-07',
+                    'shareCount' => 61784.05,
+                    'strike' => 2.8,
+                    'cliffMonths' => 12,
+                    'vestingYears' => 4,
+                    'vestingFrequency' => 'monthly',
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+        $annual = $job['annual'][0];
+        $afterTaxAnnual = $job['afterTax']['annual'][0];
+
+        $this->assertSame(172995.34, $annual['exerciseOutlay']);
+        $this->assertSame(107004.66, $annual['freeCashFlow']);
+        $this->assertSame(280000.0, $afterTaxAnnual['taxableCompIncome']);
+        $this->assertSame(0.0, $afterTaxAnnual['nsoOrdinaryIncome']);
+        $this->assertSame(0.0, $afterTaxAnnual['isoAmtPreference']);
+        $this->assertSame(0.0, $afterTaxAnnual['estimatedAmt']);
+        $this->assertGreaterThan(0.0, $afterTaxAnnual['freeCashFlow']);
+        $this->assertContains(
+            'Private early exercise option job: ISO first-exercisable value exceeds $100k in 2026; spillover treated as NSO.',
+            $projection['warnings'],
+        );
+    }
+
     public function test_private_paper_equity_uses_vested_ownership_and_compounded_dilution(): void
     {
         $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([

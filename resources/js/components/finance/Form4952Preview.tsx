@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
-import Form4952SourceDetailModal from '@/components/finance/Form4952SourceDetailModal'
+import { focusFieldIdFor } from '@/components/finance/Form4952DetailColumn'
 import { ShortDividendSummaryCard } from '@/components/finance/ShortDividendDetailModal'
 import type { ShortDividendSummary } from '@/lib/finance/shortDividendAnalysis'
-import { k1CodeSourceFieldId, k1FieldSourceFieldId } from '@/lib/finance/taxSourceFieldIds'
-import type { Form4952CalculationRow, Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
+import type { Form4952Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import { Callout, FactsLoadingPlaceholder, fmtAmt, FormBlock, FormLine, FormSubLine, FormTotalLine, InfoTooltip, type NavGlyph } from './tax-preview-primitives'
 
@@ -16,20 +15,12 @@ interface Form4952PreviewProps {
   onLoadShortDividendSummary?: () => void
   /** Open the source document review modal (K-1 or 1099) at an optional focus field. */
   onReviewDoc?: (docId: number, focusFieldId?: string) => void
+  /** Drill to a Form 4952 line-detail Miller column, keyed by line (e.g. 'line-4a'). */
+  onOpenDetail?: (instanceKey: string) => void
   /** Drill to the Schedule B / A / E Miller columns. */
   onOpenScheduleB?: () => void
   onOpenScheduleA?: () => void
   onOpenScheduleE?: () => void
-}
-
-function focusFieldIdFor(source: TaxFactSource): string | undefined {
-  if (source.box && source.code) {
-    return k1CodeSourceFieldId(source.box, source.code)
-  }
-  if (source.box) {
-    return k1FieldSourceFieldId(source.box)
-  }
-  return undefined
 }
 
 /** Short label naming the destination a source's "go to" affordance leads to. */
@@ -41,14 +32,6 @@ function goToSourceLabel(source: TaxFactSource): string {
     return '1099'
   }
   return 'Source'
-}
-
-interface DetailModalState {
-  title: string
-  description?: string
-  sources: TaxFactSource[]
-  calculationRows: Form4952CalculationRow[]
-  amountMode: 'signed' | 'absolute' | 'expense'
 }
 
 function SourceRows({
@@ -102,12 +85,11 @@ export default function Form4952Preview({
   shortDividendSummary,
   onLoadShortDividendSummary,
   onReviewDoc,
+  onOpenDetail,
   onOpenScheduleB,
   onOpenScheduleA,
   onOpenScheduleE,
 }: Form4952PreviewProps) {
-  const [detailModal, setDetailModal] = useState<DetailModalState | null>(null)
-
   useEffect(() => {
     onLoadShortDividendSummary?.()
   }, [onLoadShortDividendSummary])
@@ -163,14 +145,6 @@ export default function Form4952Preview({
     }
     return undefined
   }
-
-  const openSourcesModal = (
-    title: string,
-    description: string,
-    sources: TaxFactSource[],
-    amountMode: DetailModalState['amountMode'] = 'signed',
-    calculationRows: Form4952CalculationRow[] = [],
-  ) => setDetailModal({ title, description, sources, amountMode, calculationRows })
 
   return (
     <div className="space-y-5">
@@ -253,13 +227,9 @@ export default function Form4952Preview({
           value={facts.grossInvestmentIncomeFromK1}
           {...(facts.grossInvestmentIncomeFromK1Sources.length > 0
             ? {
-              onDetails: () => openSourcesModal(
-                'Gross investment income from K-1s (line 4a)',
-                'Each partnership’s share of investment income that feeds Form 4952 line 4a. Net capital gain is excluded.',
-                facts.grossInvestmentIncomeFromK1Sources,
-              ),
+              onDetails: () => onOpenDetail?.('line-4a-k1'),
               detailsTooltip: 'List each K-1 and go to its source',
-              detailsGlyph: 'window' as NavGlyph,
+              detailsGlyph: 'column' as NavGlyph,
             }
             : {})}
         />
@@ -267,14 +237,9 @@ export default function Form4952Preview({
           boxRef="4a"
           label={<>Gross investment income <InfoTooltip>Form 4952 line 4a: gross income from property held for investment — interest, ordinary dividends, royalties, and K-1 investment income. <strong>Excludes</strong> net capital gain and qualified dividends unless you elect to include them on line 4g (which forfeits the preferential rate). IRC §163(d)(4)(B); 2025 Form 4952 line 4a instructions.</InfoTooltip></>}
           value={facts.grossInvestmentIncomeTotal}
-          onDetails={() => openSourcesModal(
-            'Line 4a gross investment income',
-            'How Form 4952 line 4a is assembled from Schedule B and K-1 investment income.',
-            facts.grossInvestmentIncomeFromK1Sources,
-            'signed',
-            facts.line4aCalculationRows,
-          )}
+          onDetails={() => onOpenDetail?.('line-4a')}
           detailsTooltip="Show line 4a sources and calculation"
+          detailsGlyph="column"
         />
         {totalQualDiv > 0 && (
           <FormLine
@@ -283,13 +248,9 @@ export default function Form4952Preview({
             value={-totalQualDiv}
             {...(facts.qualifiedDividendSources.length > 0
               ? {
-                onDetails: () => openSourcesModal(
-                  'Qualified dividends included on line 4a (line 4b)',
-                  'These qualified dividends are subtracted on line 4b. Go to each source to verify.',
-                  facts.qualifiedDividendSources,
-                ),
+                onDetails: () => onOpenDetail?.('line-4b'),
                 detailsTooltip: 'List each qualified-dividend source',
-                detailsGlyph: 'window' as NavGlyph,
+                detailsGlyph: 'column' as NavGlyph,
               }
               : {})}
           />
@@ -298,40 +259,25 @@ export default function Form4952Preview({
           boxRef="4c"
           label="Net investment income after qualified dividends"
           value={facts.line4cNetInvestmentIncomeAfterQualifiedDividends}
-          onDetails={() => openSourcesModal(
-            'Line 4c income after qualified dividends',
-            'Line 4c subtracts qualified dividends included on line 4a unless they are elected back into investment income on line 4g.',
-            facts.qualifiedDividendSources,
-            'signed',
-            facts.line4cCalculationRows,
-          )}
+          onDetails={() => onOpenDetail?.('line-4c')}
           detailsTooltip="Show line 4c calculation"
+          detailsGlyph="column"
         />
         <FormLine
           boxRef="4d"
           label={<>Net gain from disposition of investment property <InfoTooltip>Form 4952 line 4d: net gain (floored at 0) from selling property held for investment. For a non-materially-participating partner in a securities-trading partnership, the fund’s trading gains <strong>are</strong> property held for investment (IRC §163(d)(5)(A)(ii)), so they feed line 4d.</InfoTooltip></>}
           value={facts.line4dNetGainFromDisposition}
-          onDetails={() => openSourcesModal(
-            'Line 4d net gain from disposition',
-            'Line 4d starts with the Schedule D net gain or loss, removes non-investment §1231 gain, then floors the result at $0.',
-            [],
-            'signed',
-            facts.line4dCalculationRows,
-          )}
+          onDetails={() => onOpenDetail?.('line-4d')}
           detailsTooltip="Show line 4d calculation"
+          detailsGlyph="column"
         />
         <FormLine
           boxRef="4e"
           label={<>Net capital gain from disposition <InfoTooltip>Form 4952 line 4e: the smaller of line 4d or your net capital gain (the long-term, preferential-rate slice). It is excluded from investment income unless elected on line 4g. IRC §163(d)(4)(B)(iii).</InfoTooltip></>}
           value={facts.line4eNetCapitalGainFromDisposition}
-          onDetails={() => openSourcesModal(
-            'Line 4e net capital gain from disposition',
-            'Line 4e is the preferential long-term slice, capped by line 4d. It does not raise investment income unless elected on line 4g.',
-            [],
-            'signed',
-            facts.line4eCalculationRows,
-          )}
+          onDetails={() => onOpenDetail?.('line-4e')}
           detailsTooltip="Show line 4e calculation"
+          detailsGlyph="column"
         />
         <FormLine
           boxRef="4f"
@@ -434,14 +380,9 @@ export default function Form4952Preview({
                   {...(drill ? { onClick: drill } : {})}
                   {...(destination.sources.length > 0
                     ? {
-                      onDetails: () => openSourcesModal(
-                        `${destination.label} — sources`,
-                        'The individual investment-interest sources allocated to this destination.',
-                        destination.sources,
-                        'expense',
-                      ),
+                      onDetails: () => onOpenDetail?.(`dest-${destination.destination}`),
                       detailsTooltip: 'List the sources allocated here',
-                      detailsGlyph: 'window' as NavGlyph,
+                      detailsGlyph: 'column' as NavGlyph,
                     }
                     : {})}
                   {...(drill ? { destinationTooltip: `Open ${destination.formLine}` } : {})}
@@ -495,18 +436,6 @@ export default function Form4952Preview({
         </FormBlock>
       )}
 
-      {detailModal && (
-        <Form4952SourceDetailModal
-          open
-          title={detailModal.title}
-          {...(detailModal.description ? { description: detailModal.description } : {})}
-          sources={detailModal.sources}
-          calculationRows={detailModal.calculationRows}
-          amountMode={detailModal.amountMode}
-          onGoToSource={handleGoToSource}
-          onClose={() => setDetailModal(null)}
-        />
-      )}
     </div>
   )
 }

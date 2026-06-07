@@ -492,9 +492,9 @@ function SectionRows({ section, showAll }: { section: Form8949Section; showAll: 
           <span className="truncate">{row.description}</span>
           <span className="text-right font-mono">{row.dateAcquired}</span>
           <span className="text-right font-mono">{row.dateSold}</span>
-          <span className="text-right font-mono">{fmtAmt(row.proceeds)}</span>
-          <span className="text-right font-mono">{fmtAmt(row.basis)}</span>
-          <span className={`text-right font-mono ${row.gain < 0 ? 'text-destructive' : ''}`}>{fmtAmt(row.gain)}</span>
+          <span className="text-right font-currency">{fmtAmt(row.proceeds)}</span>
+          <span className="text-right font-currency">{fmtAmt(row.basis)}</span>
+          <span className={`text-right font-currency ${row.gain < 0 ? 'text-destructive' : ''}`}>{fmtAmt(row.gain)}</span>
           <span className="w-6 text-right font-mono text-amber-600 dark:text-amber-400">{row.code}</span>
         </div>
       ))}
@@ -507,10 +507,10 @@ function SectionRows({ section, showAll }: { section: Form8949Section; showAll: 
         <span>Totals ({section.box})</span>
         <span></span>
         <span></span>
-        <span className="text-right font-mono">{fmtAmt(section.totals.proceeds)}</span>
-        <span className="text-right font-mono">{fmtAmt(section.totals.basis)}</span>
-        <span className={`text-right font-mono ${section.totals.gain < 0 ? 'text-destructive' : ''}`}>{fmtAmt(section.totals.gain)}</span>
-        <span className="w-6 text-right font-mono">
+        <span className="text-right font-currency">{fmtAmt(section.totals.proceeds)}</span>
+        <span className="text-right font-currency">{fmtAmt(section.totals.basis)}</span>
+        <span className={`text-right font-currency ${section.totals.gain < 0 ? 'text-destructive' : ''}`}>{fmtAmt(section.totals.gain)}</span>
+        <span className="w-6 text-right font-currency">
           {Math.abs(section.totals.adjustment) > 0.005 ? fmtAmt(section.totals.adjustment) : ''}
         </span>
       </div>

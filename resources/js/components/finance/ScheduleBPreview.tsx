@@ -17,6 +17,7 @@ function detailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => void)
 
   return {
     onDetails: () => onOpenDoc(source.taxDocumentId!),
+    detailsTooltip: 'Open source detail',
   }
 }
 

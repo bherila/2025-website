@@ -296,11 +296,11 @@ describe('Form4952Preview', () => {
     expect(screen.getByText(/Electing \$150 would unlock additional deduction/i)).toBeInTheDocument()
   })
 
-  it('opens a K-1 line 4a detail modal and goes to the source K-1 with a focus field', () => {
-    const onReviewDoc = jest.fn()
+  it('drills to the K-1 line 4a detail column from the source button', () => {
+    const onOpenDetail = jest.fn()
     render(
       <Form4952Preview
-        onReviewDoc={onReviewDoc}
+        onOpenDetail={onOpenDetail}
         form4952Facts={makeFacts({
           grossInvestmentIncomeFromK1: 9000,
           grossInvestmentIncomeTotal: 9000,
@@ -318,9 +318,7 @@ describe('Form4952Preview', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /list each k-1/i }))
-    expect(screen.getByText('Partnership A')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /go to k-1/i }))
-    expect(onReviewDoc).toHaveBeenCalledWith(7, 'k1-code-20-a')
+    expect(onOpenDetail).toHaveBeenCalledWith('line-4a-k1')
   })
 
   it('drills to Schedule B when the line 4a Schedule B destination button is clicked', () => {
@@ -339,41 +337,27 @@ describe('Form4952Preview', () => {
     expect(onOpenScheduleB).toHaveBeenCalled()
   })
 
-  it('opens line 4a and 4d calculation dialogs from icon-only source buttons', () => {
+  it('drills to line 4a and 4d calculation detail columns from icon-only source buttons', () => {
+    const onOpenDetail = jest.fn()
     render(
       <Form4952Preview
+        onOpenDetail={onOpenDetail}
         form4952Facts={makeFacts({
           grossInvestmentIncomeFromScheduleB: 8000,
           grossInvestmentIncomeFromK1: 2000,
           grossInvestmentIncomeTotal: 10000,
           line4cNetInvestmentIncomeAfterQualifiedDividends: 7000,
           totalQualifiedDividends: 3000,
-          line4aCalculationRows: [
-            { label: 'Schedule B investment income', amount: 8000, role: 'input', note: null },
-            { label: 'K-1 investment income', amount: 2000, role: 'input', note: null },
-            { label: 'Line 4a gross investment income', amount: 10000, role: 'result', note: null },
-          ],
-          line4cCalculationRows: [
-            { label: 'Line 4a gross investment income', amount: 10000, role: 'input', note: null },
-            { label: 'Line 4b qualified dividends included on line 4a', amount: -3000, role: 'subtract', note: null },
-            { label: 'Line 4c income after qualified dividends', amount: 7000, role: 'result', note: null },
-          ],
-          line4dCalculationRows: [
-            { label: 'Schedule D line 16 combined gain or loss', amount: -400, role: 'input', note: null },
-            { label: 'Line 4d net gain after zero floor', amount: 0, role: 'result', note: 'Form 4952 line 4d cannot be less than $0.' },
-          ],
+          line4dNetGainFromDisposition: 400,
         })}
       />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: /show line 4a sources and calculation/i }))
-    expect(screen.getByText('Schedule B investment income')).toBeInTheDocument()
-    expect(screen.getAllByText('Line 4a gross investment income').length).toBeGreaterThanOrEqual(1)
+    expect(onOpenDetail).toHaveBeenCalledWith('line-4a')
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }))
     fireEvent.click(screen.getByRole('button', { name: /show line 4d calculation/i }))
-    expect(screen.getByText('Schedule D line 16 combined gain or loss')).toBeInTheDocument()
-    expect(screen.getByText(/cannot be less than \$0/i)).toBeInTheDocument()
+    expect(onOpenDetail).toHaveBeenCalledWith('line-4d')
   })
 
   it('renders the 18–20 allocation with pro-rata math and drills on click', () => {
@@ -420,8 +404,10 @@ describe('Form4952Preview', () => {
   })
 
   it('drills into a carry destination’s own sources', () => {
+    const onOpenDetail = jest.fn()
     render(
       <Form4952Preview
+        onOpenDetail={onOpenDetail}
         form4952Facts={makeFacts({
           totalInvestmentInterestExpense: 200,
           deductibleInvestmentInterestExpense: 200,
@@ -444,7 +430,7 @@ describe('Form4952Preview', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /list the sources allocated here/i }))
-    expect(screen.getByText('Trader Fund — Box 13H')).toBeInTheDocument()
+    expect(onOpenDetail).toHaveBeenCalledWith('dest-sch-e')
   })
 
   it('renders tracing split inputs and method note when tracing allocation is present', () => {

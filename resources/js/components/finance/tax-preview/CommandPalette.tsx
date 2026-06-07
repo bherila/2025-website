@@ -110,6 +110,12 @@ function buildRows(registry: FormRegistry, state: ReturnType<typeof useTaxPrevie
   for (const entry of Object.values(registry)) {
     const meta = getTaxFormMeta(entry)
 
+    // Drill-only entries (e.g. per-line detail columns) need an instance key to
+    // show anything, so they are not directly launchable from the palette.
+    if (meta.drillOnly) {
+      continue
+    }
+
     const baseLabel = entry.label
     const formNumber = meta.formNumber ? [meta.formNumber] : []
     const baseKeywords = [...meta.keywords, ...formNumber, entry.shortLabel, entry.id]

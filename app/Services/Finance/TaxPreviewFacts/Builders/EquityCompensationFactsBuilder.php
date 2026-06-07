@@ -11,17 +11,21 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Planning\CareerComp\EquityValuationService;
 use App\Services\Planning\CareerComp\JobSpec;
+use App\Services\Planning\CareerComp\PrivateValuationScenarioService;
 use App\Support\Finance\FederalIncomeTax;
 
 class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
 {
     private readonly EquityValuationService $equityValuationService;
 
+    private readonly PrivateValuationScenarioService $privateValuationScenarioService;
+
     private readonly Form6251FactsBuilder $form6251FactsBuilder;
 
     public function __construct(
         ?K1CodeCharacterResolver $k1CodeCharacterResolver = null,
         ?EquityValuationService $equityValuationService = null,
+        ?PrivateValuationScenarioService $privateValuationScenarioService = null,
         ?Form6251FactsBuilder $form6251FactsBuilder = null,
     ) {
         $resolver = $k1CodeCharacterResolver ?? new K1CodeCharacterResolver;
@@ -29,6 +33,7 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
         parent::__construct($resolver);
 
         $this->equityValuationService = $equityValuationService ?? new EquityValuationService;
+        $this->privateValuationScenarioService = $privateValuationScenarioService ?? new PrivateValuationScenarioService;
         $this->form6251FactsBuilder = $form6251FactsBuilder ?? new Form6251FactsBuilder($resolver);
     }
 
@@ -144,7 +149,7 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $grant = $this->optionGrant($job, $row['grantId']);
-            $bargainElement = $this->bargainElement($job, $row, $year - $startYear);
+            $bargainElement = $this->bargainElement($job, $row, $year, $year - $startYear);
 
             if ($row['type'] === 'iso') {
                 $isoAmtPreference = MoneyMath::add($isoAmtPreference, $bargainElement);
@@ -206,14 +211,23 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}  $row
      */
-    private function bargainElement(JobSpec $job, array $row, int $yearOffset): float
+    private function bargainElement(JobSpec $job, array $row, int $year, int $yearOffset): float
     {
         $strike = $this->strikeForGrant($job, $row['grantId']);
-        $sharePrice = $this->equityValuationService->sharePrice($job, max(0, $yearOffset), 'medium');
+        $sharePrice = $this->optionExerciseFairMarketValue($job, $year, $yearOffset);
         $marketValue = MoneyMath::multiply($sharePrice, $row['exercisableShares']);
         $exerciseOutlay = MoneyMath::multiply($strike, $row['exercisableShares']);
 
         return max(0.0, MoneyMath::subtract($marketValue, $exerciseOutlay));
+    }
+
+    private function optionExerciseFairMarketValue(JobSpec $job, int $year, int $yearOffset): float
+    {
+        if ($job->isPrivate()) {
+            return $this->privateValuationScenarioService->commonFmvForYear($job, $year, 'medium');
+        }
+
+        return $this->equityValuationService->sharePrice($job, max(0, $yearOffset), 'medium');
     }
 
     private function strikeForGrant(JobSpec $job, string $grantId): float
