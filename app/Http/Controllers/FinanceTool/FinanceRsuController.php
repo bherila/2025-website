@@ -7,6 +7,7 @@ use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FinanceTool\ConfirmRsuGenAiImportRequest;
 use App\Models\FinanceTool\FinEquityAwards;
+use App\Services\Finance\StockQuotes\StockQuoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,28 +17,30 @@ class FinanceRsuController extends Controller
 {
     private const GENAI_JOB_TYPE = 'equity_award';
 
+    public function __construct(private readonly StockQuoteService $stockQuoteService) {}
+
     public function getRsuData(Request $request): JsonResponse
     {
         $user = Auth::user();
-        $data = DB::table('fin_equity_awards as a')
-            ->leftJoin('stock_quotes_daily as s', function ($join) {
-                $join->on('a.symbol', '=', 's.c_symb')
-                    ->whereRaw('s.c_date = (select max(c_date) from stock_quotes_daily where c_symb = a.symbol and c_date <= a.vest_date)');
-            })
+        $awards = DB::table('fin_equity_awards as a')
             ->where('a.uid', $user->id)
-            ->select('a.*', 's.c_close as fetched_vest_price')
-            ->get()
-            ->map(function ($item) {
-                if ($item->vest_price === null && $item->fetched_vest_price !== null) {
-                    $item->vest_price = $item->fetched_vest_price;
-                }
-                unset($item->fetched_vest_price);
-                if ($item->vest_price === null) {
-                    unset($item->vest_price);
-                }
+            ->select('a.*')
+            ->get();
 
-                return $item;
-            });
+        $this->stockQuoteService->ensureCoverageForAwards($awards);
+        $closes = $this->stockQuoteService->closesForAwards($awards);
+
+        $data = $awards->map(function ($item) use ($closes) {
+            $fetchedVestPrice = $closes[$item->id] ?? null;
+            if ($item->vest_price === null && $fetchedVestPrice !== null) {
+                $item->vest_price = $fetchedVestPrice;
+            }
+            if ($item->vest_price === null) {
+                unset($item->vest_price);
+            }
+
+            return $item;
+        });
 
         return response()->json($data);
     }
