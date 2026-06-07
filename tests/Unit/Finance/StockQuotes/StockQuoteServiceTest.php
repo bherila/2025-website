@@ -198,6 +198,39 @@ class StockQuoteServiceTest extends TestCase
         }
     }
 
+    public function test_ensure_coverage_for_awards_does_not_let_future_target_mask_missing_past_quote(): void
+    {
+        Carbon::setTestNow('2026-06-07 12:00:00');
+        try {
+            DB::table('stock_quotes_daily')->insert([
+                'c_symb' => 'AAPL', 'c_date' => '2026-06-05',
+                'c_open' => 1, 'c_high' => 1, 'c_low' => 1, 'c_close' => 1, 'c_vol' => 1,
+            ]);
+            $pastAward = FinEquityAwards::query()->create([
+                'award_id' => 'A1', 'grant_date' => '2024-01-01', 'vest_date' => '2024-01-05',
+                'share_count' => 10, 'symbol' => 'AAPL', 'uid' => '1',
+            ]);
+            $futureAward = FinEquityAwards::query()->create([
+                'award_id' => 'A2', 'grant_date' => '2026-01-01', 'vest_date' => '2026-07-01',
+                'share_count' => 10, 'symbol' => 'AAPL', 'uid' => '1',
+            ]);
+            $this->fakeYahooHistory([
+                '2024-01-05' => [100.0, 110.0, 99.0, 105.0, 1000],
+            ]);
+
+            (new StockQuoteService)->ensureCoverageForAwards(new Collection([$futureAward, $pastAward]));
+
+            Http::assertSentCount(1);
+            $this->assertDatabaseHas('stock_quotes_daily', [
+                'c_symb' => 'AAPL',
+                'c_date' => '2024-01-05',
+                'c_close' => 105.0,
+            ]);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_ensure_coverage_does_not_fetch_for_future_dates(): void
     {
         Http::fake();

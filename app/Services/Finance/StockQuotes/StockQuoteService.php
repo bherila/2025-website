@@ -111,19 +111,15 @@ class StockQuoteService
 
             $target = min($this->toDateString($vestDate), $today);
             $allowRecentPriorCoverage = $target === $today;
-            if (! isset($targets[$symbol]) || $target > $targets[$symbol]['date']) {
-                $targets[$symbol] = [
-                    'date' => $target,
-                    'allowRecentPriorCoverage' => $allowRecentPriorCoverage,
-                ];
-            } elseif ($target === $targets[$symbol]['date']) {
-                $targets[$symbol]['allowRecentPriorCoverage'] = $targets[$symbol]['allowRecentPriorCoverage'] || $allowRecentPriorCoverage;
-            }
+            $targets[$symbol][$target] = ($targets[$symbol][$target] ?? false) || $allowRecentPriorCoverage;
         }
 
-        foreach ($targets as $symbol => $target) {
-            // This can perform an inline provider call; we cap it to one full-history fetch per symbol per request.
-            $this->ensureCoverage($symbol, $target['date'], $target['allowRecentPriorCoverage']);
+        foreach ($targets as $symbol => $targetsByDate) {
+            ksort($targetsByDate);
+            foreach ($targetsByDate as $target => $allowRecentPriorCoverage) {
+                // This can perform an inline provider call; we cap it to one full-history fetch per symbol per request.
+                $this->ensureCoverage($symbol, $target, $allowRecentPriorCoverage);
+            }
         }
     }
 
