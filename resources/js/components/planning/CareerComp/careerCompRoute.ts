@@ -13,16 +13,21 @@ export const CAREER_COMP_RESULT_VIEW_IDS = [
   'annual-fcf',
   'ltv-table',
   'vesting-breakdown',
-  'after-tax-liquidity',
   'after-tax-fcf',
 ] as const
 
 export type CareerCompResultViewId = (typeof CAREER_COMP_RESULT_VIEW_IDS)[number]
 
+export const CAREER_COMP_LEGACY_RESULT_VIEW_IDS = [
+  'after-tax-liquidity',
+] as const
+
+export type CareerCompLegacyResultViewId = (typeof CAREER_COMP_LEGACY_RESULT_VIEW_IDS)[number]
+
 export const CAREER_COMP_DETAIL_COLUMN_IDS = ['grant-rsu', 'grant-opt', 'valuation-timeline'] as const
 
 export type CareerCompDetailColumnId = (typeof CAREER_COMP_DETAIL_COLUMN_IDS)[number]
-export type CareerCompRouteColumnId = CareerCompFormSectionId | CareerCompResultViewId | CareerCompDetailColumnId
+export type CareerCompRouteColumnId = CareerCompFormSectionId | CareerCompResultViewId | CareerCompLegacyResultViewId | CareerCompDetailColumnId
 export type CareerCompRoute = MillerRoute<CareerCompRouteColumnId>
 export type CareerCompRouteColumn = MillerColumnSpec<CareerCompRouteColumnId>
 
@@ -31,6 +36,7 @@ export const CAREER_COMP_ROUTE_IDS: ReadonlySet<string> = new Set<CareerCompRout
   'current-job',
   'offers',
   ...CAREER_COMP_RESULT_VIEW_IDS,
+  ...CAREER_COMP_LEGACY_RESULT_VIEW_IDS,
   ...CAREER_COMP_DETAIL_COLUMN_IDS,
 ])
 

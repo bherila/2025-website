@@ -8,8 +8,8 @@ namespace App\Services\Finance;
  *
  * All money arithmetic flows through {@see MoneyMath}; rows hold plain JSON-serialisable numbers.
  *
- * @phpstan-type WorkbookRow array{line?: string, description: string, amount?: float, note?: string, isHeader?: bool, isTotal?: bool}
- * @phpstan-type WorkbookSheet array{name: string, rows: array<int, WorkbookRow>}
+ * @phpstan-type WorkbookRow array{line?: string, description?: string, amount?: float, note?: string, isHeader?: bool, isTotal?: bool, values?: list<float|null>}
+ * @phpstan-type WorkbookSheet array{name: string, rows: array<int, WorkbookRow>, columns?: list<string>}
  */
 class CareerCompWorkbookBuilder
 {
@@ -18,6 +18,10 @@ class CareerCompWorkbookBuilder
     private const string PER_JOB = 'Per-Job';
 
     private const string CASH_FLOW = 'Cash-Flow';
+
+    private const string LIQUIDITY = 'Liquidity';
+
+    private const string AFTER_TAX_LIQUIDITY = 'After-Tax Liquidity';
 
     private const string ASSUMPTIONS = 'Assumptions';
 
@@ -30,6 +34,16 @@ class CareerCompWorkbookBuilder
     private const string EQUITY_TAX_ANNUAL = 'Equity Tax Annual';
 
     private const string EQUITY_TAX_SOURCES = 'Equity Tax Sources';
+
+    /** @var list<string> */
+    private const array LIQUIDITY_BANDS = ['low', 'medium', 'high'];
+
+    /** @var array<string, string> */
+    private const array LIQUIDITY_BAND_LABELS = [
+        'low' => 'Low',
+        'medium' => 'Medium',
+        'high' => 'High',
+    ];
 
     /**
      * @param  array<string, mixed>  $projection
@@ -45,6 +59,8 @@ class CareerCompWorkbookBuilder
                 $this->summarySheet($jobs),
                 $this->perJobSheet($jobs),
                 $this->cashFlowSheet($jobs),
+                $this->liquiditySheet($projection, $jobs),
+                $this->afterTaxLiquiditySheet($projection, $jobs),
                 $this->assumptionsSheet($projection, $jobs),
                 $this->vestingSheet($jobs),
                 $this->deltasSheet($projection),
@@ -133,6 +149,88 @@ class CareerCompWorkbookBuilder
         }
 
         return ['name' => self::CASH_FLOW, 'rows' => $rows];
+    }
+
+    /**
+     * @param  array<string, mixed>  $projection
+     * @param  list<array<string, mixed>>  $jobs
+     * @return WorkbookSheet
+     */
+    private function liquiditySheet(array $projection, array $jobs): array
+    {
+        return [
+            'name' => self::LIQUIDITY,
+            'columns' => $this->liquidityColumns($jobs),
+            'rows' => $this->liquidityRows($projection, $jobs, false),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $projection
+     * @param  list<array<string, mixed>>  $jobs
+     * @return WorkbookSheet
+     */
+    private function afterTaxLiquiditySheet(array $projection, array $jobs): array
+    {
+        if (! $this->hasAfterTaxLiquidity($jobs)) {
+            return [
+                'name' => self::AFTER_TAX_LIQUIDITY,
+                'rows' => [[
+                    'description' => 'After-tax liquidity unavailable',
+                    'note' => 'Recalculate the scenario to populate after-tax projection fields.',
+                    'isHeader' => true,
+                ]],
+            ];
+        }
+
+        return [
+            'name' => self::AFTER_TAX_LIQUIDITY,
+            'columns' => $this->liquidityColumns($jobs),
+            'rows' => $this->liquidityRows($projection, $jobs, true),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $jobs
+     * @return list<string>
+     */
+    private function liquidityColumns(array $jobs): array
+    {
+        $columns = ['Year'];
+
+        foreach ($jobs as $job) {
+            foreach (self::LIQUIDITY_BANDS as $band) {
+                $columns[] = $this->jobName($job).' '.self::LIQUIDITY_BAND_LABELS[$band];
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * @param  array<string, mixed>  $projection
+     * @param  list<array<string, mixed>>  $jobs
+     * @return list<WorkbookRow>
+     */
+    private function liquidityRows(array $projection, array $jobs, bool $afterTax): array
+    {
+        $rows = [];
+
+        foreach ($this->projectionYears($projection) as $year) {
+            $values = [];
+
+            foreach ($jobs as $job) {
+                foreach (self::LIQUIDITY_BANDS as $band) {
+                    $values[] = $afterTax
+                        ? $this->afterTaxLiquidityValue($job, $band, $year)
+                        : $this->liquidityValue($job, $band, $year);
+                }
+            }
+
+            $rows[] = ['line' => (string) $year, 'values' => $values];
+        }
+
+        return $rows;
     }
 
     /**
@@ -337,6 +435,97 @@ class CareerCompWorkbookBuilder
         }
 
         return ['name' => self::EQUITY_TAX_SOURCES, 'rows' => $rows];
+    }
+
+    /**
+     * @param  array<string, mixed>  $projection
+     * @return list<int>
+     */
+    private function projectionYears(array $projection): array
+    {
+        $startYear = (int) ($projection['startYear'] ?? 0);
+        $horizonYears = (int) ($projection['horizonYears'] ?? 0);
+
+        if ($startYear <= 0 || $horizonYears <= 0) {
+            return [];
+        }
+
+        return range($startYear, $startYear + $horizonYears - 1);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $jobs
+     */
+    private function hasAfterTaxLiquidity(array $jobs): bool
+    {
+        if ($jobs === []) {
+            return false;
+        }
+
+        foreach ($jobs as $job) {
+            if ($this->afterTaxAnnualRows($job) === []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $job
+     */
+    private function liquidityValue(array $job, string $band, int $year): float
+    {
+        foreach ($this->liquidityBandRows($job, $band) as $point) {
+            if ((int) ($point['year'] ?? 0) === $year) {
+                return $this->money($point, 'cumulativeValue');
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $job
+     */
+    private function afterTaxLiquidityValue(array $job, string $band, int $year): float
+    {
+        return MoneyMath::add(
+            $this->afterTaxCashFlowBase($job, $year),
+            $this->liquidityValue($job, $band, $year),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $job
+     */
+    private function afterTaxCashFlowBase(array $job, int $year): float
+    {
+        $annualCashFlows = [];
+
+        foreach ($this->afterTaxAnnualRows($job) as $annual) {
+            if ((int) ($annual['year'] ?? 0) > $year) {
+                continue;
+            }
+
+            $annualCashFlows[] = MoneyMath::subtract(
+                $this->money($annual, 'freeCashFlow'),
+                $this->money($annual, 'equitySaleProceeds'),
+            );
+        }
+
+        return MoneyMath::sum($annualCashFlows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $job
+     * @return list<array<string, mixed>>
+     */
+    private function liquidityBandRows(array $job, string $band): array
+    {
+        $liquidity = is_array($job['liquidity'] ?? null) ? $job['liquidity'] : [];
+
+        return $this->rowsOf($liquidity, $band);
     }
 
     /**

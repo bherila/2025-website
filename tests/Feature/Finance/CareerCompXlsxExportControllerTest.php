@@ -3,6 +3,7 @@
 namespace Tests\Feature\Finance;
 
 use App\Services\Planning\CareerComp\CareerCompInputs;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -31,10 +32,23 @@ class CareerCompXlsxExportControllerTest extends TestCase
         }
 
         $this->assertSame(
-            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
+            ['Summary', 'Per-Job', 'Cash-Flow', 'Liquidity', 'After-Tax Liquidity', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
             $sheetNames,
         );
         $this->assertSame('Line', $spreadsheet->getSheetByName('Summary')?->getCell('A1')->getValue());
+
+        $liquiditySheet = $spreadsheet->getSheetByName('Liquidity');
+        $afterTaxLiquiditySheet = $spreadsheet->getSheetByName('After-Tax Liquidity');
+
+        $this->assertSame('Year', $liquiditySheet?->getCell('A1')->getValue());
+        $this->assertSame('Current role Low', $liquiditySheet?->getCell('B1')->getValue());
+        $this->assertSame(DataType::TYPE_NUMERIC, $liquiditySheet?->getCell('B2')->getDataType());
+        $this->assertIsNumeric($liquiditySheet?->getCell('B2')->getValue());
+
+        $this->assertSame('Year', $afterTaxLiquiditySheet?->getCell('A1')->getValue());
+        $this->assertSame('Current role Low', $afterTaxLiquiditySheet?->getCell('B1')->getValue());
+        $this->assertSame(DataType::TYPE_NUMERIC, $afterTaxLiquiditySheet?->getCell('B2')->getDataType());
+        $this->assertIsNumeric($afterTaxLiquiditySheet?->getCell('B2')->getValue());
     }
 
     public function test_oversized_planning_horizon_is_rejected(): void

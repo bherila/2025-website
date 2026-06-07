@@ -15,7 +15,7 @@ import {
 import { CareerCompPage } from '../CareerCompPage'
 import { serializeCareerCompUrlState } from '../careerCompUrlState'
 import { DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
-import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs } from '../types'
+import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs, CareerCompProjection } from '../types'
 
 jest.mock('../careerCompApi', () => ({
   computeCareerComp: jest.fn(),
@@ -70,6 +70,42 @@ function baseInitialData(overrides: Partial<CareerCompInitialData> = {}): Career
   }
 }
 
+function projectionWithAfterTax(projection: CareerCompProjection): CareerCompProjection {
+  return {
+    ...projection,
+    jobs: projection.jobs.map((job) => ({
+      ...job,
+      afterTax: {
+        annual: job.annual.map((annual) => ({
+          year: annual.year,
+          taxableCompIncome: 0,
+          nsoOrdinaryIncome: 0,
+          isoAmtPreference: 0,
+          equitySaleProceeds: 0,
+          estimatedRegularTax: 0,
+          estimatedAmt: 0,
+          totalEstimatedTax: 0,
+          freeCashFlow: annual.freeCashFlow,
+          sourceIds: [],
+        })),
+        lifetime: {
+          taxableCompIncome: 0,
+          nsoOrdinaryIncome: 0,
+          isoAmtPreference: 0,
+          equitySaleProceeds: 0,
+          estimatedRegularTax: 0,
+          estimatedAmt: 0,
+          totalEstimatedTax: 0,
+          freeCashFlow: 0,
+          totalValue: job.lifetime.totalValue,
+        },
+        sources: [],
+        form6251: [],
+      },
+    })),
+  }
+}
+
 describe('CareerCompPage', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -89,7 +125,28 @@ describe('CareerCompPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Career Comparison' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Liquidity' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open After-Tax Liquidity' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open After-Tax FCF' })).toBeInTheDocument()
+  })
+
+  it('opens the unified liquidity result column from the canonical hash', () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/liquidity-over-time')
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    expect(container.querySelector('section[data-column-id="liquidity-over-time"]')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Before tax' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('maps the legacy after-tax liquidity hash to the unified liquidity result column', async () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/after-tax-liquidity')
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData({ projection: projectionWithAfterTax(sampleCareerCompProjection) })} />)
+
+    expect(container.querySelector('section[data-column-id="liquidity-over-time"]')).toBeInTheDocument()
+    expect(container.querySelector('section[data-column-id="after-tax-liquidity"]')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'After tax' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(window.location.hash).toBe('#/liquidity-over-time'))
   })
 
   it('opens a Miller result column from the initial hash', () => {

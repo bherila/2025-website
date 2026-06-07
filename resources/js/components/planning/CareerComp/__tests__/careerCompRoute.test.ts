@@ -14,6 +14,15 @@ describe('careerCompRoute', () => {
     expect(parseCareerCompHash('#/offers/ltv-table')).toEqual({
       columns: [{ id: 'offers' }, { id: 'ltv-table' }],
     })
+    expect(parseCareerCompHash('#/liquidity-over-time')).toEqual({
+      columns: [{ id: 'liquidity-over-time' }],
+    })
+  })
+
+  it('keeps the legacy after-tax liquidity hash parseable for page-level remapping', () => {
+    expect(parseCareerCompHash('#/after-tax-liquidity')).toEqual({
+      columns: [{ id: 'after-tax-liquidity' }],
+    })
   })
 
   it('parses grant and valuation detail instances', () => {
