@@ -397,7 +397,7 @@ class CareerComparisonWorkflowService
 
             $cliffMonths = $firstVest !== null ? $this->monthsBetween($grantDate, $firstVest) : 0;
             $vestingYears = $lastVest !== null
-                ? max(1, (int) round($this->monthsBetween($grantDate, $lastVest) / 12))
+                ? $this->vestingYearsFromMonths($this->monthsBetween($grantDate, $lastVest))
                 : 1;
 
             $grantPrice = $group
@@ -448,6 +448,15 @@ class CareerComparisonWorkflowService
         }
 
         return null;
+    }
+
+    private function vestingYearsFromMonths(int $months): int|float
+    {
+        $months = max(12, $months);
+
+        return $months % 12 === 0
+            ? (int) ($months / 12)
+            : round($months / 12, 4);
     }
 
     /**
