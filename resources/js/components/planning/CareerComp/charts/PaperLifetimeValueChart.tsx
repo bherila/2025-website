@@ -6,7 +6,7 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-import { formatMoney } from '../formatters'
+import { formatFriendlyMoney, formatMoney } from '../formatters'
 import { BAND_LABELS, type LiquidityChartRow, mapPaperEquityChartData, mapPaperEquitySeries, type ProjectionBand, SERIES_COLORS } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
@@ -77,7 +77,7 @@ export function PaperLifetimeValueChart({ projection, selectedBand = 'medium', s
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
                 <YAxis
-                  tickFormatter={(value: number) => formatMoney(value)}
+                  tickFormatter={(value: number) => formatFriendlyMoney(value)}
                   width={88}
                   {...(valueScale === 'log' ? { scale: 'log' as const, domain: [1, 'auto'] as const, allowDataOverflow: true } : {})}
                 />
@@ -121,7 +121,7 @@ export function PaperLifetimeValueChart({ projection, selectedBand = 'medium', s
                 {rows.map((row) => (
                   <TableRow key={row.year}>
                     <TableCell>{row.year}</TableCell>
-                    {series.map((entry) => <TableCell key={entry.key} className="text-right">{formatMoney(row[entry.key])}</TableCell>)}
+                    {series.map((entry) => <TableCell key={entry.key} className="text-right">{formatFriendlyMoney(row[entry.key])}</TableCell>)}
                   </TableRow>
                 ))}
               </TableBody>

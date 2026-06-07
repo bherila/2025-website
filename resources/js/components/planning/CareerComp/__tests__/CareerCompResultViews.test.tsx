@@ -67,6 +67,8 @@ describe('Career Comparison after-tax result views', () => {
     expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-band', 'medium')
     expect(screen.getByTestId('total-equity-chart')).toHaveAttribute('data-jobs', 'current,hyp-1')
     expect(screen.getByRole('cell', { name: 'Offer 1' })).toBeInTheDocument()
+    expect(screen.getAllByRole('cell', { name: '$1M' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('cell', { name: '$1,005,000' })).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Liquid total med' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Low' }))
@@ -96,7 +98,8 @@ describe('Career Comparison after-tax result views', () => {
     expect(screen.getByText('Annual federal and AMT breakdown')).toBeInTheDocument()
     expect(screen.getByText('Equity tax source breakdown')).toBeInTheDocument()
     expect(screen.getAllByText('Private offer').length).toBeGreaterThan(0)
-    expect(screen.getByRole('cell', { name: '$47,077' })).toBeInTheDocument()
+    expect(screen.getAllByRole('cell', { name: '$47k' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('cell', { name: '$47,077' })).not.toBeInTheDocument()
     expect(screen.getAllByText('ISO AMT preference').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('cell', { name: 'form_6251_iso_bargain_element' }).length).toBeGreaterThan(0)
   })

@@ -27,6 +27,8 @@ describe('PaperLifetimeValueChart', () => {
     expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"current-liquid-medium":233000'))
     expect(screen.getByTestId('line-chart')).toHaveAttribute('data-first-row', expect.stringContaining('"hyp-1-paper-base":275000'))
     expect(screen.getAllByTestId('chart-line')[0]).toHaveAttribute('data-name', 'Current job liquid equity med')
+    expect(screen.getAllByRole('cell', { name: '$233k' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('cell', { name: '$233,000' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Log' }))
 
