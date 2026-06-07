@@ -61,12 +61,14 @@ interface NumberFieldProps {
   suffix?: string
   min?: number
   max?: number
+  compact?: boolean
   onChange: (value: number) => void
 }
 
 interface MoneyFieldProps {
   label: string
   value: number
+  compact?: boolean
   onChange: (value: number) => void
 }
 
@@ -367,7 +369,7 @@ function keyedValuationStages(scenario: ValuationScenario): { key: string; stage
   })
 }
 
-function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldProps): ReactElement {
+function NumberField({ label, value, suffix, min, max, compact = false, onChange }: NumberFieldProps): ReactElement {
   const inputId = useId()
 
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -376,6 +378,15 @@ function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldPr
 
   function handleFocus(event: FocusEvent<HTMLInputElement>): void {
     event.target.select()
+  }
+
+  if (compact) {
+    return (
+      <InputGroup className="h-9">
+        <InputGroupInput aria-label={label} type="number" min={min} max={max} value={value} onChange={handleChange} onFocus={handleFocus} />
+        {suffix ? <InputGroupAddon><InputGroupText>{suffix}</InputGroupText></InputGroupAddon> : null}
+      </InputGroup>
+    )
   }
 
   return (
@@ -389,7 +400,7 @@ function NumberField({ label, value, suffix, min, max, onChange }: NumberFieldPr
   )
 }
 
-function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
+function MoneyField({ label, value, compact = false, onChange }: MoneyFieldProps): ReactElement {
   const inputId = useId()
   // While focused we show the user's in-progress text (`draft`); otherwise we mirror the prop so
   // that loading a share link, applying a saved job, or switching offers refreshes the display
@@ -407,6 +418,15 @@ function MoneyField({ label, value, onChange }: MoneyFieldProps): ReactElement {
 
   function handleBlur(): void {
     setDraft(null)
+  }
+
+  if (compact) {
+    return (
+      <InputGroup className="h-9">
+        <InputGroupAddon><InputGroupText>$</InputGroupText></InputGroupAddon>
+        <InputGroupInput aria-label={label} inputMode="decimal" value={draft ?? String(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
+      </InputGroup>
+    )
   }
 
   return (
@@ -431,15 +451,29 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   )
 }
 
-function SelectField<T extends string>({ label, value, options, onChange }: {
+function SelectField<T extends string>({ label, value, options, compact = false, onChange }: {
   label: string
   value: T
   options: SelectOption<T>[]
+  compact?: boolean
   onChange: (value: T) => void
 }): ReactElement {
   const labelId = useId()
   const triggerId = useId()
   const selected = options.find((option) => option.value === value)
+
+  if (compact) {
+    return (
+      <Select value={value} onValueChange={(next) => onChange(next as T)}>
+        <SelectTrigger aria-label={label} className="h-9">{selected?.label ?? value}</SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  }
 
   return (
     <div className="space-y-2">
@@ -832,7 +866,7 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
       <div className="space-y-4">
         {scenarios.map((scenario, scenarioIndex) => (
           <div key={scenario.id} className="space-y-3 rounded-md border p-3">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
               <div className="space-y-2">
                 <Label htmlFor={`${scenario.id}-label`}>Scenario</Label>
                 <Input id={`${scenario.id}-label`} value={scenario.label} onChange={(event) => updateScenario(scenario.id, { label: event.target.value })} />
@@ -852,29 +886,68 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
+              <div className="hidden grid-cols-[5rem_minmax(8rem,1.1fr)_minmax(9rem,1fr)_minmax(8rem,1fr)_7rem_7rem_7rem_8rem_2.5rem] gap-2 border-b px-1 pb-2 text-[11px] font-medium text-muted-foreground md:grid">
+                <span>Year</span>
+                <span>Stage</span>
+                <span>Headline valuation</span>
+                <span>Common FMV / 409A</span>
+                <span>Capital dilution</span>
+                <span>Pool dilution</span>
+                <span>FMV discount</span>
+                <span>Liquidity event</span>
+                <span />
+              </div>
               {keyedValuationStages(scenario).map(({ key, stage }, stageIndex) => (
-                <div key={key} className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
-                  <NumberField label="Year" value={stage.year} min={2000} onChange={(year) => updateStage(scenario.id, stageIndex, { year })} />
-                  <div className="space-y-2">
-                    <Label htmlFor={`${scenario.id}-${stageIndex}-stage`}>Stage</Label>
-                    <Input id={`${scenario.id}-${stageIndex}-stage`} value={stage.stage ?? ''} onChange={(event) => updateStage(scenario.id, stageIndex, { stage: event.target.value || null })} />
+                <div key={key} className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[5rem_minmax(8rem,1.1fr)_minmax(9rem,1fr)_minmax(8rem,1fr)_7rem_7rem_7rem_8rem_2.5rem] md:items-center md:border-0 md:p-0">
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Year</span>
+                    <NumberField compact label="Year" value={stage.year} min={2000} onChange={(year) => updateStage(scenario.id, stageIndex, { year })} />
                   </div>
-                  <MoneyField label="Headline valuation" value={stage.preferredPostMoneyValuation} onChange={(preferredPostMoneyValuation) => updateStage(scenario.id, stageIndex, { preferredPostMoneyValuation })} />
-                  <MoneyField label="Common FMV / 409A" value={stage.commonFmv} onChange={(commonFmv) => updateStage(scenario.id, stageIndex, { commonFmv })} />
-                  <NumberField label="Capital dilution" value={stage.capitalDilutionPct} suffix="%" min={0} max={100} onChange={(capitalDilutionPct) => updateStage(scenario.id, stageIndex, { capitalDilutionPct })} />
-                  <NumberField label="Pool dilution" value={stage.employeePoolDilutionPct} suffix="%" min={0} max={100} onChange={(employeePoolDilutionPct) => updateStage(scenario.id, stageIndex, { employeePoolDilutionPct })} />
-                  <NumberField label="FMV discount" value={stage.commonFmvDiscountPct} suffix="%" min={0} max={100} onChange={(commonFmvDiscountPct) => updateStage(scenario.id, stageIndex, { commonFmvDiscountPct })} />
-                  <SelectField label="Liquidity event" value={stage.liquidityEvent ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => updateStage(scenario.id, stageIndex, { liquidityEvent: value === 'yes' })} />
-                  <div className="sm:col-span-2">
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Stage</span>
+                    <Input
+                      aria-label="Stage"
+                      className="h-9"
+                      value={stage.stage ?? ''}
+                      onChange={(event) => updateStage(scenario.id, stageIndex, { stage: event.target.value || null })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Headline valuation</span>
+                    <MoneyField compact label="Headline valuation" value={stage.preferredPostMoneyValuation} onChange={(preferredPostMoneyValuation) => updateStage(scenario.id, stageIndex, { preferredPostMoneyValuation })} />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Common FMV / 409A</span>
+                    <MoneyField compact label="Common FMV / 409A" value={stage.commonFmv} onChange={(commonFmv) => updateStage(scenario.id, stageIndex, { commonFmv })} />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Capital dilution</span>
+                    <NumberField compact label="Capital dilution" value={stage.capitalDilutionPct} suffix="%" min={0} max={100} onChange={(capitalDilutionPct) => updateStage(scenario.id, stageIndex, { capitalDilutionPct })} />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Pool dilution</span>
+                    <NumberField compact label="Pool dilution" value={stage.employeePoolDilutionPct} suffix="%" min={0} max={100} onChange={(employeePoolDilutionPct) => updateStage(scenario.id, stageIndex, { employeePoolDilutionPct })} />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">FMV discount</span>
+                    <NumberField compact label="FMV discount" value={stage.commonFmvDiscountPct} suffix="%" min={0} max={100} onChange={(commonFmvDiscountPct) => updateStage(scenario.id, stageIndex, { commonFmvDiscountPct })} />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground md:hidden">Liquidity event</span>
+                    <SelectField compact label="Liquidity event" value={stage.liquidityEvent ? 'yes' : 'no'} options={YES_NO_OPTIONS} onChange={(value) => updateStage(scenario.id, stageIndex, { liquidityEvent: value === 'yes' })} />
+                  </div>
+                  <div className="flex justify-end md:justify-center">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      aria-label={`Remove ${stage.stage ?? `stage ${stageIndex + 1}`}`}
+                      title="Remove stage"
                       disabled={scenario.stages.length === 1}
                       onClick={() => updateScenario(scenario.id, { stages: scenario.stages.filter((_stage, index) => index !== stageIndex) })}
                     >
-                      <Trash2 className="size-4" /> Remove stage
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </div>

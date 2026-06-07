@@ -427,7 +427,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: 'valuation-timeline',
         label: 'Company valuation timeline',
         shortLabel: 'Valuation',
-        size: 'wide',
+        size: 'full',
         children: <ValuationTimelineColumn inputs={inputs} jobId={column.jobId} onChange={setInputs} />,
       }
     }

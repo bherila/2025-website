@@ -76,8 +76,10 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     fireEvent.click(screen.getByRole('button', { name: /Company valuation timeline/ }))
     expect(screen.getAllByText('Company valuation timeline')).toHaveLength(2)
     fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '250000000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
 
     expect(screen.getByDisplayValue('250000000')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Stage' })).toBeInTheDocument()
   })
 
   it('hides RSU controls when RSU grants are disabled and restores draft rows when re-enabled', () => {
