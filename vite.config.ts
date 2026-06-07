@@ -120,6 +120,13 @@ export default defineConfig({
             if (id.includes('react-markdown')) {
               return 'markdown';
             }
+            if (
+              id.includes('@codemirror/') ||
+              id.includes('@uiw/react-codemirror') ||
+              id.includes('@lezer/')
+            ) {
+              return 'codemirror';
+            }
           }
         }
       }

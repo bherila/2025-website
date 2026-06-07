@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { CodeEditor } from '@/components/ui/code-editor'
+
 import { saveMarkdownDocument, updateMarkdownDocument } from './markdownApi'
 import { Preview } from './Preview'
 import { createPreviewRenderRegistry } from './previewRenderRegistry'
@@ -228,14 +230,15 @@ export function MarkdownRendererPage({ initialData }: MarkdownRendererPageProps)
             id="markdown-tab-panel"
             aria-labelledby="markdown-tab"
           >
-            <label htmlFor="markdown-content" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
-            <textarea
-              id="markdown-content"
+            <label id="markdown-editor-label" className="mb-2 block text-sm font-medium text-foreground">Markdown</label>
+            <CodeEditor
               value={markdown}
-              onChange={(event) => setMarkdown(event.target.value)}
-              spellCheck={false}
-              placeholder="# Hello&#10;&#10;Paste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams."
-              className="h-[70vh] w-full resize-y rounded-md border border-border bg-card p-3 font-mono text-sm leading-relaxed text-foreground"
+              onChange={setMarkdown}
+              language="markdown"
+              height="70vh"
+              placeholder={'# Hello\n\nPaste Markdown here. Fenced code blocks get syntax highlighting; ```mermaid blocks render diagrams.'}
+              className="w-full rounded-md border border-border overflow-hidden"
+              ariaLabelledBy="markdown-editor-label"
             />
           </div>
         )}
