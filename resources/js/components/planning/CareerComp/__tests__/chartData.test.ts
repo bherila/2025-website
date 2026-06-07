@@ -1,4 +1,4 @@
-import { mapAfterTaxLiquidityChartData } from '../mappers'
+import { mapAfterTaxLiquidityChartData, mapPaperEquityChartData, mapPaperEquitySeries } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
 describe('Career Comparison chart data mappers', () => {
@@ -46,11 +46,26 @@ describe('Career Comparison chart data mappers', () => {
               { year: 2027, cumulativeValue: 2500 },
             ],
           },
+          paperEquity: {
+            scenarios: [{
+              id: 'base',
+              label: 'Base',
+              outcome: 'medium',
+              totalNetPaperValue: 90000,
+              points: [
+                { year: 2026, stage: 'A', preferredPostMoneyValuation: 100000000, capitalDilutionPct: 0, employeePoolDilutionPct: 0, dilutedOwnershipPct: 0.05, commonFmv: 10, grossOwnershipValue: 50000, grossCommonValue: 10000, commonIntrinsicValue: 9000, exerciseCost: 1000, netPaperValue: 49000, cumulativeNetPaperValue: 49000, liquidityEvent: false },
+                { year: 2027, stage: 'B', preferredPostMoneyValuation: 200000000, capitalDilutionPct: 10, employeePoolDilutionPct: 5, dilutedOwnershipPct: 0.045, commonFmv: 20, grossOwnershipValue: 90000, grossCommonValue: 20000, commonIntrinsicValue: 18000, exerciseCost: 2000, netPaperValue: 88000, cumulativeNetPaperValue: 88000, liquidityEvent: false },
+              ],
+            }],
+            totalsByOutcome: { low: 0, medium: 90000, high: 0 },
+          },
           vesting: [],
           lifetime: {
             totalCashComp: 400000,
             totalEquityValue: { low: 500, medium: 1600, high: 2500 },
+            totalPaperEquityValue: { low: 0, medium: 90000, high: 0 },
             totalValue: { low: 400500, medium: 401600, high: 402500 },
+            totalPaperValue: { low: 400000, medium: 490000, high: 400000 },
           },
           afterTax: {
             annual: [
@@ -107,5 +122,58 @@ describe('Career Comparison chart data mappers', () => {
     expect(rows.find((row) => row.year === 2027)?.['salary-heavy-medium']).toBe(300600)
     expect(rows.find((row) => row.year === 2027)?.['salary-heavy-low']).toBe(299500)
     expect(rows.find((row) => row.year === 2027)?.['salary-heavy-high']).toBe(301500)
+  })
+
+  it('maps paper equity scenarios by job and scenario', () => {
+    const projection: CareerCompProjection = {
+      startYear: 2026,
+      horizonYears: 1,
+      currentJobId: null,
+      jobs: [{
+        id: 'private-job',
+        name: 'Private job',
+        isCurrent: false,
+        annual: [],
+        liquidity: { low: [], medium: [], high: [] },
+        paperEquity: {
+          scenarios: [{
+            id: 'base',
+            label: 'Base',
+            outcome: 'medium',
+            totalNetPaperValue: 95000,
+            points: [{
+              year: 2026,
+              stage: 'A',
+              preferredPostMoneyValuation: 100000000,
+              capitalDilutionPct: 0,
+              employeePoolDilutionPct: 0,
+              dilutedOwnershipPct: 0.1,
+              commonFmv: 20,
+              grossOwnershipValue: 100000,
+              grossCommonValue: 20000,
+              commonIntrinsicValue: 15000,
+              exerciseCost: 5000,
+              netPaperValue: 95000,
+              cumulativeNetPaperValue: 95000,
+              liquidityEvent: false,
+            }],
+          }],
+          totalsByOutcome: { low: 0, medium: 95000, high: 0 },
+        },
+        vesting: [],
+        lifetime: {
+          totalCashComp: 0,
+          totalEquityValue: { low: 0, medium: 0, high: 0 },
+          totalPaperEquityValue: { low: 0, medium: 95000, high: 0 },
+          totalValue: { low: 0, medium: 0, high: 0 },
+          totalPaperValue: { low: 0, medium: 95000, high: 0 },
+        },
+      }],
+      deltasVsCurrent: [],
+      warnings: [],
+    }
+
+    expect(mapPaperEquitySeries(projection)[0]).toMatchObject({ key: 'private-job-paper-base', outcome: 'medium' })
+    expect(mapPaperEquityChartData(projection)[0]?.['private-job-paper-base']).toBe(95000)
   })
 })

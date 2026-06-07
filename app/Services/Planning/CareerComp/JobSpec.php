@@ -36,6 +36,7 @@ final readonly class JobSpec
                 'fullyDilutedShares' => 0.0,
                 'annualDilutionPct' => 0.0,
                 'liquidityDate' => null,
+                'valuationScenarios' => [],
             ],
             'comp' => [
                 'baseSalary' => 0.0,
@@ -147,6 +148,16 @@ final readonly class JobSpec
         $grants = $this->value('optionGrants');
 
         return is_array($grants) ? array_values(array_filter($grants, 'is_array')) : [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function valuationScenarios(): array
+    {
+        $scenarios = $this->value('company.valuationScenarios');
+
+        return is_array($scenarios) ? array_values(array_filter($scenarios, 'is_array')) : [];
     }
 
     /**

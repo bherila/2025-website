@@ -17,6 +17,8 @@ const MONEY_FIELDS = new Set([
   'fourNineA',
   'baseSalary',
   'cashBonus',
+  'commonFmv',
+  'preferredPostMoneyValuation',
   'grantValue',
   'grantPrice',
   'strike',

@@ -10,7 +10,7 @@ final class EquityValuationService
     /**
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>  $vestingRows
      * @param  list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>  $refresherDefs
-     * @return array{annualEquity:array<int, float>,liquidity:array{low:list<array{year:int,cumulativeValue:float}>,medium:list<array{year:int,cumulativeValue:float}>,high:list<array{year:int,cumulativeValue:float}>},totals:array{low:float,medium:float,high:float},refresherRows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>}
+     * @return array{annualEquity:array<int, float>,liquidity:array{low:list<array{year:int,cumulativeValue:float}>,medium:list<array{year:int,cumulativeValue:float}>,high:list<array{year:int,cumulativeValue:float}>},totals:array{low:float,medium:float,high:float},refresherRows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source:string}>}
      */
     public function value(JobSpec $job, array $vestingRows, array $refresherDefs, int $startYear, int $horizonYears): array
     {
@@ -77,7 +77,7 @@ final class EquityValuationService
 
     /**
      * @param  list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>  $refresherDefs
-     * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>
+     * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source:string}>
      */
     private function refresherRows(JobSpec $job, array $refresherDefs, string $band, int $startYear, int $horizonYears): array
     {
@@ -107,6 +107,7 @@ final class EquityValuationService
                     'year' => $year,
                     'vestedShares' => round($vestedShares, 4),
                     'exercisableShares' => 0.0,
+                    'source' => 'projected_refresher',
                 ];
             }
         }

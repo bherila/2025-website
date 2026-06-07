@@ -227,6 +227,14 @@
                     }
                 ]
             },
+            "paperEquity": {
+                "scenarios": [],
+                "totalsByOutcome": {
+                    "low": 0.0,
+                    "medium": 0.0,
+                    "high": 0.0
+                }
+            },
             "vesting": [
                 {
                     "grantId": "current-rsu-hire",
@@ -264,10 +272,20 @@
                     "medium": 87478.33,
                     "high": 95426.87
                 },
+                "totalPaperEquityValue": {
+                    "low": 0.0,
+                    "medium": 0.0,
+                    "high": 0.0
+                },
                 "totalValue": {
                     "low": 2180000.0,
                     "medium": 2187478.33,
                     "high": 2195426.87
+                },
+                "totalPaperValue": {
+                    "low": 2100000.0,
+                    "medium": 2100000.0,
+                    "high": 2100000.0
                 }
             },
             "afterTax": {
@@ -717,6 +735,183 @@
                     }
                 ]
             },
+            "paperEquity": {
+                "scenarios": [
+                    {
+                        "id": "base",
+                        "label": "Base case",
+                        "outcome": "medium",
+                        "points": [
+                            {
+                                "year": 2026,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.0,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 0.0,
+                                "grossCommonValue": 0.0,
+                                "commonIntrinsicValue": 0.0,
+                                "exerciseCost": 0.0,
+                                "netPaperValue": 0.0,
+                                "cumulativeNetPaperValue": 0.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2027,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.191667,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 191667.0,
+                                "grossCommonValue": 191666.67,
+                                "commonIntrinsicValue": 153333.33,
+                                "exerciseCost": 38333.33,
+                                "netPaperValue": 153333.67,
+                                "cumulativeNetPaperValue": 153333.67,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2028,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.291667,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 291667.0,
+                                "grossCommonValue": 291666.67,
+                                "commonIntrinsicValue": 233333.33,
+                                "exerciseCost": 58333.33,
+                                "netPaperValue": 233333.67,
+                                "cumulativeNetPaperValue": 233333.67,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2029,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.391667,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 391667.0,
+                                "grossCommonValue": 391666.67,
+                                "commonIntrinsicValue": 313333.33,
+                                "exerciseCost": 78333.33,
+                                "netPaperValue": 313333.67,
+                                "cumulativeNetPaperValue": 313333.67,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2030,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2031,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2032,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2033,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2034,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            },
+                            {
+                                "year": 2035,
+                                "stage": "Current",
+                                "preferredPostMoneyValuation": 100000000.0,
+                                "capitalDilutionPct": 0.0,
+                                "employeePoolDilutionPct": 0.0,
+                                "dilutedOwnershipPct": 0.4,
+                                "commonFmv": 10.0,
+                                "grossOwnershipValue": 400000.0,
+                                "grossCommonValue": 400000.0,
+                                "commonIntrinsicValue": 320000.0,
+                                "exerciseCost": 80000.0,
+                                "netPaperValue": 320000.0,
+                                "cumulativeNetPaperValue": 320000.0,
+                                "liquidityEvent": false
+                            }
+                        ],
+                        "totalNetPaperValue": 320000.0
+                    }
+                ],
+                "totalsByOutcome": {
+                    "low": 0.0,
+                    "medium": 320000.0,
+                    "high": 0.0
+                }
+            },
             "vesting": [
                 {
                     "grantId": "hyp-1-iso-hire",
@@ -754,10 +949,20 @@
                     "medium": 619200.0,
                     "high": 1011200.0
                 },
+                "totalPaperEquityValue": {
+                    "low": 0.0,
+                    "medium": 320000.0,
+                    "high": 0.0
+                },
                 "totalValue": {
                     "low": 2238800.0,
                     "medium": 2569200.0,
                     "high": 2961200.0
+                },
+                "totalPaperValue": {
+                    "low": 1950000.0,
+                    "medium": 2270000.0,
+                    "high": 1950000.0
                 }
             },
             "afterTax": {
@@ -1189,6 +1394,11 @@
                 "low": 58800.0,
                 "medium": 381721.67,
                 "high": 765773.13
+            },
+            "totalPaperValueDelta": {
+                "low": -150000.0,
+                "medium": 170000.0,
+                "high": -150000.0
             }
         }
     ],

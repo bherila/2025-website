@@ -42,6 +42,22 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
       fullyDilutedShares: 100000000,
       annualDilutionPct: 3,
       liquidityDate: `${currentYear + 4}-01-01`,
+      valuationScenarios: [{
+        id: 'base',
+        label: 'Base case',
+        outcome: 'medium',
+        stages: [{
+          id: 'stage-current',
+          year: currentYear,
+          stage: 'Current',
+          preferredPostMoneyValuation: 100000000,
+          capitalDilutionPct: 0,
+          employeePoolDilutionPct: 0,
+          commonFmv: 5,
+          commonFmvDiscountPct: 0,
+          liquidityEvent: false,
+        }],
+      }],
     },
     comp: {
       baseSalary: 180000,
