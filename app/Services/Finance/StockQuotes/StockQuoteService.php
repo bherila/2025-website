@@ -136,7 +136,7 @@ class StockQuoteService
             return; // Future dates can never be satisfied by historical data.
         }
 
-        if ($this->hasQuoteOnOrBefore($symbol, $target)) {
+        if ($this->hasQuoteCoverageThrough($symbol, $target)) {
             return; // Already covered locally.
         }
 
@@ -223,6 +223,15 @@ class StockQuoteService
             ->where('c_symb', $symbol)
             ->whereDate('c_date', '<=', $date)
             ->exists();
+    }
+
+    private function hasQuoteCoverageThrough(string $symbol, string $date): bool
+    {
+        $latest = $this->latestQuoteDate($symbol);
+
+        return $latest !== null
+            && $latest->format('Y-m-d') >= $date
+            && $this->hasQuoteOnOrBefore($symbol, $date);
     }
 
     private function toDateString(CarbonInterface|string $date): string

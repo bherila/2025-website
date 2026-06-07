@@ -123,15 +123,37 @@ class StockQuoteServiceTest extends TestCase
 
     public function test_ensure_coverage_skips_fetch_when_already_covered(): void
     {
-        DB::table('stock_quotes_daily')->insert([
-            'c_symb' => 'AAPL', 'c_date' => '2024-01-02',
-            'c_open' => 1, 'c_high' => 1, 'c_low' => 1, 'c_close' => 1, 'c_vol' => 1,
-        ]);
+        foreach (['2024-01-02', '2024-01-10'] as $date) {
+            DB::table('stock_quotes_daily')->insert([
+                'c_symb' => 'AAPL', 'c_date' => $date,
+                'c_open' => 1, 'c_high' => 1, 'c_low' => 1, 'c_close' => 1, 'c_vol' => 1,
+            ]);
+        }
         Http::fake();
 
         (new StockQuoteService)->ensureCoverage('AAPL', '2024-01-05');
 
         Http::assertNothingSent();
+    }
+
+    public function test_ensure_coverage_fetches_when_only_older_quotes_exist_locally(): void
+    {
+        DB::table('stock_quotes_daily')->insert([
+            'c_symb' => 'AAPL', 'c_date' => '2024-01-02',
+            'c_open' => 1, 'c_high' => 1, 'c_low' => 1, 'c_close' => 1, 'c_vol' => 1,
+        ]);
+        $this->fakeYahooHistory([
+            '2024-01-05' => [100.0, 110.0, 99.0, 105.0, 1000],
+        ]);
+
+        (new StockQuoteService)->ensureCoverage('AAPL', '2024-01-05');
+
+        Http::assertSentCount(1);
+        $this->assertDatabaseHas('stock_quotes_daily', [
+            'c_symb' => 'AAPL',
+            'c_date' => '2024-01-05',
+            'c_close' => 105.0,
+        ]);
     }
 
     public function test_ensure_coverage_fetches_when_only_newer_quotes_exist_locally(): void

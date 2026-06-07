@@ -26,8 +26,12 @@ class FinanceRsuController extends Controller
             ->where('uid', $user->id)
             ->get();
 
-        $this->stockQuoteService->ensureCoverageForAwards($awards);
-        $closes = $this->stockQuoteService->closesForAwards($awards);
+        $awardsNeedingFetchedPrices = $awards
+            ->filter(static fn (FinEquityAwards $award): bool => $award->vest_price === null)
+            ->values();
+
+        $this->stockQuoteService->ensureCoverageForAwards($awardsNeedingFetchedPrices);
+        $closes = $this->stockQuoteService->closesForAwards($awardsNeedingFetchedPrices);
 
         $data = $awards->map(function ($item) use ($closes) {
             $fetchedVestPrice = $closes[$item->id] ?? null;
