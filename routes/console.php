@@ -16,3 +16,7 @@ Schedule::command('genai:requeue-stale')->everyFiveMinutes()->withoutOverlapping
 // PHR DICOM storage cleanup: reclaim stuck pending uploads + orphan objects.
 Schedule::command('phr:dicom:gc')->hourly()->withoutOverlapping(30);
 Schedule::command('phr:exports:purge')->daily()->withoutOverlapping(30);
+
+// Auth audit log retention pruning (bherila/auth-laravel >= 0.4.2).
+// No-op unless BHERILA_AUTH_AUDIT_RETENTION_DAYS is set in .env.
+Schedule::command('bherila-auth:prune-audit-log')->daily()->withoutOverlapping(10);
