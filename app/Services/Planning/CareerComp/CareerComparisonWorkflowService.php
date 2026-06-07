@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\DB;
 
 class CareerComparisonWorkflowService
 {
+    /**
+     * The current share price the form seeds when a user clicks "Add current job". An RSU import
+     * should overwrite this untouched placeholder with the imported price; it is mirrored from the
+     * frontend default in `resources/js/components/planning/CareerComp/defaults.ts` (`buildDefaultJob`)
+     * and must be kept in sync if that default changes.
+     */
     private const PLACEHOLDER_CURRENT_SHARE_PRICE = 25.0;
 
     public function __construct(private CareerCompCalculator $calculator) {}
@@ -198,6 +204,11 @@ class CareerComparisonWorkflowService
     }
 
     /**
+     * Whether an RSU import may fill in the go-forward share price. It does so only when the field
+     * is empty/zero or still holds the untouched form placeholder, so a price the user actually
+     * entered is preserved. A genuine price that happens to equal the placeholder is the one
+     * accepted ambiguity of this value-based heuristic.
+     *
      * @param  array<string, mixed>  $currentJob
      */
     private function shouldImportCurrentSharePrice(array $currentJob): bool
