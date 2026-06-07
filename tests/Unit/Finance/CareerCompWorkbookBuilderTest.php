@@ -15,7 +15,7 @@ class CareerCompWorkbookBuilderTest extends TestCase
         $names = array_map(fn (array $sheet): string => $sheet['name'], $workbook['sheets']);
 
         $this->assertSame(
-            ['Summary', 'Per-Job', 'Cash-Flow', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
+            ['Summary', 'Per-Job', 'Cash-Flow', 'Liquidity', 'After-Tax Liquidity', 'Assumptions', 'Equity Vesting Schedule', 'Deltas-vs-Current', 'Equity Tax Summary', 'Equity Tax Annual', 'Equity Tax Sources'],
             $names,
         );
     }
@@ -47,6 +47,41 @@ class CareerCompWorkbookBuilderTest extends TestCase
             $this->assertSame($expected, $totals[$index]['amount']);
             $this->assertTrue($totals[$index]['isTotal']);
         }
+    }
+
+    public function test_liquidity_sheets_use_year_rows_and_numeric_job_band_values(): void
+    {
+        $projection = $this->goldenProjection();
+        $workbook = $this->build($projection);
+        $liquidity = $this->sheet($workbook, 'Liquidity');
+        $afterTaxLiquidity = $this->sheet($workbook, 'After-Tax Liquidity');
+        $expectedColumnCount = 1 + (count($projection['jobs']) * 3);
+
+        $this->assertSame($expectedColumnCount, count($liquidity['columns']));
+        $this->assertSame($expectedColumnCount, count($afterTaxLiquidity['columns']));
+        $this->assertSame('Year', $liquidity['columns'][0]);
+        $this->assertSame('Current role Low', $liquidity['columns'][1]);
+        $this->assertSame((string) $projection['startYear'], $liquidity['rows'][0]['line']);
+        $this->assertSame((string) $projection['startYear'], $afterTaxLiquidity['rows'][0]['line']);
+
+        $this->assertSame($projection['jobs'][0]['liquidity']['low'][0]['cumulativeValue'], $liquidity['rows'][0]['values'][0]);
+        $this->assertIsFloat($liquidity['rows'][0]['values'][0]);
+        $this->assertIsFloat($afterTaxLiquidity['rows'][0]['values'][0]);
+    }
+
+    public function test_after_tax_liquidity_sheet_reports_unavailable_when_after_tax_data_is_missing(): void
+    {
+        $projection = $this->goldenProjection();
+        foreach ($projection['jobs'] as $index => $job) {
+            unset($job['afterTax']);
+            $projection['jobs'][$index] = $job;
+        }
+
+        $afterTaxLiquidity = $this->sheet($this->build($projection), 'After-Tax Liquidity');
+
+        $this->assertArrayNotHasKey('columns', $afterTaxLiquidity);
+        $this->assertSame('After-tax liquidity unavailable', $afterTaxLiquidity['rows'][0]['description']);
+        $this->assertSame('Recalculate the scenario to populate after-tax projection fields.', $afterTaxLiquidity['rows'][0]['note']);
     }
 
     public function test_vesting_sheet_consumes_projection_values_without_rederiving(): void
@@ -152,7 +187,7 @@ class CareerCompWorkbookBuilderTest extends TestCase
 
     /**
      * @param  array<string, mixed>  $projection
-     * @return array{filename: string, sheets: array<int, array{name: string, rows: array<int, array<string, mixed>>}>}
+     * @return array{filename: string, sheets: array<int, array{name: string, rows: array<int, array<string, mixed>>, columns?: list<string>}>}
      */
     private function build(array $projection, ?string $filename = null): array
     {
@@ -160,8 +195,8 @@ class CareerCompWorkbookBuilderTest extends TestCase
     }
 
     /**
-     * @param  array{sheets: array<int, array{name: string, rows: array<int, array<string, mixed>>}>}  $workbook
-     * @return array{name: string, rows: array<int, array<string, mixed>>}
+     * @param  array{sheets: array<int, array{name: string, rows: array<int, array<string, mixed>>, columns?: list<string>}>}  $workbook
+     * @return array{name: string, rows: array<int, array<string, mixed>>, columns?: list<string>}
      */
     private function sheet(array $workbook, string $name): array
     {

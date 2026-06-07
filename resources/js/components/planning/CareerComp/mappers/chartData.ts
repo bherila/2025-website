@@ -124,6 +124,17 @@ export const BAND_DASHES: Record<ProjectionBand, string | undefined> = {
   high: '8 4',
 }
 
+interface LiquidityChartOptions {
+  band?: ProjectionBand
+  jobIds?: readonly string[]
+  requiresAfterTax?: boolean
+}
+
+interface PaperEquityChartOptions {
+  band?: ProjectionBand
+  jobIds?: readonly string[]
+}
+
 function seriesKey(job: JobProjection, band: ProjectionBand): string {
   return `${job.id}-${band}`
 }
@@ -171,8 +182,28 @@ function sumSourcesByType(sources: readonly TaxFactSource[] | undefined, sourceT
   )
 }
 
-export function mapLiquiditySeries(projection: CareerCompProjection): LiquiditySeries[] {
-  return projection.jobs.flatMap((job) => (['low', 'medium', 'high'] as ProjectionBand[]).map((band) => ({
+function selectedJobs(projection: CareerCompProjection, jobIds: readonly string[] | undefined): JobProjection[] {
+  if (jobIds === undefined) {
+    return projection.jobs
+  }
+
+  const selected = new Set(jobIds)
+
+  return projection.jobs.filter((job) => selected.has(job.id))
+}
+
+function selectedLiquidityJobs(projection: CareerCompProjection, options: LiquidityChartOptions): JobProjection[] {
+  const jobs = selectedJobs(projection, options.jobIds)
+
+  return options.requiresAfterTax === true ? jobs.filter((job) => job.afterTax !== undefined) : jobs
+}
+
+function selectedLiquidityBands(options: LiquidityChartOptions): ProjectionBand[] {
+  return options.band ? [options.band] : ['low', 'medium', 'high']
+}
+
+export function mapLiquiditySeries(projection: CareerCompProjection, options: LiquidityChartOptions = {}): LiquiditySeries[] {
+  return selectedLiquidityJobs(projection, options).flatMap((job) => selectedLiquidityBands(options).map((band) => ({
     key: seriesKey(job, band),
     label: `${job.name} ${BAND_LABELS[band]}`,
     jobId: job.id,
@@ -182,34 +213,21 @@ export function mapLiquiditySeries(projection: CareerCompProjection): LiquidityS
   })))
 }
 
-export function mapLiquidityChartData(projection: CareerCompProjection): LiquidityChartRow[] {
+export function mapLiquidityChartData(projection: CareerCompProjection, options: LiquidityChartOptions = {}): LiquidityChartRow[] {
   const years = Array.from({ length: projection.horizonYears }, (_entry, index) => projection.startYear + index)
+  const jobs = selectedLiquidityJobs(projection, options)
+  const bands = selectedLiquidityBands(options)
 
   return years.map((year) => {
     const row: LiquidityChartRow = { year }
-    projection.jobs.forEach((job) => {
-      ;(['low', 'medium', 'high'] as ProjectionBand[]).forEach((band) => {
+    jobs.forEach((job) => {
+      bands.forEach((band) => {
         const point = job.liquidity[band].find((entry) => entry.year === year)
         row[seriesKey(job, band)] = currency(point?.cumulativeValue ?? 0).value
       })
     })
     return row
   })
-}
-
-interface PaperEquityChartOptions {
-  band?: ProjectionBand
-  jobIds?: readonly string[]
-}
-
-function selectedJobs(projection: CareerCompProjection, jobIds: readonly string[] | undefined): JobProjection[] {
-  if (jobIds === undefined) {
-    return projection.jobs
-  }
-
-  const selected = new Set(jobIds)
-
-  return projection.jobs.filter((job) => selected.has(job.id))
 }
 
 export function mapPaperEquitySeries(projection: CareerCompProjection, options: PaperEquityChartOptions = {}): PaperEquitySeries[] {
@@ -274,16 +292,18 @@ export function mapPaperEquityChartData(projection: CareerCompProjection, option
   })
 }
 
-export function mapAfterTaxLiquidityChartData(projection: CareerCompProjection): LiquidityChartRow[] {
+export function mapAfterTaxLiquidityChartData(projection: CareerCompProjection, options: LiquidityChartOptions = {}): LiquidityChartRow[] {
   const years = Array.from({ length: projection.horizonYears }, (_entry, index) => projection.startYear + index)
+  const jobs = selectedJobs(projection, options.jobIds).filter((job) => job.afterTax !== undefined)
+  const bands = selectedLiquidityBands(options)
 
   return years.map((year) => {
     const row: LiquidityChartRow = { year }
 
-    projection.jobs.forEach((job) => {
+    jobs.forEach((job) => {
       const cashFlowBase = cumulativeAfterTaxCashFlowExcludingMediumEquityProceeds(job, year)
 
-      ;(['low', 'medium', 'high'] as ProjectionBand[]).forEach((band) => {
+      bands.forEach((band) => {
         const point = job.liquidity[band].find((entry) => entry.year === year)
         row[seriesKey(job, band)] = currency(cashFlowBase).add(point?.cumulativeValue ?? 0).value
       })

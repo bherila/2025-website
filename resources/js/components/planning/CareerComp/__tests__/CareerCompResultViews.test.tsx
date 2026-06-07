@@ -21,8 +21,8 @@ jest.mock('../charts/AnnualFreeCashFlowChart', () => ({
 }))
 
 jest.mock('../charts/LiquidityOverTimeChart', () => ({
-  LiquidityOverTimeChart: function MockLiquidityOverTimeChart({ mode }: { mode?: string }): ReactElement {
-    return <div data-testid={`liquidity-chart-${mode ?? 'preTax'}`} />
+  LiquidityOverTimeChart: function MockLiquidityOverTimeChart({ initialMode }: { initialMode?: string }): ReactElement {
+    return <div data-testid={`liquidity-chart-${initialMode ?? 'preTax'}`} />
   },
 }))
 

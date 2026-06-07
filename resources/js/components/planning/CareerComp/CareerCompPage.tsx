@@ -31,7 +31,6 @@ import {
 } from './CareerCompForm'
 import {
   ProjectionAfterTaxFreeCashFlow,
-  ProjectionAfterTaxLiquidity,
   ProjectionAnnualFreeCashFlow,
   ProjectionLifetimeValue,
   ProjectionLiquidity,
@@ -50,6 +49,7 @@ import {
   serializeCareerCompRoute,
 } from './careerCompRoute'
 import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCompUrlState'
+import type { LiquidityMode } from './charts/LiquidityOverTimeChart'
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
 import type { CareerCompInitialData, CareerCompInputs, CareerCompProjection } from './types'
@@ -69,24 +69,24 @@ interface CareerCompColumnMeta {
 
 type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
-  | { kind: 'result'; id: CareerCompResultViewId }
+  | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
   | { kind: 'valuationTimeline'; jobId: string }
 
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
-  render: (projection: CareerCompProjection) => ReactElement
+  render: (projection: CareerCompProjection, options?: { initialLiquidityMode?: LiquidityMode | undefined }) => ReactElement
 }
 
 export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
   {
     id: 'liquidity-over-time',
-    label: 'Expected Liquidity Value Over Time',
+    label: 'Liquidity',
     shortLabel: 'Liquidity',
     presentation: 'column',
     component: notRenderedViaMillerShell,
-    meta: { description: 'Cumulative realizable equity value by job and growth band.', icon: LineChart },
+    meta: { description: 'Compare liquidity by tax mode, job, growth band, and scale.', icon: LineChart },
     size: 'full',
-    render: (projection) => <ProjectionLiquidity projection={projection} />,
+    render: (projection, options) => <ProjectionLiquidity projection={projection} initialMode={options?.initialLiquidityMode} />,
   },
   {
     id: 'annual-fcf',
@@ -117,16 +117,6 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     meta: { description: 'RSU, ISO, and NSO vesting rows by grant.', icon: Briefcase },
     size: 'wide',
     render: (projection) => <ProjectionVestingBreakdown projection={projection} />,
-  },
-  {
-    id: 'after-tax-liquidity',
-    label: 'After-Tax Expected Liquidity Value Over Time',
-    shortLabel: 'After-Tax Liquidity',
-    presentation: 'column',
-    component: notRenderedViaMillerShell,
-    meta: { description: 'Liquidity bands net of federal regular tax and AMT from the tax-facts engine.', icon: LineChart },
-    size: 'full',
-    render: (projection) => <ProjectionAfterTaxLiquidity projection={projection} />,
   },
   {
     id: 'after-tax-fcf',
@@ -212,6 +202,10 @@ function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnStat
 
   if (CAREER_COMP_FORM_SECTIONS.some((section) => section.id === column.id)) {
     return { kind: 'form', id: column.id as CareerCompFormSectionId }
+  }
+
+  if (column.id === 'after-tax-liquidity') {
+    return { kind: 'result', id: 'liquidity-over-time', initialLiquidityMode: 'afterTax' }
   }
 
   if (RESULT_VIEWS.some((view) => view.id === column.id)) {
@@ -602,7 +596,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       label: view.label,
       shortLabel: view.shortLabel,
       size: view.size,
-      children: projection ? view.render(projection) : <ProjectionEmptyState loading={loading} />,
+      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode }) : <ProjectionEmptyState loading={loading} />,
     }
   }
 

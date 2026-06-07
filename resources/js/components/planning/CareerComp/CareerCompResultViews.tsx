@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
-import { LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
+import { type LiquidityMode, LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
 import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
 import { formatFriendlyMoney, formatShares, formatSignedFriendlyMoney } from './formatters'
 import { BAND_LABELS, type LifetimeValueRow, mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows, type ProjectionBand } from './mappers'
@@ -17,8 +17,12 @@ interface ProjectionProps {
   projection: CareerCompProjection
 }
 
-export function ProjectionLiquidity({ projection }: ProjectionProps): ReactElement {
-  return <LiquidityOverTimeChart projection={projection} />
+interface ProjectionLiquidityProps extends ProjectionProps {
+  initialMode?: LiquidityMode | undefined
+}
+
+export function ProjectionLiquidity({ projection, initialMode = 'preTax' }: ProjectionLiquidityProps): ReactElement {
+  return <LiquidityOverTimeChart projection={projection} initialMode={initialMode} />
 }
 
 export function ProjectionAnnualFreeCashFlow({ projection }: ProjectionProps): ReactElement {
@@ -76,11 +80,7 @@ function lifetimeValue(row: LifetimeValueRow, band: ProjectionBand, metric: 'tot
 }
 
 export function ProjectionAfterTaxLiquidity({ projection }: ProjectionProps): ReactElement {
-  if (!hasAfterTaxProjection(projection)) {
-    return <AfterTaxUnavailable />
-  }
-
-  return <LiquidityOverTimeChart projection={projection} mode="afterTax" />
+  return <LiquidityOverTimeChart projection={projection} initialMode="afterTax" />
 }
 
 export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps): ReactElement {
