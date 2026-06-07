@@ -90,6 +90,10 @@ function makeFacts(overrides: Partial<Form4952Facts> = {}): Form4952Facts {
     allocationMethod: 'pro_rata',
     allocationMethodDescription: 'Pro-rata allocation under Rev. Rul. 2008-38.',
     tracingSplitSources: [],
+    line4aCalculationRows: [],
+    line4cCalculationRows: [],
+    line4dCalculationRows: [],
+    line4eCalculationRows: [],
     line4dNetGainFromDisposition: 0,
     line4eNetCapitalGainFromDisposition: 0,
     line4fNetShortTermFromDisposition: 0,
@@ -319,7 +323,7 @@ describe('Form4952Preview', () => {
     expect(onReviewDoc).toHaveBeenCalledWith(7, 'k1-code-20-a')
   })
 
-  it('drills to Schedule B when the line 4a Schedule B row is clicked', () => {
+  it('drills to Schedule B when the line 4a Schedule B destination button is clicked', () => {
     const onOpenScheduleB = jest.fn()
     render(
       <Form4952Preview
@@ -331,8 +335,45 @@ describe('Form4952Preview', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Gross investment income from Schedule B'))
+    fireEvent.click(screen.getByRole('button', { name: /open schedule b/i }))
     expect(onOpenScheduleB).toHaveBeenCalled()
+  })
+
+  it('opens line 4a and 4d calculation dialogs from icon-only source buttons', () => {
+    render(
+      <Form4952Preview
+        form4952Facts={makeFacts({
+          grossInvestmentIncomeFromScheduleB: 8000,
+          grossInvestmentIncomeFromK1: 2000,
+          grossInvestmentIncomeTotal: 10000,
+          line4cNetInvestmentIncomeAfterQualifiedDividends: 7000,
+          totalQualifiedDividends: 3000,
+          line4aCalculationRows: [
+            { label: 'Schedule B investment income', amount: 8000, role: 'input', note: null },
+            { label: 'K-1 investment income', amount: 2000, role: 'input', note: null },
+            { label: 'Line 4a gross investment income', amount: 10000, role: 'result', note: null },
+          ],
+          line4cCalculationRows: [
+            { label: 'Line 4a gross investment income', amount: 10000, role: 'input', note: null },
+            { label: 'Line 4b qualified dividends included on line 4a', amount: -3000, role: 'subtract', note: null },
+            { label: 'Line 4c income after qualified dividends', amount: 7000, role: 'result', note: null },
+          ],
+          line4dCalculationRows: [
+            { label: 'Schedule D line 16 combined gain or loss', amount: -400, role: 'input', note: null },
+            { label: 'Line 4d net gain after zero floor', amount: 0, role: 'result', note: 'Form 4952 line 4d cannot be less than $0.' },
+          ],
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /show line 4a sources and calculation/i }))
+    expect(screen.getByText('Schedule B investment income')).toBeInTheDocument()
+    expect(screen.getAllByText('Line 4a gross investment income').length).toBeGreaterThanOrEqual(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    fireEvent.click(screen.getByRole('button', { name: /show line 4d calculation/i }))
+    expect(screen.getByText('Schedule D line 16 combined gain or loss')).toBeInTheDocument()
+    expect(screen.getByText(/cannot be less than \$0/i)).toBeInTheDocument()
   })
 
   it('renders the 18–20 allocation with pro-rata math and drills on click', () => {
@@ -374,7 +415,7 @@ describe('Form4952Preview', () => {
     expect(screen.getByText(/66\.7%/)).toBeInTheDocument()
     expect(screen.getAllByText('19a.').length).toBeGreaterThanOrEqual(1)
 
-    fireEvent.click(screen.getByText(/Schedule E, Part II, line 28/))
+    fireEvent.click(screen.getByRole('button', { name: /open schedule e, part ii, line 28/i }))
     expect(onOpenScheduleE).toHaveBeenCalled()
   })
 

@@ -75,7 +75,6 @@ function lineDetailProps(source: TaxFactSource, onOpenDoc?: (docId: number) => v
 
   return {
     onDetails: () => onOpenDoc(source.taxDocumentId!),
-    detailsLabel: 'Detail',
     detailsTooltip: `Open ${label} detail`,
   }
 }

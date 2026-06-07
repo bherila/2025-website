@@ -7,6 +7,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952AmtFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form4952CalculationRow;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952CarryDestination;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952TracingSplit;
@@ -198,9 +199,100 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         $nonInvestmentSection1231 = $form4797 !== null ? $form4797->netToScheduleDLongTerm : 0.0;
         $investmentDispositionNet = $this->subtractMoney($scheduleDNetGainLoss, $nonInvestmentSection1231);
         $investmentDispositionLongTerm = $this->subtractMoney($scheduleDNetLongTerm, $nonInvestmentSection1231);
+        $nonInvestmentSection1231Offset = $nonInvestmentSection1231 === 0.0 ? 0.0 : -$nonInvestmentSection1231;
         $line4d = max(0.0, $investmentDispositionNet);
         $line4e = max(0.0, min($line4d, max(0.0, $investmentDispositionLongTerm)));
         $line4f = max(0.0, $this->subtractMoney($line4d, $line4e));
+        $line4aCalculationRows = [
+            new Form4952CalculationRow(
+                label: 'Schedule B investment income',
+                amount: $grossInvestmentIncomeFromScheduleB,
+                note: 'Interest and ordinary dividends included in Form 4952 line 4a.',
+            ),
+            new Form4952CalculationRow(
+                label: 'K-1 investment income',
+                amount: $grossInvestmentIncomeFromK1,
+                note: 'Partnership-reported Form 4952 investment income, excluding net capital gain.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4a gross investment income',
+                amount: $grossInvestmentIncomeTotal,
+                role: 'result',
+                note: 'Schedule B investment income plus K-1 investment income.',
+            ),
+        ];
+        $line4cCalculationRows = [
+            new Form4952CalculationRow(
+                label: 'Line 4a gross investment income',
+                amount: $grossInvestmentIncomeTotal,
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4b qualified dividends included on line 4a',
+                amount: -$totalQualifiedDividends,
+                role: 'subtract',
+                note: 'Qualified dividends are excluded unless elected on line 4g.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4c income after qualified dividends',
+                amount: $line4c,
+                role: 'result',
+                note: 'Line 4a minus line 4b.',
+            ),
+        ];
+        $line4dCalculationRows = [
+            new Form4952CalculationRow(
+                label: 'Schedule D line 16 combined gain or loss',
+                amount: $scheduleDNetGainLoss,
+                note: 'Includes current-year capital gains and losses plus capital loss carryovers.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Less non-investment §1231 gain routed from Form 4797',
+                amount: $nonInvestmentSection1231Offset,
+                role: 'subtract',
+                note: 'Only genuine non-investment §1231 gain is carved out; trader-fund securities gains remain investment property under §163(d)(5)(A)(ii).',
+            ),
+            new Form4952CalculationRow(
+                label: 'Investment disposition net before floor',
+                amount: $investmentDispositionNet,
+                role: 'subtotal',
+                note: 'Schedule D net less the non-investment §1231 carveout.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4d net gain after zero floor',
+                amount: $line4d,
+                role: 'result',
+                note: 'Form 4952 line 4d cannot be less than $0.',
+            ),
+        ];
+        $line4eCalculationRows = [
+            new Form4952CalculationRow(
+                label: 'Schedule D line 15 net long-term gain or loss',
+                amount: $scheduleDNetLongTerm,
+                note: 'The preferential-rate long-term slice before the Form 4952 line 4d cap.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Less non-investment §1231 long-term gain',
+                amount: $nonInvestmentSection1231Offset,
+                role: 'subtract',
+            ),
+            new Form4952CalculationRow(
+                label: 'Investment long-term slice before line 4d cap',
+                amount: $investmentDispositionLongTerm,
+                role: 'subtotal',
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4d cap',
+                amount: $line4d,
+                role: 'cap',
+                note: 'Line 4e is limited to the net investment disposition gain on line 4d.',
+            ),
+            new Form4952CalculationRow(
+                label: 'Line 4e net capital gain from disposition',
+                amount: $line4e,
+                role: 'result',
+                note: 'Smaller of line 4d and the positive long-term investment slice.',
+            ),
+        ];
 
         // Line 5: investment expenses other than interest (§212). For an individual these are
         // §67(b) miscellaneous itemized deductions, SUSPENDED for 2018–2025 by §67(g) (TCJA), so
@@ -352,6 +444,10 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
                 ? 'Tracing inputs under Treas. Reg. §1.163-8T set the §163(d)(5)(A) category gross amounts by use of debt proceeds; the Form 4952 allowed deduction and carryforward still reconcile to the aggregate §163(d) limit.'
                 : 'Pro-rata allocation under Rev. Rul. 2008-38 using each category share of gross Form 4952 line-1 investment interest.',
             tracingSplitSources: $tracingSplitSources,
+            line4aCalculationRows: $line4aCalculationRows,
+            line4cCalculationRows: $line4cCalculationRows,
+            line4dCalculationRows: $line4dCalculationRows,
+            line4eCalculationRows: $line4eCalculationRows,
             line4dNetGainFromDisposition: $line4d,
             line4eNetCapitalGainFromDisposition: $line4e,
             line4fNetShortTermFromDisposition: $line4f,

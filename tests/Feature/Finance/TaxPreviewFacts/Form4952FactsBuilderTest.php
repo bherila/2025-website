@@ -215,6 +215,12 @@ class Form4952FactsBuilderTest extends TestCase
         $this->assertSame(400.0, $facts->line4dNetGainFromDisposition);
         $this->assertSame(300.0, $facts->line4eNetCapitalGainFromDisposition);
         $this->assertSame(100.0, $facts->line4fNetShortTermFromDisposition);
+        $this->assertSame(400.0, collect($facts->line4dCalculationRows)
+            ->firstWhere('label', 'Schedule D line 16 combined gain or loss')
+            ->amount);
+        $this->assertSame(300.0, collect($facts->line4eCalculationRows)
+            ->firstWhere('label', 'Line 4e net capital gain from disposition')
+            ->amount);
         $this->assertSame(250.0, $facts->line4hTotalInvestmentIncome); // 4c (150) + 4f (100)
         $this->assertSame(250.0, $facts->line6NetInvestmentIncome);
         $this->assertSame(200.0, $facts->deductibleInvestmentInterestExpense);
@@ -232,6 +238,12 @@ class Form4952FactsBuilderTest extends TestCase
         $this->assertSame(0.0, $facts->line4dNetGainFromDisposition);
         $this->assertSame(0.0, $facts->line4eNetCapitalGainFromDisposition);
         $this->assertSame(0.0, $facts->line4fNetShortTermFromDisposition);
+        $this->assertSame(-400.0, collect($facts->line4dCalculationRows)
+            ->firstWhere('label', 'Schedule D line 16 combined gain or loss')
+            ->amount);
+        $this->assertSame(0.0, collect($facts->line4dCalculationRows)
+            ->firstWhere('label', 'Line 4d net gain after zero floor')
+            ->amount);
         $this->assertSame(150.0, $facts->line6NetInvestmentIncome); // unchanged (= line 4c)
         $this->assertSame(150.0, $facts->deductibleInvestmentInterestExpense);
         $this->assertSame(50.0, $facts->disallowedCarryforward);
@@ -248,6 +260,12 @@ class Form4952FactsBuilderTest extends TestCase
 
         $this->assertSame(150.0, $facts->totalQualifiedDividends);
         $this->assertSame(50.0, $facts->line4cNetInvestmentIncomeAfterQualifiedDividends);
+        $this->assertSame(200.0, collect($facts->line4aCalculationRows)
+            ->firstWhere('label', 'Line 4a gross investment income')
+            ->amount);
+        $this->assertSame(50.0, collect($facts->line4cCalculationRows)
+            ->firstWhere('label', 'Line 4c income after qualified dividends')
+            ->amount);
         $this->assertSame(50.0, $facts->electionNiiWithoutElection);
         $this->assertSame(450.0, $facts->electionExcessInvestmentInterest);
         $this->assertSame(150.0, $facts->electionAvailableForElection);
