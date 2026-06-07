@@ -144,7 +144,7 @@ The current pilot covers the highest-value debug paths:
 | `schedule1` | Schedule 1 line 5 | Reviewed K-1 ordinary/rental/partnership-statement sources that flow through Schedule E to Schedule 1 line 5. Form 4952 investment-interest items are excluded from this line. |
 | `schedule1` | Schedule 1 line 8 family / line 9 / line 10 | 1099-MISC sources, including unreviewed parsed sources. Unrouted 1099-MISC defaults to Schedule 1 line 8z unless explicitly routed to Schedule C or Schedule E. Explicit Schedule 1 subroutes are bucketed into line 8b, 8h, 8i, or 8z; `line9TotalOtherIncome` is the sum of those line 8 buckets, not a synonym for line 8z. |
 | `scheduleB` | Schedule B line 1 / line 5 / line 6 | 1099-INT Box 1 and Box 3, 1099-DIV Box 1a and Box 1b, and K-1 Box 5 / 6a / 6b sources are itemized with review metadata. Direct 1099 interest plus direct 1099 ordinary dividends feed the Form 4952 line 4a Schedule B bucket. |
-| `form4952` | Form 4952 line 1 / line 4a / line 4c / line 5 / line 8 | Investment-interest sources are separated from excluded investment-expense debug sources. Form 4952 gross investment income composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket, exposes line 4c after subtracting qualified dividends, and keeps line 5 investment expenses distinct so Schedule A line 9 and Schedule E exclusions can be debugged without reading React state. |
+| `form4952` | Form 4952 lines 1 / 4a–4h / 5 / 6 / 7 / 8, the Special Election Smart Worksheet (A–D), the 18–20 allocation, and the parallel AMT column | Investment-interest sources are separated from excluded investment-expense debug sources. Line 4a composes Schedule B direct interest/dividends with the K-1 Box 20A gross-investment-income bucket; lines 4d–4f bring in net gain from the disposition of investment property (Schedule D, trader-fund gains included); line 4c subtracts qualified dividends; line 5 (§212) is §67(g)-suspended; and the Schedule A line 9 / Schedule E line 28 split (lines 18–20) is exposed so trader-fund allocation can be debugged without reading React state. |
 | `scheduleA` | Schedule A lines 5a/5b/5c/7/8a/9/11/12/16/17 | W-2 Box 17 state tax, user-entered itemized deductions, K-1 Box 13L portfolio deductions, and Form 4952 investment interest are exposed with source metadata. Line 5a selects the larger of state/local income tax or general sales tax before adding real estate tax, uses the current 2025+ SALT cap, and exposes gross versus deductible investment-interest totals so Form 4952 limitations are auditable. The builder returns both single and MFJ standard-deduction comparisons because filing status is not yet backend-owned by this fact slice. |
 | `scheduleE` | Schedule E Part I/II partnership and rental buckets | Explicitly routed Schedule E 1099-MISC sources and K-1 Boxes 1/2/3/4/5/11ZZ/13ZZ are separated into passive, nonpassive, and trader-fund NII totals. Trader-fund detection mirrors the existing K-1 utility logic so Form 8960 can reuse the same backend source facts. |
 | `form8949` | Form 8949 rows / Schedule D rollups / wash sales | `CapitalGainsTaxReportService` loads account-lot transactions, runs the PHP `WashSaleAnalysisEngine`, and feeds `Form8949ReportBuilder` so API, tax facts, and future XLSX exports share one canonical Form 8949 path. Imported 1099-B copies are excluded when matched account lots exist to avoid double-counting. |
@@ -654,32 +654,32 @@ All three are computed in `TaxPreviewContext` using the `isMarried` flag (MFJ th
 
 ### Form 4952 (Investment Interest Expense) Support
 
-**Computation:** `computeForm4952Lines` in `resources/js/components/finance/Form4952Preview.tsx` builds two independent source lists, then runs a QD-election optimiser.
+**Computation:** `Form4952FactsBuilder` (`app/Services/Finance/TaxPreviewFacts/Builders/Form4952FactsBuilder.php`) computes the complete regular-tax form **and** a parallel AMT form, exposed on `taxFacts.form4952`. `Form4952Preview.tsx` renders those facts and no longer computes anything client-side.
 
-**Part I — Investment interest expense (Line 1, flowing to Line 3):**
-- K-1 Box 13 codes **H** (investment interest), **G**, **AC**, **AD** — collected into `invIntSources` as negative values.
-- `invIntSources.allowedAmount` prorates Form 4952 Line 8 back to each source. `scheduleEDeductibleInvestmentInterestExpense` is the subset eligible for Schedule E treatment under trader-fund supporting-statement footnotes.
-- 1099-INT **Box 5** — investment expense reported by the payer also feeds Part I Line 1 under current convention.
-- Short dividends held >45 days (from `analyzeShortDividends`) — deductible investment interest expense per Pub. 550.
+**Part I — Investment interest expense (Line 1 → Line 3):**
+- K-1 Box 13 codes **H** (investment interest), **G**, **AC**, **AD**. For a **non-materially-participating** partner in a securities-trading partnership the allowed portion is deducted **above the line on Schedule E Part II line 28** (§163(d)(5)(A)(ii); Rev. Rul. 2008-12); for an investor fund it is itemized on **Schedule A line 9**. Materially-participating trader interest bypasses §163(d)/Form 4952 entirely (`materialParticipationScheduleEInterestSources`).
+- Brokerage **margin interest** and 1099-INT **Box 5**.
+- Short dividends held **>45 days** (`analyzeShortDividends`) — investment interest expense per Pub. 550.
 
 **Part II — Net investment income (Lines 4a–6):**
-- Gross investment income (Line 4h): when K-1 **Box 20 Code A** is present it is authoritative; otherwise reconstruct from K-1 Box 5 interest + non-qualified dividends + Section 1256 (Box 11 C) + direct 1099 interest and non-qualified dividends.
-- K-1 **Box 20 Code B** (investment expenses) — collected into `invExpSources` and summed as `totalInvExp`. This is Form 4952 **Line 5** and reduces NII. It is **not** Part I interest expense.
-- `niiBefore = max(0, niiGross − totalInvExp)` — Form 4952 Line 6 (NII, floored at zero).
+- **Line 4a** gross investment income: K-1 **Box 20A** when present (authoritative), else reconstructed from Box 5 interest + Box 6a − Box 6b. Net capital gain and **§1256 (Box 11C) are excluded from 4a** — they are capital gain and belong on line 4d (via Schedule D), not ordinary line-4a income.
+- **Line 4b** qualified dividends (subtracted); **Line 4c** = 4a − 4b.
+- **Lines 4d/4e/4f** — net gain from the disposition of property held for investment, sourced from Schedule D. Trader-fund Schedule D trading gains count as investment property under §163(d)(5)(A)(ii); genuine §1231 gains routed via Form 4797 are carved out. **4e** is the long-term (preferential-rate) slice — excluded from NII unless elected; **4f** is the short-term slice — investment income by default.
+- **Special Election Smart Worksheet (A–D):** the maximum beneficial §163(d)(4)(B)(iii) election = lesser of the excess investment interest (B) and the available qualified dividends + net capital gain (C = 4b + 4e). Reported as `recommendedElection`; the applied `line 4g` defaults to **0** (not auto-elected).
+- **Line 4h** = 4c + 4f + 4g. **Line 5** investment expenses (§212) = **$0 for 2018–2025** via a year-aware §67(g) guard (`line5TcjaSuspended` / `line5SuspensionReason`); K-1 Box 20B is tracked in `excludedInvestmentExpenseSources` but excluded from line 5. **Line 6** NII = 4h − 5 (floored at 0).
 
-**Backend facts pilot:** `TaxPreviewFactsService` follows the filed-return treatment for current debug output: K-1 Box 20B amounts are exposed under `excludedInvestmentExpenseSources` / `totalExcludedInvestmentExpenses`, while `investmentExpenseSources` / `totalInvestmentExpenses` represent amounts included on Form 4952 line 5. For the 2025 return this means line 5 is `0`, with Box 20B still available as excluded supporting detail.
+**Part III — Deduction & carryforward:**
+- **Line 8** deduction = `min(Line 3, Line 6)`; **Line 7** carryforward = `max(0, Line 3 − Line 6)`.
+- **Allocation worksheet (Lines 18–20):** the allowed Line 8 is split between **Schedule E above-the-line (19a)** and **Schedule A line 9 (20)** — pro-rata per Rev. Rul. 2008-38, or by tracing inputs under Treas. Reg. §1.163-8T when a K-1 supplies them. Exposed via `deductibleScheduleEAboveLine` / `deductibleScheduleAItemized` / `carryDestinations`.
 
-**Part III — Deduction and carryforward:**
-- Scenario A (no QD election): deductible = `min(Line 3, Line 6)`.
-- Scenarios B / C evaluate the 4g qualified-dividend election when Line 3 > Line 6, picking the best net benefit at 37% vs. the 13.2% QD rate delta.
-- `deductibleInvestmentInterestExpense` is Line 8; `disallowedCarryforward` is Line 7 (rolls forward to next year's Line 2).
+**AMT (`form4952Facts.amt`):** a parallel Line 1–8 / 4a–4h pass using AMT inputs (e.g. K-1 **Box 17B** basis adjustment to disposition gain, §56(a)(6); a hook for specified private-activity-bond investment income, §57(a)(5)). The regular-vs-AMT Line 8 difference is `line2cAdjustment` (regular − AMT) and flows to **Form 6251 line 2c** (§56(b)(1)(C)). With no AMT items the AMT lines equal regular and `line2cAdjustment` is 0.
 
 **Known gaps:**
-- Line 2 (prior-year disallowed investment interest carryover) is not persisted across years yet. Each year's Line 3 uses only current-year Line 1 sources.
-- Section 1256 net gain (Box 11 Code C) is added to reconstructed NII even without a formal Line 4g election. Aggressive treatment — a user wanting full §163(d) conformance should override by reporting Box 20 Code A instead.
-- Post-TCJA §212 misc-itemized suspension applies 2018–2025 — Box 20B investment expenses still reduce NII on Form 4952 Line 5 but are not deductible on Schedule A line 16.
+- Line 2 (prior-year disallowed carryover) is not persisted across years yet.
+- The QD/net-capital-gain election is reported but not auto-applied (`line 4g` = 0) — the user weighs the unlocked deduction against the forfeited preferential rate.
+- CLI debug slices supply Schedule D + year through `TaxPreviewFactsService::buildForm4952ForSlice`; the `schedule1` slice intentionally passes a null Schedule D (so 4d–4f are 0 for that slice only) to avoid the capital-gains report.
 
-**XLSX:** Form 4952 sheet currently renders from the client calculation output. Future workbook work should reuse `taxFacts.form4952` source lines for Part I sources, excluded 20B debug detail, Line 5 total, Line 6 NII, Line 7 carryforward, and Line 8 deduction. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
+**XLSX:** the Form 4952 sheet should reuse `taxFacts.form4952` source lines — Part I sources, excluded 20B detail, lines 4a–4h, 5, 6, 7, 8, the 18–20 allocation, and the AMT column. Schedule A Line 9 cross-references the Line 8 row via an Excel formula (rowIndex lookup keyed on the Line 8 description).
 
 ---
 

@@ -83,7 +83,7 @@ class Schedule1FactsBuilderTest extends TestCase
     {
         $scheduleB = app(ScheduleBFactsBuilder::class)->build($k1Docs, []);
 
-        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, []);
+        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, null, null, 2025, 0.0, []);
     }
 
     /**

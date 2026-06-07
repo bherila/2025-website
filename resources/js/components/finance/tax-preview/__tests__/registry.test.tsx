@@ -1,5 +1,4 @@
 import type { TaxPreviewState } from '../formRegistry'
-
 import { ALL_FORM_IDS } from '../formRegistry'
 import { formRegistry } from '../registry'
 import { FORM_IDS } from '../taxRoute'

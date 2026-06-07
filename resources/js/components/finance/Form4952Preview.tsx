@@ -321,7 +321,7 @@ export default function Form4952Preview({
         />
       </FormBlock>
 
-      {totalQualDiv > 0 && (
+      {(totalQualDiv > 0 || facts.line4eNetCapitalGainFromDisposition > 0) && (
         <FormBlock title="Special Election Smart Worksheet — Include Qualified Dividends / Net Capital Gain?">
           <FormLine label="A — Net investment income without election (4c + 4f − 5)" value={facts.electionNiiWithoutElection} />
           <FormLine label="B — Excess investment interest (line 3 − A)" value={facts.electionExcessInvestmentInterest} />

@@ -23,11 +23,13 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $docs1099
      * @param  TaxFactSource[]  $marginInterestSources
      *
-     * $scheduleD / $form4797 / $year are optional so per-form CLI slices can build a bare
-     * Form 4952; when $scheduleD is null, Part II lines 4d–4h are 0 (correct whenever there
-     * is no net gain from the disposition of investment property).
+     * $scheduleD / $form4797 are nullable — pass null only when there genuinely is no Schedule D /
+     * Form 4797 (Part II lines 4d–4h are then 0, correct when there is no net gain from the
+     * disposition of investment property). $year is required so the §67(g) line-5 suspension is
+     * never inferred from the wall clock; callers (incl. CLI slices via TaxPreviewFactsService)
+     * must always supply Schedule D and the tax year so dependent forms match the full return.
      */
-    public function build(array $k1Docs, array $docs1099, ScheduleBFacts $scheduleB, float $shortDividendDeduction, array $marginInterestSources = [], ?ScheduleDFacts $scheduleD = null, ?Form4797Facts $form4797 = null, ?int $year = null): Form4952Facts
+    public function build(array $k1Docs, array $docs1099, ScheduleBFacts $scheduleB, ?ScheduleDFacts $scheduleD, ?Form4797Facts $form4797, int $year, float $shortDividendDeduction, array $marginInterestSources = []): Form4952Facts
     {
         $investmentInterestSources = [];
         $investmentExpenseSources = [];
@@ -204,12 +206,11 @@ class Form4952FactsBuilder extends TaxPreviewFactBuilder
         // §67(b) miscellaneous itemized deductions, SUSPENDED for 2018–2025 by §67(g) (TCJA), so
         // line 5 is $0; K-1 Box 20B items are tracked in $excludedInvestmentExpenseSources but
         // excluded here. (Trader-fund §162 expenses are deducted above the line on Schedule E.)
-        $effectiveYear = $year ?? (int) date('Y');
-        $line5Suspended = $this->tcjaMiscDeductionsSuspended($effectiveYear);
+        $line5Suspended = $this->tcjaMiscDeductionsSuspended($year);
         $line5 = $line5Suspended ? 0.0 : $totalInvestmentExpenses;
         $line5SuspensionReason = $line5Suspended
-            ? "§67(g) (TCJA) suspends §212 investment-expense miscellaneous itemized deductions for {$effectiveYear}; line 5 is \$0 and K-1 Box 20B items are tracked but excluded."
-            : "Outside the §67(g) suspension window; line 5 reflects investment expenses for {$effectiveYear}.";
+            ? "§67(g) (TCJA) suspends §212 investment-expense miscellaneous itemized deductions for {$year}; line 5 is \$0 and K-1 Box 20B items are tracked but excluded."
+            : "Outside the §67(g) suspension window; line 5 reflects investment expenses for {$year}.";
 
         // No §163(d)(4)(B)(iii) / §1(h)(11)(D)(i) election is applied by default — electing would
         // forfeit the preferential qualified-dividend / net-capital-gain rate on the elected amount.

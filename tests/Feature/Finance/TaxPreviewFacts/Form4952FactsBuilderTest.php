@@ -322,7 +322,7 @@ class Form4952FactsBuilderTest extends TestCase
     {
         $scheduleB = app(ScheduleBFactsBuilder::class)->build($k1Docs, []);
 
-        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, 0.0, $marginInterestSources, $scheduleD, null, $year);
+        return app(Form4952FactsBuilder::class)->build($k1Docs, [], $scheduleB, $scheduleD, null, $year, 0.0, $marginInterestSources);
     }
 
     /**
