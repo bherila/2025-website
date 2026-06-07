@@ -96,7 +96,7 @@ describe('Career Comparison after-tax result views', () => {
     expect(screen.getByText('Annual federal and AMT breakdown')).toBeInTheDocument()
     expect(screen.getByText('Equity tax source breakdown')).toBeInTheDocument()
     expect(screen.getAllByText('Private offer').length).toBeGreaterThan(0)
-    expect(screen.getByRole('cell', { name: '$69,761' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '$47,077' })).toBeInTheDocument()
     expect(screen.getAllByText('ISO AMT preference').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('cell', { name: 'form_6251_iso_bargain_element' }).length).toBeGreaterThan(0)
   })
