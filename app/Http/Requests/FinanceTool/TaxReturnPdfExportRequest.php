@@ -62,7 +62,11 @@ class TaxReturnPdfExportRequest extends FormRequest
 
         $filename = preg_replace('/[^A-Za-z0-9._-]/', '-', $filename) ?: "{$year}-tax-return.pdf";
 
-        return str_ends_with(strtolower($filename), '.pdf') ? $filename : "{$filename}.pdf";
+        if (str_ends_with(strtolower($filename), '.pdf')) {
+            return substr($filename, 0, 255);
+        }
+
+        return substr($filename, 0, 251).'.pdf';
     }
 
     private function normalizeString(mixed $value): ?string

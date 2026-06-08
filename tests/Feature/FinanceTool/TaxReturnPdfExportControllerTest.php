@@ -5,6 +5,7 @@ namespace Tests\Feature\FinanceTool;
 use App\Models\FinanceTool\FinTaxReturnPdfExport;
 use App\Models\FinanceTool\FinTaxReturnProfile;
 use App\Models\User;
+use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery\MockInterface;
@@ -69,6 +70,35 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'mode' => 'editable',
             'status' => 'failed',
             'filename' => 'bad-template.pdf',
+        ]);
+    }
+
+    public function test_filename_is_clamped_after_pdf_extension_is_added(): void
+    {
+        $user = User::factory()->create();
+        $filename = str_repeat('a', 252);
+        $expectedFilename = str_repeat('a', 251).'.pdf';
+
+        $this->mock(IrsReturnPdfBuilder::class, function (MockInterface $mock) use ($expectedFilename): void {
+            $mock->shouldReceive('buildForUser')
+                ->once()
+                ->withArgs(static fn (User $user, TaxReturnPdfOptions $options): bool => $options->filename === $expectedFilename)
+                ->andThrow(new RuntimeException('IRS PDF template file is missing for form-1040.'));
+        });
+
+        $response = $this->actingAs($user)->postJson('/finance/tax-preview/export-pdf', [
+            'year' => 2025,
+            'scope' => 'form',
+            'formId' => 'form-1040',
+            'mode' => 'editable',
+            'filename' => $filename,
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertSame(255, strlen($expectedFilename));
+        $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
+            'user_id' => $user->id,
+            'filename' => $expectedFilename,
         ]);
     }
 
