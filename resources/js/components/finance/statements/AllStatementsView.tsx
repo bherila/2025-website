@@ -189,7 +189,19 @@ function formatComparisonValue(value: number | undefined, isPercentage: boolean)
 
 function formatStatementDate(date: string): string {
   const normalizedDate = date.split(/[ T]/)[0] ?? date
-  const [year, month, day] = normalizedDate.split('-').map(Number)
+  const [yearString, monthString, dayString] = normalizedDate.split('-')
+
+  if (!yearString || !monthString || !dayString) {
+    return '-'
+  }
+
+  const year = Number(yearString)
+  const month = Number(monthString)
+  const day = Number(dayString)
+
+  if ([year, month, day].some((value) => Number.isNaN(value))) {
+    return '-'
+  }
 
   return new Date(year, month - 1, day).toLocaleDateString('en-US', {
     month: 'short',
