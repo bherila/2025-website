@@ -357,7 +357,15 @@ class FinanceDocumentController extends Controller
     {
         $request->validate($this->statementValidationRules());
 
-        $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $request->all());
+        $payload = $request->all();
+        $userId = (int) Auth::id();
+        if (is_string($request->input('s3_key')) && $request->input('s3_key') !== '') {
+            $validatedS3 = $this->validateS3Key((string) $request->input('s3_key'), $userId, (string) $request->input('document_kind'));
+            $payload['s3_key'] = $validatedS3['s3_key'];
+            $payload['stored_filename'] = $validatedS3['stored_filename'];
+        }
+
+        $result = $this->documentIngestionService->ingestStatementDocument($userId, $payload);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 
@@ -372,7 +380,15 @@ class FinanceDocumentController extends Controller
     {
         $request->validate($this->statementValidationRules());
 
-        $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $request->all());
+        $payload = $request->all();
+        $userId = (int) Auth::id();
+        if (is_string($request->input('s3_key')) && $request->input('s3_key') !== '') {
+            $validatedS3 = $this->validateS3Key((string) $request->input('s3_key'), $userId, (string) $request->input('document_kind'));
+            $payload['s3_key'] = $validatedS3['s3_key'];
+            $payload['stored_filename'] = $validatedS3['stored_filename'];
+        }
+
+        $result = $this->documentIngestionService->ingestCsvDocument($userId, $payload);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 

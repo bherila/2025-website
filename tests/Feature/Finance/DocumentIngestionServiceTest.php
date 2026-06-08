@@ -128,6 +128,30 @@ class DocumentIngestionServiceTest extends TestCase
         ]);
     }
 
+    public function test_statement_upload_rejects_s3_key_outside_authenticated_user_prefix(): void
+    {
+        $attacker = $this->createUser();
+        $victim = $this->createUser();
+        $accountId = $this->createAccount($attacker->id, 'Brokerage');
+
+        $response = $this->actingAs($attacker)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'jan-statement.pdf',
+            's3_key' => "fin_documents/{$victim->id}/statement/known-victim.pdf",
+            'file_hash' => str_repeat('a', 64),
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => ['periodEnd' => '2025-01-31'],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('message', 'Invalid upload key for this document kind.');
+    }
+
     public function test_statement_upload_reuses_existing_document_for_same_user_file_hash(): void
     {
         Queue::fake();
