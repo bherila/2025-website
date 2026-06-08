@@ -107,15 +107,7 @@ class IrsFieldValueFormatter
             }
         }
 
-        $parts = [];
-        $offset = 0;
-
-        foreach ($groups as $length) {
-            $parts[] = substr($digits, $offset, $length);
-            $offset += $length;
-        }
-
-        return implode('-', array_filter($parts, static fn (string $part): bool => $part !== ''));
+        return $digits;
     }
 
     private function date(mixed $value): ?string

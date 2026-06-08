@@ -49,9 +49,9 @@ class IrsFieldValueFormatterTest extends TestCase
     {
         $formatter = new IrsFieldValueFormatter;
 
-        $this->assertSame('123-45-6789', $formatter->format('123456789', ['format' => 'ssn']));
+        $this->assertSame('123456789', $formatter->format('123-45-6789', ['format' => 'ssn']));
         $this->assertSame('45', $formatter->format('123456789', ['format' => 'ssn', 'segment' => 2]));
-        $this->assertSame('12-3456789', $formatter->format('123456789', ['format' => 'ein']));
+        $this->assertSame('123456789', $formatter->format('12-3456789', ['format' => 'ein']));
         $this->assertSame('01/02/2025', $formatter->format('2025-01-02', ['format' => 'date']));
         $this->assertSame('(555) 123-4567', $formatter->format('5551234567', ['format' => 'phone']));
     }
