@@ -1,6 +1,8 @@
 import {
+  liquidityDetailRouteInstance,
   ltvDetailRouteInstance,
   parseCareerCompHash,
+  parseLiquidityDetailRouteInstance,
   parseLtvDetailRouteInstance,
   serializeCareerCompRoute,
 } from '../careerCompRoute'
@@ -77,6 +79,24 @@ describe('careerCompRoute', () => {
         { id: 'ltv-table' },
         { id: 'ltv-detail', instance: detailInstance },
         { id: 'ltv-detail-year', instance: yearInstance },
+      ],
+    })
+  })
+
+  it('round-trips liquidity detail route instances', () => {
+    const detailInstance = liquidityDetailRouteInstance({ jobId: 'hyp-1', year: 2028, band: 'medium', mode: 'afterTax' })
+
+    expect(parseLiquidityDetailRouteInstance(detailInstance)).toEqual({
+      jobId: 'hyp-1',
+      year: 2028,
+      band: 'medium',
+      mode: 'afterTax',
+    })
+    expect(parseLiquidityDetailRouteInstance('jobId=hyp-1&band=medium&mode=afterTax')).toBeNull()
+    expect(parseCareerCompHash(`#/liquidity-over-time/liquidity-detail:${encodeURIComponent(detailInstance)}`)).toEqual({
+      columns: [
+        { id: 'liquidity-over-time' },
+        { id: 'liquidity-detail', instance: detailInstance },
       ],
     })
   })

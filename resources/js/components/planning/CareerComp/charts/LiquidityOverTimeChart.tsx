@@ -7,15 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
+import type { CareerCompLiquidityMode, CareerCompLtvBand } from '../careerCompRoute'
 import { formatFriendlyMoney, formatMoney } from '../formatters'
 import { type LiquidityChartRow, type LiquiditySeries, mapAfterTaxLiquidityChartData, mapLiquidityChartData, mapLiquiditySeries, type ProjectionBand, SERIES_COLORS } from '../mappers'
 import type { CareerCompProjection } from '../types'
 
-export type LiquidityMode = 'preTax' | 'afterTax'
+export type LiquidityMode = CareerCompLiquidityMode
 
 interface LiquidityOverTimeChartProps {
   projection: CareerCompProjection
   initialMode?: LiquidityMode | undefined
+  onOpenDetail?: ((jobId: string, year: number, band: CareerCompLtvBand, mode: LiquidityMode) => void) | undefined
 }
 
 type ValueScale = 'linear' | 'log'
@@ -48,7 +50,39 @@ function chartRowsForScale(rows: LiquidityChartRow[], series: LiquiditySeries[],
   })
 }
 
-export function LiquidityOverTimeChart({ projection, initialMode = 'preTax' }: LiquidityOverTimeChartProps): ReactElement {
+function LiquidityDrillButton({
+  entry,
+  year,
+  mode,
+  value,
+  onOpenDetail,
+}: {
+  entry: LiquiditySeries
+  year: number
+  mode: LiquidityMode
+  value: number
+  onOpenDetail?: ((jobId: string, year: number, band: CareerCompLtvBand, mode: LiquidityMode) => void) | undefined
+}): ReactElement {
+  if (!onOpenDetail) {
+    return <span className="font-currency tabular-nums">{formatFriendlyMoney(value)}</span>
+  }
+
+  const modeLabel = mode === 'afterTax' ? 'after-tax' : 'before-tax'
+  const bandLabel = BAND_FILTER_LABELS[entry.band].toLowerCase()
+
+  return (
+    <button
+      type="button"
+      className="inline-flex min-w-16 justify-end rounded-sm text-right font-currency tabular-nums text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`Drill into ${entry.jobName} ${modeLabel} liquidity ${bandLabel} ${year}`}
+      onClick={() => onOpenDetail(entry.jobId, year, entry.band, mode)}
+    >
+      {formatFriendlyMoney(value)}
+    </button>
+  )
+}
+
+export function LiquidityOverTimeChart({ projection, initialMode = 'preTax', onOpenDetail }: LiquidityOverTimeChartProps): ReactElement {
   const hasAfterTaxData = hasAfterTaxLiquidity(projection)
   const [requestedLiquidityMode, setRequestedLiquidityMode] = useState<LiquidityMode>(initialMode)
   const liquidityMode = requestedLiquidityMode === 'afterTax' && hasAfterTaxData ? 'afterTax' : 'preTax'
@@ -224,7 +258,11 @@ export function LiquidityOverTimeChart({ projection, initialMode = 'preTax' }: L
                 {rows.map((row) => (
                   <TableRow key={row.year}>
                     <TableCell>{row.year}</TableCell>
-                    {series.map((entry) => <TableCell key={entry.key} className="text-right">{formatFriendlyMoney(row[entry.key] ?? 0)}</TableCell>)}
+                    {series.map((entry) => (
+                      <TableCell key={entry.key} className="text-right">
+                        <LiquidityDrillButton entry={entry} year={row.year} mode={liquidityMode} value={row[entry.key] ?? 0} onOpenDetail={onOpenDetail} />
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>
