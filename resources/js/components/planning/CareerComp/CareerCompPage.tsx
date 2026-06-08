@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Download, LineChart, type LucideIcon, ReceiptText, Settings2, Share2, Table2, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, BarChart3, Briefcase, ChevronRight, Copy, Download, FileText, LineChart, type LucideIcon, ReceiptText, Settings2, Share2, Table2, Trash2, Upload } from 'lucide-react'
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import Container from '@/components/container'
@@ -63,7 +63,7 @@ import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCo
 import type { LiquidityMode } from './charts/LiquidityOverTimeChart'
 import { DEFAULT_CAREER_COMP_INPUTS } from './defaults'
 import { normalizeCareerCompInputs } from './inputUtils'
-import type { CareerCompInitialData, CareerCompInputs, CareerCompProjection } from './types'
+import type { CareerCompInitialData, CareerCompInputs, CareerCompProjection, JobSpec } from './types'
 
 interface CareerCompPageProps {
   initialData: CareerCompInitialData
@@ -330,7 +330,7 @@ function columnStackToRoute(columns: CareerCompColumnState[]): CareerCompRoute {
 
 function ProjectionEmptyState({ loading }: { loading: boolean }): ReactElement {
   return (
-    <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+    <div className="rounded-md border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
       {loading ? 'Calculating projection...' : 'Projection will appear after the backend compute endpoint returns successfully.'}
     </div>
   )
@@ -342,7 +342,7 @@ function ColumnOpenButton({ label, description, icon: Icon, onClick }: { label: 
       type="button"
       onClick={onClick}
       aria-label={`Open ${label}`}
-      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-muted bg-card px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
         <Icon className="size-4" />
@@ -715,12 +715,93 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     if (column.kind === 'job') {
       const job = [...inputs.currentJobs, ...inputs.hypotheticalJobs].find((entry) => entry.id === column.jobId)
       const isCurrentJob = inputs.currentJobs.some((entry) => entry.id === column.jobId)
+      const jobForActions = job as JobSpec | undefined
+
+      const cloneJobId = (jobs: JobSpec[]): string => {
+        let candidate = `hyp-${jobs.length + 1}`
+        let counter = 2
+        const used = new Set(jobs.map((entry) => entry.id))
+        while (used.has(candidate)) {
+          candidate = `hyp-${jobs.length + counter}`
+          counter += 1
+        }
+        return candidate
+      }
+
+      const archiveOffer = (): void => {
+        if (!jobForActions || isCurrentJob) {
+          return
+        }
+        setInputs((current) => ({
+          ...current,
+          hypotheticalJobs: current.hypotheticalJobs.map((entry) => (entry.id === jobForActions.id ? { ...entry, archived: true } : entry)),
+        }))
+      }
+
+      const deleteOffer = (): void => {
+        if (!jobForActions || isCurrentJob || inputs.hypotheticalJobs.length <= 1) {
+          return
+        }
+        setInputs((current) => ({
+          ...current,
+          hypotheticalJobs: current.hypotheticalJobs.filter((entry) => entry.id !== jobForActions.id),
+        }))
+      }
+
+      const copyOffer = (): void => {
+        if (!jobForActions || isCurrentJob) {
+          return
+        }
+
+        const nextId = cloneJobId(inputs.hypotheticalJobs)
+        const copied: JobSpec = {
+          ...jobForActions,
+          id: nextId,
+          name: `${jobForActions.name} (copy)`,
+          archived: false,
+          retainedCurrentJobIds: [...jobForActions.retainedCurrentJobIds],
+          rsuGrants: jobForActions.rsuGrants.map((grant) => ({
+            ...grant,
+            id: `${nextId}-${grant.id}`,
+            vestingEvents: [...grant.vestingEvents],
+            vestingSchedule: grant.vestingSchedule
+              ? {
+                  ...grant.vestingSchedule,
+                  tranches: grant.vestingSchedule.tranches ? [...grant.vestingSchedule.tranches] : undefined,
+                }
+              : null,
+          })),
+          optionGrants: jobForActions.optionGrants.map((grant) => ({ ...grant, id: `${nextId}-${grant.id}` })),
+        }
+
+        setInputs((current) => ({ ...current, hypotheticalJobs: [...current.hypotheticalJobs, copied] }))
+      }
+
+      const offerActions = isCurrentJob || !jobForActions
+        ? null
+        : (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button type="button" variant="ghost" size="sm" aria-label={`Copy ${jobForActions.name}`} title={`Copy ${jobForActions.name}`} onClick={copyOffer}>
+              <Copy className="size-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${jobForActions.name}`} title={`Open notes for ${jobForActions.name}`} onClick={() => onOpenOfferNotes(jobForActions.id)}>
+              <FileText className="size-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Archive ${jobForActions.name}`} title={`Archive ${jobForActions.name}`} onClick={archiveOffer}>
+              <Archive className="size-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Delete ${jobForActions.name}`} title={`Delete ${jobForActions.name}`} onClick={deleteOffer}>
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        )
 
       return {
         key: `job:${column.jobId}`,
         id: 'job',
         label: isCurrentJob ? 'Current job details' : 'Offer details',
         shortLabel: job?.name ?? 'Job',
+        headerActions: offerActions,
         size: 'wide',
         children: (
           <JobEditorColumn
@@ -732,10 +813,12 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             onOpenOfferNotes={openOfferNotes}
             onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })}
             activeGrant={activeGrant}
+            compact={isCurrentJob ? false : true}
           />
         ),
       }
     }
+
 
     if (column.kind === 'grant') {
       return {
@@ -967,7 +1050,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       <WarningDetailsDialog warning={selectedWarning} onOpenChange={(open) => { if (!open) setSelectedWarning(null) }} />
 
       {status ? (
-        <section className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>
+        <section className="rounded-md border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>
       ) : null}
 
       <section className="grid gap-3">
