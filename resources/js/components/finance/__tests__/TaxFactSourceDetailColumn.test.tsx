@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 
 import type {
+  Form1040Facts,
   Schedule1Facts,
   ScheduleAFacts,
   ScheduleDFacts,
@@ -38,11 +39,13 @@ function makeSource(overrides: Partial<TaxFactSource> = {}): TaxFactSource {
  * casts keep the fixture focused. Slices default to empty objects.
  */
 function makeFacts(slices: {
+  form1040?: Partial<Form1040Facts>
   schedule1?: Partial<Schedule1Facts>
   scheduleA?: Partial<ScheduleAFacts>
   scheduleD?: Partial<ScheduleDFacts>
 } = {}): TaxPreviewFacts {
   return {
+    form1040: (slices.form1040 ?? {}) as Form1040Facts,
     schedule1: (slices.schedule1 ?? {}) as Schedule1Facts,
     scheduleA: (slices.scheduleA ?? {}) as ScheduleAFacts,
     scheduleD: (slices.scheduleD ?? {}) as ScheduleDFacts,
@@ -50,6 +53,20 @@ function makeFacts(slices: {
 }
 
 describe('taxFactSourceDetailColumn', () => {
+  it('resolves a Form 1040 line key to its sources, total, and description', () => {
+    const sources = [makeSource({ id: 'line25b', label: 'IRA Custodian withholding', amount: 1200 })]
+    const payload = taxFactSourceDetailColumn(
+      makeFacts({ form1040: { line25bSources: sources, line25b: 1200 } }),
+      'form-1040:line-25b',
+    )
+
+    expect(payload).not.toBeNull()
+    expect(payload!.title).toBe('Form 1040 Line 25b Supporting Details')
+    expect(payload!.description).toBe('Federal income tax withheld from 1099')
+    expect(payload!.sources).toBe(sources)
+    expect(payload!.total).toBe(1200)
+  })
+
   it('resolves a Schedule 1 line key to its sources, total, and signed display', () => {
     const sources = [makeSource({ id: 'line5', label: 'Partnership — Schedule E net income/loss', amount: 1200 })]
     const payload = taxFactSourceDetailColumn(

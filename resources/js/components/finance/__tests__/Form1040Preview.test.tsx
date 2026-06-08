@@ -1,36 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import React from 'react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1040Facts, TaxFactSource } from '@/types/generated/tax-preview-facts'
 
 import Form1040Preview, { compute1099RDistributionSummary, form1040FactsToLines } from '../Form1040Preview'
-
-jest.mock('lucide-react', () => ({
-  ChevronRight: () => <svg data-testid="chevron-right" />,
-}))
-
-jest.mock('@/components/ui/table', () => ({
-  Table: ({ children }: { children: React.ReactNode }) => <table>{children}</table>,
-  TableBody: ({ children }: { children: React.ReactNode }) => <tbody>{children}</tbody>,
-  TableCell: ({ children, ...p }: React.ComponentProps<'td'>) => <td {...p}>{children}</td>,
-  TableHead: ({ children }: { children: React.ReactNode }) => <th>{children}</th>,
-  TableHeader: ({ children }: { children: React.ReactNode }) => <thead>{children}</thead>,
-  TableRow: ({ children, ...p }: React.ComponentProps<'tr'>) => <tr {...p}>{children}</tr>,
-}))
-
-jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, ...props }: React.ComponentProps<'button'>) => (
-    <button {...props}>{children}</button>
-  ),
-}))
-
-jest.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}))
 
 function makeSource(label: string, amount: number, notes?: string): TaxFactSource {
   return {
@@ -129,18 +102,40 @@ function makeFacts(overrides: Partial<Form1040Facts> = {}): Form1040Facts {
   }
 }
 
-function renderForm1040(facts: Form1040Facts = makeFacts(), onNavigate?: (tab: string) => void) {
-  return render(<Form1040Preview facts={facts} selectedYear={2025} onNavigate={onNavigate} />)
+interface RenderForm1040Options {
+  onNavigate?: (tab: string) => void
+  onOpenDetail?: (instanceKey: string) => void
+}
+
+function renderForm1040(facts: Form1040Facts = makeFacts(), options: RenderForm1040Options = {}) {
+  return render(
+    <Form1040Preview
+      facts={facts}
+      selectedYear={2025}
+      onNavigate={options.onNavigate}
+      onOpenDetail={options.onOpenDetail}
+    />,
+  )
+}
+
+function getLineRow(label: string): HTMLElement {
+  const row = screen.getByText(label).closest('div.grid')
+  expect(row).not.toBeNull()
+
+  return row!
 }
 
 describe('Form1040Preview', () => {
   it('renders backend Form 1040 facts as line items', () => {
-    renderForm1040()
+    const { container } = renderForm1040()
 
     expect(screen.getByText('Wages, salaries, tips')).toBeInTheDocument()
+    expect(screen.getByText('1z.')).toBeInTheDocument()
     expect(screen.getByText('Total tax')).toBeInTheDocument()
-    expect(screen.getByText('$100,000.00')).toBeInTheDocument()
-    expect(screen.getByText('$18,000.00')).toBeInTheDocument()
+    expect(screen.getByText('$100,000')).toBeInTheDocument()
+    expect(screen.getByText('$18,000')).toBeInTheDocument()
+    expect(container.querySelector('table')).not.toBeInTheDocument()
+    expect(screen.getByText('1z.').parentElement?.className).toContain('grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.75rem,7rem)_2rem]')
   })
 
   it('maps facts to workbook-compatible line items', () => {
@@ -153,36 +148,40 @@ describe('Form1040Preview', () => {
     ]))
   })
 
-  it('calls onNavigate for Schedule B, Schedule D, Schedule 3, and Schedule 1 rows', () => {
+  it('calls onNavigate from destination buttons for linked schedule lines', () => {
     const onNavigate = jest.fn()
-    renderForm1040(makeFacts(), onNavigate)
+    renderForm1040(makeFacts(), { onNavigate })
 
-    fireEvent.click(screen.getByText('Taxable interest').closest('tr')!)
-    fireEvent.click(screen.getByText('Capital gain or loss').closest('tr')!)
-    fireEvent.click(screen.getByText('Nonrefundable credits from Schedule 3').closest('tr')!)
-    fireEvent.click(screen.getByText('Additional income from Schedule 1').closest('tr')!)
+    fireEvent.click(within(getLineRow('Taxable interest')).getByRole('button', { name: 'Open Schedule B' }))
+    fireEvent.click(within(getLineRow('Capital gain or loss')).getByRole('button', { name: 'Open Schedule D' }))
+    fireEvent.click(within(getLineRow('Nonrefundable credits from Schedule 3')).getByRole('button', { name: 'Open Schedule 3' }))
+    fireEvent.click(within(getLineRow('Additional income from Schedule 1')).getByRole('button', { name: 'Open Schedule 1' }))
+    fireEvent.click(within(getLineRow('Standard deduction or itemized deductions')).getByRole('button', { name: 'Open Schedule A' }))
 
     expect(onNavigate).toHaveBeenNthCalledWith(1, 'schedules')
     expect(onNavigate).toHaveBeenNthCalledWith(2, 'capital-gains')
     expect(onNavigate).toHaveBeenNthCalledWith(3, 'schedule-3')
     expect(onNavigate).toHaveBeenNthCalledWith(4, 'schedule-1')
+    expect(onNavigate).toHaveBeenNthCalledWith(5, 'schedule-a')
   })
 
-  it('does not navigate when an amount source button is clicked', () => {
+  it('opens Miller-column source details without navigating when a source button is clicked', () => {
     const onNavigate = jest.fn()
-    renderForm1040(makeFacts(), onNavigate)
+    const onOpenDetail = jest.fn()
+    renderForm1040(makeFacts(), { onNavigate, onOpenDetail })
 
-    fireEvent.click(screen.getAllByTitle('View data sources')[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Form 1040 Line 1z Supporting Details' }))
 
+    expect(onOpenDetail).toHaveBeenCalledWith('form-1040:line-1z')
     expect(onNavigate).not.toHaveBeenCalled()
   })
 
-  it('shows navigation chevrons only when navigation is provided', () => {
+  it('renders destination drill buttons only when navigation is provided', () => {
     const { rerender } = render(<Form1040Preview facts={makeFacts()} selectedYear={2025} />)
-    expect(screen.queryAllByTestId('chevron-right')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Open Schedule B' })).not.toBeInTheDocument()
 
     rerender(<Form1040Preview facts={makeFacts()} selectedYear={2025} onNavigate={jest.fn()} />)
-    expect(screen.getAllByTestId('chevron-right').length).toBeGreaterThanOrEqual(4)
+    expect(screen.getAllByRole('button', { name: 'Open Schedule B' })).toHaveLength(3)
   })
 
   it('splits 1099-R IRA and pension distributions for remaining frontend consumers', () => {

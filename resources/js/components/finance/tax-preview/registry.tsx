@@ -69,6 +69,7 @@ function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
       facts={state.taxFacts?.form1040}
       selectedYear={state.year}
       onNavigate={tabToDrill(onDrill)}
+      onOpenDetail={(instance) => onDrill({ id: 'tax-source-detail', instance })}
     />
   )
 }

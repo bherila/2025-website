@@ -1,19 +1,10 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronRight } from 'lucide-react'
-import { useState } from 'react'
 
+import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { TAX_TABS, type TaxTabId } from '@/components/finance/tax-tab-ids'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
+import { taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourceDetailColumn'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import type { Form1099RParsedData } from '@/types/finance/tax-document'
 import type { Form1040LineItem } from '@/types/finance/tax-return'
@@ -21,36 +12,13 @@ import type { Form1040Facts, TaxFactSource } from '@/types/generated/tax-preview
 
 export type { Form1040LineItem } from '@/types/finance/tax-return'
 
-interface DataSource {
-  label: string
-  amount: currency
-  note?: string
-}
-
 interface Form1040PreviewProps {
   facts?: Form1040Facts | null | undefined
   selectedYear: number
   /** Called when the user clicks a 1040 line with a linked schedule tab. */
   onNavigate?: ((tab: TaxTabId) => void) | undefined
-}
-
-interface LineItem {
-  line: string
-  label: string
-  value: currency | null
-  bold?: boolean
-  refSchedule?: string
-  sources?: DataSource[]
-  /** Tab to navigate to when the row is clicked (requires onNavigate prop). */
-  navTab?: TaxTabId
-}
-
-interface DataSourceModalState {
-  line: string
-  label: string
-  sources: DataSource[]
-  navTab?: TaxTabId
-  refSchedule?: string
+  /** Push a `tax-source-detail` Miller column for a `form-1040:<line>` instance key. */
+  onOpenDetail?: ((instanceKey: string) => void) | undefined
 }
 
 interface RetirementDistributionBucket {
@@ -208,7 +176,7 @@ const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
   { line: '9', label: 'Total income', valueKey: 'line9', bold: true },
   { line: '10', label: 'Adjustments to income', valueKey: 'line10', sourcesKey: 'line10Sources', refSchedule: 'Schedule 1', navTab: TAX_TABS.schedule1 },
   { line: '11', label: 'Adjusted gross income', valueKey: 'line11', bold: true },
-  { line: '12', label: 'Standard deduction or itemized deductions', valueKey: 'line12', sourcesKey: 'line12Sources', refSchedule: 'Schedule A', navTab: TAX_TABS.schedules },
+  { line: '12', label: 'Standard deduction or itemized deductions', valueKey: 'line12', sourcesKey: 'line12Sources', refSchedule: 'Schedule A', navTab: TAX_TABS.scheduleA },
   { line: '13', label: 'Qualified business income deduction', valueKey: 'line13', sourcesKey: 'line13Sources', refSchedule: 'Form 8995', navTab: TAX_TABS.form8995 },
   { line: '14', label: 'Total deductions', valueKey: 'line14', bold: true },
   { line: '15', label: 'Taxable income', valueKey: 'line15', bold: true },
@@ -234,6 +202,34 @@ const FORM1040_LINE_DEFINITIONS: Form1040LineDefinition[] = [
   { line: '36', label: 'Amount applied to estimated tax', valueKey: 'line36', unwired: true },
   { line: '37', label: 'Amount you owe', valueKey: 'line37', bold: true },
   { line: '38', label: 'Estimated tax penalty', valueKey: 'line38', unwired: true },
+]
+
+interface Form1040LineBlock {
+  title: string
+  lines: string[]
+}
+
+const FORM1040_LINE_BLOCKS: Form1040LineBlock[] = [
+  {
+    title: 'Income',
+    lines: ['1z', '2a', '2b', '3a', '3b', '4a', '4b', '5a', '5b', '6a', '6b', '7', '8', '9', '10', '11'],
+  },
+  {
+    title: 'Deductions',
+    lines: ['12', '13', '14', '15'],
+  },
+  {
+    title: 'Tax and Credits',
+    lines: ['16', '17', '18', '19', '20', '21', '22', '23', '24'],
+  },
+  {
+    title: 'Payments',
+    lines: ['25a', '25b', '25c', '25d', '26', '31', '32', '33'],
+  },
+  {
+    title: 'Refund or Amount Owed',
+    lines: ['34', '35a', '36', '37', '38'],
+  },
 ]
 
 function sourceNote(source: TaxFactSource): string | undefined {
@@ -289,158 +285,107 @@ export function form1040FactsToLines(facts?: Form1040Facts | null): Form1040Line
   })
 }
 
+function getLineSources(facts: Form1040Facts, definition: Form1040LineDefinition): TaxFactSource[] {
+  return definition.sourcesKey ? facts[definition.sourcesKey] : []
+}
+
+function shouldRenderLine(facts: Form1040Facts, definition: Form1040LineDefinition): boolean {
+  const value = facts[definition.valueKey]
+  const sources = getLineSources(facts, definition)
+
+  return !(definition.unwired && value === 0 && sources.length === 0)
+}
+
+function lineLabel(definition: Form1040LineDefinition) {
+  if (!definition.refSchedule) {
+    return definition.label
+  }
+
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+      <span>{definition.label}</span>
+      <span className="text-xs text-muted-foreground">({definition.refSchedule})</span>
+    </span>
+  )
+}
+
 export default function Form1040Preview({
   facts,
   selectedYear,
   onNavigate,
+  onOpenDetail,
 }: Form1040PreviewProps) {
-  const [dataSourceModal, setDataSourceModal] = useState<DataSourceModalState | null>(null)
-  const rawLines = form1040FactsToLines(facts)
-  const lines: LineItem[] = rawLines.map((line) => {
-    const mappedLine: LineItem = {
-      line: line.line,
-      label: line.label,
-      value: line.value === null ? null : currency(line.value),
-      ...(line.bold ? { bold: line.bold } : {}),
-      ...(line.refSchedule ? { refSchedule: line.refSchedule } : {}),
-      ...(line.navTab ? { navTab: line.navTab as TaxTabId } : {}),
-    }
+  if (!facts) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold mb-0.5">Form 1040 — {selectedYear}</h3>
+          <p className="text-xs text-muted-foreground">U.S. Individual Income Tax Return</p>
+        </div>
+        <FactsLoadingPlaceholder label="Form 1040" />
+      </div>
+    )
+  }
 
-    if (line.sources) {
-      mappedLine.sources = line.sources.map(source => ({
-        label: source.label,
-        amount: currency(source.amount),
-        ...(source.note ? { note: source.note } : {}),
-      }))
-    }
+  const visibleDefinitions = FORM1040_LINE_DEFINITIONS.filter(definition => shouldRenderLine(facts, definition))
 
-    return mappedLine
-  })
+  const sourceClickProps = (definition: Form1040LineDefinition, sources: TaxFactSource[]) =>
+    sources.length > 0 && onOpenDetail
+      ? {
+          onDetails: () => onOpenDetail(`form-1040:line-${definition.line}`),
+          detailsTooltip: `Form 1040 Line ${definition.line} Supporting Details`,
+          detailsGlyph: 'column' as const,
+        }
+      : {}
+
+  const destinationClickProps = (definition: Form1040LineDefinition) => {
+    const navTab = definition.navTab
+
+    return navTab && onNavigate
+      ? {
+          onClick: () => onNavigate(navTab),
+          destinationTooltip: `Open ${definition.refSchedule ?? 'related form'}`,
+          destinationGlyph: 'column' as const,
+        }
+      : {}
+  }
 
   return (
-    <div className="px-4 pb-4">
-      <h2 className="text-lg font-semibold mt-4 mb-2">Form 1040 Preview — {selectedYear}</h2>
-      <div className="border rounded-md overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16">Line</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead className="text-right w-40">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {lines.map(item => (
-              <TableRow
-                key={item.line}
-                className={cn(
-                  item.bold && 'font-semibold bg-muted/30',
-                  item.navTab && onNavigate && 'cursor-pointer hover:bg-muted/20 transition-colors',
-                )}
-                onClick={item.navTab && onNavigate ? () => { onNavigate(item.navTab!) } : undefined}
-              >
-                <TableCell className="text-sm font-mono">{item.line}</TableCell>
-                <TableCell className="text-sm">
-                  <span className="flex items-center gap-1">
-                    <span>{item.label}</span>
-                    {item.refSchedule && (
-                      <span className="text-xs text-muted-foreground">({item.refSchedule})</span>
-                    )}
-                    {item.navTab && onNavigate && (
-                      <ChevronRight size={14} className="text-muted-foreground shrink-0" />
-                    )}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right text-sm font-mono">
-                  {item.value !== null ? (
-                    item.sources && item.sources.length > 0 ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto p-0 font-mono text-sm underline decoration-dotted hover:text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDataSourceModal({
-                            line: item.line,
-                            label: item.label,
-                            sources: item.sources!,
-                            ...(item.navTab ? { navTab: item.navTab } : {}),
-                            ...(item.refSchedule ? { refSchedule: item.refSchedule } : {}),
-                          })
-                        }}
-                        title="View data sources"
-                      >
-                        {item.value.format()}
-                      </Button>
-                    ) : (
-                      item.value.format()
-                    )
-                  ) : '—'}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold mb-0.5">Form 1040 — {selectedYear}</h3>
+        <p className="text-xs text-muted-foreground">U.S. Individual Income Tax Return</p>
       </div>
 
-      {/* Data Source drill-down modal */}
-      <Dialog open={dataSourceModal !== null} onOpenChange={open => !open && setDataSourceModal(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Data Source — Line {dataSourceModal?.line}</DialogTitle>
-          </DialogHeader>
-          {dataSourceModal && (
-            <div className="space-y-3 py-1">
-              <p className="text-sm text-muted-foreground">{dataSourceModal.label}</p>
-              {dataSourceModal.navTab && onNavigate && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => {
-                    onNavigate(dataSourceModal.navTab!)
-                    setDataSourceModal(null)
-                  }}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  Go to {dataSourceModal.refSchedule ?? 'source'}
-                </Button>
-              )}
-              <div className="border rounded-md overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Source</TableHead>
-                      {dataSourceModal.sources.some(s => s.note) && <TableHead>Field</TableHead>}
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dataSourceModal.sources.map((src, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-sm">{src.label}</TableCell>
-                        {dataSourceModal.sources.some(s => s.note) && (
-                          <TableCell className="text-xs text-muted-foreground">{src.note ?? ''}</TableCell>
-                        )}
-                        <TableCell className="text-right text-sm font-mono">{src.amount.format()}</TableCell>
-                      </TableRow>
-                    ))}
-                    {dataSourceModal.sources.length > 1 && (
-                      <TableRow className="font-semibold bg-muted/30">
-                        <TableCell className="text-sm">Total</TableCell>
-                        {dataSourceModal.sources.some(s => s.note) && <TableCell />}
-                        <TableCell className="text-right text-sm font-mono">
-                          {dataSourceModal.sources.reduce((acc, s) => acc.add(s.amount), currency(0)).format()}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {FORM1040_LINE_BLOCKS.map((block) => {
+        const blockDefinitions = visibleDefinitions.filter(definition => block.lines.includes(definition.line))
+
+        if (blockDefinitions.length === 0) {
+          return null
+        }
+
+        return (
+          <FormBlock key={block.title} title={block.title}>
+            {blockDefinitions.map((definition) => {
+              const value = facts[definition.valueKey]
+              const sources = getLineSources(facts, definition)
+              const needsReview = taxFactSourcesNeedReview(sources)
+              const sharedProps = {
+                boxRef: definition.line,
+                label: lineLabel(definition),
+                value,
+                isReviewed: needsReview ? false : undefined,
+                ...sourceClickProps(definition, sources),
+                ...destinationClickProps(definition),
+              }
+
+              return definition.bold
+                ? <FormTotalLine key={definition.line} {...sharedProps} />
+                : <FormLine key={definition.line} {...sharedProps} />
+            })}
+          </FormBlock>
+        )
+      })}
     </div>
   )
 }
