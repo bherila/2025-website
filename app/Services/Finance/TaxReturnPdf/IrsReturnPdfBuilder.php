@@ -6,11 +6,14 @@ use App\Models\FinanceTool\FinTaxReturnProfile;
 use App\Models\User;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxReturnPdf\Data\IrsFieldDefinition;
+use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfBuildResult;
 use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\Exceptions\TaxReturnPdfUnavailableException;
 
 class IrsReturnPdfBuilder
 {
+    private const int FORM_8949_ROWS_PER_PAGE = 11;
+
     public function __construct(
         private readonly TaxPreviewFactsService $taxPreviewFactsService,
         private readonly IrsPdfTemplateRepository $templates,
@@ -24,7 +27,12 @@ class IrsReturnPdfBuilder
 
     public function buildForUser(User $user, TaxReturnPdfOptions $options): string
     {
-        $facts = $this->taxPreviewFactsService->arrayForYear((int) $user->id, $options->year);
+        return $this->buildResultForUser($user, $options)->content;
+    }
+
+    public function buildResultForUser(User $user, TaxReturnPdfOptions $options): TaxReturnPdfBuildResult
+    {
+        $facts = $this->withIrsPdfFacts($this->taxPreviewFactsService->arrayForYear((int) $user->id, $options->year));
         $profile = $this->profile($user, $options->year);
         $readiness = $this->readinessService->forRequest(
             $user,
@@ -40,13 +48,57 @@ class IrsReturnPdfBuilder
             throw new TaxReturnPdfUnavailableException($readiness->errors, $readiness->warnings);
         }
 
-        $formId = $options->formId ?? 'form-1040';
+        $formIds = $options->scope === 'return'
+            ? $readiness->requiredForms
+            : [$options->formId ?? 'form-1040'];
+        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profile), $options);
+
+        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)));
+    }
+
+    /**
+     * @param  array<int, string>  $formIds
+     * @param  array<string, mixed>  $facts
+     * @return array<int, array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}>
+     */
+    private function formFillJobs(array $formIds, TaxReturnPdfOptions $options, array $facts, ?FinTaxReturnProfile $profile): array
+    {
+        $jobs = [];
+
+        foreach ($formIds as $index => $formId) {
+            if ($formId === 'form-8949') {
+                foreach ($this->form8949Instances($facts) as $instanceIndex => $instance) {
+                    $instanceFacts = $facts;
+                    $instanceFacts['irsPdf']['form8949']['current'] = $instance;
+                    $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}-{$instanceIndex}", $options, $instanceFacts, $profile);
+                }
+
+                continue;
+            }
+
+            $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}", $options, $facts, $profile);
+        }
+
+        return $jobs;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}
+     */
+    private function formFillJob(string $formId, string $instanceKey, TaxReturnPdfOptions $options, array $facts, ?FinTaxReturnProfile $profile): array
+    {
         $template = $this->templates->template($options->year, $formId);
         $fieldMap = $this->fieldMaps->map($options->year, $formId);
         $fields = $this->indexedFields($this->fieldDumpService->dump($this->templates->templatePath($template)));
         $fieldValues = $this->fieldValues($fieldMap->mappings, $fields, $facts, $profile);
 
-        return $this->fillEngine->fill($this->templates->templatePath($template), $fieldValues, $options);
+        return [
+            'formId' => $formId,
+            'templatePath' => $this->templates->templatePath($template),
+            'fieldValues' => $fieldValues,
+            'instanceKey' => $instanceKey,
+        ];
     }
 
     /**
@@ -61,6 +113,7 @@ class IrsReturnPdfBuilder
         $context = [
             'facts' => $facts,
             'profile' => $profile,
+            'irsProfile' => $this->profileContext($profile),
         ];
 
         foreach ($mappings as $mapping) {
@@ -98,6 +151,256 @@ class IrsReturnPdfBuilder
             ->where('user_id', $user->id)
             ->where('tax_year', $year)
             ->first();
+    }
+
+    /**
+     * @return array{nameLine: string|null, ssn: string|null}
+     */
+    private function profileContext(?FinTaxReturnProfile $profile): array
+    {
+        if (! $profile instanceof FinTaxReturnProfile) {
+            return ['nameLine' => null, 'ssn' => null];
+        }
+
+        $taxpayerName = trim(implode(' ', array_filter([
+            $profile->taxpayer_first_name,
+            $profile->taxpayer_last_name,
+        ], static fn (mixed $value): bool => is_scalar($value) && trim((string) $value) !== '')));
+        $spouseName = trim(implode(' ', array_filter([
+            $profile->spouse_first_name,
+            $profile->spouse_last_name,
+        ], static fn (mixed $value): bool => is_scalar($value) && trim((string) $value) !== '')));
+
+        $nameParts = array_values(array_filter([$taxpayerName, $spouseName], static fn (string $name): bool => $name !== ''));
+
+        return [
+            'nameLine' => $nameParts === [] ? null : implode(' & ', $nameParts),
+            'ssn' => is_scalar($profile->taxpayer_ssn) ? (string) $profile->taxpayer_ssn : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<string, mixed>
+     */
+    private function withIrsPdfFacts(array $facts): array
+    {
+        $facts['irsPdf'] = [
+            'scheduleD' => [
+                'lines' => $this->scheduleDLineColumns($facts),
+                'line21LossOnly' => $this->scheduleDLine21LossOnly($facts),
+            ],
+            'form8949' => [
+                'instances' => $this->form8949InstancesFromFacts($facts),
+                'unsupportedRowCount' => $this->form8949UnsupportedRowCount($facts),
+            ],
+        ];
+
+        return $facts;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<int|string, array{totalProceeds: float, totalCostBasis: float, totalAdjustment: float, netGainOrLoss: float}>
+     */
+    private function scheduleDLineColumns(array $facts): array
+    {
+        $lines = [];
+
+        foreach (['1a', '1b', '2', '3', '8a', '8b', '9', '10'] as $line) {
+            $lines[$line] = [
+                'totalProceeds' => 0.0,
+                'totalCostBasis' => 0.0,
+                'totalAdjustment' => 0.0,
+                'netGainOrLoss' => 0.0,
+            ];
+        }
+
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+        $rollups = is_array($scheduleD['form8949Rollups'] ?? null) ? $scheduleD['form8949Rollups'] : [];
+
+        foreach ($rollups as $rollup) {
+            if (! is_array($rollup)) {
+                continue;
+            }
+
+            $line = is_scalar($rollup['scheduleDLine'] ?? null) ? (string) $rollup['scheduleDLine'] : null;
+            if ($line === null || ! array_key_exists($line, $lines)) {
+                continue;
+            }
+
+            $lines[$line]['totalProceeds'] += $this->numeric($rollup['totalProceeds'] ?? 0.0);
+            $lines[$line]['totalCostBasis'] += $this->numeric($rollup['totalCostBasis'] ?? 0.0);
+            $lines[$line]['totalAdjustment'] += $this->numeric($rollup['totalAdjustment'] ?? 0.0);
+            $lines[$line]['netGainOrLoss'] += $this->numeric($rollup['netGainOrLoss'] ?? 0.0);
+        }
+
+        foreach ([
+            '1a' => 'line1aGainLoss',
+            '1b' => 'line1bGainLoss',
+            '2' => 'line2GainLoss',
+            '3' => 'line3GainLoss',
+            '8a' => 'line8aGainLoss',
+            '8b' => 'line8bGainLoss',
+            '9' => 'line9GainLoss',
+            '10' => 'line10GainLoss',
+        ] as $line => $key) {
+            if (array_key_exists($key, $scheduleD)) {
+                $lines[$line]['netGainOrLoss'] = $this->numeric($scheduleD[$key]);
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function scheduleDLine21LossOnly(array $facts): float
+    {
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+
+        if ($this->numeric($scheduleD['line16Combined'] ?? 0.0) >= -0.004) {
+            return 0.0;
+        }
+
+        return $this->numeric($scheduleD['line21LimitedLossOrGain'] ?? 0.0);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<int, array<string, mixed>>
+     */
+    private function form8949Instances(array $facts): array
+    {
+        $instances = is_array($facts['irsPdf']['form8949']['instances'] ?? null)
+            ? $facts['irsPdf']['form8949']['instances']
+            : [];
+
+        return $instances === [] ? [$this->blankForm8949Instance()] : $instances;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<int, array<string, mixed>>
+     */
+    private function form8949InstancesFromFacts(array $facts): array
+    {
+        $form8949 = is_array($facts['form8949'] ?? null) ? $facts['form8949'] : [];
+        $rows = is_array($form8949['rows'] ?? null) ? array_values($form8949['rows']) : [];
+        $groups = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $box = $this->form8949Box($row['form8949Box'] ?? null);
+            if ($box === null) {
+                continue;
+            }
+
+            $groups[$box][] = $row;
+        }
+
+        $instances = [];
+
+        foreach (['A', 'B', 'C', 'G', 'H', 'I'] as $box) {
+            foreach (array_chunk($groups[$box] ?? [], self::FORM_8949_ROWS_PER_PAGE) as $chunkIndex => $chunk) {
+                $instances[] = $this->form8949Instance(shortBox: $box, shortRows: $chunk, longBox: null, longRows: [], sequence: "{$box}-{$chunkIndex}");
+            }
+        }
+
+        foreach (['D', 'E', 'F', 'J', 'K', 'L'] as $box) {
+            foreach (array_chunk($groups[$box] ?? [], self::FORM_8949_ROWS_PER_PAGE) as $chunkIndex => $chunk) {
+                $instances[] = $this->form8949Instance(shortBox: null, shortRows: [], longBox: $box, longRows: $chunk, sequence: "{$box}-{$chunkIndex}");
+            }
+        }
+
+        return $instances;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $shortRows
+     * @param  array<int, array<string, mixed>>  $longRows
+     * @return array<string, mixed>
+     */
+    private function form8949Instance(?string $shortBox, array $shortRows, ?string $longBox, array $longRows, string $sequence): array
+    {
+        return [
+            'sequence' => $sequence,
+            'shortBox' => $shortBox,
+            'shortRows' => array_values($shortRows),
+            'shortTotals' => $this->form8949Totals($shortRows),
+            'longBox' => $longBox,
+            'longRows' => array_values($longRows),
+            'longTotals' => $this->form8949Totals($longRows),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function blankForm8949Instance(): array
+    {
+        return $this->form8949Instance(null, [], null, [], 'blank');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array{proceeds: float, costBasis: float, adjustmentAmount: float, gainOrLoss: float}
+     */
+    private function form8949Totals(array $rows): array
+    {
+        $totals = [
+            'proceeds' => 0.0,
+            'costBasis' => 0.0,
+            'adjustmentAmount' => 0.0,
+            'gainOrLoss' => 0.0,
+        ];
+
+        foreach ($rows as $row) {
+            $totals['proceeds'] += $this->numeric($row['proceeds'] ?? 0.0);
+            $totals['costBasis'] += $this->numeric($row['costBasis'] ?? 0.0);
+            $totals['adjustmentAmount'] += $this->numeric($row['adjustmentAmount'] ?? 0.0);
+            $totals['gainOrLoss'] += $this->numeric($row['gainOrLoss'] ?? 0.0);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function form8949UnsupportedRowCount(array $facts): int
+    {
+        $form8949 = is_array($facts['form8949'] ?? null) ? $facts['form8949'] : [];
+        $rows = is_array($form8949['rows'] ?? null) ? $form8949['rows'] : [];
+        $unsupported = 0;
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || $this->form8949Box($row['form8949Box'] ?? null) === null) {
+                $unsupported++;
+            }
+        }
+
+        return $unsupported;
+    }
+
+    private function form8949Box(mixed $value): ?string
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $box = strtoupper(trim((string) $value));
+
+        return in_array($box, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'], true) ? $box : null;
+    }
+
+    private function numeric(mixed $value): float
+    {
+        return is_numeric($value) ? (float) $value : 0.0;
     }
 
     /**

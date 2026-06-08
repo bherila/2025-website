@@ -32,10 +32,10 @@ class TaxReturnPdfExportController extends Controller
         );
 
         try {
-            $content = $this->pdfBuilder->buildForUser(Auth::user(), $options);
-            $this->audit($options, 'succeeded');
+            $result = $this->pdfBuilder->buildResultForUser(Auth::user(), $options);
+            $this->audit($options, 'succeeded', formIds: $result->formIds);
 
-            return response($content, 200, [
+            return response($result->content, 200, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => "attachment; filename=\"{$options->filename}\"",
             ]);
@@ -73,14 +73,15 @@ class TaxReturnPdfExportController extends Controller
 
     /**
      * @param  array<string, mixed>|null  $errorSummary
+     * @param  array<int, string>|null  $formIds
      */
-    private function audit(TaxReturnPdfOptions $options, string $status, ?array $errorSummary = null): void
+    private function audit(TaxReturnPdfOptions $options, string $status, ?array $errorSummary = null, ?array $formIds = null): void
     {
         FinTaxReturnPdfExport::query()->create([
             'user_id' => Auth::id(),
             'tax_year' => $options->year,
             'scope' => $options->scope,
-            'form_ids' => $options->formIds(),
+            'form_ids' => $formIds ?? $options->formIds(),
             'mode' => $options->mode,
             'status' => $status,
             'filename' => $options->filename,

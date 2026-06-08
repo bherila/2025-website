@@ -12,6 +12,11 @@ interface IrsAcroFormFillEngine
     public function fill(string $templatePath, array $fieldValues, TaxReturnPdfOptions $options): string;
 
     /**
+     * @param  array<int, array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}>  $forms
+     */
+    public function fillForms(array $forms, TaxReturnPdfOptions $options): string;
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function dumpFields(string $templatePath): array;

@@ -22,6 +22,14 @@ class UnavailableAcroFormFillEngine implements IrsAcroFormFillEngine
     }
 
     /**
+     * @param  array<int, array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}>  $forms
+     */
+    public function fillForms(array $forms, TaxReturnPdfOptions $options): string
+    {
+        throw new TaxReturnPdfUnavailableException([self::REASON]);
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function dumpFields(string $templatePath): array

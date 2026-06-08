@@ -47,6 +47,74 @@ class TcpdfFpdiFormEngineTest extends TestCase
         $this->assertStringNotContainsString('/AcroForm', $content);
     }
 
+    public function test_editable_multi_form_packets_namespace_fields_by_form_instance(): void
+    {
+        $content = app(IrsAcroFormFillEngine::class)->fillForms([
+            [
+                'formId' => 'form-8949',
+                'templatePath' => resource_path('irs/forms/2025/f8949.pdf'),
+                'fieldValues' => [
+                    'f1_01[0]' => 'First Packet Form',
+                    'c1_1[0]' => '1',
+                    'f1_03[0]' => 'First lot',
+                ],
+                'instanceKey' => 'return-4-0',
+            ],
+            [
+                'formId' => 'form-8949',
+                'templatePath' => resource_path('irs/forms/2025/f8949.pdf'),
+                'fieldValues' => [
+                    'f1_01[0]' => 'Second Packet Form',
+                    'c1_1[0]' => '1',
+                    'f1_03[0]' => 'Second lot',
+                ],
+                'instanceKey' => 'return-4-1',
+            ],
+        ], new TaxReturnPdfOptions(2025, 'return', 'editable', null, 'editable-packet.pdf'));
+
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertSame(4, $this->pageCount($content));
+        $this->assertStringContainsString('First Packet Form', $content);
+        $this->assertStringContainsString('Second Packet Form', $content);
+        $this->assertStringContainsString('/AcroForm', $content);
+        $this->assertStringContainsString('trp_form_8949_return_4_0_', $content);
+        $this->assertStringContainsString('trp_form_8949_return_4_1_', $content);
+
+        preg_match_all('/\/T\s*\((trp_[^)]+)\)/', $content, $matches);
+
+        $this->assertGreaterThan(300, count($matches[1]));
+        $this->assertSame($matches[1], array_values(array_unique($matches[1])));
+    }
+
+    public function test_print_multi_form_packet_draws_static_values_without_acroform(): void
+    {
+        $content = app(IrsAcroFormFillEngine::class)->fillForms([
+            [
+                'formId' => 'form-1040',
+                'templatePath' => resource_path('irs/forms/2025/f1040.pdf'),
+                'fieldValues' => $this->fieldValues(),
+                'instanceKey' => 'return-0',
+            ],
+            [
+                'formId' => 'schedule-1',
+                'templatePath' => resource_path('irs/forms/2025/f1040s1.pdf'),
+                'fieldValues' => [
+                    'f1_01[0]' => 'Taxpayer Example',
+                    'f1_02[0]' => '123456789',
+                    'f1_36[0]' => '42',
+                    'f1_37[0]' => '42',
+                    'f1_38[0]' => '42',
+                ],
+                'instanceKey' => 'return-1',
+            ],
+        ], new TaxReturnPdfOptions(2025, 'return', 'print', null, 'print-packet.pdf'));
+
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertSame(4, $this->pageCount($content));
+        $this->assertStringContainsString('Taxpayer', $content);
+        $this->assertStringNotContainsString('/AcroForm', $content);
+    }
+
     /**
      * @return array<string, string>
      */

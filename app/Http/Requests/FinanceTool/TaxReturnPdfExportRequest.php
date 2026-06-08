@@ -12,7 +12,7 @@ class TaxReturnPdfExportRequest extends FormRequest
 
     public const array MODES = ['editable', 'print'];
 
-    public const array FORM_IDS = ['form-1040'];
+    public const array FORM_IDS = ['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949'];
 
     public function authorize(): bool
     {

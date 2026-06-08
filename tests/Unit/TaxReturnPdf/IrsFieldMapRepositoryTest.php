@@ -12,12 +12,14 @@ class IrsFieldMapRepositoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_loads_and_validates_form_1040_map_against_dumped_fields(): void
+    public function test_loads_and_validates_pinned_maps_against_dumped_fields(): void
     {
-        $map = app(IrsFieldMapRepository::class)->map(2025, 'form-1040');
+        foreach (['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949'] as $formId) {
+            $map = app(IrsFieldMapRepository::class)->map(2025, $formId);
 
-        $this->assertSame('form-1040', $map->formId);
-        $this->assertNotEmpty($map->mappings);
+            $this->assertSame($formId, $map->formId);
+            $this->assertNotEmpty($map->mappings);
+        }
     }
 
     public function test_form_1040_profile_map_uses_xfa_captioned_identity_and_address_fields(): void
